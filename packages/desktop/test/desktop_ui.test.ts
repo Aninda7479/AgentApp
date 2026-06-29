@@ -1,0 +1,323 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import React from 'react';
+import { renderToString } from 'react-dom/server';
+
+// Mock Electron module before importing WindowManager
+vi.mock('electron', () => {
+  class MockBrowserWindow {
+    id: number;
+    static idCounter = 1;
+    destroyed = false;
+    opts: any;
+    listeners: Record<string, Function[]> = {};
+
+    constructor(options: any) {
+      this.id = MockBrowserWindow.idCounter++;
+      this.opts = options;
+    }
+
+    loadFile(path: string) {
+      return Promise.resolve();
+    }
+
+    on(event: string, fn: Function) {
+      if (!this.listeners[event]) this.listeners[event] = [];
+      this.listeners[event].push(fn);
+    }
+
+    emit(event: string) {
+      if (this.listeners[event]) {
+        this.listeners[event].forEach((fn) => fn());
+      }
+    }
+
+    isDestroyed() {
+      return this.destroyed;
+    }
+
+    close() {
+      this.destroyed = true;
+      this.emit('closed');
+    }
+
+    isMinimized() {
+      return false;
+    }
+
+    restore() {}
+    focus() {}
+    minimize() {}
+    maximize() {}
+    unmaximize() {}
+    isMaximized() {
+      return false;
+    }
+  }
+
+  return {
+    BrowserWindow: MockBrowserWindow,
+    app: {
+      whenReady: () => Promise.resolve(),
+      on: vi.fn(),
+      quit: vi.fn()
+    },
+    ipcMain: {
+      on: vi.fn()
+    }
+  };
+});
+
+import { WindowManager } from '../src/main/window';
+import { Sidebar } from '../src/renderer/components/Sidebar';
+import { TrajectoryCanvas, TrajectoryStep } from '../src/renderer/components/TrajectoryCanvas';
+import { Composer } from '../src/renderer/components/Composer';
+import { DiffViewer } from '../src/renderer/components/DiffViewer';
+import { BYOKModal } from '../src/renderer/components/BYOKModal';
+import { MCPDashboard, MCPServerInfo } from '../src/renderer/components/MCPDashboard';
+import { App } from '../src/renderer/App';
+
+describe('Step 081: Electron Main Process & Multi-Window Manager', () => {
+  let wm: WindowManager;
+
+  beforeEach(() => {
+    wm = new WindowManager();
+  });
+
+  it('should create and manage main window', () => {
+    const win = wm.createMainWindow();
+    expect(win).toBeDefined();
+    expect(wm.getMainWindow()).toBe(win);
+    expect(wm.getAllWindows()).toHaveLength(1);
+  });
+
+  it('should create named windows and handle window closure', () => {
+    const settingsWin = wm.createWindow('settings', { width: 600, height: 400 });
+    expect(wm.getWindowByName('settings')).toBe(settingsWin);
+    expect(wm.getAllWindows()).toHaveLength(1);
+
+    wm.closeWindow(settingsWin.id);
+    expect(wm.getWindowByName('settings')).toBeUndefined();
+    expect(wm.getAllWindows()).toHaveLength(0);
+  });
+
+  it('should restore/focus existing window when recreating with same name', () => {
+    const win1 = wm.createWindow('preview');
+    const win2 = wm.createWindow('preview');
+    expect(win1.id).toBe(win2.id);
+  });
+
+  it('should close all windows on closeAllWindows', () => {
+    wm.createMainWindow();
+    wm.createWindow('aux1');
+    wm.createWindow('aux2');
+    expect(wm.getAllWindows()).toHaveLength(3);
+
+    wm.closeAllWindows();
+    expect(wm.getAllWindows()).toHaveLength(0);
+    expect(wm.getMainWindow()).toBeNull();
+  });
+});
+
+describe('Step 083: Responsive Left Sidebar Navigation', () => {
+  it('should render expanded sidebar with navigation items', () => {
+    const html = renderToString(
+      React.createElement(Sidebar, {
+        activeTab: 'trajectory',
+        onSelectTab: () => {},
+        mcpCount: 3
+      })
+    );
+    expect(html).toContain('SuperAgent');
+    expect(html).toContain('Agent Trajectory');
+    expect(html).toContain('MCP Servers');
+    expect(html).toContain('BYOK Settings');
+    expect(html).toContain('width:260px');
+  });
+
+  it('should render collapsed sidebar when collapsed prop is true', () => {
+    const html = renderToString(
+      React.createElement(Sidebar, {
+        activeTab: 'mcp',
+        onSelectTab: () => {},
+        collapsed: true
+      })
+    );
+    expect(html).toContain('width:70px');
+    expect(html).not.toContain('Agent Trajectory');
+  });
+});
+
+describe('Step 084: Streaming Chat Trajectory Canvas', () => {
+  it('should render empty state when no steps provided', () => {
+    const html = renderToString(
+      React.createElement(TrajectoryCanvas, { steps: [] })
+    );
+    expect(html).toContain('empty-state');
+    expect(html).toContain('No agent execution trajectory yet');
+  });
+
+  it('should render trajectory steps including user, thought, tool, and assistant', () => {
+    const steps: TrajectoryStep[] = [
+      { id: '1', type: 'user', content: 'Build a react app' },
+      { id: '2', type: 'thought', content: 'Analyzing requirements...' },
+      {
+        id: '3',
+        type: 'tool_call',
+        toolName: 'fs_write',
+        status: 'success',
+        content: 'Wrote file src/index.tsx',
+        metadata: { filename: 'src/index.tsx', originalCode: 'old', modifiedCode: 'new' }
+      },
+      { id: '4', type: 'assistant', content: 'App constructed successfully!' }
+    ];
+
+    const html = renderToString(
+      React.createElement(TrajectoryCanvas, { steps, isStreaming: true })
+    );
+
+    expect(html).toContain('Build a react app');
+    expect(html).toContain('Analyzing requirements...');
+    expect(html).toContain('fs_write');
+    expect(html).toContain('Inspect File Diff');
+    expect(html).toContain('SuperAgent is generating trajectory...');
+  });
+});
+
+describe('Step 085: Codex Floating Prompt Composer', () => {
+  it('should render composer with inputs and action button', () => {
+    const html = renderToString(
+      React.createElement(Composer, {
+        onSend: () => {},
+        defaultModel: 'gpt-4o'
+      })
+    );
+
+    expect(html).toContain('composer-container');
+    expect(html).toContain('Ask SuperAgent to write code');
+    expect(html).toContain('Run Agent ⚡');
+    expect(html).toContain('gpt-4o');
+  });
+
+  it('should render stop button during active generation', () => {
+    const html = renderToString(
+      React.createElement(Composer, {
+        onSend: () => {},
+        isGenerating: true,
+        onStop: () => {}
+      })
+    );
+
+    expect(html).toContain('Stop ⏹');
+  });
+});
+
+describe('Step 086: Interactive Side-by-Side GUI Diff Viewer', () => {
+  it('should render side-by-side split diff view with file statistics', () => {
+    const orig = 'const x = 1;\nconsole.log(x);';
+    const mod = 'const x = 2;\nconsole.log(x);\nconsole.log("added");';
+
+    const html = renderToString(
+      React.createElement(DiffViewer, {
+        originalCode: orig,
+        modifiedCode: mod,
+        filename: 'src/config.ts',
+        onAccept: () => {},
+        onReject: () => {}
+      })
+    );
+
+    expect(html).toContain('src/config.ts');
+    expect(html).toContain('split-diff-container');
+    expect(html).toContain('Original Base');
+    expect(html).toContain('Modified Proposed');
+    expect(html).toContain('Accept All');
+    expect(html).toContain('Reject');
+  });
+});
+
+describe('Step 092: Graphical BYOK Settings Modal', () => {
+  it('should not render anything when isOpen is false', () => {
+    const html = renderToString(
+      React.createElement(BYOKModal, {
+        isOpen: false,
+        onClose: () => {},
+        onSaveKeys: () => {}
+      })
+    );
+    expect(html).toBe('');
+  });
+
+  it('should render providers and inputs when isOpen is true', () => {
+    const html = renderToString(
+      React.createElement(BYOKModal, {
+        isOpen: true,
+        onClose: () => {},
+        onSaveKeys: () => {},
+        initialKeys: { openai: 'sk-test-key' }
+      })
+    );
+
+    expect(html).toContain('BYOK Provider Settings');
+    expect(html).toContain('OpenAI API Key');
+    expect(html).toContain('Anthropic API Key');
+    expect(html).toContain('sk-test-key');
+    expect(html).toContain('Save Keys');
+  });
+});
+
+describe('Step 093: Visual MCP Server Dashboard', () => {
+  it('should render server cards and status badges', () => {
+    const servers: MCPServerInfo[] = [
+      {
+        id: 'srv-1',
+        name: 'PostgreSQL MCP',
+        transport: 'stdio',
+        commandOrUrl: 'npx postgres-mcp',
+        status: 'connected',
+        enabled: true,
+        toolsCount: 8,
+        latencyMs: 12
+      }
+    ];
+
+    const html = renderToString(
+      React.createElement(MCPDashboard, {
+        servers,
+        onAddServer: () => {},
+        onRemoveServer: () => {},
+        onToggleServer: () => {}
+      })
+    );
+
+    expect(html).toContain('Visual MCP Server Dashboard');
+    expect(html).toContain('PostgreSQL MCP');
+    expect(html).toContain('STDIO');
+    expect(html).toContain('Connected');
+    expect(html).toContain('Tools Exposed:');
+  });
+
+  it('should render empty state when no servers configured', () => {
+    const html = renderToString(
+      React.createElement(MCPDashboard, {
+        servers: [],
+        onAddServer: () => {},
+        onRemoveServer: () => {},
+        onToggleServer: () => {}
+      })
+    );
+
+    expect(html).toContain('No MCP servers registered yet');
+  });
+});
+
+describe('Step 082: Codex Clone Frameless Dark UI Window (App)', () => {
+  it('should render complete Codex App UI layout', () => {
+    const html = renderToString(React.createElement(App));
+
+    expect(html).toContain('SuperAgent Desktop — Codex Clone');
+    expect(html).toContain('OpenAI (Active)');
+    expect(html).toContain('Agent Trajectory');
+    expect(html).toContain('SuperAgent Desktop initialized');
+    expect(html).toContain('Run Agent ⚡');
+  });
+});

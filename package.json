@@ -1,0 +1,11 @@
+{
+  "name": "superagent-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=@superagent/core && npm run build --workspace=@superagent/cli && npm run build --workspace=@superagent/desktop",
+    "test": "npm test --workspace=@superagent/core && npm test --workspace=@superagent/cli && npm test --workspace=@superagent/desktop"
+  }
+}
