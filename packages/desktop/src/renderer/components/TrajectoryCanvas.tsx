@@ -39,7 +39,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
         display: 'flex',
         flexDirection: 'column',
         gap: '20px',
-        backgroundColor: '#09090b'
+        backgroundColor: '#141110' // Warm dark background
       }}
     >
       {steps.length === 0 ? (
@@ -47,7 +47,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
           data-testid="empty-state"
           style={{
             textAlign: 'center',
-            color: '#a1a1aa',
+            color: '#8a8a8a',
             marginTop: '100px',
             fontSize: '1rem'
           }}
@@ -63,19 +63,19 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 data-testid={`step-user-${step.id}`}
                 style={{
                   alignSelf: 'flex-end',
-                  backgroundColor: '#18181b',
-                  border: '1px solid #3f3f46',
+                  backgroundColor: '#1b1412', // Warm dark card
+                  border: '1px solid #2d2321',
                   borderRadius: '12px',
                   padding: '16px 20px',
                   maxWidth: '80%',
-                  color: '#f4f4f5',
+                  color: '#ececec',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
                 }}
               >
                 <div
                   style={{
                     fontSize: '0.8rem',
-                    color: '#a1a1aa',
+                    color: '#8a8a8a',
                     marginBottom: '6px',
                     display: 'flex',
                     justifyContent: 'space-between'
@@ -96,17 +96,17 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 data-testid={`step-thought-${step.id}`}
                 style={{
                   alignSelf: 'flex-start',
-                  backgroundColor: '#121215',
-                  borderLeft: '3px solid #8b5cf6',
+                  backgroundColor: '#1b1412',
+                  borderLeft: '3px solid #a855f7', // Purple highlight
                   borderRadius: '6px',
                   padding: '12px 16px',
                   maxWidth: '85%',
-                  color: '#a1a1aa',
+                  color: '#8a8a8a',
                   fontSize: '0.9rem',
                   fontStyle: 'italic'
                 }}
               >
-                <div style={{ fontWeight: 600, color: '#c4b5fd', marginBottom: '4px', fontStyle: 'normal' }}>
+                <div style={{ fontWeight: 600, color: '#c084fc', marginBottom: '4px', fontStyle: 'normal' }}>
                   🧠 Reasoning Trajectory
                 </div>
                 <div>{step.content}</div>
@@ -125,8 +125,8 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 data-testid={`step-tool-${step.id}`}
                 style={{
                   alignSelf: 'flex-start',
-                  backgroundColor: '#121215',
-                  border: '1px solid #27272a',
+                  backgroundColor: '#1b1412',
+                  border: '1px solid #2d2321',
                   borderRadius: '10px',
                   padding: '14px 18px',
                   maxWidth: '85%',
@@ -169,12 +169,12 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
 
                 <div
                   style={{
-                    backgroundColor: '#09090b',
+                    backgroundColor: '#141110',
                     padding: '10px 12px',
                     borderRadius: '6px',
                     fontFamily: 'monospace',
                     fontSize: '0.85rem',
-                    color: '#e4e4e7',
+                    color: '#ececec',
                     overflowX: 'auto',
                     whiteSpace: 'pre-wrap'
                   }}
@@ -195,8 +195,8 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                         )
                       }
                       style={{
-                        backgroundColor: '#1f1f23',
-                        border: '1px solid #3f3f46',
+                        backgroundColor: '#1e1816',
+                        border: '1px solid #2d2321',
                         color: '#3b82f6',
                         borderRadius: '6px',
                         padding: '6px 12px',
@@ -222,13 +222,13 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
               data-testid={`step-assistant-${step.id}`}
               style={{
                 alignSelf: 'flex-start',
-                backgroundColor: '#121215',
-                border: '1px solid #27272a',
+                backgroundColor: '#1b1412',
+                border: '1px solid #2d2321',
                 borderRadius: '12px',
                 padding: '20px',
                 maxWidth: '90%',
                 width: '100%',
-                color: '#f4f4f5',
+                color: '#ececec',
                 boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
               }}
             >
@@ -239,10 +239,10 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                   justifyContent: 'space-between',
                   marginBottom: '12px',
                   fontSize: '0.85rem',
-                  color: '#a1a1aa'
+                  color: '#8a8a8a'
                 }}
               >
-                <span style={{ color: '#8b5cf6', fontWeight: 600 }}>SuperAgent Core</span>
+                <span style={{ color: '#a855f7', fontWeight: 600 }}>SuperAgent Core</span>
                 {step.timestamp && <span>{step.timestamp}</span>}
               </div>
               <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, fontSize: '0.95rem' }}>
@@ -254,21 +254,21 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                   style={{
                     marginTop: '16px',
                     padding: '12px',
-                    backgroundColor: '#1a1a1e',
-                    border: '1px solid #27272a',
+                    backgroundColor: '#141110',
+                    border: '1px solid #2d2321',
                     borderRadius: '8px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between'
                   }}
                 >
-                  <span style={{ fontSize: '0.9rem', color: '#e4e4e7' }}>
+                  <span style={{ fontSize: '0.9rem', color: '#ececec' }}>
                     🎨 Generated Media Asset ({step.metadata.mediaType.toUpperCase()})
                   </span>
                   <button
                     onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
                     style={{
-                      backgroundColor: '#8b5cf6',
+                      backgroundColor: '#a855f7',
                       border: 'none',
                       color: '#ffffff',
                       padding: '4px 12px',

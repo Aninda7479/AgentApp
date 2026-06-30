@@ -4,107 +4,61 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SuperAgent Desktop — Codex Clone UI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-dark: #09090b;
-      --panel-bg: #121215;
-      --border-color: #27272a;
-      --accent-purple: #8b5cf6;
-      --accent-blue: #3b82f6;
-      --text-main: #f4f4f5;
-      --text-muted: #a1a1aa;
+      --bg-dark: #141110;
+      --sidebar-bg: #1e1816;
+      --text-main: #ececec;
+      --text-muted: #8a8a8a;
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, sans-serif; }
-    body { background: var(--bg-dark); color: var(--text-main); height: 100vh; display: flex; overflow: hidden; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-    /* Codex Dark Sidebar */
-    .sidebar { width: 260px; background: var(--panel-bg); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 16px; }
-    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.1rem; color: #fff; margin-bottom: 24px; }
-    .brand-icon { width: 24px; height: 24px; background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); borderRadius: 6px; }
+    body {
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, sans-serif;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+    }
 
-    .nav-section { margin-bottom: 20px; }
-    .nav-title { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em; margin-bottom: 8px; }
-    .nav-item { padding: 10px 12px; border-radius: 8px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; transition: all 0.2s; }
-    .nav-item:hover, .nav-item.active { background: #1f1f23; color: #fff; }
+    #root {
+      height: 100%;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+    }
 
-    /* Main Trajectory & Codex View */
-    .main-content { flex: 1; display: flex; flex-direction: column; background: var(--bg-dark); position: relative; }
-    .header { height: 56px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: rgba(18,18,21,0.6); backdrop-filter: blur(10px); }
-    .byok-badge { background: #1e1b4b; border: 1px solid #4338ca; color: #c7d2fe; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; display: flex; align-items: center; gap: 6px; }
-
-    .chat-trajectory { flex: 1; overflow-y: auto; padding: 32px; display: flex; flex-direction: column; gap: 24px; }
-    .message-card { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; max-width: 900px; width: 100%; margin: 0 auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
-    .message-card.user { background: #18181b; border-color: #3f3f46; align-self: flex-end; }
-    .message-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; font-size: 0.85rem; color: var(--text-muted); }
-
-    /* Media Artifact Grid */
-    .media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-top: 16px; }
-    .media-card { background: #1a1a1e; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; text-align: center; cursor: pointer; transition: transform 0.2s; }
-    .media-card:hover { transform: translateY(-2px); border-color: var(--accent-purple); }
-
-    /* Codex Floating Composer */
-    .composer-container { padding: 20px 32px 32px; max-width: 900px; width: 100%; margin: 0 auto; width: 100%; }
-    .composer-box { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-    .composer-input { background: transparent; border: none; outline: none; color: #fff; font-size: 1rem; resize: none; min-height: 60px; }
-    .composer-footer { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #1f1f23; padding-top: 12px; }
-    .shortcuts-hint { font-size: 0.8rem; color: var(--text-muted); }
-    .btn-send { background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); border: none; color: #fff; padding: 8px 18px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    /* Custom dark scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #2e2220;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3e2d2a;
+    }
   </style>
 </head>
 <body>
-
-  <div class="sidebar">
-    <div class="brand">
-      <div class="brand-icon"></div>
-      <span>SuperAgent Desktop</span>
-    </div>
-    <div class="nav-section">
-      <div class="nav-title">Workspaces</div>
-      <div class="nav-item active">⚡ Active Agent Trajectory</div>
-      <div class="nav-item">📁 Project Files</div>
-      <div class="nav-item">🎨 Media Gallery</div>
-    </div>
-    <div class="nav-section">
-      <div class="nav-title">Protocol & Integrations</div>
-      <div class="nav-item">🔌 MCP Servers (STDIO/SSE)</div>
-      <div class="nav-item">⚙️ BYOK Settings</div>
-    </div>
-  </div>
-
-  <div class="main-content">
-    <div class="header">
-      <div style="font-size: 0.95rem; font-weight: 600; color: #a1a1aa;">Codex Clone Interface v0.1.0</div>
-      <div class="byok-badge">🔑 BYOK Model: OpenAI (o3-mini)</div>
-    </div>
-
-    <div class="chat-trajectory">
-      <div class="message-card">
-        <div class="message-header">
-          <span style="color: var(--accent-purple); font-weight: 600;">SuperAgent Core</span>
-          <span>Just now</span>
-        </div>
-        <div>SuperAgent Desktop initialized. Ready for autonomous software engineering and multimodal AI media generation (Image, Audio, Video, PDF, PPT).</div>
-        
-        <div class="media-grid">
-          <div class="media-card">🖼️ AI Image Generator</div>
-          <div class="media-card">📄 AI PDF Compiler</div>
-          <div class="media-card">📊 AI PPT Presenter</div>
-          <div class="media-card">🎵 AI Audio Synthesizer</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="composer-container">
-      <div class="composer-box">
-        <textarea class="composer-input" placeholder="Ask SuperAgent to write code, build media assets, or run MCP tools... (Press Tab to queue turn)"></textarea>
-        <div class="composer-footer">
-          <div class="shortcuts-hint">Shift+Tab: Permissions | /compact: Summarize | /diff: Inspect</div>
-          <button class="btn-send">Run Agent</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
+  <div id="root"></div>
+  <script>
+    window.exports = window.exports || {};
+    require('./renderer/entry.js');
+  </script>
 </body>
 </html>

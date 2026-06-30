@@ -74,6 +74,10 @@ import { Composer } from '../src/renderer/components/Composer';
 import { DiffViewer } from '../src/renderer/components/DiffViewer';
 import { BYOKModal } from '../src/renderer/components/BYOKModal';
 import { MCPDashboard, MCPServerInfo } from '../src/renderer/components/MCPDashboard';
+import { SearchModal } from '../src/renderer/components/SearchModal';
+import { ScheduledView } from '../src/renderer/components/ScheduledView';
+import { PluginsView } from '../src/renderer/components/PluginsView';
+import { SettingsView } from '../src/renderer/components/SettingsView';
 import { App } from '../src/renderer/App';
 
 describe('Step 081: Electron Main Process & Multi-Window Manager', () => {
@@ -127,10 +131,10 @@ describe('Step 083: Responsive Left Sidebar Navigation', () => {
         mcpCount: 3
       })
     );
-    expect(html).toContain('SuperAgent');
-    expect(html).toContain('Agent Trajectory');
-    expect(html).toContain('MCP Servers');
-    expect(html).toContain('BYOK Settings');
+    expect(html).toContain('Aninda Das');
+    expect(html).toContain('New chat');
+    expect(html).toContain('Scheduled');
+    expect(html).toContain('Plugins');
     expect(html).toContain('width:260px');
   });
 
@@ -143,7 +147,7 @@ describe('Step 083: Responsive Left Sidebar Navigation', () => {
       })
     );
     expect(html).toContain('width:70px');
-    expect(html).not.toContain('Agent Trajectory');
+    expect(html).not.toContain('Aninda Das');
   });
 });
 
@@ -188,14 +192,14 @@ describe('Step 085: Codex Floating Prompt Composer', () => {
     const html = renderToString(
       React.createElement(Composer, {
         onSend: () => {},
-        defaultModel: 'gpt-4o'
+        defaultModel: '5.5 Medium'
       })
     );
 
     expect(html).toContain('composer-container');
-    expect(html).toContain('Ask SuperAgent to write code');
-    expect(html).toContain('Run Agent ⚡');
-    expect(html).toContain('gpt-4o');
+    expect(html).toContain('Do anything');
+    expect(html).toContain('Ask for approval');
+    expect(html).toContain('5.5 Medium');
   });
 
   it('should render stop button during active generation', () => {
@@ -207,7 +211,7 @@ describe('Step 085: Codex Floating Prompt Composer', () => {
       })
     );
 
-    expect(html).toContain('Stop ⏹');
+    expect(html).toContain('⏹');
   });
 });
 
@@ -315,9 +319,73 @@ describe('Step 082: Codex Clone Frameless Dark UI Window (App)', () => {
     const html = renderToString(React.createElement(App));
 
     expect(html).toContain('SuperAgent Desktop — Codex Clone');
-    expect(html).toContain('OpenAI (Active)');
-    expect(html).toContain('Agent Trajectory');
+    expect(html).toContain('BYOK');
+    expect(html).toContain('Configure');
+    expect(html).toContain('New chat');
     expect(html).toContain('SuperAgent Desktop initialized');
-    expect(html).toContain('Run Agent ⚡');
+  });
+});
+
+describe('Step 082b: Additional Codex UI Sub-components', () => {
+  it('should render SearchModal when open', () => {
+    const html = renderToString(
+      React.createElement(SearchModal, {
+        isOpen: true,
+        onClose: () => {},
+        onSelectChat: () => {},
+        onNewChat: () => {},
+        onOpenFolder: () => {},
+        onOpenSettings: () => {}
+      })
+    );
+    expect(html).toContain('Search chats or run a command');
+    expect(html).toContain('Find online data listings');
+    expect(html).toContain('New chat');
+  });
+
+  it('should render ScheduledView with Tasks and Templates tabs', () => {
+    const html = renderToString(
+      React.createElement(ScheduledView, {
+        onCreateTask: () => {},
+        onUseTemplate: () => {}
+      })
+    );
+    expect(html).toContain('Scheduled');
+    expect(html).toContain('Create your first scheduled task');
+  });
+
+  it('should render PluginsView with Installed and Featured plugins', () => {
+    const html = renderToString(
+      React.createElement(PluginsView, {
+        onInstallPlugin: () => {},
+        onTryPlugin: () => {},
+        onToggleSkill: () => {}
+      })
+    );
+    expect(html).toContain('Plugins');
+    expect(html).toContain('Installed');
+    expect(html).toContain('Featured');
+  });
+
+  it('should render SettingsView with left categories and work mode selection', () => {
+    const html = renderToString(
+      React.createElement(SettingsView, {
+        activeCategory: 'general',
+        onSelectCategory: () => {},
+        onBackToApp: () => {},
+        mcpDashboard: React.createElement('div', { id: 'mcp-stub' }, 'MCP Stub'),
+        connectedProviders: [],
+        modelsCatalog: [],
+        onConnectProvider: () => {},
+        onDisconnectProvider: () => {},
+        onToggleModel: () => {}
+      })
+    );
+    expect(html).toContain('settings-container');
+    expect(html).toContain('General');
+    expect(html).toContain('Work mode');
+    expect(html).toContain('For coding');
+    expect(html).toContain('Default permissions');
+    expect(html).toContain('OpenCode Desktop');
   });
 });

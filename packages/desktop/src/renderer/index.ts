@@ -5,3 +5,7 @@ export * from './components/Composer';
 export * from './components/DiffViewer';
 export * from './components/BYOKModal';
 export * from './components/MCPDashboard';
+export * from './components/SearchModal';
+export * from './components/ScheduledView';
+export * from './components/PluginsView';
+export * from './components/SettingsView';
