@@ -16,6 +16,76 @@ interface DiffLine {
   modLineNum?: number;
 }
 
+const computeDiff = (originalCode: string, modifiedCode: string): { lines: DiffLine[]; additions: number; deletions: number } => {
+  const origLines = originalCode.split('\n');
+  const modLines = modifiedCode.split('\n');
+  const diffLines: DiffLine[] = [];
+  let additions = 0;
+  let deletions = 0;
+
+  let i = 0;
+  let j = 0;
+
+  while (i < origLines.length || j < modLines.length) {
+    if (i < origLines.length && j < modLines.length) {
+      if (origLines[i] === modLines[j]) {
+        diffLines.push({
+          type: 'normal',
+          content: origLines[i],
+          origLineNum: i + 1,
+          modLineNum: j + 1
+        });
+        i++;
+        j++;
+      } else {
+        let matched = false;
+        for (let k = j + 1; k < Math.min(j + 5, modLines.length); k++) {
+          if (origLines[i] === modLines[k]) {
+            while (j < k) {
+              diffLines.push({
+                type: 'add',
+                content: modLines[j],
+                modLineNum: j + 1
+              });
+              additions++;
+              j++;
+            }
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) {
+          diffLines.push({
+            type: 'delete',
+            content: origLines[i],
+            origLineNum: i + 1
+          });
+          deletions++;
+          i++;
+        }
+      }
+    } else if (i < origLines.length) {
+      diffLines.push({
+        type: 'delete',
+        content: origLines[i],
+        origLineNum: i + 1
+      });
+      deletions++;
+      i++;
+    } else if (j < modLines.length) {
+      diffLines.push({
+        type: 'add',
+        content: modLines[j],
+        modLineNum: j + 1
+      });
+      additions++;
+      j++;
+    }
+  }
+
+  return { lines: diffLines, additions, deletions };
+};
+
 export const DiffViewer: React.FC<DiffViewerProps> = ({
   originalCode,
   modifiedCode,
@@ -26,128 +96,25 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
 }) => {
   const [viewMode, setViewMode] = useState<'split' | 'unified'>('split');
 
-  // Simple line-by-line diff algorithm for GUI visualization
-  const computeDiff = (): { lines: DiffLine[]; additions: number; deletions: number } => {
-    const origLines = originalCode.split('\n');
-    const modLines = modifiedCode.split('\n');
-    const diffLines: DiffLine[] = [];
-    let additions = 0;
-    let deletions = 0;
-
-    let i = 0;
-    let j = 0;
-
-    while (i < origLines.length || j < modLines.length) {
-      if (i < origLines.length && j < modLines.length) {
-        if (origLines[i] === modLines[j]) {
-          diffLines.push({
-            type: 'normal',
-            content: origLines[i],
-            origLineNum: i + 1,
-            modLineNum: j + 1
-          });
-          i++;
-          j++;
-        } else {
-          // Look ahead to match
-          let matched = false;
-          for (let k = j + 1; k < Math.min(j + 5, modLines.length); k++) {
-            if (origLines[i] === modLines[k]) {
-              // Additions
-              while (j < k) {
-                diffLines.push({
-                  type: 'add',
-                  content: modLines[j],
-                  modLineNum: j + 1
-                });
-                additions++;
-                j++;
-              }
-              matched = true;
-              break;
-            }
-          }
-          if (!matched) {
-            diffLines.push({
-              type: 'delete',
-              content: origLines[i],
-              origLineNum: i + 1
-            });
-            deletions++;
-            i++;
-          }
-        }
-      } else if (i < origLines.length) {
-        diffLines.push({
-          type: 'delete',
-          content: origLines[i],
-          origLineNum: i + 1
-        });
-        deletions++;
-        i++;
-      } else if (j < modLines.length) {
-        diffLines.push({
-          type: 'add',
-          content: modLines[j],
-          modLineNum: j + 1
-        });
-        additions++;
-        j++;
-      }
-    }
-
-    return { lines: diffLines, additions, deletions };
-  };
-
-  const { lines, additions, deletions } = computeDiff();
+  const { lines, additions, deletions } = computeDiff(originalCode, modifiedCode);
 
   const origSplitLines = originalCode.split('\n');
   const modSplitLines = modifiedCode.split('\n');
-  const maxLines = Math.max(origSplitLines.length, modSplitLines.length);
 
   return (
-    <div
-      data-testid="diff-viewer"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        backgroundColor: '#09090b',
-        color: '#f4f4f5'
-      }}
-    >
+    <div className="flex flex-col h-full bg-brand-bg text-brand-textMain">
       {/* Header Toolbar */}
-      <div
-        style={{
-          height: '50px',
-          backgroundColor: '#121215',
-          borderBottom: '1px solid #27272a',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 20px'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>📄 {filename}</span>
-          <span style={{ fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>+{additions}</span>
-          <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 600 }}>-{deletions}</span>
+      <div className="h-[50px] bg-brand-sidebar border-b border-brand-border flex items-center justify-between px-5 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="font-semibold text-sm">📄 {filename}</span>
+          <span className="text-xs text-emerald-400 font-bold">+{additions}</span>
+          <span className="text-xs text-red-400 font-bold">-{deletions}</span>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* View Mode Switch */}
+        <div className="flex items-center gap-2.5">
           <button
             data-testid="toggle-view-mode"
             onClick={() => setViewMode(viewMode === 'split' ? 'unified' : 'split')}
-            style={{
-              backgroundColor: '#1a1a1e',
-              border: '1px solid #3f3f46',
-              color: '#a1a1aa',
-              borderRadius: '6px',
-              padding: '4px 10px',
-              fontSize: '0.8rem',
-              cursor: 'pointer'
-            }}
+            className="bg-white/5 border border-brand-border text-brand-textMuted hover:text-white rounded-lg px-3 py-1 text-xs cursor-pointer transition-colors"
           >
             Mode: {viewMode === 'split' ? 'Side-by-Side' : 'Unified'}
           </button>
@@ -156,16 +123,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
             <button
               data-testid="btn-reject-diff"
               onClick={onReject}
-              style={{
-                backgroundColor: '#7f1d1d',
-                border: 'none',
-                color: '#fca5a5',
-                borderRadius: '6px',
-                padding: '6px 14px',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
+              className="bg-red-900/60 border border-red-800/40 text-red-400 rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-red-800/60 transition-colors active:scale-[0.97]"
             >
               Reject ✕
             </button>
@@ -175,16 +133,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
             <button
               data-testid="btn-accept-diff"
               onClick={onAccept}
-              style={{
-                backgroundColor: '#064e3b',
-                border: 'none',
-                color: '#6ee7b7',
-                borderRadius: '6px',
-                padding: '6px 14px',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
+              className="bg-emerald-900/60 border border-emerald-800/40 text-emerald-400 rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-emerald-800/60 transition-colors active:scale-[0.97]"
             >
               Accept All ✓
             </button>
@@ -194,14 +143,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
             <button
               data-testid="btn-close-diff"
               onClick={onClose}
-              style={{
-                backgroundColor: 'transparent',
-                border: 'none',
-                color: '#a1a1aa',
-                fontSize: '1.2rem',
-                cursor: 'pointer',
-                marginLeft: '8px'
-              }}
+              className="bg-transparent border-none text-brand-textMuted hover:text-white text-base cursor-pointer ml-1.5 p-1 transition-colors"
             >
               ✕
             </button>
@@ -209,151 +151,85 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
         </div>
       </div>
 
-      {/* Main Diff Content Area */}
-      <div style={{ flex: 1, overflow: 'auto', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+      {/* Main Diff Content */}
+      <div className="flex-1 overflow-auto font-mono text-xs md:text-[13px] leading-relaxed">
         {viewMode === 'split' ? (
-          /* Side by side view */
-          <div style={{ display: 'flex', minWidth: '100%' }} data-testid="split-diff-container">
-            {/* Left Column: Original */}
-            <div style={{ flex: 1, borderRight: '1px solid #27272a' }}>
-              <div
-                style={{
-                  backgroundColor: '#18181b',
-                  padding: '6px 12px',
-                  fontSize: '0.75rem',
-                  color: '#a1a1aa',
-                  borderBottom: '1px solid #27272a'
-                }}
-              >
+          /* ── Split view with proper diff alignment ── */
+          <div className="flex min-w-full" data-testid="split-diff-container">
+            {/* Left: Original */}
+            <div className="flex-1 border-r border-brand-border/50">
+              <div className="bg-brand-popover px-3 py-1.5 text-[11px] text-brand-textMuted border-b border-brand-border/50 font-bold uppercase tracking-wider">
                 Original Base
               </div>
-              {Array.from({ length: maxLines }).map((_, idx) => {
-                const line = origSplitLines[idx];
-                const isLinePresent = line !== undefined;
+              {lines.map((item, idx) => {
+                if (item.type === 'add') {
+                  return (
+                    <div key={idx} className="flex bg-brand-bg/60" style={{ height: '22px' }}>
+                      <span className="w-[40px] text-right pr-2 text-[#52525b] select-none text-xs leading-[22px]">{''}</span>
+                      <span className="flex-1 text-brand-textMuted/30 text-xs leading-[22px] px-2">—</span>
+                    </div>
+                  );
+                }
+                const bg = item.type === 'delete' ? 'bg-red-950/30' : 'transparent';
+                const color = item.type === 'delete' ? 'text-red-300' : 'text-brand-textMain';
                 return (
-                  <div
-                    key={`orig-${idx}`}
-                    style={{
-                      display: 'flex',
-                      backgroundColor: isLinePresent ? '#09090b' : '#121215',
-                      lineHeight: '20px'
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: '40px',
-                        paddingRight: '8px',
-                        textAlign: 'right',
-                        color: '#52525b',
-                        userSelect: 'none'
-                      }}
-                    >
-                      {isLinePresent ? idx + 1 : ''}
-                    </span>
-                    <span style={{ paddingLeft: '8px', whiteSpace: 'pre-wrap', flex: 1, color: '#d4d4d8' }}>
-                      {line || ''}
-                    </span>
+                  <div key={idx} className={`flex ${bg}`} style={{ height: '22px' }}>
+                    <span className="w-[40px] text-right pr-2 text-[#52525b] select-none text-xs leading-[22px]">{item.origLineNum || ''}</span>
+                    <span className={`flex-1 whitespace-pre-wrap text-xs leading-[22px] px-2 truncate ${color}`}>{item.content}</span>
                   </div>
                 );
               })}
             </div>
 
-            {/* Right Column: Modified */}
-            <div style={{ flex: 1 }}>
-              <div
-                style={{
-                  backgroundColor: '#18181b',
-                  padding: '6px 12px',
-                  fontSize: '0.75rem',
-                  color: '#a1a1aa',
-                  borderBottom: '1px solid #27272a'
-                }}
-              >
+            {/* Right: Modified */}
+            <div className="flex-1">
+              <div className="bg-brand-popover px-3 py-1.5 text-[11px] text-brand-textMuted border-b border-brand-border/50 font-bold uppercase tracking-wider">
                 Modified Proposed
               </div>
-              {Array.from({ length: maxLines }).map((_, idx) => {
-                const line = modSplitLines[idx];
-                const isLinePresent = line !== undefined;
+              {lines.map((item, idx) => {
+                if (item.type === 'delete') {
+                  return (
+                    <div key={idx} className="flex bg-brand-bg/60" style={{ height: '22px' }}>
+                      <span className="w-[40px] text-right pr-2 text-[#52525b] select-none text-xs leading-[22px]">{''}</span>
+                      <span className="flex-1 whitespace-pre-wrap text-brand-textMuted/30 text-xs leading-[22px] px-2">—</span>
+                    </div>
+                  );
+                }
+                const bg = item.type === 'add' ? 'bg-emerald-950/30' : 'transparent';
+                const color = item.type === 'add' ? 'text-emerald-300' : 'text-brand-textMain';
                 return (
-                  <div
-                    key={`mod-${idx}`}
-                    style={{
-                      display: 'flex',
-                      backgroundColor: isLinePresent ? '#06281e' : '#121215',
-                      lineHeight: '20px'
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: '40px',
-                        paddingRight: '8px',
-                        textAlign: 'right',
-                        color: '#52525b',
-                        userSelect: 'none'
-                      }}
-                    >
-                      {isLinePresent ? idx + 1 : ''}
-                    </span>
-                    <span style={{ paddingLeft: '8px', whiteSpace: 'pre-wrap', flex: 1, color: '#a7f3d0' }}>
-                      {line || ''}
-                    </span>
+                  <div key={idx} className={`flex ${bg}`} style={{ height: '22px' }}>
+                    <span className="w-[40px] text-right pr-2 text-[#52525b] select-none text-xs leading-[22px]">{item.modLineNum || ''}</span>
+                    <span className={`flex-1 whitespace-pre-wrap text-xs leading-[22px] px-2 truncate ${color}`}>{item.content}</span>
                   </div>
                 );
               })}
             </div>
           </div>
         ) : (
-          /* Unified view */
+          /* ── Unified view ── */
           <div data-testid="unified-diff-container">
             {lines.map((item, idx) => {
               const bg =
                 item.type === 'add'
-                  ? 'rgba(6, 78, 59, 0.4)'
+                  ? 'bg-emerald-950/30'
                   : item.type === 'delete'
-                  ? 'rgba(127, 29, 29, 0.4)'
-                  : 'transparent';
+                  ? 'bg-red-950/30'
+                  : '';
               const color =
                 item.type === 'add'
-                  ? '#6ee7b7'
+                  ? 'text-emerald-300'
                   : item.type === 'delete'
-                  ? '#fca5a5'
-                  : '#d4d4d8';
+                  ? 'text-red-300'
+                  : 'text-brand-textMain';
               const prefix = item.type === 'add' ? '+' : item.type === 'delete' ? '-' : ' ';
 
               return (
-                <div
-                  key={idx}
-                  style={{
-                    display: 'flex',
-                    backgroundColor: bg,
-                    lineHeight: '20px',
-                    padding: '0 8px'
-                  }}
-                >
-                  <span
-                    style={{
-                      width: '35px',
-                      textAlign: 'right',
-                      color: '#52525b',
-                      paddingRight: '6px',
-                      userSelect: 'none'
-                    }}
-                  >
-                    {item.origLineNum || ''}
-                  </span>
-                  <span
-                    style={{
-                      width: '35px',
-                      textAlign: 'right',
-                      color: '#52525b',
-                      paddingRight: '12px',
-                      userSelect: 'none'
-                    }}
-                  >
-                    {item.modLineNum || ''}
-                  </span>
-                  <span style={{ width: '20px', color: color, fontWeight: 'bold' }}>{prefix}</span>
-                  <span style={{ whiteSpace: 'pre-wrap', color: color, flex: 1 }}>{item.content}</span>
+                <div key={idx} className={`flex ${bg} leading-[22px] px-2`}>
+                  <span className="w-[35px] text-right text-[#52525b] pr-1.5 select-none text-xs">{item.origLineNum || ''}</span>
+                  <span className="w-[35px] text-right text-[#52525b] pr-3 select-none text-xs">{item.modLineNum || ''}</span>
+                  <span className={`w-5 font-bold text-xs ${color}`}>{prefix}</span>
+                  <span className={`whitespace-pre-wrap text-xs ${color} flex-1`}>{item.content}</span>
                 </div>
               );
             })}

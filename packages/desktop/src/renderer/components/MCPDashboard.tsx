@@ -19,6 +19,28 @@ export interface MCPDashboardProps {
   onRefreshServers?: () => void;
 }
 
+const getStatusBadgeClass = (status: MCPServerInfo['status']) => {
+  switch (status) {
+    case 'connected':
+      return 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/40';
+    case 'connecting':
+      return 'bg-amber-950/80 text-amber-400 border border-amber-800/40';
+    case 'error':
+      return 'bg-red-950/80 text-red-400 border border-red-800/40';
+    default:
+      return 'bg-brand-border/30 text-brand-textMuted border border-brand-border/40';
+  }
+};
+
+const getStatusLabel = (status: MCPServerInfo['status']) => {
+  switch (status) {
+    case 'connected': return 'Connected';
+    case 'connecting': return 'Connecting';
+    case 'error': return 'Error';
+    default: return 'Disconnected';
+  }
+};
+
 export const MCPDashboard: React.FC<MCPDashboardProps> = ({
   servers,
   onAddServer,
@@ -46,64 +68,28 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
     setShowAddForm(false);
   };
 
-  const getStatusBadge = (status: MCPServerInfo['status']) => {
-    switch (status) {
-      case 'connected':
-        return { color: '#10b981', bg: '#064e3b', label: 'Connected' };
-      case 'connecting':
-        return { color: '#f59e0b', bg: '#78350f', label: 'Connecting' };
-      case 'error':
-        return { color: '#ef4444', bg: '#7f1d1d', label: 'Error' };
-      default:
-        return { color: '#a1a1aa', bg: '#27272a', label: 'Disconnected' };
-    }
-  };
-
   return (
     <div
       data-testid="mcp-dashboard"
-      style={{
-        flex: 1,
-        padding: '24px 32px',
-        backgroundColor: '#09090b',
-        color: '#f4f4f5',
-        overflowY: 'auto'
-      }}
+      className="flex-1 px-4 md:px-8 py-6 bg-brand-bg text-brand-textMain overflow-y-auto"
     >
       {/* Dashboard Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '24px',
-          borderBottom: '1px solid #27272a',
-          paddingBottom: '16px'
-        }}
-      >
+      <div className="flex items-center justify-between mb-6 border-b border-brand-border pb-4">
         <div>
-          <h1 style={{ fontSize: '1.4rem', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <h1 className="text-xl md:text-2xl font-bold m-0 flex items-center gap-2.5 text-white">
             🔌 Visual MCP Server Dashboard
           </h1>
-          <p style={{ fontSize: '0.85rem', color: '#a1a1aa', margin: '4px 0 0 0' }}>
+          <p className="text-xs md:text-sm text-brand-textMuted mt-1">
             Manage Model Context Protocol servers connected via STDIO or SSE
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div className="flex gap-3">
           {onRefreshServers && (
             <button
               data-testid="mcp-refresh-btn"
               onClick={onRefreshServers}
-              style={{
-                backgroundColor: '#1a1a1e',
-                border: '1px solid #3f3f46',
-                color: '#e4e4e7',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '0.85rem'
-              }}
+              className="bg-brand-card border border-brand-border text-brand-textMain hover:text-white rounded-lg px-3.5 py-2 cursor-pointer text-xs font-medium transition-colors active:scale-[0.98]"
             >
               🔄 Refresh
             </button>
@@ -111,16 +97,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
           <button
             data-testid="mcp-add-btn"
             onClick={() => setShowAddForm(!showAddForm)}
-            style={{
-              background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
-              border: 'none',
-              color: '#ffffff',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontSize: '0.85rem'
-            }}
+            className="bg-white hover:bg-brand-textMain text-brand-bg rounded-lg px-4 py-2 font-bold cursor-pointer text-xs transition-all active:scale-[0.98]"
           >
             {showAddForm ? 'Cancel' : '+ Add MCP Server'}
           </button>
@@ -131,92 +108,51 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
       {showAddForm && (
         <div
           data-testid="mcp-add-form"
-          style={{
-            backgroundColor: '#121215',
-            border: '1px solid #3b82f6',
-            borderRadius: '12px',
-            padding: '20px',
-            marginBottom: '24px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '14px'
-          }}
+          className="bg-brand-card border border-blue-500 rounded-2xl p-5 mb-6 flex flex-col gap-3.5 shadow-lg"
         >
-          <h3 style={{ fontSize: '1rem', margin: 0, color: '#3b82f6' }}>Configure New MCP Server</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: '12px' }}>
+          <h3 className="text-base font-bold text-blue-400 m-0">Configure New MCP Server</h3>
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_2fr] gap-3">
             <div>
-              <label style={{ fontSize: '0.8rem', color: '#a1a1aa', display: 'block', marginBottom: '4px' }}>Server Name</label>
+              <label className="text-xs text-brand-textMuted block mb-1 font-medium">Server Name</label>
               <input
                 data-testid="mcp-input-name"
                 type="text"
                 value={newServerName}
                 onChange={(e) => setNewServerName(e.target.value)}
                 placeholder="e.g. Memory Server"
-                style={{
-                  width: '100%',
-                  backgroundColor: '#09090b',
-                  border: '1px solid #3f3f46',
-                  borderRadius: '6px',
-                  padding: '8px',
-                  color: '#fff',
-                  fontSize: '0.85rem'
-                }}
+                className="w-full bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50 transition-colors placeholder-brand-textMuted/40"
               />
             </div>
             <div>
-              <label style={{ fontSize: '0.8rem', color: '#a1a1aa', display: 'block', marginBottom: '4px' }}>Transport</label>
+              <label className="text-xs text-brand-textMuted block mb-1 font-medium">Transport</label>
               <select
                 data-testid="mcp-select-transport"
                 value={newTransport}
                 onChange={(e) => setNewTransport(e.target.value as 'stdio' | 'sse')}
-                style={{
-                  width: '100%',
-                  backgroundColor: '#09090b',
-                  border: '1px solid #3f3f46',
-                  borderRadius: '6px',
-                  padding: '8px',
-                  color: '#fff',
-                  fontSize: '0.85rem'
-                }}
+                className="w-full bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50 transition-colors"
               >
                 <option value="stdio">STDIO Process</option>
                 <option value="sse">HTTP SSE</option>
               </select>
             </div>
             <div>
-              <label style={{ fontSize: '0.8rem', color: '#a1a1aa', display: 'block', marginBottom: '4px' }}>Command or SSE URL</label>
+              <label className="text-xs text-brand-textMuted block mb-1 font-medium">Command or SSE URL</label>
               <input
                 data-testid="mcp-input-cmd"
                 type="text"
                 value={newCommandOrUrl}
                 onChange={(e) => setNewCommandOrUrl(e.target.value)}
                 placeholder={newTransport === 'stdio' ? 'npx -y @modelcontextprotocol/server-filesystem' : 'http://localhost:3001/sse'}
-                style={{
-                  width: '100%',
-                  backgroundColor: '#09090b',
-                  border: '1px solid #3f3f46',
-                  borderRadius: '6px',
-                  padding: '8px',
-                  color: '#fff',
-                  fontSize: '0.85rem'
-                }}
+                className="w-full bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50 transition-colors placeholder-brand-textMuted/40"
               />
             </div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div className="flex justify-end">
             <button
               data-testid="mcp-submit-add"
               onClick={handleAdd}
               disabled={!newServerName.trim() || !newCommandOrUrl.trim()}
-              style={{
-                backgroundColor: '#3b82f6',
-                border: 'none',
-                color: '#fff',
-                padding: '6px 16px',
-                borderRadius: '6px',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
+              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg px-4 py-1.5 font-bold cursor-pointer text-xs transition-all active:scale-[0.98]"
             >
               Save & Connect
             </button>
@@ -228,128 +164,62 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
       {servers.length === 0 ? (
         <div
           data-testid="mcp-empty-state"
-          style={{
-            textAlign: 'center',
-            color: '#a1a1aa',
-            padding: '60px 0',
-            backgroundColor: '#121215',
-            borderRadius: '12px',
-            border: '1px dashed #27272a'
-          }}
+          className="text-center text-brand-textMuted py-16 bg-brand-card rounded-2xl border border-dashed border-brand-border"
         >
           No MCP servers registered yet. Click "+ Add MCP Server" above to register one!
         </div>
       ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-            gap: '20px'
-          }}
-        >
-          {servers.map((srv) => {
-            const statusInfo = getStatusBadge(srv.status);
-            return (
-              <div
-                key={srv.id}
-                data-testid={`mcp-card-${srv.id}`}
-                style={{
-                  backgroundColor: '#121215',
-                  border: `1px solid ${srv.enabled ? '#27272a' : '#1f1f23'}`,
-                  borderRadius: '12px',
-                  padding: '20px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '14px',
-                  opacity: srv.enabled ? 1 : 0.6,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ fontWeight: 700, fontSize: '1rem', color: '#ffffff' }}>{srv.name}</div>
-                  <span
-                    data-testid={`mcp-status-badge-${srv.id}`}
-                    style={{
-                      fontSize: '0.75rem',
-                      padding: '2px 10px',
-                      borderRadius: '12px',
-                      backgroundColor: statusInfo.bg,
-                      color: statusInfo.color,
-                      fontWeight: 600
-                    }}
-                  >
-                    {statusInfo.label}
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    backgroundColor: '#09090b',
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    fontFamily: 'monospace',
-                    fontSize: '0.8rem',
-                    color: '#a1a1aa',
-                    overflowX: 'auto',
-                    whiteSpace: 'nowrap'
-                  }}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          {servers.map((srv) => (
+            <div
+              key={srv.id}
+              data-testid={`mcp-card-${srv.id}`}
+              className={`bg-brand-card border ${srv.enabled ? 'border-brand-border' : 'border-brand-border/30'} rounded-2xl p-5 flex flex-col gap-3.5 ${srv.enabled ? 'opacity-100' : 'opacity-60'} shadow-[0_4px_12px_rgba(0,0,0,0.3)] hover:border-purple-500/20 transition-all duration-200`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="font-bold text-base text-white">{srv.name}</div>
+                <span
+                  data-testid={`mcp-status-badge-${srv.id}`}
+                  className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${getStatusBadgeClass(srv.status)}`}
                 >
-                  <span style={{ color: '#8b5cf6', fontWeight: 600, marginRight: '6px' }}>
-                    [{srv.transport.toUpperCase()}]
-                  </span>
-                  {srv.commandOrUrl}
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    fontSize: '0.85rem',
-                    color: '#a1a1aa'
-                  }}
-                >
-                  <span>🛠 Tools Exposed: <strong style={{ color: '#fff' }}>{srv.toolsCount}</strong></span>
-                  {srv.latencyMs !== undefined && <span>⚡ {srv.latencyMs}ms</span>}
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    borderTop: '1px solid #1f1f23',
-                    paddingTop: '12px',
-                    marginTop: '4px'
-                  }}
-                >
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
-                    <input
-                      data-testid={`mcp-toggle-${srv.id}`}
-                      type="checkbox"
-                      checked={srv.enabled}
-                      onChange={(e) => onToggleServer(srv.id, e.target.checked)}
-                    />
-                    <span>{srv.enabled ? 'Enabled' : 'Disabled'}</span>
-                  </label>
-
-                  <button
-                    data-testid={`mcp-delete-${srv.id}`}
-                    onClick={() => onRemoveServer(srv.id)}
-                    style={{
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      color: '#ef4444',
-                      cursor: 'pointer',
-                      fontSize: '0.85rem'
-                    }}
-                  >
-                    Remove 🗑
-                  </button>
-                </div>
+                  {getStatusLabel(srv.status)}
+                </span>
               </div>
-            );
-          })}
+
+              <div className="bg-brand-bg/80 border border-brand-border/40 p-2.5 rounded-lg font-mono text-xs text-brand-textMuted overflow-x-auto whitespace-nowrap">
+                <span className="text-purple-400 font-bold mr-1.5">
+                  [{srv.transport.toUpperCase()}]
+                </span>
+                {srv.commandOrUrl}
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-brand-textMuted">
+                <span>🛠 Tools Exposed: <strong className="text-white">{srv.toolsCount}</strong></span>
+                {srv.latencyMs !== undefined && <span>⚡ {srv.latencyMs}ms</span>}
+              </div>
+
+              <div className="flex items-center justify-between border-t border-brand-border/40 pt-3 mt-1">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-brand-textMuted">
+                  <input
+                    data-testid={`mcp-toggle-${srv.id}`}
+                    type="checkbox"
+                    checked={srv.enabled}
+                    onChange={(e) => onToggleServer(srv.id, e.target.checked)}
+                    className="accent-purple-500"
+                  />
+                  <span>{srv.enabled ? 'Enabled' : 'Disabled'}</span>
+                </label>
+
+                <button
+                  data-testid={`mcp-delete-${srv.id}`}
+                  onClick={() => onRemoveServer(srv.id)}
+                  className="bg-transparent border-none text-red-400 hover:text-red-300 cursor-pointer text-xs font-medium transition-colors"
+                >
+                  Remove 🗑
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

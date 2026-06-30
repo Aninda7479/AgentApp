@@ -33,7 +33,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   const modalRef = useRef<HTMLDivElement>(null);
 
   const allItems: SearchItem[] = [
-    // Chats
     { id: 'c1', title: 'Find online data listings', shortcut: 'Ctrl+1', type: 'chat', actionKey: 'select-chat' },
     { id: 'c2', title: 'Add ponytail plugin', subtitle: 'GlacierPharma', shortcut: 'Ctrl+2', type: 'chat', actionKey: 'select-chat' },
     { id: 'c3', title: 'use graphify here and make the chart', subtitle: 'GlacierPharma', shortcut: 'Ctrl+3', type: 'chat', actionKey: 'select-chat' },
@@ -43,19 +42,16 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     { id: 'c7', title: 'Build LLM wiki workflow', subtitle: 'Second_Brain', shortcut: 'Ctrl+7', type: 'chat', actionKey: 'select-chat' },
     { id: 'c8', title: 'Modernize car rental demo', subtitle: 'car_rental_dem...', shortcut: 'Ctrl+8', type: 'chat', actionKey: 'select-chat' },
     { id: 'c9', title: 'Build car rental demo site', subtitle: 'Second_Brain', shortcut: 'Ctrl+9', type: 'chat', actionKey: 'select-chat' },
-    // Suggested
     { id: 'a1', title: 'New chat', icon: '📝', shortcut: 'Ctrl+N', type: 'action', actionKey: 'new-chat' },
     { id: 'a2', title: 'Open folder', icon: '📁', shortcut: 'Ctrl+O', type: 'action', actionKey: 'open-folder' },
     { id: 'a3', title: 'Settings', icon: '⚙️', shortcut: 'Ctrl+,', type: 'action', actionKey: 'settings' },
   ];
 
-  // Filter items based on query
   const filteredItems = allItems.filter(item =>
     item.title.toLowerCase().includes(query.toLowerCase()) ||
     (item.subtitle && item.subtitle.toLowerCase().includes(query.toLowerCase()))
   );
 
-  // Auto-focus input when modal opens
   useEffect(() => {
     if (isOpen) {
       setQuery('');
@@ -66,7 +62,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     }
   }, [isOpen]);
 
-  // Handle escape to close, and click outside
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
@@ -81,12 +76,9 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     };
   }, [isOpen, onClose]);
 
-  // Handle global keydowns for shortcuts when modal is NOT open, or search shortcuts when open
   useEffect(() => {
     const handleGlobalShortcuts = (e: KeyboardEvent | any) => {
       if (!isOpen) return;
-
-      // Allow Ctrl+1 through Ctrl+9 to trigger specific items directly
       if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
         e.preventDefault();
         const num = parseInt(e.key);
@@ -95,8 +87,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
           handleTriggerItem(chatItems[num - 1]);
         }
       }
-
-      // Action shortcuts
       if (e.ctrlKey && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         onNewChat();
@@ -113,7 +103,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
         onClose();
       }
     };
-
     window.addEventListener('keydown', handleGlobalShortcuts);
     return () => {
       window.removeEventListener('keydown', handleGlobalShortcuts);
@@ -159,46 +148,16 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   return (
     <div
       data-testid="search-modal-overlay"
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.4)',
-        display: 'flex',
-        alignItems: 'flex-start',
-        justifyContent: 'center',
-        paddingTop: '64px',
-        zIndex: 2000,
-        fontFamily: "'Inter', -apple-system, sans-serif",
-      }}
+      className="fixed inset-0 bg-black/40 flex items-start justify-center pt-16 z-[2000]"
     >
       <div
         ref={modalRef}
         data-testid="search-modal-content"
-        style={{
-          width: '600px',
-          backgroundColor: '#262220', // Warm dark charcoal matching screen 2
-          border: '1px solid #3d3432',
-          borderRadius: '16px',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-          maxHeight: '80vh',
-        }}
+        className="w-[600px] max-w-[90%] bg-brand-sidebar border border-brand-border rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[80vh]"
       >
-        {/* Search Input Box */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            padding: '14px 16px',
-            borderBottom: '1px solid #3d3432',
-          }}
-        >
-          <span style={{ fontSize: '1rem', color: '#8a8a8a', marginRight: '10px' }}>🔍</span>
+        {/* Search Input */}
+        <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-brand-border">
+          <span className="text-sm text-brand-textMuted">🔍</span>
           <input
             ref={inputRef}
             data-testid="search-modal-input"
@@ -210,41 +169,24 @@ export const SearchModal: React.FC<SearchModalProps> = ({
               setSelectedIndex(0);
             }}
             onKeyDown={handleKeyDown}
-            style={{
-              flex: 1,
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              color: '#ececec',
-              fontSize: '0.95rem',
-            }}
+            className="flex-1 bg-transparent border-none outline-none text-white text-sm placeholder-brand-textMuted/50"
           />
         </div>
 
-        {/* Search Results List */}
-        <div style={{ overflowY: 'auto', padding: '8px' }}>
+        {/* Results */}
+        <div className="overflow-y-auto px-2 py-2">
           {filteredItems.length === 0 ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: '#8a8a8a', fontSize: '0.9rem' }}>
+            <div className="py-6 text-center text-brand-textMuted text-sm">
               No results found for "{query}"
             </div>
           ) : (
             <>
-              {/* Chats Section */}
               {chatItems.length > 0 && (
                 <div>
-                  <div
-                    style={{
-                      fontSize: '0.75rem',
-                      textTransform: 'uppercase',
-                      color: '#8a8a8a',
-                      fontWeight: 600,
-                      padding: '8px 12px 4px',
-                      letterSpacing: '0.05em',
-                    }}
-                  >
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-brand-textMuted/70 px-3 py-1.5">
                     Chats
                   </div>
-                  {chatItems.map((item, index) => {
+                  {chatItems.map((item) => {
                     const globalIndex = filteredItems.indexOf(item);
                     const isSelected = globalIndex === selectedIndex;
                     return (
@@ -253,37 +195,19 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                         data-testid={`search-item-${item.id}`}
                         onClick={() => handleTriggerItem(item)}
                         onMouseEnter={() => setSelectedIndex(globalIndex)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '10px 12px',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          backgroundColor: isSelected ? '#3b2f2d' : 'transparent', // Warm hover highlight
-                          transition: 'background-color 0.15s ease',
-                          marginBottom: '2px',
-                        }}
+                        className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-colors mb-0.5 ${
+                          isSelected ? 'bg-white/5 text-white' : 'text-brand-textMuted hover:bg-white/5 hover:text-white'
+                        }`}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                          <span style={{ color: '#ececec', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {item.title}
-                          </span>
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <span className="text-sm truncate">{item.title}</span>
                           {item.subtitle && (
-                            <span
-                              style={{
-                                fontSize: '0.75rem',
-                                color: '#8a8a8a',
-                                backgroundColor: '#1e1816',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                              }}
-                            >
+                            <span className="text-[10px] text-brand-textMuted/60 bg-brand-bg/50 px-2 py-0.5 rounded font-mono flex-shrink-0">
                               {item.subtitle}
                             </span>
                           )}
                         </div>
-                        <span style={{ fontSize: '0.75rem', color: '#8a8a8a', fontFamily: 'monospace' }}>
+                        <span className="text-[10px] text-brand-textMuted/50 font-mono flex-shrink-0 ml-2">
                           {item.shortcut}
                         </span>
                       </div>
@@ -292,19 +216,9 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                 </div>
               )}
 
-              {/* Suggested Section */}
               {actionItems.length > 0 && (
-                <div style={{ marginTop: '8px' }}>
-                  <div
-                    style={{
-                      fontSize: '0.75rem',
-                      textTransform: 'uppercase',
-                      color: '#8a8a8a',
-                      fontWeight: 600,
-                      padding: '8px 12px 4px',
-                      letterSpacing: '0.05em',
-                    }}
-                  >
+                <div className="mt-2">
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-brand-textMuted/70 px-3 py-1.5">
                     Suggested
                   </div>
                   {actionItems.map((item) => {
@@ -316,23 +230,15 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                         data-testid={`search-item-${item.id}`}
                         onClick={() => handleTriggerItem(item)}
                         onMouseEnter={() => setSelectedIndex(globalIndex)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '10px 12px',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          backgroundColor: isSelected ? '#3b2f2d' : 'transparent',
-                          transition: 'background-color 0.15s ease',
-                          marginBottom: '2px',
-                        }}
+                        className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-colors mb-0.5 ${
+                          isSelected ? 'bg-white/5 text-white' : 'text-brand-textMuted hover:bg-white/5 hover:text-white'
+                        }`}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontSize: '1rem' }}>{item.icon}</span>
-                          <span style={{ color: '#ececec', fontSize: '0.9rem' }}>{item.title}</span>
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-sm">{item.icon}</span>
+                          <span className="text-sm">{item.title}</span>
                         </div>
-                        <span style={{ fontSize: '0.75rem', color: '#8a8a8a', fontFamily: 'monospace' }}>
+                        <span className="text-[10px] text-brand-textMuted/50 font-mono">
                           {item.shortcut}
                         </span>
                       </div>

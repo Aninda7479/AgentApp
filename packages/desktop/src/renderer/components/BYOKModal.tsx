@@ -59,51 +59,29 @@ export const BYOKModal: React.FC<BYOKModalProps> = ({
     { id: 'customEndpoint', label: 'Custom Endpoint / Proxy', placeholder: 'https://api.mycustomllm.com/v1' }
   ];
 
+  const getTestStatusStyle = () => {
+    if (!testStatus) return '';
+    if (testStatus.includes('✅')) return 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/40';
+    if (testStatus.includes('⚠️')) return 'bg-amber-950/80 text-amber-400 border border-amber-800/40';
+    return 'bg-indigo-950/80 text-indigo-400 border border-indigo-800/40';
+  };
+
   return (
     <div
       data-testid="byok-modal-overlay"
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
-        backdropFilter: 'blur(6px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000
-      }}
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[1000]"
     >
       <div
         data-testid="byok-modal-content"
-        style={{
-          backgroundColor: '#121215',
-          border: '1px solid #27272a',
-          borderRadius: '16px',
-          width: '550px',
-          maxWidth: '90%',
-          padding: '24px',
-          boxShadow: '0 20px 50px rgba(0,0,0,0.8)',
-          color: '#f4f4f5'
-        }}
+        className="bg-brand-card border border-brand-border rounded-2xl w-[550px] max-w-[90%] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-brand-textMain"
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '20px',
-            borderBottom: '1px solid #1f1f23',
-            paddingBottom: '12px'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '1.4rem' }}>⚙️</span>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5 border-b border-brand-border/60 pb-3">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">⚙️</span>
             <div>
-              <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>BYOK Provider Settings</h2>
-              <p style={{ fontSize: '0.8rem', color: '#a1a1aa', margin: '2px 0 0 0' }}>
+              <h2 className="text-lg font-bold text-white m-0">BYOK Provider Settings</h2>
+              <p className="text-xs text-brand-textMuted mt-0.5">
                 Bring Your Own Keys & Endpoint Configurations
               </p>
             </div>
@@ -111,71 +89,41 @@ export const BYOKModal: React.FC<BYOKModalProps> = ({
           <button
             data-testid="byok-close-btn"
             onClick={onClose}
-            style={{ background: 'none', border: 'none', color: '#a1a1aa', fontSize: '1.2rem', cursor: 'pointer' }}
+            className="bg-transparent border-none text-brand-textMuted hover:text-white text-lg cursor-pointer p-1 transition-colors"
           >
             ✕
           </button>
         </div>
 
+        {/* Test Status */}
         {testStatus && (
           <div
             data-testid="byok-test-status"
-            style={{
-              padding: '8px 12px',
-              borderRadius: '8px',
-              backgroundColor: testStatus.includes('✅')
-                ? '#064e3b'
-                : testStatus.includes('⚠️')
-                ? '#78350f'
-                : '#1e1b4b',
-              color: testStatus.includes('✅')
-                ? '#6ee7b7'
-                : testStatus.includes('⚠️')
-                ? '#fde68a'
-                : '#c7d2fe',
-              fontSize: '0.85rem',
-              marginBottom: '16px'
-            }}
+            className={`px-3 py-2 rounded-lg text-xs font-semibold mb-4 ${getTestStatusStyle()}`}
           >
             {testStatus}
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '400px', overflowY: 'auto' }}>
+        {/* Provider Fields */}
+        <div className="flex flex-col gap-4 max-h-[400px] overflow-y-auto">
           {providers.map((p) => (
-            <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '0.85rem', color: '#e4e4e7', fontWeight: 600 }}>{p.label}</label>
-              <div style={{ display: 'flex', gap: '8px' }}>
+            <div key={p.id} className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-brand-textMain">{p.label}</label>
+              <div className="flex gap-2">
                 <input
                   data-testid={`byok-input-${p.id}`}
                   type={p.isUrl || showKey[p.id] ? 'text' : 'password'}
                   value={keys[p.id] || ''}
                   onChange={(e) => handleChange(p.id, e.target.value)}
                   placeholder={p.placeholder}
-                  style={{
-                    flex: 1,
-                    backgroundColor: '#09090b',
-                    border: '1px solid #3f3f46',
-                    borderRadius: '8px',
-                    padding: '8px 12px',
-                    color: '#ffffff',
-                    fontSize: '0.9rem',
-                    outline: 'none'
-                  }}
+                  className="flex-1 bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-textMuted/50 transition-colors placeholder-brand-textMuted/40"
                 />
                 {!p.isUrl && (
                   <button
                     data-testid={`byok-toggle-show-${p.id}`}
                     onClick={() => toggleShow(p.id)}
-                    style={{
-                      backgroundColor: '#1a1a1e',
-                      border: '1px solid #3f3f46',
-                      color: '#a1a1aa',
-                      borderRadius: '8px',
-                      padding: '0 12px',
-                      cursor: 'pointer',
-                      fontSize: '0.85rem'
-                    }}
+                    className="bg-brand-card border border-brand-border text-brand-textMuted hover:text-white rounded-lg px-3 cursor-pointer text-xs font-medium transition-colors"
                   >
                     {showKey[p.id] ? '🔒 Hide' : '👁️ Show'}
                   </button>
@@ -183,15 +131,7 @@ export const BYOKModal: React.FC<BYOKModalProps> = ({
                 <button
                   data-testid={`byok-test-btn-${p.id}`}
                   onClick={() => handleTestConnection(p.id)}
-                  style={{
-                    backgroundColor: '#1f1f23',
-                    border: '1px solid #3f3f46',
-                    color: '#3b82f6',
-                    borderRadius: '8px',
-                    padding: '0 12px',
-                    cursor: 'pointer',
-                    fontSize: '0.8rem'
-                  }}
+                  className="bg-brand-popover border border-brand-border text-blue-400 hover:text-blue-300 rounded-lg px-3 cursor-pointer text-xs font-semibold transition-colors"
                 >
                   Test
                 </button>
@@ -200,44 +140,19 @@ export const BYOKModal: React.FC<BYOKModalProps> = ({
           ))}
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: '12px',
-            marginTop: '24px',
-            borderTop: '1px solid #1f1f23',
-            paddingTop: '16px'
-          }}
-        >
+        {/* Footer */}
+        <div className="flex justify-end gap-3 mt-6 border-t border-brand-border/60 pt-4">
           <button
             data-testid="byok-cancel-btn"
             onClick={onClose}
-            style={{
-              backgroundColor: '#1a1a1e',
-              border: '1px solid #3f3f46',
-              color: '#a1a1aa',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '0.9rem'
-            }}
+            className="bg-brand-card border border-brand-border text-brand-textMuted hover:text-white rounded-lg px-4 py-2 cursor-pointer text-sm transition-colors"
           >
             Cancel
           </button>
           <button
             data-testid="byok-save-btn"
             onClick={handleSave}
-            style={{
-              background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
-              border: 'none',
-              color: '#ffffff',
-              padding: '8px 20px',
-              borderRadius: '8px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontSize: '0.9rem'
-            }}
+            className="bg-white hover:bg-brand-textMain text-brand-bg rounded-lg px-5 py-2 font-bold cursor-pointer text-sm transition-all active:scale-[0.98]"
           >
             Save Keys
           </button>

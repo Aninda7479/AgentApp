@@ -32,7 +32,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
   return (
     <div
       data-testid="trajectory-canvas"
-      className="flex-1 overflow-y-auto px-4 md:px-6 py-6 bg-brand-bg scrollbar-thin"
+      className="flex-1 overflow-y-auto px-4 md:px-6 py-6 bg-brand-bg scrollbar-thin relative z-10"
     >
       {/* Centered Column wrapping all steps to align with the prompt composer */}
       <div className="max-w-[900px] w-full mx-auto flex flex-col gap-5">
@@ -50,7 +50,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 <div
                   key={step.id}
                   data-testid={`step-user-${step.id}`}
-                  className="self-end bg-brand-card border border-brand-border rounded-2xl px-5 py-4 max-w-[85%] md:max-w-[80%] text-brand-textMain shadow-md"
+                  className="self-end glass-card border border-brand-border rounded-2xl px-5 py-4 max-w-[85%] md:max-w-[80%] text-brand-textMain shadow-[0_4px_20px_rgba(0,0,0,0.25)] hover:border-purple-500/25 transition-all"
                 >
                   <div className="text-[10px] uppercase font-bold tracking-wider text-brand-textMuted mb-1.5 flex justify-between gap-4 select-none">
                     <span>User</span>
@@ -66,7 +66,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 <div
                   key={step.id}
                   data-testid={`step-thought-${step.id}`}
-                  className="self-start bg-brand-card border-l-4 border-purple-500 rounded-r-xl px-4 py-3 max-w-[90%] md:max-w-[85%] text-brand-textMuted italic text-[13px] md:text-sm shadow-sm"
+                  className="self-start glass-panel border-l-4 border-purple-500 rounded-r-xl px-5 py-4 max-w-[90%] md:max-w-[85%] text-brand-textMuted/95 italic text-[13px] md:text-sm shadow-[0_4px_16px_rgba(139,92,246,0.06)] border-t border-r border-b border-brand-border/30 pulse-glow"
                 >
                   <div className="font-bold text-purple-400 mb-1.5 not-italic select-none text-[11px] uppercase tracking-wider">
                     🧠 Reasoning Trajectory
@@ -85,7 +85,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 <div
                   key={step.id}
                   data-testid={`step-tool-${step.id}`}
-                  className="self-start bg-brand-card border border-brand-border rounded-xl p-4 max-w-[95%] md:max-w-[85%] w-full shadow-sm"
+                  className="self-start glass-card border border-brand-border rounded-2xl p-5 max-w-[95%] md:max-w-[85%] w-full shadow-md hover:border-blue-500/20 transition-all"
                 >
                   <div className="flex items-center justify-between gap-3 mb-2.5 select-none">
                     <div className="flex items-center gap-2">
@@ -109,7 +109,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                     </div>
                   </div>
 
-                  <div className="bg-brand-bg border border-brand-border/60 p-3 rounded-lg font-mono text-xs md:text-[13px] text-brand-textMain overflow-x-auto white-space-pre-wrap leading-relaxed">
+                  <div className="bg-brand-bg/85 border border-brand-border/50 p-4 rounded-xl font-mono text-xs md:text-[13px] text-brand-textMain overflow-x-auto white-space-pre-wrap leading-relaxed">
                     {step.content}
                   </div>
 
@@ -125,7 +125,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                             step.metadata!.modifiedCode || ''
                           )
                         }
-                        className="bg-brand-sidebar border border-brand-border hover:border-brand-textMuted/40 hover:bg-brand-border/20 text-blue-400 rounded-lg px-3.5 py-1.5 text-xs font-semibold cursor-pointer flex items-center gap-1.5 transition-colors active:scale-[0.98]"
+                        className="bg-white/5 border border-brand-border hover:border-blue-500/35 hover:bg-white/10 text-blue-400 rounded-lg px-3.5 py-1.5 text-xs font-semibold cursor-pointer flex items-center gap-1.5 transition-all duration-150 active:scale-[0.98]"
                       >
                         <span>🔍</span> Inspect File Diff ({step.metadata.filename})
                       </button>
@@ -140,7 +140,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
               <div
                 key={step.id}
                 data-testid={`step-assistant-${step.id}`}
-                className="self-start bg-brand-card border border-brand-border rounded-2xl p-5 max-w-[100%] md:max-w-[90%] w-full text-brand-textMain shadow-lg"
+                className="self-start glass-card border border-brand-border/70 rounded-2xl p-5 max-w-[100%] md:max-w-[90%] w-full text-brand-textMain shadow-[0_8px_32px_rgba(0,0,0,0.3)] border-l-2 border-l-purple-500/30 hover:border-brand-border transition-all"
               >
                 <div className="flex items-center justify-between gap-4 mb-3 text-xs text-brand-textMuted select-none">
                   <span className="text-purple-400 font-bold uppercase tracking-wider">SuperAgent Core</span>
@@ -151,13 +151,13 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 </div>
 
                 {step.metadata?.mediaType && (
-                  <div className="mt-4 p-3 bg-brand-bg border border-brand-border rounded-lg flex items-center justify-between gap-3 select-none">
+                  <div className="mt-4 p-4 bg-white/5 border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none">
                     <span className="text-xs md:text-sm text-brand-textMain font-medium">
                       🎨 Generated Media Asset ({step.metadata.mediaType.toUpperCase()})
                     </span>
                     <button
                       onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
-                      className="bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-1.5 rounded-lg cursor-pointer text-xs font-semibold transition-colors active:scale-[0.97]"
+                      className="bg-purple-600 hover:bg-purple-500 hover:shadow-[0_0_12px_rgba(168,85,247,0.4)] text-white px-4 py-2 rounded-lg cursor-pointer text-xs font-semibold transition-all active:scale-[0.97]"
                     >
                       Open Artifact
                     </button>
