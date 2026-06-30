@@ -97,70 +97,70 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         </div>
       </div>
 
-      {trajectorySteps.length <= 1 ? (
-        <div className="flex-1 flex flex-col items-center justify-center px-8 max-w-[980px] w-full mx-auto mt-10 mb-4 animate-fade-in relative z-10">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] bg-violet-500/10 rounded-full blur-[100px] pointer-events-none" />
+      <TrajectoryCanvas steps={trajectorySteps} isStreaming={isGenerating} onViewDiff={onViewDiff}>
+        {trajectorySteps.length <= 1 && (
+          <div className="flex flex-col items-center justify-center px-8 max-w-[980px] w-full mx-auto mt-6 mb-4 animate-fade-in relative z-10">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] bg-violet-500/10 rounded-full blur-[100px] pointer-events-none" />
 
-          <div
-            data-testid="workspace-title-question"
-            className="text-center text-3xl md:text-4xl font-outfit font-bold tracking-tight text-brand-textMain mb-2"
-          >
-            What should we build in{' '}
-            <span className="bg-gradient-to-r from-violet-400 via-sky-400 to-teal-400 bg-clip-text text-transparent">
-              {activeProject}
-            </span>
-            ?
-          </div>
-          <p className="text-brand-textMuted text-xs md:text-sm text-center mb-6 font-medium">
-            Select a workflow recommendation below or write a custom request.
-          </p>
-
-          <div className="w-full max-w-[860px] mb-6 p-5 glass-card rounded-xl text-xs md:text-sm text-brand-textMuted flex gap-3 items-center border border-violet-500/25 shadow-md">
-            <Terminal size={18} className="text-violet-400 flex-shrink-0" />
-            <div className="leading-relaxed text-left">
-              <span className="font-bold text-violet-400 mr-2 uppercase tracking-wider text-[10px] md:text-[11px]">
-                System Status:
+            <div
+              data-testid="workspace-title-question"
+              className="text-center text-3xl md:text-4xl font-outfit font-bold tracking-tight text-brand-textMain mb-2"
+            >
+              What should we build in{' '}
+              <span className="bg-gradient-to-r from-violet-400 via-sky-400 to-teal-400 bg-clip-text text-transparent">
+                {activeProject}
               </span>
-              <span>SuperAgent Desktop initialized. Ready for autonomous software engineering and multimodal AI media generation.</span>
+              ?
             </div>
-          </div>
+            <p className="text-brand-textMuted text-xs md:text-sm text-center mb-6 font-medium">
+              Select a workflow recommendation below or write a custom request.
+            </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-[860px] mb-8">
-            {recommendations.map(({ title, prompt, description, Icon, className }) => (
-              <button
-                key={title}
-                onClick={() => onPromptChange(prompt)}
-                className="glass-card glow-hover p-5 rounded-xl cursor-pointer text-left flex gap-4 items-start"
-              >
-                <span className={`w-9 h-9 rounded-lg flex items-center justify-center border ${className}`}>
-                  <Icon size={18} />
+            <div className="w-full max-w-[860px] mb-6 p-5 glass-card rounded-xl text-xs md:text-sm text-brand-textMuted flex gap-3 items-center border border-violet-500/25 shadow-md">
+              <Terminal size={18} className="text-violet-400 flex-shrink-0" />
+              <div className="leading-relaxed text-left">
+                <span className="font-bold text-violet-400 mr-2 uppercase tracking-wider text-[10px] md:text-[11px]">
+                  System Status:
                 </span>
-                <span>
-                  <span className="block font-semibold text-brand-textMain text-sm">{title}</span>
-                  <span className="block text-brand-textMuted text-xs mt-1">{description}</span>
-                </span>
-              </button>
-            ))}
-          </div>
+                <span>SuperAgent Desktop initialized. Ready for autonomous software engineering and multimodal AI media generation.</span>
+              </div>
+            </div>
 
-          <div className="flex gap-4 items-center justify-center flex-wrap max-w-[860px] w-full text-[11px] text-brand-textMuted border-t border-brand-border/50 pt-5">
-            <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-3.5 py-2 rounded-full font-medium shadow-sm">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Connected Models: {enabledModels.length || 'Default'}</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-[860px] mb-8">
+              {recommendations.map(({ title, prompt, description, Icon, className }) => (
+                <button
+                  key={title}
+                  onClick={() => onPromptChange(prompt)}
+                  className="glass-card glow-hover p-5 rounded-xl cursor-pointer text-left flex gap-4 items-start"
+                >
+                  <span className={`w-9 h-9 rounded-lg flex items-center justify-center border ${className}`}>
+                    <Icon size={18} />
+                  </span>
+                  <span>
+                    <span className="block font-semibold text-brand-textMain text-sm">{title}</span>
+                    <span className="block text-brand-textMuted text-xs mt-1">{description}</span>
+                  </span>
+                </button>
+              ))}
             </div>
-            <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-3.5 py-2 rounded-full font-medium shadow-sm">
-              <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
-              <span>MCP Servers: {mcpServers.filter((server) => server.enabled).length} Online</span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-3.5 py-2 rounded-full font-medium shadow-sm">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
-              <span>Credentials: {hasCredentials ? 'Active' : 'Configure keys'}</span>
+
+            <div className="flex gap-4 items-center justify-center flex-wrap max-w-[860px] w-full text-[11px] text-brand-textMuted border-t border-brand-border/50 pt-5">
+              <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-3.5 py-2 rounded-full font-medium shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Connected Models: {enabledModels.length || 'Default'}</span>
+              </div>
+              <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-3.5 py-2 rounded-full font-medium shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+                <span>MCP Servers: {mcpServers.filter((server) => server.enabled).length} Online</span>
+              </div>
+              <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-3.5 py-2 rounded-full font-medium shadow-sm">
+                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+                <span>Credentials: {hasCredentials ? 'Active' : 'Configure keys'}</span>
+              </div>
             </div>
           </div>
-        </div>
-      ) : (
-        <TrajectoryCanvas steps={trajectorySteps} isStreaming={isGenerating} onViewDiff={onViewDiff} />
-      )}
+        )}
+      </TrajectoryCanvas>
 
       <Composer
         onSend={onSendPrompt}

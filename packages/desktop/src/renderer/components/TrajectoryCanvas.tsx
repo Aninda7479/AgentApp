@@ -21,29 +21,35 @@ export interface TrajectoryCanvasProps {
   isStreaming?: boolean;
   onViewDiff?: (file: string, original: string, modified: string) => void;
   onActionClick?: (action: string, data: any) => void;
+  children?: React.ReactNode;
 }
 
 export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
   steps,
   isStreaming = false,
   onViewDiff,
-  onActionClick
+  onActionClick,
+  children
 }) => {
   return (
     <div
       data-testid="trajectory-canvas"
-      className="flex-1 overflow-y-auto px-6 md:px-10 py-8 bg-brand-bg scrollbar-thin relative z-10"
+      className="flex-1 overflow-y-auto px-4 md:px-6 py-6 bg-brand-bg scrollbar-thin relative z-10"
     >
       {/* Centered Column wrapping all steps to align with the prompt composer */}
-      <div className="max-w-[980px] w-full mx-auto flex flex-col gap-6">
-        {steps.length === 0 ? (
+      <div className="max-w-[900px] w-full mx-auto flex flex-col gap-5">
+        {children}
+
+        {steps.length === 0 && !children && (
           <div
             data-testid="empty-state"
             className="text-center text-brand-textMuted mt-24 text-sm md:text-base select-none"
           >
             No agent execution trajectory yet. Type a prompt below to start!
           </div>
-        ) : (
+        )}
+
+        {((steps.length > 1) || (steps.length > 0 && !children)) && (
           steps.map((step) => {
             if (step.type === 'user') {
               return (
