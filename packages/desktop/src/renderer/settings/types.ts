@@ -1,4 +1,5 @@
 import React from 'react';
+import { ThemeMode } from '../types';
 
 export interface ProviderConnection {
   id: string;
@@ -33,6 +34,8 @@ export interface SettingsViewProps {
   activeCategory: string;
   onSelectCategory: (category: string) => void;
   onBackToApp: () => void;
+  themeMode: ThemeMode;
+  onThemeChange: (theme: ThemeMode) => void;
   mcpDashboard: React.ReactNode;
   connectedProviders: ProviderConnection[];
   modelsCatalog: ModelConfig[];

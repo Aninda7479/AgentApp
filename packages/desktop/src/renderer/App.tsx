@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
-import { TrajectoryCanvas, TrajectoryStep } from './components/TrajectoryCanvas';
-import { Composer, ComposerOptions } from './components/Composer';
+import { TrajectoryStep } from './components/TrajectoryCanvas';
+import { ComposerOptions } from './components/Composer';
 import { DiffViewer } from './components/DiffViewer';
 import { BYOKModal } from './components/BYOKModal';
 import { MCPDashboard, MCPServerInfo } from './components/MCPDashboard';
@@ -10,23 +10,14 @@ import { ScheduledView } from './components/ScheduledView';
 import { PluginsView } from './components/PluginsView';
 import { SettingsView, ProviderConnection, ModelConfig } from './settings/SettingsView';
 import { CreateProjectModal } from './components/CreateProjectModal';
-import { Key } from 'lucide-react';
-
-export interface StoredProject {
-  name: string;
-  folders: string[];
-}
-
-export interface StoredChat {
-  id: string;
-  title: string;
-  project: string;
-  model: string;
-  timestamp: string;
-  steps: TrajectoryStep[];
-}
+import { TitleBar } from './components/TitleBar';
+import { AppToast } from './components/AppToast';
+import { WorkspaceView } from './components/WorkspaceView';
+import { StoredChat, StoredProject } from './types';
+import { useThemeMode } from './theme';
 
 export const App: React.FC = () => {
+  const { themeMode, setThemeMode } = useThemeMode();
   const [activeTab, setActiveTab] = useState<string>('trajectory');
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [isBYOKOpen, setIsBYOKOpen] = useState<boolean>(false);
@@ -702,65 +693,17 @@ export const App: React.FC = () => {
   return (
     <div
       data-testid="app-container"
+      data-theme={themeMode}
       className="flex flex-col h-screen w-screen bg-brand-bg text-brand-textMain overflow-hidden font-sans select-none"
     >
-      {/* frameless window top bar overlay */}
-      <div
-        data-testid="title-bar"
-        className="h-10 bg-brand-sidebar border-b border-brand-border flex items-center justify-between px-4 select-none drag-window"
-        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-      >
-        <div 
-          className="flex items-center gap-3.5 no-drag-window"
-          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        >
-          <span className="font-semibold text-xs text-brand-textMuted cursor-default">
-            SuperAgent Desktop — Codex Clone
-          </span>
-        </div>
-
-        <div 
-          className="flex items-center gap-3 no-drag-window"
-          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        >
-          <button
-            data-testid="byok-badge-trigger"
-            onClick={() => {
-              setActiveTab('settings');
-              setSettingsCategory('providers');
-            }}
-            className="bg-brand-sidebar hover:bg-brand-border/60 border border-brand-border text-brand-textMain px-2.5 py-0.5 rounded-full text-xs cursor-pointer flex items-center gap-1.5 transition-colors font-medium active:scale-[0.98]"
-          >
-            <Key size={11} className="text-brand-textMuted" />
-            <span>BYOK: {byokKeys.openai ? 'OpenAI' : 'Configure'}</span>
-          </button>
-
-          {/* Window Control Controls */}
-          <div className="flex items-center gap-2 pl-2">
-            <button
-              data-testid="win-minimize"
-              onClick={() => handleWindowControl('minimize')}
-              className="bg-transparent border-none text-brand-textMuted hover:text-white cursor-pointer text-sm w-5 h-5 flex items-center justify-center transition-colors"
-            >
-              -
-            </button>
-            <button
-              data-testid="win-maximize"
-              onClick={() => handleWindowControl('maximize')}
-              className="bg-transparent border-none text-brand-textMuted hover:text-white cursor-pointer text-[10px] w-5 h-5 flex items-center justify-center transition-colors"
-            >
-              ▢
-            </button>
-            <button
-              data-testid="win-close"
-              onClick={() => handleWindowControl('close')}
-              className="bg-transparent border-none text-brand-textMuted hover:text-red-500 cursor-pointer text-xs w-5 h-5 flex items-center justify-center transition-colors"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      </div>
+      <TitleBar
+        hasOpenAiKey={Boolean(byokKeys.openai)}
+        onOpenProviders={() => {
+          setActiveTab('settings');
+          setSettingsCategory('providers');
+        }}
+        onWindowControl={handleWindowControl}
+      />
 
       {/* Main Body container */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -798,128 +741,25 @@ export const App: React.FC = () => {
 
         <div className="flex-1 flex flex-col relative overflow-hidden bg-brand-bg">
           {activeTab === 'trajectory' && (
-            <>
-              {/* Header inside workspace */}
-              <div className="h-12 border-b border-brand-border/40 flex items-center justify-between px-6 bg-brand-bg">
-                <div className="flex items-center gap-2 text-sm text-brand-textMain font-semibold">
-                  <span className="text-brand-textMuted text-xs">📁</span> 
-                  <span>{activeProject || 'No Project'} workspace</span>
-                </div>
-
-                {/* Panel layout buttons */}
-                <div className="flex gap-2.5 text-brand-textMuted cursor-pointer">
-                  <span onClick={() => setActiveTab('mcp')} title="MCP Dashboard" className="text-sm hover:text-white transition-colors">🔌</span>
-                  <span onClick={() => { setActiveTab('settings'); setSettingsCategory('general'); }} title="Settings" className="text-sm hover:text-white transition-colors">⚙️</span>
-                </div>
-              </div>
-
-              {/* Central Title Question & Suggestions Dashboard */}
-              {trajectorySteps.length <= 1 ? (
-                <div className="flex-1 flex flex-col items-center justify-center px-4 max-w-[900px] w-full mx-auto mt-12 mb-4 animate-fade-in relative z-10">
-                  {/* Glowing background spot */}
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] bg-purple-900/10 rounded-full blur-[100px] pointer-events-none" />
-
-                  <div
-                    data-testid="workspace-title-question"
-                    className="text-center text-3xl md:text-4xl font-outfit font-bold tracking-tight text-white mb-2"
-                  >
-                    What should we build in <span className="bg-gradient-to-r from-purple-400 via-indigo-400 to-teal-400 bg-clip-text text-transparent">{activeProject}</span>?
-                  </div>
-                  <p className="text-brand-textMuted text-xs md:text-sm text-center mb-6 font-medium">
-                    Select a workflow recommendation below or write a custom request.
-                  </p>
-
-                  {/* System Greeting Alert */}
-                  <div className="w-full max-w-[800px] mb-6 p-4 glass-card rounded-xl text-xs md:text-sm text-brand-textMuted flex gap-3 items-center border border-purple-500/20 shadow-md">
-                    <span className="text-base">🤖</span>
-                    <div className="leading-relaxed text-left">
-                      <span className="font-bold text-purple-400 mr-2 uppercase tracking-wider text-[10px] md:text-[11px]">System Status:</span>
-                      <span>SuperAgent Desktop initialized. Ready for autonomous software engineering and multimodal AI media generation.</span>
-                    </div>
-                  </div>
-
-                  {/* Suggestion Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-[800px] mb-8">
-                    <div
-                      onClick={() => setComposerPrompt("Develop a complete interactive analytics dashboard for my application")}
-                      className="glass-card glow-hover p-4 rounded-xl cursor-pointer text-left flex gap-3.5 items-start"
-                    >
-                      <span className="text-xl bg-purple-950/80 text-purple-400 w-9 h-9 rounded-lg flex items-center justify-center border border-purple-800/40">🚀</span>
-                      <div>
-                        <h4 className="font-semibold text-white text-sm">Develop Dashboard</h4>
-                        <p className="text-brand-textMuted text-xs mt-1">Generate React views, metrics charts, and CSS styling</p>
-                      </div>
-                    </div>
-                    <div
-                      onClick={() => setComposerPrompt("Analyze the project source code for dependencies and vulnerabilities")}
-                      className="glass-card glow-hover p-4 rounded-xl cursor-pointer text-left flex gap-3.5 items-start"
-                    >
-                      <span className="text-xl bg-emerald-950/80 text-emerald-400 w-9 h-9 rounded-lg flex items-center justify-center border border-emerald-800/40">🩺</span>
-                      <div>
-                        <h4 className="font-semibold text-white text-sm">Diagnostic Run</h4>
-                        <p className="text-brand-textMuted text-xs mt-1">Audit package health, search for bugs, and run checks</p>
-                      </div>
-                    </div>
-                    <div
-                      onClick={() => setComposerPrompt("Configure a custom MCP Server extension for this environment")}
-                      className="glass-card glow-hover p-4 rounded-xl cursor-pointer text-left flex gap-3.5 items-start"
-                    >
-                      <span className="text-xl bg-blue-950/80 text-blue-400 w-9 h-9 rounded-lg flex items-center justify-center border border-blue-800/40">🔌</span>
-                      <div>
-                        <h4 className="font-semibold text-white text-sm">Integrate MCP Tools</h4>
-                        <p className="text-brand-textMuted text-xs mt-1">Extend agent capabilities with databases and file APIs</p>
-                      </div>
-                    </div>
-                    <div
-                      onClick={() => setComposerPrompt("Set up a new cron task that executes checks on a regular schedule")}
-                      className="glass-card glow-hover p-4 rounded-xl cursor-pointer text-left flex gap-3.5 items-start"
-                    >
-                      <span className="text-xl bg-pink-950/80 text-pink-400 w-9 h-9 rounded-lg flex items-center justify-center border border-pink-800/40">📅</span>
-                      <div>
-                        <h4 className="font-semibold text-white text-sm">Schedule Workflows</h4>
-                        <p className="text-brand-textMuted text-xs mt-1">Automate builds, recurring reports, and routine tasks</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Status Badges */}
-                  <div className="flex gap-4 items-center justify-center flex-wrap max-w-[800px] w-full text-[11px] text-brand-textMuted border-t border-brand-border/40 pt-5">
-                    <div className="flex items-center gap-1.5 bg-brand-sidebar/50 border border-brand-border px-3 py-1.5 rounded-full font-medium">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                      <span>Connected Models: {modelsCatalog.filter(m => m.enabled).length || 'Default'}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 bg-brand-sidebar/50 border border-brand-border px-3 py-1.5 rounded-full font-medium">
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
-                      <span>MCP Servers: {mcpServers.filter(s => s.enabled).length} Online</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 bg-brand-sidebar/50 border border-brand-border px-3 py-1.5 rounded-full font-medium">
-                      <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse"></span>
-                      <span>Credentials: {byokKeys.openai || byokKeys.gemini ? 'Active' : 'Configure keys'}</span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <TrajectoryCanvas
-                  steps={trajectorySteps}
-                  isStreaming={isGenerating}
-                  onViewDiff={handleViewDiff}
-                />
-              )}
-              <Composer
-                onSend={handleSendPrompt}
-                isGenerating={isGenerating}
-                onStop={() => setIsGenerating(false)}
-                activeProject={activeProject}
-                onAttachClick={() => triggerToast('File Attachment Manager')}
-                onMicClick={() => triggerToast('Voice Dictation Input')}
-                onLocallyClick={() => triggerToast('Local Execution Environments')}
-                onBranchClick={() => triggerToast('Git Branch Selector')}
-                availableModels={modelsCatalog.filter(m => m.enabled).map(m => m.name)}
-                defaultModel={modelsCatalog.filter(m => m.enabled)[0]?.name || 'Gemini 3.5 Flash (High)'}
-                promptValue={composerPrompt}
-                onPromptChange={setComposerPrompt}
-              />
-            </>
+            <WorkspaceView
+              activeProject={activeProject}
+              trajectorySteps={trajectorySteps}
+              isGenerating={isGenerating}
+              modelsCatalog={modelsCatalog}
+              mcpServers={mcpServers}
+              hasCredentials={Boolean(byokKeys.openai || byokKeys.gemini)}
+              composerPrompt={composerPrompt}
+              onPromptChange={setComposerPrompt}
+              onSendPrompt={handleSendPrompt}
+              onStop={() => setIsGenerating(false)}
+              onViewDiff={handleViewDiff}
+              onOpenMcp={() => setActiveTab('mcp')}
+              onOpenSettings={() => {
+                setActiveTab('settings');
+                setSettingsCategory('general');
+              }}
+              onToast={triggerToast}
+            />
           )}
 
           {activeTab === 'scheduled' && (
@@ -942,6 +782,8 @@ export const App: React.FC = () => {
               activeCategory={settingsCategory}
               onSelectCategory={setSettingsCategory}
               onBackToApp={() => setActiveTab('trajectory')}
+              themeMode={themeMode}
+              onThemeChange={setThemeMode}
               mcpDashboard={
                 <MCPDashboard
                   servers={mcpServers}
@@ -1007,16 +849,7 @@ export const App: React.FC = () => {
         onCreate={handleCreateProject}
       />
 
-      {/* Under Construction Toast Notification */}
-      {toastOpen && (
-        <div
-          data-testid="toast-under-construction"
-          className="fixed bottom-6 right-6 bg-brand-popover border border-brand-border rounded-lg py-3 px-4.5 text-white shadow-2xl z-[3000] flex items-center gap-2 text-xs"
-        >
-          <span>🚧</span>
-          <span>{toastMessage} is currently under development.</span>
-        </div>
-      )}
+      <AppToast open={toastOpen} message={toastMessage} />
     </div>
   );
 };

@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand-bg: #07070a;
-  --color-brand-sidebar: #0b0b0f;
-  --color-brand-card: #121218;
-  --color-brand-popover: #151520;
-  --color-brand-border: #1e1e2b;
-  --color-brand-textMain: #f4f4f7;
-  --color-brand-textMuted: #8e8e9f;
+  --color-brand-bg: var(--brand-bg);
+  --color-brand-sidebar: var(--brand-sidebar);
+  --color-brand-card: var(--brand-card);
+  --color-brand-popover: var(--brand-popover);
+  --color-brand-border: var(--brand-border);
+  --color-brand-textMain: var(--brand-text-main);
+  --color-brand-textMuted: var(--brand-text-muted);
   
   --font-sans: 'Inter', -apple-system, sans-serif;
   --font-outfit: 'Outfit', sans-serif;
@@ -17,6 +17,43 @@
   --animate-fade-in: fadeIn 0.4s ease-out forwards;
   --animate-pulse-slow: pulseSlow 3s infinite ease-in-out;
   --animate-float: float 4s infinite ease-in-out;
+}
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --brand-bg: #08090d;
+  --brand-sidebar: #0d0f15;
+  --brand-card: #141720;
+  --brand-popover: #191d28;
+  --brand-border: #252b38;
+  --brand-text-main: #f5f7fb;
+  --brand-text-muted: #9ca3b4;
+  --brand-hover: rgba(255, 255, 255, 0.06);
+  --brand-hover-strong: rgba(255, 255, 255, 0.1);
+  --brand-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --brand-shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.22);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --brand-bg: #eef2f7;
+  --brand-sidebar: #ffffff;
+  --brand-card: #ffffff;
+  --brand-popover: #f8fafc;
+  --brand-border: #cbd5e1;
+  --brand-text-main: #101828;
+  --brand-text-muted: #475467;
+  --brand-hover: rgba(15, 23, 42, 0.06);
+  --brand-hover-strong: rgba(15, 23, 42, 0.1);
+  --brand-shadow: 0 18px 45px rgba(15, 23, 42, 0.16);
+  --brand-shadow-soft: 0 8px 22px rgba(15, 23, 42, 0.1);
+}
+
+html,
+body {
+  background: var(--brand-bg);
+  color: var(--brand-text-main);
 }
 
 @keyframes fadeIn {
@@ -62,17 +99,19 @@
 
 /* Glassmorphism helpers */
 .glass-panel {
-  background: rgba(11, 11, 15, 0.7);
+  background: color-mix(in srgb, var(--brand-sidebar) 94%, transparent);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid color-mix(in srgb, var(--brand-border) 88%, transparent);
+  box-shadow: var(--brand-shadow-soft);
 }
 
 .glass-card {
-  background: rgba(20, 20, 28, 0.45);
+  background: color-mix(in srgb, var(--brand-card) 96%, transparent);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid color-mix(in srgb, var(--brand-border) 90%, transparent);
+  box-shadow: var(--brand-shadow-soft);
 }
 
 .glow-hover {
@@ -93,4 +132,39 @@
 @keyframes borderGlow {
   0%, 100% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.1); border-color: rgba(139, 92, 246, 0.2); }
   50% { box-shadow: 0 0 16px rgba(139, 92, 246, 0.25); border-color: rgba(139, 92, 246, 0.4); }
+}
+
+:root[data-theme='light'] .bg-white\/5 {
+  background-color: rgba(15, 23, 42, 0.055);
+}
+
+:root[data-theme='light'] .hover\:bg-white\/5:hover {
+  background-color: rgba(15, 23, 42, 0.075);
+}
+
+:root[data-theme='light'] .hover\:bg-white\/10:hover {
+  background-color: rgba(15, 23, 42, 0.105);
+}
+
+:root[data-theme='light'] .border-white\/5 {
+  border-color: rgba(15, 23, 42, 0.08);
+}
+
+:root[data-theme='light'] .text-white,
+:root[data-theme='light'] .hover\:text-white:hover {
+  color: var(--brand-text-main);
+}
+
+:root[data-theme='light'] .shadow-2xl,
+:root[data-theme='light'] .shadow-lg,
+:root[data-theme='light'] .shadow-md {
+  box-shadow: var(--brand-shadow-soft);
+}
+
+:root[data-theme='light'] .shadow-\[0_4px_20px_rgba\(0\,0\,0\,0\.25\)\],
+:root[data-theme='light'] .shadow-\[0_8px_32px_rgba\(0\,0\,0\,0\.3\)\],
+:root[data-theme='light'] .shadow-\[0_12px_40px_rgba\(0\,0\,0\,0\.5\)\],
+:root[data-theme='light'] .shadow-\[0_20px_40px_rgba\(0\,0\,0\,0\.5\)\],
+:root[data-theme='light'] .shadow-\[0_20px_50px_rgba\(0\,0\,0\,0\.8\)\] {
+  box-shadow: var(--brand-shadow);
 }

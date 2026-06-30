@@ -1,9 +1,10 @@
 import React from 'react';
+import { ArrowLeft, Bot, Keyboard, LucideIcon, Plug, Settings, SlidersHorizontal } from 'lucide-react';
 
 interface SidebarItem {
   id: string;
   label: string;
-  icon: string;
+  Icon: LucideIcon;
 }
 
 interface SettingsSidebarProps {
@@ -16,13 +17,13 @@ interface SettingsSidebarProps {
 
 const CATEGORIES: Record<string, SidebarItem[]> = {
   Desktop: [
-    { id: 'general', label: 'General', icon: '⚙️' },
-    { id: 'shortcuts', label: 'Shortcuts', icon: '⌨️' },
-    { id: 'servers', label: 'Servers', icon: '🔌' }
+    { id: 'general', label: 'General', Icon: Settings },
+    { id: 'shortcuts', label: 'Shortcuts', Icon: Keyboard },
+    { id: 'servers', label: 'Servers', Icon: Plug }
   ],
   Server: [
-    { id: 'providers', label: 'Providers', icon: '⚙️' },
-    { id: 'models', label: 'Models', icon: '✦' }
+    { id: 'providers', label: 'Providers', Icon: SlidersHorizontal },
+    { id: 'models', label: 'Models', Icon: Bot }
   ]
 };
 
@@ -32,132 +33,65 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   onBackToApp,
   searchQuery,
   setSearchQuery
-}) => {
-  const renderSidebarItem = (id: string, label: string, icon: string) => {
-    const isActive = activeCategory === id;
-    if (searchQuery && !label.toLowerCase().includes(searchQuery.toLowerCase())) return null;
-
-    return (
-      <div
-        key={id}
-        data-testid={`settings-category-${id}`}
-        onClick={() => onSelectCategory(id)}
-        style={{
-          padding: '8px 10px',
-          borderRadius: '8px',
-          color: isActive ? '#ffffff' : '#8a8a8a',
-          backgroundColor: isActive ? '#2e2220' : 'transparent',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          fontSize: '0.88rem',
-          fontWeight: isActive ? 500 : 400,
-          marginBottom: '2px',
-          transition: 'all 0.15s ease'
-        }}
-        onMouseEnter={(e) => {
-          if (!isActive) e.currentTarget.style.backgroundColor = '#251c1a';
-        }}
-        onMouseLeave={(e) => {
-          if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
-        }}
-      >
-        <span style={{ fontSize: '0.95rem' }}>{icon}</span>
-        <span>{label}</span>
-      </div>
-    );
-  };
-
-  return (
-    <div
-      style={{
-        width: '260px',
-        backgroundColor: '#1b1412',
-        borderRight: '1px solid #2d2321',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '20px 16px',
-        height: '100%'
-      }}
+}) => (
+  <aside className="flex h-full w-[260px] flex-col border-r border-brand-border bg-brand-sidebar px-4 py-5">
+    <button
+      type="button"
+      onClick={onBackToApp}
+      className="mb-5 flex items-center gap-2 text-sm text-brand-textMuted hover:text-brand-textMain"
     >
-      <div
-        onClick={onBackToApp}
-        style={{
-          color: '#8a8a8a',
-          cursor: 'pointer',
-          fontSize: '0.9rem',
-          marginBottom: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px'
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.color = '#ffffff')}
-        onMouseLeave={(e) => (e.currentTarget.style.color = '#8a8a8a')}
-      >
-        <span>←</span>
-        <span>Back to app</span>
-      </div>
+      <ArrowLeft size={15} />
+      <span>Back to app</span>
+    </button>
 
-      <div style={{ marginBottom: '24px' }}>
-        <input
-          type="text"
-          placeholder="Search settings..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{
-            width: '100%',
-            backgroundColor: '#141110',
-            border: '1px solid #2d2321',
-            borderRadius: '6px',
-            padding: '8px 12px',
-            color: '#ffffff',
-            fontSize: '0.85rem',
-            outline: 'none'
-          }}
-        />
-      </div>
-
-      <div style={{ flex: 1 }}>
-        {Object.entries(CATEGORIES).map(([group, items]) => {
-          const visibleItems = items.filter(
-            (item) => !searchQuery || item.label.toLowerCase().includes(searchQuery.toLowerCase())
-          );
-          if (visibleItems.length === 0) return null;
-
-          return (
-            <div key={group} style={{ marginBottom: '20px' }}>
-              <div
-                style={{
-                  fontSize: '0.72rem',
-                  fontWeight: 600,
-                  color: '#4b4b4b',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.08em',
-                  marginBottom: '8px',
-                  paddingLeft: '10px'
-                }}
-              >
-                {group}
-              </div>
-              {visibleItems.map((item) => renderSidebarItem(item.id, item.label, item.icon))}
-            </div>
-          );
-        })}
-      </div>
-
-      <div
-        style={{
-          borderTop: '1px solid #2d2321',
-          paddingTop: '12px',
-          fontSize: '0.78rem',
-          color: '#4b4b4b',
-          textAlign: 'left',
-          paddingLeft: '10px'
-        }}
-      >
-        Agent App Desktop
-      </div>
+    <div className="mb-6">
+      <input
+        type="text"
+        placeholder="Search settings..."
+        value={searchQuery}
+        onChange={(event) => setSearchQuery(event.target.value)}
+        className="w-full rounded-md border border-brand-border bg-brand-bg px-3 py-2 text-sm text-brand-textMain outline-none placeholder:text-brand-textMuted/70 focus:border-sky-500/70"
+      />
     </div>
-  );
-};
+
+    <div className="flex-1">
+      {Object.entries(CATEGORIES).map(([group, items]) => {
+        const visibleItems = items.filter(
+          (item) => !searchQuery || item.label.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+        if (visibleItems.length === 0) return null;
+
+        return (
+          <div key={group} className="mb-5">
+            <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-brand-textMuted/70">
+              {group}
+            </div>
+            {visibleItems.map(({ id, label, Icon }) => {
+              const isActive = activeCategory === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  data-testid={`settings-category-${id}`}
+                  onClick={() => onSelectCategory(id)}
+                  className={`mb-0.5 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors ${
+                    isActive
+                      ? 'bg-brand-popover text-brand-textMain ring-1 ring-brand-border'
+                      : 'text-brand-textMuted hover:bg-brand-card hover:text-brand-textMain'
+                  }`}
+                >
+                  <Icon size={16} />
+                  <span>{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+
+    <div className="border-t border-brand-border px-2 pt-3 text-left text-xs text-brand-textMuted">
+      Agent App Desktop
+    </div>
+  </aside>
+);

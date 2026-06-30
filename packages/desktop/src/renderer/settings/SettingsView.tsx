@@ -12,6 +12,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   activeCategory,
   onSelectCategory,
   onBackToApp,
+  themeMode,
+  onThemeChange,
   mcpDashboard,
   connectedProviders,
   modelsCatalog,
@@ -118,15 +120,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   return (
-    <div
-      className="settings-container"
-      style={{
-        display: 'flex',
-        height: '100%',
-        backgroundColor: '#141110',
-        color: '#ececec'
-      }}
-    >
+    <div className="settings-container flex h-full bg-brand-bg text-brand-textMain">
       <SettingsSidebar
         activeCategory={activeCategory}
         onSelectCategory={onSelectCategory}
@@ -135,15 +129,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         setSearchQuery={setSearchQuery}
       />
 
-      <div
-        style={{
-          flex: 1,
-          padding: '40px 60px',
-          overflowY: 'auto',
-          height: '100%'
-        }}
-      >
-        {activeCategory === 'general' && <GeneralSettings />}
+      <div className="flex-1 h-full overflow-y-auto px-8 py-8 md:px-14 md:py-10">
+        {activeCategory === 'general' && (
+          <GeneralSettings themeMode={themeMode} onThemeChange={onThemeChange} />
+        )}
         {activeCategory === 'shortcuts' && <ShortcutsSettings />}
         {activeCategory === 'servers' && <ServersSettings mcpDashboard={mcpDashboard} />}
         {activeCategory === 'providers' && (

@@ -7,13 +7,13 @@ module.exports = {
     extend: {
       colors: {
         brand: {
-          bg: '#141110',
-          sidebar: '#1e1816',
-          card: '#1b1412',
-          popover: '#262220',
-          border: '#2d2321',
-          textMain: '#ececec',
-          textMuted: '#8a8a8a',
+          bg: 'var(--brand-bg)',
+          sidebar: 'var(--brand-sidebar)',
+          card: 'var(--brand-card)',
+          popover: 'var(--brand-popover)',
+          border: 'var(--brand-border)',
+          textMain: 'var(--brand-text-main)',
+          textMuted: 'var(--brand-text-muted)',
         }
       },
       fontFamily: {

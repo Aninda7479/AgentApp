@@ -1,10 +1,6 @@
 import React, { useState } from 'react';
 import { X, Plus, Folder, Trash2 } from 'lucide-react';
-
-export interface StoredProject {
-  name: string;
-  folders: string[];
-}
+import { StoredProject } from '../types';
 
 interface CreateProjectModalProps {
   isOpen: boolean;

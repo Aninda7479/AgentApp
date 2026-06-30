@@ -132,10 +132,10 @@ export const Composer: React.FC<ComposerProps> = ({
   return (
     <div
       data-testid="composer-container"
-      className="p-4 md:p-6 pb-6 max-w-[900px] w-full mx-auto flex flex-col gap-3 box-border relative z-10"
+      className="px-6 md:px-10 pt-4 pb-7 max-w-[980px] w-full mx-auto flex flex-col gap-3 box-border relative z-10"
     >
       {/* The main input composer card */}
-      <div className="glass-panel rounded-2xl p-4 flex flex-col shadow-[0_12px_40px_rgba(0,0,0,0.5)] relative transition-all duration-300 focus-within:border-purple-500/40 focus-within:ring-1 focus-within:ring-purple-500/10">
+      <div className="glass-panel rounded-xl p-5 flex flex-col shadow-md relative transition-all duration-300 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/10">
         <textarea
           data-testid="composer-input"
           value={prompt}
@@ -144,18 +144,18 @@ export const Composer: React.FC<ComposerProps> = ({
           placeholder="Do anything"
           disabled={disabled || isGenerating}
           rows={1}
-          className="bg-transparent border-none outline-none text-white text-base resize-none w-full min-h-[60px] leading-relaxed placeholder-brand-textMuted/45 font-sans"
+          className="bg-transparent border-none outline-none text-brand-textMain text-base resize-none w-full min-h-[78px] leading-relaxed placeholder-brand-textMuted/55 font-sans"
         />
 
         {/* Toolbar row inside box */}
-        <div className="flex items-center justify-between border-t border-brand-border/40 pt-3 mt-3">
+        <div className="flex items-center justify-between border-t border-brand-border/60 pt-4 mt-4">
           {/* Left toolbar elements */}
           <div className="flex items-center gap-2 relative">
             {/* Plus button */}
             <button
               data-testid="composer-attach-btn"
               onClick={onAttachClick}
-              className="text-brand-textMuted hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+              className="text-brand-textMuted hover:text-brand-textMain p-2 rounded-lg bg-brand-popover/60 hover:bg-brand-popover border border-brand-border transition-colors cursor-pointer"
             >
               <PlusIcon className="w-4.5 h-4.5" />
             </button>
@@ -165,7 +165,7 @@ export const Composer: React.FC<ComposerProps> = ({
               <button
                 data-testid="approval-dropdown-btn"
                 onClick={() => setShowApprovalDropdown(!showApprovalDropdown)}
-                className="bg-white/5 border border-brand-border hover:border-purple-500/30 hover:bg-white/10 text-brand-textMain px-3.5 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all duration-150 cursor-pointer select-none active:scale-[0.98]"
+                className="bg-brand-popover border border-brand-border hover:border-violet-500/35 hover:bg-brand-card text-brand-textMain px-4 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all duration-150 cursor-pointer select-none active:scale-[0.98] shadow-sm"
               >
                 <UserCheckIcon className="w-3.5 h-3.5 text-brand-textMuted" />
                 <span>{getApprovalLabel()}</span>
@@ -175,7 +175,7 @@ export const Composer: React.FC<ComposerProps> = ({
               {showApprovalDropdown && (
                 <div
                   data-testid="approval-dropdown-menu"
-                  className="absolute bottom-full left-0 mb-2 glass-panel rounded-lg shadow-2xl z-50 w-[180px] overflow-hidden"
+                  className="absolute bottom-full left-0 mb-2 glass-panel rounded-lg shadow-lg z-50 w-[190px] overflow-hidden"
                 >
                   <div
                     data-testid="approval-option-ask"
@@ -219,7 +219,7 @@ export const Composer: React.FC<ComposerProps> = ({
               <button
                 data-testid="model-dropdown-btn"
                 onClick={() => setShowModelDropdown(!showModelDropdown)}
-                className="text-brand-textMuted hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-white/5 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="text-brand-textMuted hover:text-brand-textMain px-3 py-2 rounded-lg bg-brand-popover/60 hover:bg-brand-popover border border-brand-border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <CpuIcon className="w-3.5 h-3.5" />
                 <span>{selectedModel}</span>
@@ -229,7 +229,7 @@ export const Composer: React.FC<ComposerProps> = ({
               {showModelDropdown && (
                 <div
                   data-testid="model-dropdown-menu"
-                  className="absolute bottom-full right-0 mb-2 glass-panel rounded-lg shadow-2xl z-50 w-[160px] overflow-hidden"
+                  className="absolute bottom-full right-0 mb-2 glass-panel rounded-lg shadow-lg z-50 w-[170px] overflow-hidden"
                 >
                   {availableModels.map((model) => (
                     <div
@@ -252,7 +252,7 @@ export const Composer: React.FC<ComposerProps> = ({
             <button
               data-testid="composer-mic-btn"
               onClick={onMicClick}
-              className="text-brand-textMuted hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors cursor-pointer"
+              className="text-brand-textMuted hover:text-brand-textMain p-2 rounded-lg bg-brand-popover/60 hover:bg-brand-popover border border-brand-border transition-colors cursor-pointer"
             >
               <MicIcon className="w-4 h-4" />
             </button>
@@ -273,8 +273,8 @@ export const Composer: React.FC<ComposerProps> = ({
                 disabled={disabled || !prompt.trim()}
                 className={`rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150 ${
                   !prompt.trim() || disabled
-                    ? 'bg-white/5 text-brand-textMuted/30 cursor-not-allowed border border-white/5'
-                    : 'bg-white hover:bg-purple-100 hover:shadow-[0_0_12px_rgba(255,255,255,0.4)] text-black cursor-pointer active:scale-[0.92]'
+                    ? 'bg-brand-popover text-brand-textMuted/40 cursor-not-allowed border border-brand-border'
+                    : 'bg-violet-600 hover:bg-violet-500 hover:shadow-[0_0_12px_rgba(139,92,246,0.32)] text-white cursor-pointer active:scale-[0.92] border border-violet-500'
                 }`}
               >
                 <ArrowUpIcon className="w-4 h-4" />
@@ -287,12 +287,12 @@ export const Composer: React.FC<ComposerProps> = ({
       {/* Under-composer badge row: Folder, Work locally, main branch */}
       <div
         data-testid="composer-badges-row"
-        className="flex gap-2 px-2 items-center flex-wrap"
+        className="flex gap-2.5 px-1 items-center flex-wrap"
       >
         {/* Project Folder Badge */}
         <div
           data-testid="badge-project"
-          className="bg-white/5 border border-brand-border rounded-full text-brand-textMain px-3.5 py-1.5 text-[11px] font-semibold flex items-center gap-1.5 select-none"
+          className="bg-brand-card border border-brand-border rounded-full text-brand-textMain px-3.5 py-2 text-[11px] font-semibold flex items-center gap-1.5 select-none shadow-sm"
         >
           <FolderIcon className="w-3.5 h-3.5 text-indigo-400" />
           <span>{activeProject}</span>
@@ -302,7 +302,7 @@ export const Composer: React.FC<ComposerProps> = ({
         <div
           data-testid="badge-work-locally"
           onClick={onLocallyClick}
-          className="bg-white/5 border border-brand-border hover:border-purple-500/35 hover:bg-white/10 rounded-full text-brand-textMain px-3.5 py-1.5 text-[11px] font-semibold flex items-center gap-1.5 select-none cursor-pointer transition-all duration-150 active:scale-[0.98]"
+          className="bg-brand-card border border-brand-border hover:border-violet-500/35 hover:bg-brand-popover rounded-full text-brand-textMain px-3.5 py-2 text-[11px] font-semibold flex items-center gap-1.5 select-none cursor-pointer transition-all duration-150 active:scale-[0.98] shadow-sm"
         >
           <LaptopIcon className="w-3.5 h-3.5 text-teal-400" />
           <span>Work locally</span>
@@ -313,7 +313,7 @@ export const Composer: React.FC<ComposerProps> = ({
         <div
           data-testid="badge-branch"
           onClick={onBranchClick}
-          className="bg-white/5 border border-brand-border hover:border-purple-500/35 hover:bg-white/10 rounded-full text-brand-textMain px-3.5 py-1.5 text-[11px] font-semibold flex items-center gap-1.5 select-none cursor-pointer transition-all duration-150 active:scale-[0.98]"
+          className="bg-brand-card border border-brand-border hover:border-violet-500/35 hover:bg-brand-popover rounded-full text-brand-textMain px-3.5 py-2 text-[11px] font-semibold flex items-center gap-1.5 select-none cursor-pointer transition-all duration-150 active:scale-[0.98] shadow-sm"
         >
           <GitBranchIcon className="w-3.5 h-3.5 text-purple-400" />
           <span>main</span>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StoredProject, StoredChat } from '../App';
+import { StoredProject, StoredChat } from '../types';
 
 // Inline Custom SVG Outline Icons for maximum reliability in Electron
 const PlusIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -119,10 +119,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <button
         data-testid={`nav-item-${id}`}
         onClick={() => onSelectTab(id)}
-        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 text-sm font-medium mb-0.5 select-none ${
+        className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg transition-all duration-150 text-sm font-medium mb-1 select-none ${
           isActive 
-            ? 'text-white bg-white/5 border-l-2 border-purple-500 shadow-sm' 
-            : 'text-brand-textMuted hover:text-white hover:bg-white/5'
+            ? 'text-brand-textMain bg-brand-popover border border-brand-border shadow-sm' 
+            : 'text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-brand-popover/70'
         }`}
       >
         <IconComponent className="w-4 h-4 flex-shrink-0" />
@@ -137,11 +137,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       style={{
         width: collapsed ? '70px' : '260px',
       }}
-      className="glass-panel border-r border-brand-border flex flex-col p-2.5 h-full box-border transition-all duration-200 z-20"
+      className="glass-panel border-r border-brand-border flex flex-col p-3.5 h-full box-border transition-all duration-200 z-20"
     >
       {/* Top Windows Navigation Bar — Aligned to exactly match main workspace header height h-12 */}
       {!collapsed && (
-        <div className="h-12 border-b border-brand-border flex items-center gap-4 px-2 mb-3 select-none">
+        <div className="h-14 border-b border-brand-border flex items-center gap-4 px-2 mb-4 select-none">
           {/* Navigation Arrows */}
           <div className="flex gap-2 text-brand-textMuted text-xs font-mono">
             <span className="cursor-pointer hover:text-white transition-colors">←</span>
@@ -160,11 +160,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Main navigation list */}
       <div className="flex-1 overflow-y-auto pr-0.5 custom-scrollbar">
         {/* Core items */}
-        <div className="mb-4">
+        <div className="mb-5 space-y-1">
           <button
             data-testid="nav-new-chat"
             onClick={onNewChat || (() => onSelectTab('trajectory'))}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white bg-gradient-to-r from-purple-600/10 to-indigo-600/10 border border-purple-500/20 hover:border-purple-500/55 hover:from-purple-600/25 hover:to-indigo-600/25 transition-all duration-150 text-sm font-semibold mb-2 select-none cursor-pointer"
+            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-lg text-brand-textMain bg-violet-500/15 border border-violet-500/35 hover:border-violet-500/60 hover:bg-violet-500/20 transition-all duration-150 text-sm font-semibold mb-2 select-none cursor-pointer shadow-sm"
           >
             <PlusIcon className="w-4 h-4 flex-shrink-0 text-purple-400" />
             {!collapsed && <span>New chat</span>}
@@ -173,7 +173,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             data-testid="nav-search"
             onClick={onOpenSearch}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 transition-all duration-150 text-sm font-medium mb-0.5 select-none cursor-pointer"
+            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-brand-popover/70 transition-all duration-150 text-sm font-medium mb-1 select-none cursor-pointer"
           >
             <SearchIcon className="w-4 h-4 flex-shrink-0" />
             {!collapsed && <span>Search</span>}
@@ -185,10 +185,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Projects Section */}
         {!collapsed && (
-          <div className="mb-4">
-            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-brand-textMuted/70 px-3 py-2 select-none">
+          <div className="mb-5">
+            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-brand-textMuted/80 px-3.5 py-2.5 select-none">
               <span 
-                className="cursor-pointer hover:text-white flex items-center gap-1.5"
+                className="cursor-pointer hover:text-brand-textMain flex items-center gap-1.5"
                 onClick={() => setProjectsCollapsed(!projectsCollapsed)}
               >
                 <span>Projects</span>
@@ -196,7 +196,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </span>
               <button 
                 onClick={onCreateProjectClick}
-                className="text-brand-textMuted hover:text-white p-0.5 rounded hover:bg-white/5 transition-colors"
+                className="text-brand-textMuted hover:text-brand-textMain p-1.5 rounded-md bg-brand-popover/60 hover:bg-brand-popover transition-colors"
                 title="Create Project"
               >
                 <PlusIcon className="w-3.5 h-3.5" />
@@ -211,10 +211,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <div
                       key={proj.name}
                       data-testid={`project-item-${proj.name}`}
-                      className={`group flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-150 cursor-pointer mb-0.5 ${
+                      className={`group flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-lg text-sm transition-all duration-150 cursor-pointer mb-1 ${
                         isSelected 
-                          ? 'text-white bg-white/5 border-l-2 border-indigo-500 shadow-sm' 
-                          : 'text-brand-textMuted hover:text-white hover:bg-white/5'
+                          ? 'text-brand-textMain bg-brand-popover border border-brand-border shadow-sm' 
+                          : 'text-brand-textMuted hover:text-brand-textMain hover:bg-brand-popover/70'
                       }`}
                     >
                       <div 
@@ -235,7 +235,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             e.stopPropagation();
                             onDeleteProject(proj.name);
                           }}
-                          className="opacity-0 group-hover:opacity-100 text-brand-textMuted hover:text-red-400 p-0.5 rounded hover:bg-white/5 transition-all"
+                          className="opacity-0 group-hover:opacity-100 text-brand-textMuted hover:text-red-400 p-1 rounded-md hover:bg-brand-popover transition-all"
                           title="Delete Project"
                         >
                           <Trash2Icon className="w-3.5 h-3.5" />
@@ -245,7 +245,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   );
                 })}
                 {projects.length === 0 && (
-                  <div className="text-xs text-brand-textMuted/50 px-3 py-2 italic">
+                  <div className="text-xs text-brand-textMuted/60 px-3.5 py-2.5 italic">
                     No projects. Click + to add.
                   </div>
                 )}
@@ -256,9 +256,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Chats Section */}
         {!collapsed && (
-          <div className="mb-4">
+          <div className="mb-5">
             <div 
-              className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-brand-textMuted/70 px-3 py-2 select-none cursor-pointer hover:text-white"
+              className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-brand-textMuted/80 px-3.5 py-2.5 select-none cursor-pointer hover:text-brand-textMain"
               onClick={() => setChatsCollapsed(!chatsCollapsed)}
             >
               <span>Chats</span>
@@ -273,10 +273,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <div
                       key={chat.id}
                       data-testid={`chat-item-${chat.title.replace(/\s+/g, '-')}`}
-                      className={`group flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-150 cursor-pointer mb-0.5 ${
+                      className={`group flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-lg text-sm transition-all duration-150 cursor-pointer mb-1 ${
                         isSelected 
-                          ? 'text-white bg-white/5 border-l-2 border-indigo-400 shadow-sm' 
-                          : 'text-brand-textMuted hover:text-white hover:bg-white/5'
+                          ? 'text-brand-textMain bg-brand-popover border border-brand-border shadow-sm' 
+                          : 'text-brand-textMuted hover:text-brand-textMain hover:bg-brand-popover/70'
                       }`}
                     >
                       <div 
@@ -299,7 +299,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               e.stopPropagation();
                               onDeleteChat(chat.id);
                             }}
-                            className="opacity-0 group-hover:opacity-100 text-brand-textMuted hover:text-red-400 p-0.5 rounded hover:bg-white/5 transition-all"
+                            className="opacity-0 group-hover:opacity-100 text-brand-textMuted hover:text-red-400 p-1 rounded-md hover:bg-brand-popover transition-all"
                             title="Delete Chat"
                           >
                             <Trash2Icon className="w-3.5 h-3.5" />
@@ -310,7 +310,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   );
                 })}
                 {chats.length === 0 && (
-                  <div className="text-xs text-brand-textMuted/50 px-3 py-2 italic">
+                  <div className="text-xs text-brand-textMuted/60 px-3.5 py-2.5 italic">
                     No active chats.
                   </div>
                 )}
@@ -321,17 +321,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Settings Footer & Collapse button placed side-by-side for clean horizontal layout */}
-      <div className={`flex ${collapsed ? 'flex-col gap-1' : 'flex-row gap-2'} items-center border-t border-brand-border/40 pt-2.5 mt-auto`}>
+      <div className={`flex ${collapsed ? 'flex-col gap-2' : 'flex-row gap-2'} items-center border-t border-brand-border/70 pt-3 mt-auto`}>
         <button
           data-testid="sidebar-settings-btn"
           onClick={() => {
             onSelectTab('settings');
             if (onProfileClick) onProfileClick(); // call profile click callback for test expectations
           }}
-          className={`w-full flex items-center justify-start gap-3 px-3 py-2 rounded-lg transition-colors duration-150 text-sm font-medium ${
+          className={`w-full flex items-center justify-start gap-3 px-3.5 py-2.5 rounded-lg transition-colors duration-150 text-sm font-medium ${
             activeTab === 'settings' 
-              ? 'text-white bg-white/5 border-l-2 border-purple-500 shadow-sm' 
-              : 'text-brand-textMuted hover:text-white hover:bg-white/5'
+              ? 'text-brand-textMain bg-brand-popover border border-brand-border shadow-sm' 
+              : 'text-brand-textMuted hover:text-brand-textMain hover:bg-brand-popover/70'
           }`}
         >
           <SettingsIcon className="w-4.5 h-4.5 flex-shrink-0" />
@@ -340,7 +340,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
-            className={`flex items-center justify-center p-2 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 transition-all duration-150 cursor-pointer ${collapsed ? 'w-full' : ''}`}
+            className={`flex items-center justify-center p-2.5 rounded-lg text-brand-textMuted bg-brand-popover/60 hover:text-brand-textMain hover:bg-brand-popover transition-all duration-150 cursor-pointer ${collapsed ? 'w-full' : ''}`}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? <ChevronRightIcon className="w-4.5 h-4.5" /> : <PanelLeftCloseIcon className="w-4.5 h-4.5" />}

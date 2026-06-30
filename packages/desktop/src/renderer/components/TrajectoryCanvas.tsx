@@ -32,10 +32,10 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
   return (
     <div
       data-testid="trajectory-canvas"
-      className="flex-1 overflow-y-auto px-4 md:px-6 py-6 bg-brand-bg scrollbar-thin relative z-10"
+      className="flex-1 overflow-y-auto px-6 md:px-10 py-8 bg-brand-bg scrollbar-thin relative z-10"
     >
       {/* Centered Column wrapping all steps to align with the prompt composer */}
-      <div className="max-w-[900px] w-full mx-auto flex flex-col gap-5">
+      <div className="max-w-[980px] w-full mx-auto flex flex-col gap-6">
         {steps.length === 0 ? (
           <div
             data-testid="empty-state"
@@ -50,7 +50,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 <div
                   key={step.id}
                   data-testid={`step-user-${step.id}`}
-                  className="self-end glass-card border border-brand-border rounded-2xl px-5 py-4 max-w-[85%] md:max-w-[80%] text-brand-textMain shadow-[0_4px_20px_rgba(0,0,0,0.25)] hover:border-purple-500/25 transition-all"
+                  className="self-end glass-card border border-brand-border rounded-xl px-6 py-5 max-w-[85%] md:max-w-[78%] text-brand-textMain shadow-md hover:border-violet-500/30 transition-all"
                 >
                   <div className="text-[10px] uppercase font-bold tracking-wider text-brand-textMuted mb-1.5 flex justify-between gap-4 select-none">
                     <span>User</span>
@@ -66,7 +66,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 <div
                   key={step.id}
                   data-testid={`step-thought-${step.id}`}
-                  className="self-start glass-panel border-l-4 border-purple-500 rounded-r-xl px-5 py-4 max-w-[90%] md:max-w-[85%] text-brand-textMuted/95 italic text-[13px] md:text-sm shadow-[0_4px_16px_rgba(139,92,246,0.06)] border-t border-r border-b border-brand-border/30 pulse-glow"
+                  className="self-start glass-panel border-l-4 border-violet-500 rounded-xl px-6 py-5 max-w-[94%] md:max-w-[88%] text-brand-textMuted/95 italic text-[13px] md:text-sm shadow-md border-t border-r border-b border-brand-border/60 pulse-glow"
                 >
                   <div className="font-bold text-purple-400 mb-1.5 not-italic select-none text-[11px] uppercase tracking-wider">
                     🧠 Reasoning Trajectory
@@ -85,7 +85,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 <div
                   key={step.id}
                   data-testid={`step-tool-${step.id}`}
-                  className="self-start glass-card border border-brand-border rounded-2xl p-5 max-w-[95%] md:max-w-[85%] w-full shadow-md hover:border-blue-500/20 transition-all"
+                  className="self-start glass-card border border-brand-border rounded-xl p-5 max-w-[96%] md:max-w-[88%] w-full shadow-md hover:border-blue-500/30 transition-all"
                 >
                   <div className="flex items-center justify-between gap-3 mb-2.5 select-none">
                     <div className="flex items-center gap-2">
@@ -98,10 +98,10 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                       <span
                         className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
                           isSuccess
-                            ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/40'
+                            ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
                             : isError
-                            ? 'bg-red-950/80 text-red-400 border border-red-800/40'
-                            : 'bg-indigo-950/80 text-indigo-400 border border-indigo-800/40'
+                            ? 'bg-red-500/15 text-red-500 border border-red-500/30'
+                            : 'bg-indigo-500/15 text-indigo-500 border border-indigo-500/30'
                         }`}
                       >
                         {isRunning ? 'Running...' : step.status || 'Done'}
@@ -125,7 +125,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                             step.metadata!.modifiedCode || ''
                           )
                         }
-                        className="bg-white/5 border border-brand-border hover:border-blue-500/35 hover:bg-white/10 text-blue-400 rounded-lg px-3.5 py-1.5 text-xs font-semibold cursor-pointer flex items-center gap-1.5 transition-all duration-150 active:scale-[0.98]"
+                        className="bg-blue-500/10 border border-blue-500/25 hover:border-blue-500/45 hover:bg-blue-500/15 text-blue-500 rounded-lg px-4 py-2 text-xs font-semibold cursor-pointer flex items-center gap-1.5 transition-all duration-150 active:scale-[0.98] shadow-sm"
                       >
                         <span>🔍</span> Inspect File Diff ({step.metadata.filename})
                       </button>
@@ -140,7 +140,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
               <div
                 key={step.id}
                 data-testid={`step-assistant-${step.id}`}
-                className="self-start glass-card border border-brand-border/70 rounded-2xl p-5 max-w-[100%] md:max-w-[90%] w-full text-brand-textMain shadow-[0_8px_32px_rgba(0,0,0,0.3)] border-l-2 border-l-purple-500/30 hover:border-brand-border transition-all"
+                className="self-start glass-card border border-brand-border rounded-xl p-6 max-w-[100%] md:max-w-[92%] w-full text-brand-textMain shadow-md border-l-4 border-l-violet-500/40 hover:border-brand-border transition-all"
               >
                 <div className="flex items-center justify-between gap-4 mb-3 text-xs text-brand-textMuted select-none">
                   <span className="text-purple-400 font-bold uppercase tracking-wider">SuperAgent Core</span>
@@ -151,7 +151,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 </div>
 
                 {step.metadata?.mediaType && (
-                  <div className="mt-4 p-4 bg-white/5 border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none">
+                  <div className="mt-4 p-4 bg-brand-popover border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none">
                     <span className="text-xs md:text-sm text-brand-textMain font-medium">
                       🎨 Generated Media Asset ({step.metadata.mediaType.toUpperCase()})
                     </span>
