@@ -33,14 +33,32 @@ export interface StoredModel {
   type?: string;
 }
 
+export interface StoredProject {
+  name: string;
+  folders: string[];
+}
+
+export interface StoredChat {
+  id: string;
+  title: string;
+  project: string;
+  model: string;
+  timestamp: string;
+  steps: any[];
+}
+
 export interface StoreData {
   connectedProviders: StoredProvider[];
   modelsCatalog: StoredModel[];
+  projects?: StoredProject[];
+  chats?: StoredChat[];
 }
 
 const EMPTY_STORE: StoreData = {
   connectedProviders: [],
-  modelsCatalog: []
+  modelsCatalog: [],
+  projects: [],
+  chats: []
 };
 
 function getStorePath(): string {
@@ -55,7 +73,9 @@ export function readStore(): StoreData {
     const parsed = JSON.parse(raw) as Partial<StoreData>;
     return {
       connectedProviders: parsed.connectedProviders ?? [],
-      modelsCatalog: parsed.modelsCatalog ?? []
+      modelsCatalog: parsed.modelsCatalog ?? [],
+      projects: parsed.projects ?? [],
+      chats: parsed.chats ?? []
     };
   } catch {
     // Corrupted or unreadable — start fresh

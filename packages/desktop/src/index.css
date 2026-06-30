@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-bg: #141110;
+  --color-brand-sidebar: #1e1816;
+  --color-brand-card: #1b1412;
+  --color-brand-popover: #262220;
+  --color-brand-border: #2d2321;
+  --color-brand-textMain: #ececec;
+  --color-brand-textMuted: #8a8a8a;
+  
+  --font-sans: 'Inter', -apple-system, sans-serif;
+  --font-outfit: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}

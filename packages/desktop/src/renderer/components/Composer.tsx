@@ -1,5 +1,65 @@
 import React, { useState, KeyboardEvent } from 'react';
 
+// Inline Custom SVG Outline Icons for maximum reliability in Electron
+const PlusIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M5 12h14M12 5v14"/>
+  </svg>
+);
+
+const CpuIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 15h3M1 9h3M1 15h3"/>
+  </svg>
+);
+
+const MicIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 19v3M8 22h8"/>
+  </svg>
+);
+
+const ArrowUpIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>
+  </svg>
+);
+
+const FolderIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/>
+  </svg>
+);
+
+const LaptopIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+    <line x1="2" y1="20" x2="22" y2="20"/>
+    <line x1="12" y1="17" x2="12" y2="20"/>
+  </svg>
+);
+
+const GitBranchIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <line x1="6" y1="3" x2="6" y2="15"/>
+    <circle cx="18" cy="6" r="3"/>
+    <circle cx="6" cy="18" r="3"/>
+    <path d="M18 9a9 9 0 0 1-9 9"/>
+  </svg>
+);
+
+const ChevronDownIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <polyline points="6 9 12 15 18 9"/>
+  </svg>
+);
+
+const UserCheckIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/>
+  </svg>
+);
+
 export interface ComposerOptions {
   model: string;
   mode: 'auto' | 'plan' | 'bypass';
@@ -65,30 +125,10 @@ export const Composer: React.FC<ComposerProps> = ({
   return (
     <div
       data-testid="composer-container"
-      style={{
-        padding: '16px 24px 24px',
-        maxWidth: '900px',
-        width: '100%',
-        margin: '0 auto',
-        boxSizing: 'border-box',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px'
-      }}
+      className="p-4 md:p-6 pb-6 max-w-[900px] w-full mx-auto flex flex-col gap-2.5 box-border"
     >
       {/* The main input composer card */}
-      <div
-        style={{
-          backgroundColor: '#1b1412', // Warm dark card background
-          border: '1px solid #2d2321',
-          borderRadius: '20px',
-          padding: '16px',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 8px 30px rgba(0,0,0,0.4)',
-          position: 'relative'
-        }}
-      >
+      <div className="bg-brand-card border border-brand-border rounded-2xl p-4 flex flex-col shadow-xl relative transition-all duration-200 focus-within:border-brand-textMuted/40">
         <textarea
           data-testid="composer-input"
           value={prompt}
@@ -96,90 +136,39 @@ export const Composer: React.FC<ComposerProps> = ({
           onKeyDown={handleKeyDown}
           placeholder="Do anything"
           disabled={disabled || isGenerating}
-          style={{
-            backgroundColor: 'transparent',
-            border: 'none',
-            outline: 'none',
-            color: '#ffffff',
-            fontSize: '1.05rem',
-            resize: 'none',
-            fontFamily: 'inherit',
-            width: '100%',
-            minHeight: '60px',
-            lineHeight: '1.5'
-          }}
+          rows={1}
+          className="bg-transparent border-none outline-none text-white text-base resize-none w-full min-h-[60px] leading-relaxed placeholder-brand-textMuted/50 font-sans"
         />
 
         {/* Toolbar row inside box */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            borderTop: '1px solid #2d2321',
-            paddingTop: '12px',
-            marginTop: '12px'
-          }}
-        >
+        <div className="flex items-center justify-between border-t border-brand-border/60 pt-3 mt-3">
           {/* Left toolbar elements */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
+          <div className="flex items-center gap-2 relative">
             {/* Plus button */}
             <button
               data-testid="composer-attach-btn"
               onClick={onAttachClick}
-              style={{
-                backgroundColor: 'transparent',
-                border: 'none',
-                color: '#8a8a8a',
-                fontSize: '1.2rem',
-                cursor: 'pointer',
-                padding: '4px 8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
+              className="text-brand-textMuted hover:text-white p-1.5 rounded-lg hover:bg-brand-border/40 transition-colors cursor-pointer"
             >
-              +
+              <PlusIcon className="w-4.5 h-4.5" />
             </button>
 
             {/* Ask for Approval Dropdown Pill */}
-            <div style={{ position: 'relative' }}>
+            <div className="relative">
               <button
                 data-testid="approval-dropdown-btn"
                 onClick={() => setShowApprovalDropdown(!showApprovalDropdown)}
-                style={{
-                  backgroundColor: '#2e2220',
-                  border: '1px solid #3d302e',
-                  color: '#ececec',
-                  padding: '6px 12px',
-                  borderRadius: '20px',
-                  fontSize: '0.82rem',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
+                className="bg-brand-bg/60 border border-brand-border hover:border-brand-textMuted/30 hover:bg-brand-bg text-brand-textMain px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer select-none active:scale-[0.98]"
               >
-                <span>✋</span> {getApprovalLabel()} <span style={{ fontSize: '0.65rem', color: '#8a8a8a' }}>▼</span>
+                <UserCheckIcon className="w-3.5 h-3.5 text-brand-textMuted" />
+                <span>{getApprovalLabel()}</span>
+                <ChevronDownIcon className="w-3 h-3 text-brand-textMuted" />
               </button>
 
               {showApprovalDropdown && (
                 <div
                   data-testid="approval-dropdown-menu"
-                  style={{
-                    position: 'absolute',
-                    bottom: '100%',
-                    left: 0,
-                    marginBottom: '8px',
-                    backgroundColor: '#261c1a',
-                    border: '1px solid #3d2b29',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                    zIndex: 10,
-                    width: '180px',
-                    overflow: 'hidden'
-                  }}
+                  className="absolute bottom-full left-0 mb-2 bg-brand-popover border border-brand-border rounded-lg shadow-2xl z-50 w-[180px] overflow-hidden"
                 >
                   <div
                     data-testid="approval-option-ask"
@@ -187,9 +176,7 @@ export const Composer: React.FC<ComposerProps> = ({
                       setApprovalMode('ask');
                       setShowApprovalDropdown(false);
                     }}
-                    style={{ padding: '10px 12px', fontSize: '0.85rem', cursor: 'pointer', color: '#ececec' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3b2f2d')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-brand-border/50 cursor-pointer transition-colors"
                   >
                     Ask for approval
                   </div>
@@ -199,9 +186,7 @@ export const Composer: React.FC<ComposerProps> = ({
                       setApprovalMode('always');
                       setShowApprovalDropdown(false);
                     }}
-                    style={{ padding: '10px 12px', fontSize: '0.85rem', cursor: 'pointer', color: '#ececec' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3b2f2d')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-brand-border/50 cursor-pointer transition-colors"
                   >
                     Always approve
                   </div>
@@ -211,9 +196,7 @@ export const Composer: React.FC<ComposerProps> = ({
                       setApprovalMode('never');
                       setShowApprovalDropdown(false);
                     }}
-                    style={{ padding: '10px 12px', fontSize: '0.85rem', cursor: 'pointer', color: '#ececec' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3b2f2d')}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-brand-border/50 cursor-pointer transition-colors"
                   >
                     Never approve
                   </div>
@@ -223,44 +206,23 @@ export const Composer: React.FC<ComposerProps> = ({
           </div>
 
           {/* Right toolbar elements */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="flex items-center gap-2.5">
             {/* Model Badge */}
-            <div style={{ position: 'relative' }}>
+            <div className="relative">
               <button
                 data-testid="model-dropdown-btn"
                 onClick={() => setShowModelDropdown(!showModelDropdown)}
-                style={{
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  color: '#8a8a8a',
-                  fontSize: '0.85rem',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '4px 8px'
-                }}
+                className="text-brand-textMuted hover:text-white px-2 py-1.5 rounded-lg hover:bg-brand-border/40 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
               >
-                <span>{selectedModel}</span> <span style={{ fontSize: '0.65rem' }}>▼</span>
+                <CpuIcon className="w-3.5 h-3.5" />
+                <span>{selectedModel}</span>
+                <ChevronDownIcon className="w-3 h-3" />
               </button>
 
               {showModelDropdown && (
                 <div
                   data-testid="model-dropdown-menu"
-                  style={{
-                    position: 'absolute',
-                    bottom: '100%',
-                    right: 0,
-                    marginBottom: '8px',
-                    backgroundColor: '#261c1a',
-                    border: '1px solid #3d2b29',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                    zIndex: 10,
-                    width: '150px',
-                    overflow: 'hidden'
-                  }}
+                  className="absolute bottom-full right-0 mb-2 bg-brand-popover border border-brand-border rounded-lg shadow-2xl z-50 w-[160px] overflow-hidden"
                 >
                   {availableModels.map((model) => (
                     <div
@@ -270,9 +232,7 @@ export const Composer: React.FC<ComposerProps> = ({
                         setSelectedModel(model);
                         setShowModelDropdown(false);
                       }}
-                      style={{ padding: '10px 12px', fontSize: '0.85rem', cursor: 'pointer', color: '#ececec' }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3b2f2d')}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                      className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-brand-border/50 cursor-pointer transition-colors"
                     >
                       {model}
                     </div>
@@ -285,16 +245,9 @@ export const Composer: React.FC<ComposerProps> = ({
             <button
               data-testid="composer-mic-btn"
               onClick={onMicClick}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#8a8a8a',
-                fontSize: '1rem',
-                cursor: 'pointer',
-                padding: '4px'
-              }}
+              className="text-brand-textMuted hover:text-white p-1.5 rounded-lg hover:bg-brand-border/40 transition-colors cursor-pointer"
             >
-              🎙️
+              <MicIcon className="w-4 h-4" />
             </button>
 
             {/* Submit Up Arrow Button */}
@@ -302,45 +255,22 @@ export const Composer: React.FC<ComposerProps> = ({
               <button
                 data-testid="btn-stop"
                 onClick={onStop}
-                style={{
-                  backgroundColor: '#ef4444',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '32px',
-                  height: '32px',
-                  color: '#ffffff',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '0.75rem'
-                }}
+                className="bg-red-500 hover:bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold cursor-pointer transition-colors active:scale-[0.92]"
               >
-                ⏹
+                <span className="text-[10px] leading-none">⏹</span>
               </button>
             ) : (
               <button
                 data-testid="btn-send"
                 onClick={handleSend}
                 disabled={disabled || !prompt.trim()}
-                style={{
-                  backgroundColor: !prompt.trim() || disabled ? '#2d2321' : '#ececec',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '32px',
-                  height: '32px',
-                  color: !prompt.trim() || disabled ? '#8a8a8a' : '#1b1412',
-                  cursor: !prompt.trim() || disabled ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1rem',
-                  fontWeight: 'bold',
-                  transition: 'all 0.15s ease'
-                }}
+                className={`rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150 ${
+                  !prompt.trim() || disabled
+                    ? 'bg-brand-border text-brand-textMuted/40 cursor-not-allowed'
+                    : 'bg-white hover:bg-brand-textMain text-brand-bg cursor-pointer active:scale-[0.92]'
+                }`}
               >
-                ↑
+                <ArrowUpIcon className="w-4 h-4" />
               </button>
             )}
           </div>
@@ -350,73 +280,37 @@ export const Composer: React.FC<ComposerProps> = ({
       {/* Under-composer badge row: Folder, Work locally, main branch */}
       <div
         data-testid="composer-badges-row"
-        style={{
-          display: 'flex',
-          gap: '8px',
-          paddingLeft: '12px',
-          alignItems: 'center',
-          flexWrap: 'wrap'
-        }}
+        className="flex gap-2 px-2 items-center flex-wrap"
       >
         {/* Project Folder Badge */}
         <div
           data-testid="badge-project"
-          style={{
-            backgroundColor: '#1b1412',
-            border: '1px solid #2d2321',
-            borderRadius: '16px',
-            color: '#ececec',
-            padding: '4px 12px',
-            fontSize: '0.78rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontWeight: 500
-          }}
+          className="bg-brand-card border border-brand-border rounded-full text-brand-textMain px-3 py-1 text-[11px] font-semibold flex items-center gap-1.5 select-none"
         >
-          <span>📁</span> {activeProject}
+          <FolderIcon className="w-3 h-3 text-brand-textMuted" />
+          <span>{activeProject}</span>
         </div>
 
         {/* Work Locally Badge */}
         <div
           data-testid="badge-work-locally"
           onClick={onLocallyClick}
-          style={{
-            backgroundColor: '#1b1412',
-            border: '1px solid #2d2321',
-            borderRadius: '16px',
-            color: '#ececec',
-            padding: '4px 12px',
-            fontSize: '0.78rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontWeight: 500,
-            cursor: 'pointer'
-          }}
+          className="bg-brand-card border border-brand-border hover:border-brand-textMuted/30 hover:bg-brand-card/70 rounded-full text-brand-textMain px-3 py-1 text-[11px] font-semibold flex items-center gap-1.5 select-none cursor-pointer transition-colors active:scale-[0.98]"
         >
-          <span>💻</span> Work locally <span style={{ fontSize: '0.6rem', color: '#8a8a8a' }}>▼</span>
+          <LaptopIcon className="w-3 h-3 text-brand-textMuted" />
+          <span>Work locally</span>
+          <ChevronDownIcon className="w-2.5 h-2.5 text-brand-textMuted" />
         </div>
 
         {/* Git Branch Badge */}
         <div
           data-testid="badge-branch"
           onClick={onBranchClick}
-          style={{
-            backgroundColor: '#1b1412',
-            border: '1px solid #2d2321',
-            borderRadius: '16px',
-            color: '#ececec',
-            padding: '4px 12px',
-            fontSize: '0.78rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontWeight: 500,
-            cursor: 'pointer'
-          }}
+          className="bg-brand-card border border-brand-border hover:border-brand-textMuted/30 hover:bg-brand-card/70 rounded-full text-brand-textMain px-3 py-1 text-[11px] font-semibold flex items-center gap-1.5 select-none cursor-pointer transition-colors active:scale-[0.98]"
         >
-          <span>🌿</span> main <span style={{ fontSize: '0.6rem', color: '#8a8a8a' }}>▼</span>
+          <GitBranchIcon className="w-3 h-3 text-brand-textMuted" />
+          <span>main</span>
+          <ChevronDownIcon className="w-2.5 h-2.5 text-brand-textMuted" />
         </div>
       </div>
     </div>

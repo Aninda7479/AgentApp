@@ -5,21 +5,24 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc && node -e \"require('fs').copyFileSync('src/ui.html', 'dist/ui.html')\"",
+    "build": "npx @tailwindcss/cli -i src/index.css -o dist/index.css && tsc && node -e \"require('fs').copyFileSync('src/ui.html', 'dist/ui.html')\"",
     "start": "electron dist/main.js",
     "test": "vitest run"
   },
   "dependencies": {
     "@superagent/core": "*",
+    "lucide-react": "^1.22.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.2",
     "@types/node": "^20.14.9",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "electron": "^31.0.0",
+    "electron": "^43.0.0",
+    "tailwindcss": "^4.3.2",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "^4.1.9"
   }
 }

@@ -8,6 +8,8 @@ import { SlackChannelAdapter } from '../src/gateway/channels/slack';
 import { ReleaseInstallerBuilder } from '../src/builder/installer';
 import { IncomingMessage } from '../src/gateway/channels/types';
 
+vi.mock('electron', () => ({}));
+
 describe('Desktop Gateway Suite (Steps 094 - 100)', () => {
   describe('Step 094: System Tray Background Daemon Process', () => {
     it('should initialize system tray stub in headless test environment', () => {
@@ -51,7 +53,9 @@ describe('Desktop Gateway Suite (Steps 094 - 100)', () => {
 
       const trayManager = new SystemTrayManager({
         electronProvider: {
-          Tray: vi.fn().mockImplementation(() => mockTray),
+          Tray: vi.fn().mockImplementation(function (this: any) {
+            return mockTray;
+          }),
           Menu: mockMenu,
           nativeImage: mockNativeImage
         }

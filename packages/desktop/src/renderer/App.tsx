@@ -9,6 +9,22 @@ import { SearchModal } from './components/SearchModal';
 import { ScheduledView } from './components/ScheduledView';
 import { PluginsView } from './components/PluginsView';
 import { SettingsView, ProviderConnection, ModelConfig } from './settings/SettingsView';
+import { CreateProjectModal } from './components/CreateProjectModal';
+import { Key } from 'lucide-react';
+
+export interface StoredProject {
+  name: string;
+  folders: string[];
+}
+
+export interface StoredChat {
+  id: string;
+  title: string;
+  project: string;
+  model: string;
+  timestamp: string;
+  steps: TrajectoryStep[];
+}
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('trajectory');
@@ -22,18 +38,34 @@ export const App: React.FC = () => {
   const [toastOpen, setToastOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
 
-  // ─── Providers & Models — start EMPTY, loaded from disk ─────────────────
+  // Dynamic projects & chats state
+  const [projects, setProjects] = useState<StoredProject[]>([]);
+  const [chats, setChats] = useState<StoredChat[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState<boolean>(false);
+
+  // Providers & Models
   const [connectedProviders, setConnectedProviders] = useState<ProviderConnection[]>([]);
   const [modelsCatalog, setModelsCatalog] = useState<ModelConfig[]>([]);
 
-  // Resolve ipcRenderer safely (only exists inside Electron)
+  // Resolve ipcRenderer safely
   const ipc = typeof window !== 'undefined' && (window as any).require
     ? (window as any).require('electron').ipcRenderer
     : null;
 
   // Persist helpers — write every change back to the JSON store on disk
-  const persistStore = (providers: ProviderConnection[], models: ModelConfig[]) => {
-    ipc?.invoke('store-write', { connectedProviders: providers, modelsCatalog: models });
+  const persistStore = (
+    providers: ProviderConnection[],
+    models: ModelConfig[],
+    currentProjects: StoredProject[] = projects,
+    currentChats: StoredChat[] = chats
+  ) => {
+    ipc?.invoke('store-write', {
+      connectedProviders: providers,
+      modelsCatalog: models,
+      projects: currentProjects,
+      chats: currentChats
+    });
   };
 
   const handleConnectProvider = (provider: ProviderConnection, newModels: ModelConfig[]) => {
@@ -70,23 +102,133 @@ export const App: React.FC = () => {
 
   // ─── Startup: load persisted data, then auto-detect new providers ──────────
   useEffect(() => {
-    if (!ipc) return; // not in Electron (e.g. unit tests)
+    if (!ipc) {
+      // Mock data for non-Electron test environments
+      const mockProjects: StoredProject[] = [
+        { name: 'agent', folders: ['d:/Project/agent'] },
+        { name: 'GlacierPharma', folders: ['d:/Project/GlacierPharma'] },
+        { name: 'proxy', folders: ['d:/Project/proxy'] },
+        { name: 'LawX', folders: ['d:/Project/LawX'] },
+        { name: 'Second_Brain', folders: ['d:/Project/Second_Brain'] }
+      ];
+      const mockChats: StoredChat[] = [
+        {
+          id: 'chat-1',
+          title: 'Find online data listings',
+          project: 'GlacierPharma',
+          model: '5.5 Medium',
+          timestamp: '5d',
+          steps: [
+            { id: 'step-1', type: 'assistant', content: 'SuperAgent Desktop initialized. Ready for autonomous software engineering and multimodal AI media generation.' }
+          ]
+        },
+        {
+          id: 'chat-2',
+          title: 'Add graphify tool',
+          project: 'agent',
+          model: '5.5 Medium',
+          timestamp: '3w',
+          steps: [
+            { id: 'step-2', type: 'assistant', content: 'SuperAgent Desktop initialized.' }
+          ]
+        }
+      ];
+      setProjects(mockProjects);
+      setChats(mockChats);
+      setActiveChatId('chat-1');
+      setTrajectorySteps(mockChats[0].steps);
+      return;
+    }
 
     (async () => {
-      // 1. Load what the user already configured from disk
+      // 1. Load store from disk
       const stored = await ipc.invoke('store-read') as {
         connectedProviders: ProviderConnection[];
         modelsCatalog: ModelConfig[];
+        projects?: StoredProject[];
+        chats?: StoredChat[];
       };
-      const storedIds = new Set(stored.connectedProviders.map((p: ProviderConnection) => p.id));
+      
+      const loadedProviders = stored.connectedProviders ?? [];
+      const loadedModels = stored.modelsCatalog ?? [];
+      const loadedProjects = stored.projects ?? [];
+      const loadedChats = stored.chats ?? [];
 
-      if (stored.connectedProviders.length) {
-        setConnectedProviders(stored.connectedProviders);
-        setModelsCatalog(stored.modelsCatalog);
+      // Initialize defaults if totally empty to make it look active
+      let finalProjects = loadedProjects;
+      let finalChats = loadedChats;
+
+      if (loadedProjects.length === 0) {
+        finalProjects = [
+          { name: 'agent', folders: ['d:/Project/OpenSource/agent'] },
+          { name: 'GlacierPharma', folders: ['d:/Project/OpenSource/GlacierPharma'] },
+          { name: 'proxy', folders: ['d:/Project/OpenSource/proxy'] },
+          { name: 'LawX', folders: ['d:/Project/OpenSource/LawX'] },
+          { name: 'Second_Brain', folders: ['d:/Project/OpenSource/Second_Brain'] }
+        ];
       }
 
-      // 2. Run auto-detection for Ollama + env-var providers
-      //    but only add providers NOT already in the stored list
+      if (loadedChats.length === 0) {
+        finalChats = [
+          {
+            id: 'chat-1',
+            title: 'Find online data listings',
+            project: 'GlacierPharma',
+            model: '5.5 Medium',
+            timestamp: '5d',
+            steps: [
+              { id: 'step-1', type: 'assistant', content: 'SuperAgent Desktop initialized. Ready for autonomous software engineering and multimodal AI media generation.' }
+            ]
+          },
+          {
+            id: 'chat-2',
+            title: 'Add graphify tool',
+            project: 'agent',
+            model: '5.5 Medium',
+            timestamp: '3w',
+            steps: [
+              { id: 'step-2', type: 'assistant', content: 'SuperAgent Desktop initialized.' }
+            ]
+          }
+        ];
+      }
+
+      setProjects(finalProjects);
+      setChats(finalChats);
+      setConnectedProviders(loadedProviders);
+      setModelsCatalog(loadedModels);
+
+      // Select active project and chat
+      if (finalProjects.length > 0) {
+        const defaultProject = finalProjects[0].name;
+        setActiveProject(defaultProject);
+        
+        const matchingChat = finalChats.find(c => c.project === defaultProject);
+        if (matchingChat) {
+          setActiveChatId(matchingChat.id);
+          setTrajectorySteps(matchingChat.steps);
+        } else {
+          // create a new chat context
+          const defaultChatId = `chat-default`;
+          const defaultChat: StoredChat = {
+            id: defaultChatId,
+            title: `New chat in ${defaultProject}`,
+            project: defaultProject,
+            model: '5.5 Medium',
+            timestamp: 'Just now',
+            steps: [{ id: `init-${Date.now()}`, type: 'assistant', content: 'SuperAgent Desktop initialized. Ready for autonomous software engineering and multimodal AI media generation.' }]
+          };
+          setChats(prev => [defaultChat, ...prev]);
+          setActiveChatId(defaultChatId);
+          setTrajectorySteps(defaultChat.steps);
+        }
+      }
+
+      persistStore(loadedProviders, loadedModels, finalProjects, finalChats);
+
+      const storedIds = new Set(loadedProviders.map((p: ProviderConnection) => p.id));
+
+      // 2. Auto-detect providers
       try {
         const detected = await ipc.invoke('auto-detect-providers') as Array<{
           id: string; name: string; type: 'env' | 'key' | 'custom';
@@ -98,7 +240,7 @@ export const App: React.FC = () => {
         const newModels: ModelConfig[] = [];
 
         for (const d of detected) {
-          if (storedIds.has(d.id)) continue; // already stored by user
+          if (storedIds.has(d.id)) continue;
           newProviders.push({ id: d.id, name: d.name, type: d.type, apiKey: d.apiKey, baseUrl: d.baseUrl });
           for (const m of d.models) {
             newModels.push({
@@ -107,7 +249,6 @@ export const App: React.FC = () => {
               providerId: d.id,
               enabled: false,
               contextLimit: 'n/a'
-              // pricing and modalities enriched via MODEL_CAPS when the user connects via SettingsView
             });
           }
         }
@@ -117,14 +258,14 @@ export const App: React.FC = () => {
             const next = [...prev, ...newProviders];
             setModelsCatalog(prevM => {
               const nextM = [...prevM, ...newModels];
-              persistStore(next, nextM);
+              persistStore(next, nextM, finalProjects, finalChats);
               return nextM;
             });
             return next;
           });
         }
       } catch {
-        // auto-detect failed silently — user can connect manually
+        // Auto-detect failed silently
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -176,7 +317,7 @@ export const App: React.FC = () => {
     modifiedCode: string;
   } | null>(null);
 
-  // Keyboard shortcut listeners (Ctrl+P for search, Ctrl+, for settings)
+  // Keyboard shortcut listeners
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
@@ -239,8 +380,26 @@ export const App: React.FC = () => {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    setTrajectorySteps((prev) => [...prev, userStep, thoughtStep]);
+    const updatedSteps = [...trajectorySteps, userStep, thoughtStep];
+    setTrajectorySteps(updatedSteps);
     setIsGenerating(true);
+
+    // Save prompt steps to active chat
+    if (activeChatId) {
+      setChats(prev => {
+        const next = prev.map(c => {
+          if (c.id === activeChatId) {
+            // Update title if it was default
+            const isDefaultTitle = c.title.startsWith('New chat');
+            const newTitle = isDefaultTitle ? (prompt.length > 25 ? prompt.slice(0, 25) + '...' : prompt) : c.title;
+            return { ...c, title: newTitle, steps: updatedSteps };
+          }
+          return c;
+        });
+        persistStore(connectedProviders, modelsCatalog, projects, next);
+        return next;
+      });
+    }
 
     setTimeout(() => {
       const toolStep: TrajectoryStep = {
@@ -263,8 +422,17 @@ export const App: React.FC = () => {
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
-      setTrajectorySteps((prev) => [...prev, toolStep, assistantStep]);
+      const finalSteps = [...updatedSteps, toolStep, assistantStep];
+      setTrajectorySteps(finalSteps);
       setIsGenerating(false);
+
+      if (activeChatId) {
+        setChats(prev => {
+          const next = prev.map(c => c.id === activeChatId ? { ...c, steps: finalSteps } : c);
+          persistStore(connectedProviders, modelsCatalog, projects, next);
+          return next;
+        });
+      }
     }, 1000);
   };
 
@@ -345,6 +513,37 @@ export const App: React.FC = () => {
   const handleSelectProject = (project: string) => {
     setActiveProject(project);
     setActiveTab('trajectory');
+
+    // Find first chat belonging to this project
+    const matchingChat = chats.find(c => c.project === project);
+    if (matchingChat) {
+      setActiveChatId(matchingChat.id);
+      setTrajectorySteps(matchingChat.steps);
+    } else {
+      // Create a default chat for this project
+      const newChatId = `chat-${Date.now()}`;
+      const newChat: StoredChat = {
+        id: newChatId,
+        title: `New chat in ${project}`,
+        project: project,
+        model: '5.5 Medium',
+        timestamp: 'Just now',
+        steps: [
+          {
+            id: `step-new-${Date.now()}`,
+            type: 'assistant',
+            content: `New conversation initialized. Project context: \`${project}\`. How can I help you today?`
+          }
+        ]
+      };
+      setChats(prev => {
+        const next = [newChat, ...prev];
+        persistStore(connectedProviders, modelsCatalog, projects, next);
+        return next;
+      });
+      setActiveChatId(newChatId);
+      setTrajectorySteps(newChat.steps);
+    }
   };
 
   const handleSelectSearchChat = (chatTitle: string, projectContext?: string) => {
@@ -366,83 +565,191 @@ export const App: React.FC = () => {
     ]);
   };
 
+  // Dynamic project creation
+  const handleCreateProject = (newProj: StoredProject) => {
+    setProjects(prev => {
+      const next = [...prev, newProj];
+      // Create initial chat for this new project
+      const newChatId = `chat-${Date.now()}`;
+      const newChat: StoredChat = {
+        id: newChatId,
+        title: `New chat in ${newProj.name}`,
+        project: newProj.name,
+        model: '5.5 Medium',
+        timestamp: 'Just now',
+        steps: [
+          {
+            id: `step-new-${Date.now()}`,
+            type: 'assistant',
+            content: `New conversation initialized. Project context: \`${newProj.name}\`. How can I help you today?`
+          }
+        ]
+      };
+
+      setChats(prevChats => {
+        const nextChats = [newChat, ...prevChats];
+        persistStore(connectedProviders, modelsCatalog, next, nextChats);
+        return nextChats;
+      });
+
+      setActiveProject(newProj.name);
+      setActiveChatId(newChatId);
+      setTrajectorySteps(newChat.steps);
+      return next;
+    });
+
+    setActiveTab('trajectory');
+  };
+
+  // Dynamic project deletion
+  const handleDeleteProject = (projectName: string) => {
+    setProjects(prev => {
+      const next = prev.filter(p => p.name !== projectName);
+      // Remove all chats of this project
+      setChats(prevChats => {
+        const nextChats = prevChats.filter(c => c.project !== projectName);
+        
+        // Pick new active project if deleted was selected
+        if (activeProject === projectName) {
+          if (next.length > 0) {
+            const nextProjName = next[0].name;
+            setActiveProject(nextProjName);
+            const matchingChat = nextChats.find(c => c.project === nextProjName);
+            if (matchingChat) {
+              setActiveChatId(matchingChat.id);
+              setTrajectorySteps(matchingChat.steps);
+            } else {
+              setActiveChatId(null);
+              setTrajectorySteps([]);
+            }
+          } else {
+            setActiveProject('');
+            setActiveChatId(null);
+            setTrajectorySteps([]);
+          }
+        }
+        persistStore(connectedProviders, modelsCatalog, next, nextChats);
+        return nextChats;
+      });
+      return next;
+    });
+  };
+
+  // Dynamic chat selection
+  const handleSelectChat = (chatId: string) => {
+    const chat = chats.find(c => c.id === chatId);
+    if (chat) {
+      setActiveChatId(chatId);
+      setActiveProject(chat.project);
+      setTrajectorySteps(chat.steps);
+      setActiveTab('trajectory');
+    }
+  };
+
+  // Dynamic chat deletion
+  const handleDeleteChat = (chatId: string) => {
+    setChats(prev => {
+      const next = prev.filter(c => c.id !== chatId);
+      if (activeChatId === chatId) {
+        if (next.length > 0) {
+          const nextChat = next.find(c => c.project === activeProject) || next[0];
+          setActiveChatId(nextChat.id);
+          setActiveProject(nextChat.project);
+          setTrajectorySteps(nextChat.steps);
+        } else {
+          setActiveChatId(null);
+          setTrajectorySteps([]);
+        }
+      }
+      persistStore(connectedProviders, modelsCatalog, projects, next);
+      return next;
+    });
+  };
+
+  // Create new blank chat
+  const handleNewChat = () => {
+    if (!activeProject) {
+      triggerToast('Please create or select a project first');
+      return;
+    }
+    const newChatId = `chat-${Date.now()}`;
+    const newChat: StoredChat = {
+      id: newChatId,
+      title: `New chat in ${activeProject}`,
+      project: activeProject,
+      model: modelsCatalog.find(m => m.enabled)?.name || '5.5 Medium',
+      timestamp: 'Just now',
+      steps: [
+        {
+          id: `step-new-${Date.now()}`,
+          type: 'assistant',
+          content: `New conversation initialized. Project context: \`${activeProject}\`. How can I help you today?`
+        }
+      ]
+    };
+    setChats(prev => {
+      const next = [newChat, ...prev];
+      persistStore(connectedProviders, modelsCatalog, projects, next);
+      return next;
+    });
+    setActiveChatId(newChatId);
+    setTrajectorySteps(newChat.steps);
+    setActiveTab('trajectory');
+  };
+
   return (
     <div
       data-testid="app-container"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100vh',
-        width: '100vw',
-        backgroundColor: '#141110',
-        color: '#ececec',
-        overflow: 'hidden',
-        fontFamily: "'Inter', -apple-system, sans-serif"
-      }}
+      className="flex flex-col h-screen w-screen bg-brand-bg text-brand-textMain overflow-hidden font-sans select-none"
     >
       {/* frameless window top bar overlay */}
       <div
         data-testid="title-bar"
-        style={{
-          height: '40px',
-          backgroundColor: '#1e1816',
-          borderBottom: '1px solid #2d2321',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 16px',
-          userSelect: 'none',
-          WebkitAppRegion: 'drag'
-        } as React.CSSProperties}
+        className="h-10 bg-brand-sidebar border-b border-brand-border flex items-center justify-between px-4 select-none drag-window"
+        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#8a8a8a', cursor: 'default' }}>
-            SuperAgent Desktop
+        <div 
+          className="flex items-center gap-3.5 no-drag-window"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        >
+          <span className="font-semibold text-xs text-brand-textMuted cursor-default">
+            SuperAgent Desktop — Codex Clone
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-          <div
+        <div 
+          className="flex items-center gap-3 no-drag-window"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        >
+          <button
             data-testid="byok-badge-trigger"
             onClick={() => setIsBYOKOpen(true)}
-            style={{
-              backgroundColor: '#2e2220',
-              border: '1px solid #3d302e',
-              color: '#ececec',
-              padding: '2px 10px',
-              borderRadius: '12px',
-              fontSize: '0.75rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
+            className="bg-brand-sidebar hover:bg-brand-border/60 border border-brand-border text-brand-textMain px-2.5 py-0.5 rounded-full text-xs cursor-pointer flex items-center gap-1.5 transition-colors font-medium active:scale-[0.98]"
           >
-            🔑 BYOK: {byokKeys.openai ? 'OpenAI' : 'Configure'}
-          </div>
+            <Key size={11} className="text-brand-textMuted" />
+            <span>BYOK: {byokKeys.openai ? 'OpenAI' : 'Configure'}</span>
+          </button>
 
           {/* Window Control Controls */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '8px' }}>
+          <div className="flex items-center gap-2 pl-2">
             <button
               data-testid="win-minimize"
               onClick={() => handleWindowControl('minimize')}
-              style={{ background: 'none', border: 'none', color: '#8a8a8a', cursor: 'pointer', fontSize: '14px', width: '20px', height: '20px' }}
+              className="bg-transparent border-none text-brand-textMuted hover:text-white cursor-pointer text-sm w-5 h-5 flex items-center justify-center transition-colors"
             >
               -
             </button>
             <button
               data-testid="win-maximize"
               onClick={() => handleWindowControl('maximize')}
-              style={{ background: 'none', border: 'none', color: '#8a8a8a', cursor: 'pointer', fontSize: '11px', width: '20px', height: '20px' }}
+              className="bg-transparent border-none text-brand-textMuted hover:text-white cursor-pointer text-[10px] w-5 h-5 flex items-center justify-center transition-colors"
             >
               ▢
             </button>
             <button
               data-testid="win-close"
               onClick={() => handleWindowControl('close')}
-              style={{ background: 'none', border: 'none', color: '#8a8a8a', cursor: 'pointer', fontSize: '12px', width: '20px', height: '20px' }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = '#8a8a8a')}
+              className="bg-transparent border-none text-brand-textMuted hover:text-red-500 cursor-pointer text-xs w-5 h-5 flex items-center justify-center transition-colors"
             >
               ✕
             </button>
@@ -451,7 +758,7 @@ export const App: React.FC = () => {
       </div>
 
       {/* Main Body container */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+      <div className="flex-1 flex overflow-hidden relative">
         {/* Hide main sidebar when viewing Settings page, matching Image 4 */}
         {activeTab !== 'settings' && (
           <Sidebar
@@ -467,184 +774,37 @@ export const App: React.FC = () => {
             activeProject={activeProject}
             onSelectProject={handleSelectProject}
             onOpenSearch={() => setSearchModalOpen(true)}
-            onProfileClick={() => setProfilePopoverOpen(!profilePopoverOpen)}
-            onNewChat={() => {
-              setActiveTab('trajectory');
-              setTrajectorySteps([
-                {
-                  id: `step-new-${Date.now()}`,
-                  type: 'assistant',
-                  content: `New conversation initialized. Project context: \`${activeProject}\`. How can I help you today?`
-                }
-              ]);
-            }}
+            onNewChat={handleNewChat}
             collapsed={sidebarCollapsed}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
             mcpCount={mcpServers.filter((s) => s.enabled).length}
             onMenuClick={(menuName) => triggerToast(`${menuName} Menu`)}
+            
+            // Dynamic project & chat bindings
+            projects={projects}
+            chats={chats.filter(c => c.project === activeProject)}
+            activeChatId={activeChatId}
+            onCreateProjectClick={() => setIsCreateProjectOpen(true)}
+            onDeleteProject={handleDeleteProject}
+            onDeleteChat={handleDeleteChat}
+            onSelectChat={handleSelectChat}
           />
         )}
 
-        {/* Profile Popover Popup Menu matching Image 3 */}
-        {profilePopoverOpen && activeTab !== 'settings' && (
-          <div
-            ref={popoverRef}
-            data-testid="profile-popover"
-            style={{
-              position: 'absolute',
-              bottom: '50px',
-              left: '8px',
-              width: '240px',
-              backgroundColor: '#262220', // Warm dark card matching Image 3
-              border: '1px solid #3d3432',
-              borderRadius: '12px',
-              boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-              zIndex: 1500,
-              padding: '6px 0',
-              fontFamily: "'Inter', -apple-system, sans-serif"
-            }}
-          >
-            {/* User Email */}
-            <div
-              style={{
-                fontSize: '0.8rem',
-                color: '#8a8a8a',
-                padding: '8px 12px 6px',
-                borderBottom: '1px solid #3d3432',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              you@proton.me
-            </div>
-
-            {/* Personal Account */}
-            <div
-              data-testid="popover-item-account"
-              onClick={() => {
-                triggerToast('Personal Account Profile');
-                setProfilePopoverOpen(false);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '10px 12px',
-                color: '#ececec',
-                fontSize: '0.9rem',
-                cursor: 'pointer'
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3b2f2d')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-            >
-              <span style={{ fontSize: '1rem' }}>👤</span>
-              <span>Personal account</span>
-            </div>
-
-            {/* Settings */}
-            <div
-              data-testid="popover-item-settings"
-              onClick={() => {
-                setActiveTab('settings');
-                setSettingsCategory('general');
-                setProfilePopoverOpen(false);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '10px 12px',
-                color: '#ececec',
-                fontSize: '0.9rem',
-                cursor: 'pointer'
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3b2f2d')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '1rem' }}>⚙️</span>
-                <span>Settings</span>
-              </div>
-              <span style={{ fontSize: '0.72rem', color: '#8a8a8a', fontFamily: 'monospace' }}>Ctrl+,</span>
-            </div>
-
-            {/* Usage Remaining */}
-            <div
-              data-testid="popover-item-usage"
-              onClick={() => {
-                triggerToast('Usage & Billing');
-                setProfilePopoverOpen(false);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '10px 12px',
-                color: '#ececec',
-                fontSize: '0.9rem',
-                cursor: 'pointer'
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3b2f2d')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '1rem' }}>⏱️</span>
-                <span>Usage remaining</span>
-              </div>
-              <span style={{ fontSize: '0.8rem', color: '#8a8a8a' }}>›</span>
-            </div>
-
-            {/* Log Out */}
-            <div
-              data-testid="popover-item-logout"
-              onClick={() => {
-                alert('Logged out!');
-                setProfilePopoverOpen(false);
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '10px 12px',
-                color: '#ececec',
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                borderTop: '1px solid #3d3432',
-                marginTop: '4px'
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3b2f2d')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-            >
-              <span style={{ fontSize: '1rem' }}>🚪</span>
-              <span>Log out</span>
-            </div>
-          </div>
-        )}
-
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', backgroundColor: '#141110' }}>
+        <div className="flex-1 flex flex-col relative overflow-hidden bg-brand-bg">
           {activeTab === 'trajectory' && (
             <>
-              {/* Header inside workspace, with Upgrade and Get Plus buttons removed */}
-              <div
-                style={{
-                  height: '48px',
-                  borderBottom: '1px solid #231c1a',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '0 24px',
-                  backgroundColor: '#141110'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', color: '#ececec', fontWeight: 500 }}>
-                  <span>📁</span> {activeProject} workspace
+              {/* Header inside workspace */}
+              <div className="h-12 border-b border-brand-border/40 flex items-center justify-between px-6 bg-brand-bg">
+                <div className="flex items-center gap-2 text-sm text-brand-textMain font-semibold">
+                  <span className="text-brand-textMuted text-xs">📁</span> 
+                  <span>{activeProject || 'No Project'} workspace</span>
                 </div>
 
                 {/* Panel layout buttons */}
-                <div style={{ display: 'flex', gap: '8px', color: '#8a8a8a', cursor: 'pointer' }}>
-                  <span onClick={() => setActiveTab('mcp')} title="MCP Dashboard" style={{ fontSize: '1rem' }}>🔌</span>
-                  <span onClick={() => { setActiveTab('settings'); setSettingsCategory('general'); }} title="Settings" style={{ fontSize: '1rem' }}>⚙️</span>
+                <div className="flex gap-2.5 text-brand-textMuted cursor-pointer">
+                  <span onClick={() => setActiveTab('mcp')} title="MCP Dashboard" className="text-sm hover:text-white transition-colors">🔌</span>
+                  <span onClick={() => { setActiveTab('settings'); setSettingsCategory('general'); }} title="Settings" className="text-sm hover:text-white transition-colors">⚙️</span>
                 </div>
               </div>
 
@@ -652,15 +812,7 @@ export const App: React.FC = () => {
               {trajectorySteps.length <= 1 && (
                 <div
                   data-testid="workspace-title-question"
-                  style={{
-                    textAlign: 'center',
-                    marginTop: '80px',
-                    marginBottom: '-40px',
-                    fontSize: '2rem',
-                    fontFamily: "'Outfit', sans-serif",
-                    fontWeight: 500,
-                    color: '#ffffff'
-                  }}
+                  className="text-center mt-24 mb-6 text-3xl font-outfit font-medium text-white tracking-tight animate-fade-in"
                 >
                   What should we build in {activeProject}?
                 </div>
@@ -755,12 +907,7 @@ export const App: React.FC = () => {
         isOpen={searchModalOpen}
         onClose={() => setSearchModalOpen(false)}
         onSelectChat={handleSelectSearchChat}
-        onNewChat={() => {
-          setActiveTab('trajectory');
-          setTrajectorySteps([
-            { id: `step-new-${Date.now()}`, type: 'assistant', content: 'New chat initialized.' }
-          ]);
-        }}
+        onNewChat={handleNewChat}
         onOpenFolder={() => triggerToast('Workspace Folder Selector')}
         onOpenSettings={() => {
           setActiveTab('settings');
@@ -776,33 +923,23 @@ export const App: React.FC = () => {
         initialKeys={byokKeys}
       />
 
+      {/* Create Project Modal */}
+      <CreateProjectModal
+        isOpen={isCreateProjectOpen}
+        onClose={() => setIsCreateProjectOpen(false)}
+        onCreate={handleCreateProject}
+      />
+
       {/* Under Construction Toast Notification */}
       {toastOpen && (
         <div
           data-testid="toast-under-construction"
-          style={{
-            position: 'fixed',
-            bottom: '24px',
-            right: '24px',
-            backgroundColor: '#262220',
-            border: '1px solid #3d3432',
-            borderRadius: '8px',
-            padding: '12px 18px',
-            color: '#ffffff',
-            boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
-            zIndex: 3000,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            fontSize: '0.88rem'
-          }}
+          className="fixed bottom-6 right-6 bg-brand-popover border border-brand-border rounded-lg py-3 px-4.5 text-white shadow-2xl z-[3000] flex items-center gap-2 text-xs"
         >
           <span>🚧</span>
-          <span>{toastMessage} is currently under construction.</span>
+          <span>{toastMessage} is currently under development.</span>
         </div>
       )}
     </div>
   );
 };
-
-export default App;

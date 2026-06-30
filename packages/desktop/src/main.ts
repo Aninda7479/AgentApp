@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron';
+import { app, ipcMain, dialog } from 'electron';
 import path from 'path';
 import { windowManager } from './main/window';
 import { readStore, writeStore, StoreData } from './main/store';
@@ -13,6 +13,18 @@ ipcMain.handle('store-read', (): StoreData => {
 
 ipcMain.handle('store-write', (_event, data: StoreData): void => {
   writeStore(data);
+});
+
+ipcMain.handle('select-project-folders', async () => {
+  const win = windowManager.getMainWindow();
+  const result = await dialog.showOpenDialog(win!, {
+    title: 'Select Folder(s)',
+    properties: ['openDirectory', 'multiSelections']
+  });
+  if (result.canceled) {
+    return [];
+  }
+  return result.filePaths;
 });
 
 // ─── IPC: Auto-detect local providers on startup ─────────────────────────────

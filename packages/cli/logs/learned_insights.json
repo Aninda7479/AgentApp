@@ -222,5 +222,42 @@
     "lesson": "Always write unit tests",
     "category": "user_preference",
     "timestamp": 1782754611575
+  },
+  {
+    "id": "insight-1782842051920-48wg1",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782842051920
+  },
+  {
+    "id": "insight-1782842051929-di85j",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782842051929
+  },
+  {
+    "id": "insight-1782842210522-napcj",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782842210522
+  },
+  {
+    "id": "insight-1782842210542-z2dpf",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782842210542
+  },
+  {
+    "id": "insight-1782842280319-eakj4",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782842280319
+  }
+]80318
   }
 ]

@@ -131,7 +131,7 @@ describe('Step 083: Responsive Left Sidebar Navigation', () => {
         mcpCount: 3
       })
     );
-    expect(html).toContain('Aninda Das');
+    expect(html).toContain('Settings');
     expect(html).toContain('New chat');
     expect(html).toContain('Scheduled');
     expect(html).toContain('Plugins');
@@ -147,7 +147,7 @@ describe('Step 083: Responsive Left Sidebar Navigation', () => {
       })
     );
     expect(html).toContain('width:70px');
-    expect(html).not.toContain('Aninda Das');
+    expect(html).not.toContain('Settings');
   });
 });
 

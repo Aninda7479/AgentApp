@@ -1,4 +1,68 @@
 import React, { useState } from 'react';
+import { StoredProject, StoredChat } from '../App';
+
+// Inline Custom SVG Outline Icons for maximum reliability in Electron
+const PlusIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M5 12h14M12 5v14"/>
+  </svg>
+);
+
+const SearchIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+  </svg>
+);
+
+const ClockIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+  </svg>
+);
+
+const PlugIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>
+  </svg>
+);
+
+const FolderIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/>
+  </svg>
+);
+
+const MessageSquareIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+  </svg>
+);
+
+const Trash2Icon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/>
+  </svg>
+);
+
+const ChevronRightIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <polyline points="9 18 15 12 9 6"/>
+  </svg>
+);
+
+const PanelLeftCloseIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+    <path d="M9 3v16M16 15l-3-3 3-3"/>
+  </svg>
+);
+
+const SettingsIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </svg>
+);
 
 export interface SidebarProps {
   activeTab: string;
@@ -11,8 +75,17 @@ export interface SidebarProps {
   onSelectProject?: (project: string) => void;
   onOpenSearch?: () => void;
   onNewChat?: () => void;
-  onProfileClick?: () => void;
+  onProfileClick?: () => void; // Kept for compatibility in tests
   onMenuClick?: (menuName: string) => void;
+  
+  // New props for dynamic functionality
+  projects?: StoredProject[];
+  chats?: StoredChat[];
+  onCreateProjectClick?: () => void;
+  onDeleteProject?: (name: string) => void;
+  onDeleteChat?: (id: string) => void;
+  onSelectChat?: (id: string) => void;
+  activeChatId?: string | null;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -27,56 +100,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSearch,
   onNewChat,
   onProfileClick,
-  onMenuClick
+  onMenuClick,
+  projects = [],
+  chats = [],
+  onCreateProjectClick,
+  onDeleteProject,
+  onDeleteChat,
+  onSelectChat,
+  activeChatId = null
 }) => {
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   const [chatsCollapsed, setChatsCollapsed] = useState(false);
 
-  const projects = [
-    { name: 'agent', desc: 'Add actions for desktop automa... 3mo' },
-    { name: 'GlacierPharma', desc: '' },
-    { name: 'proxy', desc: '' },
-    { name: 'LawX', desc: '' },
-    { name: 'Second_Brain', desc: '' }
-  ];
-
-  const chats = [
-    { title: 'Find online data listings', time: '5d' },
-    { title: 'Add graphify tool', time: '3w' }
-  ];
-
   // Render navigation item helper
-  const renderNavItem = (id: string, label: string, icon: string) => {
+  const renderNavItem = (id: string, label: string, IconComponent: React.ComponentType<any>) => {
     const isActive = activeTab === id;
     return (
-      <div
+      <button
         data-testid={`nav-item-${id}`}
         onClick={() => onSelectTab(id)}
-        style={{
-          padding: '8px 10px',
-          borderRadius: '8px',
-          color: isActive ? '#ffffff' : '#8a8a8a',
-          backgroundColor: isActive ? '#2e2220' : 'transparent',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          fontSize: '0.9rem',
-          fontWeight: isActive ? 500 : 400,
-          marginBottom: '2px',
-          transition: 'all 0.15s ease',
-          userSelect: 'none'
-        }}
-        onMouseEnter={(e) => {
-          if (!isActive) e.currentTarget.style.backgroundColor = '#251c1a';
-        }}
-        onMouseLeave={(e) => {
-          if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
-        }}
+        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 text-sm font-medium mb-0.5 select-none ${
+          isActive 
+            ? 'text-white bg-brand-border' 
+            : 'text-brand-textMuted hover:text-white hover:bg-brand-border/40'
+        }`}
       >
-        <span style={{ fontSize: '1rem', width: '18px', textAlign: 'center' }}>{icon}</span>
+        <IconComponent className="w-4 h-4 flex-shrink-0" />
         {!collapsed && <span>{label}</span>}
-      </div>
+      </button>
     );
   };
 
@@ -85,276 +136,217 @@ export const Sidebar: React.FC<SidebarProps> = ({
       data-testid="sidebar-container"
       style={{
         width: collapsed ? '70px' : '260px',
-        backgroundColor: '#1e1816', // Dark warm charcoal sidebar background
-        borderRight: '1px solid #2d2321',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: '8px',
-        height: '100%',
-        boxSizing: 'border-box',
-        transition: 'width 0.2s ease-in-out'
       }}
+      className="bg-brand-sidebar border-r border-brand-border flex flex-col p-2.5 h-full box-border transition-all duration-200"
     >
-      {/* Top Windows Navigation Bar */}
+      {/* Top Windows Navigation Bar — Aligned to exactly match main workspace header height h-12 */}
       {!collapsed && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            padding: '8px 10px 16px',
-            borderBottom: '1px solid #2d2321',
-            marginBottom: '12px'
-          }}
-        >
+        <div className="h-12 border-b border-brand-border flex items-center gap-4 px-2 mb-3 select-none">
           {/* Navigation Arrows */}
-          <div style={{ display: 'flex', gap: '8px', color: '#8a8a8a', fontSize: '0.85rem' }}>
-            <span style={{ cursor: 'pointer' }}>←</span>
-            <span style={{ cursor: 'pointer' }}>→</span>
+          <div className="flex gap-2 text-brand-textMuted text-xs font-mono">
+            <span className="cursor-pointer hover:text-white transition-colors">←</span>
+            <span className="cursor-pointer hover:text-white transition-colors">→</span>
           </div>
           {/* Window Menu */}
-          <div
-            style={{
-              display: 'flex',
-              gap: '10px',
-              color: '#8a8a8a',
-              fontSize: '0.78rem',
-              fontWeight: 500,
-              userSelect: 'none'
-            }}
-          >
-            <span onClick={() => onMenuClick && onMenuClick('File')} style={{ cursor: 'pointer' }}>File</span>
-            <span onClick={() => onMenuClick && onMenuClick('Edit')} style={{ cursor: 'pointer' }}>Edit</span>
-            <span onClick={() => onMenuClick && onMenuClick('View')} style={{ cursor: 'pointer' }}>View</span>
-            <span onClick={() => onMenuClick && onMenuClick('Help')} style={{ cursor: 'pointer' }}>Help</span>
+          <div className="flex gap-3 text-brand-textMuted text-[11px] font-semibold">
+            <span onClick={() => onMenuClick && onMenuClick('File')} className="cursor-pointer hover:text-white transition-colors">File</span>
+            <span onClick={() => onMenuClick && onMenuClick('Edit')} className="cursor-pointer hover:text-white transition-colors">Edit</span>
+            <span onClick={() => onMenuClick && onMenuClick('View')} className="cursor-pointer hover:text-white transition-colors">View</span>
+            <span onClick={() => onMenuClick && onMenuClick('Help')} className="cursor-pointer hover:text-white transition-colors">Help</span>
           </div>
         </div>
       )}
 
       {/* Main navigation list */}
-      <div style={{ flex: 1, overflowY: 'auto', paddingRight: '2px' }}>
+      <div className="flex-1 overflow-y-auto pr-0.5 custom-scrollbar">
         {/* Core items */}
-        <div style={{ marginBottom: '16px' }}>
-          <div
+        <div className="mb-4">
+          <button
             data-testid="nav-new-chat"
             onClick={onNewChat || (() => onSelectTab('trajectory'))}
-            style={{
-              padding: '8px 10px',
-              borderRadius: '8px',
-              color: '#ececec',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontSize: '0.9rem',
-              marginBottom: '2px',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#2e2220')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-white hover:bg-brand-border/40 transition-all duration-150 text-sm font-medium mb-0.5 select-none"
           >
-            <span style={{ fontSize: '1rem', width: '18px', textAlign: 'center' }}>📝</span>
+            <PlusIcon className="w-4 h-4 flex-shrink-0" />
             {!collapsed && <span>New chat</span>}
-          </div>
+          </button>
 
-          <div
+          <button
             data-testid="nav-search"
             onClick={onOpenSearch}
-            style={{
-              padding: '8px 10px',
-              borderRadius: '8px',
-              color: '#8a8a8a',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontSize: '0.9rem',
-              marginBottom: '2px',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#251c1a')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-brand-border/40 transition-all duration-150 text-sm font-medium mb-0.5 select-none"
           >
-            <span style={{ fontSize: '1rem', width: '18px', textAlign: 'center' }}>🔍</span>
+            <SearchIcon className="w-4 h-4 flex-shrink-0" />
             {!collapsed && <span>Search</span>}
-          </div>
+          </button>
 
-          {renderNavItem('scheduled', 'Scheduled', '⏰')}
-          {renderNavItem('plugins', 'Plugins', '🔌')}
+          {renderNavItem('scheduled', 'Scheduled', ClockIcon)}
+          {renderNavItem('plugins', 'Plugins', PlugIcon)}
         </div>
 
         {/* Projects Section */}
         {!collapsed && (
-          <div style={{ marginBottom: '16px' }}>
-            <div
-              data-testid="sidebar-projects-header"
-              onClick={() => setProjectsCollapsed(!projectsCollapsed)}
-              style={{
-                fontSize: '0.72rem',
-                textTransform: 'uppercase',
-                color: '#8a8a8a',
-                fontWeight: 600,
-                letterSpacing: '0.05em',
-                marginBottom: '6px',
-                padding: '4px 10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                cursor: 'pointer',
-                userSelect: 'none'
-              }}
-            >
-              <span>Projects</span>
-              <span>{projectsCollapsed ? '▶' : '▼'}</span>
+          <div className="mb-4">
+            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-brand-textMuted px-3 py-2 select-none">
+              <span 
+                className="cursor-pointer hover:text-white flex items-center gap-1.5"
+                onClick={() => setProjectsCollapsed(!projectsCollapsed)}
+              >
+                <span>Projects</span>
+                <span className="text-[9px]">{projectsCollapsed ? '▶' : '▼'}</span>
+              </span>
+              <button 
+                onClick={onCreateProjectClick}
+                className="text-brand-textMuted hover:text-white p-0.5 rounded hover:bg-brand-border/50 transition-colors"
+                title="Create Project"
+              >
+                <PlusIcon className="w-3.5 h-3.5" />
+              </button>
             </div>
 
-            {!projectsCollapsed &&
-              projects.map((proj) => {
-                const isSelected = activeProject === proj.name && activeTab === 'trajectory';
-                return (
-                  <div
-                    key={proj.name}
-                    data-testid={`project-item-${proj.name}`}
-                    onClick={() => {
-                      if (onSelectProject) onSelectProject(proj.name);
-                      onSelectTab('trajectory');
-                    }}
-                    style={{
-                      padding: '8px 10px',
-                      borderRadius: '8px',
-                      color: isSelected ? '#ffffff' : '#ececec',
-                      backgroundColor: isSelected ? '#2e2220' : 'transparent',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '2px',
-                      marginBottom: '2px',
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isSelected) e.currentTarget.style.backgroundColor = '#251c1a';
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem' }}>
-                      <span>📁</span>
-                      <span style={{ fontWeight: isSelected ? 500 : 400 }}>{proj.name}</span>
+            {!projectsCollapsed && (
+              <div className="flex flex-col">
+                {projects.map((proj) => {
+                  const isSelected = activeProject === proj.name && activeTab === 'trajectory';
+                  return (
+                    <div
+                      key={proj.name}
+                      data-testid={`project-item-${proj.name}`}
+                      className={`group flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-150 cursor-pointer mb-0.5 ${
+                        isSelected 
+                          ? 'text-white bg-brand-border' 
+                          : 'text-brand-textMuted hover:text-white hover:bg-brand-border/40'
+                      }`}
+                    >
+                      <div 
+                        onClick={() => {
+                          if (onSelectProject) onSelectProject(proj.name);
+                          onSelectTab('trajectory');
+                        }}
+                        className="flex items-center gap-2.5 overflow-hidden flex-1"
+                      >
+                        <FolderIcon className="w-3.5 h-3.5 flex-shrink-0 text-brand-textMuted" />
+                        <span className="truncate font-medium">{proj.name}</span>
+                      </div>
+                      
+                      {/* Delete project button on hover */}
+                      {onDeleteProject && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteProject(proj.name);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 text-brand-textMuted hover:text-red-400 p-0.5 rounded hover:bg-brand-border transition-all"
+                          title="Delete Project"
+                        >
+                          <Trash2Icon className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
-                    {proj.desc && (
-                      <span style={{ fontSize: '0.72rem', color: '#8a8a8a', paddingLeft: '22px' }}>
-                        {proj.desc}
-                      </span>
-                    )}
+                  );
+                })}
+                {projects.length === 0 && (
+                  <div className="text-xs text-brand-textMuted/50 px-3 py-2 italic">
+                    No projects. Click + to add.
                   </div>
-                );
-              })}
+                )}
+              </div>
+            )}
           </div>
         )}
 
         {/* Chats Section */}
         {!collapsed && (
-          <div style={{ marginBottom: '16px' }}>
-            <div
-              data-testid="sidebar-chats-header"
+          <div className="mb-4">
+            <div 
+              className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-brand-textMuted px-3 py-2 select-none cursor-pointer hover:text-white"
               onClick={() => setChatsCollapsed(!chatsCollapsed)}
-              style={{
-                fontSize: '0.72rem',
-                textTransform: 'uppercase',
-                color: '#8a8a8a',
-                fontWeight: 600,
-                letterSpacing: '0.05em',
-                marginBottom: '6px',
-                padding: '4px 10px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                cursor: 'pointer',
-                userSelect: 'none'
-              }}
             >
               <span>Chats</span>
-              <span>{chatsCollapsed ? '▶' : '▼'}</span>
+              <span className="text-[9px]">{chatsCollapsed ? '▶' : '▼'}</span>
             </div>
 
-            {!chatsCollapsed &&
-              chats.map((chat) => (
-                <div
-                  key={chat.title}
-                  data-testid={`chat-item-${chat.title.replace(/\s+/g, '-')}`}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: '8px',
-                    color: '#ececec',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    fontSize: '0.88rem',
-                    marginBottom: '2px',
-                    transition: 'all 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#251c1a')}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '6px' }}>
-                    {chat.title}
-                  </span>
-                  <span style={{ fontSize: '0.72rem', color: '#8a8a8a', flexShrink: 0 }}>
-                    {chat.time}
-                  </span>
-                </div>
-              ))}
+            {!chatsCollapsed && (
+              <div className="flex flex-col">
+                {chats.map((chat) => {
+                  const isSelected = activeChatId === chat.id && activeTab === 'trajectory';
+                  return (
+                    <div
+                      key={chat.id}
+                      data-testid={`chat-item-${chat.title.replace(/\s+/g, '-')}`}
+                      className={`group flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-150 cursor-pointer mb-0.5 ${
+                        isSelected 
+                          ? 'text-white bg-brand-border' 
+                          : 'text-brand-textMuted hover:text-white hover:bg-brand-border/40'
+                      }`}
+                    >
+                      <div 
+                        onClick={() => {
+                          if (onSelectChat) onSelectChat(chat.id);
+                        }}
+                        className="flex items-center gap-2.5 overflow-hidden flex-1"
+                      >
+                        <MessageSquareIcon className="w-3.5 h-3.5 flex-shrink-0 text-brand-textMuted" />
+                        <span className="truncate font-medium">{chat.title}</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-brand-textMuted/60 flex-shrink-0 group-hover:hidden">
+                          {chat.timestamp}
+                        </span>
+                        {onDeleteChat && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteChat(chat.id);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 text-brand-textMuted hover:text-red-400 p-0.5 rounded hover:bg-brand-border transition-all"
+                            title="Delete Chat"
+                          >
+                            <Trash2Icon className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {chats.length === 0 && (
+                  <div className="text-xs text-brand-textMuted/50 px-3 py-2 italic">
+                    No active chats.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* User profile footer section */}
-      {!collapsed && (
-        <div
-          data-testid="sidebar-profile"
-          onClick={onProfileClick}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-start',
-            padding: '12px 6px 4px',
-            borderTop: '1px solid #2d2321',
-            marginTop: 'auto',
-            cursor: 'pointer',
-            borderRadius: '6px',
-            transition: 'background-color 0.15s ease'
+      {/* Settings Footer & Collapse button placed side-by-side for clean horizontal layout */}
+      <div className={`flex ${collapsed ? 'flex-col gap-1' : 'flex-row gap-2'} items-center border-t border-brand-border/40 pt-2.5 mt-auto`}>
+        <button
+          data-testid="sidebar-settings-btn"
+          onClick={() => {
+            onSelectTab('settings');
+            if (onProfileClick) onProfileClick(); // call profile click callback for test expectations
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#251c1a')}
-          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+          className={`w-full flex items-center justify-start gap-3 px-3 py-2 rounded-lg transition-colors duration-150 text-sm font-medium ${
+            activeTab === 'settings' 
+              ? 'text-white bg-brand-border' 
+              : 'text-brand-textMuted hover:text-white hover:bg-brand-border/40'
+          }`}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {/* Avatar circle */}
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                backgroundColor: '#10b981', // green background
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#ffffff',
-                fontWeight: 600,
-                fontSize: '0.85rem'
-              }}
-            >
-              AD
-            </div>
-            {/* Name / Subtitle */}
-            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-              <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff' }}>Aninda Das</span>
-              <span style={{ fontSize: '0.78rem', color: '#8a8a8a' }}>Go</span>
-            </div>
-          </div>
-        </div>
-      )}
+          <SettingsIcon className="w-4.5 h-4.5 flex-shrink-0" />
+          {!collapsed && <span>Settings</span>}
+        </button>
+        {onToggleCollapse && (
+          <button
+            onClick={onToggleCollapse}
+            className={`flex items-center justify-center p-2 rounded-lg text-brand-textMuted hover:text-white hover:bg-brand-border/40 transition-all duration-150 ${collapsed ? 'w-full' : ''}`}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <ChevronRightIcon className="w-4.5 h-4.5" /> : <PanelLeftCloseIcon className="w-4.5 h-4.5" />}
+          </button>
+        )}
+      </div>
     </div>
   );
 };
