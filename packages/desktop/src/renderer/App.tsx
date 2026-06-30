@@ -8,7 +8,7 @@ import { MCPDashboard, MCPServerInfo } from './components/MCPDashboard';
 import { SearchModal } from './components/SearchModal';
 import { ScheduledView } from './components/ScheduledView';
 import { PluginsView } from './components/PluginsView';
-import { SettingsView, ProviderConnection, ModelConfig } from './components/SettingsView';
+import { SettingsView, ProviderConnection, ModelConfig } from './settings/SettingsView';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('trajectory');

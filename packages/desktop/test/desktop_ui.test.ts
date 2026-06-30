@@ -77,7 +77,7 @@ import { MCPDashboard, MCPServerInfo } from '../src/renderer/components/MCPDashb
 import { SearchModal } from '../src/renderer/components/SearchModal';
 import { ScheduledView } from '../src/renderer/components/ScheduledView';
 import { PluginsView } from '../src/renderer/components/PluginsView';
-import { SettingsView } from '../src/renderer/components/SettingsView';
+import { SettingsView } from '../src/renderer/settings/SettingsView';
 import { App } from '../src/renderer/App';
 
 describe('Step 081: Electron Main Process & Multi-Window Manager', () => {

@@ -8,4 +8,4 @@ export * from './components/MCPDashboard';
 export * from './components/SearchModal';
 export * from './components/ScheduledView';
 export * from './components/PluginsView';
-export * from './components/SettingsView';
+export * from './settings/SettingsView';
