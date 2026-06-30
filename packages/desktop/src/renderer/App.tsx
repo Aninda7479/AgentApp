@@ -397,7 +397,7 @@ export const App: React.FC = () => {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#8a8a8a', cursor: 'default' }}>
-            SuperAgent Desktop — Codex Clone
+            SuperAgent Desktop
           </span>
         </div>
 

@@ -156,7 +156,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
           paddingLeft: '10px'
         }}
       >
-        OpenCode Desktop
+        Agent App Desktop
       </div>
     </div>
   );

@@ -21,7 +21,7 @@ export class WindowManager {
       height: 800,
       minWidth: 900,
       minHeight: 600,
-      frame: false, // Frameless window for Codex UI clone
+      frame: false, // Frameless window 
       titleBarStyle: 'hidden',
       backgroundColor: '#09090b',
       webPreferences: {
