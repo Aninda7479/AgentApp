@@ -290,6 +290,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         ) : (
                           projectChats.map((chat) => {
                             const isChatSelected = activeChatId === chat.id && activeTab === 'trajectory';
+                            const isChatRunning = Boolean(chat.isRunning);
                             return (
                               <div
                                 key={chat.id}
@@ -307,10 +308,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 {isChatSelected && (
                                   <span className="absolute left-[-10px] top-2 bottom-2 w-[2px] rounded-r-full bg-gradient-to-b from-violet-500 to-indigo-500" />
                                 )}
+                                {isChatRunning && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                                )}
                                 <span className="truncate flex-1 leading-snug">{chat.title}</span>
                                 <div className="flex items-center gap-1 flex-shrink-0">
                                   <span className="text-[10px] text-brand-textMuted/40 group-hover:hidden">
-                                    {chat.timestamp}
+                                    {isChatRunning ? 'Working...' : chat.timestamp}
                                   </span>
                                   {onDeleteChat && (
                                     <button
@@ -370,6 +374,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="flex flex-col gap-0.5">
                 {standaloneChats.map((chat) => {
                   const isSelected = activeChatId === chat.id && activeTab === 'trajectory';
+                  const isChatRunning = Boolean(chat.isRunning);
                   return (
                     <div
                       key={chat.id}
@@ -387,10 +392,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       {isSelected && (
                         <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-gradient-to-b from-violet-500 to-indigo-500" />
                       )}
+                      {isChatRunning && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                      )}
                       <span className="truncate flex-1">{chat.title}</span>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <span className="text-[10px] text-brand-textMuted/40 group-hover:hidden">
-                          {chat.timestamp}
+                          {isChatRunning ? 'Working...' : chat.timestamp}
                         </span>
                         {onDeleteChat && (
                           <button

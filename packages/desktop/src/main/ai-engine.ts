@@ -209,10 +209,23 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
+  content: string | RichContentPart[];
   toolCallId?: string;
   name?: string;
 }
+
+interface RichTextPart {
+  type: 'text';
+  text: string;
+}
+
+interface RichImagePart {
+  type: 'image';
+  mimeType: string;
+  data: string;
+}
+
+type RichContentPart = RichTextPart | RichImagePart;
 
 // ─── Provider Config ──────────────────────────────────────────────────────────
 
@@ -254,7 +267,7 @@ export class AgentEngine {
     // ── Build system prompt ────────────────────────────────────────────────
     // Inject attached file paths so the AI knows exactly what to read.
     const attachmentSection = (config.attachments && config.attachments.length > 0)
-      ? `\n\nThe following files are attached to this chat session and are available for you to read:\n${config.attachments.map(p => `- ${p}`).join('\n')}\n\nWhen the user asks you to read, summarise, or analyse an attachment, use the read_file tool with the exact paths listed above.`
+      ? `\n\nThe following files are attached to this chat session and are available for you to inspect:\n${config.attachments.map(p => `- ${p}`).join('\n')}\n\nWhen the latest prompt includes image attachments, inspect them directly from the multimodal input first. Use the read_file tool only for text-based attachments such as source files, markdown, or extracted text. Do not use OCR or shell commands for an image unless direct visual inspection is insufficient.`
       : '';
 
     const scopeSection = config.projectRoot
@@ -273,14 +286,48 @@ Key guidelines:
 - Read relevant files before making edits
 - Verify changes compile/work after editing
 - Be concise but thorough in explanations
-- When you edit files, mention which files changed and the diff summary` + attachmentSection + scopeSection);
+- When you edit files, mention which files changed and the diff summary
+- If a tool fails twice, stop retrying the same approach and explain the limitation instead` + attachmentSection + scopeSection);
 
     this.history.push({ role: 'system', content: sysPrompt });
   }
 
+  private buildUserContent(content: string, attachments: string[] = []): string | RichContentPart[] {
+    const imageAttachments = attachments.filter(filePath => /\.(png|jpe?g|gif|webp|bmp)$/i.test(filePath));
+    if (imageAttachments.length === 0) {
+      return content;
+    }
+
+    const parts: RichContentPart[] = [{ type: 'text', text: content }];
+    for (const filePath of imageAttachments) {
+      try {
+        const buffer = fs.readFileSync(filePath);
+        const ext = path.extname(filePath).toLowerCase();
+        const mimeType = ext === '.png'
+          ? 'image/png'
+          : ext === '.gif'
+          ? 'image/gif'
+          : ext === '.webp'
+          ? 'image/webp'
+          : ext === '.bmp'
+          ? 'image/bmp'
+          : 'image/jpeg';
+        parts.push({
+          type: 'image',
+          mimeType,
+          data: buffer.toString('base64')
+        });
+      } catch {
+        // If image loading fails, fall back to the text-only prompt for that file.
+      }
+    }
+
+    return parts.length > 1 ? parts : content;
+  }
+
   /** Add a user message to history */
-  public addUserMessage(content: string): void {
-    this.history.push({ role: 'user', content });
+  public addUserMessage(content: string, attachments: string[] = []): void {
+    this.history.push({ role: 'user', content: this.buildUserContent(content, attachments) });
   }
 
   /** Stop the current generation */
@@ -304,13 +351,14 @@ Key guidelines:
   /** Main streaming agent run */
   public async run(
     userPrompt: string,
-    onEvent: (event: AgentEvent) => void
+    onEvent: (event: AgentEvent) => void,
+    currentAttachments: string[] = []
   ): Promise<void> {
     this.abortController = new AbortController();
-    this.addUserMessage(userPrompt);
+    this.addUserMessage(userPrompt, currentAttachments);
 
     let iterations = 0;
-    const MAX_ITERATIONS = 10; // prevent infinite loops
+    const MAX_ITERATIONS = 16; // prevent infinite loops while allowing multi-step tool workflows
 
     try {
       while (iterations < MAX_ITERATIONS) {
@@ -435,8 +483,18 @@ Key guidelines:
       if (msg.role === 'tool') {
         return {
           role: 'tool' as const,
-          content: msg.content,
+          content: typeof msg.content === 'string' ? msg.content : '',
           tool_call_id: msg.toolCallId || 'unknown'
+        };
+      }
+      if (Array.isArray(msg.content)) {
+        return {
+          role: msg.role as 'system' | 'user' | 'assistant',
+          content: msg.content.map(part =>
+            part.type === 'text'
+              ? { type: 'text', text: part.text }
+              : { type: 'image_url', image_url: { url: `data:${part.mimeType};base64,${part.data}` } }
+          )
         };
       }
       return { role: msg.role as 'system' | 'user' | 'assistant', content: msg.content };
@@ -556,8 +614,25 @@ Key guidelines:
             content: [{
               type: 'tool_result' as const,
               tool_use_id: m.toolCallId || 'unknown',
-              content: m.content
+              content: typeof m.content === 'string' ? m.content : ''
             }]
+          };
+        }
+        if (Array.isArray(m.content)) {
+          return {
+            role: m.role as 'user' | 'assistant',
+            content: m.content.map(part =>
+              part.type === 'text'
+                ? { type: 'text' as const, text: part.text }
+                : {
+                    type: 'image' as const,
+                    source: {
+                      type: 'base64' as const,
+                      media_type: part.mimeType,
+                      data: part.data
+                    }
+                  }
+            )
           };
         }
         return { role: m.role as 'user' | 'assistant', content: m.content };
@@ -571,7 +646,7 @@ Key guidelines:
 
     const payload = {
       model: this.config.model || 'claude-3-5-sonnet-20241022',
-      system: systemMsg,
+      system: typeof systemMsg === 'string' ? systemMsg : '',
       messages: conversationMsgs,
       tools,
       stream: true,
@@ -667,7 +742,18 @@ Key guidelines:
       .filter(m => m.role !== 'system')
       .map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
+        parts: Array.isArray(m.content)
+          ? m.content.map(part =>
+              part.type === 'text'
+                ? { text: part.text }
+                : {
+                    inlineData: {
+                      mimeType: part.mimeType,
+                      data: part.data
+                    }
+                  }
+            )
+          : [{ text: m.content }]
       }));
 
     const systemInstruction = this.history.find(m => m.role === 'system')?.content;
@@ -681,7 +767,7 @@ Key guidelines:
     }];
 
     const payload: Record<string, unknown> = { contents, tools };
-    if (systemInstruction) {
+    if (typeof systemInstruction === 'string' && systemInstruction) {
       payload.systemInstruction = { parts: [{ text: systemInstruction }] };
     }
 
@@ -753,7 +839,9 @@ Key guidelines:
 
     const messages = this.history.map(m => ({
       role: m.role === 'tool' ? 'tool' : m.role,
-      content: m.content
+      content: Array.isArray(m.content)
+        ? m.content.filter(part => part.type === 'text').map(part => part.text).join('\n')
+        : m.content
     }));
 
     const payload = {

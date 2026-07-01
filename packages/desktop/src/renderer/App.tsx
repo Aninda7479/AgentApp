@@ -41,6 +41,39 @@ function sanitizeFolderName(name: string): string {
   return sanitized || `chat-${Date.now()}`;
 }
 
+function formatWorkedDuration(elapsedMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  return `${Math.max(1, seconds)}s`;
+}
+
+function stampWorkedDuration(steps: TrajectoryStep[], workedDuration: string): TrajectoryStep[] {
+  let lastUserIndex = -1;
+  for (let i = steps.length - 1; i >= 0; i--) {
+    if (steps[i].type === 'user') {
+      lastUserIndex = i;
+      break;
+    }
+  }
+
+  return steps.map((step, index) => {
+    if (index <= lastUserIndex || step.type === 'user') {
+      return step;
+    }
+    return {
+      ...step,
+      metadata: {
+        ...(step.metadata || {}),
+        workedDuration
+      }
+    };
+  });
+}
+
 export const App: React.FC = () => {
   const { themeMode, setThemeMode } = useThemeMode();
   const [workMode, setWorkMode] = useState<'coding' | 'everyday'>('coding');
@@ -145,6 +178,12 @@ export const App: React.FC = () => {
     activeChatIdRef.current = activeChatId;
   }, [activeChatId]);
 
+  const activeChat = chats.find(chat => chat.id === activeChatId) || null;
+
+  useEffect(() => {
+    setIsGenerating(Boolean(activeChat?.isRunning));
+  }, [activeChat?.id, activeChat?.isRunning]);
+
   useEffect(() => {
     try {
       localStorage.setItem('composer_prompt_cache', composerPrompt);
@@ -176,6 +215,27 @@ export const App: React.FC = () => {
         c.id === targetChatId ? { ...c, steps: nextSteps } : c
       );
       // Pass the updated chats to persistStore to save immediately to disk
+      persistStore(connectedProviders, modelsCatalog, projects, nextChats);
+      return nextChats;
+    });
+  };
+
+  const updateChatRecord = (targetChatId: string, updater: (chat: StoredChat) => StoredChat) => {
+    setChats(prevChats => {
+      const existing = prevChats.find(chat => chat.id === targetChatId);
+      if (!existing) return prevChats;
+
+      let updatedChat = existing;
+      const nextChats = prevChats.map(chat => {
+        if (chat.id !== targetChatId) return chat;
+        updatedChat = updater(chat);
+        return updatedChat;
+      });
+
+      if (targetChatId === activeChatIdRef.current) {
+        setTrajectorySteps(updatedChat.steps);
+      }
+
       persistStore(connectedProviders, modelsCatalog, projects, nextChats);
       return nextChats;
     });
@@ -224,7 +284,10 @@ export const App: React.FC = () => {
               id: newStepId,
               type: 'assistant',
               content: streamingBufferRef.current,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              metadata: {
+                workedDuration: formatWorkedDuration(Date.now() - (chats.find(c => c.id === chatId)?.startedAt || Date.now()))
+              }
             };
             return [...prev, newStep];
           }
@@ -259,7 +322,16 @@ export const App: React.FC = () => {
       }
 
       if (agentEvent.type === 'done' || agentEvent.type === 'error' || agentEvent.type === 'abort') {
-        setIsGenerating(false);
+        const chat = chats.find(c => c.id === chatId);
+        const workedDuration = formatWorkedDuration(Date.now() - (chat?.startedAt || Date.now()));
+
+        updateChatRecord(chatId, current => ({
+          ...current,
+          isRunning: false,
+          lastError: agentEvent.type === 'error' ? (agentEvent.error || 'Unknown error') : undefined,
+          steps: stampWorkedDuration(current.steps, workedDuration)
+        }));
+
         streamingBufferRef.current = '';
         streamingStepIdRef.current = null;
         streamingChatIdRef.current = null;
@@ -274,7 +346,7 @@ export const App: React.FC = () => {
       ipc.removeListener('agent-event', handleAgentEvent);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ipc]);
+  }, [ipc, chats]);
 
   const handleConnectProvider = (provider: ProviderConnection, newModels: ModelConfig[]) => {
     setConnectedProviders(prev => {
@@ -331,7 +403,10 @@ export const App: React.FC = () => {
 
       // Use exactly what is stored — no hardcoded defaults
       const finalProjects = loadedProjects;
-      const finalChats = loadedChats;
+      const finalChats = loadedChats.map(chat => ({
+        ...chat,
+        isRunning: false
+      }));
 
       setProjects(finalProjects);
       setChats(finalChats);
@@ -677,16 +752,41 @@ export const App: React.FC = () => {
     savedAttachments: { filename: string; fullPath: string }[] = [],
     startTime: number = Date.now()
   ) => {
-    setIsGenerating(true);
+    if (activeChatIdRef.current === chatId) {
+      setIsGenerating(true);
+    }
     let currentSteps = [...initialSteps];
-
-    const updateChatSteps = (nextSteps: TrajectoryStep[]) => {
+    const finalizeSimulation = (nextSteps: TrajectoryStep[]) => {
       currentSteps = nextSteps;
-      setTrajectorySteps(nextSteps);
+      const workedDuration = formatWorkedDuration(Date.now() - startTime);
+      const completedSteps = stampWorkedDuration(nextSteps, workedDuration);
+      if (activeChatIdRef.current === chatId) {
+        setTrajectorySteps(completedSteps);
+      }
       setChats(prev => {
         const next = prev.map(c => {
           if (c.id === chatId) {
-            return { ...c, steps: nextSteps };
+            return { ...c, steps: completedSteps, isRunning: false };
+          }
+          return c;
+        });
+        persistStore(connectedProviders, modelsCatalog, projects, next);
+        return next;
+      });
+      if (activeChatIdRef.current === chatId) {
+        setIsGenerating(false);
+      }
+    };
+
+    const updateChatSteps = (nextSteps: TrajectoryStep[]) => {
+      currentSteps = nextSteps;
+      if (activeChatIdRef.current === chatId) {
+        setTrajectorySteps(nextSteps);
+      }
+      setChats(prev => {
+        const next = prev.map(c => {
+          if (c.id === chatId) {
+            return { ...c, steps: nextSteps, isRunning: true, startedAt: c.startedAt || startTime };
           }
           return c;
         });
@@ -782,8 +882,7 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
               content: contentResult,
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             };
-            setIsGenerating(false);
-            updateChatSteps([...currentSteps, assistantStep]);
+            finalizeSimulation([...currentSteps, assistantStep]);
           }, 1200);
         }, 1200);
 
@@ -804,8 +903,7 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
             content: 'Please attach a document or PDF file (such as `Faceless Millionaire.pdf`) for me to read and summarize directly.',
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
-          setIsGenerating(false);
-          updateChatSteps([...currentSteps, assistantStep]);
+          finalizeSimulation([...currentSteps, assistantStep]);
         }, 1200);
 
       } else if (lower.includes('image') || lower.includes('video') || lower.includes('media') || lower.includes('asset')) {
@@ -840,8 +938,7 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
                 mediaPath: 'C:/Users/anind/OneDrive/Pictures/mockup.png'
               }
             };
-            setIsGenerating(false);
-            updateChatSteps([...currentSteps, assistantStep]);
+            finalizeSimulation([...currentSteps, assistantStep]);
           }, 1200);
         }, 1200);
 
@@ -889,8 +986,7 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
                 content: 'I have modified `App.tsx` to automatically redirect the active tab to the trajectory execution screen on startup. Verified compilation succeeds.',
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               };
-              setIsGenerating(false);
-              updateChatSteps([...currentSteps, assistantStep]);
+              finalizeSimulation([...currentSteps, assistantStep]);
             }, 1000);
           }, 1200);
         }, 1200);
@@ -923,8 +1019,7 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
               content: 'According to your personal memories, you are a Computer Science student. You favor glassmorphism styles, dark palettes, and high performance desktop wrappers.',
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             };
-            setIsGenerating(false);
-            updateChatSteps([...currentSteps, assistantStep]);
+            finalizeSimulation([...currentSteps, assistantStep]);
           }, 1200);
         }, 1200);
 
@@ -945,8 +1040,7 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
             content: `I am connected and ready. I can write and compile code, interface with your local filesystem via MCP tool servers, query your memory profiles, and manage/preview your uploaded image and video assets. How should we proceed?`,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
-          setIsGenerating(false);
-          updateChatSteps([...currentSteps, assistantStep]);
+          finalizeSimulation([...currentSteps, assistantStep]);
         }, 1200);
       }
     }, 1000);
@@ -956,6 +1050,7 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
     setComposerPrompt('');
     const attachmentsToSave = [...composerAttachments];
     setComposerAttachments([]);
+    const runStartedAt = Date.now();
 
     let chatId = activeChatId;
     let projectScope = activeProject;
@@ -1042,7 +1137,9 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
         project: projectScope,
         model: options.model,
         timestamp: new Date().toLocaleDateString(),
-        steps: combinedSteps
+        steps: combinedSteps,
+        isRunning: true,
+        startedAt: runStartedAt
       };
 
       setChats(prev => {
@@ -1060,7 +1157,7 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
       setChats(prev => {
         const next = prev.map(c => {
           if (c.id === chatId) {
-            return { ...c, steps: updatedSteps };
+            return { ...c, steps: updatedSteps, isRunning: true, startedAt: runStartedAt, lastError: undefined };
           }
           return c;
         });
@@ -1069,7 +1166,7 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
       });
     }
 
-    setIsGenerating(true);
+    setIsGenerating(activeChatIdRef.current === chatId);
 
     // ── Route to real AI or simulation ──────────────────────────────────────
     if (hasRealCredentials && ipc) {
@@ -1111,9 +1208,19 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
       };
 
       // Non-blocking: events come back via 'agent-event' IPC listener
-      ipc.invoke('agent-run', { sessionId, prompt, config: agentConfig }).catch((err: Error) => {
+      ipc.invoke('agent-run', {
+        sessionId,
+        prompt,
+        config: agentConfig,
+        currentAttachments: savedAttachments.map(att => att.fullPath)
+      }).catch((err: Error) => {
         triggerToast(`Failed to start agent: ${err.message}`);
-        setIsGenerating(false);
+        updateChatRecord(chatId, current => ({
+          ...current,
+          isRunning: false,
+          lastError: err.message,
+          steps: stampWorkedDuration(current.steps, formatWorkedDuration(Date.now() - (current.startedAt || runStartedAt)))
+        }));
       });
 
     } else {
@@ -1126,7 +1233,7 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
           ? `Streaming from ${activeProvider?.name || 'provider'} using model ${options.model}...`
           : `Demo mode — configure a provider in Settings to use real AI. Simulating response for: "${prompt.slice(0, 40)}..."`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        metadata: { workedDuration: '0s' }
+        metadata: { workedDuration: '1s' }
       };
       setTrajectorySteps(prev => [...prev, thoughtStep]);
       setChats(prev => {
@@ -1138,11 +1245,10 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
         return next;
       });
 
-      const startTime = Date.now();
       simulateAgentResponse(prompt, chatId, isNew
         ? [...combinedSteps, thoughtStep]
         : [...trajectorySteps, userStep, ...attachmentSteps, thoughtStep],
-        projectScope, options.model, savedAttachments, startTime);
+        projectScope, options.model, savedAttachments, runStartedAt);
     }
   };
 
@@ -1183,6 +1289,28 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
         console.warn(`Window control ${action} failed outside Electron`, e);
       }
     }
+  };
+
+  const handleStopActiveRun = () => {
+    if (!activeChatId || activeChatId === 'draft-chat') {
+      setIsGenerating(false);
+      return;
+    }
+
+    const runningChat = chats.find(chat => chat.id === activeChatId);
+    const workedDuration = formatWorkedDuration(Date.now() - (runningChat?.startedAt || Date.now()));
+
+    ipc?.invoke('agent-stop', `session-${activeChatId}`).catch((err: Error) => {
+      console.error('Failed to stop agent session', err);
+    });
+
+    updateChatRecord(activeChatId, current => ({
+      ...current,
+      isRunning: false,
+      lastError: 'Stopped by user',
+      steps: stampWorkedDuration(current.steps, workedDuration)
+    }));
+    setIsGenerating(false);
   };
 
   const handleCreateTaskFromChat = (taskType: string) => {
@@ -1460,13 +1588,14 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
               activeProject={activeProject}
               trajectorySteps={trajectorySteps}
               isGenerating={isGenerating}
+              startedAt={activeChat?.startedAt}
               modelsCatalog={modelsCatalog}
               mcpServers={mcpServers}
               hasCredentials={Boolean(byokKeys.openai || byokKeys.gemini)}
               composerPrompt={composerPrompt}
               onPromptChange={setComposerPrompt}
               onSendPrompt={handleSendPrompt}
-              onStop={() => setIsGenerating(false)}
+              onStop={handleStopActiveRun}
               onViewDiff={handleViewDiff}
               onOpenMcp={() => setActiveTab('mcp')}
               onOpenSettings={() => {

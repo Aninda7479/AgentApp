@@ -149,6 +149,28 @@ describe('Step 083: Responsive Left Sidebar Navigation', () => {
     expect(html).toContain('width:70px');
     expect(html).not.toContain('Settings');
   });
+
+  it('should show a running indicator for chats that continue in the background', () => {
+    const html = renderToString(
+      React.createElement(Sidebar, {
+        activeTab: 'trajectory',
+        onSelectTab: () => {},
+        chats: [{
+          id: 'chat-1',
+          title: 'Vision task',
+          project: '',
+          model: 'gpt-4o',
+          timestamp: '2026-07-01',
+          steps: [],
+          isRunning: true
+        }],
+        activeChatId: 'chat-1'
+      })
+    );
+
+    expect(html).toContain('Working...');
+    expect(html).toContain('animate-pulse');
+  });
 });
 
 describe('Step 084: Streaming Chat Trajectory Canvas', () => {
@@ -184,6 +206,58 @@ describe('Step 084: Streaming Chat Trajectory Canvas', () => {
     expect(html).toContain('fs_write');
     expect(html).toContain('Review');
     expect(html).toContain('Worked for');
+  });
+
+  it('should summarize noisy tool output in the worked-details list', () => {
+    const steps: TrajectoryStep[] = [
+      { id: '1', type: 'user', content: 'Summarize the PDF' },
+      { id: '2', type: 'thought', content: 'Inspecting attachment...' },
+      {
+        id: '3',
+        type: 'tool_call',
+        toolName: 'read_file',
+        status: 'success',
+        content: '%PDF-1.4 \uFFFD\uFFFD\uFFFD\uFFFD 10 0 obj << /Type /Catalog /Version',
+      },
+      {
+        id: '4',
+        type: 'tool_call',
+        toolName: 'run_command',
+        status: 'error',
+        content: 'Error: Command failed: pip install pdfplumber 2>&1 | tail -20\nmore stderr here'
+      },
+      { id: '5', type: 'assistant', content: 'I need to use a different extraction path.' }
+    ];
+
+    const html = renderToString(
+      React.createElement(TrajectoryCanvas, { steps, isStreaming: false, initialExpanded: true })
+    );
+
+    expect(html).toContain('Opened a binary document preview');
+    expect(html).toContain('Command failed: pip install pdfplumber 2&gt;&amp;1 | tail -20');
+    expect(html).not.toContain('%PDF-1.4');
+    expect(html).not.toContain('more stderr here');
+  });
+
+  it('should keep the prompt visible when attachment user steps follow it', () => {
+    const steps: TrajectoryStep[] = [
+      { id: '1', type: 'user', content: 'Extract text from this image' },
+      {
+        id: '2',
+        type: 'user',
+        content: '📎 Attached context: mockup.png',
+        metadata: { mediaType: 'image', mediaPath: '/tmp/mockup.png' } as any
+      },
+      { id: '3', type: 'assistant', content: 'I can inspect the image directly.' }
+    ];
+
+    const html = renderToString(
+      React.createElement(TrajectoryCanvas, { steps, isStreaming: false })
+    );
+
+    expect(html).toContain('Extract text from this image');
+    expect(html).toContain('Attached context: mockup.png');
+    expect(html).toContain('I can inspect the image directly.');
   });
 });
 

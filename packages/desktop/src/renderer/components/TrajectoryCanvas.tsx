@@ -22,6 +22,54 @@ export interface TrajectoryStep {
   };
 }
 
+function stripAnsi(value: string): string {
+  return value.replace(/\u001b\[[0-9;]*m/g, '');
+}
+
+function truncatePreview(value: string, maxLength: number = 88): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  return normalized.length > maxLength
+    ? `${normalized.slice(0, maxLength - 3)}...`
+    : normalized;
+}
+
+function summarizeToolContent(step: TrajectoryStep): string {
+  const toolName = step.toolName || 'tool';
+  const rawContent = stripAnsi(step.content || '');
+  const trimmed = rawContent.trim();
+
+  if (!trimmed) {
+    return toolName;
+  }
+
+  if (toolName === 'read_file') {
+    if (/%PDF-\d\.\d/i.test(trimmed) || /�{2,}/.test(trimmed)) {
+      return 'Opened a binary document preview';
+    }
+
+    const firstLine = truncatePreview(trimmed.split('\n')[0] || trimmed);
+    return firstLine || 'Read file contents';
+  }
+
+  if (toolName === 'run_command') {
+    const lines = trimmed.split('\n').map(line => line.trim()).filter(Boolean);
+    const firstLine = lines[0] || '';
+    const commandFailureMatch = firstLine.match(/^Error:\s*Command failed:\s*(.+)$/i);
+    if (commandFailureMatch) {
+      return `Command failed: ${truncatePreview(commandFailureMatch[1])}`;
+    }
+
+    if (/^Error:/i.test(firstLine)) {
+      return truncatePreview(firstLine);
+    }
+
+    return truncatePreview(firstLine) || 'Executed command';
+  }
+
+  return truncatePreview(trimmed);
+}
+
 // ─── Local Image Preview ──────────────────────────────────────────────────────
 const LocalImagePreview: React.FC<{ filePath: string }> = ({ filePath }) => {
   const [src, setSrc] = useState<string | null>(null);
@@ -353,32 +401,34 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
 
   // Group consecutive non-user steps into "agent turns"
   interface AgentTurn {
-    userStep: TrajectoryStep;
+    userSteps: TrajectoryStep[];
     agentSteps: TrajectoryStep[];
   }
 
   const initialAgentSteps: TrajectoryStep[] = [];
   const turns: AgentTurn[] = [];
   let pendingAgentSteps: TrajectoryStep[] = [];
-  let currentUserStep: TrajectoryStep | null = null;
+  let currentUserSteps: TrajectoryStep[] = [];
 
   for (const step of steps) {
     if (step.type === 'user') {
-      if (currentUserStep && pendingAgentSteps.length > 0) {
-        turns.push({ userStep: currentUserStep, agentSteps: [...pendingAgentSteps] });
+      if (currentUserSteps.length > 0 && pendingAgentSteps.length > 0) {
+        turns.push({ userSteps: [...currentUserSteps], agentSteps: [...pendingAgentSteps] });
         pendingAgentSteps = [];
+        currentUserSteps = [step];
+      } else {
+        currentUserSteps.push(step);
       }
-      currentUserStep = step;
     } else {
-      if (currentUserStep) {
+      if (currentUserSteps.length > 0) {
         pendingAgentSteps.push(step);
       } else {
         initialAgentSteps.push(step);
       }
     }
   }
-  if (currentUserStep) {
-    turns.push({ userStep: currentUserStep, agentSteps: [...pendingAgentSteps] });
+  if (currentUserSteps.length > 0) {
+    turns.push({ userSteps: [...currentUserSteps], agentSteps: [...pendingAgentSteps] });
   }
 
   // Last assistant step being streamed
@@ -421,42 +471,47 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
 
         {/* Render turns */}
         {turns.map((turn, turnIdx) => (
-          <div key={turn.userStep.id} className="flex flex-col gap-0">
+          <div key={turn.userSteps[0]?.id || `turn-${turnIdx}`} className="flex flex-col gap-0">
             {/* ── User Prompt Bubble ─────────────────────────────────── */}
             <div className="flex justify-center mb-6 mt-2">
               <div
-                data-testid={`step-user-${turn.userStep.id}`}
+                data-testid={`step-user-${turn.userSteps[0]?.id || turnIdx}`}
                 className="relative group bg-brand-card border border-brand-border/80 rounded-2xl px-5 py-3 max-w-[88%] text-brand-textMain text-[13px] leading-relaxed shadow-sm hover:border-violet-500/25 transition-all"
               >
-                {turn.userStep.content}
+                {turn.userSteps.map((step, idx) => (
+                  <div key={step.id} className={idx > 0 ? 'mt-2.5' : ''}>
+                    {step.content && (
+                      <div>{step.content}</div>
+                    )}
 
-                {/* Attachment previews */}
-                {turn.userStep.metadata?.mediaPath && turn.userStep.metadata?.mediaType === 'image' && (
-                  <LocalImagePreview filePath={turn.userStep.metadata.mediaPath} />
-                )}
-                {turn.userStep.metadata?.mediaPath && turn.userStep.metadata?.mediaType !== 'image' && (
-                  <div className="mt-2.5 p-3 bg-brand-popover/80 border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">📄</span>
-                      <span className="text-xs text-brand-textMain font-medium font-sans">
-                        {turn.userStep.metadata.mediaType!.toUpperCase()} Document
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => onActionClick && onActionClick('openMedia', turn.userStep.metadata)}
-                      className="bg-white/5 border border-brand-border hover:bg-white/10 text-brand-textMain px-3 py-1 rounded-lg cursor-pointer text-xs font-semibold transition-all"
-                    >
-                      Open
-                    </button>
+                    {step.metadata?.mediaPath && step.metadata?.mediaType === 'image' && (
+                      <LocalImagePreview filePath={step.metadata.mediaPath} />
+                    )}
+                    {step.metadata?.mediaPath && step.metadata?.mediaType !== 'image' && (
+                      <div className="mt-2.5 p-3 bg-brand-popover/80 border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">📄</span>
+                          <span className="text-xs text-brand-textMain font-medium font-sans">
+                            {step.metadata.mediaType!.toUpperCase()} Document
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
+                          className="bg-white/5 border border-brand-border hover:bg-white/10 text-brand-textMain px-3 py-1 rounded-lg cursor-pointer text-xs font-semibold transition-all"
+                        >
+                          Open
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
+                ))}
 
                 {/* User actions on hover (Copy and Undo) */}
                 <div className="flex items-center gap-1 mt-2.5 pt-2 border-t border-brand-border/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none">
                   {/* Copy Button */}
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText(turn.userStep.content);
+                      navigator.clipboard.writeText(turn.userSteps.map(step => step.content).filter(Boolean).join('\n'));
                     }}
                     title="Copy prompt"
                     className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-all cursor-pointer text-[10px]"
@@ -468,7 +523,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                   {/* Undo Button */}
                   {onUndoStep && (
                     <button
-                      onClick={() => onUndoStep(turn.userStep.id)}
+                      onClick={() => onUndoStep(turn.userSteps[0].id)}
                       title="Undo this prompt and response"
                       className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-red-400 hover:bg-red-500/5 transition-all cursor-pointer text-[10px]"
                     >
@@ -600,7 +655,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
                 }`}
               />
               <span className="text-brand-textMuted/80 font-mono">{step.toolName || 'tool'}</span>
-              <span className="text-brand-textMuted/60 truncate max-w-[300px]">{step.content}</span>
+              <span className="text-brand-textMuted/60 truncate max-w-[300px]">{summarizeToolContent(step)}</span>
             </div>
           ))}
         </WorkedHeader>

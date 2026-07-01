@@ -174,9 +174,6 @@ export class SettingsStorage {
       }
 
       try {
-        if (fs.existsSync(settingsFilePath)) {
-          fs.rmSync(settingsFilePath, { force: true });
-        }
         fs.renameSync(tmpPath, settingsFilePath);
       } catch (renameError) {
         try {

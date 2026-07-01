@@ -38,6 +38,9 @@ export interface StoredChat {
   timestamp: string;
   steps: TrajectoryStep[];
   projectStorageKey?: string;
+  isRunning?: boolean;
+  startedAt?: number;
+  lastError?: string;
 }
 
 export interface StoreData {

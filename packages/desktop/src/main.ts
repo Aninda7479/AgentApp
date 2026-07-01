@@ -30,11 +30,13 @@ const activeSessions = new Map<string, AgentEngine>();
 ipcMain.handle('agent-run', async (event, {
   sessionId,
   prompt,
-  config
+  config,
+  currentAttachments
 }: {
   sessionId: string;
   prompt: string;
   config: AgentEngineConfig;
+  currentAttachments?: string[];
 }) => {
   try {
     // Reuse or create engine
@@ -51,7 +53,7 @@ ipcMain.handle('agent-run', async (event, {
       if (win && !win.isDestroyed()) {
         win.webContents.send('agent-event', agentEvent);
       }
-    });
+    }, currentAttachments);
 
     // Clean up after done/error/abort
     activeSessions.delete(sessionId);

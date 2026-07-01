@@ -20,6 +20,7 @@ interface WorkspaceViewProps {
   activeProject: string;
   trajectorySteps: TrajectoryStep[];
   isGenerating: boolean;
+  startedAt?: number;
   modelsCatalog: ModelConfig[];
   mcpServers: MCPServerInfo[];
   hasCredentials: boolean;
@@ -162,6 +163,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   activeProject,
   trajectorySteps,
   isGenerating,
+  startedAt,
   modelsCatalog,
   mcpServers,
   hasCredentials,
@@ -190,7 +192,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
       model: enabledModels[0]?.name || '',
       steps: trajectorySteps,
       isGenerating,
-      startedAt: Date.now()
+      startedAt: startedAt || Date.now()
     }
   ]);
   const [activeSessionId, setActiveSessionId] = useState('session-main');
@@ -199,10 +201,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   React.useEffect(() => {
     setAgentSessions(prev => prev.map(s =>
       s.id === 'session-main'
-        ? { ...s, steps: trajectorySteps, isGenerating, project: activeProject }
+        ? { ...s, steps: trajectorySteps, isGenerating, project: activeProject, startedAt: startedAt || s.startedAt }
         : s
     ));
-  }, [trajectorySteps, isGenerating, activeProject]);
+  }, [trajectorySteps, isGenerating, activeProject, startedAt]);
 
   const activeSession = agentSessions.find(s => s.id === activeSessionId) || agentSessions[0];
   const showMultiAgentBar = agentSessions.length > 1;
