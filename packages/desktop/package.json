@@ -6,6 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "npx @tailwindcss/cli -i src/index.css -o dist/index.css && tsc && node -e \"require('fs').copyFileSync('src/ui.html', 'dist/ui.html')\"",
+    "dev": "node -e \"require('fs').mkdirSync('dist', { recursive: true }); require('fs').copyFileSync('src/ui.html', 'dist/ui.html')\" && concurrently -n \"tailwind,tsc,electron\" -c \"blue,green,magenta\" \"npx @tailwindcss/cli -i src/index.css -o dist/index.css --watch\" \"tsc -w\" \"nodemon --watch dist/main.js --watch dist/main --watch dist/gateway --watch dist/builder --exec electron dist/main.js --dev\"",
     "start": "electron dist/main.js",
     "test": "vitest run"
   },
@@ -20,7 +21,9 @@
     "@types/node": "^20.14.9",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "concurrently": "^10.0.3",
     "electron": "^43.0.0",
+    "nodemon": "^3.1.14",
     "tailwindcss": "^4.3.2",
     "typescript": "^5.6.0",
     "vitest": "^4.1.9"

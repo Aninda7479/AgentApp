@@ -101,7 +101,7 @@ body {
 
 /* Glassmorphism helpers */
 .glass-panel {
-  background: color-mix(in srgb, var(--brand-sidebar) 94%, transparent);
+  background-color: color-mix(in srgb, var(--brand-sidebar) 94%, transparent);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid color-mix(in srgb, var(--brand-border) 88%, transparent);
@@ -109,12 +109,13 @@ body {
 }
 
 .glass-card {
-  background: color-mix(in srgb, var(--brand-card) 96%, transparent);
+  background-color: color-mix(in srgb, var(--brand-card) 96%, transparent);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid color-mix(in srgb, var(--brand-border) 90%, transparent);
   box-shadow: var(--brand-shadow-soft);
 }
+
 
 .glow-hover {
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);

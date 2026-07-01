@@ -1,5 +1,6 @@
 import { app, ipcMain, dialog } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { windowManager } from './main/window';
 import { readStore, writeStore, StoreData } from './main/store';
 import https from 'https';
@@ -171,8 +172,42 @@ function initApp() {
   mainWindow.loadFile(path.join(__dirname, 'ui.html'));
 }
 
+function setupDevWatcher() {
+  const isDev = process.argv.includes('--dev');
+  if (!isDev) return;
+
+  const watchPath = path.join(__dirname, 'renderer');
+  const cssPath = path.join(__dirname, 'index.css');
+  const htmlPath = path.join(__dirname, 'ui.html');
+
+  let reloadTimeout: NodeJS.Timeout | null = null;
+  const reloadWindow = () => {
+    if (reloadTimeout) clearTimeout(reloadTimeout);
+    reloadTimeout = setTimeout(() => {
+      const mainWindow = windowManager.getMainWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.reload();
+      }
+    }, 100);
+  };
+
+  // Watch renderer directory
+  if (fs.existsSync(watchPath)) {
+    fs.watch(watchPath, { recursive: true }, reloadWindow);
+  }
+  // Watch CSS file
+  if (fs.existsSync(cssPath)) {
+    fs.watch(cssPath, reloadWindow);
+  }
+  // Watch HTML file
+  if (fs.existsSync(htmlPath)) {
+    fs.watch(htmlPath, reloadWindow);
+  }
+}
+
 app.whenReady().then(() => {
   initApp();
+  setupDevWatcher();
   app.on('activate', () => {
     if (windowManager.getAllWindows().length === 0) initApp();
   });

@@ -1,68 +1,19 @@
 import React, { useState } from 'react';
 import { StoredProject, StoredChat } from '../types';
+import {
+  Plus,
+  Search,
+  Clock,
+  Plug,
+  Folder,
+  MessageSquare,
+  Trash2,
+  ChevronRight,
+  PanelLeftClose,
+  Settings,
+  ChevronLeft,
+} from 'lucide-react';
 
-// Inline Custom SVG Outline Icons for maximum reliability in Electron
-const PlusIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <path d="M5 12h14M12 5v14"/>
-  </svg>
-);
-
-const SearchIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-  </svg>
-);
-
-const ClockIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-  </svg>
-);
-
-const PlugIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>
-  </svg>
-);
-
-const FolderIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/>
-  </svg>
-);
-
-const MessageSquareIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-  </svg>
-);
-
-const Trash2Icon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/>
-  </svg>
-);
-
-const ChevronRightIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <polyline points="9 18 15 12 9 6"/>
-  </svg>
-);
-
-const PanelLeftCloseIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
-    <path d="M9 3v16M16 15l-3-3 3-3"/>
-  </svg>
-);
-
-const SettingsIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
-    <circle cx="12" cy="12" r="3"/>
-  </svg>
-);
 
 export interface SidebarProps {
   activeTab: string;
@@ -77,7 +28,7 @@ export interface SidebarProps {
   onNewChat?: () => void;
   onProfileClick?: () => void; // Kept for compatibility in tests
   onMenuClick?: (menuName: string) => void;
-  
+
   // New props for dynamic functionality
   projects?: StoredProject[];
   chats?: StoredChat[];
@@ -119,13 +70,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <button
         data-testid={`nav-item-${id}`}
         onClick={() => onSelectTab(id)}
-        className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg transition-all duration-150 text-sm font-medium mb-1 select-none ${
-          isActive 
-            ? 'text-brand-textMain bg-brand-popover border border-brand-border shadow-sm' 
-            : 'text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-brand-popover/70'
-        }`}
+        className={`relative w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-lg transition-all duration-200 text-sm font-medium mb-1.5 select-none cursor-pointer ${isActive
+            ? 'text-brand-textMain bg-white/5 border border-brand-border/40 shadow-sm'
+            : 'text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-white/5'
+          }`}
       >
-        <IconComponent className="w-4 h-4 flex-shrink-0" />
+        {/* Left active line indicator */}
+        {isActive && (
+          <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-gradient-to-b from-violet-500 to-indigo-500" />
+        )}
+        <IconComponent className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isActive ? 'scale-110 text-violet-400' : ''}`} />
         {!collapsed && <span>{label}</span>}
       </button>
     );
@@ -137,22 +91,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
       style={{
         width: collapsed ? '70px' : '260px',
       }}
-      className="glass-panel border-r border-brand-border flex flex-col p-3.5 h-full box-border transition-all duration-200 z-20"
+      className=" glass-panel border-r border-brand-border/50 flex flex-col p-4 h-full box-border transition-all duration-200 z-20"
     >
-      {/* Top Windows Navigation Bar — Aligned to exactly match main workspace header height h-12 */}
+      {/* Top Windows Navigation Bar — Spacious and styled to feel like a premium Electron header */}
       {!collapsed && (
-        <div className="h-14 border-b border-brand-border flex items-center gap-4 px-2 mb-4 select-none">
+        <div className="h-14 border-b border-brand-border/30 flex items-center justify-between px-1 mb-5 select-none">
           {/* Navigation Arrows */}
-          <div className="flex gap-2 text-brand-textMuted text-xs font-mono">
-            <span className="cursor-pointer hover:text-white transition-colors">←</span>
-            <span className="cursor-pointer hover:text-white transition-colors">→</span>
+          <div className="flex gap-1.5 text-brand-textMuted select-none">
+            <button className="w-6.5 h-6.5 flex items-center justify-center rounded-md hover:bg-white/5 hover:text-brand-textMain transition-all cursor-pointer">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button className="w-6.5 h-6.5 flex items-center justify-center rounded-md hover:bg-white/5 hover:text-brand-textMain transition-all cursor-pointer">
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
           {/* Window Menu */}
-          <div className="flex gap-3 text-brand-textMuted text-[11px] font-semibold">
-            <span onClick={() => onMenuClick && onMenuClick('File')} className="cursor-pointer hover:text-white transition-colors">File</span>
-            <span onClick={() => onMenuClick && onMenuClick('Edit')} className="cursor-pointer hover:text-white transition-colors">Edit</span>
-            <span onClick={() => onMenuClick && onMenuClick('View')} className="cursor-pointer hover:text-white transition-colors">View</span>
-            <span onClick={() => onMenuClick && onMenuClick('Help')} className="cursor-pointer hover:text-white transition-colors">Help</span>
+          <div className="flex gap-1 text-brand-textMuted text-[12px] font-medium tracking-wide">
+            {['File', 'Edit', 'View', 'Help'].map((item) => (
+              <span
+                key={item}
+                onClick={() => onMenuClick && onMenuClick(item)}
+                className="cursor-pointer px-2.5 py-1 rounded-md hover:bg-white/5 hover:text-brand-textMain transition-all duration-150"
+              >
+                {item}
+              </span>
+            ))}
           </div>
         </div>
       )}
@@ -160,74 +123,76 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Main navigation list */}
       <div className="flex-1 overflow-y-auto pr-0.5 custom-scrollbar">
         {/* Core items */}
-        <div className="mb-5 space-y-1">
+        <div className="mb-6 space-y-1">
           <button
             data-testid="nav-new-chat"
             onClick={onNewChat || (() => onSelectTab('trajectory'))}
-            className="w-full flex items-center gap-3 px-3.5 py-3 rounded-lg text-brand-textMain bg-violet-500/15 border border-violet-500/35 hover:border-violet-500/60 hover:bg-violet-500/20 transition-all duration-150 text-sm font-semibold mb-2 select-none cursor-pointer shadow-sm"
+            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-3.5 rounded-xl text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 hover:shadow-lg hover:shadow-violet-600/25 active:scale-[0.98] transition-all duration-200 text-sm font-semibold mb-3 select-none cursor-pointer border border-violet-500/20`}
           >
-            <PlusIcon className="w-4 h-4 flex-shrink-0 text-purple-400" />
+            <Plus className="w-4 h-4 flex-shrink-0 text-white" />
             {!collapsed && <span>New chat</span>}
           </button>
 
           <button
             data-testid="nav-search"
             onClick={onOpenSearch}
-            className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-brand-popover/70 transition-all duration-150 text-sm font-medium mb-1 select-none cursor-pointer"
+            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-lg text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-white/5 transition-all duration-200 text-sm font-medium mb-1.5 select-none cursor-pointer`}
           >
-            <SearchIcon className="w-4 h-4 flex-shrink-0" />
+            <Search className="w-4 h-4 flex-shrink-0" />
             {!collapsed && <span>Search</span>}
           </button>
 
-          {renderNavItem('scheduled', 'Scheduled', ClockIcon)}
-          {renderNavItem('plugins', 'Plugins', PlugIcon)}
+          {renderNavItem('scheduled', 'Scheduled', Clock)}
+          {renderNavItem('plugins', 'Plugins', Plug)}
         </div>
 
         {/* Projects Section */}
         {!collapsed && (
-          <div className="mb-5">
-            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-brand-textMuted/80 px-3.5 py-2.5 select-none">
-              <span 
-                className="cursor-pointer hover:text-brand-textMain flex items-center gap-1.5"
+          <div className="mb-6">
+            <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-brand-textMuted/50 px-4 py-2 mt-6 mb-1.5 select-none">
+              <span
+                className="cursor-pointer hover:text-brand-textMain flex items-center gap-1.5 transition-colors duration-150"
                 onClick={() => setProjectsCollapsed(!projectsCollapsed)}
               >
                 <span>Projects</span>
-                <span className="text-[9px]">{projectsCollapsed ? '▶' : '▼'}</span>
+                <span className="text-[9px] opacity-70">{projectsCollapsed ? '▶' : '▼'}</span>
               </span>
-              <button 
+              <button
                 onClick={onCreateProjectClick}
-                className="text-brand-textMuted hover:text-brand-textMain p-1.5 rounded-md bg-brand-popover/60 hover:bg-brand-popover transition-colors"
+                className="text-brand-textMuted/70 hover:text-brand-textMain p-1 rounded-md hover:bg-white/5 transition-all duration-150 cursor-pointer"
                 title="Create Project"
               >
-                <PlusIcon className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5" />
               </button>
             </div>
 
             {!projectsCollapsed && (
-              <div className="flex flex-col">
+              <div className="flex flex-col space-y-0.5">
                 {projects.map((proj) => {
                   const isSelected = activeProject === proj.name && activeTab === 'trajectory';
                   return (
                     <div
                       key={proj.name}
                       data-testid={`project-item-${proj.name}`}
-                      className={`group flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-lg text-sm transition-all duration-150 cursor-pointer mb-1 ${
-                        isSelected 
-                          ? 'text-brand-textMain bg-brand-popover border border-brand-border shadow-sm' 
-                          : 'text-brand-textMuted hover:text-brand-textMain hover:bg-brand-popover/70'
-                      }`}
+                      className={`group relative flex items-center justify-between gap-2 px-4 py-2.5 rounded-lg text-sm transition-all duration-200 cursor-pointer select-none ${isSelected
+                          ? 'text-brand-textMain bg-white/5 border border-brand-border/40 shadow-sm'
+                          : 'text-brand-textMuted hover:text-brand-textMain hover:bg-white/5'
+                        }`}
                     >
-                      <div 
+                      {isSelected && (
+                        <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-gradient-to-b from-violet-500 to-indigo-500" />
+                      )}
+                      <div
                         onClick={() => {
                           if (onSelectProject) onSelectProject(proj.name);
                           onSelectTab('trajectory');
                         }}
                         className="flex items-center gap-2.5 overflow-hidden flex-1"
                       >
-                        <FolderIcon className="w-3.5 h-3.5 flex-shrink-0 text-brand-textMuted" />
+                        <Folder className={`w-3.5 h-3.5 flex-shrink-0 transition-colors duration-150 ${isSelected ? 'text-violet-400' : 'text-brand-textMuted'}`} />
                         <span className="truncate font-medium">{proj.name}</span>
                       </div>
-                      
+
                       {/* Delete project button on hover */}
                       {onDeleteProject && (
                         <button
@@ -235,17 +200,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             e.stopPropagation();
                             onDeleteProject(proj.name);
                           }}
-                          className="opacity-0 group-hover:opacity-100 text-brand-textMuted hover:text-red-400 p-1 rounded-md hover:bg-brand-popover transition-all"
+                          className="opacity-0 group-hover:opacity-100 text-brand-textMuted hover:text-red-400 p-1 rounded-md hover:bg-white/5 transition-all cursor-pointer"
                           title="Delete Project"
                         >
-                          <Trash2Icon className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
                   );
                 })}
                 {projects.length === 0 && (
-                  <div className="text-xs text-brand-textMuted/60 px-3.5 py-2.5 italic">
+                  <div className="text-xs text-brand-textMuted/60 px-4 py-2.5 italic">
                     No projects. Click + to add.
                   </div>
                 )}
@@ -256,39 +221,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Chats Section */}
         {!collapsed && (
-          <div className="mb-5">
-            <div 
-              className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-brand-textMuted/80 px-3.5 py-2.5 select-none cursor-pointer hover:text-brand-textMain"
+          <div className="mb-6">
+            <div
+              className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-brand-textMuted/50 px-4 py-2 mt-6 mb-1.5 select-none cursor-pointer hover:text-brand-textMain transition-colors duration-150"
               onClick={() => setChatsCollapsed(!chatsCollapsed)}
             >
               <span>Chats</span>
-              <span className="text-[9px]">{chatsCollapsed ? '▶' : '▼'}</span>
+              <span className="text-[9px] opacity-70">{chatsCollapsed ? '▶' : '▼'}</span>
             </div>
 
             {!chatsCollapsed && (
-              <div className="flex flex-col">
+              <div className="flex flex-col space-y-0.5">
                 {chats.map((chat) => {
                   const isSelected = activeChatId === chat.id && activeTab === 'trajectory';
                   return (
                     <div
                       key={chat.id}
                       data-testid={`chat-item-${chat.title.replace(/\s+/g, '-')}`}
-                      className={`group flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-lg text-sm transition-all duration-150 cursor-pointer mb-1 ${
-                        isSelected 
-                          ? 'text-brand-textMain bg-brand-popover border border-brand-border shadow-sm' 
-                          : 'text-brand-textMuted hover:text-brand-textMain hover:bg-brand-popover/70'
-                      }`}
+                      className={`group relative flex items-center justify-between gap-2 px-4 py-2.5 rounded-lg text-sm transition-all duration-200 cursor-pointer select-none ${isSelected
+                          ? 'text-brand-textMain bg-white/5 border border-brand-border/40 shadow-sm'
+                          : 'text-brand-textMuted hover:text-brand-textMain hover:bg-white/5'
+                        }`}
                     >
-                      <div 
+                      {isSelected && (
+                        <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-gradient-to-b from-violet-500 to-indigo-500" />
+                      )}
+                      <div
                         onClick={() => {
                           if (onSelectChat) onSelectChat(chat.id);
                         }}
                         className="flex items-center gap-2.5 overflow-hidden flex-1"
                       >
-                        <MessageSquareIcon className="w-3.5 h-3.5 flex-shrink-0 text-brand-textMuted" />
+                        <MessageSquare className={`w-3.5 h-3.5 flex-shrink-0 transition-colors duration-150 ${isSelected ? 'text-violet-400' : 'text-brand-textMuted'}`} />
                         <span className="truncate font-medium">{chat.title}</span>
                       </div>
-                      
+
                       <div className="flex items-center gap-1.5">
                         <span className="text-[10px] text-brand-textMuted/60 flex-shrink-0 group-hover:hidden">
                           {chat.timestamp}
@@ -299,10 +266,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               e.stopPropagation();
                               onDeleteChat(chat.id);
                             }}
-                            className="opacity-0 group-hover:opacity-100 text-brand-textMuted hover:text-red-400 p-1 rounded-md hover:bg-brand-popover transition-all"
+                            className="opacity-0 group-hover:opacity-100 text-brand-textMuted hover:text-red-400 p-1 rounded-md hover:bg-white/5 transition-all cursor-pointer"
                             title="Delete Chat"
                           >
-                            <Trash2Icon className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
@@ -310,7 +277,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   );
                 })}
                 {chats.length === 0 && (
-                  <div className="text-xs text-brand-textMuted/60 px-3.5 py-2.5 italic">
+                  <div className="text-xs text-brand-textMuted/60 px-4 py-2.5 italic">
                     No active chats.
                   </div>
                 )}
@@ -321,29 +288,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Settings Footer & Collapse button placed side-by-side for clean horizontal layout */}
-      <div className={`flex ${collapsed ? 'flex-col gap-2' : 'flex-row gap-2'} items-center border-t border-brand-border/70 pt-3 mt-auto`}>
+      <div className={`flex ${collapsed ? 'flex-col gap-2.5' : 'flex-row gap-2.5'} items-center border-t border-brand-border/40 pt-4 mt-auto`}>
         <button
           data-testid="sidebar-settings-btn"
           onClick={() => {
             onSelectTab('settings');
             if (onProfileClick) onProfileClick(); // call profile click callback for test expectations
           }}
-          className={`w-full flex items-center justify-start gap-3 px-3.5 py-2.5 rounded-lg transition-colors duration-150 text-sm font-medium ${
-            activeTab === 'settings' 
-              ? 'text-brand-textMain bg-brand-popover border border-brand-border shadow-sm' 
-              : 'text-brand-textMuted hover:text-brand-textMain hover:bg-brand-popover/70'
-          }`}
+          className={`relative flex-1 flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-lg transition-all duration-200 text-sm font-medium cursor-pointer ${activeTab === 'settings'
+              ? 'text-brand-textMain bg-white/5 border border-brand-border/40 shadow-sm'
+              : 'text-brand-textMuted hover:text-brand-textMain hover:bg-white/5'
+            }`}
         >
-          <SettingsIcon className="w-4.5 h-4.5 flex-shrink-0" />
+          {activeTab === 'settings' && (
+            <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-gradient-to-b from-violet-500 to-indigo-500" />
+          )}
+          <Settings className={`w-4.5 h-4.5 flex-shrink-0 transition-transform duration-200 ${activeTab === 'settings' ? 'scale-110 text-violet-400' : ''}`} />
           {!collapsed && <span>Settings</span>}
         </button>
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
-            className={`flex items-center justify-center p-2.5 rounded-lg text-brand-textMuted bg-brand-popover/60 hover:text-brand-textMain hover:bg-brand-popover transition-all duration-150 cursor-pointer ${collapsed ? 'w-full' : ''}`}
+            className={`flex items-center justify-center p-2.5 rounded-lg text-brand-textMuted bg-white/5 border border-brand-border/20 hover:text-brand-textMain hover:bg-white/10 hover:border-brand-border/45 transition-all duration-200 cursor-pointer ${collapsed ? 'w-full' : 'w-10 h-10'}`}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {collapsed ? <ChevronRightIcon className="w-4.5 h-4.5" /> : <PanelLeftCloseIcon className="w-4.5 h-4.5" />}
+            {collapsed ? <ChevronRight className="w-4.5 h-4.5" /> : <PanelLeftClose className="w-4.5 h-4.5" />}
           </button>
         )}
       </div>
