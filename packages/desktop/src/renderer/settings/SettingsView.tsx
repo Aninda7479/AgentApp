@@ -7,6 +7,7 @@ import { ShortcutsSettings } from './ShortcutsSettings';
 import { ServersSettings } from './ServersSettings';
 import { ProvidersSettings } from './ProvidersSettings';
 import { ModelsSettings } from './ModelsSettings';
+import { PlaceholderSettings } from './PlaceholderSettings';
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   activeCategory,
@@ -153,7 +154,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           />
         )}
         {activeCategory === 'shortcuts' && <ShortcutsSettings />}
-        {activeCategory === 'servers' && <ServersSettings mcpDashboard={mcpDashboard} />}
+        {activeCategory === 'pets' && (
+          <PlaceholderSettings
+            title="Pets"
+            description="OpenAI-style companion and behavior preferences will live here."
+            status="planned"
+          />
+        )}
         {activeCategory === 'providers' && (
           <ProvidersSettings
             connectedProviders={connectedProviders}
@@ -169,6 +176,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onConnectProvider={onConnectProvider}
             onToggleModel={onToggleModel}
             enrichModel={enrichModel}
+          />
+        )}
+        {activeCategory === 'usage' && (
+          <PlaceholderSettings
+            title="AI Usage"
+            description="Token usage, request volume, and model consumption summaries."
+            status="planned"
+          />
+        )}
+        {activeCategory === 'mcp' && <ServersSettings mcpDashboard={mcpDashboard} />}
+        {activeCategory === 'browser-use' && (
+          <PlaceholderSettings
+            title="Browser Use"
+            description="Browser automation controls and permissions for AI-assisted browsing."
+            status="planned"
+          />
+        )}
+        {activeCategory === 'computer-use' && (
+          <PlaceholderSettings
+            title="Computer Use"
+            description="Desktop control permissions, sessions, and safety rails."
+            status="planned"
+          />
+        )}
+        {activeCategory === 'archived-chats' && (
+          <PlaceholderSettings
+            title="Archived Chats"
+            description="Review and restore archived conversations."
+            status="planned"
+          />
+        )}
+        {activeCategory === 'archived-projects' && (
+          <PlaceholderSettings
+            title="Archived Projects"
+            description="Browse archived workspaces and restore them when needed."
+            status="planned"
           />
         )}
       </div>

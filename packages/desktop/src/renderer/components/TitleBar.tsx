@@ -72,14 +72,14 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         className="flex items-center gap-3 no-drag-window"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
-        {/* <button
+        <button
           data-testid="byok-badge-trigger"
           onClick={onOpenProviders}
           className="bg-brand-card hover:bg-brand-popover border border-brand-border/80 text-brand-textMain px-3 py-1 rounded-full text-[10px] cursor-pointer flex items-center gap-1 transition-all duration-150 font-semibold shadow-sm active:scale-[0.98]"
         >
           <Key size={10} className="text-brand-textMuted" />
           <span>BYOK: {hasOpenAiKey ? 'OpenAI' : 'Configure'}</span>
-        </button> */}
+        </button>
 
         {/* Custom Window Controls */}
         <div className="flex items-center pl-1">
