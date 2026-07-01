@@ -21,6 +21,7 @@ interface WorkspaceViewProps {
   onOpenSettings: () => void;
   onToast: (message: string) => void;
   onAttachClick?: () => void;
+  onAttachPastedFiles?: (files: FileList) => void;
 }
 
 const recommendations = [
@@ -69,33 +70,17 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   onOpenMcp,
   onOpenSettings,
   onToast,
-  onAttachClick
+  onAttachClick,
+  onAttachPastedFiles
 }) => {
   const enabledModels = modelsCatalog.filter((model) => model.enabled);
 
   return (
     <>
-      <div className="h-14 border-b border-brand-border/70 flex items-center justify-between px-8 bg-brand-sidebar">
-        <div className="flex items-center gap-2 text-sm text-brand-textMain font-semibold">
-          <Folder size={15} className="text-amber-500" />
-          <span>{activeProject || 'No Project'} workspace</span>
-        </div>
-
-        <div className="flex gap-2 text-brand-textMuted">
-          <button
-            onClick={onOpenMcp}
-            title="MCP Dashboard"
-            className="w-9 h-9 rounded-lg border border-brand-border bg-brand-card flex items-center justify-center hover:text-brand-textMain hover:bg-brand-popover transition-colors shadow-sm"
-          >
-            <Plug size={15} />
-          </button>
-          <button
-            onClick={onOpenSettings}
-            title="Settings"
-            className="w-9 h-9 rounded-lg border border-brand-border bg-brand-card flex items-center justify-center hover:text-brand-textMain hover:bg-brand-popover transition-colors shadow-sm"
-          >
-            <Wrench size={15} />
-          </button>
+      <div className="h-11 border-b border-brand-border/70 flex items-center px-6 bg-brand-sidebar">
+        <div className="flex items-center gap-2 text-xs text-brand-textMain font-semibold">
+          <Folder size={13} className="text-amber-500" />
+          <span>{activeProject ? `${activeProject} workspace` : 'Workspace'}</span>
         </div>
       </div>
 
@@ -117,62 +102,68 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         }}
       >
         {trajectorySteps.length <= 1 && (
-          <div className="flex flex-col items-center justify-center px-8 max-w-[980px] w-full mx-auto mt-6 mb-4 animate-fade-in relative z-10">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] bg-violet-500/10 rounded-full blur-[100px] pointer-events-none" />
+          <div className="flex flex-col items-center justify-center px-6 max-w-[840px] w-full mx-auto mt-4 mb-2 animate-fade-in relative z-10">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-violet-500/5 rounded-full blur-[80px] pointer-events-none" />
 
             <div
               data-testid="workspace-title-question"
-              className="text-center text-3xl md:text-4xl font-outfit font-bold tracking-tight text-brand-textMain mb-2"
+              className="text-center text-xl md:text-2xl font-outfit font-bold tracking-tight text-brand-textMain mb-1.5"
             >
-              What should we build in{' '}
-              <span className="bg-gradient-to-r from-violet-400 via-sky-400 to-teal-400 bg-clip-text text-transparent">
-                {activeProject}
-              </span>
-              ?
+              {activeProject ? (
+                <>
+                  What should we build in{' '}
+                  <span className="bg-gradient-to-r from-violet-400 via-sky-400 to-teal-400 bg-clip-text text-transparent">
+                    {activeProject}
+                  </span>
+                  ?
+                </>
+              ) : (
+                'What should we build?'
+              )}
             </div>
-            <p className="text-brand-textMuted text-xs md:text-sm text-center mb-6 font-medium">
+            <p className="text-brand-textMuted text-[11px] text-center mb-4 font-medium">
               Select a workflow recommendation below or write a custom request.
             </p>
 
-            <div className="w-full max-w-[860px] mb-6 p-5 glass-card rounded-xl text-xs md:text-sm text-brand-textMuted flex gap-3 items-center border border-violet-500/25 shadow-md">
-              <Terminal size={18} className="text-violet-400 flex-shrink-0" />
+            <div className="w-full max-w-[760px] mb-4 p-3.5 glass-card rounded-lg text-xs text-brand-textMuted flex gap-2.5 items-center border border-violet-500/15 shadow-sm">
+              <Terminal size={15} className="text-violet-400 flex-shrink-0" />
               <div className="leading-relaxed text-left">
-                <span className="font-bold text-violet-400 mr-2 uppercase tracking-wider text-[10px] md:text-[11px]">
+                <span className="font-bold text-violet-400 mr-1.5 uppercase tracking-wider text-[9px] md:text-[10px]">
                   System Status:
                 </span>
                 <span>SuperAgent Desktop initialized. Ready for autonomous software engineering and multimodal AI media generation.</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-[860px] mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-[760px] mb-5">
               {recommendations.map(({ title, prompt, description, Icon, className }) => (
                 <button
                   key={title}
                   onClick={() => onPromptChange(prompt)}
-                  className="glass-card glow-hover p-5 rounded-xl cursor-pointer text-left flex gap-4 items-start"
+                  className="glass-card glow-hover p-3.5 rounded-lg cursor-pointer text-left flex gap-3.5 items-start"
                 >
-                  <span className={`w-9 h-9 rounded-lg flex items-center justify-center border ${className}`}>
-                    <Icon size={18} />
+                  <span className={`w-7.5 h-7.5 rounded flex items-center justify-center border ${className}`}>
+                    <Icon size={14} />
                   </span>
                   <span>
-                    <span className="block font-semibold text-brand-textMain text-sm">{title}</span>
-                    <span className="block text-brand-textMuted text-xs mt-1">{description}</span>
+                    <span className="block font-semibold text-brand-textMain text-xs">{title}</span>
+                    <span className="block text-brand-textMuted text-[10px] mt-0.5">{description}</span>
                   </span>
                 </button>
               ))}
             </div>
 
-            <div className="flex gap-4 items-center justify-center flex-wrap max-w-[860px] w-full text-[11px] text-brand-textMuted border-t border-brand-border/50 pt-5">
-              <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-3.5 py-2 rounded-full font-medium shadow-sm">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <div className="flex gap-3 items-center justify-center flex-wrap max-w-[760px] w-full text-[10px] text-brand-textMuted border-t border-brand-border/40 pt-4">
+              <div className="flex items-center gap-1 bg-brand-card border border-brand-border px-2.5 py-1 rounded-full font-medium shadow-sm">
+                <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
                 <span>Connected Models: {enabledModels.length || 'Default'}</span>
               </div>
-              <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-3.5 py-2 rounded-full font-medium shadow-sm">
-                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+              <div className="flex items-center gap-1 bg-brand-card border border-brand-border px-2.5 py-1 rounded-full font-medium shadow-sm">
+                <span className="w-1 h-1 rounded-full bg-sky-500 animate-pulse" />
                 <span>MCP Servers: {mcpServers.filter((server) => server.enabled).length} Online</span>
               </div>
-              <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-3.5 py-2 rounded-full font-medium shadow-sm">
-                <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
+              <div className="flex items-center gap-1 bg-brand-card border border-brand-border px-2.5 py-1 rounded-full font-medium shadow-sm">
+                <span className="w-1 h-1 rounded-full bg-teal-500 animate-pulse" />
                 <span>Credentials: {hasCredentials ? 'Active' : 'Configure keys'}</span>
               </div>
             </div>
@@ -193,6 +184,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         defaultModel={enabledModels[0]?.name || ''}
         promptValue={composerPrompt}
         onPromptChange={onPromptChange}
+        onAttachPastedFiles={onAttachPastedFiles}
       />
     </>
   );

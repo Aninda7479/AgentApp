@@ -86,6 +86,28 @@ ipcMain.handle('read-file-base64', async (_event, filePath) => {
   }
 });
 
+ipcMain.handle('save-chat-media-buffer', async (_event, { buffer, filename, chatId, projectName }) => {
+  const base = path.join(app.getPath('userData'), 'Conversation');
+  const projectsDir = path.join(base, 'Projects');
+  const chatsDir = path.join(base, 'Chats');
+
+  let targetDir = '';
+  if (projectName) {
+    targetDir = path.join(projectsDir, projectName, chatId);
+  } else {
+    targetDir = path.join(chatsDir, chatId);
+  }
+
+  fs.mkdirSync(targetDir, { recursive: true });
+  const destPath = path.join(targetDir, filename);
+  fs.writeFileSync(destPath, Buffer.from(buffer));
+  return {
+    filename,
+    relativePath: path.relative(app.getPath('userData'), destPath),
+    fullPath: destPath
+  };
+});
+
 // ─── IPC: Auto-detect local providers on startup ─────────────────────────────
 
 ipcMain.handle('auto-detect-providers', async () => {

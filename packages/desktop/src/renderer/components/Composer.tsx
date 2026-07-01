@@ -1,4 +1,4 @@
-import React, { useState, KeyboardEvent, useEffect } from 'react';
+import React, { useState, KeyboardEvent, useEffect, useRef } from 'react';
 import {
   Plus,
   Cpu,
@@ -31,6 +31,7 @@ export interface ComposerProps {
   onBranchClick?: () => void;
   promptValue?: string;
   onPromptChange?: (val: string) => void;
+  onAttachPastedFiles?: (files: FileList) => void;
 }
 
 export const Composer: React.FC<ComposerProps> = ({
@@ -46,7 +47,8 @@ export const Composer: React.FC<ComposerProps> = ({
   onLocallyClick,
   onBranchClick,
   promptValue,
-  onPromptChange
+  onPromptChange,
+  onAttachPastedFiles
 }) => {
   const [localPrompt, setLocalPrompt] = useState('');
   const prompt = promptValue !== undefined ? promptValue : localPrompt;
@@ -56,6 +58,30 @@ export const Composer: React.FC<ComposerProps> = ({
   const [approvalMode, setApprovalMode] = useState<'always' | 'never' | 'ask'>('ask');
   const [showApprovalDropdown, setShowApprovalDropdown] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const adjustTextareaHeight = () => {
+    const tx = textareaRef.current;
+    if (tx) {
+      tx.style.height = 'auto';
+      tx.style.height = `${Math.min(tx.scrollHeight, 180)}px`;
+    }
+  };
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [prompt]);
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = e.clipboardData?.files;
+    if (files && files.length > 0) {
+      e.preventDefault();
+      if (onAttachPastedFiles) {
+        onAttachPastedFiles(files);
+      }
+    }
+  };
 
   const hasModels = availableModels && availableModels.length > 0;
 
@@ -93,19 +119,21 @@ export const Composer: React.FC<ComposerProps> = ({
   return (
     <div
       data-testid="composer-container"
-      className="px-6 md:px-10 pt-4 pb-7 max-w-[980px] w-full mx-auto flex flex-col gap-3 box-border relative z-10"
+      className="px-4 pt-2 pb-4 max-w-[940px] w-full mx-auto flex flex-col gap-2 box-border relative z-10"
     >
       {/* The main input composer card */}
-      <div className="glass-panel rounded-xl p-5 flex flex-col shadow-md relative transition-all duration-300 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/10">
+      <div className="glass-panel rounded-xl p-3 flex flex-col shadow-sm relative transition-all duration-300 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/10">
         <textarea
+          ref={textareaRef}
           data-testid="composer-input"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={hasModels ? "Do anything" : "No models are connected yet. Please go to Settings to connect a provider."}
           disabled={disabled || isGenerating || !hasModels}
           rows={1}
-          className="bg-transparent border-none outline-none text-brand-textMain text-base resize-none w-full min-h-[78px] leading-relaxed placeholder-brand-textMuted/55 font-sans disabled:opacity-50"
+          className="bg-transparent border-none outline-none text-brand-textMain text-sm resize-none w-full min-h-[44px] leading-relaxed placeholder-brand-textMuted/55 font-sans disabled:opacity-50"
         />
 
         {/* Toolbar row inside box */}
@@ -249,41 +277,43 @@ export const Composer: React.FC<ComposerProps> = ({
       </div>
 
       {/* Under-composer badge row: Folder, Work locally, main branch */}
-      <div
-        data-testid="composer-badges-row"
-        className="flex gap-2.5 px-1 items-center flex-wrap"
-      >
-        {/* Project Folder Badge */}
+      {activeProject && (
         <div
-          data-testid="badge-project"
-          className="bg-brand-card border border-brand-border rounded-full text-brand-textMain px-3.5 py-2 text-[11px] font-semibold flex items-center gap-1.5 select-none shadow-sm"
+          data-testid="composer-badges-row"
+          className="flex gap-2.5 px-1 items-center flex-wrap"
         >
-          <Folder className="w-3.5 h-3.5 text-indigo-400" />
-          <span>{activeProject}</span>
-        </div>
+          {/* Project Folder Badge */}
+          <div
+            data-testid="badge-project"
+            className="bg-brand-card border border-brand-border rounded-full text-brand-textMain px-3 py-1.5 text-[10px] font-semibold flex items-center gap-1 select-none shadow-sm"
+          >
+            <Folder className="w-3 h-3 text-indigo-400" />
+            <span>{activeProject}</span>
+          </div>
 
-        {/* Work Locally Badge */}
-        <div
-          data-testid="badge-work-locally"
-          onClick={onLocallyClick}
-          className="bg-brand-card border border-brand-border hover:border-violet-500/35 hover:bg-brand-popover rounded-full text-brand-textMain px-3.5 py-2 text-[11px] font-semibold flex items-center gap-1.5 select-none cursor-pointer transition-all duration-150 active:scale-[0.98] shadow-sm"
-        >
-          <Laptop className="w-3.5 h-3.5 text-teal-400" />
-          <span>Work locally</span>
-          <ChevronDown className="w-2.5 h-2.5 text-brand-textMuted" />
-        </div>
+          {/* Work Locally Badge */}
+          <div
+            data-testid="badge-work-locally"
+            onClick={onLocallyClick}
+            className="bg-brand-card border border-brand-border hover:border-violet-500/35 hover:bg-brand-popover rounded-full text-brand-textMain px-3 py-1.5 text-[10px] font-semibold flex items-center gap-1 select-none cursor-pointer transition-all duration-150 active:scale-[0.98] shadow-sm"
+          >
+            <Laptop className="w-3 h-3 text-teal-400" />
+            <span>Work locally</span>
+            <ChevronDown className="w-2 h-2 text-brand-textMuted" />
+          </div>
 
-        {/* Git Branch Badge */}
-        <div
-          data-testid="badge-branch"
-          onClick={onBranchClick}
-          className="bg-brand-card border border-brand-border hover:border-violet-500/35 hover:bg-brand-popover rounded-full text-brand-textMain px-3.5 py-2 text-[11px] font-semibold flex items-center gap-1.5 select-none cursor-pointer transition-all duration-150 active:scale-[0.98] shadow-sm"
-        >
-          <GitBranch className="w-3.5 h-3.5 text-purple-400" />
-          <span>main</span>
-          <ChevronDown className="w-2.5 h-2.5 text-brand-textMuted" />
+          {/* Git Branch Badge */}
+          <div
+            data-testid="badge-branch"
+            onClick={onBranchClick}
+            className="bg-brand-card border border-brand-border hover:border-violet-500/35 hover:bg-brand-popover rounded-full text-brand-textMain px-3 py-1.5 text-[10px] font-semibold flex items-center gap-1 select-none cursor-pointer transition-all duration-150 active:scale-[0.98] shadow-sm"
+          >
+            <GitBranch className="w-3 h-3 text-purple-400" />
+            <span>main</span>
+            <ChevronDown className="w-2 h-2 text-brand-textMuted" />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

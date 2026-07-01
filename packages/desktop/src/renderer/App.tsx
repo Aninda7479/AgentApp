@@ -25,7 +25,7 @@ export const App: React.FC = () => {
   const [searchModalOpen, setSearchModalOpen] = useState<boolean>(false);
   const [profilePopoverOpen, setProfilePopoverOpen] = useState<boolean>(false);
   const [settingsCategory, setSettingsCategory] = useState<string>('general');
-  const [activeProject, setActiveProject] = useState<string>('GlacierPharma');
+  const [activeProject, setActiveProject] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [toastOpen, setToastOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
@@ -292,6 +292,33 @@ export const App: React.FC = () => {
     };
   }, [profilePopoverOpen]);
 
+  const addAttachmentStep = (filename: string, fullPath: string) => {
+    setChats(prevChats => {
+      const updatedChats = prevChats.map(c => {
+        if (c.id === activeChatId) {
+          const attachStep: TrajectoryStep = {
+            id: `attach-${Date.now()}-${Math.random()}`,
+            type: 'user',
+            content: `📎 Attached context: ${filename}`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            metadata: {
+              mediaType: filename.toLowerCase().endsWith('.pdf') ? 'pdf' : filename.toLowerCase().endsWith('.ppt') ? 'ppt' : 'image',
+              mediaPath: fullPath
+            }
+          };
+          const updatedSteps = [...c.steps, attachStep];
+          if (activeChatId === c.id) {
+            setTrajectorySteps(updatedSteps);
+          }
+          return { ...c, steps: updatedSteps };
+        }
+        return c;
+      });
+      persistStore(connectedProviders, modelsCatalog, projects, updatedChats);
+      return updatedChats;
+    });
+  };
+
   const handleAttachFiles = async () => {
     if (!activeChatId) {
       triggerToast('Please select or create a chat first');
@@ -312,37 +339,60 @@ export const App: React.FC = () => {
           
           if (res) {
             triggerToast(`Uploaded: ${res.filename}`);
-            setChats(prevChats => {
-              const updatedChats = prevChats.map(c => {
-                if (c.id === activeChatId) {
-                  const attachStep: TrajectoryStep = {
-                    id: `attach-${Date.now()}-${Math.random()}`,
-                    type: 'user',
-                    content: `📎 Attached context: ${res.filename}`,
-                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                    metadata: {
-                      mediaType: res.filename.toLowerCase().endsWith('.pdf') ? 'pdf' : res.filename.toLowerCase().endsWith('.ppt') ? 'ppt' : 'image',
-                      mediaPath: res.fullPath
-                    }
-                  };
-                  const updatedSteps = [...c.steps, attachStep];
-                  // If active chat is the one we modified, sync local state
-                  if (activeChatId === c.id) {
-                    setTrajectorySteps(updatedSteps);
-                  }
-                  return { ...c, steps: updatedSteps };
-                }
-                return c;
-              });
-              persistStore(connectedProviders, modelsCatalog, projects, updatedChats);
-              return updatedChats;
-            });
+            addAttachmentStep(res.filename, res.fullPath);
           }
         }
       }
     } catch (e) {
       console.error('Failed to attach files', e);
       triggerToast('Error attaching files');
+    }
+  };
+
+  const handleAttachPastedFiles = async (files: FileList) => {
+    if (!activeChatId) {
+      triggerToast('Please select or create a chat first');
+      return;
+    }
+    const currentChat = chats.find(c => c.id === activeChatId);
+    if (!currentChat) return;
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const filePath = (file as any).path;
+
+        if (filePath) {
+          const res = await ipc?.invoke('copy-file-to-chat', {
+            sourcePath: filePath,
+            chatId: activeChatId,
+            projectName: currentChat.project
+          });
+          if (res) {
+            triggerToast(`Attached: ${res.filename}`);
+            addAttachmentStep(res.filename, res.fullPath);
+          }
+        } else {
+          const buffer = await file.arrayBuffer();
+          const uint8 = new Uint8Array(buffer);
+          const filename = file.name || `pasted-media-${Date.now()}.png`;
+
+          const res = await ipc?.invoke('save-chat-media-buffer', {
+            buffer: Array.from(uint8),
+            filename,
+            chatId: activeChatId,
+            projectName: currentChat.project
+          });
+
+          if (res) {
+            triggerToast(`Pasted Image Saved`);
+            addAttachmentStep(res.filename, res.fullPath);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to attach pasted files', e);
+      triggerToast('Error attaching pasted file');
     }
   };
 
@@ -658,27 +708,25 @@ export const App: React.FC = () => {
 
   // Create new blank chat — optionally scoped to a specific project
   const handleNewChat = (forProject?: string) => {
-    const targetProject = forProject || activeProject;
-    if (!targetProject) {
-      triggerToast('Please create or select a project first');
-      return;
-    }
+    const targetProject = forProject !== undefined ? forProject : activeProject;
     const newChatId = `chat-${Date.now()}`;
     const newChat: StoredChat = {
       id: newChatId,
       title: `New chat`,
-      project: targetProject,
+      project: targetProject || '',
       model: modelsCatalog.find(m => m.enabled)?.name || '',
       timestamp: 'Just now',
       steps: [
         {
           id: `step-new-${Date.now()}`,
           type: 'assistant',
-          content: `New conversation initialized. Project context: \`${targetProject}\`. How can I help you today?`
+          content: targetProject
+            ? `New conversation initialized. Project context: \`${targetProject}\`. How can I help you today?`
+            : `New standalone conversation initialized. How can I help you today?`
         }
       ]
     };
-    setActiveProject(targetProject);
+    setActiveProject(targetProject || '');
     setChats(prev => {
       const next = [newChat, ...prev];
       persistStore(connectedProviders, modelsCatalog, projects, next);
@@ -764,6 +812,7 @@ export const App: React.FC = () => {
               }}
               onToast={triggerToast}
               onAttachClick={handleAttachFiles}
+              onAttachPastedFiles={handleAttachPastedFiles}
             />
           )}
 
