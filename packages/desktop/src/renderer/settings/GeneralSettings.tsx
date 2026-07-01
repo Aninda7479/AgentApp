@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Code2, MessageSquare, Moon, Sun } from 'lucide-react';
+import { Check, Code2, MessageSquare, Moon, Sun, Monitor } from 'lucide-react';
 import { ThemeMode } from '../types';
 
 interface GeneralSettingsProps {
@@ -86,6 +86,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
           <div className="inline-flex rounded-lg border border-brand-border bg-brand-bg p-1">
             {[
               { id: 'light' as const, label: 'Lite', Icon: Sun },
+              { id: 'system' as const, label: 'System', Icon: Monitor },
               { id: 'dark' as const, label: 'Dark', Icon: Moon }
             ].map(({ id, label, Icon }) => {
               const selected = themeMode === id;

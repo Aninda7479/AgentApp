@@ -177,12 +177,15 @@ export class SettingsStorage {
         if (fs.existsSync(settingsFilePath)) {
           fs.rmSync(settingsFilePath, { force: true });
         }
-      } catch {
-        // If cleanup fails, the copy below can still overwrite on most systems.
+        fs.renameSync(tmpPath, settingsFilePath);
+      } catch (renameError) {
+        try {
+          fs.copyFileSync(tmpPath, settingsFilePath);
+          fs.unlinkSync(tmpPath);
+        } catch (copyError) {
+          console.error('Failed to replace settings file atomically:', renameError, copyError);
+        }
       }
-
-      fs.copyFileSync(tmpPath, settingsFilePath);
-      fs.unlinkSync(tmpPath);
     } catch (e) {
       console.error('Failed to save settings:', e);
     }

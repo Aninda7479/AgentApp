@@ -35,17 +35,18 @@ export const App: React.FC = () => {
   const [defaultPermissions, setDefaultPermissions] = useState<boolean>(true);
   const [autoReview, setAutoReview] = useState<boolean>(true);
   const [fullAccess, setFullAccess] = useState<boolean>(true);
+  const [settingsHydrated, setSettingsHydrated] = useState<boolean>(false);
 
   // Sync themeMode with settings.json
   useEffect(() => {
-    if (ipc && themeMode) {
+    if (ipc && themeMode && settingsHydrated) {
       ipc.invoke('settings-write', {
         theme: {
           desktop: themeMode
         }
       });
     }
-  }, [themeMode]);
+  }, [themeMode, settingsHydrated]);
 
   const handleWorkModeChange = (mode: 'coding' | 'everyday') => {
     setWorkMode(mode);
@@ -363,6 +364,8 @@ export const App: React.FC = () => {
         }
       } catch (err) {
         console.error('Failed to load general settings:', err);
+      } finally {
+        setSettingsHydrated(true);
       }
 
       const storedIds = new Set(loadedProviders.map((p: ProviderConnection) => p.id));

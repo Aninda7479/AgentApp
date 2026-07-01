@@ -17,4 +17,4 @@ export interface StoredChat {
   projectStorageKey?: string;
 }
 
-export type ThemeMode = 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark' | 'system';
