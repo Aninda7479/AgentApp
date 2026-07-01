@@ -1,6 +1,11 @@
 import { app, ipcMain, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs';
+
+// Set custom userData path to organize files in Roaming\OpenSource\AgentApp
+const customUserDataPath = path.join(app.getPath('appData'), 'OpenSource', 'AgentApp');
+app.setPath('userData', customUserDataPath);
+
 import { windowManager } from './main/window';
 import { readStore, writeStore, StoreData } from './main/store';
 import https from 'https';

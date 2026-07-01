@@ -95,40 +95,7 @@ export const App: React.FC = () => {
   // ─── Startup: load persisted data, then auto-detect new providers ──────────
   useEffect(() => {
     if (!ipc) {
-      // Mock data for non-Electron test environments
-      const mockProjects: StoredProject[] = [
-        { name: 'agent', folders: ['d:/Project/agent'] },
-        { name: 'GlacierPharma', folders: ['d:/Project/GlacierPharma'] },
-        { name: 'proxy', folders: ['d:/Project/proxy'] },
-        { name: 'LawX', folders: ['d:/Project/LawX'] },
-        { name: 'Second_Brain', folders: ['d:/Project/Second_Brain'] }
-      ];
-      const mockChats: StoredChat[] = [
-        {
-          id: 'chat-1',
-          title: 'Find online data listings',
-          project: 'GlacierPharma',
-          model: '5.5 Medium',
-          timestamp: '5d',
-          steps: [
-            { id: 'step-1', type: 'assistant', content: 'SuperAgent Desktop initialized. Ready for autonomous software engineering and multimodal AI media generation.' }
-          ]
-        },
-        {
-          id: 'chat-2',
-          title: 'Add graphify tool',
-          project: 'agent',
-          model: '5.5 Medium',
-          timestamp: '3w',
-          steps: [
-            { id: 'step-2', type: 'assistant', content: 'SuperAgent Desktop initialized.' }
-          ]
-        }
-      ];
-      setProjects(mockProjects);
-      setChats(mockChats);
-      setActiveChatId('chat-1');
-      setTrajectorySteps(mockChats[0].steps);
+      // No Electron IPC — start empty for test environments
       return;
     }
 
@@ -146,44 +113,9 @@ export const App: React.FC = () => {
       const loadedProjects = stored.projects ?? [];
       const loadedChats = stored.chats ?? [];
 
-      // Initialize defaults if totally empty to make it look active
-      let finalProjects = loadedProjects;
-      let finalChats = loadedChats;
-
-      if (loadedProjects.length === 0) {
-        finalProjects = [
-          { name: 'agent', folders: ['d:/Project/OpenSource/agent'] },
-          { name: 'GlacierPharma', folders: ['d:/Project/OpenSource/GlacierPharma'] },
-          { name: 'proxy', folders: ['d:/Project/OpenSource/proxy'] },
-          { name: 'LawX', folders: ['d:/Project/OpenSource/LawX'] },
-          { name: 'Second_Brain', folders: ['d:/Project/OpenSource/Second_Brain'] }
-        ];
-      }
-
-      if (loadedChats.length === 0) {
-        finalChats = [
-          {
-            id: 'chat-1',
-            title: 'Find online data listings',
-            project: 'GlacierPharma',
-            model: '5.5 Medium',
-            timestamp: '5d',
-            steps: [
-              { id: 'step-1', type: 'assistant', content: 'SuperAgent Desktop initialized. Ready for autonomous software engineering and multimodal AI media generation.' }
-            ]
-          },
-          {
-            id: 'chat-2',
-            title: 'Add graphify tool',
-            project: 'agent',
-            model: '5.5 Medium',
-            timestamp: '3w',
-            steps: [
-              { id: 'step-2', type: 'assistant', content: 'SuperAgent Desktop initialized.' }
-            ]
-          }
-        ];
-      }
+      // Use exactly what is stored — no hardcoded defaults
+      const finalProjects = loadedProjects;
+      const finalChats = loadedChats;
 
       setProjects(finalProjects);
       setChats(finalChats);
@@ -659,27 +591,29 @@ export const App: React.FC = () => {
     });
   };
 
-  // Create new blank chat
-  const handleNewChat = () => {
-    if (!activeProject) {
+  // Create new blank chat — optionally scoped to a specific project
+  const handleNewChat = (forProject?: string) => {
+    const targetProject = forProject || activeProject;
+    if (!targetProject) {
       triggerToast('Please create or select a project first');
       return;
     }
     const newChatId = `chat-${Date.now()}`;
     const newChat: StoredChat = {
       id: newChatId,
-      title: `New chat in ${activeProject}`,
-      project: activeProject,
+      title: `New chat`,
+      project: targetProject,
       model: modelsCatalog.find(m => m.enabled)?.name || '5.5 Medium',
       timestamp: 'Just now',
       steps: [
         {
           id: `step-new-${Date.now()}`,
           type: 'assistant',
-          content: `New conversation initialized. Project context: \`${activeProject}\`. How can I help you today?`
+          content: `New conversation initialized. Project context: \`${targetProject}\`. How can I help you today?`
         }
       ]
     };
+    setActiveProject(targetProject);
     setChats(prev => {
       const next = [newChat, ...prev];
       persistStore(connectedProviders, modelsCatalog, projects, next);
@@ -723,14 +657,15 @@ export const App: React.FC = () => {
             onSelectProject={handleSelectProject}
             onOpenSearch={() => setSearchModalOpen(true)}
             onNewChat={handleNewChat}
+            onNewChatInProject={(projectName) => handleNewChat(projectName)}
             collapsed={sidebarCollapsed}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
             mcpCount={mcpServers.filter((s) => s.enabled).length}
             onMenuClick={(menuName) => triggerToast(`${menuName} Menu`)}
-            
+
             // Dynamic project & chat bindings
             projects={projects}
-            chats={chats.filter(c => c.project === activeProject)}
+            chats={chats}
             activeChatId={activeChatId}
             onCreateProjectClick={() => setIsCreateProjectOpen(true)}
             onDeleteProject={handleDeleteProject}
