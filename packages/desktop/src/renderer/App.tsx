@@ -1322,6 +1322,7 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
           setSettingsCategory('providers');
         }}
         onWindowControl={handleWindowControl}
+        onMenuClick={triggerToast}
       />
 
       {/* Main Body container */}

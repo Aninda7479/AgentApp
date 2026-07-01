@@ -120,30 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       style={{ width: collapsed ? '70px' : '260px' }}
       className="glass-panel border-r border-brand-border/50 flex flex-col p-4 h-full box-border transition-all duration-200 z-20"
     >
-      {/* Top Navigation Bar */}
-      {!collapsed && (
-        <div className="h-14 border-b border-brand-border/30 flex items-center justify-between px-1 mb-5 select-none">
-          <div className="flex gap-1.5 text-brand-textMuted select-none">
-            <button className="w-6.5 h-6.5 flex items-center justify-center rounded-md hover:bg-white/5 hover:text-brand-textMain transition-all cursor-pointer">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <button className="w-6.5 h-6.5 flex items-center justify-center rounded-md hover:bg-white/5 hover:text-brand-textMain transition-all cursor-pointer">
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="flex gap-1 text-brand-textMuted text-[12px] font-medium tracking-wide">
-            {['File', 'Edit', 'View', 'Help'].map((item) => (
-              <span
-                key={item}
-                onClick={() => onMenuClick && onMenuClick(item)}
-                className="cursor-pointer px-2.5 py-1 rounded-md hover:bg-white/5 hover:text-brand-textMain transition-all duration-150"
-              >
-                {item}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       {/* Main scrollable nav list */}
       <div className="flex-1 overflow-y-auto pr-0.5 custom-scrollbar">

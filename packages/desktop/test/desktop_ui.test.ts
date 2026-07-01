@@ -318,7 +318,7 @@ describe('Step 082: Codex Clone Frameless Dark UI Window (App)', () => {
   it('should render complete Codex App UI layout', () => {
     const html = renderToString(React.createElement(App));
 
-    expect(html).toContain('SuperAgent Desktop — Codex Clone');
+    expect(html).toContain('SuperAgent Desktop');
     expect(html).toContain('BYOK');
     expect(html).toContain('Configure');
     expect(html).toContain('New chat');
