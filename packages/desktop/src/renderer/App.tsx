@@ -17,6 +17,18 @@ import { WorkspaceView } from './components/WorkspaceView';
 import { StoredChat, StoredProject } from './types';
 import { useThemeMode } from './theme';
 
+interface NavigationSnapshot {
+  activeTab: string;
+  settingsCategory: string;
+  activeProject: string;
+  activeChatId: string | null;
+  activeDiff: {
+    filename: string;
+    originalCode: string;
+    modifiedCode: string;
+  } | null;
+}
+
 function sanitizeFolderName(name: string): string {
   let sanitized = name
     .toLowerCase()
@@ -458,6 +470,77 @@ export const App: React.FC = () => {
     originalCode: string;
     modifiedCode: string;
   } | null>(null);
+  const [navigationHistory, setNavigationHistory] = useState<NavigationSnapshot[]>([]);
+  const [navigationIndex, setNavigationIndex] = useState<number>(-1);
+  const restoringNavigationRef = useRef(false);
+
+  const snapshotsEqual = (left: NavigationSnapshot, right: NavigationSnapshot) =>
+    left.activeTab === right.activeTab &&
+    left.settingsCategory === right.settingsCategory &&
+    left.activeProject === right.activeProject &&
+    left.activeChatId === right.activeChatId &&
+    left.activeDiff?.filename === right.activeDiff?.filename &&
+    left.activeDiff?.originalCode === right.activeDiff?.originalCode &&
+    left.activeDiff?.modifiedCode === right.activeDiff?.modifiedCode;
+
+  useEffect(() => {
+    if (restoringNavigationRef.current) {
+      restoringNavigationRef.current = false;
+      return;
+    }
+
+    const snapshot: NavigationSnapshot = {
+      activeTab,
+      settingsCategory,
+      activeProject,
+      activeChatId,
+      activeDiff
+    };
+
+    setNavigationHistory(prev => {
+      const current = navigationIndex >= 0 ? prev[navigationIndex] : null;
+      if (current && snapshotsEqual(current, snapshot)) {
+        return prev;
+      }
+
+      const next = navigationIndex >= 0 ? prev.slice(0, navigationIndex + 1) : [];
+      next.push(snapshot);
+      setNavigationIndex(next.length - 1);
+      return next;
+    });
+  }, [activeTab, settingsCategory, activeProject, activeChatId, activeDiff, navigationIndex]);
+
+  const restoreNavigationSnapshot = (snapshot: NavigationSnapshot) => {
+    restoringNavigationRef.current = true;
+    setActiveTab(snapshot.activeTab);
+    setSettingsCategory(snapshot.settingsCategory);
+    setActiveProject(snapshot.activeProject);
+    setActiveChatId(snapshot.activeChatId);
+    setActiveDiff(snapshot.activeDiff);
+
+    if (snapshot.activeChatId) {
+      const chat = chats.find(c => c.id === snapshot.activeChatId);
+      setTrajectorySteps(chat?.steps || []);
+    }
+  };
+
+  const handleNavigateBack = () => {
+    if (navigationIndex <= 0) return;
+    const nextIndex = navigationIndex - 1;
+    const snapshot = navigationHistory[nextIndex];
+    if (!snapshot) return;
+    setNavigationIndex(nextIndex);
+    restoreNavigationSnapshot(snapshot);
+  };
+
+  const handleNavigateForward = () => {
+    if (navigationIndex < 0 || navigationIndex >= navigationHistory.length - 1) return;
+    const nextIndex = navigationIndex + 1;
+    const snapshot = navigationHistory[nextIndex];
+    if (!snapshot) return;
+    setNavigationIndex(nextIndex);
+    restoreNavigationSnapshot(snapshot);
+  };
 
   // Keyboard shortcut listeners
   useEffect(() => {
@@ -1326,6 +1409,10 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
         }}
         onWindowControl={handleWindowControl}
         onMenuClick={triggerToast}
+        onNavigateBack={handleNavigateBack}
+        onNavigateForward={handleNavigateForward}
+        canNavigateBack={navigationIndex > 1}
+        canNavigateForward={navigationIndex >= 0 && navigationIndex < navigationHistory.length - 1}
       />
 
       {/* Main Body container */}

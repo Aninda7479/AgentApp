@@ -6,13 +6,21 @@ interface TitleBarProps {
   onOpenProviders: () => void;
   onWindowControl: (action: 'minimize' | 'maximize' | 'close') => void;
   onMenuClick?: (menuName: string) => void;
+  onNavigateBack: () => void;
+  onNavigateForward: () => void;
+  canNavigateBack: boolean;
+  canNavigateForward: boolean;
 }
 
 export const TitleBar: React.FC<TitleBarProps> = ({
   hasOpenAiKey,
   onOpenProviders,
   onWindowControl,
-  onMenuClick
+  onMenuClick,
+  onNavigateBack,
+  onNavigateForward,
+  canNavigateBack,
+  canNavigateForward
 }) => {
   return (
     <div
@@ -33,15 +41,25 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         {/* Back / Forward History Navigation */}
         <div className="flex gap-1 text-brand-textMuted select-none border-l border-brand-border/30 pl-3">
           <button
-            onClick={() => window.history.back()}
-            className="w-5.5 h-5.5 flex items-center justify-center rounded hover:bg-white/5 hover:text-brand-textMain transition-all cursor-pointer"
+            onClick={onNavigateBack}
+            disabled={!canNavigateBack}
+            className={`w-5.5 h-5.5 flex items-center justify-center rounded transition-all ${
+              canNavigateBack
+                ? 'hover:bg-white/5 hover:text-brand-textMain cursor-pointer'
+                : 'opacity-35 cursor-not-allowed'
+            }`}
             title="Go back"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => window.history.forward()}
-            className="w-5.5 h-5.5 flex items-center justify-center rounded hover:bg-white/5 hover:text-brand-textMain transition-all cursor-pointer"
+            onClick={onNavigateForward}
+            disabled={!canNavigateForward}
+            className={`w-5.5 h-5.5 flex items-center justify-center rounded transition-all ${
+              canNavigateForward
+                ? 'hover:bg-white/5 hover:text-brand-textMain cursor-pointer'
+                : 'opacity-35 cursor-not-allowed'
+            }`}
             title="Go forward"
           >
             <ChevronRight className="w-3.5 h-3.5" />
