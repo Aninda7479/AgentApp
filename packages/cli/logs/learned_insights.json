@@ -257,7 +257,222 @@
     "lesson": "Always write unit tests",
     "category": "user_preference",
     "timestamp": 1782842280319
-  }
-]80318
+  },
+  {
+    "id": "insight-1782909873598-8zj4y",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782909873598
+  },
+  {
+    "id": "insight-1782909873687-doghg",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782909873687
+  },
+  {
+    "id": "insight-1782910231392-ba8py",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782910231392
+  },
+  {
+    "id": "insight-1782910231436-ilbo9",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782910231436
+  },
+  {
+    "id": "insight-1782911371613-umqa5",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782911371613
+  },
+  {
+    "id": "insight-1782911424270-566y7",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782911424270
+  },
+  {
+    "id": "insight-1782911424285-z8lvj",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782911424285
+  },
+  {
+    "id": "insight-1782911428962-pidcb",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782911428962
+  },
+  {
+    "id": "insight-1782911429077-e9vyh",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782911429077
+  },
+  {
+    "id": "insight-1782911813789-x25qe",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782911813789
+  },
+  {
+    "id": "insight-1782911813809-ke7lu",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782911813809
+  },
+  {
+    "id": "insight-1782911821433-0ce7m",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782911821433
+  },
+  {
+    "id": "insight-1782911821568-dt7dy",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782911821568
+  },
+  {
+    "id": "insight-1782911925456-33bi9",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782911925456
+  },
+  {
+    "id": "insight-1782911925485-xv589",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782911925485
+  },
+  {
+    "id": "insight-1782911930084-xt7xu",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782911930084
+  },
+  {
+    "id": "insight-1782911930112-pmobd",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782911930112
+  },
+  {
+    "id": "insight-1782911964920-ogpl9",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782911964920
+  },
+  {
+    "id": "insight-1782911964934-w9145",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782911964934
+  },
+  {
+    "id": "insight-1782912144494-xz32w",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782912144494
+  },
+  {
+    "id": "insight-1782912144509-ietbi",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782912144509
+  },
+  {
+    "id": "insight-1782912209752-ywpl8",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782912209752
+  },
+  {
+    "id": "insight-1782912209754-a4t4v",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782912209754
+  },
+  {
+    "id": "insight-1782912249953-djidb",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782912249953
+  },
+  {
+    "id": "insight-1782912250041-gmbbj",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782912250041
+  },
+  {
+    "id": "insight-1782912287874-897ji",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782912287874
+  },
+  {
+    "id": "insight-1782912287921-1z0qn",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782912287921
+  },
+  {
+    "id": "insight-1782912668570-jygwv",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782912668570
+  },
+  {
+    "id": "insight-1782912668647-0fj8b",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782912668647
+  },
+  {
+    "id": "insight-1782912741539-aptts",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782912741539
+  },
+  {
+    "id": "insight-1782912741559-kp4md",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782912741559
   }
 ]

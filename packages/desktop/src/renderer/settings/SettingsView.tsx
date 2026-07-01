@@ -19,7 +19,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   modelsCatalog,
   onConnectProvider,
   onDisconnectProvider,
-  onToggleModel
+  onToggleModel,
+  workMode,
+  onWorkModeChange,
+  confirmShellCommands,
+  onConfirmShellCommandsChange,
+  autoReviewPlan,
+  onAutoReviewPlanChange,
+  unsandboxedActions,
+  onUnsandboxedActionsChange
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -131,7 +139,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
       <div className="flex-1 h-full overflow-y-auto px-8 py-8 md:px-14 md:py-10">
         {activeCategory === 'general' && (
-          <GeneralSettings themeMode={themeMode} onThemeChange={onThemeChange} />
+          <GeneralSettings
+            themeMode={themeMode}
+            onThemeChange={onThemeChange}
+            workMode={workMode}
+            onWorkModeChange={onWorkModeChange}
+            confirmShellCommands={confirmShellCommands}
+            onConfirmShellCommandsChange={onConfirmShellCommandsChange}
+            autoReviewPlan={autoReviewPlan}
+            onAutoReviewPlanChange={onAutoReviewPlanChange}
+            unsandboxedActions={unsandboxedActions}
+            onUnsandboxedActionsChange={onUnsandboxedActionsChange}
+          />
         )}
         {activeCategory === 'shortcuts' && <ShortcutsSettings />}
         {activeCategory === 'servers' && <ServersSettings mcpDashboard={mcpDashboard} />}

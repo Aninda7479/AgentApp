@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { SettingsStorage } from '@superagent/core';
 
 export interface CliOptions {
   key?: string;
@@ -28,10 +29,11 @@ export function createCliProgram(onExecute?: (options: CliOptions, prompt?: stri
     .option('--permission <level>', 'Execution permission level (ask, auto, deny)', 'ask')
     .option('-i, --interactive', 'Start interactive TUI session', true)
     .action((prompt, options) => {
+      const savedSettings = SettingsStorage.loadSettings();
       const mergedOptions: CliOptions = {
         key: options.key,
-        provider: options.provider || 'openai',
-        model: options.model,
+        provider: options.provider || savedSettings.lastUsedModel?.provider || 'openai',
+        model: options.model || savedSettings.lastUsedModel?.model,
         verbose: Boolean(options.verbose),
         permission: (options.permission || 'ask') as 'ask' | 'auto' | 'deny',
         interactive: !prompt && Boolean(options.interactive ?? true),
@@ -46,8 +48,10 @@ export function createCliProgram(onExecute?: (options: CliOptions, prompt?: stri
 }
 
 export function parseCliArguments(args: string[], onExecute?: (options: CliOptions, prompt?: string) => void): CliOptions {
+  const savedSettings = SettingsStorage.loadSettings();
   let parsedOptions: CliOptions = {
-    provider: 'openai',
+    provider: savedSettings.lastUsedModel?.provider || 'openai',
+    model: savedSettings.lastUsedModel?.model,
     verbose: false,
     permission: 'ask',
     interactive: true,

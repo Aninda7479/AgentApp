@@ -1,4 +1,4 @@
-import { ModelCapability } from '@superagent/core';
+import { ModelCapability, SettingsStorage } from '@superagent/core';
 import { SessionContext, CLICommandResult } from '../types.js';
 
 export class ModelSwitcher {
@@ -39,6 +39,12 @@ export class ModelSwitcher {
     if (matched) {
       context.activeModel = matched.id;
       context.activeProvider = matched.provider;
+      SettingsStorage.saveSettings({
+        lastUsedModel: {
+          model: matched.id,
+          provider: matched.provider
+        }
+      });
       return {
         success: true,
         message: `Active model switched to '${matched.name}' (${matched.id}) [Provider: ${matched.provider}].`,
@@ -48,6 +54,11 @@ export class ModelSwitcher {
 
     // Fallback if model ID is custom or not in default list
     context.activeModel = targetModel;
+    SettingsStorage.saveSettings({
+      lastUsedModel: {
+        model: targetModel
+      }
+    });
     return {
       success: true,
       message: `Active model set to custom identifier '${targetModel}'. Provider remains '${context.activeProvider}'.`,
@@ -65,6 +76,13 @@ export class ModelSwitcher {
     if (models.length > 0) {
       context.activeModel = models[0].id;
     }
+
+    SettingsStorage.saveSettings({
+      lastUsedModel: {
+        provider: p,
+        model: context.activeModel
+      }
+    });
 
     return {
       success: true,

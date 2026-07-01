@@ -1,10 +1,18 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Check, Code2, MessageSquare, Moon, Sun } from 'lucide-react';
 import { ThemeMode } from '../types';
 
 interface GeneralSettingsProps {
   themeMode: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
+  workMode: 'coding' | 'everyday';
+  onWorkModeChange: (mode: 'coding' | 'everyday') => void;
+  confirmShellCommands: boolean;
+  onConfirmShellCommandsChange: (val: boolean) => void;
+  autoReviewPlan: boolean;
+  onAutoReviewPlanChange: (val: boolean) => void;
+  unsandboxedActions: boolean;
+  onUnsandboxedActionsChange: (val: boolean) => void;
 }
 
 interface ToggleRowProps {
@@ -37,12 +45,18 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ label, description, value, onChan
   </div>
 );
 
-export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ themeMode, onThemeChange }) => {
-  const [workMode, setWorkMode] = useState<'coding' | 'everyday'>('coding');
-  const [defaultPermissions, setDefaultPermissions] = useState(true);
-  const [autoReview, setAutoReview] = useState(true);
-  const [fullAccess, setFullAccess] = useState(true);
-
+export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
+  themeMode,
+  onThemeChange,
+  workMode,
+  onWorkModeChange,
+  confirmShellCommands,
+  onConfirmShellCommandsChange,
+  autoReviewPlan,
+  onAutoReviewPlanChange,
+  unsandboxedActions,
+  onUnsandboxedActionsChange
+}) => {
   const modes = [
     {
       id: 'coding' as const,
@@ -109,7 +123,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ themeMode, onT
                 <button
                   key={id}
                   type="button"
-                  onClick={() => setWorkMode(id)}
+                  onClick={() => onWorkModeChange(id)}
                   className={`rounded-lg border p-4 text-left transition-colors ${
                     selected
                       ? 'border-sky-500/70 bg-sky-500/10 text-brand-textMain'
@@ -132,20 +146,20 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({ themeMode, onT
           <ToggleRow
             label="Confirm Shell Commands"
             description="Always prompt for approval before running terminal scripts or execution utilities."
-            value={defaultPermissions}
-            onChange={setDefaultPermissions}
+            value={confirmShellCommands}
+            onChange={onConfirmShellCommandsChange}
           />
           <ToggleRow
             label="Automatic Review & Planning"
             description="Require approval of implementation plans before making file modifications."
-            value={autoReview}
-            onChange={setAutoReview}
+            value={autoReviewPlan}
+            onChange={onAutoReviewPlanChange}
           />
           <ToggleRow
             label="Unsandboxed Terminal Actions"
             description="Allow commands to execute outside local virtual sandbox isolation folders."
-            value={fullAccess}
-            onChange={setFullAccess}
+            value={unsandboxedActions}
+            onChange={onUnsandboxedActionsChange}
           />
         </div>
       </section>

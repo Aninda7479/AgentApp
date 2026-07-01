@@ -14,7 +14,7 @@ export class CustomAdapter implements BaseProviderAdapter {
   private defaultModel: string;
 
   constructor(config: BYOKConfig) {
-    if (config.provider !== 'deepseek' && config.provider !== 'custom') {
+    if (config.provider !== 'deepseek' && config.provider !== 'custom' && config.provider !== 'deepinfra') {
       throw new Error(`Invalid provider for CustomAdapter: ${config.provider}`);
     }
     this.provider = config.provider;
@@ -23,6 +23,9 @@ export class CustomAdapter implements BaseProviderAdapter {
     if (config.provider === 'deepseek') {
       this.baseUrl = (config.baseUrl || 'https://api.deepseek.com/v1').replace(/\/+$/, '');
       this.defaultModel = config.modelName || 'deepseek-chat';
+    } else if (config.provider === 'deepinfra') {
+      this.baseUrl = (config.baseUrl || 'https://api.deepinfra.com/v1/openai').replace(/\/+$/, '');
+      this.defaultModel = config.modelName || 'meta-llama/Llama-3-70b-instruct';
     } else {
       this.baseUrl = (config.baseUrl || 'http://localhost:11434/v1').replace(/\/+$/, '');
       this.defaultModel = config.modelName || 'custom-model';
@@ -185,6 +188,21 @@ export class CustomAdapter implements BaseProviderAdapter {
           supportsVision: false,
           supportsTools: true,
           supportsReasoning: true
+        }
+      ];
+    }
+
+    if (this.provider === 'deepinfra') {
+      return [
+        {
+          id: this.defaultModel,
+          name: `DeepInfra Model (${this.defaultModel})`,
+          provider: 'deepinfra',
+          contextWindow: 128000,
+          maxOutputTokens: 4096,
+          supportsVision: false,
+          supportsTools: true,
+          supportsReasoning: false
         }
       ];
     }

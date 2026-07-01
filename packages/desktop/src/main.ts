@@ -8,6 +8,7 @@ app.setPath('userData', customUserDataPath);
 
 import { windowManager } from './main/window';
 import { readStore, writeStore, StoreData } from './main/store';
+import { SettingsStorage } from '@superagent/core';
 import https from 'https';
 import http from 'http';
 
@@ -90,6 +91,14 @@ ipcMain.handle('store-read', (): StoreData => {
 
 ipcMain.handle('store-write', (_event, data: StoreData): void => {
   writeStore(data);
+});
+
+ipcMain.handle('settings-read', () => {
+  return SettingsStorage.loadSettings();
+});
+
+ipcMain.handle('settings-write', (_event, settings) => {
+  SettingsStorage.saveSettings(settings);
 });
 
 ipcMain.handle('select-project-folders', async () => {

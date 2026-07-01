@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Command } from 'commander';
-import { BYOKProviderManager, SuperAgentEngine, createMediaTool } from '@superagent/core';
+import { BYOKProviderManager, SuperAgentEngine, createMediaTool, SettingsStorage } from '@superagent/core';
 
 export interface ExecOptions {
   prompt?: string;
@@ -59,8 +59,9 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
     };
   }
 
-  const provider = options.provider || 'openai';
-  const model = options.model || (provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : provider === 'gemini' ? 'gemini-1.5-pro' : 'gpt-4o');
+  const savedSettings = SettingsStorage.loadSettings();
+  const provider = options.provider || savedSettings.lastUsedModel?.provider || 'openai';
+  const model = options.model || savedSettings.lastUsedModel?.model || (provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : provider === 'gemini' ? 'gemini-1.5-pro' : 'gpt-4o');
 
   if (!options.silent) {
     console.log(`[SuperAgent Exec] Running prompt using provider: ${provider}, model: ${model}...`);

@@ -18,6 +18,7 @@ export function createProviderAdapter(config: BYOKConfig): BaseProviderAdapter {
     case 'gemini':
       return new GeminiAdapter(config);
     case 'deepseek':
+    case 'deepinfra':
     case 'custom':
       return new CustomAdapter(config);
     default:

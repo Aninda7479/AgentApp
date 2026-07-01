@@ -31,6 +31,42 @@ function sanitizeFolderName(name: string): string {
 
 export const App: React.FC = () => {
   const { themeMode, setThemeMode } = useThemeMode();
+  const [workMode, setWorkMode] = useState<'coding' | 'everyday'>('coding');
+  const [defaultPermissions, setDefaultPermissions] = useState<boolean>(true);
+  const [autoReview, setAutoReview] = useState<boolean>(true);
+  const [fullAccess, setFullAccess] = useState<boolean>(true);
+
+  // Sync themeMode with settings.json
+  useEffect(() => {
+    if (ipc && themeMode) {
+      ipc.invoke('settings-write', {
+        theme: {
+          desktop: themeMode
+        }
+      });
+    }
+  }, [themeMode]);
+
+  const handleWorkModeChange = (mode: 'coding' | 'everyday') => {
+    setWorkMode(mode);
+    ipc?.invoke('settings-write', { general: { workMode: mode } });
+  };
+
+  const handleConfirmShellCommandsChange = (val: boolean) => {
+    setDefaultPermissions(val);
+    ipc?.invoke('settings-write', { general: { confirmShellCommands: val } });
+  };
+
+  const handleAutoReviewPlanChange = (val: boolean) => {
+    setAutoReview(val);
+    ipc?.invoke('settings-write', { general: { autoReviewPlan: val } });
+  };
+
+  const handleUnsandboxedActionsChange = (val: boolean) => {
+    setFullAccess(val);
+    ipc?.invoke('settings-write', { general: { unsandboxedActions: val } });
+  };
+
   const [activeTab, setActiveTab] = useState<string>('trajectory');
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [isBYOKOpen, setIsBYOKOpen] = useState<boolean>(false);
@@ -281,6 +317,24 @@ export const App: React.FC = () => {
       }
 
       persistStore(loadedProviders, loadedModels, finalProjects, finalChats);
+
+      // Load general settings from settings.json
+      try {
+        const settings = await ipc.invoke('settings-read');
+        if (settings) {
+          if (settings.theme?.desktop) {
+            setThemeMode(settings.theme.desktop);
+          }
+          if (settings.general) {
+            if (settings.general.workMode) setWorkMode(settings.general.workMode);
+            if (settings.general.confirmShellCommands !== undefined) setDefaultPermissions(settings.general.confirmShellCommands);
+            if (settings.general.autoReviewPlan !== undefined) setAutoReview(settings.general.autoReviewPlan);
+            if (settings.general.unsandboxedActions !== undefined) setFullAccess(settings.general.unsandboxedActions);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load general settings:', err);
+      }
 
       const storedIds = new Set(loadedProviders.map((p: ProviderConnection) => p.id));
 
@@ -1322,6 +1376,14 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
               onConnectProvider={handleConnectProvider}
               onDisconnectProvider={handleDisconnectProvider}
               onToggleModel={handleToggleModel}
+              workMode={workMode}
+              onWorkModeChange={handleWorkModeChange}
+              confirmShellCommands={defaultPermissions}
+              onConfirmShellCommandsChange={handleConfirmShellCommandsChange}
+              autoReviewPlan={autoReview}
+              onAutoReviewPlanChange={handleAutoReviewPlanChange}
+              unsandboxedActions={fullAccess}
+              onUnsandboxedActionsChange={handleUnsandboxedActionsChange}
             />
           )}
 

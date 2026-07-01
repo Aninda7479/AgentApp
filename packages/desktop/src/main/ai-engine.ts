@@ -217,7 +217,7 @@ export interface ChatMessage {
 // ─── Provider Config ──────────────────────────────────────────────────────────
 
 export interface AgentEngineConfig {
-  provider: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'deepseek' | 'custom';
+  provider: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'deepseek' | 'deepinfra' | 'custom';
   apiKey: string;
   baseUrl?: string;
   model: string;
@@ -381,7 +381,7 @@ Key guidelines:
   ): Promise<{ fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> }> {
     const { provider } = this.config;
 
-    if (provider === 'openai' || provider === 'custom' || provider === 'deepseek') {
+    if (provider === 'openai' || provider === 'custom' || provider === 'deepseek' || provider === 'deepinfra') {
       return this.streamOpenAI(onEvent, signal);
     }
     if (provider === 'anthropic') {
@@ -404,6 +404,8 @@ Key guidelines:
   ): Promise<{ fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> }> {
     const defaultUrl = this.config.provider === 'deepseek'
       ? 'https://api.deepseek.com/v1'
+      : this.config.provider === 'deepinfra'
+      ? 'https://api.deepinfra.com/v1/openai'
       : 'https://api.openai.com/v1';
     const baseUrl = (this.config.baseUrl || defaultUrl).replace(/\/+$/, '');
     const url = `${baseUrl}/chat/completions`;

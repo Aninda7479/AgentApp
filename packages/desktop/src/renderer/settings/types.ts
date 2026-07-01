@@ -42,4 +42,12 @@ export interface SettingsViewProps {
   onConnectProvider: (provider: ProviderConnection, models: ModelConfig[]) => void;
   onDisconnectProvider: (providerId: string) => void;
   onToggleModel: (modelId: string) => void;
+  workMode: 'coding' | 'everyday';
+  onWorkModeChange: (mode: 'coding' | 'everyday') => void;
+  confirmShellCommands: boolean;
+  onConfirmShellCommandsChange: (val: boolean) => void;
+  autoReviewPlan: boolean;
+  onAutoReviewPlanChange: (val: boolean) => void;
+  unsandboxedActions: boolean;
+  onUnsandboxedActionsChange: (val: boolean) => void;
 }

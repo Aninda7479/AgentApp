@@ -39,7 +39,7 @@ export interface ChatMessage {
     name?: string;
 }
 export interface AgentEngineConfig {
-    provider: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'custom';
+    provider: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'deepseek' | 'deepinfra' | 'custom';
     apiKey: string;
     baseUrl?: string;
     model: string;

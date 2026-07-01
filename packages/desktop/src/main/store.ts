@@ -7,6 +7,7 @@
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
+import { SettingsStorage } from '@superagent/core';
 
 export interface StoredProvider {
   id: string;
@@ -75,22 +76,18 @@ function getConversationPaths() {
 }
 
 export function readStore(): StoreData {
-  const providersPath = getProvidersFilePath();
   const { projectsDir, chatsDir } = getConversationPaths();
 
   let providers: StoredProvider[] = [];
   let models: StoredModel[] = [];
 
-  // 1. Read provider connections and model catalog from providers-store.json
+  // Load from unified settings
   try {
-    if (fs.existsSync(providersPath)) {
-      const raw = fs.readFileSync(providersPath, 'utf-8');
-      const parsed = JSON.parse(raw);
-      providers = parsed.connectedProviders ?? [];
-      models = parsed.modelsCatalog ?? [];
-    }
+    const settings = SettingsStorage.loadSettings();
+    providers = (settings.providers as StoredProvider[]) ?? [];
+    models = (settings.models as StoredModel[]) ?? [];
   } catch (e) {
-    console.error('Failed to read providers-store.json:', e);
+    console.error('Failed to read unified settings:', e);
   }
 
   const projects: StoredProject[] = [];
@@ -189,19 +186,16 @@ export function readStore(): StoreData {
 }
 
 export function writeStore(data: StoreData): void {
-  const providersPath = getProvidersFilePath();
   const { projectsDir, chatsDir } = getConversationPaths();
 
-  // 1. Write provider connections and model catalog to providers-store.json
+  // Write provider connections and model catalog to unified settings.json
   try {
-    fs.mkdirSync(path.dirname(providersPath), { recursive: true });
-    const providersJson = {
-      connectedProviders: data.connectedProviders,
-      modelsCatalog: data.modelsCatalog
-    };
-    fs.writeFileSync(providersPath, JSON.stringify(providersJson, null, 2), 'utf-8');
+    SettingsStorage.saveSettings({
+      providers: data.connectedProviders as any,
+      models: data.modelsCatalog as any
+    });
   } catch (e) {
-    console.error('Failed to write providers-store.json:', e);
+    console.error('Failed to write unified settings:', e);
   }
 
   // Keep track of active directories to delete stale ones

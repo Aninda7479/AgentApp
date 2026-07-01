@@ -1,4 +1,5 @@
-import { BYOKProviderManager, ModelCapabilityRegistry, SkillStore, LearningLoopEngine, AgentMessage } from '@superagent/core';
+import { BYOKProviderManager, ModelCapabilityRegistry, SkillStore, LearningLoopEngine, AgentMessage, SettingsStorage } from '@superagent/core';
+import { BUILTIN_THEMES } from './commands/theme.js';
 
 export interface KeyInput {
   name?: string;
@@ -54,7 +55,30 @@ export function createSessionContext(provider: string = 'openai', model: string 
   const capabilityRegistry = new ModelCapabilityRegistry();
   const skillStore = new SkillStore();
   const learningEngine = new LearningLoopEngine();
-  const activeTheme: Theme = {
+
+  // Load saved settings
+  const savedSettings = SettingsStorage.loadSettings();
+  const activeProvider = savedSettings.lastUsedModel?.provider || provider;
+  const activeModel = savedSettings.lastUsedModel?.model || model;
+
+  // Load saved API keys from settings.json into byokManager
+  if (savedSettings.providers) {
+    for (const p of savedSettings.providers) {
+      if (p.apiKey) {
+        try {
+          byokManager.registerKey({
+            provider: p.id as any,
+            apiKey: p.apiKey,
+            baseUrl: p.baseUrl
+          });
+        } catch {
+          // ignore registration errors for incomplete provider configs
+        }
+      }
+    }
+  }
+
+  const defaultTheme: Theme = {
     name: 'DARK',
     description: 'Default dark theme',
     primaryColor: '#00ffff',
@@ -67,9 +91,13 @@ export function createSessionContext(provider: string = 'openai', model: string 
     borderColor: '#444444',
     backgroundColor: '#000000'
   };
+
+  const savedThemeName = (savedSettings.theme?.cli || 'dark').toLowerCase();
+  const activeTheme = BUILTIN_THEMES[savedThemeName] || defaultTheme;
+
   return {
-    activeProvider: provider,
-    activeModel: model,
+    activeProvider,
+    activeModel,
     byokManager,
     capabilityRegistry,
     skillStore,

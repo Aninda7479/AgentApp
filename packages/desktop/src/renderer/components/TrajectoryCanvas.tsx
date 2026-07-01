@@ -61,6 +61,7 @@ interface WorkedHeaderProps {
   foldersExplored?: number;
   editedFiles?: Array<{ name: string; added: number; removed: number }>;
   children?: React.ReactNode;
+  initialExpanded?: boolean;
 }
 
 const WorkedHeader: React.FC<WorkedHeaderProps> = ({
@@ -68,9 +69,10 @@ const WorkedHeader: React.FC<WorkedHeaderProps> = ({
   filesExplored,
   foldersExplored,
   editedFiles = [],
-  children
+  children,
+  initialExpanded = false
 }) => {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(initialExpanded);
 
   return (
     <div className="flex flex-col gap-1 select-none">
@@ -330,6 +332,7 @@ export interface TrajectoryCanvasProps {
   onActionClick?: (action: string, data: any) => void;
   onUndoStep?: (stepId: string) => void;
   children?: React.ReactNode;
+  initialExpanded?: boolean;
 }
 
 export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
@@ -338,7 +341,8 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
   onViewDiff,
   onActionClick,
   onUndoStep,
-  children
+  children,
+  initialExpanded = false
 }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -353,6 +357,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
     agentSteps: TrajectoryStep[];
   }
 
+  const initialAgentSteps: TrajectoryStep[] = [];
   const turns: AgentTurn[] = [];
   let pendingAgentSteps: TrajectoryStep[] = [];
   let currentUserStep: TrajectoryStep | null = null;
@@ -367,6 +372,8 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
     } else {
       if (currentUserStep) {
         pendingAgentSteps.push(step);
+      } else {
+        initialAgentSteps.push(step);
       }
     }
   }
@@ -397,6 +404,19 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
           >
             No agent execution trajectory yet. Type a prompt below to start!
           </div>
+        )}
+
+        {/* Render initial agent steps before any user prompts */}
+        {initialAgentSteps.length > 0 && (
+          <AgentResponseBlock
+            steps={initialAgentSteps}
+            isLastTurn={turns.length === 0}
+            streamingStepId={streamingStepId}
+            isStreaming={isStreaming && turns.length === 0}
+            onViewDiff={onViewDiff}
+            onActionClick={onActionClick}
+            initialExpanded={initialExpanded}
+          />
         )}
 
         {/* Render turns */}
@@ -469,6 +489,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 isStreaming={isStreaming && turnIdx === turns.length - 1}
                 onViewDiff={onViewDiff}
                 onActionClick={onActionClick}
+                initialExpanded={initialExpanded}
               />
             )}
           </div>
@@ -502,6 +523,7 @@ interface AgentResponseBlockProps {
   isStreaming: boolean;
   onViewDiff?: (file: string, original: string, modified: string) => void;
   onActionClick?: (action: string, data: any) => void;
+  initialExpanded?: boolean;
 }
 
 const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
@@ -510,7 +532,8 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
   streamingStepId,
   isStreaming,
   onViewDiff,
-  onActionClick
+  onActionClick,
+  initialExpanded = false
 }) => {
   // Categorize the steps
   const thoughtSteps = steps.filter(s => s.type === 'thought');
@@ -550,6 +573,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
           filesExplored={totalFiles > 0 ? totalFiles : undefined}
           foldersExplored={totalFolders > 0 ? totalFolders : undefined}
           editedFiles={editedFiles}
+          initialExpanded={initialExpanded}
         >
           {/* Thought steps inside the collapsible */}
           {thoughtSteps.map(step => (

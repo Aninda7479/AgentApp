@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { getUserDataDirectory } from '@superagent/core';
 import {
   createSessionContext,
   processSlashCommand,
@@ -13,11 +14,17 @@ describe('Step 080: CLI Integration Verification Suite', () => {
 
   beforeEach(async () => {
     await fs.mkdir(integrationTmpDir, { recursive: true });
+    try {
+      const testSettingsDir = getUserDataDirectory();
+      await fs.rm(testSettingsDir, { recursive: true, force: true });
+    } catch {}
   });
 
   afterEach(async () => {
     try {
       await fs.rm(integrationTmpDir, { recursive: true, force: true });
+      const testSettingsDir = getUserDataDirectory();
+      await fs.rm(testSettingsDir, { recursive: true, force: true });
     } catch {
       // ignore cleanup errors
     }

@@ -170,20 +170,20 @@ describe('Step 084: Streaming Chat Trajectory Canvas', () => {
         toolName: 'fs_write',
         status: 'success',
         content: 'Wrote file src/index.tsx',
-        metadata: { filename: 'src/index.tsx', originalCode: 'old', modifiedCode: 'new' }
+        metadata: { filename: 'src/index.tsx', originalCode: 'old', modifiedCode: 'new', addedLines: 1, removedLines: 0 }
       },
       { id: '4', type: 'assistant', content: 'App constructed successfully!' }
     ];
 
     const html = renderToString(
-      React.createElement(TrajectoryCanvas, { steps, isStreaming: true })
+      React.createElement(TrajectoryCanvas, { steps, isStreaming: false, initialExpanded: true, onViewDiff: () => {} })
     );
 
     expect(html).toContain('Build a react app');
     expect(html).toContain('Analyzing requirements...');
     expect(html).toContain('fs_write');
-    expect(html).toContain('Inspect File Diff');
-    expect(html).toContain('SuperAgent is generating trajectory...');
+    expect(html).toContain('Review');
+    expect(html).toContain('Worked for');
   });
 });
 
@@ -373,12 +373,22 @@ describe('Step 082b: Additional Codex UI Sub-components', () => {
         activeCategory: 'general',
         onSelectCategory: () => {},
         onBackToApp: () => {},
+        themeMode: 'dark',
+        onThemeChange: () => {},
         mcpDashboard: React.createElement('div', { id: 'mcp-stub' }, 'MCP Stub'),
         connectedProviders: [],
         modelsCatalog: [],
         onConnectProvider: () => {},
         onDisconnectProvider: () => {},
-        onToggleModel: () => {}
+        onToggleModel: () => {},
+        workMode: 'coding',
+        onWorkModeChange: () => {},
+        confirmShellCommands: true,
+        onConfirmShellCommandsChange: () => {},
+        autoReviewPlan: true,
+        onAutoReviewPlanChange: () => {},
+        unsandboxedActions: true,
+        onUnsandboxedActionsChange: () => {}
       })
     );
     expect(html).toContain('settings-container');

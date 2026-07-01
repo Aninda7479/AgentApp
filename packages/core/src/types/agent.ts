@@ -1,4 +1,4 @@
-export type AIProvider = 'openai' | 'anthropic' | 'gemini' | 'deepseek' | 'custom';
+export type AIProvider = 'openai' | 'anthropic' | 'gemini' | 'deepseek' | 'deepinfra' | 'custom';
 
 export interface BYOKConfig {
   provider: AIProvider;

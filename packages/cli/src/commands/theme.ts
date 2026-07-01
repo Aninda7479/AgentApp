@@ -1,4 +1,5 @@
 import { Theme, SessionContext, CLICommandResult } from '../types.js';
+import { SettingsStorage } from '@superagent/core';
 
 export const BUILTIN_THEMES: Record<string, Theme> = {
   dark: {
@@ -128,6 +129,11 @@ export class ThemeSwitcher {
     }
 
     context.activeTheme = found;
+    SettingsStorage.saveSettings({
+      theme: {
+        cli: found.name
+      }
+    });
     return {
       success: true,
       message: `Visual theme switched to '${found.name.toUpperCase()}'.`,

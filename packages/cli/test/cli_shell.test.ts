@@ -1,4 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { getUserDataDirectory } from '@superagent/core';
 import {
   parseCliArguments,
   createCliProgram,
@@ -16,6 +19,19 @@ import {
 } from '../src/index.js';
 
 describe('Phase 4: Terminal UI & CLI Shell Suite (Steps 061 - 067)', () => {
+  beforeEach(async () => {
+    try {
+      const testSettingsDir = getUserDataDirectory();
+      await fs.rm(testSettingsDir, { recursive: true, force: true });
+    } catch {}
+  });
+
+  afterEach(async () => {
+    try {
+      const testSettingsDir = getUserDataDirectory();
+      await fs.rm(testSettingsDir, { recursive: true, force: true });
+    } catch {}
+  });
   describe('Step 061: Commander CLI Binary & Argument Parser', () => {
     it('should parse CLI default options correctly', () => {
       const options = parseCliArguments([]);
