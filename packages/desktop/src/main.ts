@@ -9,6 +9,7 @@ app.setPath('userData', customUserDataPath);
 import { windowManager } from './main/window';
 import { readStore, writeStore, StoreData } from './main/store';
 import { SettingsStorage } from '@superagent/core';
+import { getChatDirectory } from './main/storage/index.js';
 import https from 'https';
 import http from 'http';
 
@@ -129,16 +130,7 @@ ipcMain.handle('select-files', async () => {
 });
 
 ipcMain.handle('copy-file-to-chat', async (_event, { sourcePath, chatId, projectName }) => {
-  const base = path.join(app.getPath('userData'), 'Conversation');
-  const projectsDir = path.join(base, 'Projects');
-  const chatsDir = path.join(base, 'Chats');
-
-  let targetDir = '';
-  if (projectName) {
-    targetDir = path.join(projectsDir, projectName, chatId);
-  } else {
-    targetDir = path.join(chatsDir, chatId);
-  }
+  const targetDir = getChatDirectory(app.getPath('userData'), chatId, projectName || undefined);
 
   fs.mkdirSync(targetDir, { recursive: true });
   const filename = path.basename(sourcePath);
@@ -167,16 +159,7 @@ ipcMain.handle('read-file-base64', async (_event, filePath) => {
 });
 
 ipcMain.handle('save-chat-media-buffer', async (_event, { buffer, filename, chatId, projectName }) => {
-  const base = path.join(app.getPath('userData'), 'Conversation');
-  const projectsDir = path.join(base, 'Projects');
-  const chatsDir = path.join(base, 'Chats');
-
-  let targetDir = '';
-  if (projectName) {
-    targetDir = path.join(projectsDir, projectName, chatId);
-  } else {
-    targetDir = path.join(chatsDir, chatId);
-  }
+  const targetDir = getChatDirectory(app.getPath('userData'), chatId, projectName || undefined);
 
   fs.mkdirSync(targetDir, { recursive: true });
   const destPath = path.join(targetDir, filename);

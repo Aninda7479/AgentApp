@@ -2,6 +2,7 @@ export * from './types/agent.js';
 export * from './providers/byok.js';
 export * from './providers/storage.js';
 export * from './providers/settings-store.js';
+export * from './storage/index.js';
 export * from './providers/openai.js';
 export * from './providers/anthropic.js';
 export * from './providers/gemini.js';
