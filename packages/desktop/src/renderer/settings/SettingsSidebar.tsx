@@ -16,12 +16,12 @@ interface SettingsSidebarProps {
 }
 
 const CATEGORIES: Record<string, SidebarItem[]> = {
-  Desktop: [
+  Personal: [
     { id: 'general', label: 'General', Icon: Settings },
     { id: 'shortcuts', label: 'Shortcuts', Icon: Keyboard },
     { id: 'servers', label: 'Servers', Icon: Plug }
   ],
-  Server: [
+  "AI Config": [
     { id: 'providers', label: 'Providers', Icon: SlidersHorizontal },
     { id: 'models', label: 'Models', Icon: Bot }
   ]
