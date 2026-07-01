@@ -1,4 +1,4 @@
-import React, { useState, KeyboardEvent } from 'react';
+import React, { useState, KeyboardEvent, useEffect } from 'react';
 import {
   Plus,
   Cpu,
@@ -57,6 +57,16 @@ export const Composer: React.FC<ComposerProps> = ({
   const [showApprovalDropdown, setShowApprovalDropdown] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
 
+  const hasModels = availableModels && availableModels.length > 0;
+
+  useEffect(() => {
+    if (hasModels) {
+      if (!availableModels.includes(selectedModel)) {
+        setSelectedModel(availableModels[0] || defaultModel);
+      }
+    }
+  }, [availableModels, defaultModel, hasModels, selectedModel]);
+
   const handleSend = () => {
     if (!prompt.trim() || disabled || isGenerating) return;
     onSend(prompt, {
@@ -92,10 +102,10 @@ export const Composer: React.FC<ComposerProps> = ({
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Do anything"
-          disabled={disabled || isGenerating}
+          placeholder={hasModels ? "Do anything" : "No models are connected yet. Please go to Settings to connect a provider."}
+          disabled={disabled || isGenerating || !hasModels}
           rows={1}
-          className="bg-transparent border-none outline-none text-brand-textMain text-base resize-none w-full min-h-[78px] leading-relaxed placeholder-brand-textMuted/55 font-sans"
+          className="bg-transparent border-none outline-none text-brand-textMain text-base resize-none w-full min-h-[78px] leading-relaxed placeholder-brand-textMuted/55 font-sans disabled:opacity-50"
         />
 
         {/* Toolbar row inside box */}
@@ -169,15 +179,18 @@ export const Composer: React.FC<ComposerProps> = ({
             <div className="relative">
               <button
                 data-testid="model-dropdown-btn"
+                disabled={!hasModels}
                 onClick={() => setShowModelDropdown(!showModelDropdown)}
-                className="text-brand-textMuted hover:text-brand-textMain px-3 py-2 rounded-lg bg-brand-popover/60 hover:bg-brand-popover border border-brand-border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                className={`text-brand-textMuted hover:text-brand-textMain px-3 py-2 rounded-lg bg-brand-popover/60 hover:bg-brand-popover border border-brand-border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                  hasModels ? 'cursor-pointer' : 'cursor-not-allowed opacity-75'
+                }`}
               >
                 <Cpu className="w-3.5 h-3.5" />
-                <span>{selectedModel}</span>
-                <ChevronDown className="w-3 h-3" />
+                <span>{hasModels ? selectedModel : 'No models are connected yet'}</span>
+                {hasModels && <ChevronDown className="w-3 h-3" />}
               </button>
 
-              {showModelDropdown && (
+              {hasModels && showModelDropdown && (
                 <div
                   data-testid="model-dropdown-menu"
                   className="absolute bottom-full right-0 mb-2 glass-panel rounded-lg shadow-lg z-50 w-[170px] overflow-hidden"
@@ -221,9 +234,9 @@ export const Composer: React.FC<ComposerProps> = ({
               <button
                 data-testid="btn-send"
                 onClick={handleSend}
-                disabled={disabled || !prompt.trim()}
+                disabled={disabled || !prompt.trim() || !hasModels}
                 className={`rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150 ${
-                  !prompt.trim() || disabled
+                  !prompt.trim() || disabled || !hasModels
                     ? 'bg-brand-popover text-brand-textMuted/40 cursor-not-allowed border border-brand-border'
                     : 'bg-violet-600 hover:bg-violet-500 hover:shadow-[0_0_12px_rgba(139,92,246,0.32)] text-white cursor-pointer active:scale-[0.92] border border-violet-500'
                 }`}

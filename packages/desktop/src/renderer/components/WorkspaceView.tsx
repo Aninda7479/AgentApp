@@ -20,6 +20,7 @@ interface WorkspaceViewProps {
   onOpenMcp: () => void;
   onOpenSettings: () => void;
   onToast: (message: string) => void;
+  onAttachClick?: () => void;
 }
 
 const recommendations = [
@@ -67,7 +68,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   onViewDiff,
   onOpenMcp,
   onOpenSettings,
-  onToast
+  onToast,
+  onAttachClick
 }) => {
   const enabledModels = modelsCatalog.filter((model) => model.enabled);
 
@@ -97,7 +99,23 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         </div>
       </div>
 
-      <TrajectoryCanvas steps={trajectorySteps} isStreaming={isGenerating} onViewDiff={onViewDiff}>
+      <TrajectoryCanvas
+        steps={trajectorySteps}
+        isStreaming={isGenerating}
+        onViewDiff={onViewDiff}
+        onActionClick={(action, data) => {
+          if (action === 'openMedia') {
+            const electron = typeof window !== 'undefined' && (window as any).require
+              ? (window as any).require('electron')
+              : null;
+            if (electron && data?.mediaPath) {
+              electron.shell.openPath(data.mediaPath);
+            } else {
+              onToast(`Open Media Artifact: ${data?.mediaPath || 'No Path'}`);
+            }
+          }
+        }}
+      >
         {trajectorySteps.length <= 1 && (
           <div className="flex flex-col items-center justify-center px-8 max-w-[980px] w-full mx-auto mt-6 mb-4 animate-fade-in relative z-10">
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] bg-violet-500/10 rounded-full blur-[100px] pointer-events-none" />
@@ -167,12 +185,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         isGenerating={isGenerating}
         onStop={onStop}
         activeProject={activeProject}
-        onAttachClick={() => onToast('File Attachment Manager')}
+        onAttachClick={onAttachClick || (() => onToast('File Attachment Manager'))}
         onMicClick={() => onToast('Voice Dictation Input')}
         onLocallyClick={() => onToast('Local Execution Environments')}
         onBranchClick={() => onToast('Git Branch Selector')}
         availableModels={enabledModels.map((model) => model.name)}
-        defaultModel={enabledModels[0]?.name || 'Gemini 3.5 Flash (High)'}
+        defaultModel={enabledModels[0]?.name || ''}
         promptValue={composerPrompt}
         onPromptChange={onPromptChange}
       />

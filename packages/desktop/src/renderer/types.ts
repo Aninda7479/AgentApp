@@ -3,6 +3,7 @@ import { TrajectoryStep } from './components/TrajectoryCanvas';
 export interface StoredProject {
   name: string;
   folders: string[];
+  allowedCommands?: string[];
 }
 
 export interface StoredChat {

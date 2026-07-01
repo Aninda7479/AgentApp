@@ -38,6 +38,7 @@ export interface SidebarProps {
   chats?: StoredChat[];
   onCreateProjectClick?: () => void;
   onDeleteProject?: (name: string) => void;
+  onConfigureProject?: (project: StoredProject) => void;
   onDeleteChat?: (id: string) => void;
   onSelectChat?: (id: string) => void;
   activeChatId?: string | null;
@@ -61,6 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   chats = [],
   onCreateProjectClick,
   onDeleteProject,
+  onConfigureProject,
   onDeleteChat,
   onSelectChat,
   activeChatId = null
@@ -270,6 +272,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               >
                                 <MessageSquarePlus className="w-3.5 h-3.5" />
                                 <span>New chat</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onConfigureProject) onConfigureProject(proj);
+                                  setOpenMenuProject(null);
+                                }}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
+                              >
+                                <Settings className="w-3.5 h-3.5" />
+                                <span>Project Settings</span>
                               </button>
                               {onDeleteProject && (
                                 <button

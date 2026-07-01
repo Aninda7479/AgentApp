@@ -10,6 +10,7 @@ import { ScheduledView } from './components/ScheduledView';
 import { PluginsView } from './components/PluginsView';
 import { SettingsView, ProviderConnection, ModelConfig } from './settings/SettingsView';
 import { CreateProjectModal } from './components/CreateProjectModal';
+import { ConfigureProjectModal } from './components/ConfigureProjectModal';
 import { TitleBar } from './components/TitleBar';
 import { AppToast } from './components/AppToast';
 import { WorkspaceView } from './components/WorkspaceView';
@@ -35,6 +36,8 @@ export const App: React.FC = () => {
   const [chats, setChats] = useState<StoredChat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState<boolean>(false);
+  const [isConfigureProjectOpen, setIsConfigureProjectOpen] = useState<boolean>(false);
+  const [projectToConfigure, setProjectToConfigure] = useState<StoredProject | null>(null);
 
   // Providers & Models
   const [connectedProviders, setConnectedProviders] = useState<ProviderConnection[]>([]);
@@ -289,6 +292,60 @@ export const App: React.FC = () => {
     };
   }, [profilePopoverOpen]);
 
+  const handleAttachFiles = async () => {
+    if (!activeChatId) {
+      triggerToast('Please select or create a chat first');
+      return;
+    }
+    const currentChat = chats.find(c => c.id === activeChatId);
+    if (!currentChat) return;
+
+    try {
+      const filePaths: string[] = await ipc?.invoke('select-files');
+      if (filePaths && filePaths.length > 0) {
+        for (const filePath of filePaths) {
+          const res = await ipc?.invoke('copy-file-to-chat', {
+            sourcePath: filePath,
+            chatId: activeChatId,
+            projectName: currentChat.project
+          });
+          
+          if (res) {
+            triggerToast(`Uploaded: ${res.filename}`);
+            setChats(prevChats => {
+              const updatedChats = prevChats.map(c => {
+                if (c.id === activeChatId) {
+                  const attachStep: TrajectoryStep = {
+                    id: `attach-${Date.now()}-${Math.random()}`,
+                    type: 'user',
+                    content: `📎 Attached context: ${res.filename}`,
+                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    metadata: {
+                      mediaType: res.filename.toLowerCase().endsWith('.pdf') ? 'pdf' : res.filename.toLowerCase().endsWith('.ppt') ? 'ppt' : 'image',
+                      mediaPath: res.fullPath
+                    }
+                  };
+                  const updatedSteps = [...c.steps, attachStep];
+                  // If active chat is the one we modified, sync local state
+                  if (activeChatId === c.id) {
+                    setTrajectorySteps(updatedSteps);
+                  }
+                  return { ...c, steps: updatedSteps };
+                }
+                return c;
+              });
+              persistStore(connectedProviders, modelsCatalog, projects, updatedChats);
+              return updatedChats;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to attach files', e);
+      triggerToast('Error attaching files');
+    }
+  };
+
   const handleSendPrompt = (prompt: string, options: ComposerOptions) => {
     setComposerPrompt('');
     const userStep: TrajectoryStep = {
@@ -526,6 +583,14 @@ export const App: React.FC = () => {
     setActiveTab('trajectory');
   };
 
+  const handleSaveProjectConfig = (updatedProj: StoredProject) => {
+    setProjects(prev => {
+      const next = prev.map(p => p.name === updatedProj.name ? updatedProj : p);
+      persistStore(connectedProviders, modelsCatalog, next, chats);
+      return next;
+    });
+  };
+
   // Dynamic project deletion
   const handleDeleteProject = (projectName: string) => {
     setProjects(prev => {
@@ -603,7 +668,7 @@ export const App: React.FC = () => {
       id: newChatId,
       title: `New chat`,
       project: targetProject,
-      model: modelsCatalog.find(m => m.enabled)?.name || '5.5 Medium',
+      model: modelsCatalog.find(m => m.enabled)?.name || '',
       timestamp: 'Just now',
       steps: [
         {
@@ -669,6 +734,10 @@ export const App: React.FC = () => {
             activeChatId={activeChatId}
             onCreateProjectClick={() => setIsCreateProjectOpen(true)}
             onDeleteProject={handleDeleteProject}
+            onConfigureProject={(proj) => {
+              setProjectToConfigure(proj);
+              setIsConfigureProjectOpen(true);
+            }}
             onDeleteChat={handleDeleteChat}
             onSelectChat={handleSelectChat}
           />
@@ -694,6 +763,7 @@ export const App: React.FC = () => {
                 setSettingsCategory('general');
               }}
               onToast={triggerToast}
+              onAttachClick={handleAttachFiles}
             />
           )}
 
@@ -782,6 +852,14 @@ export const App: React.FC = () => {
         isOpen={isCreateProjectOpen}
         onClose={() => setIsCreateProjectOpen(false)}
         onCreate={handleCreateProject}
+      />
+
+      {/* Configure Project Modal */}
+      <ConfigureProjectModal
+        isOpen={isConfigureProjectOpen}
+        onClose={() => setIsConfigureProjectOpen(false)}
+        project={projectToConfigure}
+        onSave={handleSaveProjectConfig}
       />
 
       <AppToast open={toastOpen} message={toastMessage} />

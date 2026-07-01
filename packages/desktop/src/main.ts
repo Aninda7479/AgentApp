@@ -33,6 +33,59 @@ ipcMain.handle('select-project-folders', async () => {
   return result.filePaths;
 });
 
+ipcMain.handle('select-files', async () => {
+  const win = windowManager.getMainWindow();
+  const result = await dialog.showOpenDialog(win!, {
+    title: 'Select Files',
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Media Files', extensions: ['jpg', 'jpeg', 'png', 'gif', 'mp4', 'avi', 'mkv', 'mov', 'pdf', 'ppt'] }
+    ]
+  });
+  if (result.canceled) {
+    return [];
+  }
+  return result.filePaths;
+});
+
+ipcMain.handle('copy-file-to-chat', async (_event, { sourcePath, chatId, projectName }) => {
+  const base = path.join(app.getPath('userData'), 'Conversation');
+  const projectsDir = path.join(base, 'Projects');
+  const chatsDir = path.join(base, 'Chats');
+
+  let targetDir = '';
+  if (projectName) {
+    targetDir = path.join(projectsDir, projectName, chatId);
+  } else {
+    targetDir = path.join(chatsDir, chatId);
+  }
+
+  fs.mkdirSync(targetDir, { recursive: true });
+  const filename = path.basename(sourcePath);
+  const destPath = path.join(targetDir, filename);
+  fs.copyFileSync(sourcePath, destPath);
+  return {
+    filename,
+    relativePath: path.relative(app.getPath('userData'), destPath),
+    fullPath: destPath
+  };
+});
+
+ipcMain.handle('read-file-base64', async (_event, filePath) => {
+  try {
+    const content = fs.readFileSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    let mimeType = 'image/png';
+    if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+    else if (ext === '.gif') mimeType = 'image/gif';
+    else if (ext === '.svg') mimeType = 'image/svg+xml';
+    return `data:${mimeType};base64,${content.toString('base64')}`;
+  } catch (e) {
+    console.error('Failed to read file as base64', e);
+    return null;
+  }
+});
+
 // ─── IPC: Auto-detect local providers on startup ─────────────────────────────
 
 ipcMain.handle('auto-detect-providers', async () => {

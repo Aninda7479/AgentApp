@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 export interface TrajectoryStep {
   id: string;
@@ -15,6 +15,37 @@ export interface TrajectoryStep {
     [key: string]: any;
   };
 }
+
+const LocalImagePreview: React.FC<{ filePath: string }> = ({ filePath }) => {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    const ipc = typeof window !== 'undefined' && (window as any).require
+      ? (window as any).require('electron').ipcRenderer
+      : null;
+    if (ipc) {
+      ipc.invoke('read-file-base64', filePath).then((base64: string | null) => {
+        if (base64) setSrc(base64);
+      });
+    }
+  }, [filePath]);
+
+  if (!src) {
+    return (
+      <div className="mt-2 w-32 h-20 bg-brand-card animate-pulse rounded-lg border border-brand-border flex items-center justify-center text-[10px] text-brand-textMuted select-none">
+        Loading...
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt="Attached preview"
+      className="mt-2 rounded-lg max-w-full max-h-[220px] object-contain border border-brand-border/60 shadow-sm"
+    />
+  );
+};
 
 export interface TrajectoryCanvasProps {
   steps: TrajectoryStep[];
@@ -52,6 +83,8 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
         {((steps.length > 1) || (steps.length > 0 && !children)) && (
           steps.map((step) => {
             if (step.type === 'user') {
+              const hasMedia = step.metadata?.mediaPath;
+              const isImage = step.metadata?.mediaType === 'image';
               return (
                 <div
                   key={step.id}
@@ -63,6 +96,26 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                     {step.timestamp && <span>{step.timestamp}</span>}
                   </div>
                   <div className="whitespace-pre-wrap leading-relaxed text-sm md:text-base font-sans">{step.content}</div>
+
+                  {hasMedia && isImage && (
+                    <LocalImagePreview filePath={step.metadata!.mediaPath} />
+                  )}
+                  {hasMedia && !isImage && (
+                    <div className="mt-2.5 p-3.5 bg-brand-popover/80 border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none hover:border-violet-500/30 transition-all">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">📄</span>
+                        <span className="text-xs md:text-sm text-brand-textMain font-medium font-sans">
+                          {step.metadata!.mediaType!.toUpperCase()} Document
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
+                        className="bg-white/5 border border-brand-border hover:bg-white/10 text-brand-textMain px-3.5 py-1.5 rounded-lg cursor-pointer text-xs font-semibold transition-all"
+                      >
+                        Open File
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             }
