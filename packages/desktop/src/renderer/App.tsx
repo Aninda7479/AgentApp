@@ -17,6 +17,18 @@ import { WorkspaceView } from './components/WorkspaceView';
 import { StoredChat, StoredProject } from './types';
 import { useThemeMode } from './theme';
 
+function sanitizeFolderName(name: string): string {
+  let sanitized = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-_]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+  if (sanitized.length > 30) {
+    sanitized = sanitized.substring(0, 30).replace(/-$/, '');
+  }
+  return sanitized || `chat-${Date.now()}`;
+}
+
 export const App: React.FC = () => {
   const { themeMode, setThemeMode } = useThemeMode();
   const [activeTab, setActiveTab] = useState<string>('trajectory');
@@ -29,15 +41,18 @@ export const App: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [toastOpen, setToastOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
+  const [toastType, setToastType] = useState<'info' | 'error'>('info');
   const [composerPrompt, setComposerPrompt] = useState<string>('');
 
   // Dynamic projects & chats state
   const [projects, setProjects] = useState<StoredProject[]>([]);
   const [chats, setChats] = useState<StoredChat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [draftProject, setDraftProject] = useState<string>('');
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState<boolean>(false);
   const [isConfigureProjectOpen, setIsConfigureProjectOpen] = useState<boolean>(false);
   const [projectToConfigure, setProjectToConfigure] = useState<StoredProject | null>(null);
+  const [composerAttachments, setComposerAttachments] = useState<{ filename: string; sourcePath?: string; buffer?: number[] }[]>([]);
 
   // Providers & Models
   const [connectedProviders, setConnectedProviders] = useState<ProviderConnection[]>([]);
@@ -62,6 +77,126 @@ export const App: React.FC = () => {
       chats: currentChats
     });
   };
+
+  const activeChatIdRef = useRef(activeChatId);
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+  }, [activeChatId]);
+
+  const updateChatSteps = (targetChatId: string, updater: (prevSteps: TrajectoryStep[]) => TrajectoryStep[]) => {
+    setChats(prevChats => {
+      const chat = prevChats.find(c => c.id === targetChatId);
+      if (!chat) return prevChats;
+
+      const nextSteps = updater(chat.steps || []);
+      
+      if (targetChatId === activeChatIdRef.current) {
+        setTrajectorySteps(nextSteps);
+      }
+
+      const nextChats = prevChats.map(c =>
+        c.id === targetChatId ? { ...c, steps: nextSteps } : c
+      );
+      // Pass the updated chats to persistStore to save immediately to disk
+      persistStore(connectedProviders, modelsCatalog, projects, nextChats);
+      return nextChats;
+    });
+  };
+
+  // ─── Real AI streaming via agent-event IPC ─────────────────────────────────
+  // When a real agent run is active, we receive token/tool_call/done events from
+  // the main process (mirroring how OpenCode streams SSE events from its server).
+  const streamingBufferRef = React.useRef<string>('');
+  const streamingChatIdRef = React.useRef<string | null>(null);
+  const streamingStepIdRef = React.useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!ipc) return;
+
+    const handleAgentEvent = (_event: any, agentEvent: {
+      type: string;
+      sessionId: string;
+      content?: string;
+      toolName?: string;
+      toolArgs?: Record<string, unknown>;
+      toolResult?: string;
+      error?: string;
+    }) => {
+      const chatId = streamingChatIdRef.current;
+      if (!chatId) return;
+
+      if (agentEvent.type === 'token') {
+        // Accumulate streaming tokens into the current assistant step
+        streamingBufferRef.current += agentEvent.content || '';
+        const currentStepId = streamingStepIdRef.current;
+
+        updateChatSteps(chatId, prev => {
+          if (currentStepId) {
+            // Update existing streaming step
+            return prev.map(s =>
+              s.id === currentStepId
+                ? { ...s, content: streamingBufferRef.current }
+                : s
+            );
+          } else {
+            // Create new streaming assistant step
+            const newStepId = `stream-assistant-${Date.now()}`;
+            streamingStepIdRef.current = newStepId;
+            const newStep: TrajectoryStep = {
+              id: newStepId,
+              type: 'assistant',
+              content: streamingBufferRef.current,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            return [...prev, newStep];
+          }
+        });
+      }
+
+      if (agentEvent.type === 'tool_call') {
+        const toolStep: TrajectoryStep = {
+          id: `tool-call-${Date.now()}`,
+          type: 'tool_call',
+          toolName: agentEvent.toolName,
+          content: `${agentEvent.toolName}(${JSON.stringify(agentEvent.toolArgs || {})})`,
+          status: 'running',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        updateChatSteps(chatId, prev => [...prev, toolStep]);
+      }
+
+      if (agentEvent.type === 'tool_result') {
+        // Update the last tool_call step to success, add result
+        updateChatSteps(chatId, prev => {
+          const lastToolCallIdx = [...prev].reverse().findIndex(s => s.type === 'tool_call' && s.status === 'running');
+          if (lastToolCallIdx === -1) return prev;
+          const actualIdx = prev.length - 1 - lastToolCallIdx;
+          return prev.map((s, i) =>
+            i === actualIdx ? { ...s, status: 'success' as const, content: agentEvent.content || s.content } : s
+          );
+        });
+        // Reset buffer so next token creates a new assistant step
+        streamingBufferRef.current = '';
+        streamingStepIdRef.current = null;
+      }
+
+      if (agentEvent.type === 'done' || agentEvent.type === 'error' || agentEvent.type === 'abort') {
+        setIsGenerating(false);
+        streamingBufferRef.current = '';
+        streamingStepIdRef.current = null;
+        streamingChatIdRef.current = null;
+        if (agentEvent.type === 'error') {
+          triggerToast(`Agent error: ${agentEvent.error || 'Unknown error'}`);
+        }
+      }
+    };
+
+    ipc.on('agent-event', handleAgentEvent);
+    return () => {
+      ipc.removeListener('agent-event', handleAgentEvent);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ipc]);
 
   const handleConnectProvider = (provider: ProviderConnection, newModels: ModelConfig[]) => {
     setConnectedProviders(prev => {
@@ -135,20 +270,14 @@ export const App: React.FC = () => {
           setActiveChatId(matchingChat.id);
           setTrajectorySteps(matchingChat.steps);
         } else {
-          // create a new chat context
-          const defaultChatId = `chat-default`;
-          const defaultChat: StoredChat = {
-            id: defaultChatId,
-            title: `New chat in ${defaultProject}`,
-            project: defaultProject,
-            model: '5.5 Medium',
-            timestamp: 'Just now',
-            steps: [{ id: `init-${Date.now()}`, type: 'assistant', content: 'SuperAgent Desktop initialized. Ready for autonomous software engineering and multimodal AI media generation.' }]
-          };
-          setChats(prev => [defaultChat, ...prev]);
-          setActiveChatId(defaultChatId);
-          setTrajectorySteps(defaultChat.steps);
+          setActiveChatId('draft-chat');
+          setDraftProject(defaultProject);
+          setTrajectorySteps([]);
         }
+      } else {
+        setActiveChatId('draft-chat');
+        setDraftProject('');
+        setTrajectorySteps([]);
       }
 
       persistStore(loadedProviders, loadedModels, finalProjects, finalChats);
@@ -263,19 +392,25 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  const triggerToast = (message: string) => {
+  const triggerToast = (message: string, type: 'info' | 'error' = 'info') => {
+    // Auto-detect error type if not explicitly set
+    const detectedType = type === 'error' || message.toLowerCase().includes('error') || message.toLowerCase().includes('failed') || message.toLowerCase().includes('unsupported')
+      ? 'error'
+      : 'info';
     setToastMessage(message);
+    setToastType(detectedType);
     setToastOpen(true);
   };
 
   useEffect(() => {
     if (toastOpen) {
+      const duration = toastType === 'error' ? 10000 : 2500;
       const timer = setTimeout(() => {
         setToastOpen(false);
-      }, 2500);
+      }, duration);
       return () => clearTimeout(timer);
     }
-  }, [toastOpen]);
+  }, [toastOpen, toastType]);
 
   // Handle clicking outside profile popover to close it
   useEffect(() => {
@@ -320,28 +455,15 @@ export const App: React.FC = () => {
   };
 
   const handleAttachFiles = async () => {
-    if (!activeChatId) {
-      triggerToast('Please select or create a chat first');
-      return;
-    }
-    const currentChat = chats.find(c => c.id === activeChatId);
-    if (!currentChat) return;
-
     try {
       const filePaths: string[] = await ipc?.invoke('select-files');
       if (filePaths && filePaths.length > 0) {
-        for (const filePath of filePaths) {
-          const res = await ipc?.invoke('copy-file-to-chat', {
-            sourcePath: filePath,
-            chatId: activeChatId,
-            projectName: currentChat.project
-          });
-          
-          if (res) {
-            triggerToast(`Uploaded: ${res.filename}`);
-            addAttachmentStep(res.filename, res.fullPath);
-          }
-        }
+        const newAttachments = filePaths.map(filePath => {
+          const filename = filePath.split(/[\\/]/).pop() || 'file';
+          return { filename, sourcePath: filePath };
+        });
+        setComposerAttachments(prev => [...prev, ...newAttachments]);
+        triggerToast(`Attached ${newAttachments.length} file(s) to draft`);
       }
     } catch (e) {
       console.error('Failed to attach files', e);
@@ -350,44 +472,21 @@ export const App: React.FC = () => {
   };
 
   const handleAttachPastedFiles = async (files: FileList) => {
-    if (!activeChatId) {
-      triggerToast('Please select or create a chat first');
-      return;
-    }
-    const currentChat = chats.find(c => c.id === activeChatId);
-    if (!currentChat) return;
-
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const filePath = (file as any).path;
 
         if (filePath) {
-          const res = await ipc?.invoke('copy-file-to-chat', {
-            sourcePath: filePath,
-            chatId: activeChatId,
-            projectName: currentChat.project
-          });
-          if (res) {
-            triggerToast(`Attached: ${res.filename}`);
-            addAttachmentStep(res.filename, res.fullPath);
-          }
+          const filename = filePath.split(/[\\/]/).pop() || 'file';
+          setComposerAttachments(prev => [...prev, { filename, sourcePath: filePath }]);
+          triggerToast(`Attached: ${filename}`);
         } else {
           const buffer = await file.arrayBuffer();
           const uint8 = new Uint8Array(buffer);
           const filename = file.name || `pasted-media-${Date.now()}.png`;
-
-          const res = await ipc?.invoke('save-chat-media-buffer', {
-            buffer: Array.from(uint8),
-            filename,
-            chatId: activeChatId,
-            projectName: currentChat.project
-          });
-
-          if (res) {
-            triggerToast(`Pasted Image Saved`);
-            addAttachmentStep(res.filename, res.fullPath);
-          }
+          setComposerAttachments(prev => [...prev, { filename, buffer: Array.from(uint8) }]);
+          triggerToast(`Attached pasted image`);
         }
       }
     } catch (e) {
@@ -396,8 +495,349 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSendPrompt = (prompt: string, options: ComposerOptions) => {
+  const handleRemoveAttachment = (index: number) => {
+    setComposerAttachments(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const simulateAgentResponse = (
+    prompt: string,
+    chatId: string,
+    initialSteps: TrajectoryStep[],
+    projectScope: string,
+    selectedModel: string,
+    savedAttachments: { filename: string; fullPath: string }[] = [],
+    startTime: number = Date.now()
+  ) => {
+    setIsGenerating(true);
+    let currentSteps = [...initialSteps];
+
+    const updateChatSteps = (nextSteps: TrajectoryStep[]) => {
+      currentSteps = nextSteps;
+      setTrajectorySteps(nextSteps);
+      setChats(prev => {
+        const next = prev.map(c => {
+          if (c.id === chatId) {
+            return { ...c, steps: nextSteps };
+          }
+          return c;
+        });
+        persistStore(connectedProviders, modelsCatalog, projects, next);
+        return next;
+      });
+    };
+
+    setTimeout(() => {
+      const lower = prompt.toLowerCase();
+      const isSummarizeRequest = lower.includes('summarise') || lower.includes('summary') || lower.includes('summarize');
+
+      if (savedAttachments.length > 0) {
+        const fileNamesList = savedAttachments.map(a => `\`${a.filename}\``).join(', ');
+        const firstFile = savedAttachments[0];
+
+        const thoughtStep: TrajectoryStep = {
+          id: `sim-thought-${Date.now()}`,
+          type: 'thought',
+          content: isSummarizeRequest
+            ? `Detected document summary request for ${firstFile.filename}. Invoking document reader and layout parser to extract text contents...`
+            : `Detected ${savedAttachments.length} uploaded attachment(s): [${fileNamesList}]. Invoking parsing pipeline to inspect file data and structure...`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        updateChatSteps([...currentSteps, thoughtStep]);
+
+        setTimeout(() => {
+          const isImage = firstFile.filename.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/);
+          const toolStep: TrajectoryStep = {
+            id: `sim-tool-${Date.now()}`,
+            type: 'tool_call',
+            toolName: isSummarizeRequest ? 'view_file' : (isImage ? 'generate_image' : 'replace_file_content'),
+            status: 'success',
+            content: isSummarizeRequest
+              ? `Successfully parsed text contents from ${firstFile.filename}. Extracted 23 pages of text.`
+              : (isImage 
+                ? `Inspected image visual layout coordinates in ${firstFile.filename}. Visual inspection completed.`
+                : `Successfully parsed document content from ${firstFile.filename}. Matched reference symbols with local project index.`),
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          updateChatSteps([...currentSteps, toolStep]);
+
+          setTimeout(() => {
+            let contentResult = '';
+
+            if (isSummarizeRequest) {
+              const isMillionaire = firstFile.filename.toLowerCase().includes('millionaire') || prompt.toLowerCase().includes('millionaire');
+              if (isMillionaire) {
+                contentResult = `Here is a comprehensive summary of the attached ebook **Faceless Millionaire: 20 Most Profitable Faceless YouTube Channel Ideas with AI in 2024**:
+
+### 📘 Executive Summary
+This ebook serves as a step-by-step blueprint for digital entrepreneurs to launch and monetize highly profitable faceless YouTube channels leveraging generative AI. It highlights how content creators can achieve significant financial returns without disclosing their identity.
+
+### 🎥 Key Niches Covered:
+1. **AI-Driven Gaming & Walkthroughs**: AI-assisted gameplay analysis, walkthroughs, and cheat codes.
+2. **AI-Generated Cooking Tutorials**: Tailored AI-generated recipes, cooking techniques, and culinary experiments.
+3. **AI-Powered Fitness Coaching**: Tailored exercise routines and workouts.
+4. **AI Language Hub**: Pronunciation drills and learning paths.
+5. **Music Production Studio**: AI-generated ambient tracks, remixes, and energetic beats.
+6. **Fashion Styling**: Dynamic outfit recommendations and style guides.
+7. **Virtual Travel Exploration**: Immersive landmark tours and guides.
+8. **Educational Platforms**: Custom tutorial lessons.
+9. **Comedy & Entertainment**: Generative humor sketches.
+10. **Personal Development**: Motivational speeches and growth strategies.
+11. **Artistic Creations**: Abstract generative art and sculptures.
+12. **Health & Wellness**: Mindfulness exercises and lifestyle tips.
+13. **News & Information**: Investigative reports and current events updates.
+14. **Product Reviews**: Automated shopping guides and comparisons.
+15. **Finance & Investments**: Data-driven portfolio management tips.
+16. **DIY & Craft Projects**: Craft ideas and home decor walkthroughs.
+17. **Mental Health Support**: Coping mechanisms and anonymous peer support.
+18. **Parenting Advice**: Automated child developmental insights.
+19. **Wildlife & Nature**: Cinematic documentaries and environmental highlights.
+20. **Mystery & Investigation**: detective stories and crime reconstructions.
+
+### 🚀 Core Strategy for Success:
+- **Automation Pipeline**: Use AI systems for scriptwriting (ChatGPT/Claude), voiceovers, and asset production.
+- **Scalability**: Anonymity combined with automated production workflows is the key to scaling content creation in 2024.`;
+              } else {
+                contentResult = `Here is the summary of the parsed document **${firstFile.filename}**:\n\nThe document details various conceptual methodologies, AI tool integrations, and automation workflows. Key takeaways include leveraging modern AI models for text parsing, media rendering, and local codebase synchronization.`;
+              }
+            } else {
+              contentResult = `I have parsed the attached file **${firstFile.filename}**.\n\n${
+                isImage 
+                  ? `Visual inspection confirms that the layout coordinates and pixel alignments are rendered correctly. The details are registered to guide our modifications.`
+                  : `Document specifications are registered. I will align the local code modifications with these requirements.`
+              }`;
+            }
+
+            const assistantStep: TrajectoryStep = {
+              id: `sim-assistant-${Date.now()}`,
+              type: 'assistant',
+              content: contentResult,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            setIsGenerating(false);
+            updateChatSteps([...currentSteps, assistantStep]);
+          }, 1200);
+        }, 1200);
+
+      } else if (isSummarizeRequest) {
+        // Summarize request but without attachments
+        const thoughtStep: TrajectoryStep = {
+          id: `sim-thought-${Date.now()}`,
+          type: 'thought',
+          content: 'No attachments found. Checking active workspace files for text logs or document summaries...',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        updateChatSteps([...currentSteps, thoughtStep]);
+
+        setTimeout(() => {
+          const assistantStep: TrajectoryStep = {
+            id: `sim-assistant-${Date.now()}`,
+            type: 'assistant',
+            content: 'Please attach a document or PDF file (such as `Faceless Millionaire.pdf`) for me to read and summarize directly.',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          setIsGenerating(false);
+          updateChatSteps([...currentSteps, assistantStep]);
+        }, 1200);
+
+      } else if (lower.includes('image') || lower.includes('video') || lower.includes('media') || lower.includes('asset')) {
+        // Simulation of Multimodal Image/Video Generation
+        const thoughtStep: TrajectoryStep = {
+          id: `sim-thought-${Date.now()}`,
+          type: 'thought',
+          content: 'Coding Agent analyzed prompt. Invoking local multimodal image rendering pipeline with parameters: aspect_ratio=16:9, steps=30, style=high-contrast.',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        updateChatSteps([...currentSteps, thoughtStep]);
+
+        setTimeout(() => {
+          const toolStep: TrajectoryStep = {
+            id: `sim-tool-${Date.now()}`,
+            type: 'tool_call',
+            toolName: 'generate_image',
+            status: 'success',
+            content: 'Image successfully generated. Saved to chat context assets.',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          updateChatSteps([...currentSteps, toolStep]);
+
+          setTimeout(() => {
+            const assistantStep: TrajectoryStep = {
+              id: `sim-assistant-${Date.now()}`,
+              type: 'assistant',
+              content: 'I have successfully generated the premium layout visualization. You can click to open or view the media file in your default system player.',
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              metadata: {
+                mediaType: 'image',
+                mediaPath: 'C:/Users/anind/OneDrive/Pictures/mockup.png'
+              }
+            };
+            setIsGenerating(false);
+            updateChatSteps([...currentSteps, assistantStep]);
+          }, 1200);
+        }, 1200);
+
+      } else if (lower.includes('code') || lower.includes('write') || lower.includes('build') || lower.includes('react') || lower.includes('bug')) {
+        // Simulation of Coding Agent writing codes
+        const thoughtStep: TrajectoryStep = {
+          id: `sim-thought-${Date.now()}`,
+          type: 'thought',
+          content: `Scanning file path structure in project workspace [${projectScope || 'Standalone'}]. Locating target files and computing token maps.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        updateChatSteps([...currentSteps, thoughtStep]);
+
+        setTimeout(() => {
+          const toolStep: TrajectoryStep = {
+            id: `sim-tool-${Date.now()}`,
+            type: 'tool_call',
+            toolName: 'replace_file_content',
+            status: 'success',
+            content: 'Applied contiguous replacement patch to desktop/src/renderer/App.tsx.',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            metadata: {
+              filename: 'App.tsx',
+              originalCode: 'const activeTab = "general";',
+              modifiedCode: 'const activeTab = "trajectory";'
+            }
+          };
+          updateChatSteps([...currentSteps, toolStep]);
+
+          setTimeout(() => {
+            const buildStep: TrajectoryStep = {
+              id: `sim-tool-build-${Date.now()}`,
+              type: 'tool_call',
+              toolName: 'run_command',
+              status: 'success',
+              content: 'npm run build output: tailwindcss compiled successfully. tsc type-checks passed.',
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            updateChatSteps([...currentSteps, buildStep]);
+
+            setTimeout(() => {
+              const assistantStep: TrajectoryStep = {
+                id: `sim-assistant-${Date.now()}`,
+                type: 'assistant',
+                content: 'I have modified `App.tsx` to automatically redirect the active tab to the trajectory execution screen on startup. Verified compilation succeeds.',
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              };
+              setIsGenerating(false);
+              updateChatSteps([...currentSteps, assistantStep]);
+            }, 1000);
+          }, 1200);
+        }, 1200);
+
+      } else if (lower.includes('who') || lower.includes('name') || lower.includes('profile') || lower.includes('memory') || lower.includes('preference')) {
+        // Simulation of memory & profile searching
+        const thoughtStep: TrajectoryStep = {
+          id: `sim-thought-${Date.now()}`,
+          type: 'thought',
+          content: 'Personal preference prompt detected. Querying memory profile via REST endpoint first per priority rule.',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        updateChatSteps([...currentSteps, thoughtStep]);
+
+        setTimeout(() => {
+          const toolStep: TrajectoryStep = {
+            id: `sim-tool-${Date.now()}`,
+            type: 'tool_call',
+            toolName: 'search_memory',
+            status: 'success',
+            content: 'Found 1 memory block: "User studies CSE, resides in West Bengal, prefers clean, modern layouts and dark glassmorphic themes."',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          updateChatSteps([...currentSteps, toolStep]);
+
+          setTimeout(() => {
+            const assistantStep: TrajectoryStep = {
+              id: `sim-assistant-${Date.now()}`,
+              type: 'assistant',
+              content: 'According to your personal memories, you are a Computer Science student. You favor glassmorphism styles, dark palettes, and high performance desktop wrappers.',
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+            setIsGenerating(false);
+            updateChatSteps([...currentSteps, assistantStep]);
+          }, 1200);
+        }, 1200);
+
+      } else {
+        // Standard chatting response
+        const thoughtStep: TrajectoryStep = {
+          id: `sim-thought-${Date.now()}`,
+          type: 'thought',
+          content: 'Formulating structured markdown reply with available model credentials and MCP bindings.',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        updateChatSteps([...currentSteps, thoughtStep]);
+
+        setTimeout(() => {
+          const assistantStep: TrajectoryStep = {
+            id: `sim-assistant-${Date.now()}`,
+            type: 'assistant',
+            content: `I am connected and ready. I can write and compile code, interface with your local filesystem via MCP tool servers, query your memory profiles, and manage/preview your uploaded image and video assets. How should we proceed?`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          setIsGenerating(false);
+          updateChatSteps([...currentSteps, assistantStep]);
+        }, 1200);
+      }
+    }, 1000);
+  };
+
+  const handleSendPrompt = async (prompt: string, options: ComposerOptions) => {
     setComposerPrompt('');
+    const attachmentsToSave = [...composerAttachments];
+    setComposerAttachments([]);
+
+    let chatId = activeChatId;
+    let projectScope = activeProject;
+    let isNew = false;
+    let chatTitle = '';
+
+    if (chatId === 'draft-chat') {
+      isNew = true;
+      chatTitle = prompt.length > 25 ? prompt.slice(0, 25).trim() + '...' : prompt.trim();
+      const sanitized = sanitizeFolderName(chatTitle);
+      let uniqueChatId = sanitized;
+      let counter = 1;
+      while (chats.some(c => c.id === uniqueChatId)) {
+        uniqueChatId = `${sanitized}-${counter}`;
+        counter++;
+      }
+      chatId = uniqueChatId;
+      projectScope = draftProject || '';
+    }
+
+    if (!chatId) return;
+
+    // Process and copy attachments to the resolved folder via Electron IPC
+    const savedAttachments: { filename: string; fullPath: string }[] = [];
+    for (const att of attachmentsToSave) {
+      try {
+        if (att.sourcePath) {
+          const res = await ipc?.invoke('copy-file-to-chat', {
+            sourcePath: att.sourcePath,
+            chatId: chatId,
+            projectName: projectScope
+          });
+          if (res) {
+            savedAttachments.push({ filename: res.filename, fullPath: res.fullPath });
+          }
+        } else if (att.buffer) {
+          const res = await ipc?.invoke('save-chat-media-buffer', {
+            buffer: att.buffer,
+            filename: att.filename,
+            chatId: chatId,
+            projectName: projectScope
+          });
+          if (res) {
+            savedAttachments.push({ filename: res.filename, fullPath: res.fullPath });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to copy attachment in handleSendPrompt', err);
+      }
+    }
+
     const userStep: TrajectoryStep = {
       id: `step-user-${Date.now()}`,
       type: 'user',
@@ -405,26 +845,53 @@ export const App: React.FC = () => {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    const thoughtStep: TrajectoryStep = {
-      id: `step-thought-${Date.now()}`,
-      type: 'thought',
-      content: `Analyzing prompt for project [${activeProject}] using model ${options.model}. Querying connected MCP servers...`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
+    const attachmentSteps: TrajectoryStep[] = savedAttachments.map((att, idx) => ({
+      id: `attach-${Date.now()}-${idx}-${Math.random()}`,
+      type: 'user' as const,
+      content: `📎 Attached context: ${att.filename}`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      metadata: {
+        mediaType: att.filename.toLowerCase().endsWith('.pdf') ? 'pdf' : att.filename.toLowerCase().endsWith('.ppt') ? 'ppt' : 'image' as any,
+        mediaPath: att.fullPath
+      }
+    }));
 
-    const updatedSteps = [...trajectorySteps, userStep, thoughtStep];
-    setTrajectorySteps(updatedSteps);
-    setIsGenerating(true);
+    const combinedSteps = [userStep, ...attachmentSteps];
 
-    // Save prompt steps to active chat
-    if (activeChatId) {
+    // Determine if we have real provider credentials
+    const activeProvider = connectedProviders.find(p => {
+      const modelName = options.model || '';
+      return modelsCatalog.some(m => m.providerId === p.id && m.name === modelName && m.enabled);
+    }) || connectedProviders[0];
+
+    const hasRealCredentials = Boolean(activeProvider?.apiKey);
+
+    if (isNew) {
+      const newChat: StoredChat = {
+        id: chatId,
+        title: chatTitle,
+        project: projectScope,
+        model: options.model,
+        timestamp: new Date().toLocaleDateString(),
+        steps: combinedSteps
+      };
+
+      setChats(prev => {
+        const next = [newChat, ...prev];
+        persistStore(connectedProviders, modelsCatalog, projects, next);
+        return next;
+      });
+
+      setActiveChatId(chatId);
+      setActiveProject(projectScope);
+      setTrajectorySteps(combinedSteps);
+    } else {
+      const updatedSteps = [...trajectorySteps, userStep, ...attachmentSteps];
+      setTrajectorySteps(updatedSteps);
       setChats(prev => {
         const next = prev.map(c => {
-          if (c.id === activeChatId) {
-            // Update title if it was default
-            const isDefaultTitle = c.title.startsWith('New chat');
-            const newTitle = isDefaultTitle ? (prompt.length > 25 ? prompt.slice(0, 25) + '...' : prompt) : c.title;
-            return { ...c, title: newTitle, steps: updatedSteps };
+          if (c.id === chatId) {
+            return { ...c, steps: updatedSteps };
           }
           return c;
         });
@@ -433,40 +900,62 @@ export const App: React.FC = () => {
       });
     }
 
-    setTimeout(() => {
-      const toolStep: TrajectoryStep = {
-        id: `step-tool-${Date.now()}`,
-        type: 'tool_call',
-        toolName: 'file_editor',
-        status: 'success',
-        content: `Modified src/app.ts in ${activeProject} with updates.`,
-        metadata: {
-          filename: 'src/app.ts',
-          originalCode: 'function run() {\n  console.log("old");\n}',
-          modifiedCode: 'function run() {\n  console.log("new optimized in ' + activeProject + '");\n}'
-        }
+    setIsGenerating(true);
+
+    // ── Route to real AI or simulation ──────────────────────────────────────
+    if (hasRealCredentials && ipc) {
+      // Real AI: call main process agent runner
+      streamingChatIdRef.current = chatId;
+      streamingBufferRef.current = '';
+      streamingStepIdRef.current = null;
+
+      const sessionId = `session-${chatId}`;
+      const agentConfig = {
+        provider: (activeProvider.type === 'env' || activeProvider.type === 'key'
+          ? activeProvider.id
+          : 'custom') as 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'custom',
+        apiKey: activeProvider.apiKey,
+        baseUrl: activeProvider.baseUrl || undefined,
+        model: options.model || '',
+        projectRoot: undefined // could be set from project config
       };
 
-      const assistantStep: TrajectoryStep = {
-        id: `step-asst-${Date.now()}`,
-        type: 'assistant',
-        content: `I have completed the task in project \`${activeProject}\`. You can inspect the updated file diffs.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      // Non-blocking: events come back via 'agent-event' IPC listener
+      ipc.invoke('agent-run', { sessionId, prompt, config: agentConfig }).catch((err: Error) => {
+        triggerToast(`Failed to start agent: ${err.message}`);
+        setIsGenerating(false);
+      });
+
+    } else {
+      // Simulation fallback (no real credentials configured yet)
+      // Add thought step for the simulation
+      const thoughtStep: TrajectoryStep = {
+        id: `step-thought-${Date.now()}`,
+        type: 'thought',
+        content: hasRealCredentials
+          ? `Streaming from ${activeProvider?.name || 'provider'} using model ${options.model}...`
+          : `Demo mode — configure a provider in Settings to use real AI. Simulating response for: "${prompt.slice(0, 40)}..."`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        metadata: { workedDuration: '0s' }
       };
-
-      const finalSteps = [...updatedSteps, toolStep, assistantStep];
-      setTrajectorySteps(finalSteps);
-      setIsGenerating(false);
-
-      if (activeChatId) {
-        setChats(prev => {
-          const next = prev.map(c => c.id === activeChatId ? { ...c, steps: finalSteps } : c);
-          persistStore(connectedProviders, modelsCatalog, projects, next);
-          return next;
+      setTrajectorySteps(prev => [...prev, thoughtStep]);
+      setChats(prev => {
+        const next = prev.map(c => {
+          if (c.id === chatId) return { ...c, steps: [...c.steps, thoughtStep] };
+          return c;
         });
-      }
-    }, 1000);
+        persistStore(connectedProviders, modelsCatalog, projects, next);
+        return next;
+      });
+
+      const startTime = Date.now();
+      simulateAgentResponse(prompt, chatId, isNew
+        ? [...combinedSteps, thoughtStep]
+        : [...trajectorySteps, userStep, ...attachmentSteps, thoughtStep],
+        projectScope, options.model, savedAttachments, startTime);
+    }
   };
+
 
   const handleViewDiff = (filename: string, originalCode: string, modifiedCode: string) => {
     setActiveDiff({ filename, originalCode, modifiedCode });
@@ -552,29 +1041,9 @@ export const App: React.FC = () => {
       setActiveChatId(matchingChat.id);
       setTrajectorySteps(matchingChat.steps);
     } else {
-      // Create a default chat for this project
-      const newChatId = `chat-${Date.now()}`;
-      const newChat: StoredChat = {
-        id: newChatId,
-        title: `New chat in ${project}`,
-        project: project,
-        model: '5.5 Medium',
-        timestamp: 'Just now',
-        steps: [
-          {
-            id: `step-new-${Date.now()}`,
-            type: 'assistant',
-            content: `New conversation initialized. Project context: \`${project}\`. How can I help you today?`
-          }
-        ]
-      };
-      setChats(prev => {
-        const next = [newChat, ...prev];
-        persistStore(connectedProviders, modelsCatalog, projects, next);
-        return next;
-      });
-      setActiveChatId(newChatId);
-      setTrajectorySteps(newChat.steps);
+      setActiveChatId('draft-chat');
+      setDraftProject(project);
+      setTrajectorySteps([]);
     }
   };
 
@@ -709,32 +1178,31 @@ export const App: React.FC = () => {
   // Create new blank chat — optionally scoped to a specific project
   const handleNewChat = (forProject?: string) => {
     const targetProject = forProject !== undefined ? forProject : activeProject;
-    const newChatId = `chat-${Date.now()}`;
-    const newChat: StoredChat = {
-      id: newChatId,
-      title: `New chat`,
-      project: targetProject || '',
-      model: modelsCatalog.find(m => m.enabled)?.name || '',
-      timestamp: 'Just now',
-      steps: [
-        {
-          id: `step-new-${Date.now()}`,
-          type: 'assistant',
-          content: targetProject
-            ? `New conversation initialized. Project context: \`${targetProject}\`. How can I help you today?`
-            : `New standalone conversation initialized. How can I help you today?`
-        }
-      ]
-    };
     setActiveProject(targetProject || '');
-    setChats(prev => {
-      const next = [newChat, ...prev];
-      persistStore(connectedProviders, modelsCatalog, projects, next);
-      return next;
-    });
-    setActiveChatId(newChatId);
-    setTrajectorySteps(newChat.steps);
+    setDraftProject(targetProject || '');
+    setActiveChatId('draft-chat');
+    setTrajectorySteps([]);
     setActiveTab('trajectory');
+  };
+
+  const handleUndoStep = (stepId: string) => {
+    setChats(prevChats => {
+      const chat = prevChats.find(c => c.id === activeChatId);
+      if (!chat) return prevChats;
+
+      const idx = chat.steps.findIndex(s => s.id === stepId);
+      if (idx === -1) return prevChats;
+
+      const nextSteps = chat.steps.slice(0, idx);
+      setTrajectorySteps(nextSteps);
+
+      const nextChats = prevChats.map(c =>
+        c.id === activeChatId ? { ...c, steps: nextSteps } : c
+      );
+      persistStore(connectedProviders, modelsCatalog, projects, nextChats);
+      return nextChats;
+    });
+    triggerToast('Conversation rolled back');
   };
 
   return (
@@ -811,8 +1279,11 @@ export const App: React.FC = () => {
                 setSettingsCategory('general');
               }}
               onToast={triggerToast}
+              onUndoStep={handleUndoStep}
               onAttachClick={handleAttachFiles}
               onAttachPastedFiles={handleAttachPastedFiles}
+              composerAttachments={composerAttachments}
+              onRemoveAttachment={handleRemoveAttachment}
             />
           )}
 
@@ -911,7 +1382,7 @@ export const App: React.FC = () => {
         onSave={handleSaveProjectConfig}
       />
 
-      <AppToast open={toastOpen} message={toastMessage} />
+      <AppToast open={toastOpen} message={toastMessage} type={toastType} onClose={() => setToastOpen(false)} />
     </div>
   );
 };

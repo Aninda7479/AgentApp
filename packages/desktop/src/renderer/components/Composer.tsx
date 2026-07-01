@@ -17,6 +17,12 @@ export interface ComposerOptions {
   attachments: string[];
 }
 
+export interface AttachmentItem {
+  filename: string;
+  sourcePath?: string;
+  buffer?: number[];
+}
+
 export interface ComposerProps {
   onSend: (prompt: string, options: ComposerOptions) => void;
   disabled?: boolean;
@@ -32,6 +38,8 @@ export interface ComposerProps {
   promptValue?: string;
   onPromptChange?: (val: string) => void;
   onAttachPastedFiles?: (files: FileList) => void;
+  attachments?: AttachmentItem[];
+  onRemoveAttachment?: (index: number) => void;
 }
 
 export const Composer: React.FC<ComposerProps> = ({
@@ -48,7 +56,9 @@ export const Composer: React.FC<ComposerProps> = ({
   onBranchClick,
   promptValue,
   onPromptChange,
-  onAttachPastedFiles
+  onAttachPastedFiles,
+  attachments = [],
+  onRemoveAttachment
 }) => {
   const [localPrompt, setLocalPrompt] = useState('');
   const prompt = promptValue !== undefined ? promptValue : localPrompt;
@@ -123,6 +133,25 @@ export const Composer: React.FC<ComposerProps> = ({
     >
       {/* The main input composer card */}
       <div className="glass-panel rounded-xl p-3 flex flex-col shadow-sm relative transition-all duration-300 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/10">
+        {/* Composer Attachments Queue Row */}
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-3 pb-3 border-b border-brand-border/40 select-none">
+            {attachments.map((file, idx) => (
+              <div key={idx} className="flex items-center gap-1.5 bg-brand-card hover:bg-brand-card/85 border border-brand-border px-2.5 py-1 rounded-lg text-xs text-brand-textMain animate-fade-in group transition-colors">
+                <span className="text-brand-textMuted text-[10px]">📎</span>
+                <span className="truncate max-w-[140px] font-medium font-sans">{file.filename}</span>
+                <button
+                  type="button"
+                  onClick={() => onRemoveAttachment && onRemoveAttachment(idx)}
+                  className="text-brand-textMuted hover:text-brand-textMain font-bold ml-1 rounded hover:bg-white/5 w-4 h-4 flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <textarea
           ref={textareaRef}
           data-testid="composer-input"
@@ -266,7 +295,7 @@ export const Composer: React.FC<ComposerProps> = ({
                 className={`rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150 ${
                   !prompt.trim() || disabled || !hasModels
                     ? 'bg-brand-popover text-brand-textMuted/40 cursor-not-allowed border border-brand-border'
-                    : 'bg-violet-600 hover:bg-violet-500 hover:shadow-[0_0_12px_rgba(139,92,246,0.32)] text-white cursor-pointer active:scale-[0.92] border border-violet-500'
+                    : 'bg-amber-400 hover:bg-amber-300 hover:shadow-[0_0_12px_rgba(251,191,36,0.45)] text-brand-bg cursor-pointer active:scale-[0.92] border border-amber-300'
                 }`}
               >
                 <ArrowUp className="w-4 h-4" />

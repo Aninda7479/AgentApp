@@ -1,4 +1,4 @@
-import { app, ipcMain, dialog } from 'electron';
+import { app, ipcMain, dialog, BrowserWindow } from 'electron';
 import path from 'path';
 import fs from 'fs';
 
@@ -10,6 +10,77 @@ import { windowManager } from './main/window';
 import { readStore, writeStore, StoreData } from './main/store';
 import https from 'https';
 import http from 'http';
+
+// ─── IPC: Real AI Agent Streaming ─────────────────────────────────────────────
+// Architecture matches OpenCode/Codex: streaming SSE events forwarded to renderer
+// via Electron IPC (replaces HTTP SSE in desktop context)
+
+import { AgentEngine, AgentEngineConfig, AgentEvent } from './main/ai-engine';
+
+
+// Track active agent sessions per window: sessionId → engine
+const activeSessions = new Map<string, AgentEngine>();
+
+/**
+ * agent-run: Start a new agent session or continue an existing one.
+ * The engine streams events back using webContents.send('agent-event', event).
+ */
+ipcMain.handle('agent-run', async (event, {
+  sessionId,
+  prompt,
+  config
+}: {
+  sessionId: string;
+  prompt: string;
+  config: AgentEngineConfig;
+}) => {
+  try {
+    // Reuse or create engine
+    let engine = activeSessions.get(sessionId);
+    if (!engine) {
+      engine = new AgentEngine(config, sessionId);
+      activeSessions.set(sessionId, engine);
+    }
+
+    const win = BrowserWindow.fromWebContents(event.sender);
+
+    // Run agent; emit each event back to renderer
+    await engine.run(prompt, (agentEvent: AgentEvent) => {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('agent-event', agentEvent);
+      }
+    });
+
+    // Clean up after done/error/abort
+    activeSessions.delete(sessionId);
+    return { success: true };
+
+  } catch (err: unknown) {
+    activeSessions.delete(sessionId);
+    return { success: false, error: (err as Error).message };
+  }
+});
+
+/**
+ * agent-stop: Abort a running agent session.
+ */
+ipcMain.handle('agent-stop', (_event, sessionId: string) => {
+  const engine = activeSessions.get(sessionId);
+  if (engine) {
+    engine.abort();
+    activeSessions.delete(sessionId);
+  }
+  return { stopped: true };
+});
+
+/**
+ * agent-list: List active session IDs.
+ */
+ipcMain.handle('agent-list', () => {
+  return { sessions: Array.from(activeSessions.keys()) };
+});
+
+
 
 // ─── IPC: Persistent Store ───────────────────────────────────────────────────
 

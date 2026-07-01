@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronRight, ChevronDown, Copy, ThumbsUp, ThumbsDown, FileText, FolderOpen, Check, Eye, RotateCcw } from 'lucide-react';
 
 export interface TrajectoryStep {
   id: string;
@@ -12,10 +13,16 @@ export interface TrajectoryStep {
     originalCode?: string;
     modifiedCode?: string;
     mediaType?: 'image' | 'pdf' | 'ppt' | 'audio';
+    addedLines?: number;
+    removedLines?: number;
+    filesExplored?: number;
+    foldersExplored?: number;
+    workedDuration?: string;
     [key: string]: any;
   };
 }
 
+// ─── Local Image Preview ──────────────────────────────────────────────────────
 const LocalImagePreview: React.FC<{ filePath: string }> = ({ filePath }) => {
   const [src, setSrc] = useState<string | null>(null);
 
@@ -47,11 +54,281 @@ const LocalImagePreview: React.FC<{ filePath: string }> = ({ filePath }) => {
   );
 };
 
+// ─── Worked-for collapsible header ───────────────────────────────────────────
+interface WorkedHeaderProps {
+  duration: string;
+  filesExplored?: number;
+  foldersExplored?: number;
+  editedFiles?: Array<{ name: string; added: number; removed: number }>;
+  children?: React.ReactNode;
+}
+
+const WorkedHeader: React.FC<WorkedHeaderProps> = ({
+  duration,
+  filesExplored,
+  foldersExplored,
+  editedFiles = [],
+  children
+}) => {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="flex flex-col gap-1 select-none">
+      {/* "Worked for Xs >" toggle */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1.5 text-brand-textMuted hover:text-brand-textMain text-[12px] font-medium transition-colors w-fit group"
+      >
+        {expanded ? (
+          <ChevronDown size={13} className="text-brand-textMuted group-hover:text-brand-textMain transition-colors" />
+        ) : (
+          <ChevronRight size={13} className="text-brand-textMuted group-hover:text-brand-textMain transition-colors" />
+        )}
+        <span>Worked for {duration}</span>
+      </button>
+
+      {/* Collapsible detail pills */}
+      {expanded && (
+        <div className="ml-5 flex flex-col gap-1.5 animate-fade-in">
+          {/* Files + Folders explored chip */}
+          {(filesExplored !== undefined || foldersExplored !== undefined) && (
+            <button className="flex items-center gap-1.5 text-brand-textMuted hover:text-brand-textMain text-[11px] transition-colors w-fit group">
+              <FolderOpen size={11} className="text-brand-textMuted/70" />
+              <span>
+                Explored{' '}
+                {filesExplored !== undefined && (
+                  <span className="text-brand-textMain font-semibold">{filesExplored} files</span>
+                )}
+                {filesExplored !== undefined && foldersExplored !== undefined && ', '}
+                {foldersExplored !== undefined && (
+                  <span className="text-brand-textMain font-semibold">{foldersExplored} folders</span>
+                )}
+              </span>
+              <ChevronRight size={11} className="text-brand-textMuted/60 group-hover:text-brand-textMain transition-colors" />
+            </button>
+          )}
+
+          {/* Edited files */}
+          {editedFiles.map((ef, i) => (
+            <div key={i} className="flex items-center gap-2 text-[11px]">
+              <FileText size={11} className="text-brand-textMuted/70 flex-shrink-0" />
+              <span className="text-violet-400 font-medium">M→</span>
+              <span className="text-brand-textMain font-medium font-mono">{ef.name}</span>
+              {ef.added > 0 && (
+                <span className="text-emerald-500 font-semibold">+{ef.added}</span>
+              )}
+              {ef.removed > 0 && (
+                <span className="text-red-500 font-semibold ml-0.5">-{ef.removed}</span>
+              )}
+            </div>
+          ))}
+
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── File Changed Summary Chip ────────────────────────────────────────────────
+interface FileChangedChipProps {
+  count: number;
+  added: number;
+  removed: number;
+  onReview?: () => void;
+}
+
+const FileChangedChip: React.FC<FileChangedChipProps> = ({ count, added, removed, onReview }) => (
+  <div className="flex items-center justify-between gap-3 mt-2">
+    <button className="flex items-center gap-2 text-[11px] text-brand-textMuted hover:text-brand-textMain transition-colors group">
+      <span>{count} file{count !== 1 ? 's' : ''} changed</span>
+      {added > 0 && <span className="text-emerald-500 font-semibold">+{added}</span>}
+      {removed > 0 && <span className="text-red-500 font-semibold">-{removed}</span>}
+      <ChevronRight size={11} className="text-brand-textMuted/60 group-hover:text-brand-textMain transition-colors" />
+    </button>
+
+    {onReview && (
+      <button
+        onClick={onReview}
+        className="flex items-center gap-1.5 text-[11px] text-brand-textMuted hover:text-brand-textMain border border-brand-border hover:border-violet-500/40 px-2.5 py-1 rounded-md transition-all select-none"
+      >
+        <Eye size={11} />
+        <span>Review</span>
+      </button>
+    )}
+  </div>
+);
+
+// ─── Action buttons (copy, thumbs) ────────────────────────────────────────────
+interface MessageActionsProps {
+  content: string;
+  onThumbsUp?: () => void;
+  onThumbsDown?: () => void;
+}
+
+const MessageActions: React.FC<MessageActionsProps> = ({ content, onThumbsUp, onThumbsDown }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <div className="flex items-center gap-1 mt-3 select-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      <button
+        onClick={handleCopy}
+        title="Copy"
+        className="p-1.5 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-all cursor-pointer"
+      >
+        {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+      </button>
+      <button
+        onClick={onThumbsUp}
+        title="Good response"
+        className="p-1.5 rounded-md text-brand-textMuted hover:text-emerald-400 hover:bg-emerald-500/5 transition-all cursor-pointer"
+      >
+        <ThumbsUp size={13} />
+      </button>
+      <button
+        onClick={onThumbsDown}
+        title="Bad response"
+        className="p-1.5 rounded-md text-brand-textMuted hover:text-red-400 hover:bg-red-500/5 transition-all cursor-pointer"
+      >
+        <ThumbsDown size={13} />
+      </button>
+    </div>
+  );
+};
+
+// ─── Streaming Cursor ─────────────────────────────────────────────────────────
+const StreamingCursor: React.FC = () => (
+  <span
+    className="inline-block w-[2px] h-[1.1em] bg-violet-400 ml-0.5 align-middle animate-[blink_1s_step-end_infinite] rounded-sm"
+    style={{ animation: 'blink 0.9s step-end infinite' }}
+  />
+);
+
+// ─── Simple Markdown renderer (lightweight, no deps) ─────────────────────────
+const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ content, streaming }) => {
+  // Very lightweight inline markdown: bold, code, italic
+  const renderLine = (line: string, idx: number) => {
+    // Heading
+    if (line.startsWith('### ')) {
+      return (
+        <h3 key={idx} className="font-bold text-brand-textMain text-[14px] mt-3 mb-1">
+          {line.slice(4)}
+        </h3>
+      );
+    }
+    if (line.startsWith('## ')) {
+      return (
+        <h2 key={idx} className="font-bold text-brand-textMain text-[15px] mt-3 mb-1">
+          {line.slice(3)}
+        </h2>
+      );
+    }
+    if (line.startsWith('# ')) {
+      return (
+        <h1 key={idx} className="font-bold text-brand-textMain text-[16px] mt-4 mb-1">
+          {line.slice(2)}
+        </h1>
+      );
+    }
+    // Horizontal rule
+    if (line.trim() === '---') {
+      return <hr key={idx} className="border-brand-border/40 my-3" />;
+    }
+    // Numbered list
+    if (/^\d+\.\s/.test(line)) {
+      const match = line.match(/^(\d+)\.\s(.*)/);
+      if (match) {
+        return (
+          <div key={idx} className="flex gap-2 my-0.5">
+            <span className="text-brand-textMuted text-[13px] min-w-[1.5rem] text-right select-none">{match[1]}.</span>
+            <span className="text-[13px] leading-relaxed">{renderInline(match[2])}</span>
+          </div>
+        );
+      }
+    }
+    // Bullet list
+    if (line.startsWith('- ') || line.startsWith('* ')) {
+      return (
+        <div key={idx} className="flex gap-2 my-0.5 pl-1">
+          <span className="text-brand-textMuted text-[13px] mt-1 select-none">•</span>
+          <span className="text-[13px] leading-relaxed">{renderInline(line.slice(2))}</span>
+        </div>
+      );
+    }
+    // Empty line
+    if (line.trim() === '') {
+      return <div key={idx} className="h-2" />;
+    }
+    // Normal paragraph
+    return (
+      <p key={idx} className="text-[13px] leading-relaxed">
+        {renderInline(line)}
+      </p>
+    );
+  };
+
+  const renderInline = (text: string): React.ReactNode => {
+    // Split on code spans, bold, italic
+    const parts: React.ReactNode[] = [];
+    let remaining = text;
+    let keyIdx = 0;
+
+    while (remaining.length > 0) {
+      // Inline code
+      const codeMatch = remaining.match(/^(.*?)`([^`]+)`(.*)/s);
+      if (codeMatch) {
+        if (codeMatch[1]) parts.push(<span key={keyIdx++}>{renderBoldItalic(codeMatch[1])}</span>);
+        parts.push(
+          <code key={keyIdx++} className="font-mono text-[12px] bg-brand-card border border-brand-border/60 px-1.5 py-0.5 rounded text-amber-300">
+            {codeMatch[2]}
+          </code>
+        );
+        remaining = codeMatch[3];
+        continue;
+      }
+      parts.push(<span key={keyIdx++}>{renderBoldItalic(remaining)}</span>);
+      break;
+    }
+    return parts;
+  };
+
+  const renderBoldItalic = (text: string): React.ReactNode => {
+    // Bold: **text**
+    const parts = text.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={i} className="font-bold text-brand-textMain">{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+  };
+
+  const lines = content.split('\n');
+
+  return (
+    <div className="text-brand-textMain font-sans leading-relaxed">
+      {lines.map((line, i) => renderLine(line, i))}
+      {streaming && <StreamingCursor />}
+    </div>
+  );
+};
+
+
+// ─── Main TrajectoryCanvas ────────────────────────────────────────────────────
+
 export interface TrajectoryCanvasProps {
   steps: TrajectoryStep[];
   isStreaming?: boolean;
   onViewDiff?: (file: string, original: string, modified: string) => void;
   onActionClick?: (action: string, data: any) => void;
+  onUndoStep?: (stepId: string) => void;
   children?: React.ReactNode;
 }
 
@@ -60,183 +337,339 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
   isStreaming = false,
   onViewDiff,
   onActionClick,
+  onUndoStep,
   children
 }) => {
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new steps arrive or streaming
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [steps.length, isStreaming]);
+
+  // Group consecutive non-user steps into "agent turns"
+  interface AgentTurn {
+    userStep: TrajectoryStep;
+    agentSteps: TrajectoryStep[];
+  }
+
+  const turns: AgentTurn[] = [];
+  let pendingAgentSteps: TrajectoryStep[] = [];
+  let currentUserStep: TrajectoryStep | null = null;
+
+  for (const step of steps) {
+    if (step.type === 'user') {
+      if (currentUserStep && pendingAgentSteps.length > 0) {
+        turns.push({ userStep: currentUserStep, agentSteps: [...pendingAgentSteps] });
+        pendingAgentSteps = [];
+      }
+      currentUserStep = step;
+    } else {
+      if (currentUserStep) {
+        pendingAgentSteps.push(step);
+      }
+    }
+  }
+  if (currentUserStep) {
+    turns.push({ userStep: currentUserStep, agentSteps: [...pendingAgentSteps] });
+  }
+
+  // Last assistant step being streamed
+  const lastAssistantIdx = [...steps].reverse().findIndex(s => s.type === 'assistant');
+  const streamingStepId = isStreaming && lastAssistantIdx !== -1
+    ? steps[steps.length - 1 - lastAssistantIdx]?.id
+    : null;
+
   return (
     <div
       data-testid="trajectory-canvas"
-      className="flex-1 overflow-y-auto px-4 md:px-6 py-6 bg-brand-bg scrollbar-thin relative z-10"
+      className="flex-1 overflow-y-auto px-6 py-6 bg-brand-bg scrollbar-thin relative z-10"
     >
-      {/* Centered Column wrapping all steps to align with the prompt composer */}
-      <div className="max-w-[900px] w-full mx-auto flex flex-col gap-5">
+      {/* Content column — max width matches Antigravity style */}
+      <div className="max-w-[760px] w-full mx-auto flex flex-col gap-0">
         {children}
 
+        {/* Empty state */}
         {steps.length === 0 && !children && (
           <div
             data-testid="empty-state"
-            className="text-center text-brand-textMuted mt-24 text-sm md:text-base select-none"
+            className="text-center text-brand-textMuted mt-24 text-sm select-none"
           >
             No agent execution trajectory yet. Type a prompt below to start!
           </div>
         )}
 
-        {((steps.length > 1) || (steps.length > 0 && !children)) && (
-          steps.map((step) => {
-            if (step.type === 'user') {
-              const hasMedia = step.metadata?.mediaPath;
-              const isImage = step.metadata?.mediaType === 'image';
-              return (
-                <div
-                  key={step.id}
-                  data-testid={`step-user-${step.id}`}
-                  className="self-end glass-card border border-brand-border rounded-xl px-6 py-5 max-w-[85%] md:max-w-[78%] text-brand-textMain shadow-md hover:border-violet-500/30 transition-all"
-                >
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-brand-textMuted mb-1.5 flex justify-between gap-4 select-none">
-                    <span>User</span>
-                    {step.timestamp && <span>{step.timestamp}</span>}
-                  </div>
-                  <div className="whitespace-pre-wrap leading-relaxed text-sm md:text-base font-sans">{step.content}</div>
-
-                  {hasMedia && isImage && (
-                    <LocalImagePreview filePath={step.metadata!.mediaPath} />
-                  )}
-                  {hasMedia && !isImage && (
-                    <div className="mt-2.5 p-3.5 bg-brand-popover/80 border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none hover:border-violet-500/30 transition-all">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xl">📄</span>
-                        <span className="text-xs md:text-sm text-brand-textMain font-medium font-sans">
-                          {step.metadata!.mediaType!.toUpperCase()} Document
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
-                        className="bg-white/5 border border-brand-border hover:bg-white/10 text-brand-textMain px-3.5 py-1.5 rounded-lg cursor-pointer text-xs font-semibold transition-all"
-                      >
-                        Open File
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            }
-
-            if (step.type === 'thought') {
-              return (
-                <div
-                  key={step.id}
-                  data-testid={`step-thought-${step.id}`}
-                  className="self-start glass-panel border-l-4 border-violet-500 rounded-xl px-6 py-5 max-w-[94%] md:max-w-[88%] text-brand-textMuted/95 italic text-[13px] md:text-sm shadow-md border-t border-r border-b border-brand-border/60 pulse-glow"
-                >
-                  <div className="font-bold text-purple-400 mb-1.5 not-italic select-none text-[11px] uppercase tracking-wider">
-                    🧠 Reasoning Trajectory
-                  </div>
-                  <div className="leading-relaxed">{step.content}</div>
-                </div>
-              );
-            }
-
-            if (step.type === 'tool_call' || step.type === 'tool_result') {
-              const isSuccess = step.status === 'success';
-              const isError = step.status === 'error';
-              const isRunning = step.status === 'running' || step.status === 'pending';
-
-              return (
-                <div
-                  key={step.id}
-                  data-testid={`step-tool-${step.id}`}
-                  className="self-start glass-card border border-brand-border rounded-xl p-5 max-w-[96%] md:max-w-[88%] w-full shadow-md hover:border-blue-500/30 transition-all"
-                >
-                  <div className="flex items-center justify-between gap-3 mb-2.5 select-none">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">⚙️</span>
-                      <span className="font-bold text-blue-400 text-xs md:text-sm">
-                        Tool: {step.toolName || 'Executor'}
-                      </span>
-                    </div>
-                    <div>
-                      <span
-                        className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                          isSuccess
-                            ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30'
-                            : isError
-                            ? 'bg-red-500/15 text-red-500 border border-red-500/30'
-                            : 'bg-indigo-500/15 text-indigo-500 border border-indigo-500/30'
-                        }`}
-                      >
-                        {isRunning ? 'Running...' : step.status || 'Done'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="bg-brand-bg/85 border border-brand-border/50 p-4 rounded-xl font-mono text-xs md:text-[13px] text-brand-textMain overflow-x-auto white-space-pre-wrap leading-relaxed">
-                    {step.content}
-                  </div>
-
-                  {step.metadata?.filename && (
-                    <div className="mt-3 flex gap-2 select-none">
-                      <button
-                        data-testid={`view-diff-btn-${step.id}`}
-                        onClick={() =>
-                          onViewDiff &&
-                          onViewDiff(
-                            step.metadata!.filename!,
-                            step.metadata!.originalCode || '',
-                            step.metadata!.modifiedCode || ''
-                          )
-                        }
-                        className="bg-blue-500/10 border border-blue-500/25 hover:border-blue-500/45 hover:bg-blue-500/15 text-blue-500 rounded-lg px-4 py-2 text-xs font-semibold cursor-pointer flex items-center gap-1.5 transition-all duration-150 active:scale-[0.98] shadow-sm"
-                      >
-                        <span>🔍</span> Inspect File Diff ({step.metadata.filename})
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            }
-
-            // Default: Assistant text response
-            return (
+        {/* Render turns */}
+        {turns.map((turn, turnIdx) => (
+          <div key={turn.userStep.id} className="flex flex-col gap-0">
+            {/* ── User Prompt Bubble ─────────────────────────────────── */}
+            <div className="flex justify-center mb-6 mt-2">
               <div
-                key={step.id}
-                data-testid={`step-assistant-${step.id}`}
-                className="self-start glass-card border border-brand-border rounded-xl p-6 max-w-[100%] md:max-w-[92%] w-full text-brand-textMain shadow-md border-l-4 border-l-violet-500/40 hover:border-brand-border transition-all"
+                data-testid={`step-user-${turn.userStep.id}`}
+                className="relative group bg-brand-card border border-brand-border/80 rounded-2xl px-5 py-3 max-w-[88%] text-brand-textMain text-[13px] leading-relaxed shadow-sm hover:border-violet-500/25 transition-all"
               >
-                <div className="flex items-center justify-between gap-4 mb-3 text-xs text-brand-textMuted select-none">
-                  <span className="text-purple-400 font-bold uppercase tracking-wider">SuperAgent Core</span>
-                  {step.timestamp && <span>{step.timestamp}</span>}
-                </div>
-                <div className="whitespace-pre-wrap leading-relaxed text-sm md:text-base font-sans">
-                  {step.content}
-                </div>
+                {turn.userStep.content}
 
-                {step.metadata?.mediaType && (
-                  <div className="mt-4 p-4 bg-brand-popover border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none">
-                    <span className="text-xs md:text-sm text-brand-textMain font-medium">
-                      🎨 Generated Media Asset ({step.metadata.mediaType.toUpperCase()})
-                    </span>
+                {/* Attachment previews */}
+                {turn.userStep.metadata?.mediaPath && turn.userStep.metadata?.mediaType === 'image' && (
+                  <LocalImagePreview filePath={turn.userStep.metadata.mediaPath} />
+                )}
+                {turn.userStep.metadata?.mediaPath && turn.userStep.metadata?.mediaType !== 'image' && (
+                  <div className="mt-2.5 p-3 bg-brand-popover/80 border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">📄</span>
+                      <span className="text-xs text-brand-textMain font-medium font-sans">
+                        {turn.userStep.metadata.mediaType!.toUpperCase()} Document
+                      </span>
+                    </div>
                     <button
-                      onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
-                      className="bg-purple-600 hover:bg-purple-500 hover:shadow-[0_0_12px_rgba(168,85,247,0.4)] text-white px-4 py-2 rounded-lg cursor-pointer text-xs font-semibold transition-all active:scale-[0.97]"
+                      onClick={() => onActionClick && onActionClick('openMedia', turn.userStep.metadata)}
+                      className="bg-white/5 border border-brand-border hover:bg-white/10 text-brand-textMain px-3 py-1 rounded-lg cursor-pointer text-xs font-semibold transition-all"
                     >
-                      Open Artifact
+                      Open
                     </button>
                   </div>
                 )}
-              </div>
-            );
-          })
-        )}
 
-        {isStreaming && (
-          <div
-            data-testid="streaming-indicator"
-            className="flex items-center gap-2 text-purple-400 text-xs md:text-sm px-3 py-2 select-none"
-          >
-            <span className="animate-pulse">⚡</span>
-            <span>SuperAgent is generating trajectory...</span>
+                {/* User actions on hover (Copy and Undo) */}
+                <div className="flex items-center gap-1 mt-2.5 pt-2 border-t border-brand-border/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none">
+                  {/* Copy Button */}
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(turn.userStep.content);
+                    }}
+                    title="Copy prompt"
+                    className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-all cursor-pointer text-[10px]"
+                  >
+                    <Copy size={11} />
+                    <span>Copy</span>
+                  </button>
+
+                  {/* Undo Button */}
+                  {onUndoStep && (
+                    <button
+                      onClick={() => onUndoStep(turn.userStep.id)}
+                      title="Undo this prompt and response"
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-red-400 hover:bg-red-500/5 transition-all cursor-pointer text-[10px]"
+                    >
+                      <RotateCcw size={11} />
+                      <span>Undo</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ── Agent Response Block ───────────────────────────────── */}
+            {turn.agentSteps.length > 0 && (
+              <AgentResponseBlock
+                steps={turn.agentSteps}
+                isLastTurn={turnIdx === turns.length - 1}
+                streamingStepId={streamingStepId}
+                isStreaming={isStreaming && turnIdx === turns.length - 1}
+                onViewDiff={onViewDiff}
+                onActionClick={onActionClick}
+              />
+            )}
+          </div>
+        ))}
+
+        {/* Streaming dots when agent is thinking but no steps yet in this turn */}
+        {isStreaming && turns.length > 0 && turns[turns.length - 1].agentSteps.length === 0 && (
+          <div className="flex items-center gap-2 text-brand-textMuted text-[12px] px-1 py-2 mb-4 select-none">
+            <span className="flex gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+            </span>
+            <span>Thinking...</span>
           </div>
         )}
+
+        <div ref={bottomRef} />
       </div>
+    </div>
+  );
+};
+
+
+// ─── Agent Response Block ─────────────────────────────────────────────────────
+
+interface AgentResponseBlockProps {
+  steps: TrajectoryStep[];
+  isLastTurn: boolean;
+  streamingStepId: string | null;
+  isStreaming: boolean;
+  onViewDiff?: (file: string, original: string, modified: string) => void;
+  onActionClick?: (action: string, data: any) => void;
+}
+
+const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
+  steps,
+  isLastTurn,
+  streamingStepId,
+  isStreaming,
+  onViewDiff,
+  onActionClick
+}) => {
+  // Categorize the steps
+  const thoughtSteps = steps.filter(s => s.type === 'thought');
+  const toolSteps = steps.filter(s => s.type === 'tool_call' || s.type === 'tool_result');
+  const assistantSteps = steps.filter(s => s.type === 'assistant');
+
+  // Compute worked duration & edit stats from metadata
+  const duration = thoughtSteps[0]?.metadata?.workedDuration ||
+    toolSteps[0]?.metadata?.workedDuration ||
+    assistantSteps[0]?.metadata?.workedDuration || '0s';
+
+  const totalFiles: number = toolSteps.reduce((acc, s) => acc + (s.metadata?.filesExplored || 0), 0);
+  const totalFolders: number = toolSteps.reduce((acc, s) => acc + (s.metadata?.foldersExplored || 0), 0);
+
+  const editedFiles = toolSteps
+    .filter(s => s.metadata?.filename && (s.metadata.addedLines !== undefined || s.metadata.removedLines !== undefined))
+    .map(s => ({
+      name: s.metadata!.filename!,
+      added: s.metadata!.addedLines || 0,
+      removed: s.metadata!.removedLines || 0
+    }));
+
+  const hasWorkDetails = thoughtSteps.length > 0 || toolSteps.length > 0 ||
+    totalFiles > 0 || editedFiles.length > 0;
+
+  // Summed file-change stats for the bottom chip
+  const totalAdded = toolSteps.reduce((acc, s) => acc + (s.metadata?.addedLines || 0), 0);
+  const totalRemoved = toolSteps.reduce((acc, s) => acc + (s.metadata?.removedLines || 0), 0);
+  const changedFilesCount = editedFiles.length;
+
+  return (
+    <div className="mb-6 flex flex-col gap-2 group">
+      {/* Worked-for collapsible header */}
+      {hasWorkDetails && (
+        <WorkedHeader
+          duration={duration}
+          filesExplored={totalFiles > 0 ? totalFiles : undefined}
+          foldersExplored={totalFolders > 0 ? totalFolders : undefined}
+          editedFiles={editedFiles}
+        >
+          {/* Thought steps inside the collapsible */}
+          {thoughtSteps.map(step => (
+            <div
+              key={step.id}
+              className="flex items-start gap-2 text-[11px] text-brand-textMuted/80 italic"
+            >
+              <span className="text-violet-400/70 mt-0.5 select-none">◈</span>
+              <span>{step.content}</span>
+            </div>
+          ))}
+
+          {/* Tool call details */}
+          {toolSteps.map(step => (
+            <div
+              key={step.id}
+              data-testid={`step-tool-${step.id}`}
+              className="flex items-center gap-2 text-[11px] text-brand-textMuted"
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                  step.status === 'success' ? 'bg-emerald-500' :
+                  step.status === 'error' ? 'bg-red-500' : 'bg-sky-400'
+                }`}
+              />
+              <span className="text-brand-textMuted/80 font-mono">{step.toolName || 'tool'}</span>
+              <span className="text-brand-textMuted/60 truncate max-w-[300px]">{step.content}</span>
+            </div>
+          ))}
+        </WorkedHeader>
+      )}
+
+      {/* ── Assistant text responses ──── */}
+      {assistantSteps.map((step, idx) => {
+        const isStreamingThis = step.id === streamingStepId;
+        const isLast = idx === assistantSteps.length - 1;
+
+        return (
+          <div
+            key={step.id}
+            data-testid={`step-assistant-${step.id}`}
+            className="flex flex-col gap-1"
+          >
+            <MarkdownText content={step.content} streaming={isStreamingThis && isStreaming} />
+
+            {/* What's Next suggestion */}
+            {isLast && !isStreaming && step.content.toLowerCase().includes("what") && (
+              <div className="mt-1">
+                <p className="text-brand-textMuted text-[12px] font-semibold mt-3 mb-1">What's Next?</p>
+              </div>
+            )}
+
+            {/* Attached media */}
+            {step.metadata?.mediaType && (
+              <div className="mt-3 p-3.5 bg-brand-popover border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none">
+                <span className="text-xs text-brand-textMain font-medium">
+                  🎨 Generated Asset ({step.metadata.mediaType.toUpperCase()})
+                </span>
+                <button
+                  onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
+                  className="bg-violet-600 hover:bg-violet-500 text-white px-3 py-1.5 rounded-lg cursor-pointer text-xs font-semibold transition-all active:scale-[0.97]"
+                >
+                  Open
+                </button>
+              </div>
+            )}
+
+            {/* File diff viewer button */}
+            {step.metadata?.filename && (
+              <div className="mt-2 flex gap-2">
+                <button
+                  data-testid={`view-diff-btn-${step.id}`}
+                  onClick={() =>
+                    onViewDiff &&
+                    onViewDiff(
+                      step.metadata!.filename!,
+                      step.metadata!.originalCode || '',
+                      step.metadata!.modifiedCode || ''
+                    )
+                  }
+                  className="flex items-center gap-1.5 text-[11px] text-brand-textMuted hover:text-sky-400 transition-colors"
+                >
+                  <Eye size={11} />
+                  <span>View diff — {step.metadata.filename}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* File changed summary chip (if tool edits happened) */}
+      {changedFilesCount > 0 && !isStreaming && (
+        <FileChangedChip
+          count={changedFilesCount}
+          added={totalAdded}
+          removed={totalRemoved}
+          onReview={
+            editedFiles.length > 0 && onViewDiff
+              ? () => {
+                  const firstEdit = toolSteps.find(s => s.metadata?.filename);
+                  if (firstEdit) {
+                    onViewDiff(
+                      firstEdit.metadata!.filename!,
+                      firstEdit.metadata!.originalCode || '',
+                      firstEdit.metadata!.modifiedCode || ''
+                    );
+                  }
+                }
+              : undefined
+          }
+        />
+      )}
+
+      {/* Action buttons row */}
+      {assistantSteps.length > 0 && !isStreaming && (
+        <MessageActions
+          content={assistantSteps.map(s => s.content).join('\n\n')}
+        />
+      )}
     </div>
   );
 };
