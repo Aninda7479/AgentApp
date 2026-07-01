@@ -487,7 +487,13 @@ Key guidelines:
                 }
                 const acc = toolCallAccumulators.get(idx)!;
                 if (tc.id) acc.id = tc.id;
-                if (tc.function?.name) acc.name += tc.function.name;
+                if (tc.function?.name) {
+                  if (!acc.name) {
+                    acc.name = tc.function.name;
+                  } else if (acc.name !== tc.function.name) {
+                    acc.name += tc.function.name;
+                  }
+                }
                 if (tc.function?.arguments) acc.argsJson += tc.function.arguments;
               }
             }

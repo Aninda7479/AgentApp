@@ -474,5 +474,61 @@
     "lesson": "Always write unit tests",
     "category": "user_preference",
     "timestamp": 1782912741559
+  },
+  {
+    "id": "insight-1782914205514-s22dt",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782914205514
+  },
+  {
+    "id": "insight-1782914205589-w08f7",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782914205589
+  },
+  {
+    "id": "insight-1782914356613-zr82j",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782914356613
+  },
+  {
+    "id": "insight-1782914356696-wepez",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782914356696
+  },
+  {
+    "id": "insight-1782915030152-9e37c",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782915030152
+  },
+  {
+    "id": "insight-1782915030244-ds8dr",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782915030244
+  },
+  {
+    "id": "insight-1782916969146-weezv",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1782916969146
+  },
+  {
+    "id": "insight-1782916969183-svy3a",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1782916969183
   }
 ]

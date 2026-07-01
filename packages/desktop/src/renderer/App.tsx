@@ -78,7 +78,13 @@ export const App: React.FC = () => {
   const [toastOpen, setToastOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
   const [toastType, setToastType] = useState<'info' | 'error'>('info');
-  const [composerPrompt, setComposerPrompt] = useState<string>('');
+  const [composerPrompt, setComposerPrompt] = useState<string>(() => {
+    try {
+      return localStorage.getItem('composer_prompt_cache') || '';
+    } catch {
+      return '';
+    }
+  });
 
   // Dynamic projects & chats state
   const [projects, setProjects] = useState<StoredProject[]>([]);
@@ -88,7 +94,14 @@ export const App: React.FC = () => {
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState<boolean>(false);
   const [isConfigureProjectOpen, setIsConfigureProjectOpen] = useState<boolean>(false);
   const [projectToConfigure, setProjectToConfigure] = useState<StoredProject | null>(null);
-  const [composerAttachments, setComposerAttachments] = useState<{ filename: string; sourcePath?: string; buffer?: number[] }[]>([]);
+  const [composerAttachments, setComposerAttachments] = useState<{ filename: string; sourcePath?: string; buffer?: number[] }[]>(() => {
+    try {
+      const cached = localStorage.getItem('composer_attachments_cache');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Providers & Models
   const [connectedProviders, setConnectedProviders] = useState<ProviderConnection[]>([]);
@@ -118,6 +131,22 @@ export const App: React.FC = () => {
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
   }, [activeChatId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('composer_prompt_cache', composerPrompt);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [composerPrompt]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('composer_attachments_cache', JSON.stringify(composerAttachments));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [composerAttachments]);
 
   const updateChatSteps = (targetChatId: string, updater: (prevSteps: TrajectoryStep[]) => TrajectoryStep[]) => {
     setChats(prevChats => {
@@ -963,6 +992,26 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
       streamingBufferRef.current = '';
       streamingStepIdRef.current = null;
 
+      // Collect all attachment paths from this chat's history (previous + new)
+      const allAttachmentPaths: string[] = [];
+      // From existing trajectory steps
+      const allSteps = [...trajectorySteps, userStep, ...attachmentSteps];
+      for (const step of allSteps) {
+        if (step.metadata?.mediaPath) {
+          allAttachmentPaths.push(step.metadata.mediaPath as string);
+        }
+      }
+      // Add any newly uploaded attachments from this send
+      for (const att of savedAttachments) {
+        if (!allAttachmentPaths.includes(att.fullPath)) {
+          allAttachmentPaths.push(att.fullPath);
+        }
+      }
+
+      // Resolve project root — use first folder of the active project if set
+      const activeProjectConfig = projects.find(p => p.name === projectScope);
+      const resolvedProjectRoot = activeProjectConfig?.folders?.[0] || undefined;
+
       const sessionId = `session-${chatId}`;
       const agentConfig = {
         provider: (activeProvider.type === 'env' || activeProvider.type === 'key'
@@ -971,7 +1020,8 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
         apiKey: activeProvider.apiKey,
         baseUrl: activeProvider.baseUrl || undefined,
         model: options.model || '',
-        projectRoot: undefined // could be set from project config
+        projectRoot: resolvedProjectRoot,
+        attachments: allAttachmentPaths.length > 0 ? allAttachmentPaths : undefined
       };
 
       // Non-blocking: events come back via 'agent-event' IPC listener

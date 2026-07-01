@@ -160,7 +160,7 @@ export const Composer: React.FC<ComposerProps> = ({
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={hasModels ? "Do anything" : "No models are connected yet. Please go to Settings to connect a provider."}
-          disabled={disabled || isGenerating || !hasModels}
+          disabled={disabled}
           rows={1}
           className="bg-transparent border-none outline-none text-brand-textMain text-sm resize-none w-full min-h-[44px] leading-relaxed placeholder-brand-textMuted/55 font-sans disabled:opacity-50"
         />

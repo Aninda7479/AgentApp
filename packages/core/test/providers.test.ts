@@ -14,6 +14,7 @@ import {
   CompletionRequest,
   AIProvider
 } from '../src/index.js';
+import { AgentEngine } from '../src/providers/ai-engine.js';
 
 describe('Phase 1 Core Provider Suite (Steps 001-008)', () => {
   const tempStorageDir = path.join(os.tmpdir(), `superagent-test-${Date.now()}`);
@@ -270,6 +271,43 @@ describe('Phase 1 Core Provider Suite (Steps 001-008)', () => {
 
       expect(response.provider).toBe('anthropic');
       expect(response.content).toBe('Fallback response from Claude');
+    });
+  });
+
+  describe('AgentEngine tool name parsing', () => {
+    it('should correctly accumulate tool names without duplicating repeated names', async () => {
+      const engine = new AgentEngine({
+        provider: 'openai',
+        apiKey: 'test-key',
+        model: 'gpt-4o'
+      });
+
+      const chunks = [
+        `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"list_dir"}}]}}]}\n`,
+        `data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"list_dir","arguments":"{\\"path\\":\\".\\"}"}}]}}]}\n`,
+        `data: [DONE]\n`
+      ];
+
+      vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => {
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          start(controller) {
+            for (const chunk of chunks) {
+              controller.enqueue(encoder.encode(chunk));
+            }
+            controller.close();
+          }
+        });
+        return {
+          ok: true,
+          body: stream
+        };
+      }));
+
+      const result = await (engine as any).streamFromProvider(() => {}, new AbortController().signal);
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0].name).toBe('list_dir');
+      expect(result.toolCalls[0].args).toEqual({ path: '.' });
     });
   });
 });

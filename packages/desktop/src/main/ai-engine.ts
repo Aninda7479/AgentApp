@@ -223,6 +223,8 @@ export interface AgentEngineConfig {
   model: string;
   systemPrompt?: string;
   projectRoot?: string;
+  /** Absolute paths to all files attached to this chat session */
+  attachments?: string[];
   maxTokens?: number;
   temperature?: number;
 }
@@ -239,11 +241,29 @@ export class AgentEngine {
   constructor(config: AgentEngineConfig, sessionId?: string) {
     this.config = config;
     this.sessionId = sessionId || `session-${Date.now()}`;
-    this.tools = createBuiltinTools(config.projectRoot);
+
+    // ── Determine working root ─────────────────────────────────────────────
+    // For standalone chats (no project), sandbox to the chat attachments dir
+    // so the agent cannot freely browse the whole filesystem.
+    const effectiveRoot = config.projectRoot
+      || (config.attachments?.[0] ? path.dirname(config.attachments[0]) : process.cwd());
+
+    this.tools = createBuiltinTools(effectiveRoot);
     this.history = [];
 
-    // System prompt matching OpenCode's AGENTS.md pattern
-    const sysPrompt = config.systemPrompt || `You are SuperAgent, a powerful autonomous AI coding assistant.
+    // ── Build system prompt ────────────────────────────────────────────────
+    // Inject attached file paths so the AI knows exactly what to read.
+    const attachmentSection = (config.attachments && config.attachments.length > 0)
+      ? `\n\nThe following files are attached to this chat session and are available for you to read:\n${config.attachments.map(p => `- ${p}`).join('\n')}\n\nWhen the user asks you to read, summarise, or analyse an attachment, use the read_file tool with the exact paths listed above.`
+      : '';
+
+    const scopeSection = config.projectRoot
+      ? `\n\nYour working directory (project root) is: ${config.projectRoot}`
+      : (config.attachments?.length
+          ? `\n\nThis is a standalone chat (no project workspace). Your file access is restricted to the chat attachments folder: ${effectiveRoot}\nDo NOT attempt to read or list files outside this folder.`
+          : '');
+
+    const sysPrompt = config.systemPrompt || (`You are SuperAgent, a powerful autonomous AI coding assistant.
 
 You have access to tools to read files, list directories, search codebases, run shell commands, and write files.
 Use tools progressively — don't dump the whole codebase; fetch what you need when you need it.
@@ -253,7 +273,7 @@ Key guidelines:
 - Read relevant files before making edits
 - Verify changes compile/work after editing
 - Be concise but thorough in explanations
-- When you edit files, mention which files changed and the diff summary`;
+- When you edit files, mention which files changed and the diff summary` + attachmentSection + scopeSection);
 
     this.history.push({ role: 'system', content: sysPrompt });
   }
@@ -487,7 +507,13 @@ Key guidelines:
                 }
                 const acc = toolCallAccumulators.get(idx)!;
                 if (tc.id) acc.id = tc.id;
-                if (tc.function?.name) acc.name += tc.function.name;
+                if (tc.function?.name) {
+                  if (!acc.name) {
+                    acc.name = tc.function.name;
+                  } else if (acc.name !== tc.function.name) {
+                    acc.name += tc.function.name;
+                  }
+                }
                 if (tc.function?.arguments) acc.argsJson += tc.function.arguments;
               }
             }

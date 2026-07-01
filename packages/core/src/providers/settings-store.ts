@@ -87,22 +87,45 @@ export class SettingsStorage {
   private static cachedSettings: AppSettings | null = null;
 
   public static loadSettings(): AppSettings {
+    const filePath = getSettingsFilePath();
+    const backupPath = filePath + '.bak';
+
+    // Try reading primary
     try {
-      const filePath = getSettingsFilePath();
       if (fs.existsSync(filePath)) {
-        const raw = fs.readFileSync(filePath, 'utf-8');
-        this.cachedSettings = JSON.parse(raw);
-        return this.cachedSettings || {};
+        const raw = fs.readFileSync(filePath, 'utf-8').trim();
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          this.cachedSettings = parsed;
+          return parsed || {};
+        }
       }
     } catch (e) {
-      console.error('Failed to load settings:', e);
+      console.error('Failed to parse settings.json, trying backup...', e);
     }
-    return {};
+
+    // Try reading backup
+    try {
+      if (fs.existsSync(backupPath)) {
+        const raw = fs.readFileSync(backupPath, 'utf-8').trim();
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          this.cachedSettings = parsed;
+          return parsed || {};
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse backup settings.json.bak:', e);
+    }
+
+    return this.cachedSettings || {};
   }
 
   public static saveSettings(settings: AppSettings): void {
     try {
       const filePath = getSettingsFilePath();
+      const tmpPath = filePath + '.tmp';
+      const backupPath = filePath + '.bak';
       getConfigDirectory();
       
       const current = this.loadSettings();
@@ -116,7 +139,21 @@ export class SettingsStorage {
       };
       
       this.cachedSettings = updated;
-      fs.writeFileSync(filePath, JSON.stringify(updated, null, 2), 'utf-8');
+      
+      // 1. Write atomically to temporary file
+      fs.writeFileSync(tmpPath, JSON.stringify(updated, null, 2), 'utf-8');
+
+      // 2. Backup current settings file if it exists
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.copyFileSync(filePath, backupPath);
+        } catch {
+          // ignore backup errors
+        }
+      }
+
+      // 3. Rename atomically to replace settings file
+      fs.renameSync(tmpPath, filePath);
     } catch (e) {
       console.error('Failed to save settings:', e);
     }
