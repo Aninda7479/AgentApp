@@ -10,14 +10,14 @@ import {
 } from '../src/index.js';
 
 describe('Step 080: CLI Integration Verification Suite', () => {
-  const integrationTmpDir = path.join(process.cwd(), 'test_tmp_integration');
+  const integrationTmpDir = path.join(process.cwd(), 'tmp', 'test_tmp_integration');
 
   beforeEach(async () => {
     await fs.mkdir(integrationTmpDir, { recursive: true });
     try {
       const testSettingsDir = getUserDataDirectory();
       await fs.rm(testSettingsDir, { recursive: true, force: true });
-    } catch {}
+    } catch { }
   });
 
   afterEach(async () => {

@@ -2,6 +2,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getConfigDirectory, SettingsStorage } from './settings-store.js';
 
+export interface ModelScore {
+  coding: number; // 0-100
+  reasoning: number; // 0-100
+  vision: number; // 0-100
+  costEfficiency: number; // 0-100 (100 = free/cheapest, 0 = highest cost)
+}
+
 export class ModelGovStorage {
   public static getInstructionsPath(): string {
     return path.join(getConfigDirectory(), 'model-gov-instructions.md');
@@ -30,6 +37,63 @@ export class ModelGovStorage {
   }
 
   /**
+   * Resolves capabilities scores based on model ID keywords.
+   */
+  public static getModelScores(modelId: string): ModelScore {
+    const id = modelId.toLowerCase();
+    
+    // Baseline database for frontier and open-source models (2026 stats)
+    if (id.includes('fable-5') || id.includes('fable')) {
+      return { coding: 80.3, reasoning: 85.0, vision: 80.0, costEfficiency: 10 };
+    }
+    if (id.includes('claude-3-7-sonnet') || id.includes('sonnet')) {
+      return { coding: 75.0, reasoning: 78.0, vision: 80.0, costEfficiency: 35 };
+    }
+    if (id.includes('claude-3-opus') || id.includes('opus')) {
+      return { coding: 69.0, reasoning: 75.0, vision: 78.0, costEfficiency: 15 };
+    }
+    if (id.includes('o3-mini')) {
+      return { coding: 76.0, reasoning: 82.0, vision: 20.0, costEfficiency: 60 };
+    }
+    if (id.includes('o1') || id.includes('o3')) {
+      return { coding: 74.0, reasoning: 84.0, vision: 75.0, costEfficiency: 20 };
+    }
+    if (id.includes('gpt-4o-mini')) {
+      return { coding: 58.0, reasoning: 59.0, vision: 70.0, costEfficiency: 96 };
+    }
+    if (id.includes('gpt-4o')) {
+      return { coding: 72.0, reasoning: 74.0, vision: 82.0, costEfficiency: 40 };
+    }
+    if (id.includes('deepseek-reasoner')) {
+      return { coding: 73.0, reasoning: 84.0, vision: 10.0, costEfficiency: 90 };
+    }
+    if (id.includes('deepseek-chat') || id.includes('deepseek-v3') || id.includes('deepseek')) {
+      return { coding: 70.0, reasoning: 71.0, vision: 10.0, costEfficiency: 95 };
+    }
+    if (id.includes('gemini-3.1-pro') || id.includes('gemini-3')) {
+      return { coding: 73.0, reasoning: 76.0, vision: 83.0, costEfficiency: 50 };
+    }
+    if (id.includes('gemini-2.5-flash') || id.includes('gemini-2.0-flash') || id.includes('flash')) {
+      return { coding: 60.0, reasoning: 62.0, vision: 75.0, costEfficiency: 98 };
+    }
+    if (id.includes('gemma-4') || id.includes('gemma')) {
+      return { coding: 64.0, reasoning: 65.0, vision: 15.0, costEfficiency: 98 };
+    }
+    if (id.includes('phi-4') || id.includes('phi')) {
+      return { coding: 62.0, reasoning: 63.0, vision: 10.0, costEfficiency: 99 };
+    }
+    if (id.includes('wan') || id.includes('cosmos') || id.includes('video') || id.includes('seedream') || id.includes('expand')) {
+      return { coding: 10.0, reasoning: 15.0, vision: 85.0, costEfficiency: 85 };
+    }
+    if (id.includes('e5') || id.includes('gte') || id.includes('sentence-transformers')) {
+      return { coding: 5.0, reasoning: 5.0, vision: 5.0, costEfficiency: 100 };
+    }
+
+    // Default open-source fallback
+    return { coding: 55.0, reasoning: 55.0, vision: 30.0, costEfficiency: 85 };
+  }
+
+  /**
    * Generates custom markdown instructions dynamically based on the active models in the pool.
    */
   public static generateDynamicInstructions(): string {
@@ -49,32 +113,35 @@ export class ModelGovStorage {
       conversations: []
     };
 
-    const pricingList: string[] = [];
+    const scoreTableLines: string[] = [
+      '| Model Name | Provider | Coding Score | Reasoning Score | Vision Score | Cost Index |',
+      '| :--- | :--- | :---: | :---: | :---: | :---: |'
+    ];
 
     for (const m of activeModels) {
       const id = m.id.toLowerCase();
       const name = m.name;
       const provider = m.providerId;
 
-      // Classify model capability based on ID keywords or modalities
-      const isCoding = /code|coder|sonnet|o3-mini|deepseek-v3|mistral-small|phi-4/.test(id);
-      const isReasoning = /reasoner|o1|o3|gemini-3|gemini.*pro|hermes|gemma-4/.test(id);
-      const isVision = /vision|image|expand|cosmos|wan|video|clip|seedream/.test(id) || (m.inputModalities?.includes('image') || false);
+      // Extract capabilities scores
+      const scores = this.getModelScores(m.id);
 
-      if (isCoding) {
-        categories.coding.push(`\`${name}\` (${provider})`);
-      } else if (isReasoning) {
-        categories.reasoning.push(`\`${name}\` (${provider})`);
-      } else if (isVision) {
-        categories.vision.push(`\`${name}\` (${provider})`);
-      } else {
-        categories.conversations.push(`\`${name}\` (${provider})`);
-      }
+      // Classify model category
+      const isCoding = scores.coding >= 70;
+      const isReasoning = scores.reasoning >= 75;
+      const isVision = scores.vision >= 75;
 
-      // Format pricing line using settings rates
-      const input = m.pricing?.inputPer1M || '0.20';
-      const output = m.pricing?.outputPer1M || '0.60';
-      pricingList.push(`*   **${name}** (${provider}): Input ${input} / Output ${output}`);
+      const modelLabel = `\`${name}\` (Score: **${Math.max(scores.coding, scores.reasoning, scores.vision)}**)`;
+
+      if (isCoding) categories.coding.push(modelLabel);
+      else if (isReasoning) categories.reasoning.push(modelLabel);
+      else if (isVision) categories.vision.push(modelLabel);
+      else categories.conversations.push(modelLabel);
+
+      // Add to score matrix table
+      scoreTableLines.push(
+        `| ${name} | ${provider} | ${scores.coding.toFixed(1)} | ${scores.reasoning.toFixed(1)} | ${scores.vision.toFixed(1)} | ${scores.costEfficiency} |`
+      );
     }
 
     const optimization = settings.modelGov?.optimizationGoal || 'balanced';
@@ -89,14 +156,20 @@ Dynamically generated at: ${new Date().toLocaleString()}.
 *   **Optimization Goal**: ${optimization.toUpperCase()} (Prioritizing ${optimization === 'quality' ? 'maximum output accuracy and reasoning capability' : optimization === 'cost' ? 'minimum API expenses and token utilization' : 'optimal balance between latency, cost, and quality'})
 *   **Routing Strategy**: ${strategy === 'orchestrator' ? 'Orchestrator Mode (Decomposes tasks into sub-tasks and conducts multiple models in parallel)' : 'Single Model Router Mode (Selects the single best candidate model for the query)'}
 
-## Dynamic Swarm Pool
-*   **Coding & Complex Engineering**: ${categories.coding.join(', ') || 'None available (falls back to conversation models).'}
-*   **Logic Reasoning & Expert Analysis**: ${categories.reasoning.join(', ') || 'None available (falls back to conversation models).'}
-*   **Vision & Multimodal Ingestion**: ${categories.vision.join(', ') || 'None available (falls back to conversation models).'}
-*   **Everyday Conversations & Summarization**: ${categories.conversations.join(', ') || 'None available.'}
+## Model Capability & Score Matrix
+${scoreTableLines.join('\n')}
 
-## Swarm Pricing Catalog (per 1M tokens)
-${pricingList.length > 0 ? pricingList.join('\n') : '*   No pricing information cataloged.'}
+## Dynamic Swarm Pool
+*   **Coding Specialists**: ${categories.coding.join(', ') || 'None in pool.'}
+*   **Reasoning Specialists**: ${categories.reasoning.join(', ') || 'None in pool.'}
+*   **Vision Specialists**: ${categories.vision.join(', ') || 'None in pool.'}
+*   **Conversation Specialists**: ${categories.conversations.join(', ') || 'None in pool.'}
+
+## Claude Fable 5 Escalation-Based Routing System
+Fugu routing follows the Anthropic Fable-class conducting framework to minimize context burn while maximizing output quality:
+1. **Task Decomposition (Planning)**: Always assign planning, file structural outlines, and plan validation steps to the model with the highest **Reasoning Score**.
+2. **Standard Execution (Writing)**: Route routine writing, minor text adjustments, or boilerplate additions to the model with the highest **Cost Index** (cheapest) that maintains a **Coding Score** > 60.
+3. **Escalation Trigger (Debugging)**: If a compiler command returns an error or a test suite fails, escalate execution to the model with the highest **Coding Score** to run the diagnostics and correct files.
 
 ## Dynamic Routing Rules
 1. If prompt asks to compile, debug, edit code, write scripts, or parse compiler errors, route to **Coding**.
@@ -131,7 +204,6 @@ ${pricingList.length > 0 ? pricingList.join('\n') : '*   No pricing information 
       // Update pricing values for registered models in settings
       let updatedCount = 0;
       for (const m of currentModels) {
-        // Clean model ID (OpenRouter uses standard names in their API)
         const cleanName = m.name.toLowerCase();
         
         // Find matching OpenRouter entry
@@ -163,7 +235,6 @@ ${pricingList.length > 0 ? pricingList.join('\n') : '*   No pricing information 
       return newContent;
     } catch (e: any) {
       console.error('Failed to auto-update model gov instructions:', e);
-      // Fallback to generating based on local settings pricing
       const fallbackContent = this.generateDynamicInstructions();
       this.saveInstructions(fallbackContent);
       return fallbackContent;

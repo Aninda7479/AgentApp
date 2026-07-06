@@ -123,25 +123,43 @@ export class ModelRouter {
       }
     }
 
-    // 2. Map Capability Priority
-    let targetOrder: string[] = [];
-    if (isCoding) {
-      targetOrder = ['claude-3-7-sonnet', 'claude-3-5-sonnet', 'o3-mini', 'gpt-4o', 'deepseek-chat', 'gemini-1.5-pro'];
-    } else if (isReasoning) {
-      targetOrder = ['o3-mini', 'deepseek-reasoner', 'o1', 'claude-3-7-sonnet', 'gemini-2.5-flash'];
-    } else if (isVision) {
-      targetOrder = ['gpt-4o', 'claude-3-5-sonnet', 'gemini-1.5-pro', 'gemini-2.5-flash'];
-    } else {
-      targetOrder = ['gpt-4o-mini', 'gemini-2.5-flash', 'deepseek-chat', 'gpt-4o'];
+    // 3. Dynamic Selection sorting based on task capabilities and optimization goals
+    const optimization = settings.modelGov?.optimizationGoal || 'balanced';
+
+    const candidates = enabledModels.map(m => {
+      const scores = ModelGovStorage.getModelScores(m.id);
+      let taskScore = 0;
+      if (isCoding) taskScore = scores.coding;
+      else if (isReasoning) taskScore = scores.reasoning;
+      else if (isVision) taskScore = scores.vision;
+      else taskScore = (scores.coding + scores.reasoning) / 2; // general chat capability
+
+      // Score = Capability * Weight + Cost * Weight
+      let finalScore = 0;
+      if (optimization === 'quality') {
+        finalScore = taskScore;
+      } else if (optimization === 'cost') {
+        finalScore = scores.costEfficiency;
+      } else {
+        // Balanced: 70% capability + 30% cost-efficiency
+        finalScore = (taskScore * 0.7) + (scores.costEfficiency * 0.3);
+      }
+
+      return {
+        model: m,
+        finalScore
+      };
+    });
+
+    // Sort descending
+    candidates.sort((a, b) => b.finalScore - a.finalScore);
+
+    if (candidates.length > 0) {
+      const best = candidates[0].model;
+      return { provider: best.providerId, model: best.id.replace(`${best.providerId}-`, '') };
     }
 
-    // Try to find matching model in our filtered pool
-    for (const modelName of targetOrder) {
-      const found = enabledModels.find(m => m.id.toLowerCase().includes(modelName) || m.name.toLowerCase().includes(modelName));
-      if (found) return { provider: found.providerId, model: found.id.replace(`${found.providerId}-`, '') };
-    }
-
-    // Default Fallback: Select the first enabled model
+    // Default Fallback
     const firstEnabled = enabledModels[0];
     return { provider: firstEnabled.providerId, model: firstEnabled.id.replace(`${firstEnabled.providerId}-`, '') };
   }

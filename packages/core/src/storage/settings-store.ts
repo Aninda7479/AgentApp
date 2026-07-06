@@ -75,7 +75,7 @@ export interface SettingsPaths {
 export function getUserDataDirectory(): string {
   if (process.env.VITEST) {
     const workerId = process.env.VITEST_WORKER_ID || '1';
-    return path.join(process.cwd(), `test_tmp_settings_dir_${workerId}`);
+    return path.join(process.cwd(), 'tmp', `test_tmp_settings_dir_${workerId}`);
   }
 
   const home = os.homedir();

@@ -143,6 +143,75 @@ ipcMain.handle('model-gov-update-instructions', async () => {
   return await ModelGovStorage.autoUpdateInstructions();
 });
 
+ipcMain.handle('model-gov-optimize-instructions-by-ai', async () => {
+  const settings = SettingsStorage.loadSettings();
+  const govEnabledIds = settings.modelGov?.enabledModels || [];
+  
+  const activeModels = (settings.models || []).filter(m => 
+    govEnabledIds.includes(m.id) || 
+    govEnabledIds.includes(`${m.providerId}-${m.id}`)
+  );
+
+  const currentInstructions = ModelGovStorage.loadInstructions();
+
+  const providers = settings.providers || [];
+  const activeProvider = providers.find(p => p.apiKey);
+  const activeModelSetting = settings.models?.find(m => m.enabled && m.providerId === activeProvider?.id);
+
+  if (!activeProvider || !activeModelSetting) {
+    throw new Error('No active AI provider with configured API key found to perform prompt optimization.');
+  }
+
+  const engineConfig = {
+    provider: activeProvider.id as any,
+    apiKey: activeProvider.apiKey,
+    baseUrl: activeProvider.baseUrl,
+    model: activeModelSetting.id.replace(`${activeProvider.id}-`, ''),
+    systemPrompt: 'You are a professional system prompt optimizer specializing in AI model routing and orchestration.',
+    temperature: 0.3
+  };
+
+  const engine = new AgentEngine(engineConfig, `optimize-prompt-${Date.now()}`);
+  
+  const optimizationPrompt = `You are a system prompt optimizer. You are optimizing the Model Governance System Instructions for a Sakana Fugu-class routing conductor.
+
+Here is the current pool of enabled models:
+${activeModels.map(m => `- ${m.name} (${m.providerId}) - Pricing: Input ${m.pricing?.inputPer1M || 'N/A'}, Output ${m.pricing?.outputPer1M || 'N/A'}`).join('\n')}
+
+Here is the current instructions file content:
+\`\`\`markdown
+${currentInstructions}
+\`\`\`
+
+Optimization Goal: ${settings.modelGov?.optimizationGoal || 'balanced'}
+Routing Strategy: ${settings.modelGov?.routingStrategy || 'router'}
+
+Please optimize these system instructions to:
+1. Make the categorization boundaries more precise for the specific models in this pool.
+2. Formulate explicit conducting guidelines using the Claude Fable 5 escalation structure.
+3. Keep the output strictly in Markdown format.
+4. Do NOT wrap the output in markdown code blocks (e.g. \`\`\`markdown). Return ONLY the direct markdown text of the system instructions.`;
+
+  let optimizedContent = '';
+  await engine.run(optimizationPrompt, (event) => {
+    if (event.type === 'token' && event.content) {
+      optimizedContent += event.content;
+    }
+  });
+
+  if (!optimizedContent || optimizedContent.trim().length === 0) {
+    throw new Error('AI engine returned empty optimization response.');
+  }
+
+  optimizedContent = optimizedContent
+    .replace(/^```markdown\n?/i, '')
+    .replace(/```$/, '')
+    .trim();
+
+  ModelGovStorage.saveInstructions(optimizedContent);
+  return optimizedContent;
+});
+
 ipcMain.handle('select-project-folders', async () => {
   const win = windowManager.getMainWindow();
   const result = await dialog.showOpenDialog(win!, {

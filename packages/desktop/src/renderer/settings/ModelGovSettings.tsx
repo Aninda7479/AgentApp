@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ModelConfig } from './types';
-import { Scale, Save, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award } from 'lucide-react';
+import { Scale, Save, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award, Sparkles } from 'lucide-react';
 
 interface ModelGovSettingsProps {
   modelsCatalog: ModelConfig[];
@@ -114,6 +114,22 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
     }
   };
 
+  const [optimizing, setOptimizing] = useState(false);
+  const handleOptimizeByAI = async () => {
+    if (!ipc) return;
+    setOptimizing(true);
+    setMessage(null);
+    try {
+      const newInst = await ipc.invoke('model-gov-optimize-instructions-by-ai') as string;
+      setInstructions(newInst);
+      setMessage({ text: 'Model Governance system instructions optimized by AI successfully!', type: 'success' });
+    } catch (e: any) {
+      setMessage({ text: `AI Optimization failed: ${e.message}`, type: 'error' });
+    } finally {
+      setOptimizing(false);
+    }
+  };
+
   const toggleModelSelection = (modelId: string) => {
     setEnabledModels(prev => 
       prev.includes(modelId) ? prev.filter(id => id !== modelId) : [...prev, modelId]
@@ -160,6 +176,14 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
           >
             <RefreshCw className={`w-3.5 h-3.5 ${updatingPrice ? 'animate-spin' : ''}`} />
             <span>Update Swarm Rates</span>
+          </button>
+          <button
+            onClick={handleOptimizeByAI}
+            disabled={optimizing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 text-xs font-semibold cursor-pointer disabled:opacity-50 transition-all"
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${optimizing ? 'animate-spin' : ''}`} />
+            <span>Optimize by AI</span>
           </button>
           <button
             onClick={handleSave}

@@ -16,7 +16,7 @@ import {
 } from '../src/index.js';
 
 describe('CLI Command Unit Tools', () => {
-  const testTmpDir = path.join(process.cwd(), 'test_tmp_tools');
+  const testTmpDir = path.join(process.cwd(), 'tmp', 'test_tmp_tools');
 
   beforeEach(async () => {
     await fs.mkdir(testTmpDir, { recursive: true });

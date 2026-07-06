@@ -33,5 +33,61 @@
     "lesson": "Always write unit tests",
     "category": "user_preference",
     "timestamp": 1783315564760
+  },
+  {
+    "id": "insight-1783315919390-qbk3k",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1783315919390
+  },
+  {
+    "id": "insight-1783315919422-2dnkv",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1783315919422
+  },
+  {
+    "id": "insight-1783316215215-a2nxr",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1783316215215
+  },
+  {
+    "id": "insight-1783316215287-xx2lt",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1783316215287
+  },
+  {
+    "id": "insight-1783316318528-l212s",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1783316318528
+  },
+  {
+    "id": "insight-1783316318545-8al0i",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1783316318545
+  },
+  {
+    "id": "insight-1783316566480-ikp98",
+    "topic": "Architecture",
+    "lesson": "Use clean decoupled functions",
+    "category": "user_preference",
+    "timestamp": 1783316566480
+  },
+  {
+    "id": "insight-1783316566570-3dzee",
+    "topic": "Testing",
+    "lesson": "Always write unit tests",
+    "category": "user_preference",
+    "timestamp": 1783316566570
   }
 ]
