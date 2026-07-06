@@ -15,6 +15,7 @@ export * from './planner/agent.js';
 export * from './automation/browser.js';
 export * from './automation/extractor.js';
 export * from './automation/search.js';
+export * from './automation/computer-use.js';
 export * from './vector/embedding.js';
 export * from './vector/retriever.js';
 export * from './vector/inspector.js';

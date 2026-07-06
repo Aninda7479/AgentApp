@@ -442,8 +442,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         onMicClick={() => onToast('Voice Dictation Input')}
         onLocallyClick={() => onToast('Local Execution Environments')}
         onBranchClick={() => onToast('Git Branch Selector')}
-        availableModels={enabledModels.map(model => model.name)}
-        defaultModel={enabledModels[0]?.name || ''}
+        availableModels={enabledModels.length > 1 ? ['Model Governance', ...enabledModels.map(model => model.name)] : enabledModels.map(model => model.name)}
+        defaultModel={enabledModels.length > 1 ? 'Model Governance' : (enabledModels[0]?.name || '')}
         promptValue={composerPrompt}
         onPromptChange={onPromptChange}
         onAttachPastedFiles={onAttachPastedFiles}

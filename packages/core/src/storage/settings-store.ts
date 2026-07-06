@@ -48,12 +48,21 @@ export interface GeneralAppSettings {
   unsandboxedActions?: boolean;
 }
 
+export interface ModelGovSettings {
+  enabledModels?: string[];
+  autoUpdateInstructions?: boolean;
+  optimizationGoal?: 'quality' | 'cost' | 'balanced';
+  routingStrategy?: 'orchestrator' | 'router';
+  categoryOverrides?: Record<string, string>;
+}
+
 export interface AppSettings {
   theme?: ThemeSettings;
   providers?: ProviderSettings[];
   models?: ModelSettings[];
   lastUsedModel?: LastUsedModelSettings;
   general?: GeneralAppSettings;
+  modelGov?: ModelGovSettings;
 }
 
 export interface SettingsPaths {
@@ -157,7 +166,8 @@ export class SettingsStorage {
         providers: settings.providers !== undefined ? settings.providers : current.providers,
         models: settings.models !== undefined ? settings.models : current.models,
         lastUsedModel: settings.lastUsedModel !== undefined ? { ...current.lastUsedModel, ...settings.lastUsedModel } : current.lastUsedModel,
-        general: settings.general !== undefined ? { ...current.general, ...settings.general } : current.general
+        general: settings.general !== undefined ? { ...current.general, ...settings.general } : current.general,
+        modelGov: settings.modelGov !== undefined ? { ...current.modelGov, ...settings.modelGov } : current.modelGov
       };
 
       this.cachedSettings = updated;

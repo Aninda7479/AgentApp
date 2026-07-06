@@ -209,6 +209,28 @@ const FileChangedChip: React.FC<FileChangedChipProps> = ({ count, added, removed
   </div>
 );
 
+const PromptCopyButton: React.FC<{ content: string }> = ({ content }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      title="Copy prompt"
+      className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-all cursor-pointer text-[10px]"
+    >
+      {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+      <span>{copied ? 'Copied' : 'Copy'}</span>
+    </button>
+  );
+};
+
 // ─── Action buttons (copy, thumbs) ────────────────────────────────────────────
 interface MessageActionsProps {
   content: string;
@@ -509,16 +531,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 {/* User actions on hover (Copy and Undo) */}
                 <div className="flex items-center gap-1 mt-2.5 pt-2 border-t border-brand-border/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none">
                   {/* Copy Button */}
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(turn.userSteps.map(step => step.content).filter(Boolean).join('\n'));
-                    }}
-                    title="Copy prompt"
-                    className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-all cursor-pointer text-[10px]"
-                  >
-                    <Copy size={11} />
-                    <span>Copy</span>
-                  </button>
+                  <PromptCopyButton content={turn.userSteps.map(step => step.content).filter(Boolean).join('\n')} />
 
                   {/* Undo Button */}
                   {onUndoStep && (

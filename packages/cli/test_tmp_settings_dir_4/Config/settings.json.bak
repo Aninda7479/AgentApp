@@ -1,0 +1,14 @@
+{
+  "theme": {
+    "cli": "nord",
+    "desktop": "system"
+  },
+  "lastUsedModel": {
+    "provider": "gemini",
+    "model": "gemini-1.5-pro"
+  },
+  "general": {
+    "workMode": "coding",
+    "confirmShellCommands": true
+  }
+}

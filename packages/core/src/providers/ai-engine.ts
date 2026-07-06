@@ -53,6 +53,8 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { UsageTracker } from '../storage/usage-tracker.js';
+import { ComputerUse } from '../automation/computer-use.js';
 
 const execAsync = promisify(exec);
 
@@ -199,6 +201,78 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
           return `Successfully wrote ${lines} lines to ${filePath}`;
         } catch (err: unknown) {
           return `Error writing file: ${(err as Error).message}`;
+        }
+      }
+    },
+    {
+      name: 'screenshot_screen',
+      description: 'Capture a PNG screenshot of the user\'s desktop display. Returns the file path of the saved screenshot.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false
+      },
+      execute: async () => {
+        try {
+          const path = await ComputerUse.takeScreenshot();
+          return `Screenshot captured successfully and saved to: ${path}`;
+        } catch (err: unknown) {
+          return `Error capturing screenshot: ${(err as Error).message}`;
+        }
+      }
+    },
+    {
+      name: 'mouse_control',
+      description: 'Control the mouse cursor on the screen. Move, left click, right click, or double click.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['move', 'left_click', 'right_click', 'double_click'], description: 'The mouse action to perform' },
+          x: { type: 'number', description: 'Screen X coordinate (required for move)' },
+          y: { type: 'number', description: 'Screen Y coordinate (required for move)' }
+        },
+        required: ['action'],
+        additionalProperties: false
+      },
+      execute: async ({ action, x, y }) => {
+        try {
+          if (action === 'move') {
+            if (x === undefined || y === undefined) {
+              return 'Error: Coordinates x and y are required for move action';
+            }
+            return await ComputerUse.moveMouse(x as number, y as number);
+          }
+          let clickType: 'left' | 'right' | 'double' = 'left';
+          if (action === 'right_click') clickType = 'right';
+          if (action === 'double_click') clickType = 'double';
+          return await ComputerUse.clickMouse(clickType);
+        } catch (err: unknown) {
+          return `Mouse action failed: ${(err as Error).message}`;
+        }
+      }
+    },
+    {
+      name: 'keyboard_type',
+      description: 'Simulate keyboard typing or key presses on the computer.',
+      parameters: {
+        type: 'object',
+        properties: {
+          text: { type: 'string', description: 'Alphanumeric text to type out' },
+          key: { type: 'string', description: 'Special key command to press (e.g. "{ENTER}", "{TAB}", "{BACKSPACE}", "{ESC}")' }
+        },
+        additionalProperties: false
+      },
+      execute: async ({ text, key }) => {
+        try {
+          if (text) {
+            return await ComputerUse.typeText(text as string);
+          }
+          if (key) {
+            return await ComputerUse.pressKey(key as string);
+          }
+          return 'Error: Either text or key parameter must be provided';
+        } catch (err: unknown) {
+          return `Keyboard action failed: ${(err as Error).message}`;
         }
       }
     }
@@ -380,21 +454,45 @@ Key guidelines:
     signal: AbortSignal
   ): Promise<{ fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> }> {
     const { provider } = this.config;
+    let res: { fullContent: string; toolCalls: any[] };
 
     if (provider === 'openai' || provider === 'custom' || provider === 'deepseek' || provider === 'deepinfra') {
-      return this.streamOpenAI(onEvent, signal);
-    }
-    if (provider === 'anthropic') {
-      return this.streamAnthropic(onEvent, signal);
-    }
-    if (provider === 'gemini') {
-      return this.streamGemini(onEvent, signal);
-    }
-    if (provider === 'ollama') {
-      return this.streamOllama(onEvent, signal);
+      res = await this.streamOpenAI(onEvent, signal);
+    } else if (provider === 'anthropic') {
+      res = await this.streamAnthropic(onEvent, signal);
+    } else if (provider === 'gemini') {
+      res = await this.streamGemini(onEvent, signal);
+    } else if (provider === 'ollama') {
+      res = await this.streamOllama(onEvent, signal);
+    } else {
+      throw new Error(`Unsupported provider: ${provider}`);
     }
 
-    throw new Error(`Unsupported provider: ${provider}`);
+    // Compute estimated token usage: 1 token ~ 4 characters
+    const inputChars = this.history.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
+    const promptTokens = Math.max(1, Math.round(inputChars / 4));
+    const completionTokens = Math.max(1, Math.round(res.fullContent.length / 4));
+
+    // Track usage in centralized storage
+    UsageTracker.trackUsage(
+      this.config.provider,
+      this.config.model,
+      promptTokens,
+      completionTokens
+    );
+
+    // Emit usage stats back to renderer
+    onEvent({
+      type: 'token',
+      sessionId: this.sessionId,
+      usage: {
+        promptTokens,
+        completionTokens,
+        totalTokens: promptTokens + completionTokens
+      }
+    });
+
+    return res;
   }
 
   // ── OpenAI / Custom (OpenAI-compatible) Streaming ────────────────────────

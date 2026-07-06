@@ -1,0 +1,29 @@
+[
+  {
+    "model": "gpt-4o",
+    "provider": "openai",
+    "promptTokens": 131,
+    "completionTokens": 1,
+    "totalTokens": 132,
+    "cost": 0.0003375,
+    "timestamp": "2026-07-06T05:07:58.941Z"
+  },
+  {
+    "model": "gpt-4o",
+    "provider": "openai",
+    "promptTokens": 131,
+    "completionTokens": 1,
+    "totalTokens": 132,
+    "cost": 0.0003375,
+    "timestamp": "2026-07-06T05:20:42.919Z"
+  },
+  {
+    "model": "gpt-4o",
+    "provider": "openai",
+    "promptTokens": 131,
+    "completionTokens": 1,
+    "totalTokens": 132,
+    "cost": 0.0003375,
+    "timestamp": "2026-07-06T05:25:58.593Z"
+  }
+]

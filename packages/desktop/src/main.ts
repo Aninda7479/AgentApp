@@ -8,7 +8,7 @@ app.setPath('userData', customUserDataPath);
 
 import { windowManager } from './main/window';
 import { readStore, writeStore, StoreData } from './main/store';
-import { SettingsStorage } from '@superagent/core';
+import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage } from '@superagent/core';
 import { getChatDirectory } from './main/storage/index.js';
 import https from 'https';
 import http from 'http';
@@ -42,7 +42,22 @@ ipcMain.handle('agent-run', async (event, {
     // Reuse or create engine
     let engine = activeSessions.get(sessionId);
     if (!engine) {
-      engine = new AgentEngine(config, sessionId);
+      let finalConfig = { ...config };
+      if (config.model === 'auto' || config.model === 'Model Governance') {
+        const settings = SettingsStorage.loadSettings();
+        const enabledModels = settings.models?.filter(m => m.enabled) || [];
+        const routed = ModelRouter.routeModelForTask(prompt, enabledModels as any);
+        if (routed) {
+          finalConfig.provider = routed.provider as any;
+          finalConfig.model = routed.model;
+          const byok = settings.providers?.find(p => p.id === routed.provider);
+          if (byok) {
+            finalConfig.apiKey = byok.apiKey;
+            finalConfig.baseUrl = byok.baseUrl;
+          }
+        }
+      }
+      engine = new AgentEngine(finalConfig, sessionId);
       activeSessions.set(sessionId, engine);
     }
 
@@ -102,6 +117,30 @@ ipcMain.handle('settings-read', () => {
 
 ipcMain.handle('settings-write', (_event, settings) => {
   SettingsStorage.saveSettings(settings);
+});
+
+ipcMain.handle('usage-summary', () => {
+  return UsageTracker.getSummary();
+});
+
+ipcMain.handle('usage-records', () => {
+  return UsageTracker.loadUsage();
+});
+
+ipcMain.handle('usage-clear', () => {
+  UsageTracker.clearUsage();
+});
+
+ipcMain.handle('model-gov-read-instructions', () => {
+  return ModelGovStorage.loadInstructions();
+});
+
+ipcMain.handle('model-gov-write-instructions', (_event, content: string) => {
+  ModelGovStorage.saveInstructions(content);
+});
+
+ipcMain.handle('model-gov-update-instructions', async () => {
+  return await ModelGovStorage.autoUpdateInstructions();
 });
 
 ipcMain.handle('select-project-folders', async () => {
@@ -350,9 +389,20 @@ function setupDevWatcher() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   initApp();
   setupDevWatcher();
+
+  // Model Gov startup instructions auto-update check
+  try {
+    const settings = SettingsStorage.loadSettings();
+    if (settings.modelGov?.autoUpdateInstructions) {
+      ModelGovStorage.autoUpdateInstructions().catch(e => console.error('Model Gov instructions auto-update failed:', e));
+    }
+  } catch (e) {
+    // Ignore settings errors at startup
+  }
+
   app.on('activate', () => {
     if (windowManager.getAllWindows().length === 0) initApp();
   });

@@ -12,7 +12,8 @@ import {
   SlidersHorizontal,
   SquareTerminal,
   MonitorSmartphone,
-  MousePointer2
+  MousePointer2,
+  Scale
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -38,6 +39,7 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
   "AI Config": [
     { id: 'providers', label: 'Providers', Icon: SlidersHorizontal },
     { id: 'models', label: 'Models', Icon: Bot },
+    { id: 'model-gov', label: 'Model Gov', Icon: Scale },
     { id: 'usage', label: 'AI Usage', Icon: SquareTerminal }
   ],
   Integrations: [

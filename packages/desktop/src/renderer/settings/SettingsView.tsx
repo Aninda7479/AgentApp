@@ -8,6 +8,8 @@ import { ServersSettings } from './ServersSettings';
 import { ProvidersSettings } from './ProvidersSettings';
 import { ModelsSettings } from './ModelsSettings';
 import { PlaceholderSettings } from './PlaceholderSettings';
+import { UsageTrackerSettings } from './UsageTrackerSettings';
+import { ModelGovSettings } from './ModelGovSettings';
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   activeCategory,
@@ -178,13 +180,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             enrichModel={enrichModel}
           />
         )}
-        {activeCategory === 'usage' && (
-          <PlaceholderSettings
-            title="AI Usage"
-            description="Token usage, request volume, and model consumption summaries."
-            status="planned"
+        {activeCategory === 'model-gov' && (
+          <ModelGovSettings
+            modelsCatalog={modelsCatalog}
+            onSaveSettings={(patch) => {
+              const ipc = typeof window !== 'undefined' && (window as any).require
+                ? (window as any).require('electron').ipcRenderer
+                : null;
+              if (ipc) {
+                ipc.invoke('settings-read').then((current: any) => {
+                  ipc.invoke('settings-write', { ...current, ...patch });
+                });
+              }
+            }}
           />
         )}
+        {activeCategory === 'usage' && <UsageTrackerSettings />}
         {activeCategory === 'mcp' && <ServersSettings mcpDashboard={mcpDashboard} />}
         {activeCategory === 'browser-use' && (
           <PlaceholderSettings
