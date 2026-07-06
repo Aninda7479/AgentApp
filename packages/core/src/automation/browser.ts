@@ -5,6 +5,10 @@ export interface BrowserEngineConfig {
   viewport?: { width: number; height: number };
   userAgent?: string;
   timeout?: number;
+  connectToActiveChrome?: boolean;
+  chromeDebugPort?: number;
+  useUserProfile?: boolean;
+  userProfilePath?: string;
 }
 
 export interface NavigationResult {
@@ -30,23 +34,56 @@ export class PlaywrightBrowserEngine {
       headless: true,
       viewport: { width: 1280, height: 720 },
       timeout: 30000,
+      connectToActiveChrome: false,
+      chromeDebugPort: 9222,
+      useUserProfile: false,
       ...config,
     };
   }
 
   public async initialize(launchOptions?: LaunchOptions): Promise<void> {
-    if (this.browser) return;
+    if (this.browser || this.context) return;
     try {
-      this.browser = await chromium.launch({
-        headless: this.config.headless,
-        ...launchOptions,
-      });
-      this.context = await this.browser.newContext({
-        viewport: this.config.viewport,
-        userAgent: this.config.userAgent,
-      });
-      this.page = await this.context.newPage();
-      if (this.config.timeout) {
+      if (this.config.connectToActiveChrome) {
+        const port = this.config.chromeDebugPort || 9222;
+        // Connect directly to already running Chrome via remote-debugging port
+        this.browser = await chromium.connectOverCDP(`http://localhost:${port}`);
+        
+        const contexts = this.browser.contexts();
+        if (contexts.length > 0) {
+          this.context = contexts[0];
+          const pages = this.context.pages();
+          this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
+        } else {
+          this.context = await this.browser.newContext({
+            viewport: this.config.viewport,
+          });
+          this.page = await this.context.newPage();
+        }
+      } else if (this.config.useUserProfile && this.config.userProfilePath) {
+        // Launch a persistent browser context referencing local Chrome user data
+        this.context = await chromium.launchPersistentContext(this.config.userProfilePath, {
+          headless: this.config.headless,
+          viewport: this.config.viewport,
+          userAgent: this.config.userAgent,
+          ...launchOptions
+        });
+        const pages = this.context.pages();
+        this.page = pages.length > 0 ? pages[0] : await this.context.newPage();
+      } else {
+        // Isolated new session
+        this.browser = await chromium.launch({
+          headless: this.config.headless,
+          ...launchOptions,
+        });
+        this.context = await this.browser.newContext({
+          viewport: this.config.viewport,
+          userAgent: this.config.userAgent,
+        });
+        this.page = await this.context.newPage();
+      }
+
+      if (this.page && this.config.timeout) {
         this.page.setDefaultTimeout(this.config.timeout);
       }
     } catch (error) {
@@ -115,6 +152,6 @@ export class PlaywrightBrowserEngine {
   }
 
   public isInitialized(): boolean {
-    return this.browser !== null && this.browser.isConnected();
+    return (this.browser !== null && this.browser.isConnected()) || this.context !== null;
   }
 }

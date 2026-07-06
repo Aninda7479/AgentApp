@@ -62,6 +62,10 @@ export interface BrowserUseSettings {
   height?: number;
   userAgent?: string;
   timeout?: number;
+  connectToActiveChrome?: boolean;
+  chromeDebugPort?: number;
+  useUserProfile?: boolean;
+  userProfilePath?: string;
 }
 
 export interface ComputerUseSettings {

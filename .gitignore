@@ -1,5 +1,5 @@
 # Logs and debug output (as per project structure rules)
-logs/
+logs
 *.log
 npm-debug.log*
 yarn-debug.log*

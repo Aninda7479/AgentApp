@@ -36,7 +36,7 @@ describe('Automation & Vector Memory Suite (Steps 035 - 040)', () => {
         // If Chromium binaries are not pre-installed in environment, ensure proper error format is thrown
         expect((err as Error).message).toContain('Failed to initialize Playwright browser core engine');
       }
-    });
+    }, 20000);
   });
 
   // Step 036: Web Page Content Extractor & Markdown Converter
