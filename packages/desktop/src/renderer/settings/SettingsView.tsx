@@ -10,6 +10,8 @@ import { ModelsSettings } from './ModelsSettings';
 import { PlaceholderSettings } from './PlaceholderSettings';
 import { UsageTrackerSettings } from './UsageTrackerSettings';
 import { ModelGovSettings } from './ModelGovSettings';
+import { BrowserUseSettings } from './BrowserUseSettings';
+import { ComputerUseSettings } from './ComputerUseSettings';
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   activeCategory,
@@ -198,17 +200,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {activeCategory === 'usage' && <UsageTrackerSettings />}
         {activeCategory === 'mcp' && <ServersSettings mcpDashboard={mcpDashboard} />}
         {activeCategory === 'browser-use' && (
-          <PlaceholderSettings
-            title="Browser Use"
-            description="Browser automation controls and permissions for AI-assisted browsing."
-            status="planned"
+          <BrowserUseSettings
+            onSaveSettings={(patch) => {
+              const ipc = typeof window !== 'undefined' && (window as any).require
+                ? (window as any).require('electron').ipcRenderer
+                : null;
+              if (ipc) {
+                ipc.invoke('settings-read').then((current: any) => {
+                  ipc.invoke('settings-write', { ...current, ...patch });
+                });
+              }
+            }}
           />
         )}
         {activeCategory === 'computer-use' && (
-          <PlaceholderSettings
-            title="Computer Use"
-            description="Desktop control permissions, sessions, and safety rails."
-            status="planned"
+          <ComputerUseSettings
+            onSaveSettings={(patch) => {
+              const ipc = typeof window !== 'undefined' && (window as any).require
+                ? (window as any).require('electron').ipcRenderer
+                : null;
+              if (ipc) {
+                ipc.invoke('settings-read').then((current: any) => {
+                  ipc.invoke('settings-write', { ...current, ...patch });
+                });
+              }
+            }}
           />
         )}
         {activeCategory === 'archived-chats' && (

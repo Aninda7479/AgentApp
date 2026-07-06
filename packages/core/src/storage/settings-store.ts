@@ -56,6 +56,20 @@ export interface ModelGovSettings {
   categoryOverrides?: Record<string, string>;
 }
 
+export interface BrowserUseSettings {
+  headless?: boolean;
+  width?: number;
+  height?: number;
+  userAgent?: string;
+  timeout?: number;
+}
+
+export interface ComputerUseSettings {
+  enableMouse?: boolean;
+  enableKeyboard?: boolean;
+  actionDelay?: number;
+}
+
 export interface AppSettings {
   theme?: ThemeSettings;
   providers?: ProviderSettings[];
@@ -63,6 +77,8 @@ export interface AppSettings {
   lastUsedModel?: LastUsedModelSettings;
   general?: GeneralAppSettings;
   modelGov?: ModelGovSettings;
+  browserUse?: BrowserUseSettings;
+  computerUse?: ComputerUseSettings;
 }
 
 export interface SettingsPaths {

@@ -8,8 +8,36 @@ app.setPath('userData', customUserDataPath);
 
 import { windowManager } from './main/window';
 import { readStore, writeStore, StoreData } from './main/store';
-import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage } from '@superagent/core';
+import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, PlaywrightBrowserEngine, ComputerUse } from '@superagent/core';
 import { getChatDirectory } from './main/storage/index.js';
+
+let mainSharedBrowser: PlaywrightBrowserEngine | null = null;
+
+async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
+  if (!mainSharedBrowser) {
+    let config: any = { headless: true };
+    try {
+      const settings = SettingsStorage.loadSettings();
+      if (settings.browserUse) {
+        config = {
+          headless: settings.browserUse.headless !== false,
+          viewport: settings.browserUse.width && settings.browserUse.height
+            ? { width: settings.browserUse.width, height: settings.browserUse.height }
+            : { width: 1280, height: 720 },
+          userAgent: settings.browserUse.userAgent,
+          timeout: settings.browserUse.timeout ? settings.browserUse.timeout * 1000 : 30000
+        };
+      }
+    } catch {
+      // Fallback
+    }
+    mainSharedBrowser = new PlaywrightBrowserEngine(config);
+  }
+  if (!mainSharedBrowser.isInitialized()) {
+    await mainSharedBrowser.initialize();
+  }
+  return mainSharedBrowser;
+}
 import https from 'https';
 import http from 'http';
 
@@ -210,6 +238,26 @@ Please optimize these system instructions to:
 
   ModelGovStorage.saveInstructions(optimizedContent);
   return optimizedContent;
+});
+
+ipcMain.handle('browser-navigate', async (_event, { url }) => {
+  const browser = await getMainBrowser();
+  const res = await browser.navigate(url);
+  return `Successfully navigated to ${res.url} (HTTP status: ${res.status}). Page Title: "${res.title}"`;
+});
+
+ipcMain.handle('browser-screenshot', async (_event, { fullPage }) => {
+  const browser = await getMainBrowser();
+  const logsDir = path.join(app.getPath('userData'), 'logs');
+  fs.mkdirSync(logsDir, { recursive: true });
+  const screenshotPath = path.join(logsDir, `browser-screenshot-${Date.now()}.png`);
+  await browser.takeScreenshot({ path: screenshotPath, fullPage: !!fullPage });
+  return `Screenshot captured and saved to: ${screenshotPath}`;
+});
+
+ipcMain.handle('screenshot_screen', async () => {
+  const p = await ComputerUse.takeScreenshot();
+  return `Screenshot captured successfully and saved to: ${p}`;
 });
 
 ipcMain.handle('select-project-folders', async () => {

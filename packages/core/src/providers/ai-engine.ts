@@ -55,8 +55,38 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { UsageTracker } from '../storage/usage-tracker.js';
 import { ComputerUse } from '../automation/computer-use.js';
+import { PlaywrightBrowserEngine } from '../automation/browser.js';
+import { SettingsStorage } from '../storage/settings-store.js';
 
 const execAsync = promisify(exec);
+
+let sharedBrowser: PlaywrightBrowserEngine | null = null;
+
+async function getBrowser(): Promise<PlaywrightBrowserEngine> {
+  if (!sharedBrowser) {
+    let config: any = { headless: true };
+    try {
+      const settings = SettingsStorage.loadSettings();
+      if (settings.browserUse) {
+        config = {
+          headless: settings.browserUse.headless !== false,
+          viewport: settings.browserUse.width && settings.browserUse.height
+            ? { width: settings.browserUse.width, height: settings.browserUse.height }
+            : { width: 1280, height: 720 },
+          userAgent: settings.browserUse.userAgent,
+          timeout: settings.browserUse.timeout ? settings.browserUse.timeout * 1000 : 30000
+        };
+      }
+    } catch {
+      // Fallback
+    }
+    sharedBrowser = new PlaywrightBrowserEngine(config);
+  }
+  if (!sharedBrowser.isInitialized()) {
+    await sharedBrowser.initialize();
+  }
+  return sharedBrowser;
+}
 
 function makeSafeExec(projectRoot: string) {
   return async (command: string): Promise<string> => {
@@ -274,6 +304,249 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         } catch (err: unknown) {
           return `Keyboard action failed: ${(err as Error).message}`;
         }
+      }
+    },
+    {
+      name: 'browser_navigate',
+      description: 'Navigate the headless browser to the specified URL.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'The absolute URL to load (e.g. https://www.google.com)' }
+        },
+        required: ['url'],
+        additionalProperties: false
+      },
+      execute: async ({ url }) => {
+        try {
+          const browser = await getBrowser();
+          const res = await browser.navigate(url as string);
+          return `Successfully navigated to ${res.url} (HTTP status: ${res.status}). Page Title: "${res.title}"`;
+        } catch (err: unknown) {
+          return `Navigation failed: ${(err as Error).message}`;
+        }
+      }
+    },
+    {
+      name: 'browser_screenshot',
+      description: 'Capture a PNG screenshot of the current page. Returns the saved screenshot path.',
+      parameters: {
+        type: 'object',
+        properties: {
+          fullPage: { type: 'boolean', description: 'Capture the entire scrollable height of the webpage' }
+        },
+        additionalProperties: false
+      },
+      execute: async ({ fullPage }) => {
+        try {
+          const browser = await getBrowser();
+          const logsDir = path.join(process.cwd(), 'logs');
+          fs.mkdirSync(logsDir, { recursive: true });
+          const screenshotPath = path.join(logsDir, `browser-screenshot-${Date.now()}.png`);
+          await browser.takeScreenshot({ path: screenshotPath, fullPage: !!fullPage });
+          return `Screenshot captured and saved to: ${screenshotPath}`;
+        } catch (err: unknown) {
+          return `Screenshot failed: ${(err as Error).message}`;
+        }
+      }
+    },
+    {
+      name: 'browser_click',
+      description: 'Click on a webpage element specified by CSS selector, text content, or coordinates.',
+      parameters: {
+        type: 'object',
+        properties: {
+          selector: { type: 'string', description: 'CSS selector of the target element' },
+          text: { type: 'string', description: 'Click element matching this inner text (if selector not provided)' },
+          x: { type: 'number', description: 'Optional pixel X coordinate' },
+          y: { type: 'number', description: 'Optional pixel Y coordinate' }
+        },
+        additionalProperties: false
+      },
+      execute: async ({ selector, text, x, y }) => {
+        try {
+          const browser = await getBrowser();
+          const page = browser.getPage();
+          if (selector) {
+            await page.click(selector as string);
+            return `Clicked element matching selector: "${selector}"`;
+          } else if (text) {
+            await page.click(`text="${text}"`);
+            return `Clicked element with text: "${text}"`;
+          } else if (x !== undefined && y !== undefined) {
+            await page.mouse.click(x as number, y as number);
+            return `Clicked at coordinates: (${x}, ${y})`;
+          }
+          return 'Error: Please specify selector, text, or coordinates (x, y)';
+        } catch (err: unknown) {
+          return `Click failed: ${(err as Error).message}`;
+        }
+      }
+    },
+    {
+      name: 'browser_type',
+      description: 'Type text into a webpage input field specified by its CSS selector.',
+      parameters: {
+        type: 'object',
+        properties: {
+          selector: { type: 'string', description: 'CSS selector of the input field' },
+          text: { type: 'string', description: 'The text to type into the field' },
+          pressEnter: { type: 'boolean', description: 'Submit by pressing Enter after typing' }
+        },
+        required: ['selector', 'text'],
+        additionalProperties: false
+      },
+      execute: async ({ selector, text, pressEnter }) => {
+        try {
+          const browser = await getBrowser();
+          const page = browser.getPage();
+          await page.fill(selector as string, text as string);
+          if (pressEnter) {
+            await page.press(selector as string, 'Enter');
+            return `Typed "${text}" into selector "${selector}" and pressed Enter.`;
+          }
+          return `Typed "${text}" into selector "${selector}".`;
+        } catch (err: unknown) {
+          return `Type action failed: ${(err as Error).message}`;
+        }
+      }
+    },
+    {
+      name: 'browser_press_key',
+      description: 'Press a keyboard key on the active element or page globally.',
+      parameters: {
+        type: 'object',
+        properties: {
+          key: { type: 'string', description: 'Key name (e.g. "Enter", "Escape", "ArrowDown", "Backspace")' },
+          selector: { type: 'string', description: 'CSS selector of the element to focus before pressing key' }
+        },
+        required: ['key'],
+        additionalProperties: false
+      },
+      execute: async ({ key, selector }) => {
+        try {
+          const browser = await getBrowser();
+          const page = browser.getPage();
+          if (selector) {
+            await page.press(selector as string, key as string);
+            return `Pressed key "${key}" on element: "${selector}"`;
+          } else {
+            await page.keyboard.press(key as string);
+            return `Pressed key "${key}" globally on the page.`;
+          }
+        } catch (err: unknown) {
+          return `Press key failed: ${(err as Error).message}`;
+        }
+      }
+    },
+    {
+      name: 'browser_scroll',
+      description: 'Scroll the viewport of the webpage.',
+      parameters: {
+        type: 'object',
+        properties: {
+          direction: { type: 'string', enum: ['up', 'down', 'top', 'bottom'], description: 'Scroll direction' },
+          selector: { type: 'string', description: 'CSS selector of target element to scroll into view' },
+          amount: { type: 'number', description: 'Scroll distance in pixels (defaults to 300)' }
+        },
+        additionalProperties: false
+      },
+      execute: async ({ direction, selector, amount }) => {
+        try {
+          const browser = await getBrowser();
+          const page = browser.getPage();
+          if (selector) {
+            await page.locator(selector as string).scrollIntoViewIfNeeded();
+            return `Scrolled element into view: "${selector}"`;
+          }
+          const dist = amount !== undefined ? (amount as number) : 300;
+          if (direction === 'down' || !direction) {
+            await page.evaluate((d) => window.scrollBy(0, d), dist);
+          } else if (direction === 'up') {
+            await page.evaluate((d) => window.scrollBy(0, -d), dist);
+          } else if (direction === 'top') {
+            await page.evaluate(() => window.scrollTo(0, 0));
+          } else if (direction === 'bottom') {
+            await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+          }
+          return `Scrolled page ${direction || 'down'}.`;
+        } catch (err: unknown) {
+          return `Scroll failed: ${(err as Error).message}`;
+        }
+      }
+    },
+    {
+      name: 'browser_get_elements',
+      description: 'List interactive page elements (links, buttons, inputs) with selectors and texts.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false
+      },
+      execute: async () => {
+        try {
+          const browser = await getBrowser();
+          const page = browser.getPage();
+          const list = await page.evaluate(() => {
+            const selectables = document.querySelectorAll('button, a, input, select, textarea, [role="button"]');
+            return Array.from(selectables).slice(0, 100).map((el, i) => {
+              const rect = el.getBoundingClientRect();
+              return {
+                index: i,
+                tag: el.tagName.toLowerCase(),
+                text: el.textContent?.trim().slice(0, 50) || '',
+                type: (el as any).type || '',
+                id: el.id || '',
+                className: el.className || '',
+                placeholder: (el as any).placeholder || '',
+                visible: rect.width > 0 && rect.height > 0
+              };
+            });
+          });
+          return JSON.stringify(list, null, 2);
+        } catch (err: unknown) {
+          return `Get elements failed: ${(err as Error).message}`;
+        }
+      }
+    },
+    {
+      name: 'browser_get_content',
+      description: 'Get page inner text or raw HTML source.',
+      parameters: {
+        type: 'object',
+        properties: {
+          format: { type: 'string', enum: ['text', 'html'], description: 'Output format (default is text)' }
+        },
+        additionalProperties: false
+      },
+      execute: async ({ format }) => {
+        try {
+          const browser = await getBrowser();
+          const page = browser.getPage();
+          if (format === 'html') {
+            return await page.content();
+          }
+          return await page.innerText('body');
+        } catch (err: unknown) {
+          return `Get content failed: ${(err as Error).message}`;
+        }
+      }
+    },
+    {
+      name: 'browser_close',
+      description: 'Close the active browser instance and clear session cookies/history.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false
+      },
+      execute: async () => {
+        if (sharedBrowser) {
+          await sharedBrowser.close();
+          sharedBrowser = null;
+          return 'Browser successfully shut down.';
+        }
+        return 'Browser is not currently running.';
       }
     }
   ];
