@@ -5,8 +5,10 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace=@superagent/core && npm run build --workspace=@superagent/cli && npm run build --workspace=@superagent/desktop",
+    "build": "npm run build --workspace=@superagent/core && npm run build --workspace=@superagent/cli && npm run build --workspace=@superagent/desktop && npm run build --workspace=@superagent/web",
     "dev": "npm run dev --workspace=@superagent/desktop",
+    "web:dev": "npm run dev --workspace=@superagent/web",
+    "web:start": "npm run start --workspace=@superagent/web",
     "test": "npm test --workspace=@superagent/core && npm test --workspace=@superagent/cli && npm test --workspace=@superagent/desktop"
   }
 }

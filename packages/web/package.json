@@ -1,0 +1,28 @@
+{
+  "name": "@superagent/web",
+  "version": "0.1.0",
+  "description": "Web deployment backend and bundler for SuperAgent",
+  "main": "dist/server.js",
+  "type": "module",
+  "scripts": {
+    "build:client": "node scripts/build.js",
+    "build:server": "tsc",
+    "build": "npm run build:client && npm run build:server",
+    "start": "node dist/server.js",
+    "dev": "npm run build:client && concurrently -n \"tsc,server\" -c \"green,magenta\" \"tsc -w\" \"nodemon --watch dist/server.js dist/server.js\""
+  },
+  "dependencies": {
+    "@superagent/core": "*",
+    "express": "^4.19.2",
+    "ws": "^8.17.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.9",
+    "@types/ws": "^8.5.10",
+    "concurrently": "^10.0.3",
+    "esbuild": "^0.21.5",
+    "nodemon": "^3.1.14",
+    "typescript": "^5.6.0"
+  }
+}

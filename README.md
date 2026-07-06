@@ -40,6 +40,20 @@ npm run build
 
 ---
 
+## Start
+
+### Start Desktop
+```bash
+npm run start --workspace=@superagent/desktop
+```
+
+### Start Web(In Cloud Server/VPS for remote access)
+```bash
+npm run start --workspace=@superagent/web
+```
+    
+---
+
 ## 📖 User Guide
 
 ### Running the CLI
