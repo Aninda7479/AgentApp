@@ -58,6 +58,21 @@ body {
   color: var(--brand-text-main);
 }
 
+/* Mobile / touch polish: remove tap flash, prevent double-tap zoom,
+   allow momentum scrolling, and keep smooth in-app navigation. */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+body {
+  touch-action: manipulation;
+  overscroll-behavior: none;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }

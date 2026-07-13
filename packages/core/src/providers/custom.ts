@@ -6,6 +6,7 @@ import {
   ModelCapability,
   AIProvider
 } from '../types/agent.js';
+import { resolveBaseUrl, getProviderMeta } from './provider-meta.js';
 
 export class CustomAdapter implements BaseProviderAdapter {
   public readonly provider: AIProvider;
@@ -14,22 +15,10 @@ export class CustomAdapter implements BaseProviderAdapter {
   private defaultModel: string;
 
   constructor(config: BYOKConfig) {
-    if (config.provider !== 'deepseek' && config.provider !== 'custom' && config.provider !== 'deepinfra') {
-      throw new Error(`Invalid provider for CustomAdapter: ${config.provider}`);
-    }
     this.provider = config.provider;
     this.apiKey = config.apiKey || 'custom-key';
-
-    if (config.provider === 'deepseek') {
-      this.baseUrl = (config.baseUrl || 'https://api.deepseek.com/v1').replace(/\/+$/, '');
-      this.defaultModel = config.modelName || 'deepseek-chat';
-    } else if (config.provider === 'deepinfra') {
-      this.baseUrl = (config.baseUrl || 'https://api.deepinfra.com/v1/openai').replace(/\/+$/, '');
-      this.defaultModel = config.modelName || 'meta-llama/Llama-3-70b-instruct';
-    } else {
-      this.baseUrl = (config.baseUrl || 'http://localhost:11434/v1').replace(/\/+$/, '');
-      this.defaultModel = config.modelName || 'custom-model';
-    }
+    this.baseUrl = resolveBaseUrl(config.provider, config.baseUrl);
+    this.defaultModel = config.modelName || getProviderMeta(config.provider)?.name || 'gpt-4o';
   }
 
   public async complete(request: CompletionRequest): Promise<CompletionResponse> {
@@ -207,17 +196,10 @@ export class CustomAdapter implements BaseProviderAdapter {
       ];
     }
 
-    return [
-      {
-        id: this.defaultModel,
-        name: `Custom Model (${this.defaultModel})`,
-        provider: 'custom',
-        contextWindow: 32768,
-        maxOutputTokens: 4096,
-        supportsVision: false,
-        supportsTools: true,
-        supportsReasoning: false
-      }
-    ];
+    // For other OpenAI-compatible providers (OpenRouter, Kimi, Mistral, …) and
+    // generic custom endpoints the real model list is discovered via the
+    // provider's own `/models` endpoint, so we don't fabricate capabilities
+    // here.
+    return [];
   }
 }

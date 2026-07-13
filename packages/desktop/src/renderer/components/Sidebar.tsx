@@ -136,7 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title="Close menu"
           aria-label="Close menu"
         >
-          <PanelLeftClose className="w-4.5 h-4.5" />
+          <PanelLeftClose className="w-5 h-5" />
         </button>
       )}
 
@@ -463,7 +463,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {activeTab === 'settings' && (
             <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-gradient-to-b from-violet-500 to-indigo-500" />
           )}
-          <Settings className={`w-4.5 h-4.5 flex-shrink-0 transition-transform duration-200 ${activeTab === 'settings' ? 'scale-110 text-violet-400' : ''}`} />
+          <Settings className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 ${activeTab === 'settings' ? 'scale-110 text-violet-400' : ''}`} />
           {!collapsed && <span>Settings</span>}
         </button>
         {onToggleCollapse && (
@@ -472,7 +472,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className={`flex items-center justify-center p-2.5 rounded-lg text-brand-textMuted bg-white/5 border border-brand-border/20 hover:text-brand-textMain hover:bg-white/10 hover:border-brand-border/45 transition-all duration-200 cursor-pointer ${collapsed ? 'w-full' : 'w-10 h-10'}`}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
-            {collapsed ? <ChevronRight className="w-4.5 h-4.5" /> : <PanelLeftClose className="w-4.5 h-4.5" />}
+            {collapsed ? <ChevronRight className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
           </button>
         )}
       </div>

@@ -14,19 +14,23 @@ import {
   ModelGovStorage,
   PlaywrightBrowserEngine,
   ComputerUse,
-  getUserDataDirectory
+  getUserDataDirectory,
+  AuthStore,
+  ProviderAutoDetector
 } from '@superagent/core';
 
 import { AgentEngine, AgentEngineConfig, AgentEvent } from './ai-engine.js';
 import { readConversationStore, writeConversationStore } from './storage/conversation-store.js';
 import { getChatDirectory } from './storage/paths.js';
 import {
-  getAuthConfig,
   authGate,
   handleLogin,
   handleLogout,
   handleStatus,
-  getAuthenticatedUser
+  handleSetup,
+  handleChangePassword,
+  getAuthenticatedUser,
+  isAuthDisabled
 } from './auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -42,30 +46,41 @@ app.use(express.json({ limit: '50mb' }));
 const userDataDir = getUserDataDirectory();
 
 // ─── VPS Authentication ─────────────────────────────────────────────────────
-// Session-based login system (see auth.ts). Falls back to open mode when no
-// SUPERAGENT_PASSWORD / SUPERAGENT_PASSWORD_HASH is configured.
-const authConfig = getAuthConfig();
+// Session-based login system. Credentials live in the shared core AuthStore so
+// the CLI/Desktop/Web all manage the same admin account. Auth is required by
+// default; set SUPERAGENT_DISABLE_AUTH=true for open (local/dev) mode.
+
+// Seed the admin account from env vars on first run (headless provisioning).
+if (!isAuthDisabled() && AuthStore.ensureSeededFromEnv()) {
+  console.log('[Security] Seeded admin credentials from environment variables.');
+}
 
 // Lightweight health check (always public).
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
 // Auth endpoints (must be registered before the gate).
+app.post('/api/auth/setup', handleSetup);
 app.post('/api/auth/login', handleLogin);
 app.post('/api/auth/logout', handleLogout);
 app.get('/api/auth/status', handleStatus);
+app.post('/api/auth/change-password', handleChangePassword);
 
-// Serve the standalone login page (public).
+// Serve the standalone login/setup page (public).
 app.get('/login', (_req, res) => {
   res.sendFile(path.join(__dirname, 'login.html'));
 });
 
-if (authConfig.enabled) {
-  console.log(`[Security] Login enabled — username "${authConfig.username}". All routes require an authenticated session.`);
-  if (!process.env.SUPERAGENT_SESSION_SECRET) {
-    console.log('[Security] No SUPERAGENT_SESSION_SECRET set — using a random secret (sessions reset on restart).');
-  }
+// Serve the account (change password) page — protected by the gate below.
+app.get('/account', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'account.html'));
+});
+
+if (isAuthDisabled()) {
+  console.log('[Security Warning] SUPERAGENT_DISABLE_AUTH=true — running in OPEN mode with NO authentication.');
+} else if (AuthStore.isPasswordSet()) {
+  console.log(`[Security] Login enabled — username "${AuthStore.getUsername()}". All routes require an authenticated session.`);
 } else {
-  console.log('[Security Warning] Running without authentication! Set SUPERAGENT_PASSWORD (and optionally SUPERAGENT_USERNAME) to secure your server.');
+  console.log('[Security] Login enabled with the default password "admin" — set a custom one via `superagent password set` or the /account page.');
 }
 
 // Gate everything else behind a valid session.
@@ -148,6 +163,20 @@ async function runAgentEngine(
           }
         }
       }
+
+      // Safety net: the client may send a model *display name* (e.g.
+      // "Google: Gemma 4 31B (free)") instead of the provider model *id* (slug).
+      // Resolve it to the real id so the upstream API is never sent a name.
+      if (finalConfig.model && /\s/.test(finalConfig.model) && finalConfig.provider) {
+        const settings = SettingsStorage.loadSettings();
+        const match = (settings.models || []).find(
+          m => m.providerId === finalConfig.provider && m.name === finalConfig.model
+        );
+        if (match) {
+          finalConfig.model = match.id.replace(`${finalConfig.provider}-`, '');
+        }
+      }
+
       engine = new AgentEngine(finalConfig, sessionId);
       activeSessions.set(sessionId, engine);
     }
@@ -169,114 +198,9 @@ async function runAgentEngine(
 }
 
 // ─── Auto-detect Providers ───────────────────────────────────────────────────
-async function fetchJson(url: string, headers: Record<string, string> = {}): Promise<any> {
-  try {
-    const response = await fetch(url, { headers });
-    if (!response.ok) return null;
-    return await response.json();
-  } catch {
-    return null;
-  }
-}
-
+// Shared with the Desktop app via core's ProviderAutoDetector (single source of truth).
 async function autoDetectProviders() {
-  const detected: any[] = [];
-  
-  // 1. Check local Ollama
-  try {
-    const response = await fetch('http://localhost:11434/api/tags');
-    if (response.ok) {
-      const ollamaModels = await response.json() as any;
-      if (ollamaModels?.models?.length) {
-        detected.push({
-          id: 'ollama',
-          name: 'Ollama (Local)',
-          type: 'custom',
-          apiKey: '',
-          baseUrl: 'http://localhost:11434',
-          models: (ollamaModels.models as any[]).map((m: any) => ({
-            id: m.name,
-            name: m.name
-          }))
-        });
-      }
-    }
-  } catch {
-    // Ollama not running
-  }
-
-  // 2. Env cloud providers
-  const envProviders = [
-    {
-      id: 'chatgpt',
-      name: 'OpenAI (ChatGPT)',
-      envKey: 'OPENAI_API_KEY',
-      modelsUrl: 'https://api.openai.com/v1/models',
-      authHeader: (k: string) => ({ Authorization: `Bearer ${k}` }),
-      parseModels: (d: any) => (d?.data ?? []).map((m: any) => ({ id: m.id, name: m.id }))
-    },
-    {
-      id: 'deepseek',
-      name: 'DeepSeek',
-      envKey: 'DEEPSEEK_API_KEY',
-      modelsUrl: 'https://api.deepseek.com/models',
-      authHeader: (k: string) => ({ Authorization: `Bearer ${k}` }),
-      parseModels: (d: any) => (d?.data ?? []).map((m: any) => ({ id: m.id, name: m.id }))
-    },
-    {
-      id: 'deepinfra',
-      name: 'DeepInfra',
-      envKey: 'DEEPINFRA_API_KEY',
-      modelsUrl: 'https://api.deepinfra.com/v1/models',
-      authHeader: (k: string) => ({ Authorization: `Bearer ${k}` }),
-      parseModels: (d: any) => {
-        const list = Array.isArray(d) ? d : (d?.data ?? []);
-        return list.map((m: any) => ({ id: m.model_name ?? m.id, name: m.model_name ?? m.id }));
-      }
-    },
-    {
-      id: 'google',
-      name: 'Google Gemini',
-      envKey: 'GEMINI_API_KEY',
-      modelsUrl: '', 
-      authHeader: () => ({}),
-      parseModels: (d: any) => (d?.models ?? []).map((m: any) => ({
-        id: m.name.replace('models/', ''),
-        name: m.displayName ?? m.name
-      }))
-    }
-  ];
-
-  for (const prov of envProviders) {
-    const apiKey = process.env[prov.envKey];
-    if (!apiKey) continue;
-
-    try {
-      let data: any;
-      if (prov.id === 'google') {
-        data = await fetchJson(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-      } else {
-        data = await fetchJson(prov.modelsUrl, prov.authHeader(apiKey));
-      }
-      if (data) {
-        const models = prov.parseModels(data);
-        if (models.length) {
-          detected.push({
-            id: prov.id,
-            name: prov.name,
-            type: 'env',
-            apiKey,
-            baseUrl: '',
-            models
-          });
-        }
-      }
-    } catch {
-      // Key configured but fetch failed
-    }
-  }
-
-  return detected;
+  return ProviderAutoDetector.detect();
 }
 
 // ─── Model Governance Prompt Optimization ────────────────────────────────────
@@ -511,7 +435,7 @@ server.on('upgrade', (request, socket, head) => {
   const pathname = new URL(request.url || '', `http://${request.headers.host}`).pathname;
   if (pathname === '/api/ws') {
     // Enforce authentication on the WebSocket handshake too.
-    if (authConfig.enabled && !getAuthenticatedUser(request)) {
+    if (!isAuthDisabled() && !getAuthenticatedUser(request)) {
       socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
       socket.destroy();
       return;
@@ -526,7 +450,7 @@ server.on('upgrade', (request, socket, head) => {
 
 server.listen(PORT, () => {
   console.log(`================================================================`);
-  console.log(`🚀 SuperAgent Web Server ignited at: http://localhost:${PORT}`);
-  console.log(`⚙️  Resolving configuration and logs at: ${userDataDir}`);
+  console.log(`SuperAgent Web Server ignited at: http://localhost:${PORT}`);
+  console.log(`Resolving configuration and logs at: ${userDataDir}`);
   console.log(`================================================================`);
 });

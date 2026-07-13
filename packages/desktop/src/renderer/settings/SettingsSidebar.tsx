@@ -121,7 +121,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
     </div>
 
     <div className="hidden lg:block flex-shrink-0 border-t border-brand-border px-6 py-3 text-left text-xs text-brand-textMuted">
-      Agent App Desktop
+      SuperAgent
     </div>
   </aside>
 );

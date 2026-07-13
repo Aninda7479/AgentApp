@@ -1,5 +1,6 @@
 import React from 'react';
-import { Key, ChevronLeft, ChevronRight, Sparkles, Menu } from 'lucide-react';
+import { Key, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
+import { BrandLogo } from '../BrandLogo';
 
 interface TitleBarProps {
   hasOpenAiKey: boolean;
@@ -55,7 +56,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
         {/* App Logo */}
         <div className="flex items-center text-violet-500 hover:text-violet-400 transition-colors flex-shrink-0">
-          <Sparkles className="w-4 h-4 animate-pulse" />
+          <BrandLogo size={22} />
         </div>
 
         {/* Back / Forward History Navigation */}
@@ -63,7 +64,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           <button
             onClick={onNavigateBack}
             disabled={!canNavigateBack}
-            className={`w-5.5 h-5.5 flex items-center justify-center rounded transition-all ${
+            className={`w-6 h-6 flex items-center justify-center rounded transition-all ${
               canNavigateBack
                 ? 'hover:bg-white/5 hover:text-brand-textMain cursor-pointer'
                 : 'opacity-35 cursor-not-allowed'
@@ -75,7 +76,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           <button
             onClick={onNavigateForward}
             disabled={!canNavigateForward}
-            className={`w-5.5 h-5.5 flex items-center justify-center rounded transition-all ${
+            className={`w-6 h-6 flex items-center justify-center rounded transition-all ${
               canNavigateForward
                 ? 'hover:bg-white/5 hover:text-brand-textMain cursor-pointer'
                 : 'opacity-35 cursor-not-allowed'
@@ -102,7 +103,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
       {/* Middle side: Window Title label */}
       <div className="hidden sm:block text-[11px] text-brand-textMuted/60 font-semibold absolute left-1/2 -translate-x-1/2 pointer-events-none select-none tracking-wider">
-        Agent Desktop
+        SuperAgent
       </div>
 
       {/* Right side: BYOK status pill and custom Window controls */}

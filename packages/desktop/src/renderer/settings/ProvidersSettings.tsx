@@ -43,6 +43,7 @@ const ProviderLogo: React.FC<{ providerId: string; org?: string; size?: number }
 
 const POPULAR_PROVIDERS = [
   { id: 'ollama', name: 'Ollama', org: 'ollama', desc: 'Local model interface (Ollama runner instance)', defaultUrl: 'http://localhost:11434' },
+  { id: 'ollama-cloud', name: 'Ollama Cloud', org: 'ollama', desc: 'Ollama Cloud hosted model inference API', defaultUrl: 'https://api.ollama.com' },
   { id: 'claude', name: 'Claude', org: 'anthropic', desc: 'Anthropic Claude Developer API platform', defaultUrl: 'https://api.anthropic.com/v1' },
   { id: 'chatgpt', name: 'ChatGPT', org: 'openai', desc: 'OpenAI Developer platform API access', defaultUrl: 'https://api.openai.com/v1' },
   { id: 'google', name: 'Google', org: 'google', desc: 'Google Gemini Developer models', defaultUrl: 'https://generativelanguage.googleapis.com' },
@@ -160,6 +161,27 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
           contextLimit: m.context_length ? fmtTokens(m.context_length) : undefined,
           description: m.description
         }));
+      } else if (modalProviderId === 'ollama-cloud') {
+        const base = url.replace(/\/+$/, '');
+        const authHeaders: Record<string, string> = {};
+        if (key) authHeaders['Authorization'] = `Bearer ${key}`;
+
+        const res = await fetch(`${base}/api/tags`, { headers: authHeaders });
+        if (!res.ok) throw new Error(`Ollama Cloud API error [${res.status}]: ${res.statusText}`);
+        const data = await res.json();
+        rawModels = (data.models ?? []).map((m: any) => ({
+          id: m.name,
+          name: m.name,
+          contextLimit: m.details?.parameter_size ? `~${m.details.parameter_size}` : undefined
+        }));
+
+        if (!rawModels?.length) {
+          throw new Error('Ollama Cloud returned no models. Verify the endpoint is reachable.');
+        }
+
+        if (!key) {
+          setTestingStatus('Connected (no API key — model listing only, chat will fail without a key)');
+        }
       } else {
         const base = url || 'https://api.openai.com/v1';
         const headers: Record<string, string> = {};
@@ -199,7 +221,13 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       google:   [{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', ctx: '1M' }, { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', ctx: '2M' }, { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', ctx: '1M' }],
       claude:   [{ id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', ctx: '200k' }, { id: 'claude-haiku-3-5', name: 'Claude Haiku 3.5', ctx: '200k' }],
       kimi:     [{ id: 'moonshot-v1-128k', name: 'Moonshot v1 128k', ctx: '128k' }, { id: 'moonshot-v1-32k', name: 'Moonshot v1 32k', ctx: '32k' }],
-      openrouter: [{ id: 'openrouter/auto', name: 'Auto Router' }]
+      openrouter: [{ id: 'openrouter/auto', name: 'Auto Router' }],
+      'ollama-cloud': [
+        { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', ctx: '128k' },
+        { id: 'gemma4:31b', name: 'Gemma 4 31B', ctx: '128k' },
+        { id: 'gpt-oss:20b', name: 'GPT-OSS 20B', ctx: '128k' },
+        { id: 'qwen3.5:397b', name: 'Qwen 3.5 397B', ctx: '128k' }
+      ]
     };
 
     const defaults = knownDefaults[modalProviderId];

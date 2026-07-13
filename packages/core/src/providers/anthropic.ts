@@ -14,9 +14,6 @@ export class AnthropicAdapter implements BaseProviderAdapter {
   private defaultModel: string;
 
   constructor(config: BYOKConfig) {
-    if (config.provider !== 'anthropic') {
-      throw new Error(`Invalid provider for AnthropicAdapter: ${config.provider}`);
-    }
     this.apiKey = config.apiKey;
     this.baseUrl = (config.baseUrl || 'https://api.anthropic.com').replace(/\/+$/, '');
     this.defaultModel = config.modelName || 'claude-3-7-sonnet-20250219';

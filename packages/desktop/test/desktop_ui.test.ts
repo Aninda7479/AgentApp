@@ -470,6 +470,6 @@ describe('Step 082b: Additional Codex UI Sub-components', () => {
     expect(html).toContain('Work mode');
     expect(html).toContain('For coding');
     expect(html).toContain('Default permissions');
-    expect(html).toContain('Agent App Desktop');
+    expect(html).toContain('SuperAgent');
   });
 });

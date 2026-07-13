@@ -14,9 +14,6 @@ export class GeminiAdapter implements BaseProviderAdapter {
   private defaultModel: string;
 
   constructor(config: BYOKConfig) {
-    if (config.provider !== 'gemini') {
-      throw new Error(`Invalid provider for GeminiAdapter: ${config.provider}`);
-    }
     this.apiKey = config.apiKey;
     this.baseUrl = (config.baseUrl || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
     this.defaultModel = config.modelName || 'gemini-2.5-flash';

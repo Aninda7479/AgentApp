@@ -1,6 +1,7 @@
 {
   "name": "superagent-monorepo",
   "private": true,
+  "description": "SuperAgent — open-source autonomous AI agent for coding, browser automation, and multimodal media generation (Desktop + Web).",
   "workspaces": [
     "packages/*"
   ],

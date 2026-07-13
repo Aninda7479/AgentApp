@@ -1,7 +1,7 @@
 {
   "name": "@superagent/desktop",
   "version": "0.1.0",
-  "description": "Codex-Inspired Desktop Application for SuperAgent",
+  "description": "SuperAgent desktop app (Electron) — a Codex-inspired autonomous AI agent UI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

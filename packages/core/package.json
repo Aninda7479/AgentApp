@@ -1,7 +1,7 @@
 {
   "name": "@superagent/core",
   "version": "0.1.0",
-  "description": "Shared agent intelligence core for SuperAgent Desktop and CLI",
+  "description": "Shared agent intelligence core for SuperAgent (Desktop, Web, and CLI)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

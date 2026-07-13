@@ -1,136 +1,78 @@
 // ─── SuperAgent Web/VPS Authentication ──────────────────────────────────────
-// A self-contained, dependency-free session login system for the web server.
-//
-// Features:
-//   • Username + password login (credentials from environment variables)
+// Session layer for the web server. Credential storage/verification lives in
+// the shared core (`AuthStore`) so the CLI, Desktop and Web all manage the SAME
+// admin account. This file only owns web-specific concerns:
 //   • Signed, HttpOnly session cookies (HMAC-SHA256, tamper-proof)
-//   • Optional scrypt password hashing (SUPERAGENT_PASSWORD_HASH)
-//   • Constant-time credential comparison (mitigates timing attacks)
 //   • Per-IP brute-force rate limiting with temporary lockout
-//   • Protects both HTTP routes and the WebSocket upgrade handshake
+//   • The Express middleware/gate and auth route handlers
+//   • Enforcing auth on the WebSocket upgrade handshake
+//
+// Credential lifecycle (set / verify / change) is handled by core's AuthStore,
+// which persists to `<userData>/Config/auth.json`.
 //
 // Environment variables:
-//   SUPERAGENT_USERNAME         Login username        (default: "admin")
-//   SUPERAGENT_PASSWORD         Login password (plaintext)
-//   SUPERAGENT_WEB_PASSWORD     Alias for SUPERAGENT_PASSWORD (back-compat)
-//   SUPERAGENT_PASSWORD_HASH    scrypt hash "scrypt$<saltHex>$<hashHex>" (overrides plaintext)
-//   SUPERAGENT_SESSION_SECRET   Secret used to sign sessions (random if unset)
-//   SUPERAGENT_SESSION_TTL      Session lifetime in hours   (default: 168 = 7 days)
+//   SUPERAGENT_PASSWORD         Seed password on first run (plaintext, optional)
+//   SUPERAGENT_SESSION_SECRET   Secret used to sign sessions     (persisted if unset)
+//   SUPERAGENT_SESSION_TTL      Session lifetime in hours        (default: 168 = 7 days)
 //   SUPERAGENT_SECURE_COOKIES   "true" to mark cookies Secure (HTTPS only)
+//   SUPERAGENT_DISABLE_AUTH     "true" to run in open mode (local/dev only)
 //
-// If neither a password nor a password hash is configured, authentication is
-// DISABLED (open mode) and a warning is printed — preserving prior behavior.
+// By default the web surface REQUIRES authentication. The login is password-only:
+// there is no username field — ownership of the single admin password is the only
+// proof of identity. If no password exists yet, visitors are guided through a
+// one-time setup flow to create it.
 
 import crypto from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
 import type { IncomingMessage } from 'http';
+import { AuthStore } from '@superagent/core';
 
+/** Name of the session cookie. */
 const COOKIE_NAME = 'sa_session';
 
-interface AuthConfig {
-  enabled: boolean;
-  username: string;
-  password?: string;
-  passwordHash?: { salt: Buffer; hash: Buffer };
-  secret: string;
-  secureCookies: boolean;
-  sessionTtlMs: number;
+/** Whether authentication is disabled entirely (explicit opt-out for local dev). */
+export function isAuthDisabled(): boolean {
+  return process.env.SUPERAGENT_DISABLE_AUTH === 'true';
 }
 
-function parsePasswordHash(raw?: string): { salt: Buffer; hash: Buffer } | undefined {
-  if (!raw) return undefined;
-  const parts = raw.split('$');
-  if (parts.length === 3 && parts[0] === 'scrypt') {
-    try {
-      return { salt: Buffer.from(parts[1], 'hex'), hash: Buffer.from(parts[2], 'hex') };
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
+/** Session lifetime in milliseconds (from env, default 7 days). */
+function sessionTtlMs(): number {
+  const hours = Number(process.env.SUPERAGENT_SESSION_TTL) || 168;
+  return Math.max(1, hours) * 60 * 60 * 1000;
 }
 
-let cachedConfig: AuthConfig | null = null;
-
-export function getAuthConfig(): AuthConfig {
-  if (cachedConfig) return cachedConfig;
-
-  const password = process.env.SUPERAGENT_PASSWORD || process.env.SUPERAGENT_WEB_PASSWORD;
-  const passwordHash = parsePasswordHash(process.env.SUPERAGENT_PASSWORD_HASH);
-  const username = process.env.SUPERAGENT_USERNAME || 'admin';
-  const enabled = Boolean(password || passwordHash);
-
-  const ttlHours = Number(process.env.SUPERAGENT_SESSION_TTL) || 168;
-  const secret =
-    process.env.SUPERAGENT_SESSION_SECRET || crypto.randomBytes(48).toString('hex');
-
-  cachedConfig = {
-    enabled,
-    username,
-    password: password || undefined,
-    passwordHash,
-    secret,
-    secureCookies: process.env.SUPERAGENT_SECURE_COOKIES === 'true',
-    sessionTtlMs: Math.max(1, ttlHours) * 60 * 60 * 1000
-  };
-  return cachedConfig;
-}
-
-// ─── Constant-time helpers ───────────────────────────────────────────────────
-function safeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a, 'utf-8');
-  const bufB = Buffer.from(b, 'utf-8');
-  // Hash both to equal length so timingSafeEqual never throws on length mismatch.
-  const hashA = crypto.createHash('sha256').update(bufA).digest();
-  const hashB = crypto.createHash('sha256').update(bufB).digest();
-  return crypto.timingSafeEqual(hashA, hashB);
-}
-
-export function verifyCredentials(username: string, password: string): boolean {
-  const cfg = getAuthConfig();
-  if (!cfg.enabled) return false;
-
-  const userOk = safeEqual(username, cfg.username);
-
-  let passOk = false;
-  if (cfg.passwordHash) {
-    try {
-      const derived = crypto.scryptSync(password, cfg.passwordHash.salt, cfg.passwordHash.hash.length);
-      passOk =
-        derived.length === cfg.passwordHash.hash.length &&
-        crypto.timingSafeEqual(derived, cfg.passwordHash.hash);
-    } catch {
-      passOk = false;
-    }
-  } else if (cfg.password) {
-    passOk = safeEqual(password, cfg.password);
-  }
-
-  return userOk && passOk;
+/** Whether cookies should carry the Secure attribute (HTTPS deployments). */
+function useSecureCookies(): boolean {
+  return process.env.SUPERAGENT_SECURE_COOKIES === 'true';
 }
 
 // ─── Session token: base64url(payload).hmac ──────────────────────────────────
+
+/** Signs arbitrary data with the persistent session secret from core. */
 function sign(data: string): string {
   return crypto
-    .createHmac('sha256', getAuthConfig().secret)
+    .createHmac('sha256', AuthStore.getOrCreateSessionSecret())
     .update(data)
     .digest('base64url');
 }
 
+/** Creates a signed session token embedding the username and an expiry. */
 export function createSessionToken(username: string): string {
-  const cfg = getAuthConfig();
-  const payload = JSON.stringify({ u: username, exp: Date.now() + cfg.sessionTtlMs });
+  const payload = JSON.stringify({ u: username, exp: Date.now() + sessionTtlMs() });
   const encoded = Buffer.from(payload, 'utf-8').toString('base64url');
   return `${encoded}.${sign(encoded)}`;
 }
 
+/** Verifies a session token; returns the username or null if invalid/expired. */
 export function verifySessionToken(token: string | undefined): string | null {
   if (!token) return null;
   const dot = token.lastIndexOf('.');
   if (dot === -1) return null;
+
   const encoded = token.slice(0, dot);
   const signature = token.slice(dot + 1);
 
+  // Constant-time signature check.
   const expected = sign(encoded);
   const sigBuf = Buffer.from(signature);
   const expBuf = Buffer.from(expected);
@@ -148,6 +90,8 @@ export function verifySessionToken(token: string | undefined): string | null {
 }
 
 // ─── Cookie helpers ──────────────────────────────────────────────────────────
+
+/** Parses a `Cookie` header into a key/value map. */
 export function parseCookies(header?: string): Record<string, string> {
   const out: Record<string, string> = {};
   if (!header) return out;
@@ -161,8 +105,8 @@ export function parseCookies(header?: string): Record<string, string> {
   return out;
 }
 
+/** Builds a `Set-Cookie` string for the session cookie. */
 function buildSetCookie(value: string, maxAgeMs: number): string {
-  const cfg = getAuthConfig();
   const attrs = [
     `${COOKIE_NAME}=${value}`,
     'Path=/',
@@ -170,28 +114,31 @@ function buildSetCookie(value: string, maxAgeMs: number): string {
     'SameSite=Lax',
     `Max-Age=${Math.floor(maxAgeMs / 1000)}`
   ];
-  if (cfg.secureCookies) attrs.push('Secure');
+  if (useSecureCookies()) attrs.push('Secure');
   return attrs.join('; ');
 }
 
+/** Issues a fresh session cookie for the given user. */
 export function setSessionCookie(res: Response, username: string): void {
-  const token = createSessionToken(username);
-  res.setHeader('Set-Cookie', buildSetCookie(token, getAuthConfig().sessionTtlMs));
+  res.setHeader('Set-Cookie', buildSetCookie(createSessionToken(username), sessionTtlMs()));
 }
 
+/** Clears the session cookie (logout). */
 export function clearSessionCookie(res: Response): void {
   res.setHeader('Set-Cookie', buildSetCookie('', 0));
 }
 
+/** Returns the authenticated username for a raw request, or null. */
 export function getAuthenticatedUser(req: IncomingMessage): string | null {
   const cookies = parseCookies(req.headers.cookie);
   return verifySessionToken(cookies[COOKIE_NAME]);
 }
 
 // ─── Brute-force rate limiter (per IP) ───────────────────────────────────────
+
 const MAX_ATTEMPTS = 8;
-const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const LOCKOUT_MS = 15 * 60 * 1000;
+const WINDOW_MS = 15 * 60 * 1000; // rolling window
+const LOCKOUT_MS = 15 * 60 * 1000; // lockout duration after too many failures
 
 interface AttemptRecord {
   count: number;
@@ -200,12 +147,14 @@ interface AttemptRecord {
 }
 const attempts = new Map<string, AttemptRecord>();
 
+/** Best-effort client IP (respects a single X-Forwarded-For hop). */
 function clientIp(req: Request): string {
   const fwd = req.headers['x-forwarded-for'];
   if (typeof fwd === 'string' && fwd.length) return fwd.split(',')[0].trim();
   return req.socket.remoteAddress || 'unknown';
 }
 
+/** Checks whether the caller is currently allowed to attempt a login. */
 export function checkRateLimit(req: Request): { allowed: boolean; retryAfterMs?: number } {
   const ip = clientIp(req);
   const rec = attempts.get(ip);
@@ -221,6 +170,7 @@ export function checkRateLimit(req: Request): { allowed: boolean; retryAfterMs?:
   return { allowed: true };
 }
 
+/** Records a failed login attempt and locks the IP after too many failures. */
 export function recordFailedAttempt(req: Request): void {
   const ip = clientIp(req);
   const now = Date.now();
@@ -235,19 +185,28 @@ export function recordFailedAttempt(req: Request): void {
   }
 }
 
+/** Clears the attempt counter for a caller (on successful login). */
 export function clearAttempts(req: Request): void {
   attempts.delete(clientIp(req));
 }
 
 // ─── Express middleware & route handlers ─────────────────────────────────────
 
-/** Paths reachable without a valid session (login flow + health). */
-const PUBLIC_PATHS = new Set(['/login', '/api/auth/login', '/api/auth/status', '/api/health']);
+/** Paths reachable without a valid session (login/setup flow + health). */
+const PUBLIC_PATHS = new Set([
+  '/login',
+  '/api/health',
+  '/api/auth/status',
+  '/api/auth/login',
+  '/api/auth/setup'
+]);
 
+/**
+ * Express gate: allows public paths, then requires a valid session. Unauthenticated
+ * API calls receive 401 JSON; page requests are redirected to `/login`.
+ */
 export function authGate(req: Request, res: Response, next: NextFunction): void {
-  const cfg = getAuthConfig();
-  if (!cfg.enabled) return next();
-
+  if (isAuthDisabled()) return next();
   if (PUBLIC_PATHS.has(req.path)) return next();
 
   const user = getAuthenticatedUser(req);
@@ -256,7 +215,6 @@ export function authGate(req: Request, res: Response, next: NextFunction): void 
     return next();
   }
 
-  // Unauthenticated: JSON error for API calls, redirect to login for pages.
   if (req.path.startsWith('/api/')) {
     res.status(401).json({ error: 'Authentication required', authRequired: true });
     return;
@@ -264,9 +222,52 @@ export function authGate(req: Request, res: Response, next: NextFunction): void 
   res.redirect(302, '/login');
 }
 
+/**
+ * GET /api/auth/status — reports the current auth state so the front-end knows
+ * whether to show the login form, the first-run setup form, or the app.
+ */
+export function handleStatus(req: Request, res: Response): void {
+  if (isAuthDisabled()) {
+    res.json({ authenticated: true, authRequired: false, passwordSet: true });
+    return;
+  }
+  const user = getAuthenticatedUser(req);
+  res.json({
+    authenticated: Boolean(user),
+    authRequired: true,
+    passwordSet: AuthStore.isPasswordSet()
+  });
+}
+
+/**
+ * POST /api/auth/setup — one-time creation of the admin account. Only permitted
+ * while no password exists yet (prevents takeover once configured).
+ */
+export function handleSetup(req: Request, res: Response): void {
+  if (isAuthDisabled()) {
+    res.json({ ok: true, authRequired: false });
+    return;
+  }
+  if (AuthStore.isPasswordSet()) {
+    res.status(409).json({ error: 'A password has already been set. Please sign in.' });
+    return;
+  }
+
+  const { password } = (req.body || {}) as { password?: string };
+  const result = AuthStore.setPassword(password || '');
+  if (!result.ok) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+
+  // Log the admin in immediately.
+  setSessionCookie(res, AuthStore.getUsername());
+  res.json({ ok: true });
+}
+
+/** POST /api/auth/login — verifies credentials and issues a session cookie. */
 export function handleLogin(req: Request, res: Response): void {
-  const cfg = getAuthConfig();
-  if (!cfg.enabled) {
+  if (isAuthDisabled()) {
     res.json({ ok: true, authRequired: false });
     return;
   }
@@ -280,34 +281,56 @@ export function handleLogin(req: Request, res: Response): void {
     return;
   }
 
-  const { username, password } = (req.body || {}) as { username?: string; password?: string };
-  if (typeof username !== 'string' || typeof password !== 'string') {
-    res.status(400).json({ error: 'Username and password are required.' });
+  const { password } = (req.body || {}) as { password?: string };
+  if (typeof password !== 'string') {
+    res.status(400).json({ error: 'Password is required.' });
     return;
   }
 
-  if (verifyCredentials(username, password)) {
+  if (AuthStore.verifyPassword(password)) {
     clearAttempts(req);
-    setSessionCookie(res, username);
-    res.json({ ok: true, username });
+    setSessionCookie(res, AuthStore.getUsername());
+    res.json({ ok: true });
     return;
   }
 
   recordFailedAttempt(req);
-  res.status(401).json({ error: 'Invalid username or password.' });
+  res.status(401).json({ error: 'Invalid password.' });
 }
 
+/** POST /api/auth/logout — clears the session cookie. */
 export function handleLogout(_req: Request, res: Response): void {
   clearSessionCookie(res);
   res.json({ ok: true });
 }
 
-export function handleStatus(req: Request, res: Response): void {
-  const cfg = getAuthConfig();
-  if (!cfg.enabled) {
-    res.json({ authenticated: true, authRequired: false });
+/**
+ * POST /api/auth/change-password — updates the password (and optionally the
+ * username) after verifying the current password. Requires an active session.
+ */
+export function handleChangePassword(req: Request, res: Response): void {
+  if (isAuthDisabled()) {
+    res.status(400).json({ error: 'Authentication is disabled on this server.' });
     return;
   }
-  const user = getAuthenticatedUser(req);
-  res.json({ authenticated: Boolean(user), authRequired: true, username: user || undefined });
+  const sessionUser = getAuthenticatedUser(req);
+  if (!sessionUser) {
+    res.status(401).json({ error: 'Authentication required.' });
+    return;
+  }
+
+  const { currentPassword, newPassword } = (req.body || {}) as {
+    currentPassword?: string;
+    newPassword?: string;
+  };
+
+  const result = AuthStore.changePassword(currentPassword || '', newPassword || '');
+  if (!result.ok) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+
+  // Re-issue the cookie so the session stays valid.
+  setSessionCookie(res, AuthStore.getUsername());
+  res.json({ ok: true });
 }

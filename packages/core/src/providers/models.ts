@@ -8,22 +8,26 @@ import { OpenAIAdapter } from './openai.js';
 import { AnthropicAdapter } from './anthropic.js';
 import { GeminiAdapter } from './gemini.js';
 import { CustomAdapter } from './custom.js';
+import { resolveProviderFamily } from './provider-meta.js';
 
 export function createProviderAdapter(config: BYOKConfig): BaseProviderAdapter {
-  switch (config.provider) {
-    case 'openai':
-      return new OpenAIAdapter(config);
-    case 'anthropic':
-      return new AnthropicAdapter(config);
-    case 'gemini':
-      return new GeminiAdapter(config);
-    case 'deepseek':
-    case 'deepinfra':
-    case 'custom':
-      return new CustomAdapter(config);
-    default:
-      throw new Error(`Unsupported provider: ${config.provider}`);
+  const family = resolveProviderFamily(config.provider);
+
+  if (family === 'anthropic') {
+    return new AnthropicAdapter({ ...config, provider: 'anthropic' });
   }
+  if (family === 'gemini') {
+    return new GeminiAdapter({ ...config, provider: 'gemini' });
+  }
+
+  // OpenAI-compatible family (OpenAI, DeepSeek, DeepInfra, OpenRouter, Kimi, …).
+  // `openai`/`chatgpt` use the dedicated OpenAI adapter (richer model list);
+  // every other provider reuses the generic OpenAI-compatible adapter which
+  // honours `baseUrl` so self-hosted / proxy endpoints work out of the box.
+  if (config.provider === 'openai' || config.provider === 'chatgpt') {
+    return new OpenAIAdapter({ ...config, provider: 'openai' });
+  }
+  return new CustomAdapter(config);
 }
 
 export class ModelCapabilityRegistry {

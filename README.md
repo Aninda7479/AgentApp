@@ -1,6 +1,6 @@
-# SuperAgent 🚀
+# SuperAgent
 
-> An open-source, high-performance AI agent platform designed for modern autonomous coding, browser workflows, and terminal automation.
+> An open-source autonomous AI agent for modern coding, browser automation, multimodal media generation, and terminal workflows — cross-platform on Desktop and Web, with a responsive UI that works on phones, tablets, and desktops.
 
 [![License: GPL v3 / AGPL v3](https://img.shields.io/badge/License-GPLv3%20%2F%20AGPLv3-blue.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -58,32 +58,57 @@ The web UI is fully responsive and works on phones, tablets, and desktops
 #### 🔐 Securing the Web/VPS deployment (Login System)
 
 When exposing the server publicly, enable the built-in session login by setting
-a password. Authentication protects every route **and** the live WebSocket.
+a password. Authentication protects **every route and the live WebSocket**.
+
+The login is **password-only** — there is no username field. Possession of the
+single admin password is the only proof of identity, so you only ever enter the
+password (in the browser) to sign in.
+
+Credentials are managed by the shared core `AuthStore` and persisted to
+`<userData>/Config/auth.json` (scrypt-hashed, 0600). The **same** store is used
+by the Web server *and* the CLI, so you can set or rotate the password from
+either side.
+
+**First-run setup (recommended):** start the server with no password, open
+`/login`, and you will be guided through creating the password. After that,
+`/login` is the normal sign-in page and `/account` lets you change the password
+and sign out.
+
+**Headless / Docker seeding:** provide the password via environment variables
+before the first start. The server seeds the store once and then the persisted
+file is authoritative.
 
 ```bash
 # Windows (PowerShell)
-$env:SUPERAGENT_USERNAME = "admin"          # optional, defaults to "admin"
 $env:SUPERAGENT_PASSWORD = "your-strong-password"
 npm run start --workspace=@superagent/web
 
 # Linux / macOS
-SUPERAGENT_USERNAME=admin \
 SUPERAGENT_PASSWORD='your-strong-password' \
 npm run start --workspace=@superagent/web
 ```
 
+**Manage credentials from the CLI** (operates on the same store):
+
+```bash
+superagent password status   # is a custom password configured?
+superagent password set      # set / overwrite the password (interactive)
+```
+
+**Default password.** When no custom password has been configured, the login
+password defaults to `admin` — so you can sign in out of the box, then set a
+stronger one with `superagent password set` (or the web `/account` page). Once a
+custom password is set, the default no longer works.
+
 | Variable | Description | Default |
 | :--- | :--- | :--- |
-| `SUPERAGENT_USERNAME` | Login username | `admin` |
-| `SUPERAGENT_PASSWORD` | Login password (plaintext) | — |
-| `SUPERAGENT_PASSWORD_HASH` | scrypt hash `scrypt$<saltHex>$<hashHex>` (overrides plaintext) | — |
-| `SUPERAGENT_SESSION_SECRET` | Secret used to sign session cookies (set this to keep sessions across restarts) | random |
-| `SUPERAGENT_SESSION_TTL` | Session lifetime in hours | `168` (7 days) |
-| `SUPERAGENT_SECURE_COOKIES` | Set to `true` when served over HTTPS | `false` |
+| `SUPERAGENT_PASSWORD` | Login password (seeds the store on first run) | — |
+| `SUPERAGENT_WEB_PASSWORD` | Alias for `SUPERAGENT_PASSWORD` | — |
+| `SUPERAGENT_SESSION_SECRET` | Secret used to sign session cookies (set this to keep sessions across restarts; auto-generated and persisted otherwise) | random |
 
-Sessions use signed, `HttpOnly` cookies, constant-time credential checks, and
-per-IP brute-force rate limiting. If no password is configured the server runs
-in open mode and prints a security warning.
+Sessions use signed, `HttpOnly` cookies with constant-time credential checks.
+If no password is configured the server runs in **open mode** (`isAuthDisabled()`)
+and prints a security warning.
 
 ---
 

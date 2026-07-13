@@ -541,7 +541,7 @@ export const App: React.FC = () => {
     {
       id: 'step-1',
       type: 'assistant',
-      content: 'SuperAgent Desktop initialized. Ready for autonomous software engineering and multimodal AI media generation.',
+      content: 'SuperAgent initialized. Ready for autonomous software engineering and multimodal AI media generation.',
       timestamp: 'Just now'
     }
   ]);
@@ -1174,13 +1174,26 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
       const resolvedProjectRoot = activeProjectConfig?.folders?.[0] || undefined;
 
       const sessionId = `session-${chatId}`;
+
+      // The composer exposes model *display names* (e.g. "Google: Gemma 4 31B
+      // (free)"), but providers expect the API model *id* / slug (e.g.
+      // "google/gemma-4-31b:free"). Resolve the display name to its catalog id
+      // and strip the `<providerId>-` prefix before handing it to the engine.
+      const selectedModelName = options.model || '';
+      const selectedModelConfig =
+        modelsCatalog.find(m => m.providerId === activeProvider?.id && m.name === selectedModelName && m.enabled) ||
+        modelsCatalog.find(m => m.providerId === activeProvider?.id && m.name === selectedModelName);
+      const resolvedModel = selectedModelConfig
+        ? selectedModelConfig.id.replace(`${activeProvider?.id}-`, '')
+        : selectedModelName;
+
       const agentConfig = {
-        provider: (activeProvider.type === 'env' || activeProvider.type === 'key'
+        provider: activeProvider.type === 'env' || activeProvider.type === 'key'
           ? activeProvider.id
-          : 'custom') as 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'custom',
+          : 'custom',
         apiKey: activeProvider.apiKey,
         baseUrl: activeProvider.baseUrl || undefined,
-        model: options.model || '',
+        model: resolvedModel,
         projectRoot: resolvedProjectRoot,
         attachments: allAttachmentPaths.length > 0 ? allAttachmentPaths : undefined
       };
@@ -1505,7 +1518,8 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
     <div
       data-testid="app-container"
       data-theme={themeMode}
-      className="flex flex-col h-screen w-screen bg-brand-bg text-brand-textMain overflow-hidden font-sans select-none"
+      style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+      className="flex flex-col h-[100dvh] w-full max-w-full bg-brand-bg text-brand-textMain overflow-hidden overflow-x-hidden font-sans select-none"
     >
       <TitleBar
         hasOpenAiKey={Boolean(byokKeys.openai)}
@@ -1523,11 +1537,11 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
       />
 
       {/* Main Body container */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden overflow-x-hidden relative min-w-0">
         {/* Mobile drawer backdrop */}
         {mobileNavOpen && activeTab !== 'settings' && (
           <div
-            className="lg:hidden fixed inset-0 top-10 z-30 bg-black/50 backdrop-blur-sm"
+            className="lg:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
             onClick={() => setMobileNavOpen(false)}
             aria-hidden="true"
           />
@@ -1580,7 +1594,7 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
               startedAt={activeChat?.startedAt}
               modelsCatalog={modelsCatalog}
               mcpServers={mcpServers}
-              hasCredentials={Boolean(byokKeys.openai || byokKeys.gemini)}
+              hasCredentials={Boolean(connectedProviders.find(p => p.apiKey) || byokKeys.openai || byokKeys.gemini)}
               composerPrompt={composerPrompt}
               onPromptChange={setComposerPrompt}
               onSendPrompt={handleSendPrompt}

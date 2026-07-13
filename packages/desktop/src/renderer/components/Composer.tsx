@@ -175,7 +175,7 @@ export const Composer: React.FC<ComposerProps> = ({
               onClick={onAttachClick}
               className="text-brand-textMuted hover:text-brand-textMain p-2 rounded-lg bg-brand-popover/60 hover:bg-brand-popover border border-brand-border transition-colors cursor-pointer"
             >
-              <Plus className="w-4.5 h-4.5" />
+              <Plus className="w-5 h-5" />
             </button>
 
             {/* Ask for Approval Dropdown Pill */}

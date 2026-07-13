@@ -47,6 +47,17 @@ interface ModelsListProps {
 
 const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatalog, modelSearch, onToggleModel }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Collapsed provider sections (clicking a provider header toggles it).
+  const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
+
+  const toggleProvider = (providerId: string) => {
+    setCollapsedProviders(prev => {
+      const next = new Set(prev);
+      if (next.has(providerId)) next.delete(providerId);
+      else next.add(providerId);
+      return next;
+    });
+  };
 
   if (connectedProviders.length === 0) {
     return (
@@ -69,12 +80,16 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
 
         return (
           <div key={prov.id} style={{ marginBottom: '28px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', fontSize: '0.85rem', fontWeight: 600, color: '#6b6b6b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              <span style={{ color: '#ef4444' }}>✦</span>
+            <div
+              onClick={() => toggleProvider(prov.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', fontSize: '0.85rem', fontWeight: 600, color: '#6b6b6b', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', userSelect: 'none' }}
+            >
+              <span style={{ color: '#ef4444', transition: 'transform 0.15s ease', transform: collapsedProviders.has(prov.id) ? 'rotate(-90deg)' : 'rotate(0deg)' }}>▾</span>
               <span>{prov.name}</span>
               <span style={{ marginLeft: '4px', fontSize: '0.75rem', fontWeight: 400, color: '#4b4b4b' }}>{models.length} model{models.length !== 1 ? 's' : ''}</span>
             </div>
 
+            {!collapsedProviders.has(prov.id) && (
             <div style={{ backgroundColor: '#1b1412', border: '1px solid #2d2321', borderRadius: '12px', overflow: 'hidden' }}>
               {models.map((model, idx) => {
                 const isExpanded = expandedId === model.id;
@@ -198,6 +213,7 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
                 );
               })}
             </div>
+            )}
           </div>
         );
       })}
@@ -284,6 +300,18 @@ export const ModelsSettings: React.FC<ModelsSettingsProps> = ({
           if (res.ok) {
             const d = await res.json();
             rawModels = (d.data ?? []).map((m: any) => ({ id: m.id, name: m.name ?? m.id, contextLimit: m.context_length ? fmtTokens(m.context_length) : undefined, description: m.description }));
+          }
+        } else if (prov.id === 'ollama-cloud') {
+          const base = url.replace(/\/+$/, '');
+          const headers: Record<string, string> = {};
+          if (key) headers['Authorization'] = `Bearer ${key}`;
+          const res = await fetch(`${base}/api/tags`, { headers });
+          if (res.ok) {
+            const d = await res.json();
+            rawModels = (d.models ?? []).map((m: any) => ({
+              id: m.name, name: m.name,
+              contextLimit: m.details?.parameter_size ? `~${m.details.parameter_size}` : undefined
+            }));
           }
         }
 

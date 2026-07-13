@@ -1,7 +1,7 @@
 {
   "name": "@superagent/web",
   "version": "0.1.0",
-  "description": "Web deployment backend and bundler for SuperAgent",
+  "description": "SuperAgent web server + responsive SPA (Electron-compatible shared renderer)",
   "main": "dist/server.js",
   "type": "module",
   "scripts": {

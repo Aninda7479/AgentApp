@@ -12,7 +12,9 @@ import {
   ModelCapabilityRegistry,
   ModelRouter,
   CompletionRequest,
-  AIProvider
+  AIProvider,
+  createProviderAdapter,
+  resolveProviderFamily
 } from '../src/index.js';
 import { AgentEngine } from '../src/providers/ai-engine.js';
 
@@ -308,6 +310,81 @@ describe('Phase 1 Core Provider Suite (Steps 001-008)', () => {
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls[0].name).toBe('list_dir');
       expect(result.toolCalls[0].args).toEqual({ path: '.' });
+    });
+  });
+
+  describe('Provider meta + full provider support (Step 009)', () => {
+    it('should resolve every listed provider to a supported API family', () => {
+      const expectations: Record<string, string> = {
+        openai: 'openai',
+        chatgpt: 'openai',
+        deepseek: 'openai',
+        deepinfra: 'openai',
+        openrouter: 'openai',
+        kimi: 'openai',
+        moonshot: 'openai',
+        mistral: 'openai',
+        grok: 'openai',
+        perplexity: 'openai',
+        vertex: 'openai',
+        'custom-123': 'openai',
+        anthropic: 'anthropic',
+        claude: 'anthropic',
+        gemini: 'gemini',
+        google: 'gemini',
+        ollama: 'ollama'
+      };
+
+      for (const [id, family] of Object.entries(expectations)) {
+        expect(resolveProviderFamily(id)).toBe(family);
+      }
+    });
+
+    it('createProviderAdapter should support all listed providers without throwing', () => {
+      const cases: Array<[string, any]> = [
+        ['openrouter', CustomAdapter],
+        ['kimi', CustomAdapter],
+        ['deepinfra', CustomAdapter],
+        ['chatgpt', OpenAIAdapter],
+        ['openai', OpenAIAdapter],
+        ['claude', AnthropicAdapter],
+        ['google', GeminiAdapter]
+      ];
+      for (const [provider, Adapter] of cases) {
+        const adapter = createProviderAdapter({ provider: provider as any, apiKey: 'test-key' });
+        expect(adapter).toBeInstanceOf(Adapter);
+      }
+    });
+
+    it('should route a previously unsupported provider (OpenRouter) through the agent engine', async () => {
+      const engine = new AgentEngine({
+        provider: 'openrouter',
+        apiKey: 'sk-or-test',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        model: 'openai/gpt-4o'
+      });
+
+      const chunks = [
+        `data: {"choices":[{"delta":{"content":"Hello"}}]}\n`,
+        `data: [DONE]\n`
+      ];
+
+      vi.stubGlobal('fetch', vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+        // Verify the request hits the OpenRouter OpenAI-compatible endpoint.
+        expect(_url).toContain('openrouter.ai/api/v1/chat/completions');
+        expect((init.headers as Record<string, string>).Authorization).toBe('Bearer sk-or-test');
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream({
+          start(controller) {
+            for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+            controller.close();
+          }
+        });
+        return { ok: true, body: stream };
+      }));
+
+      const result = await (engine as any).streamFromProvider(() => {}, new AbortController().signal);
+      expect(result.fullContent).toBe('Hello');
     });
   });
 });

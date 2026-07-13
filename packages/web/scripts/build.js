@@ -58,6 +58,10 @@ async function build() {
   fs.copyFileSync(path.join(webRoot, 'src/login.html'), path.join(distDir, 'login.html'));
   console.log('[Build] login.html copied.');
 
+  // 3c. Copy the standalone account (change password) page
+  fs.copyFileSync(path.join(webRoot, 'src/account.html'), path.join(distDir, 'account.html'));
+  console.log('[Build] account.html copied.');
+
   // 4. Resolve and Copy CSS (use desktop index.css or built desktop/dist/index.css)
   const desktopBuiltCss = path.join(desktopRoot, 'dist/index.css');
   const desktopSrcCss = path.join(desktopRoot, 'src/index.css');

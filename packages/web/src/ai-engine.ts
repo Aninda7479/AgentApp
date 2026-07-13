@@ -53,6 +53,7 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { resolveProviderFamily, resolveBaseUrl } from '@superagent/core';
 
 const execAsync = promisify(exec);
 
@@ -230,7 +231,7 @@ type RichContentPart = RichTextPart | RichImagePart;
 // ─── Provider Config ──────────────────────────────────────────────────────────
 
 export interface AgentEngineConfig {
-  provider: 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'deepseek' | 'deepinfra' | 'custom';
+  provider: string;
   apiKey: string;
   baseUrl?: string;
   model: string;
@@ -449,20 +450,14 @@ Key guidelines:
   ): Promise<{ fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> }> {
     const { provider } = this.config;
 
-    if (provider === 'openai' || provider === 'custom' || provider === 'deepseek' || provider === 'deepinfra') {
-      return this.streamOpenAI(onEvent, signal);
-    }
-    if (provider === 'anthropic') {
-      return this.streamAnthropic(onEvent, signal);
-    }
-    if (provider === 'gemini') {
-      return this.streamGemini(onEvent, signal);
-    }
-    if (provider === 'ollama') {
-      return this.streamOllama(onEvent, signal);
-    }
+    const family = resolveProviderFamily(provider);
+    if (family === 'anthropic') return this.streamAnthropic(onEvent, signal);
+    if (family === 'gemini') return this.streamGemini(onEvent, signal);
+    if (family === 'ollama') return this.streamOllama(onEvent, signal);
 
-    throw new Error(`Unsupported provider: ${provider}`);
+    // Everything else (OpenAI, DeepSeek, DeepInfra, OpenRouter, Kimi, …) speaks
+    // the OpenAI-compatible Chat Completions protocol.
+    return this.streamOpenAI(onEvent, signal);
   }
 
   // ── OpenAI / Custom (OpenAI-compatible) Streaming ────────────────────────
@@ -470,12 +465,7 @@ Key guidelines:
     onEvent: (event: AgentEvent) => void,
     signal: AbortSignal
   ): Promise<{ fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> }> {
-    const defaultUrl = this.config.provider === 'deepseek'
-      ? 'https://api.deepseek.com/v1'
-      : this.config.provider === 'deepinfra'
-      ? 'https://api.deepinfra.com/v1/openai'
-      : 'https://api.openai.com/v1';
-    const baseUrl = (this.config.baseUrl || defaultUrl).replace(/\/+$/, '');
+    const baseUrl = resolveBaseUrl(this.config.provider, this.config.baseUrl);
     const url = `${baseUrl}/chat/completions`;
 
     // Convert history to OpenAI format (handle tool messages)
@@ -601,7 +591,8 @@ Key guidelines:
     onEvent: (event: AgentEvent) => void,
     signal: AbortSignal
   ): Promise<{ fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> }> {
-    const url = 'https://api.anthropic.com/v1/messages';
+    const anthropicHost = resolveBaseUrl('anthropic', this.config.baseUrl).replace(/\/v1\/?$/, '');
+    const url = `${anthropicHost}/v1/messages`;
 
     // Anthropic separates system from messages
     const systemMsg = this.history.find(m => m.role === 'system')?.content || '';
@@ -735,7 +726,8 @@ Key guidelines:
     signal: AbortSignal
   ): Promise<{ fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> }> {
     const model = this.config.model || 'gemini-2.0-flash';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${this.config.apiKey}&alt=sse`;
+    const geminiHost = resolveBaseUrl('google', this.config.baseUrl).replace(/\/+$/, '');
+    const url = `${geminiHost}/v1beta/models/${model}:streamGenerateContent?key=${this.config.apiKey}&alt=sse`;
 
     // Convert to Gemini format
     const contents = this.history
@@ -853,9 +845,12 @@ Key guidelines:
       }
     };
 
+    const ollamaHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (this.config.apiKey) ollamaHeaders['Authorization'] = `Bearer ${this.config.apiKey}`;
+
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: ollamaHeaders,
       body: JSON.stringify(payload),
       signal
     });
