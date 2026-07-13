@@ -41,6 +41,15 @@ interface WorkspaceViewProps {
   activeChatModel?: string;
   /** Called when the user changes the selected model in the composer. */
   onModelChange?: (model: string) => void;
+  /** Projects available for the composer context switcher. */
+  projects?: { name: string }[];
+  /** Switch the active project from the composer. */
+  onSelectProject?: (name: string) => void;
+  /** Real execution-mode setting (true = full system access). */
+  unsandboxedActions?: boolean;
+  onUnsandboxedActionsChange?: (value: boolean) => void;
+  /** Invoked when voice dictation is unavailable in this environment. */
+  onMicUnavailable?: () => void;
 }
 
 const recommendations = [
@@ -186,7 +195,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   composerAttachments = [],
   onRemoveAttachment,
   activeChatModel,
-  onModelChange
+  onModelChange,
+  projects = [],
+  onSelectProject,
+  unsandboxedActions = false,
+  onUnsandboxedActionsChange,
+  onMicUnavailable
 }) => {
   const enabledModels = modelsCatalog.filter(model => model.enabled);
 
@@ -445,10 +459,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           ));
         }}
         activeProject={activeProject}
-        onAttachClick={onAttachClick || (() => onToast('File Attachment Manager'))}
-        onMicClick={() => onToast('Voice Dictation Input')}
-        onLocallyClick={() => onToast('Local Execution Environments')}
-        onBranchClick={() => onToast('Git Branch Selector')}
+        onAttachClick={onAttachClick}
         availableModels={enabledModels.length > 1 ? ['Model Governance', ...enabledModels.map(model => model.name)] : enabledModels.map(model => model.name)}
         defaultModel={activeChatModel && enabledModels.some(m => m.name === activeChatModel) ? activeChatModel : (enabledModels.length > 1 ? 'Model Governance' : (enabledModels[0]?.name || ''))}
         promptValue={composerPrompt}
@@ -457,6 +468,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         attachments={composerAttachments}
         onRemoveAttachment={onRemoveAttachment}
         onModelChange={onModelChange}
+        projects={projects}
+        onSelectProject={onSelectProject}
+        sandbox={!unsandboxedActions}
+        onSandboxChange={(v) => onUnsandboxedActionsChange?.(!v)}
+        onMicUnavailable={onMicUnavailable}
       />
     </>
   );

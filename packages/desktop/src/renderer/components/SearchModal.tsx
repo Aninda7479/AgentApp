@@ -1,10 +1,16 @@
 import React, { useState, useEffect, useRef, KeyboardEvent } from 'react';
+import { Search, Plus, FolderOpen, Settings as SettingsIcon, MessageSquare, Folder } from 'lucide-react';
 
 /** Props for the SearchModal component. */
 export interface SearchModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Real conversations to search across. */
+  chats?: { id: string; title: string; project?: string }[];
+  /** Real projects to jump into. */
+  projects?: { name: string }[];
   onSelectChat: (chatTitle: string, projectContext?: string) => void;
+  onSelectProject?: (name: string) => void;
   onNewChat: () => void;
   onOpenFolder: () => void;
   onOpenSettings: () => void;
@@ -15,16 +21,20 @@ interface SearchItem {
   title: string;
   subtitle?: string;
   shortcut: string;
-  type: 'chat' | 'action';
-  icon?: string;
-  actionKey: 'select-chat' | 'new-chat' | 'open-folder' | 'settings';
+  type: 'chat' | 'project' | 'action';
+  icon: React.ReactNode;
+  actionKey: 'select-chat' | 'select-project' | 'new-chat' | 'open-folder' | 'settings';
+  payload?: string;
 }
 
-/** Command palette / search modal for navigating chats and triggering actions. */
+/** Command palette / search modal for navigating real chats, projects, and actions. */
 export const SearchModal: React.FC<SearchModalProps> = ({
   isOpen,
   onClose,
+  chats = [],
+  projects = [],
   onSelectChat,
+  onSelectProject,
   onNewChat,
   onOpenFolder,
   onOpenSettings,
@@ -34,22 +44,37 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  const allItems: SearchItem[] = [
-    { id: 'c1', title: 'Find online data listings', shortcut: 'Ctrl+1', type: 'chat', actionKey: 'select-chat' },
-    { id: 'c2', title: 'Add ponytail plugin', subtitle: 'GlacierPharma', shortcut: 'Ctrl+2', type: 'chat', actionKey: 'select-chat' },
-    { id: 'c3', title: 'use graphify here and make the chart', subtitle: 'GlacierPharma', shortcut: 'Ctrl+3', type: 'chat', actionKey: 'select-chat' },
-    { id: 'c4', title: 'Add graphify tool', shortcut: 'Ctrl+4', type: 'chat', actionKey: 'select-chat' },
-    { id: 'c5', title: 'Upgrade proxy for Roo Code', subtitle: 'proxy', shortcut: 'Ctrl+5', type: 'chat', actionKey: 'select-chat' },
-    { id: 'c6', title: 'Draft BYOM executive memo', subtitle: 'LawX', shortcut: 'Ctrl+6', type: 'chat', actionKey: 'select-chat' },
-    { id: 'c7', title: 'Build LLM wiki workflow', subtitle: 'Second_Brain', shortcut: 'Ctrl+7', type: 'chat', actionKey: 'select-chat' },
-    { id: 'c8', title: 'Modernize car rental demo', subtitle: 'car_rental_dem...', shortcut: 'Ctrl+8', type: 'chat', actionKey: 'select-chat' },
-    { id: 'c9', title: 'Build car rental demo site', subtitle: 'Second_Brain', shortcut: 'Ctrl+9', type: 'chat', actionKey: 'select-chat' },
-    { id: 'a1', title: 'New chat', icon: '📝', shortcut: 'Ctrl+N', type: 'action', actionKey: 'new-chat' },
-    { id: 'a2', title: 'Open folder', icon: '📁', shortcut: 'Ctrl+O', type: 'action', actionKey: 'open-folder' },
-    { id: 'a3', title: 'Settings', icon: '⚙️', shortcut: 'Ctrl+,', type: 'action', actionKey: 'settings' },
+  const chatItems: SearchItem[] = chats.map((c) => ({
+    id: `chat-${c.id}`,
+    title: c.title,
+    subtitle: c.project,
+    shortcut: '',
+    type: 'chat',
+    icon: <MessageSquare size={14} />,
+    actionKey: 'select-chat',
+    payload: c.id,
+  }));
+
+  const projectItems: SearchItem[] = projects.map((p) => ({
+    id: `proj-${p.name}`,
+    title: p.name,
+    subtitle: 'Project',
+    shortcut: '',
+    type: 'project',
+    icon: <Folder size={14} />,
+    actionKey: 'select-project',
+    payload: p.name,
+  }));
+
+  const actionItems: SearchItem[] = [
+    { id: 'a1', title: 'New chat', subtitle: 'Start a fresh conversation', shortcut: 'Ctrl+N', type: 'action', icon: <Plus size={14} />, actionKey: 'new-chat' },
+    { id: 'a2', title: 'Open folder', subtitle: 'Add a project from disk', shortcut: 'Ctrl+O', type: 'action', icon: <FolderOpen size={14} />, actionKey: 'open-folder' },
+    { id: 'a3', title: 'Settings', subtitle: 'Providers, models, preferences', shortcut: 'Ctrl+,', type: 'action', icon: <SettingsIcon size={14} />, actionKey: 'settings' },
   ];
 
-  const filteredItems = allItems.filter(item =>
+  const allItems = [...chatItems, ...projectItems, ...actionItems];
+
+  const filteredItems = allItems.filter((item) =>
     item.title.toLowerCase().includes(query.toLowerCase()) ||
     (item.subtitle && item.subtitle.toLowerCase().includes(query.toLowerCase()))
   );
@@ -81,14 +106,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   useEffect(() => {
     const handleGlobalShortcuts = (e: KeyboardEvent | any) => {
       if (!isOpen) return;
-      if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
-        e.preventDefault();
-        const num = parseInt(e.key);
-        const chatItems = filteredItems.filter(i => i.type === 'chat');
-        if (chatItems[num - 1]) {
-          handleTriggerItem(chatItems[num - 1]);
-        }
-      }
       if (e.ctrlKey && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         onNewChat();
@@ -109,13 +126,16 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     return () => {
       window.removeEventListener('keydown', handleGlobalShortcuts);
     };
-  }, [isOpen, filteredItems]);
+  }, [isOpen, onNewChat, onOpenFolder, onOpenSettings, onClose]);
 
   if (!isOpen) return null;
 
   const handleTriggerItem = (item: SearchItem) => {
     if (item.actionKey === 'select-chat') {
-      onSelectChat(item.title, item.subtitle);
+      const chat = chats.find((c) => c.id === item.payload);
+      onSelectChat(item.title, chat?.project);
+    } else if (item.actionKey === 'select-project') {
+      onSelectProject?.(item.payload!);
     } else if (item.actionKey === 'new-chat') {
       onNewChat();
     } else if (item.actionKey === 'open-folder') {
@@ -144,22 +164,60 @@ export const SearchModal: React.FC<SearchModalProps> = ({
     }
   };
 
-  const chatItems = filteredItems.filter(item => item.type === 'chat');
-  const actionItems = filteredItems.filter(item => item.type === 'action');
+  const chatResults = filteredItems.filter((i) => i.type === 'chat');
+  const projectResults = filteredItems.filter((i) => i.type === 'project');
+  const actionResults = filteredItems.filter((i) => i.type === 'action');
+
+  const renderGroup = (heading: string, items: SearchItem[]) =>
+    items.length > 0 && (
+      <div>
+        <div className="text-[10px] uppercase font-bold tracking-wider text-brand-textMuted/70 px-3 py-1.5">
+          {heading}
+        </div>
+        {items.map((item) => {
+          const globalIndex = filteredItems.indexOf(item);
+          const isSelected = globalIndex === selectedIndex;
+          return (
+            <div
+              key={item.id}
+              data-testid={`search-item-${item.id}`}
+              onClick={() => handleTriggerItem(item)}
+              onMouseEnter={() => setSelectedIndex(globalIndex)}
+              className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-colors mb-0.5 ${
+                isSelected ? 'bg-white/5 text-white' : 'text-brand-textMuted hover:bg-white/5 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                <span className="text-brand-textMuted/80 flex-shrink-0">{item.icon}</span>
+                <span className="text-sm truncate">{item.title}</span>
+                {item.subtitle && (
+                  <span className="text-[10px] text-brand-textMuted/60 bg-brand-bg/50 px-2 py-0.5 rounded font-mono flex-shrink-0 truncate max-w-[120px]">
+                    {item.subtitle}
+                  </span>
+                )}
+              </div>
+              {item.shortcut && (
+                <span className="text-[10px] text-brand-textMuted/50 font-mono flex-shrink-0 ml-2">{item.shortcut}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
 
   return (
     <div
       data-testid="search-modal-overlay"
-      className="fixed inset-0 bg-black/40 flex items-start justify-center pt-16 z-[2000]"
+      className="fixed inset-0 bg-black/40 flex items-start justify-center pt-16 z-[2000] px-3"
     >
       <div
         ref={modalRef}
         data-testid="search-modal-content"
-        className="w-[600px] max-w-[90%] bg-brand-sidebar border border-brand-border rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[80vh]"
+        className="w-[600px] max-w-full bg-brand-sidebar border border-brand-border rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[80vh]"
       >
         {/* Search Input */}
         <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-brand-border">
-          <span className="text-sm text-brand-textMuted">🔍</span>
+          <Search size={16} className="text-brand-textMuted flex-shrink-0" />
           <input
             ref={inputRef}
             data-testid="search-modal-input"
@@ -173,81 +231,28 @@ export const SearchModal: React.FC<SearchModalProps> = ({
             onKeyDown={handleKeyDown}
             className="flex-1 bg-transparent border-none outline-none text-white text-sm placeholder-brand-textMuted/50"
           />
+          {query && (
+            <button
+              onClick={() => { setQuery(''); inputRef.current?.focus(); }}
+              className="text-brand-textMuted hover:text-white text-xs px-1.5 cursor-pointer"
+              aria-label="Clear search"
+            >
+              ✕
+            </button>
+          )}
         </div>
 
         {/* Results */}
         <div className="overflow-y-auto px-2 py-2">
           {filteredItems.length === 0 ? (
-            <div className="py-6 text-center text-brand-textMuted text-sm">
-              No results found for "{query}"
+            <div className="py-8 text-center text-brand-textMuted text-sm">
+              No results for &ldquo;{query}&rdquo;
             </div>
           ) : (
             <>
-              {chatItems.length > 0 && (
-                <div>
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-brand-textMuted/70 px-3 py-1.5">
-                    Chats
-                  </div>
-                  {chatItems.map((item) => {
-                    const globalIndex = filteredItems.indexOf(item);
-                    const isSelected = globalIndex === selectedIndex;
-                    return (
-                      <div
-                        key={item.id}
-                        data-testid={`search-item-${item.id}`}
-                        onClick={() => handleTriggerItem(item)}
-                        onMouseEnter={() => setSelectedIndex(globalIndex)}
-                        className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-colors mb-0.5 ${
-                          isSelected ? 'bg-white/5 text-white' : 'text-brand-textMuted hover:bg-white/5 hover:text-white'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <span className="text-sm truncate">{item.title}</span>
-                          {item.subtitle && (
-                            <span className="text-[10px] text-brand-textMuted/60 bg-brand-bg/50 px-2 py-0.5 rounded font-mono flex-shrink-0">
-                              {item.subtitle}
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-brand-textMuted/50 font-mono flex-shrink-0 ml-2">
-                          {item.shortcut}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {actionItems.length > 0 && (
-                <div className="mt-2">
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-brand-textMuted/70 px-3 py-1.5">
-                    Suggested
-                  </div>
-                  {actionItems.map((item) => {
-                    const globalIndex = filteredItems.indexOf(item);
-                    const isSelected = globalIndex === selectedIndex;
-                    return (
-                      <div
-                        key={item.id}
-                        data-testid={`search-item-${item.id}`}
-                        onClick={() => handleTriggerItem(item)}
-                        onMouseEnter={() => setSelectedIndex(globalIndex)}
-                        className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-colors mb-0.5 ${
-                          isSelected ? 'bg-white/5 text-white' : 'text-brand-textMuted hover:bg-white/5 hover:text-white'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-sm">{item.icon}</span>
-                          <span className="text-sm">{item.title}</span>
-                        </div>
-                        <span className="text-[10px] text-brand-textMuted/50 font-mono">
-                          {item.shortcut}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              {renderGroup('Chats', chatResults)}
+              {renderGroup('Projects', projectResults)}
+              {renderGroup('Actions', actionResults)}
             </>
           )}
         </div>

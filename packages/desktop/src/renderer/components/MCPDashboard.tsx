@@ -77,7 +77,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
       className="flex-1 px-4 md:px-8 py-6 bg-brand-bg text-brand-textMain overflow-y-auto"
     >
       {/* Dashboard Header */}
-      <div className="flex items-center justify-between mb-6 border-b border-brand-border pb-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6 border-b border-brand-border pb-4">
         <div>
           <h1 className="text-xl md:text-2xl font-bold m-0 flex items-center gap-2.5 text-white">
             🔌 Visual MCP Server Dashboard
@@ -87,7 +87,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
           </p>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           {onRefreshServers && (
             <button
               data-testid="mcp-refresh-btn"

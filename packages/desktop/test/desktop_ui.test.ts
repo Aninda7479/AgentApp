@@ -400,12 +400,18 @@ describe('Step 082: Codex Clone Frameless Dark UI Window (App)', () => {
 });
 
 describe('Step 082b: Additional Codex UI Sub-components', () => {
-  it('should render SearchModal when open', () => {
+  it('should render SearchModal with real chats and actions when open', () => {
     const html = renderToString(
       React.createElement(SearchModal, {
         isOpen: true,
         onClose: () => {},
+        chats: [
+          { id: 'c1', title: 'Find online data listings', project: 'GlacierPharma' },
+          { id: 'c2', title: 'Draft BYOM executive memo', project: 'LawX' }
+        ],
+        projects: [{ name: 'GlacierPharma' }],
         onSelectChat: () => {},
+        onSelectProject: () => {},
         onNewChat: () => {},
         onOpenFolder: () => {},
         onOpenSettings: () => {}
@@ -414,6 +420,8 @@ describe('Step 082b: Additional Codex UI Sub-components', () => {
     expect(html).toContain('Search chats or run a command');
     expect(html).toContain('Find online data listings');
     expect(html).toContain('New chat');
+    expect(html).toContain('Open folder');
+    expect(html).toContain('Settings');
   });
 
   it('should render ScheduledView with Tasks and Templates tabs', () => {

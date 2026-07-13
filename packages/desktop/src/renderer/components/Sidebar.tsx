@@ -126,7 +126,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <div
       data-testid="sidebar-container"
       style={{ width: collapsed ? '70px' : '260px', maxWidth: '85vw' }}
-      className={`glass-panel border-r border-brand-border/50 flex flex-col p-4 h-full box-border transition-transform duration-200 z-40
+      className={`glass-panel border-r border-brand-border/50 flex flex-col p-4 h-full box-border transition-transform duration-200 z-40 pb-[68px] md:pb-4
         fixed inset-y-0 left-0 lg:static lg:translate-x-0
         ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}`}
     >

@@ -386,7 +386,7 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
   const lines = content.split('\n');
 
   return (
-    <div className="text-brand-textMain font-sans leading-relaxed">
+    <div className="text-brand-textMain font-sans leading-relaxed break-words">
       {lines.map((line, i) => renderLine(line, i))}
       {streaming && <StreamingCursor />}
     </div>
@@ -670,8 +670,8 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
                   step.status === 'error' ? 'bg-red-500' : 'bg-sky-400'
                 }`}
               />
-              <span className="text-brand-textMuted/80 font-mono">{step.toolName || 'tool'}</span>
-              <span className="text-brand-textMuted/60 truncate max-w-[300px]">{summarizeToolContent(step)}</span>
+              <span className="text-brand-textMuted/80 font-mono flex-shrink-0">{step.toolName || 'tool'}</span>
+              <span className="text-brand-textMuted/60 truncate flex-1 min-w-0 max-w-[60vw] sm:max-w-[320px]">{summarizeToolContent(step)}</span>
             </div>
           ))}
         </WorkedHeader>

@@ -134,7 +134,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   return (
-    <div className="settings-container flex h-full bg-brand-bg text-brand-textMain">
+    <div className="settings-container flex h-full flex-col lg:flex-row bg-brand-bg text-brand-textMain">
       <SettingsSidebar
         activeCategory={activeCategory}
         onSelectCategory={onSelectCategory}

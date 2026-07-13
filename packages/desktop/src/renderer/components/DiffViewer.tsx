@@ -8,6 +8,8 @@ export interface DiffViewerProps {
   onAccept?: () => void;
   onReject?: () => void;
   onClose?: () => void;
+  /** Called when the user accepts a change, so the parent can mark it reviewed. */
+  onReview?: (filename: string) => void;
 }
 
 interface DiffLine {
@@ -94,7 +96,8 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   filename = 'file.txt',
   onAccept,
   onReject,
-  onClose
+  onClose,
+  onReview
 }) => {
   const [viewMode, setViewMode] = useState<'split' | 'unified'>(
     typeof window !== 'undefined' && window.innerWidth < 768 ? 'unified' : 'split'
@@ -147,7 +150,10 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
           {onAccept && (
             <button
               data-testid="btn-accept-diff"
-              onClick={onAccept}
+              onClick={() => {
+                onReview?.(filename);
+                onAccept();
+              }}
               className="bg-emerald-900/60 border border-emerald-800/40 text-emerald-400 rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-emerald-800/60 transition-colors active:scale-[0.97]"
             >
               Accept All ✓

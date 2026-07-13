@@ -5,10 +5,11 @@ import {
   Mic,
   ArrowUp,
   Folder,
-  Laptop,
-  GitBranch,
   ChevronDown,
   UserCheck,
+  Check,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 
 /** Options returned by the Composer when a prompt is submitted. */
@@ -25,6 +26,10 @@ export interface AttachmentItem {
   buffer?: number[];
 }
 
+interface ProjectRef {
+  name: string;
+}
+
 /** Props for the Composer prompt input component. */
 export interface ComposerProps {
   onSend: (prompt: string, options: ComposerOptions) => void;
@@ -37,17 +42,31 @@ export interface ComposerProps {
   onModelChange?: (model: string) => void;
   activeProject?: string;
   onAttachClick?: () => void;
-  onMicClick?: () => void;
-  onLocallyClick?: () => void;
-  onBranchClick?: () => void;
   promptValue?: string;
   onPromptChange?: (val: string) => void;
   onAttachPastedFiles?: (files: FileList) => void;
   attachments?: AttachmentItem[];
   onRemoveAttachment?: (index: number) => void;
+
+  // ── Real, functional extras (no filler) ──
+  /** Projects available for the context pill's switcher. */
+  projects?: ProjectRef[];
+  /** Switch the active project from the composer context pill. */
+  onSelectProject?: (name: string) => void;
+  /** Sandbox / full-access execution mode (bound to real settings). */
+  sandbox?: boolean;
+  onSandboxChange?: (value: boolean) => void;
+  /** Invoked when the browser/Electron lacks the Web Speech API. */
+  onMicUnavailable?: () => void;
 }
 
-/** Main prompt composer with model selector, approval mode, and attachment support. */
+// Web Speech API types are not in the standard lib; treat as any.
+const SpeechRecognitionCtor: any =
+  typeof window !== 'undefined'
+    ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    : undefined;
+
+/** Main prompt composer with model selector, approval mode, voice dictation, and context controls. */
 export const Composer: React.FC<ComposerProps> = ({
   onSend,
   disabled = false,
@@ -55,17 +74,19 @@ export const Composer: React.FC<ComposerProps> = ({
   onStop,
   availableModels = ['5.5 Medium', 'o3-mini', 'gpt-4o', 'claude-3-5-sonnet'],
   defaultModel = '5.5 Medium',
-  activeProject = 'GlacierPharma',
+  activeProject = '',
   onAttachClick,
-  onMicClick,
-  onLocallyClick,
-  onBranchClick,
   promptValue,
   onPromptChange,
   onAttachPastedFiles,
   attachments = [],
   onRemoveAttachment,
-  onModelChange
+  onModelChange,
+  projects = [],
+  onSelectProject,
+  sandbox = true,
+  onSandboxChange,
+  onMicUnavailable,
 }) => {
   const [localPrompt, setLocalPrompt] = useState('');
   const prompt = promptValue !== undefined ? promptValue : localPrompt;
@@ -75,6 +96,14 @@ export const Composer: React.FC<ComposerProps> = ({
   const [approvalMode, setApprovalMode] = useState<'always' | 'never' | 'ask'>('ask');
   const [showApprovalDropdown, setShowApprovalDropdown] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+
+  // Voice dictation
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const basePromptRef = useRef<string>('');
+
+  // Project switcher popover
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -110,22 +139,60 @@ export const Composer: React.FC<ComposerProps> = ({
     }
   }, [availableModels, defaultModel, hasModels, selectedModel]);
 
-  // When the parent-supplied default changes (e.g. switching to another chat
-  // or a new chat adopting the last-used model), sync the selection to it.
   useEffect(() => {
     if (defaultModel && availableModels.includes(defaultModel)) {
       setSelectedModel(defaultModel);
     }
   }, [defaultModel]);
 
+  const toggleDictation = () => {
+    if (!SpeechRecognitionCtor) {
+      onMicUnavailable?.();
+      return;
+    }
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const rec = new SpeechRecognitionCtor();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-US';
+    basePromptRef.current = prompt;
+    rec.onresult = (event: any) => {
+      let text = '';
+      for (let i = 0; i < event.results.length; i++) {
+        text += event.results[i][0].transcript;
+      }
+      const base = basePromptRef.current;
+      setPrompt(base + (base && !base.endsWith(' ') && text ? ' ' : '') + text);
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recognitionRef.current = rec;
+    try {
+      rec.start();
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop?.();
+    };
+  }, []);
+
   const handleSend = () => {
     if (!prompt.trim() || disabled || isGenerating) return;
     onSend(prompt, {
       model: selectedModel,
       mode: approvalMode === 'always' ? 'auto' : approvalMode === 'never' ? 'bypass' : 'plan',
-      attachments: []
+      attachments: [],
     });
     setPrompt('');
+    basePromptRef.current = '';
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -184,10 +251,10 @@ export const Composer: React.FC<ComposerProps> = ({
         <div className="flex items-center justify-between gap-2 flex-wrap border-t border-brand-border/60 pt-4 mt-4">
           {/* Left toolbar elements */}
           <div className="flex items-center gap-2 relative">
-            {/* Plus button */}
+            {/* Plus / attach button */}
             <button
               data-testid="composer-attach-btn"
-              onClick={onAttachClick}
+              onClick={() => onAttachClick?.()}
               className="text-brand-textMuted hover:text-brand-textMain p-2 rounded-lg bg-brand-popover/60 hover:bg-brand-popover border border-brand-border transition-colors cursor-pointer"
             >
               <Plus className="w-5 h-5" />
@@ -265,7 +332,7 @@ export const Composer: React.FC<ComposerProps> = ({
               {hasModels && showModelDropdown && (
                 <div
                   data-testid="model-dropdown-menu"
-                  className="absolute bottom-full right-0 mb-2 glass-panel rounded-lg shadow-lg z-50 w-[170px] overflow-hidden"
+                  className="absolute bottom-full right-0 mb-2 glass-panel rounded-lg shadow-lg z-50 w-[170px] overflow-hidden max-h-[50vh] overflow-y-auto"
                 >
                   {availableModels.map((model) => (
                     <div
@@ -285,16 +352,21 @@ export const Composer: React.FC<ComposerProps> = ({
               )}
             </div>
 
-            {/* Mic Icon */}
+            {/* Mic / voice dictation */}
             <button
               data-testid="composer-mic-btn"
-              onClick={onMicClick}
-              className="text-brand-textMuted hover:text-brand-textMain p-2 rounded-lg bg-brand-popover/60 hover:bg-brand-popover border border-brand-border transition-colors cursor-pointer"
+              onClick={toggleDictation}
+              title={!SpeechRecognitionCtor ? 'Voice input not supported here' : listening ? 'Stop dictation' : 'Dictate with your voice'}
+              className={`p-2 rounded-lg border transition-colors cursor-pointer ${
+                listening
+                  ? 'bg-red-500/15 border-red-500/40 text-red-400'
+                  : 'bg-brand-popover/60 hover:bg-brand-popover border-brand-border text-brand-textMuted hover:text-brand-textMain'
+              }`}
             >
-              <Mic className="w-4 h-4" />
+              <Mic className={`w-4 h-4 ${listening ? 'animate-pulse' : ''}`} />
             </button>
 
-            {/* Submit Up Arrow Button */}
+            {/* Submit / Stop */}
             {isGenerating ? (
               <button
                 data-testid="btn-stop"
@@ -319,46 +391,70 @@ export const Composer: React.FC<ComposerProps> = ({
             )}
           </div>
         </div>
+
+        {/* Dictation indicator */}
+        {listening && (
+          <div className="absolute -top-7 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-300 text-[10px] font-semibold animate-fade-in">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+            Listening…
+          </div>
+        )}
       </div>
 
-      {/* Under-composer badge row: Folder, Work locally, main branch */}
-      {activeProject && (
-        <div
-          data-testid="composer-badges-row"
-          className="flex gap-2.5 px-1 items-center flex-wrap"
+      {/* Under-composer context row: project switcher + sandbox mode */}
+      <div data-testid="composer-badges-row" className="flex gap-2 px-1 items-center flex-wrap">
+        {/* Project context pill + switcher */}
+        {activeProject && (
+          <div className="relative">
+            <button
+              data-testid="badge-project"
+              onClick={() => projects.length > 0 && setProjectMenuOpen((v) => !v)}
+              className={`bg-brand-card border border-brand-border rounded-full text-brand-textMain px-3 py-1.5 text-[10px] font-semibold flex items-center gap-1 select-none shadow-sm transition-all duration-150 active:scale-[0.98] ${
+                projects.length > 0 ? 'cursor-pointer hover:border-violet-500/35 hover:bg-brand-popover' : 'cursor-default'
+              }`}
+            >
+              <Folder className="w-3 h-3 text-indigo-400" />
+              <span className="max-w-[120px] truncate">{activeProject}</span>
+              {projects.length > 0 && <ChevronDown className="w-2 h-2 text-brand-textMuted" />}
+            </button>
+
+            {projectMenuOpen && projects.length > 0 && (
+              <div className="absolute bottom-full left-0 mb-2 ui-popover w-56 p-1.5 z-50 max-h-[50vh] overflow-y-auto">
+                <div className="ui-menu-label">Switch project</div>
+                {projects.map((p) => (
+                  <button
+                    key={p.name}
+                    onClick={() => {
+                      onSelectProject?.(p.name);
+                      setProjectMenuOpen(false);
+                    }}
+                    className={`ui-popover-item ${p.name === activeProject ? 'active' : ''}`}
+                  >
+                    <Folder className="w-3.5 h-3.5 text-indigo-400" />
+                    <span className="truncate">{p.name}</span>
+                    {p.name === activeProject && <Check className="w-3.5 h-3.5 ml-auto" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Sandbox / full-access toggle */}
+        <button
+          data-testid="badge-sandbox"
+          onClick={() => onSandboxChange?.(!sandbox)}
+          title={sandbox ? 'Running sandboxed — toggle for full access' : 'Full system access enabled — click to sandbox'}
+          className={`rounded-full px-3 py-1.5 text-[10px] font-semibold flex items-center gap-1 select-none shadow-sm border transition-all duration-150 active:scale-[0.98] cursor-pointer ${
+            sandbox
+              ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/15'
+              : 'bg-amber-500/10 border-amber-500/25 text-amber-400 hover:bg-amber-500/15'
+          }`}
         >
-          {/* Project Folder Badge */}
-          <div
-            data-testid="badge-project"
-            className="bg-brand-card border border-brand-border rounded-full text-brand-textMain px-3 py-1.5 text-[10px] font-semibold flex items-center gap-1 select-none shadow-sm"
-          >
-            <Folder className="w-3 h-3 text-indigo-400" />
-            <span>{activeProject}</span>
-          </div>
-
-          {/* Work Locally Badge */}
-          <div
-            data-testid="badge-work-locally"
-            onClick={onLocallyClick}
-            className="bg-brand-card border border-brand-border hover:border-violet-500/35 hover:bg-brand-popover rounded-full text-brand-textMain px-3 py-1.5 text-[10px] font-semibold flex items-center gap-1 select-none cursor-pointer transition-all duration-150 active:scale-[0.98] shadow-sm"
-          >
-            <Laptop className="w-3 h-3 text-teal-400" />
-            <span>Work locally</span>
-            <ChevronDown className="w-2 h-2 text-brand-textMuted" />
-          </div>
-
-          {/* Git Branch Badge */}
-          <div
-            data-testid="badge-branch"
-            onClick={onBranchClick}
-            className="bg-brand-card border border-brand-border hover:border-violet-500/35 hover:bg-brand-popover rounded-full text-brand-textMain px-3 py-1.5 text-[10px] font-semibold flex items-center gap-1 select-none cursor-pointer transition-all duration-150 active:scale-[0.98] shadow-sm"
-          >
-            <GitBranch className="w-3 h-3 text-purple-400" />
-            <span>main</span>
-            <ChevronDown className="w-2 h-2 text-brand-textMuted" />
-          </div>
-        </div>
-      )}
+          {sandbox ? <ShieldCheck className="w-3 h-3" /> : <ShieldAlert className="w-3 h-3" />}
+          <span>{sandbox ? 'Sandboxed' : 'Full access'}</span>
+        </button>
+      </div>
     </div>
   );
 };

@@ -14,6 +14,7 @@ import { ConfigureProjectModal } from './components/ConfigureProjectModal';
 import { TitleBar } from './components/TitleBar';
 import { AppToast } from './components/AppToast';
 import { WorkspaceView } from './components/WorkspaceView';
+import { BottomNav } from './components/BottomNav';
 import { StoredChat, StoredProject } from './types';
 import { useThemeMode } from './theme';
 
@@ -203,6 +204,9 @@ export const App: React.FC = () => {
   }, [activeChatId]);
 
   const activeChat = chats.find(chat => chat.id === activeChatId) || null;
+
+  /** Model to use when a feature shells out a prompt (no hardcoded filler model). */
+  const defaultComposerModel = lastUsedModel || modelsCatalog.find(m => m.enabled)?.name || '';
 
   useEffect(() => {
     setIsGenerating(Boolean(activeChat?.isRunning));
@@ -1362,7 +1366,7 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
   const handleCreateTaskFromChat = (taskType: string) => {
     setActiveTab('trajectory');
     handleSendPrompt(`Create a scheduled task: ${taskType}`, {
-      model: '5.5 Medium',
+      model: defaultComposerModel,
       mode: 'plan',
       attachments: []
     });
@@ -1371,7 +1375,7 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
   const handleUseTemplate = (templateName: string, cronExpr: string) => {
     setActiveTab('trajectory');
     handleSendPrompt(`Initialize template "${templateName}" with cron "${cronExpr}"`, {
-      model: '5.5 Medium',
+      model: defaultComposerModel,
       mode: 'plan',
       attachments: []
     });
@@ -1380,7 +1384,7 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
   const handleInstallPlugin = (pluginId: string) => {
     setActiveTab('trajectory');
     handleSendPrompt(`Install plugin "${pluginId}" into this workspace`, {
-      model: '5.5 Medium',
+      model: defaultComposerModel,
       mode: 'plan',
       attachments: []
     });
@@ -1389,7 +1393,7 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
   const handleTryPlugin = (pluginId: string) => {
     setActiveTab('trajectory');
     handleSendPrompt(`Test operations using plugin "${pluginId}"`, {
-      model: '5.5 Medium',
+      model: defaultComposerModel,
       mode: 'plan',
       attachments: []
     });
@@ -1412,6 +1416,12 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
   };
 
   const handleSelectSearchChat = (chatTitle: string, projectContext?: string) => {
+    // Prefer opening the real conversation that matches the search result.
+    const match = chats.find(c => c.title === chatTitle);
+    if (match) {
+      handleSelectChat(match.id);
+      return;
+    }
     if (projectContext) {
       setActiveProject(projectContext);
     }
@@ -1440,7 +1450,7 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
         id: newChatId,
         title: `New chat in ${newProj.name}`,
         project: newProj.name,
-        model: '5.5 Medium',
+        model: defaultComposerModel,
         timestamp: 'Just now',
         steps: [
           {
@@ -1569,6 +1579,56 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
     triggerToast('Conversation rolled back');
   };
 
+  /** Opens the OS folder picker and turns each chosen folder into a project. */
+  const handleOpenFolder = async () => {
+    if (!ipc) {
+      triggerToast('Folder picker is only available in the desktop app');
+      return;
+    }
+    try {
+      const paths = (await ipc.invoke('select-project-folders')) as string[] | undefined;
+      if (Array.isArray(paths) && paths.length > 0) {
+        paths.forEach((p, i) => {
+          const name = p.split(/[\\/]/).pop() || `Project ${i + 1}`;
+          handleCreateProject({ name, folders: [p] });
+        });
+        triggerToast(`Added ${paths.length} project folder${paths.length > 1 ? 's' : ''}`);
+      }
+    } catch (e) {
+      triggerToast('Could not open folder');
+    }
+  };
+
+  /** Quits the application (closes the main window). */
+  const handleQuit = () => {
+    handleWindowControl('close');
+  };
+
+  /** Shows basic about info. */
+  const handleAbout = () => {
+    triggerToast('SuperAgent — open-source autonomous AI agent');
+  };
+
+  /** Undoes the most recent step in the active chat. */
+  const handleUndoLastStep = () => {
+    const chat = activeChat;
+    if (!chat || chat.steps.length === 0) {
+      triggerToast('Nothing to undo');
+      return;
+    }
+    const lastStep = chat.steps[chat.steps.length - 1];
+    handleUndoStep(lastStep.id);
+  };
+
+  /** Marks a diff's originating step as reviewed so it no longer needs attention. */
+  const handleReviewDiff = (filename: string) => {
+    if (!activeChatId) return;
+    updateChatSteps(activeChatId, prev => prev.map(s =>
+      s.metadata?.filename === filename ? { ...s, metadata: { ...s.metadata, reviewed: true } } : s
+    ));
+    triggerToast(`Marked ${filename} as reviewed`);
+  };
+
   return (
     <div
       data-testid="app-container"
@@ -1583,12 +1643,23 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
           setSettingsCategory('providers');
         }}
         onWindowControl={handleWindowControl}
-        onMenuClick={triggerToast}
         onNavigateBack={handleNavigateBack}
         onNavigateForward={handleNavigateForward}
         canNavigateBack={navigationIndex > 1}
         canNavigateForward={navigationIndex >= 0 && navigationIndex < navigationHistory.length - 1}
         onToggleMobileNav={activeTab !== 'settings' ? () => setMobileNavOpen(prev => !prev) : undefined}
+        themeMode={themeMode}
+        onNewChat={() => handleNewChat()}
+        onOpenFolder={handleOpenFolder}
+        onOpenSettings={() => {
+          setActiveTab('settings');
+          setSettingsCategory('general');
+        }}
+        onQuit={handleQuit}
+        onUndoLastStep={handleUndoLastStep}
+        onToggleSidebar={() => setSidebarCollapsed(c => !c)}
+        onAbout={handleAbout}
+        onToggleTheme={() => setThemeMode(themeMode === 'light' ? 'dark' : 'light')}
       />
 
       {/* Main Body container */}
@@ -1621,7 +1692,6 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
             collapsed={sidebarCollapsed}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
             mcpCount={mcpServers.filter((s) => s.enabled).length}
-            onMenuClick={(menuName) => triggerToast(`${menuName} Menu`)}
             mobileOpen={mobileNavOpen}
             onMobileClose={() => setMobileNavOpen(false)}
 
@@ -1640,7 +1710,7 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
           />
         )}
 
-        <div className="flex-1 flex flex-col relative overflow-hidden bg-brand-bg">
+        <div className="flex-1 flex flex-col relative overflow-hidden bg-brand-bg pb-[72px] md:pb-0">
           {activeTab === 'trajectory' && (
             <WorkspaceView
               activeProject={activeProject}
@@ -1668,6 +1738,11 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
               onAttachPastedFiles={handleAttachPastedFiles}
               composerAttachments={composerAttachments}
               onRemoveAttachment={handleRemoveAttachment}
+              projects={projects}
+              onSelectProject={handleSelectProject}
+              unsandboxedActions={fullAccess}
+              onUnsandboxedActionsChange={handleUnsandboxedActionsChange}
+              onMicUnavailable={() => triggerToast('Voice input is not supported in this browser')}
             />
           )}
 
@@ -1723,14 +1798,14 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
               modifiedCode={activeDiff?.modifiedCode || '// Select a file diff from trajectory canvas'}
               filename={activeDiff?.filename || 'No File Selected'}
               onAccept={() => {
-                alert('Accepted changes!');
+                if (activeDiff) handleReviewDiff(activeDiff.filename);
                 setActiveTab('trajectory');
               }}
               onReject={() => {
-                alert('Rejected changes!');
                 setActiveTab('trajectory');
               }}
               onClose={() => setActiveTab('trajectory')}
+              onReview={handleReviewDiff}
             />
           )}
 
@@ -1745,13 +1820,26 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
         </div>
       </div>
 
+      {/* Mobile bottom navigation (phones only) */}
+      <BottomNav
+        activeTab={activeTab}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          setMobileNavOpen(false);
+        }}
+        mcpCount={mcpServers.filter((s) => s.enabled).length}
+      />
+
       {/* search dialog overlay */}
       <SearchModal
         isOpen={searchModalOpen}
         onClose={() => setSearchModalOpen(false)}
+        chats={chats.map(c => ({ id: c.id, title: c.title, project: c.project }))}
+        projects={projects}
         onSelectChat={handleSelectSearchChat}
+        onSelectProject={(name) => handleSelectProject(name)}
         onNewChat={handleNewChat}
-        onOpenFolder={() => triggerToast('Workspace Folder Selector')}
+        onOpenFolder={handleOpenFolder}
         onOpenSettings={() => {
           setActiveTab('settings');
           setSettingsCategory('general');
