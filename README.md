@@ -50,7 +50,15 @@ npm run start --workspace=@superagent/desktop
 ### Start Web(In Cloud Server/VPS for remote access)
 ```bash
 npm run start --workspace=@superagent/web
+# or with live reload during development:
+npm run dev --workspace=@superagent/web
 ```
+
+The server binds to **all network interfaces** (`0.0.0.0`) by default, so it is
+reachable from other devices on your LAN — the startup log prints a
+`Network (LAN) URL` (e.g. `http://192.168.x.x:3000`) you can open on a phone or
+another machine. To restrict it to the local machine only, set `HOST=127.0.0.1`.
+Both `PORT` (default `3000`) and `HOST` are configurable via environment variables.
 
 The web UI is fully responsive and works on phones, tablets, and desktops
 (the sidebar becomes a slide-over drawer on small screens).

@@ -37,6 +37,10 @@ interface WorkspaceViewProps {
   onAttachPastedFiles?: (files: FileList) => void;
   composerAttachments?: any[];
   onRemoveAttachment?: (index: number) => void;
+  /** Model of the currently open chat (used to default the composer selection). */
+  activeChatModel?: string;
+  /** Called when the user changes the selected model in the composer. */
+  onModelChange?: (model: string) => void;
 }
 
 const recommendations = [
@@ -180,7 +184,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   onAttachClick,
   onAttachPastedFiles,
   composerAttachments = [],
-  onRemoveAttachment
+  onRemoveAttachment,
+  activeChatModel,
+  onModelChange
 }) => {
   const enabledModels = modelsCatalog.filter(model => model.enabled);
 
@@ -444,12 +450,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         onLocallyClick={() => onToast('Local Execution Environments')}
         onBranchClick={() => onToast('Git Branch Selector')}
         availableModels={enabledModels.length > 1 ? ['Model Governance', ...enabledModels.map(model => model.name)] : enabledModels.map(model => model.name)}
-        defaultModel={enabledModels.length > 1 ? 'Model Governance' : (enabledModels[0]?.name || '')}
+        defaultModel={activeChatModel && enabledModels.some(m => m.name === activeChatModel) ? activeChatModel : (enabledModels.length > 1 ? 'Model Governance' : (enabledModels[0]?.name || ''))}
         promptValue={composerPrompt}
         onPromptChange={onPromptChange}
         onAttachPastedFiles={onAttachPastedFiles}
         attachments={composerAttachments}
         onRemoveAttachment={onRemoveAttachment}
+        onModelChange={onModelChange}
       />
     </>
   );

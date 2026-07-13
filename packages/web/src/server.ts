@@ -436,6 +436,21 @@ app.get('*', (req, res) => {
 
 // ─── Server Ignition ─────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
+// Bind to all interfaces by default so the server is reachable from other devices
+// on the local network. Override with HOST=127.0.0.1 to restrict to localhost.
+const HOST = process.env.HOST || '0.0.0.0';
+
+/** Returns the machine's non-internal IPv4 addresses (for LAN access URLs). */
+function lanAddresses(): string[] {
+  const out: string[] = [];
+  const interfaces = os.networkInterfaces();
+  for (const list of Object.values(interfaces)) {
+    for (const info of list || []) {
+      if ((String(info.family) === 'IPv4' || String(info.family) === '4') && !info.internal) out.push(info.address);
+    }
+  }
+  return out;
+}
 
 server.on('upgrade', (request, socket, head) => {
   const pathname = new URL(request.url || '', `http://${request.headers.host}`).pathname;
@@ -454,9 +469,13 @@ server.on('upgrade', (request, socket, head) => {
   }
 });
 
-server.listen(PORT, () => {
+server.listen(Number(PORT), HOST, () => {
   console.log(`================================================================`);
   console.log(`SuperAgent Web Server ignited at: http://localhost:${PORT}`);
+  // Surface the LAN URLs so the server can be opened from phones / other machines.
+  for (const addr of lanAddresses()) {
+    console.log(`Network (LAN) URL:              http://${addr}:${PORT}`);
+  }
   console.log(`Resolving configuration and logs at: ${userDataDir}`);
   console.log(`================================================================`);
 });

@@ -11,40 +11,24 @@ export const ShortcutsSettings: React.FC = () => {
   ];
 
   return (
-    <div style={{ maxWidth: '640px' }}>
-      <h1 style={{ fontSize: '1.6rem', fontWeight: 600, color: '#ffffff', marginBottom: '8px', textAlign: 'left' }}>
+    <div className="mx-auto w-full max-w-2xl text-left">
+      <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain sm:text-3xl">
         Shortcuts
       </h1>
-      <p style={{ fontSize: '0.88rem', color: '#8a8a8a', marginBottom: '28px', textAlign: 'left', lineHeight: '1.5' }}>
+      <p className="mb-7 mt-2 text-sm leading-relaxed text-brand-textMuted sm:text-base">
         View and manage keyboard combinations to quickly execute app operations.
       </p>
 
-      <div style={{ backgroundColor: '#1b1412', border: '1px solid #2d2321', borderRadius: '12px', overflow: 'hidden' }}>
+      <div className="ui-card overflow-hidden">
         {shortcutItems.map((item, idx) => (
           <div
             key={item.label}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '16px 20px',
-              borderBottom: idx === shortcutItems.length - 1 ? 'none' : '1px solid #231c1a'
-            }}
+            className={`flex items-center justify-between gap-3 px-4 py-3.5 sm:px-5 ${
+              idx === shortcutItems.length - 1 ? '' : 'border-b border-brand-border'
+            }`}
           >
-            <span style={{ fontSize: '0.9rem', color: '#ffffff', fontWeight: 500 }}>{item.label}</span>
-            <span
-              style={{
-                fontFamily: 'monospace',
-                fontSize: '0.82rem',
-                backgroundColor: '#141110',
-                border: '1px solid #2d2321',
-                padding: '4px 8px',
-                borderRadius: '6px',
-                color: '#ececec'
-              }}
-            >
-              {item.value}
-            </span>
+            <span className="text-sm font-medium text-brand-textMain">{item.label}</span>
+            <kbd className="ui-chip font-mono text-xs">{item.value}</kbd>
           </div>
         ))}
       </div>

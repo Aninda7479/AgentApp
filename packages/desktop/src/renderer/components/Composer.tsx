@@ -33,6 +33,8 @@ export interface ComposerProps {
   onStop?: () => void;
   availableModels?: string[];
   defaultModel?: string;
+  /** Called whenever the user changes the selected model in the dropdown. */
+  onModelChange?: (model: string) => void;
   activeProject?: string;
   onAttachClick?: () => void;
   onMicClick?: () => void;
@@ -62,7 +64,8 @@ export const Composer: React.FC<ComposerProps> = ({
   onPromptChange,
   onAttachPastedFiles,
   attachments = [],
-  onRemoveAttachment
+  onRemoveAttachment,
+  onModelChange
 }) => {
   const [localPrompt, setLocalPrompt] = useState('');
   const prompt = promptValue !== undefined ? promptValue : localPrompt;
@@ -106,6 +109,14 @@ export const Composer: React.FC<ComposerProps> = ({
       }
     }
   }, [availableModels, defaultModel, hasModels, selectedModel]);
+
+  // When the parent-supplied default changes (e.g. switching to another chat
+  // or a new chat adopting the last-used model), sync the selection to it.
+  useEffect(() => {
+    if (defaultModel && availableModels.includes(defaultModel)) {
+      setSelectedModel(defaultModel);
+    }
+  }, [defaultModel]);
 
   const handleSend = () => {
     if (!prompt.trim() || disabled || isGenerating) return;
@@ -263,6 +274,7 @@ export const Composer: React.FC<ComposerProps> = ({
                       onClick={() => {
                         setSelectedModel(model);
                         setShowModelDropdown(false);
+                        onModelChange?.(model);
                       }}
                       className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-purple-500/15 cursor-pointer transition-colors"
                     >

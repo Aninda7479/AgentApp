@@ -110,7 +110,7 @@ export const UsageTrackerSettings: React.FC = () => {
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="glass-card p-4 rounded-xl border border-violet-500/10 flex gap-4 items-center">
           <div className="w-10 h-10 rounded-lg bg-violet-500/10 text-violet-400 flex items-center justify-center">
             <Coins className="w-5 h-5" />

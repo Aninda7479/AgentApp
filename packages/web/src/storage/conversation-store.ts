@@ -262,6 +262,8 @@ export function writeConversationStore(data: StoreData, userDataDir: string): vo
   // Clean up stale project and chat directories no longer in the active set
   try {
     for (const folderName of fs.readdirSync(roots.projectsDir)) {
+      const projectDir = getProjectDirectory(userDataDir, folderName);
+      if (!activeProjectKeys.has(folderName)) {
         fs.rmSync(projectDir, { recursive: true, force: true });
         continue;
       }

@@ -147,6 +147,8 @@ export const App: React.FC = () => {
   const [chats, setChats] = useState<StoredChat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [draftProject, setDraftProject] = useState<string>('');
+  /** Last model the user selected; persisted to disk via core settings store. */
+  const [lastUsedModel, setLastUsedModel] = useState<string>('');
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState<boolean>(false);
   const [isConfigureProjectOpen, setIsConfigureProjectOpen] = useState<boolean>(false);
   const [projectToConfigure, setProjectToConfigure] = useState<StoredProject | null>(null);
@@ -181,6 +183,17 @@ export const App: React.FC = () => {
       modelsCatalog: models,
       projects: currentProjects,
       chats: currentChats
+    });
+  };
+
+  /** Persists the last-used model to disk through core's settings store. */
+  const persistLastUsedModel = (modelName: string) => {
+    if (!modelName) return;
+    setLastUsedModel(modelName);
+    const modelConfig = modelsCatalog.find(m => m.name === modelName);
+    const providerId = modelConfig?.providerId;
+    ipc?.invoke('settings-write', {
+      lastUsedModel: { provider: providerId, model: modelName }
     });
   };
 
@@ -463,6 +476,9 @@ export const App: React.FC = () => {
             if (settings.general.confirmShellCommands !== undefined) setDefaultPermissions(settings.general.confirmShellCommands);
             if (settings.general.autoReviewPlan !== undefined) setAutoReview(settings.general.autoReviewPlan);
             if (settings.general.unsandboxedActions !== undefined) setFullAccess(settings.general.unsandboxedActions);
+          }
+          if (settings.lastUsedModel?.model) {
+            setLastUsedModel(settings.lastUsedModel.model);
           }
         }
       } catch (err) {
@@ -1178,6 +1194,11 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
 
     setIsGenerating(activeChatIdRef.current === chatId);
 
+    // Remember the model used so it becomes the default next time the app opens.
+    if (options.model) {
+      persistLastUsedModel(options.model);
+    }
+
     // ── Route to real AI or simulation ──────────────────────────────────────
     if (hasRealCredentials && ipc) {
       // Real AI: call main process agent runner
@@ -1641,6 +1662,8 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
               }}
               onToast={triggerToast}
               onUndoStep={handleUndoStep}
+              activeChatModel={activeChat?.model || lastUsedModel}
+              onModelChange={persistLastUsedModel}
               onAttachClick={handleAttachFiles}
               onAttachPastedFiles={handleAttachPastedFiles}
               composerAttachments={composerAttachments}

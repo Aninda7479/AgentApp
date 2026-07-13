@@ -126,7 +126,7 @@ export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Left: configuration settings */}
         <div className="space-y-4">
           <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">

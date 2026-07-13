@@ -208,7 +208,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       )}
 
       {/* swarm tuning controls */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
           <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
             <Sliders size={14} className="text-sky-400" />
@@ -259,7 +259,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1 text-left">
             <label className="text-[10px] text-brand-textMuted uppercase font-bold">Coding & engineering</label>
             <select
