@@ -1,5 +1,6 @@
 import { TrajectoryStep } from '../../renderer/components/TrajectoryCanvas';
 
+/** Persisted AI provider configuration with API key. */
 export interface StoredProvider {
   id: string;
   name: string;
@@ -8,6 +9,7 @@ export interface StoredProvider {
   baseUrl: string;
 }
 
+/** Persisted model catalog entry with capabilities and pricing. */
 export interface StoredModel {
   id: string;
   name: string;
@@ -23,6 +25,7 @@ export interface StoredModel {
   type?: string;
 }
 
+/** Persisted project record with folder paths and allowed commands. */
 export interface StoredProject {
   name: string;
   folders: string[];
@@ -30,6 +33,7 @@ export interface StoredProject {
   storageKey?: string;
 }
 
+/** Persisted chat conversation with trajectory steps. */
 export interface StoredChat {
   id: string;
   title: string;
@@ -43,6 +47,7 @@ export interface StoredChat {
   lastError?: string;
 }
 
+/** Top-level shape of the application's persisted data. */
 export interface StoreData {
   connectedProviders: StoredProvider[];
   modelsCatalog: StoredModel[];
@@ -50,6 +55,7 @@ export interface StoreData {
   chats?: StoredChat[];
 }
 
+/** Resolved directory paths for conversation storage. */
 export interface ConversationRoots {
   userDataDir: string;
   baseDir: string;

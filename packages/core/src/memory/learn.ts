@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { AgentMessage } from '../types/agent.js';
 
+/** A single insight learned from conversation or execution trajectories. */
 export interface LearnedInsight {
   id: string;
   topic: string;
@@ -10,6 +11,7 @@ export interface LearnedInsight {
   timestamp: number;
 }
 
+/** Extracts, stores, and retrieves learned insights from agent trajectories. */
 export class LearningLoopEngine {
   private filePath: string;
   private insights: LearnedInsight[] = [];

@@ -2,11 +2,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+/** Theme preference settings for desktop and CLI surfaces. */
 export interface ThemeSettings {
   desktop?: 'light' | 'dark' | 'system';
   cli?: 'light' | 'dark' | 'system' | string;
 }
 
+/** Configuration for a single AI provider (API key, base URL, etc.). */
 export interface ProviderSettings {
   id: string;
   name: string;
@@ -15,12 +17,14 @@ export interface ProviderSettings {
   baseUrl: string;
 }
 
+/** Per-model pricing info (cost per million tokens). */
 export interface ModelPricing {
   inputPer1M?: string;
   outputPer1M?: string;
   cachedInputPer1M?: string;
 }
 
+/** Configuration and metadata for a registered model. */
 export interface ModelSettings {
   id: string;
   name: string;
@@ -36,11 +40,13 @@ export interface ModelSettings {
   type?: string;
 }
 
+/** Tracks the most recently used provider and model. */
 export interface LastUsedModelSettings {
   provider?: string;
   model?: string;
 }
 
+/** General application-level preferences. */
 export interface GeneralAppSettings {
   workMode?: 'coding' | 'everyday';
   confirmShellCommands?: boolean;
@@ -48,6 +54,7 @@ export interface GeneralAppSettings {
   unsandboxedActions?: boolean;
 }
 
+/** Model governance: enabled models, routing strategy, and optimization goal. */
 export interface ModelGovSettings {
   enabledModels?: string[];
   autoUpdateInstructions?: boolean;
@@ -56,6 +63,7 @@ export interface ModelGovSettings {
   categoryOverrides?: Record<string, string>;
 }
 
+/** Settings for the built-in browser automation engine. */
 export interface BrowserUseSettings {
   headless?: boolean;
   width?: number;
@@ -68,12 +76,14 @@ export interface BrowserUseSettings {
   userProfilePath?: string;
 }
 
+/** Settings for desktop computer-use automation (mouse/keyboard). */
 export interface ComputerUseSettings {
   enableMouse?: boolean;
   enableKeyboard?: boolean;
   actionDelay?: number;
 }
 
+/** Top-level application settings object persisted to disk. */
 export interface AppSettings {
   theme?: ThemeSettings;
   providers?: ProviderSettings[];
@@ -85,6 +95,7 @@ export interface AppSettings {
   computerUse?: ComputerUseSettings;
 }
 
+/** Resolved file system paths for user data and config files. */
 export interface SettingsPaths {
   userDataDirectory: string;
   configDirectory: string;
@@ -92,6 +103,7 @@ export interface SettingsPaths {
   backupFilePath: string;
 }
 
+/** Returns the OS-specific user data directory for the application. */
 export function getUserDataDirectory(): string {
   if (process.env.VITEST) {
     const workerId = process.env.VITEST_WORKER_ID || '1';
@@ -110,6 +122,7 @@ export function getUserDataDirectory(): string {
   return path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), 'OpenSource', 'AgentApp');
 }
 
+/** Resolves all relevant file paths from a base directory. */
 export function getSettingsPaths(baseDirectory = getUserDataDirectory()): SettingsPaths {
   const configDirectory = path.join(baseDirectory, 'Config');
   const settingsFilePath = path.join(configDirectory, 'settings.json');
@@ -121,6 +134,7 @@ export function getSettingsPaths(baseDirectory = getUserDataDirectory()): Settin
   };
 }
 
+/** Ensures the config directory exists and returns its path. */
 export function getConfigDirectory(): string {
   const { configDirectory } = getSettingsPaths();
   if (!fs.existsSync(configDirectory)) {
@@ -129,6 +143,7 @@ export function getConfigDirectory(): string {
   return configDirectory;
 }
 
+/** Returns the path to the main settings JSON file. */
 export function getSettingsFilePath(): string {
   return getSettingsPaths().settingsFilePath;
 }
@@ -146,9 +161,11 @@ function readJsonFile<T>(filePath: string): T | null {
   return JSON.parse(raw) as T;
 }
 
+/** Reads, writes, and caches the application settings from disk. */
 export class SettingsStorage {
   private static cachedSettings: AppSettings | null = null;
 
+  /** Loads settings from disk (primary file, with backup fallback). */
   public static loadSettings(): AppSettings {
     const { settingsFilePath, backupFilePath } = getSettingsPaths();
 
@@ -175,6 +192,7 @@ export class SettingsStorage {
     return this.cachedSettings || {};
   }
 
+  /** Persists settings to disk atomically with a backup file. */
   public static saveSettings(settings: AppSettings): void {
     try {
       const { configDirectory, settingsFilePath, backupFilePath } = getSettingsPaths();
@@ -218,27 +236,33 @@ export class SettingsStorage {
     }
   }
 
+  /** Updates a single top-level settings key and persists. */
   public static updateSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {
     this.saveSettings({ [key]: value });
   }
 
+  /** Applies a partial settings patch and persists. */
   public static updateSettings(patch: AppSettings): void {
     this.saveSettings(patch);
   }
 
+  /** Clears the in-memory settings cache. */
   public static clearCache(): void {
     this.cachedSettings = null;
   }
 }
 
+/** Convenience wrapper to load AppSettings from disk. */
 export function loadSettings(): AppSettings {
   return SettingsStorage.loadSettings();
 }
 
+/** Convenience wrapper to persist AppSettings to disk. */
 export function saveSettings(settings: AppSettings): void {
   SettingsStorage.saveSettings(settings);
 }
 
+/** Convenience wrapper to update a single settings key. */
 export function updateSettings<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {
   SettingsStorage.updateSetting(key, value);
 }

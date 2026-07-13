@@ -2,6 +2,7 @@ import React from 'react';
 import { Key, ChevronLeft, ChevronRight, Menu } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 
+/** Props for the TitleBar component. */
 interface TitleBarProps {
   hasOpenAiKey: boolean;
   onOpenProviders: () => void;
@@ -20,6 +21,7 @@ interface TitleBarProps {
 const isElectron =
   typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '');
 
+/** Desktop title bar with logo, navigation, menus, and window controls. */
 export const TitleBar: React.FC<TitleBarProps> = ({
   hasOpenAiKey,
   onOpenProviders,

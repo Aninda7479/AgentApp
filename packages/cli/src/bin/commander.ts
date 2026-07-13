@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { SettingsStorage } from '@superagent/core';
 
+/** Parsed CLI flags and options for the chat command. */
 export interface CliOptions {
   key?: string;
   provider: string;
@@ -10,6 +11,10 @@ export interface CliOptions {
   interactive: boolean;
 }
 
+/**
+ * Builds and returns the main Commander program with chat subcommand.
+ * @param onExecute - Optional callback invoked when a command is executed
+ */
 export function createCliProgram(onExecute?: (options: CliOptions, prompt?: string) => void): Command {
   const program = new Command();
 
@@ -47,6 +52,11 @@ export function createCliProgram(onExecute?: (options: CliOptions, prompt?: stri
   return program;
 }
 
+/**
+ * Parses raw CLI arguments and returns merged options.
+ * @param args - Raw process.argv slice (e.g. process.argv.slice(2))
+ * @param onExecute - Optional callback invoked when a command is executed
+ */
 export function parseCliArguments(args: string[], onExecute?: (options: CliOptions, prompt?: string) => void): CliOptions {
   const savedSettings = SettingsStorage.loadSettings();
   let parsedOptions: CliOptions = {

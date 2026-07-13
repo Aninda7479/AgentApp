@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getConfigDirectory, SettingsStorage } from './settings-store.js';
 
+/** A single recorded usage entry for a model call. */
 export interface ModelUsageRecord {
   model: string;
   provider: string;
@@ -12,6 +13,7 @@ export interface ModelUsageRecord {
   timestamp: string;
 }
 
+/** Aggregated usage statistics grouped by model+provider. */
 export interface ModelUsageSummary {
   model: string;
   provider: string;
@@ -22,6 +24,7 @@ export interface ModelUsageSummary {
   callCount: number;
 }
 
+/** Returns per-million-token pricing for a given provider/model combo. */
 export function getModelPricing(provider: string, model: string): { inputPrice: number; outputPrice: number } {
   try {
     const settings = SettingsStorage.loadSettings();
@@ -82,11 +85,13 @@ export function getModelPricing(provider: string, model: string): { inputPrice: 
   return { inputPrice: 0.20, outputPrice: 0.60 };
 }
 
+/** Tracks per-model token usage and costs, persisted to disk. */
 export class UsageTracker {
   private static getUsageFilePath(): string {
     return path.join(getConfigDirectory(), 'usage-log.json');
   }
 
+  /** Loads all usage records from the JSON log file. */
   public static loadUsage(): ModelUsageRecord[] {
     const filePath = this.getUsageFilePath();
     if (!fs.existsSync(filePath)) {
@@ -100,6 +105,7 @@ export class UsageTracker {
     }
   }
 
+  /** Records a new usage event, calculating cost from pricing. */
   public static trackUsage(
     provider: string,
     model: string,
@@ -142,6 +148,7 @@ export class UsageTracker {
     }
   }
 
+  /** Returns aggregated usage summaries grouped by model. */
   public static getSummary(): ModelUsageSummary[] {
     const records = this.loadUsage();
     const map = new Map<string, ModelUsageSummary>();
@@ -170,6 +177,7 @@ export class UsageTracker {
     return Array.from(map.values());
   }
 
+  /** Clears all recorded usage history from disk. */
   public static clearUsage(): void {
     try {
       const filePath = this.getUsageFilePath();

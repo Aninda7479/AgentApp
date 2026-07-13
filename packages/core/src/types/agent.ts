@@ -1,3 +1,4 @@
+/** Supported AI provider identifiers. */
 export type AIProvider =
   | 'openai'
   | 'chatgpt'
@@ -17,6 +18,7 @@ export type AIProvider =
   | 'ollama'
   | 'custom';
 
+/** Configuration for a Bring-Your-Own-Key provider connection. */
 export interface BYOKConfig {
   provider: AIProvider;
   apiKey: string;
@@ -24,6 +26,7 @@ export interface BYOKConfig {
   modelName?: string;
 }
 
+/** A single message in an agent conversation trajectory. */
 export interface AgentMessage {
   id: string;
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -32,6 +35,7 @@ export interface AgentMessage {
   toolCalls?: ToolCall[];
 }
 
+/** A tool invocation record with its execution status. */
 export interface ToolCall {
   id: string;
   toolName: string;
@@ -40,6 +44,7 @@ export interface ToolCall {
   status: 'pending' | 'executing' | 'completed' | 'failed';
 }
 
+/** Definition of a tool available to the agent, including its schema and executor. */
 export interface ToolDefinition {
   name: string;
   description: string;
@@ -47,12 +52,14 @@ export interface ToolDefinition {
   execute: (args: Record<string, any>, config: BYOKConfig) => Promise<any>;
 }
 
+/** Request payload for generating a multimodal media asset. */
 export interface MediaGenerationRequest {
   type: 'image' | 'audio' | 'video' | 'pdf' | 'ppt';
   prompt: string;
   options?: Record<string, any>;
 }
 
+/** Full conversation trajectory for an agent session. */
 export interface ExecutionTrajectory {
   sessionId: string;
   messages: AgentMessage[];
@@ -60,6 +67,7 @@ export interface ExecutionTrajectory {
   permissionMode: 'auto' | 'manual' | 'read-only';
 }
 
+/** A chat message used in completion requests to provider APIs. */
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
@@ -68,6 +76,7 @@ export interface ChatMessage {
   toolCalls?: ToolCall[];
 }
 
+/** Request payload to complete a chat with an LLM provider. */
 export interface CompletionRequest {
   messages: ChatMessage[];
   model?: string;
@@ -77,6 +86,7 @@ export interface CompletionRequest {
   stream?: boolean;
 }
 
+/** Response from an LLM completion request. */
 export interface CompletionResponse {
   id: string;
   provider: AIProvider;
@@ -90,6 +100,7 @@ export interface CompletionResponse {
   };
 }
 
+/** Capabilities and limits of a specific AI model. */
 export interface ModelCapability {
   id: string;
   name: string;
@@ -101,6 +112,7 @@ export interface ModelCapability {
   supportsReasoning: boolean;
 }
 
+/** Interface that every LLM provider adapter must implement. */
 export interface BaseProviderAdapter {
   readonly provider: AIProvider;
   complete(request: CompletionRequest): Promise<CompletionResponse>;

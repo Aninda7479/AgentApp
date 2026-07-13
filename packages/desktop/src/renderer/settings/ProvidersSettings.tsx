@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ProviderConnection, ModelConfig } from './types';
 
+/** Props for the providers settings panel. */
 interface ProvidersSettingsProps {
   connectedProviders: ProviderConnection[];
   onConnectProvider: (provider: ProviderConnection, models: ModelConfig[]) => void;
@@ -11,18 +12,12 @@ interface ProvidersSettingsProps {
 const ProviderLogo: React.FC<{ providerId: string; org?: string; size?: number }> = ({ providerId, org, size = 24 }) => {
   const [error, setError] = useState(false);
 
-  // Fallback org resolution
   const match = POPULAR_PROVIDERS.find(p => p.id === providerId || providerId.startsWith(p.id));
   const targetOrg = org || match?.org;
 
   if (error || !targetOrg) {
     return (
-      <div style={{
-        width: size, height: size, borderRadius: '6px',
-        backgroundColor: '#2e2220', color: '#8a8a8a',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: `${size * 0.55}px`, fontWeight: 600, flexShrink: 0
-      }}>
+      <div style={{ width: size, height: size }} className="flex flex-shrink-0 items-center justify-center rounded-md bg-violet-500/10 text-[0.6em] font-semibold text-brand-textMuted">
         ⚙️
       </div>
     );
@@ -33,10 +28,8 @@ const ProviderLogo: React.FC<{ providerId: string; org?: string; size?: number }
       src={`https://github.com/${targetOrg}.png`}
       alt={providerId}
       onError={() => setError(true)}
-      style={{
-        width: size, height: size, borderRadius: '6px',
-        objectFit: 'cover', flexShrink: 0
-      }}
+      style={{ width: size, height: size }}
+      className="flex-shrink-0 rounded-md object-cover"
     />
   );
 };
@@ -54,6 +47,7 @@ const POPULAR_PROVIDERS = [
   { id: 'deepinfra', name: 'DeepInfra', org: 'deepinfra', desc: 'Low cost serverless inference hosting provider', defaultUrl: 'https://api.deepinfra.com/v1' }
 ];
 
+/** Manages provider connections: list connected providers, connect new ones via modal, and test endpoints. */
 export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
   connectedProviders,
   onConnectProvider,
@@ -69,7 +63,6 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
   const [errorDetails, setErrorDetails] = useState('');
 
   const handleOpenConnectModal = (pId: string, pName: string, defaultUrl: string) => {
-    // If it's a custom provider, generate a unique ID so they can connect multiple custom hosts
     const id = pId === 'custom' ? `custom-${Date.now()}` : pId;
     setModalProviderId(id);
     setConnectionName(pName);
@@ -252,299 +245,155 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
     setIsModalOpen(false);
   };
 
-  // Filter visible popular providers (hide already connected ones)
   const visiblePopular = POPULAR_PROVIDERS.filter(
     (p) => !connectedProviders.some((cp) => cp.id === p.id)
   );
 
+  const typeLabel = (type: string) =>
+    type === 'env' ? 'Environment' : type === 'key' ? 'API Key' : 'Custom';
+
   return (
-    <div style={{ maxWidth: '780px' }}>
-      <h1 style={{ fontSize: '1.6rem', fontWeight: 600, color: '#ffffff', marginBottom: '8px', textAlign: 'left' }}>
+    <div className="mx-auto w-full max-w-3xl text-left">
+      <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain sm:text-3xl">
         Providers
       </h1>
-      <p style={{ fontSize: '0.88rem', color: '#8a8a8a', marginBottom: '28px', textAlign: 'left', lineHeight: '1.5' }}>
+      <p className="mb-7 mt-2 text-sm leading-relaxed text-brand-textMuted sm:text-base">
         Manage model connections, credentials, and custom endpoint URLs.
       </p>
 
       {/* Connected Providers List */}
-      <div style={{ marginBottom: '32px', textAlign: 'left' }}>
-        <div style={{ fontSize: '0.92rem', fontWeight: 600, color: '#ececec', marginBottom: '16px' }}>
-          Connected providers
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {connectedProviders.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '30px', border: '1px dashed #2d2321', borderRadius: '12px', color: '#8a8a8a', fontSize: '0.85rem' }}>
-              No active API connections. Connect one of the popular providers below.
-            </div>
-          ) : (
-            connectedProviders.map((p) => (
-              <div
-                key={p.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  backgroundColor: '#1b1412',
-                  border: '1px solid #2d2321',
-                  borderRadius: '12px',
-                  padding: '16px 20px'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <section className="mb-8">
+        <h3 className="ui-label mb-3">Connected providers</h3>
+        {connectedProviders.length === 0 ? (
+          <div className="ui-card px-6 py-10 text-center text-sm text-brand-textMuted">
+            No active API connections. Connect one of the popular providers below.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {connectedProviders.map((p) => (
+              <div key={p.id} className="ui-card flex items-center justify-between gap-3 p-3.5 sm:p-4">
+                <div className="flex min-w-0 items-center gap-3">
                   <ProviderLogo providerId={p.id} />
-                  <span style={{ fontWeight: 600, color: '#ffffff', fontSize: '0.92rem' }}>{p.name}</span>
-                  <span
-                    style={{
-                      fontSize: '0.72rem',
-                      backgroundColor: '#251c1a',
-                      color: '#ef4444',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      fontWeight: 500
-                    }}
-                  >
-                    {p.type === 'env' ? 'Environment' : p.type === 'key' ? 'API Key' : 'Custom'}
-                  </span>
+                  <span className="truncate text-sm font-semibold text-brand-textMain">{p.name}</span>
+                  <span className="ui-badge bg-brand-popover text-brand-textMuted">{typeLabel(p.type)}</span>
                 </div>
                 <button
                   onClick={() => onDisconnectProvider(p.id)}
-                  style={{
-                    backgroundColor: 'transparent',
-                    border: 'none',
-                    color: '#ffffff',
-                    fontWeight: 500,
-                    fontSize: '0.88rem',
-                    cursor: 'pointer',
-                    padding: '4px 8px'
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = '#ffffff')}
+                  className="ui-btn-ghost text-red-400 hover:bg-red-500/10 hover:text-red-300"
                 >
                   Disconnect
                 </button>
               </div>
-            ))
-          )}
-        </div>
-      </div>
+            ))}
+          </div>
+        )}
+      </section>
 
-      {/* Popular Providers Grid */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <div style={{ fontSize: '0.92rem', fontWeight: 600, color: '#ececec' }}>Popular providers</div>
-          <button
-            onClick={() => handleOpenConnectModal('custom', 'Custom Provider', '')}
-            style={{
-              backgroundColor: '#2a1e1c',
-              border: '1px solid #3d2b29',
-              borderRadius: '6px',
-              color: '#ffffff',
-              padding: '6px 14px',
-              fontSize: '0.82rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3a2622')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#2a1e1c')}
-          >
+      {/* Popular Providers */}
+      <section>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="ui-label">Popular providers</h3>
+          <button onClick={() => handleOpenConnectModal('custom', 'Custom Provider', '')} className="ui-btn">
             + Add Custom Provider
           </button>
         </div>
-        <div style={{ backgroundColor: '#1b1412', border: '1px solid #2d2321', borderRadius: '12px', overflow: 'hidden' }}>
-          {visiblePopular.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '30px', color: '#8a8a8a', fontSize: '0.85rem' }}>
-              All popular providers are connected!
-            </div>
-          ) : (
-            visiblePopular.map((p, idx) => (
+
+        {visiblePopular.length === 0 ? (
+          <div className="ui-card px-6 py-10 text-center text-sm text-brand-textMuted">
+            All popular providers are connected!
+          </div>
+        ) : (
+          <div className="ui-card overflow-hidden">
+            {visiblePopular.map((p, idx) => (
               <div
                 key={p.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '16px 20px',
-                  borderBottom: idx === visiblePopular.length - 1 ? 'none' : '1px solid #231c1a'
-                }}
+                className={`flex items-center justify-between gap-3 p-3.5 sm:p-4 ${
+                  idx === visiblePopular.length - 1 ? '' : 'border-b border-brand-border'
+                }`}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, marginRight: '16px', textAlign: 'left' }}>
+                <div className="flex min-w-0 items-center gap-3">
                   <ProviderLogo providerId={p.id} org={p.org} size={32} />
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontWeight: 600, color: '#ffffff', fontSize: '0.92rem' }}>{p.name}</span>
-                    </div>
-                    <div style={{ fontSize: '0.78rem', color: '#8a8a8a', marginTop: '2px' }}>{p.desc}</div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-brand-textMain">{p.name}</div>
+                    <div className="truncate text-xs text-brand-textMuted">{p.desc}</div>
                   </div>
                 </div>
                 <button
                   onClick={() => handleOpenConnectModal(p.id, p.name, p.defaultUrl)}
-                  style={{
-                    backgroundColor: '#2a1e1c',
-                    border: '1px solid #3d2b29',
-                    borderRadius: '6px',
-                    color: '#ffffff',
-                    padding: '6px 12px',
-                    fontSize: '0.85rem',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap'
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#3a2622')}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#2a1e1c')}
+                  className="ui-btn-primary flex-shrink-0"
                 >
                   + Connect
                 </button>
               </div>
-            ))
-          )}
-        </div>
-      </div>
+            ))}
+          </div>
+        )}
+      </section>
 
+      {/* Connect modal */}
       {isModalOpen && (
         <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.75)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 3000
-          }}
+          className="ui-modal-backdrop"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}
         >
-          <div
-            style={{
-              width: '460px',
-              backgroundColor: '#1e1816',
-              border: '1px solid #3d2b29',
-              borderRadius: '12px',
-              padding: '24px',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.6)'
-            }}
-          >
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: '#ffffff', marginBottom: '16px', textAlign: 'left' }}>
+          <div className="ui-modal p-5 sm:p-6">
+            <h3 className="mb-4 text-left font-outfit text-lg font-semibold text-brand-textMain">
               Connect {connectionName}
             </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>
-                <label style={{ fontSize: '0.8rem', color: '#8a8a8a' }}>Connection Name</label>
+
+            <div className="flex flex-col gap-3.5">
+              <div className="flex flex-col gap-1 text-left">
+                <label className="ui-label">Connection Name</label>
                 <input
                   type="text"
                   value={connectionName}
                   onChange={(e) => setConnectionName(e.target.value)}
-                  style={{
-                    backgroundColor: '#141110',
-                    border: '1px solid #2d2321',
-                    borderRadius: '6px',
-                    padding: '8px 12px',
-                    color: '#ffffff',
-                    fontSize: '0.9rem',
-                    outline: 'none'
-                  }}
+                  className="ui-input"
                 />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>
-                <label style={{ fontSize: '0.8rem', color: '#8a8a8a' }}>API Key / Token</label>
+              <div className="flex flex-col gap-1 text-left">
+                <label className="ui-label">API Key / Token</label>
                 <input
                   type="password"
                   placeholder="Enter credential token"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  style={{
-                    backgroundColor: '#141110',
-                    border: '1px solid #2d2321',
-                    borderRadius: '6px',
-                    padding: '8px 12px',
-                    color: '#ffffff',
-                    fontSize: '0.9rem',
-                    outline: 'none'
-                  }}
+                  className="ui-input"
                 />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'left' }}>
-                <label style={{ fontSize: '0.8rem', color: '#8a8a8a' }}>Base Endpoint URL</label>
+              <div className="flex flex-col gap-1 text-left">
+                <label className="ui-label">Base Endpoint URL</label>
                 <input
                   type="text"
                   placeholder="Defaults to standard URL if empty"
                   value={baseUrl}
                   onChange={(e) => setBaseUrl(e.target.value)}
-                  style={{
-                    backgroundColor: '#141110',
-                    border: '1px solid #2d2321',
-                    borderRadius: '6px',
-                    padding: '8px 12px',
-                    color: '#ffffff',
-                    fontSize: '0.9rem',
-                    outline: 'none'
-                  }}
+                  className="ui-input"
                 />
               </div>
             </div>
 
             {errorDetails && (
-              <div
-                style={{
-                  backgroundColor: '#3d1c1a',
-                  border: '1px solid #ef4444',
-                  borderRadius: '6px',
-                  padding: '10px 12px',
-                  color: '#ffffff',
-                  fontSize: '0.8rem',
-                  textAlign: 'left',
-                  marginBottom: '16px',
-                  lineHeight: '1.4'
-                }}
-              >
+              <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-300">
                 <strong>Connection Error:</strong> {errorDetails}
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="mt-5 flex items-center justify-between gap-3">
               <button
                 onClick={handleForceConnect}
-                style={{
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  color: '#8a8a8a',
-                  fontSize: '0.8rem',
-                  cursor: 'pointer',
-                  textDecoration: 'underline'
-                }}
+                className="ui-btn-ghost text-xs underline-offset-2 hover:underline"
               >
                 Force Connect (Offline)
               </button>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  style={{
-                    backgroundColor: 'transparent',
-                    border: '1px solid #2d2321',
-                    borderRadius: '6px',
-                    color: '#ececec',
-                    padding: '6px 14px',
-                    fontSize: '0.85rem',
-                    cursor: 'pointer'
-                  }}
-                >
+              <div className="flex gap-2">
+                <button onClick={() => setIsModalOpen(false)} className="ui-btn">
                   Cancel
                 </button>
                 <button
                   onClick={handleTestConnection}
                   disabled={testingStatus === 'Testing connection...'}
-                  style={{
-                    backgroundColor: '#3b82f6',
-                    border: 'none',
-                    borderRadius: '6px',
-                    color: '#ffffff',
-                    padding: '6px 14px',
-                    fontSize: '0.85rem',
-                    fontWeight: 500,
-                    cursor: 'pointer'
-                  }}
+                  className="ui-btn-primary"
                 >
                   {testingStatus === 'Testing connection...' ? 'Testing...' : 'Test & Connect'}
                 </button>

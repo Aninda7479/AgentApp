@@ -26,6 +26,7 @@ import React from 'react';
 import { render } from 'ink';
 import { App } from './ui/App.js';
 
+/** Entry point: parses argv and launches password subcommand or interactive TUI. */
 if (process.argv[1] && (process.argv[1].endsWith('commander.js') || process.argv[1].endsWith('index.js') || process.argv[1].includes('superagent'))) {
   const argv = process.argv.slice(2);
 
@@ -41,6 +42,7 @@ if (process.argv[1] && (process.argv[1].endsWith('commander.js') || process.argv
     const options = parseCliArguments(argv);
     if (options.interactive) {
       render(React.createElement(App, { provider: options.provider, model: options.model, initialPermission: options.permission, initialVerbose: options.verbose }));
-    }
+}
+
   }
 }

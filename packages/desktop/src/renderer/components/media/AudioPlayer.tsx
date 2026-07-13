@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 
+/** Props for the AudioPlayer component. */
 export interface AudioPlayerProps {
   src: string;
   title?: string;
@@ -12,6 +13,7 @@ export interface AudioPlayerProps {
   onPause?: () => void;
 }
 
+/** Audio player with waveform visualization, playback controls, and speed selection. */
 export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   src,
   title = 'Untitled Track',

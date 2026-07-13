@@ -3,6 +3,7 @@ import { ThemeMode } from './types';
 
 const THEME_STORAGE_KEY = 'superagent.theme';
 
+/** Reads the persisted theme from localStorage, defaulting to 'dark'. */
 export const getInitialTheme = (): ThemeMode => {
   if (typeof window === 'undefined') return 'dark';
 
@@ -18,6 +19,7 @@ function resolveTheme(themeMode: ThemeMode): 'light' | 'dark' {
   return themeMode;
 }
 
+/** React hook that manages theme state and syncs it with localStorage. */
 export const useThemeMode = () => {
   const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialTheme);
 

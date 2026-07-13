@@ -1,5 +1,6 @@
 import React from 'react';
 
+/** Displays a read-only list of keyboard shortcuts and their key bindings. */
 export const ShortcutsSettings: React.FC = () => {
   const shortcutItems = [
     { label: 'Search Command Palette', value: 'Ctrl + P' },

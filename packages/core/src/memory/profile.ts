@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
+/** A single key-value entry in the user profile. */
 export interface UserProfileEntry {
   key: string;
   value: unknown;
@@ -8,10 +9,12 @@ export interface UserProfileEntry {
   updatedAt: number;
 }
 
+/** The full user profile data persisted to disk. */
 export interface UserProfileData {
   entries: Record<string, UserProfileEntry>;
 }
 
+/** Persistent user profile store for preferences, identity, and environment entries. */
 export class UserProfileStore {
   private filePath: string;
   private memoryCache: UserProfileData = { entries: {} };

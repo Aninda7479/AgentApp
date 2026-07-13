@@ -2,12 +2,14 @@ import { EventEmitter } from 'events';
 import { ChannelAdapter, ChannelAdapterConfig, IncomingMessage, OutgoingMessage, ChannelType } from './types';
 import { FetchFunction } from './telegram';
 
+/** Discord-specific adapter configuration. */
 export interface DiscordAdapterConfig extends ChannelAdapterConfig {
   botToken?: string;
   applicationId?: string;
   apiBaseUrl?: string;
 }
 
+/** Discord channel adapter using the Discord REST API (v10). */
 export class DiscordChannelAdapter extends EventEmitter implements ChannelAdapter {
   public readonly channelType: ChannelType = 'discord';
   private connected: boolean = false;

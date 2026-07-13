@@ -1,5 +1,6 @@
 import { SlashCommandRouter, SlashCommandContext, SlashCommandResult } from './router.js';
 
+/** A single line in a unified diff output. */
 export interface DiffLine {
   type: 'add' | 'delete' | 'context';
   oldLineNumber?: number;
@@ -7,6 +8,7 @@ export interface DiffLine {
   content: string;
 }
 
+/** Represents a pending file modification awaiting review. */
 export interface DiffFileChange {
   id: string;
   filePath: string;
@@ -15,6 +17,7 @@ export interface DiffFileChange {
   status: 'pending' | 'accepted' | 'rejected';
 }
 
+/** Aggregated counts of changes by status. */
 export interface DiffSummary {
   totalFiles: number;
   pending: number;
@@ -22,9 +25,11 @@ export interface DiffSummary {
   rejected: number;
 }
 
+/** Manages pending file diffs and provides accept/reject operations. */
 export class DiffReviewer {
   private changes: Map<string, DiffFileChange> = new Map();
 
+  /** Adds a new file change with original and modified content. */
   public addChange(filePath: string, originalContent: string, modifiedContent: string): DiffFileChange {
     const id = `diff_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const change: DiffFileChange = {
@@ -38,18 +43,22 @@ export class DiffReviewer {
     return change;
   }
 
+  /** Removes all tracked changes. */
   public clear(): void {
     this.changes.clear();
   }
 
+  /** Returns only changes with status 'pending'. */
   public getPendingChanges(): DiffFileChange[] {
     return Array.from(this.changes.values()).filter((c) => c.status === 'pending');
   }
 
+  /** Returns all tracked changes regardless of status. */
   public getAllChanges(): DiffFileChange[] {
     return Array.from(this.changes.values());
   }
 
+  /** Finds a change by its ID or file path. */
   public getChange(idOrPath: string): DiffFileChange | undefined {
     if (this.changes.has(idOrPath)) {
       return this.changes.get(idOrPath);
@@ -57,6 +66,7 @@ export class DiffReviewer {
     return Array.from(this.changes.values()).find((c) => c.filePath === idOrPath);
   }
 
+  /** Marks a change as accepted by ID or file path. */
   public accept(idOrPath: string): boolean {
     const change = this.getChange(idOrPath);
     if (change) {
@@ -66,6 +76,7 @@ export class DiffReviewer {
     return false;
   }
 
+  /** Marks a change as rejected by ID or file path. */
   public reject(idOrPath: string): boolean {
     const change = this.getChange(idOrPath);
     if (change) {
@@ -75,6 +86,7 @@ export class DiffReviewer {
     return false;
   }
 
+  /** Accepts all pending changes and returns the count accepted. */
   public acceptAll(): number {
     let count = 0;
     for (const change of this.changes.values()) {
@@ -86,6 +98,7 @@ export class DiffReviewer {
     return count;
   }
 
+  /** Rejects all pending changes and returns the count rejected. */
   public rejectAll(): number {
     let count = 0;
     for (const change of this.changes.values()) {
@@ -97,6 +110,7 @@ export class DiffReviewer {
     return count;
   }
 
+  /** Returns aggregated counts of changes by status. */
   public getSummary(): DiffSummary {
     const all = Array.from(this.changes.values());
     return {
@@ -107,6 +121,7 @@ export class DiffReviewer {
     };
   }
 
+  /** Generates a simple line-by-line diff between two strings. */
   public static generateDiffLines(original: string, modified: string): DiffLine[] {
     const origLines = original ? original.split('\n') : [];
     const modLines = modified ? modified.split('\n') : [];
@@ -114,7 +129,9 @@ export class DiffReviewer {
 
     let i = 0;
     let j = 0;
+    // Walk both line arrays simultaneously, comparing line by line
     while (i < origLines.length || j < modLines.length) {
+      // Lines match — emit as context (unchanged)
       if (i < origLines.length && j < modLines.length && origLines[i] === modLines[j]) {
         diffLines.push({
           type: 'context',
@@ -125,6 +142,7 @@ export class DiffReviewer {
         i++;
         j++;
       } else {
+        // Line removed from original (or not found ahead in modified)
         if (i < origLines.length && (j >= modLines.length || !modLines.slice(j).includes(origLines[i]))) {
           diffLines.push({
             type: 'delete',
@@ -146,6 +164,7 @@ export class DiffReviewer {
     return diffLines;
   }
 
+  /** Renders diff lines into a human-readable formatted string. */
   public static renderFormattedDiff(filePath: string, diffLines: DiffLine[]): string {
     const output: string[] = [`=== Diff: ${filePath} ===`];
     for (const line of diffLines) {
@@ -161,6 +180,7 @@ export class DiffReviewer {
   }
 }
 
+/** Registers the `/diff` slash command for reviewing file modifications. */
 export function registerDiffCommand(router: SlashCommandRouter, reviewer: DiffReviewer): void {
   router.register(
     'diff',

@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import { BYOKProviderManager } from '../providers/byok.js';
 
+/** Result of a single diagnostic check. */
 export interface DiagnosticResult {
   name: string;
   status: 'pass' | 'warn' | 'fail';
@@ -8,12 +9,14 @@ export interface DiagnosticResult {
   details?: Record<string, unknown>;
 }
 
+/** Full system health report with aggregated diagnostics. */
 export interface SystemHealthReport {
   timestamp: number;
   overallStatus: 'healthy' | 'degraded' | 'unhealthy';
   diagnostics: DiagnosticResult[];
 }
 
+/** Runs system checks: Node version, Git, terminal env, and provider config. */
 export class SystemDiagnostics {
   public checkNodeVersion(): DiagnosticResult {
     const version = process.version;

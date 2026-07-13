@@ -5,7 +5,7 @@ import { TrajectoryCanvas, TrajectoryStep } from './TrajectoryCanvas';
 import { MCPServerInfo } from './MCPDashboard';
 import { ModelConfig } from '../settings/SettingsView';
 
-// ─── Agent Session type ───────────────────────────────────────────────────────
+/** Represents a parallel agent session with its own trajectory. */
 export interface AgentSession {
   id: string;
   label: string;
@@ -159,6 +159,7 @@ const AgentTabBar: React.FC<AgentTabBarProps> = ({
 
 // ─── WorkspaceView ────────────────────────────────────────────────────────────
 
+/** Main workspace view combining trajectory canvas, composer, and multi-agent tabs. */
 export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   activeProject,
   trajectorySteps,

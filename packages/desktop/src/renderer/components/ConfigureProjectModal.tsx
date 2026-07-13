@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus, Folder, Trash2, FolderOpen, Terminal, Check } from 'lucide-react';
 import { StoredProject } from '../types';
 
+/** Props for the ConfigureProjectModal component. */
 interface ConfigureProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -9,6 +10,7 @@ interface ConfigureProjectModalProps {
   onSave: (updatedProject: StoredProject) => void;
 }
 
+/** Modal for configuring project folders and pre-approved shell commands. */
 export const ConfigureProjectModal: React.FC<ConfigureProjectModalProps> = ({
   isOpen,
   onClose,

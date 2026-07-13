@@ -4,16 +4,22 @@ import * as path from 'path';
 import { spawn, spawnSync } from 'child_process';
 import { KeyInput } from '../types.js';
 
+/** Configuration for the external editor integration bridge. */
 export interface EditorBridgeOptions {
   editorCommand?: string;
   tempDir?: string;
   extension?: string;
 }
 
+/** Opens an external text editor for composing or editing prompts. */
 export class EditorBridge {
   private editorCommand: string;
   private tempDir: string;
   private extension: string;
+  /**
+   * Creates a new EditorBridge with platform-specific editor defaults.
+   * @param options - Optional configuration overrides
+   */
   constructor(options: EditorBridgeOptions = {}) {
     this.editorCommand =
       options.editorCommand ||
@@ -24,10 +30,12 @@ export class EditorBridge {
     this.extension = options.extension || '.tmp';
   }
 
+  /** Returns the resolved editor command string. */
   public getEditorCommand(): string {
     return this.editorCommand;
   }
 
+  /** Creates a temporary file with the given content and returns its path. */
   public createTempFile(initialContent: string = ''): string {
     const filename = `superagent_prompt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${this.extension}`;
     const filePath = path.join(this.tempDir, filename);
@@ -35,6 +43,7 @@ export class EditorBridge {
     return filePath;
   }
 
+  /** Opens the editor synchronously and returns the edited content. */
   public openSync(initialContent: string = ''): string {
     const filePath = this.createTempFile(initialContent);
     try {
@@ -54,6 +63,7 @@ export class EditorBridge {
     }
   }
 
+  /** Opens the editor asynchronously and returns the edited content. */
   public async openAsync(initialContent: string = ''): Promise<string> {
     const filePath = this.createTempFile(initialContent);
     return new Promise((resolve, reject) => {
@@ -84,6 +94,7 @@ export class EditorBridge {
     });
   }
 
+  /** Returns true if the key event is a Ctrl+G or Ctrl+E editor shortcut. */
   public static isEditorShortcut(key: KeyInput): boolean {
     if (key.ctrl && key.name === 'g') return true;
     if (key.ctrl && key.name === 'e') return true;

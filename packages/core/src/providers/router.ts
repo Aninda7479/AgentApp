@@ -10,11 +10,13 @@ import { createProviderAdapter } from './models.js';
 import { SettingsStorage } from '../storage/settings-store.js';
 import { ModelGovStorage } from '../storage/model-gov.js';
 
+/** Options for the model router. */
 export interface RouterOptions {
   preferredProvider?: AIProvider;
   fallbackOrder?: AIProvider[];
 }
 
+/** Routes completion requests to the best available provider with fallback and task-based model selection. */
 export class ModelRouter {
   private preferredProvider?: AIProvider;
   private fallbackOrder: AIProvider[];

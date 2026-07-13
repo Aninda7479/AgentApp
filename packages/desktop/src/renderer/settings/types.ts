@@ -1,6 +1,7 @@
 import React from 'react';
 import { ThemeMode } from '../types';
 
+/** Persisted AI provider connection with API key and base URL. */
 export interface ProviderConnection {
   id: string;
   name: string;
@@ -9,12 +10,14 @@ export interface ProviderConnection {
   baseUrl: string;
 }
 
+/** Per-token pricing for a model (per 1M tokens). */
 export interface ModelPricing {
   inputPer1M?: string;
   outputPer1M?: string;
   cachedInputPer1M?: string;
 }
 
+/** Model catalog entry with capabilities, pricing, and enable state. */
 export interface ModelConfig {
   id: string;
   name: string;
@@ -30,6 +33,7 @@ export interface ModelConfig {
   type?: string; // legacy single-string field
 }
 
+/** Props for the top-level SettingsView component. */
 export interface SettingsViewProps {
   activeCategory: string;
   onSelectCategory: (category: string) => void;

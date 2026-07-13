@@ -1,8 +1,10 @@
+/** Options for generating a unified diff. */
 export interface DiffOptions {
   filePath?: string;
   contextLines?: number;
 }
 
+/** Generates unified diffs using LCS-based comparison. */
 export class UnifiedDiffGenerator {
   public generateDiff(oldContent: string, newContent: string, options: DiffOptions = {}): string {
     const filePath = options.filePath ?? 'file';

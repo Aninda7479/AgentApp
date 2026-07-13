@@ -17,6 +17,7 @@ import { WorkspaceView } from './components/WorkspaceView';
 import { StoredChat, StoredProject } from './types';
 import { useThemeMode } from './theme';
 
+/** Captures the full navigation state so we can restore it on back/forward. */
 interface NavigationSnapshot {
   activeTab: string;
   settingsCategory: string;
@@ -29,6 +30,7 @@ interface NavigationSnapshot {
   } | null;
 }
 
+/** Converts a chat title into a safe, URL-friendly folder name (max 30 chars). */
 function sanitizeFolderName(name: string): string {
   let sanitized = name
     .toLowerCase()
@@ -41,6 +43,7 @@ function sanitizeFolderName(name: string): string {
   return sanitized || `chat-${Date.now()}`;
 }
 
+/** Formats milliseconds into a human-readable duration like "2m 15s" or "8s". */
 function formatWorkedDuration(elapsedMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -51,6 +54,7 @@ function formatWorkedDuration(elapsedMs: number): string {
   return `${Math.max(1, seconds)}s`;
 }
 
+/** Attaches the total worked duration to every agent step after the last user message. */
 function stampWorkedDuration(steps: TrajectoryStep[], workedDuration: string): TrajectoryStep[] {
   let lastUserIndex = -1;
   for (let i = steps.length - 1; i >= 0; i--) {
@@ -74,6 +78,11 @@ function stampWorkedDuration(steps: TrajectoryStep[], workedDuration: string): T
   });
 }
 
+/**
+ * Root application component.
+ * Manages all global state: projects, chats, providers, models, navigation,
+ * streaming AI events, and coordinates every view (trajectory, settings, diff, etc.).
+ */
 export const App: React.FC = () => {
   const { themeMode, setThemeMode } = useThemeMode();
   const [workMode, setWorkMode] = useState<'coding' | 'everyday'>('coding');
@@ -160,6 +169,7 @@ export const App: React.FC = () => {
     : null;
 
   // Persist helpers — write every change back to the JSON store on disk
+  /** Writes the current in-memory state to the on-disk JSON store via IPC. */
   const persistStore = (
     providers: ProviderConnection[],
     models: ModelConfig[],
@@ -201,6 +211,7 @@ export const App: React.FC = () => {
     }
   }, [composerAttachments]);
 
+  /** Applies a step-updater to a specific chat and persists the result. */
   const updateChatSteps = (targetChatId: string, updater: (prevSteps: TrajectoryStep[]) => TrajectoryStep[]) => {
     setChats(prevChats => {
       const chat = prevChats.find(c => c.id === targetChatId);
@@ -221,6 +232,7 @@ export const App: React.FC = () => {
     });
   };
 
+  /** Applies a full-chat updater (e.g. isRunning=false) and persists. */
   const updateChatRecord = (targetChatId: string, updater: (chat: StoredChat) => StoredChat) => {
     setChats(prevChats => {
       const existing = prevChats.find(chat => chat.id === targetChatId);
@@ -349,6 +361,7 @@ export const App: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ipc, chats]);
 
+  /** Handles connecting a new AI provider — updates state and persists. */
   const handleConnectProvider = (provider: ProviderConnection, newModels: ModelConfig[]) => {
     setConnectedProviders(prev => {
       const next = [...prev.filter(p => p.id !== provider.id), provider];
@@ -361,6 +374,7 @@ export const App: React.FC = () => {
     });
   };
 
+  /** Removes a provider and its models from state and persists. */
   const handleDisconnectProvider = (providerId: string) => {
     setConnectedProviders(prev => {
       const next = prev.filter(p => p.id !== providerId);
@@ -373,6 +387,7 @@ export const App: React.FC = () => {
     });
   };
 
+  /** Toggles a model's enabled/disabled state and persists. */
   const handleToggleModel = (modelId: string) => {
     setModelsCatalog(prev => {
       const next = prev.map(m => m.id === modelId ? { ...m, enabled: !m.enabled } : m);
@@ -555,6 +570,7 @@ export const App: React.FC = () => {
   const [navigationIndex, setNavigationIndex] = useState<number>(-1);
   const restoringNavigationRef = useRef(false);
 
+  /** Compares two navigation snapshots for equality to avoid duplicate history entries. */
   const snapshotsEqual = (left: NavigationSnapshot, right: NavigationSnapshot) =>
     left.activeTab === right.activeTab &&
     left.settingsCategory === right.settingsCategory &&
@@ -591,6 +607,7 @@ export const App: React.FC = () => {
     });
   }, [activeTab, settingsCategory, activeProject, activeChatId, activeDiff, navigationIndex]);
 
+  /** Restores a navigation snapshot (used by back/forward buttons). */
   const restoreNavigationSnapshot = (snapshot: NavigationSnapshot) => {
     restoringNavigationRef.current = true;
     setActiveTab(snapshot.activeTab);
@@ -605,6 +622,7 @@ export const App: React.FC = () => {
     }
   };
 
+  /** Navigates one step back in the navigation history. */
   const handleNavigateBack = () => {
     if (navigationIndex <= 0) return;
     const nextIndex = navigationIndex - 1;
@@ -614,6 +632,7 @@ export const App: React.FC = () => {
     restoreNavigationSnapshot(snapshot);
   };
 
+  /** Navigates one step forward in the navigation history. */
   const handleNavigateForward = () => {
     if (navigationIndex < 0 || navigationIndex >= navigationHistory.length - 1) return;
     const nextIndex = navigationIndex + 1;
@@ -642,6 +661,7 @@ export const App: React.FC = () => {
     };
   }, []);
 
+  /** Shows a toast notification with auto-detection of error vs info type. */
   const triggerToast = (message: string, type: 'info' | 'error' = 'info') => {
     // Auto-detect error type if not explicitly set
     const detectedType = type === 'error' || message.toLowerCase().includes('error') || message.toLowerCase().includes('failed') || message.toLowerCase().includes('unsupported')
@@ -677,6 +697,7 @@ export const App: React.FC = () => {
     };
   }, [profilePopoverOpen]);
 
+  /** Adds an attachment step to the current chat's trajectory. */
   const addAttachmentStep = (filename: string, fullPath: string) => {
     setChats(prevChats => {
       const updatedChats = prevChats.map(c => {
@@ -704,6 +725,7 @@ export const App: React.FC = () => {
     });
   };
 
+  /** Opens a file dialog via Electron IPC and adds selected files as attachments. */
   const handleAttachFiles = async () => {
     try {
       const filePaths: string[] = await ipc?.invoke('select-files');
@@ -721,6 +743,7 @@ export const App: React.FC = () => {
     }
   };
 
+  /** Handles paste events — extracts files from clipboard and adds them as attachments. */
   const handleAttachPastedFiles = async (files: FileList) => {
     try {
       for (let i = 0; i < files.length; i++) {
@@ -745,10 +768,15 @@ export const App: React.FC = () => {
     }
   };
 
+  /** Removes an attachment from the composer by index. */
   const handleRemoveAttachment = (index: number) => {
     setComposerAttachments(prev => prev.filter((_, idx) => idx !== index));
   };
 
+  /**
+   * Runs a demo-mode agent simulation when no real provider is configured.
+   * Produces thought → tool_call → assistant steps based on the prompt content.
+   */
   const simulateAgentResponse = (
     prompt: string,
     chatId: string,
@@ -1024,6 +1052,10 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
     }, 1000);
   };
 
+  /**
+   * Main prompt submission handler.
+   * Creates or updates a chat, copies attachments, then routes to real AI or simulation.
+   */
   const handleSendPrompt = async (prompt: string, options: ComposerOptions) => {
     setComposerPrompt('');
     const attachmentsToSave = [...composerAttachments];
@@ -1244,11 +1276,13 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
   };
 
 
+  /** Opens the diff viewer for a specific file change. */
   const handleViewDiff = (filename: string, originalCode: string, modifiedCode: string) => {
     setActiveDiff({ filename, originalCode, modifiedCode });
     setActiveTab('diff');
   };
 
+  /** Adds a new MCP server entry to state. */
   const handleAddMcpServer = (newServer: Partial<MCPServerInfo>) => {
     const created: MCPServerInfo = {
       id: `mcp-${Date.now()}`,

@@ -3,6 +3,7 @@ import * as path from 'path';
 import { Command } from 'commander';
 import { BYOKProviderManager, SuperAgentEngine, createMediaTool, SettingsStorage } from '@superagent/core';
 
+/** Options for the non-interactive script execution command. */
 export interface ExecOptions {
   prompt?: string;
   file?: string;
@@ -14,6 +15,7 @@ export interface ExecOptions {
   apiKey?: string;
 }
 
+/** Result returned after executing a non-interactive prompt. */
 export interface ExecResult {
   success: boolean;
   output: string;
@@ -23,6 +25,10 @@ export interface ExecResult {
   error?: string;
 }
 
+/**
+ * Executes a prompt or file-based instruction via the SuperAgent engine.
+ * @param options - Execution configuration (prompt, file, model, output, etc.)
+ */
 export async function executeScript(options: ExecOptions): Promise<ExecResult> {
   const startTime = Date.now();
   let promptText = options.prompt || '';
@@ -60,6 +66,7 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
   }
 
   const savedSettings = SettingsStorage.loadSettings();
+  // Resolve provider and model from options, settings, or sensible defaults
   const provider = options.provider || savedSettings.lastUsedModel?.provider || 'openai';
   const model = options.model || savedSettings.lastUsedModel?.model || (provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : provider === 'gemini' ? 'gemini-1.5-pro' : 'gpt-4o');
 
@@ -130,6 +137,7 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
   return result;
 }
 
+/** Registers the `exec` subcommand on the Commander program. */
 export function registerExecCommand(program: Command): void {
   program
     .command('exec')

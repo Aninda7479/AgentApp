@@ -1,6 +1,7 @@
 import React from 'react';
 import { Construction, Sparkles } from 'lucide-react';
 
+/** Props for the placeholder settings panel. */
 interface PlaceholderSettingsProps {
   title: string;
   description: string;
@@ -8,6 +9,7 @@ interface PlaceholderSettingsProps {
   liveLabel?: string;
 }
 
+/** Placeholder settings panel indicating a feature is live or under construction. */
 export const PlaceholderSettings: React.FC<PlaceholderSettingsProps> = ({
   title,
   description,

@@ -3,7 +3,9 @@ import * as path from 'path';
 import { SkillDefinition } from '@superagent/core';
 import { SessionContext, CLICommandResult } from '../types.js';
 
+/** Manages skill codification and learning insight persistence. */
 export class SkillCodifier {
+  /** Returns a formatted string listing all codified skills and learned insights. */
   public static async listSkillsAndInsights(context: SessionContext): Promise<string> {
     const skills = context.skillStore.listSkills();
     const insights = await context.learningEngine.getInsights();
@@ -32,6 +34,14 @@ export class SkillCodifier {
     return lines.join('\n');
   }
 
+  /**
+   * Creates a SKILL.md file and registers the skill in the store.
+   * @param context - Active session context
+   * @param name - Human-readable skill name
+   * @param description - Brief skill description
+   * @param instructions - Skill body instructions
+   * @param workspaceDir - Target workspace directory
+   */
   public static async codifySkill(
     context: SessionContext,
     name: string,
@@ -39,6 +49,7 @@ export class SkillCodifier {
     instructions: string,
     workspaceDir: string = process.cwd()
   ): Promise<CLICommandResult> {
+    // Generate a filesystem-safe skill ID from the name
     const skillId = name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
     const skillDir = path.join(workspaceDir, '.agent', 'skills', skillId);
     await fs.mkdir(skillDir, { recursive: true });
@@ -70,6 +81,7 @@ ${instructions}
     };
   }
 
+  /** Saves a user-defined insight topic/lesson pair to the learning engine. */
   public static async recordInsight(
     context: SessionContext,
     topic: string,
@@ -83,6 +95,7 @@ ${instructions}
     };
   }
 
+  /** Extracts learnings automatically from the current session trajectory. */
   public static async autoExtractTrajectory(context: SessionContext): Promise<CLICommandResult> {
     const insights = await context.learningEngine.extractLearningsFromTrajectory(context.messages);
     return {
@@ -93,6 +106,7 @@ ${instructions}
   }
 }
 
+/** Handles `/learn` slash command: lists, records insights, or codifies skills. */
 export async function handleLearnCommand(args: string[], context: SessionContext): Promise<CLICommandResult> {
   if (args.length === 0 || args[0] === 'list') {
     const listStr = await SkillCodifier.listSkillsAndInsights(context);

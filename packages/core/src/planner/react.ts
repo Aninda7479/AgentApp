@@ -1,5 +1,6 @@
 import { ToolDefinition, ToolCall, BYOKConfig, AgentMessage } from '../types/agent.js';
 
+/** A single Thought-Action-Observation step in the ReAct loop. */
 export interface ReActStep {
   stepNumber: number;
   thought: string;
@@ -9,6 +10,7 @@ export interface ReActStep {
   finalOutput?: string;
 }
 
+/** LLM callback that drives a single ReAct step. */
 export type LLMStepDriver = (
   messages: AgentMessage[],
   tools: ToolDefinition[],
@@ -20,12 +22,14 @@ export type LLMStepDriver = (
   finalOutput?: string;
 }>;
 
+/** Options for configuring the ReAct loop. */
 export interface ReActLoopOptions {
   maxSteps?: number;
   tools?: Map<string, ToolDefinition>;
   llmDriver?: LLMStepDriver;
 }
 
+/** Executes a ReAct (Thought-Action-Observation) loop with tool integration. */
 export class ReActExecutor {
   private tools: Map<string, ToolDefinition>;
   private maxSteps: number;

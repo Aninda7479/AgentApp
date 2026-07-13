@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 
+/** Item in the system tray context menu. */
 export interface TrayMenuItem {
   id: string;
   label: string;
@@ -9,6 +10,7 @@ export interface TrayMenuItem {
   click?: () => void;
 }
 
+/** Options for creating a SystemTrayManager instance. */
 export interface SystemTrayOptions {
   iconPath?: string;
   tooltip?: string;
@@ -19,8 +21,10 @@ export interface SystemTrayOptions {
   };
 }
 
+/** Visual status indicator for the tray icon tooltip. */
 export type DaemonStatus = 'online' | 'offline' | 'busy' | 'idle';
 
+/** Manages the system tray icon, tooltip, and context menu. */
 export class SystemTrayManager extends EventEmitter {
   private trayInstance: any = null;
   private currentStatus: DaemonStatus = 'offline';

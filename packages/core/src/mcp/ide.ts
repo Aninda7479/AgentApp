@@ -1,6 +1,7 @@
 import * as http from 'node:http';
 import { EventEmitter } from 'node:events';
 
+/** A text selection within a file in the IDE. */
 export interface IDESelection {
   text: string;
   startLine: number;
@@ -9,6 +10,7 @@ export interface IDESelection {
   endColumn?: number;
 }
 
+/** Snapshot of what the user is doing in their IDE at a point in time. */
 export interface IDEActiveContext {
   activeFile?: string;
   selection?: IDESelection;
@@ -17,12 +19,14 @@ export interface IDEActiveContext {
   lastUpdated?: number;
 }
 
+/** Options for the IDE context bridge HTTP server. */
 export interface IDEContextBridgeOptions {
   port?: number;
   host?: string;
   onContextUpdate?: (context: IDEActiveContext) => void;
 }
 
+/** Lightweight HTTP server that receives IDE context updates (VS Code extensions, etc.). */
 export class IDEContextBridge extends EventEmitter {
   private server: http.Server | null = null;
   private context: IDEActiveContext = {};

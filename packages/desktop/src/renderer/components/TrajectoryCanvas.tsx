@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronRight, ChevronDown, Copy, ThumbsUp, ThumbsDown, FileText, FolderOpen, Check, Eye, RotateCcw } from 'lucide-react';
 
+/** A single step in the agent execution trajectory. */
 export interface TrajectoryStep {
   id: string;
   type: 'user' | 'assistant' | 'tool_call' | 'tool_result' | 'thought';
@@ -395,6 +396,7 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
 
 // ─── Main TrajectoryCanvas ────────────────────────────────────────────────────
 
+/** Props for the TrajectoryCanvas component. */
 export interface TrajectoryCanvasProps {
   steps: TrajectoryStep[];
   isStreaming?: boolean;
@@ -405,6 +407,7 @@ export interface TrajectoryCanvasProps {
   initialExpanded?: boolean;
 }
 
+/** Canvas that renders the agent's execution trajectory with turn grouping. */
 export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
   steps,
   isStreaming = false,

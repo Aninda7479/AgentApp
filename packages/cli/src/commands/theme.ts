@@ -1,6 +1,7 @@
 import { Theme, SessionContext, CLICommandResult } from '../types.js';
 import { SettingsStorage } from '@superagent/core';
 
+/** Map of built-in theme name to Theme definition. */
 export const BUILTIN_THEMES: Record<string, Theme> = {
   dark: {
     name: 'dark',
@@ -82,6 +83,7 @@ export const BUILTIN_THEMES: Record<string, Theme> = {
   }
 };
 
+/** Registry that stores and retrieves available themes. */
 export class ThemeRegistry {
   private themes: Map<string, Theme> = new Map();
 
@@ -91,22 +93,27 @@ export class ThemeRegistry {
     }
   }
 
+  /** Returns a theme by name (case-insensitive), or undefined if not found. */
   public getTheme(name: string): Theme | undefined {
     return this.themes.get(name.toLowerCase());
   }
 
+  /** Returns all registered themes as an array. */
   public getAllThemes(): Theme[] {
     return Array.from(this.themes.values());
   }
 
+  /** Registers a new theme in the registry (overwrites if name exists). */
   public registerTheme(theme: Theme): void {
     this.themes.set(theme.name.toLowerCase(), theme);
   }
 }
 
+/** Static helper for listing and switching visual themes. */
 export class ThemeSwitcher {
   private static registry = new ThemeRegistry();
 
+  /** Returns a formatted string listing all themes with the current one marked. */
   public static listThemes(context: SessionContext): string {
     const themes = this.registry.getAllThemes();
     const lines: string[] = ['=== Terminal Visual Themes ==='];
@@ -119,6 +126,7 @@ export class ThemeSwitcher {
     return lines.join('\n');
   }
 
+  /** Switches the active theme by name and persists the selection. */
   public static switchTheme(context: SessionContext, themeName: string): CLICommandResult {
     const found = this.registry.getTheme(themeName);
     if (!found) {
@@ -142,6 +150,7 @@ export class ThemeSwitcher {
   }
 }
 
+/** Handles `/theme` slash command: lists or switches themes. */
 export function handleThemeCommand(args: string[], context: SessionContext): CLICommandResult {
   if (args.length === 0 || args[0] === 'list') {
     return {

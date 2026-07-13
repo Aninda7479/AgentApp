@@ -1,10 +1,12 @@
 import React, { useState, useCallback } from 'react';
 
+/** A single entry in the PDF table of contents / outline. */
 export interface PDFPageOutline {
   pageNumber: number;
   title: string;
 }
 
+/** Props for the PDFViewport component. */
 export interface PDFViewportProps {
   src?: string;
   numPages?: number;
@@ -14,6 +16,7 @@ export interface PDFViewportProps {
   onPageChange?: (page: number) => void;
 }
 
+/** PDF document viewer with toolbar, outline sidebar, zoom, and rotation controls. */
 export const PDFViewport: React.FC<PDFViewportProps> = ({
   numPages = 10,
   initialPage = 1,

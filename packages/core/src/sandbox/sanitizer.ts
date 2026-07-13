@@ -1,3 +1,4 @@
+/** Sanitizes strings and env vars by redacting API keys, tokens, and secrets. */
 export class EnvironmentSanitizer {
   private customSecrets: Set<string> = new Set();
   private defaultPatterns: RegExp[] = [

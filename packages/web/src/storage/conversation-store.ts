@@ -6,10 +6,12 @@ import type { ConversationRoots, StoreData, StoredChat, StoredProject } from './
 
 type ProjectRecord = StoredProject & { storageKey: string };
 
+/** Ensures a directory exists, creating it recursively if needed. */
 function ensureDirectory(dir: string): void {
   fs.mkdirSync(dir, { recursive: true });
 }
 
+/** Reads and parses a JSON file, returning null if missing or empty. */
 function readJson<T>(filePath: string): T | null {
   if (!fs.existsSync(filePath)) return null;
   const raw = fs.readFileSync(filePath, 'utf-8').trim();
@@ -17,6 +19,7 @@ function readJson<T>(filePath: string): T | null {
   return JSON.parse(raw) as T;
 }
 
+/** Atomically writes JSON to disk using a temp file + backup strategy. */
 function writeJson(filePath: string, data: unknown): void {
   ensureDirectory(path.dirname(filePath));
   const tmpPath = `${filePath}.tmp`;
@@ -31,6 +34,7 @@ function writeJson(filePath: string, data: unknown): void {
   fs.unlinkSync(tmpPath);
 }
 
+/** Generates a unique storage key by appending a numeric suffix if needed. */
 function uniqueStorageKey(baseKey: string, usedKeys: Set<string>): string {
   let candidate = baseKey;
   let suffix = 2;
@@ -42,6 +46,7 @@ function uniqueStorageKey(baseKey: string, usedKeys: Set<string>): string {
   return candidate;
 }
 
+/** Reads a project's config.json from its directory, creating a default if missing. */
 function readProjectRecord(projectDir: string, folderName: string): ProjectRecord | null {
   const configPath = path.join(projectDir, 'project-config.json');
   let folders: string[] = [];
@@ -69,6 +74,7 @@ function readProjectRecord(projectDir: string, folderName: string): ProjectRecor
   };
 }
 
+/** Reads and deserializes a single chat.json file into a StoredChat record. */
 function readChatRecord(chatJsonPath: string, projectName: string, projectKey?: string): StoredChat | null {
   try {
     const chat = readJson<StoredChat>(chatJsonPath);
@@ -84,6 +90,7 @@ function readChatRecord(chatJsonPath: string, projectName: string, projectKey?: 
   }
 }
 
+/** Resolves a unique storage key for a project and builds its record. */
 function resolveProjectKey(project: StoredProject, usedKeys: Set<string>): ProjectRecord {
   const storageKey = uniqueStorageKey(normalizeStorageKey(project.storageKey || project.name), usedKeys);
   return {
@@ -95,6 +102,7 @@ function resolveProjectKey(project: StoredProject, usedKeys: Set<string>): Proje
   };
 }
 
+/** Scans the filesystem to discover all projects and their chats. */
 function readProjectsAndChats(roots: ConversationRoots): { projects: ProjectRecord[]; chats: StoredChat[] } {
   const projects: ProjectRecord[] = [];
   const chats: StoredChat[] = [];
@@ -156,6 +164,7 @@ function readProjectsAndChats(roots: ConversationRoots): { projects: ProjectReco
   return { projects, chats };
 }
 
+/** Iterates project directories and returns the first one matching the predicate. */
 function findProjectRecord(roots: ConversationRoots, matcher: (project: ProjectRecord) => boolean): ProjectRecord | null {
   try {
     for (const folderName of fs.readdirSync(roots.projectsDir)) {
@@ -172,6 +181,7 @@ function findProjectRecord(roots: ConversationRoots, matcher: (project: ProjectR
   return null;
 }
 
+/** Reads the full conversation store (providers, models, projects, chats) from disk. */
 export function readConversationStore(userDataDir: string): StoreData {
   const roots = getConversationRoots(userDataDir);
 
@@ -196,11 +206,13 @@ export function readConversationStore(userDataDir: string): StoreData {
   };
 }
 
+/** Builds unique project records from a list of projects. */
 function buildProjectRecords(projects: StoredProject[]): ProjectRecord[] {
   const usedKeys = new Set<string>();
   return projects.map((project) => resolveProjectKey(project, usedKeys));
 }
 
+/** Writes the full conversation store to disk, cleaning up removed projects/chats. */
 export function writeConversationStore(data: StoreData, userDataDir: string): void {
   const roots = getConversationRoots(userDataDir);
   ensureDirectory(roots.projectsDir);
@@ -247,12 +259,9 @@ export function writeConversationStore(data: StoreData, userDataDir: string): vo
     activeChatFolders.add(targetProjectKey ? `${targetProjectKey}/${chat.id}` : `standalone/${chat.id}`);
   }
 
+  // Clean up stale project and chat directories no longer in the active set
   try {
     for (const folderName of fs.readdirSync(roots.projectsDir)) {
-      const projectDir = path.join(roots.projectsDir, folderName);
-      if (!fs.statSync(projectDir).isDirectory()) continue;
-
-      if (!activeProjectKeys.has(folderName)) {
         fs.rmSync(projectDir, { recursive: true, force: true });
         continue;
       }
@@ -283,6 +292,7 @@ export function writeConversationStore(data: StoreData, userDataDir: string): vo
   }
 }
 
+/** Reads a single project record from disk by its storage key. */
 export function readProject(userDataDir: string, projectKey: string): StoredProject | null {
   const projectDir = getProjectDirectory(userDataDir, projectKey);
   if (!fs.existsSync(projectDir) || !fs.statSync(projectDir).isDirectory()) {
@@ -292,6 +302,7 @@ export function readProject(userDataDir: string, projectKey: string): StoredProj
   return project ? { name: project.name, folders: project.folders, allowedCommands: project.allowedCommands, storageKey: project.storageKey } : null;
 }
 
+/** Saves a project config to disk, resolving a unique storage key. */
 export function saveProject(userDataDir: string, project: StoredProject): StoredProject {
   const record = resolveProjectKey(project, new Set<string>());
   writeJson(getProjectConfigPath(userDataDir, record.storageKey), {
@@ -302,6 +313,7 @@ export function saveProject(userDataDir: string, project: StoredProject): Stored
   return record;
 }
 
+/** Reads a single chat record from disk by ID, optionally scoped to a project. */
 export function readChat(userDataDir: string, chatId: string, projectKey?: string): StoredChat | null {
   const chatJsonPath = getChatJsonPath(userDataDir, chatId, projectKey);
   if (!fs.existsSync(chatJsonPath)) return null;
@@ -309,6 +321,7 @@ export function readChat(userDataDir: string, chatId: string, projectKey?: strin
   return readChatRecord(chatJsonPath, projectName, projectKey);
 }
 
+/** Saves a chat record to disk, resolving its project association. */
 export function saveChat(userDataDir: string, chat: StoredChat): void {
   const roots = getConversationRoots(userDataDir);
   const project =
@@ -321,6 +334,7 @@ export function saveChat(userDataDir: string, chat: StoredChat): void {
   });
 }
 
+/** Deletes a project directory and all its contents from disk. */
 export function deleteProject(userDataDir: string, projectKey: string): void {
   const projectDir = getProjectDirectory(userDataDir, projectKey);
   if (fs.existsSync(projectDir)) {
@@ -328,6 +342,7 @@ export function deleteProject(userDataDir: string, projectKey: string): void {
   }
 }
 
+/** Deletes a chat directory from disk, optionally scoped to a project. */
 export function deleteChat(userDataDir: string, chatId: string, projectKey?: string): void {
   const chatDir = getChatDirectory(userDataDir, chatId, projectKey);
   if (fs.existsSync(chatDir)) {
@@ -335,6 +350,7 @@ export function deleteChat(userDataDir: string, chatId: string, projectKey?: str
   }
 }
 
+/** Reads a project, applies an updater function, and saves the result. */
 export function updateProject(
   userDataDir: string,
   projectKey: string,
@@ -347,6 +363,7 @@ export function updateProject(
   return { ...next, storageKey: existing.storageKey };
 }
 
+/** Reads a chat, applies an updater function, and saves the result. */
 export function updateChat(
   userDataDir: string,
   chatId: string,

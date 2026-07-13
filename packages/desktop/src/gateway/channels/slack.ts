@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { ChannelAdapter, ChannelAdapterConfig, IncomingMessage, OutgoingMessage, ChannelType } from './types';
 import { FetchFunction } from './telegram';
 
+/** Slack-specific adapter configuration. */
 export interface SlackAdapterConfig extends ChannelAdapterConfig {
   botToken?: string;
   appToken?: string;
@@ -9,6 +10,7 @@ export interface SlackAdapterConfig extends ChannelAdapterConfig {
   apiBaseUrl?: string;
 }
 
+/** Slack channel adapter using the Slack Web API for message exchange. */
 export class SlackChannelAdapter extends EventEmitter implements ChannelAdapter {
   public readonly channelType: ChannelType = 'slack';
   private connected: boolean = false;

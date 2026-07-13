@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 
+/** Props for the VideoPlayer component. */
 export interface VideoPlayerProps {
   src: string;
   poster?: string;
@@ -11,6 +12,7 @@ export interface VideoPlayerProps {
   onPause?: () => void;
 }
 
+/** Video player with overlay controls, fullscreen, PiP, and speed selection. */
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   src,
   poster,

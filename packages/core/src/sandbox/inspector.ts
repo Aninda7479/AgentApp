@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+/** Information about a file or directory obtained via inspection. */
 export interface FileInspectResult {
   path: string;
   exists: boolean;
@@ -12,12 +13,14 @@ export interface FileInspectResult {
   totalLines?: number;
 }
 
+/** Options for reading a file range. */
 export interface ReadFileOptions {
   startLine?: number;
   endLine?: number;
   encoding?: BufferEncoding;
 }
 
+/** Result of reading a range of lines from a file. */
 export interface ReadFileResult {
   content: string;
   startLine: number;
@@ -26,6 +29,7 @@ export interface ReadFileResult {
   isBinary: boolean;
 }
 
+/** Inspects files and directories: stats, binary detection, and range reading. */
 export class FileSystemInspector {
   public isBinaryBuffer(buffer: Buffer): boolean {
     const checkLength = Math.min(buffer.length, 4096);

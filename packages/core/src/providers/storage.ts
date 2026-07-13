@@ -4,11 +4,13 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import { AIProvider, BYOKConfig } from '../types/agent.js';
 
+/** Options for the secure credential storage. */
 export interface StorageOptions {
   storagePath?: string;
   secretKey?: string;
 }
 
+/** A summary view of a stored credential (masked key, no secrets exposed). */
 export interface CredentialInfo {
   provider: AIProvider;
   maskedKey: string;
@@ -16,6 +18,7 @@ export interface CredentialInfo {
   modelName?: string;
 }
 
+/** AES-256-GCM encrypted credential store on disk. */
 export class SecureStorageManager {
   private storagePath: string;
   private secretKey: Buffer;

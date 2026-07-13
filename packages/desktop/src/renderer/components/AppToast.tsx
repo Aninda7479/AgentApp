@@ -8,6 +8,7 @@ interface AppToastProps {
   onClose: () => void;
 }
 
+/** Toast notification component with copy-to-clipboard and auto-dismiss. */
 export const AppToast: React.FC<AppToastProps> = ({ open, message, type = 'info', onClose }) => {
   const [copied, setCopied] = useState(false);
 

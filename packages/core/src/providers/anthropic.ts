@@ -7,6 +7,7 @@ import {
   AIProvider
 } from '../types/agent.js';
 
+/** Provider adapter for the Anthropic Messages API (Claude). */
 export class AnthropicAdapter implements BaseProviderAdapter {
   public readonly provider: AIProvider = 'anthropic';
   private apiKey: string;

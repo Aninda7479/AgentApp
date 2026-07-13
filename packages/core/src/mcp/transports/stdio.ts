@@ -1,5 +1,6 @@
 import { StdioClientTransport, StdioServerParameters } from '@modelcontextprotocol/sdk/client/stdio.js';
 
+/** Options to configure a stdio-based MCP transport. */
 export interface MCPStdioOptions {
   command: string;
   args?: string[];
@@ -8,6 +9,7 @@ export interface MCPStdioOptions {
   stderr?: StdioServerParameters['stderr'];
 }
 
+/** MCP transport over stdio (launch a subprocess and communicate via stdin/stdout). */
 export class MCPStdioTransport extends StdioClientTransport {
   constructor(options: MCPStdioOptions) {
     super({
@@ -20,6 +22,7 @@ export class MCPStdioTransport extends StdioClientTransport {
   }
 }
 
+/** Creates a stdio transport from options. */
 export function createStdioTransport(options: MCPStdioOptions): MCPStdioTransport {
   return new MCPStdioTransport(options);
 }

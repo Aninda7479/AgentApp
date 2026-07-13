@@ -1,6 +1,7 @@
 import path from 'path';
 import type { ConversationRoots } from './types.js';
 
+/** Sanitizes a project name into a safe, filesystem-friendly storage key. */
 export function normalizeStorageKey(name: string): string {
   const fallback = `project-${Date.now()}`;
   const cleaned = name
@@ -15,6 +16,7 @@ export function normalizeStorageKey(name: string): string {
     .replace(/[. ]+$/g, '') || fallback;
 }
 
+/** Returns the root directory paths for conversation storage under a user data dir. */
 export function getConversationRoots(userDataDir: string): ConversationRoots {
   const baseDir = path.join(userDataDir, 'Conversation');
   return {
@@ -25,14 +27,17 @@ export function getConversationRoots(userDataDir: string): ConversationRoots {
   };
 }
 
+/** Returns the filesystem path for a project's root directory. */
 export function getProjectDirectory(userDataDir: string, projectKey: string): string {
   return path.join(getConversationRoots(userDataDir).projectsDir, normalizeStorageKey(projectKey));
 }
 
+/** Returns the path to a project's config JSON file. */
 export function getProjectConfigPath(userDataDir: string, projectKey: string): string {
   return path.join(getProjectDirectory(userDataDir, projectKey), 'project-config.json');
 }
 
+/** Returns the directory path for a chat, optionally nested under a project. */
 export function getChatDirectory(
   userDataDir: string,
   chatId: string,
@@ -44,6 +49,7 @@ export function getChatDirectory(
   return path.join(getConversationRoots(userDataDir).chatsDir, chatId);
 }
 
+/** Returns the path to a chat's JSON file, optionally nested under a project. */
 export function getChatJsonPath(
   userDataDir: string,
   chatId: string,

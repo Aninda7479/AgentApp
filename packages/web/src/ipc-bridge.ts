@@ -5,6 +5,7 @@ let socket: WebSocket | null = null;
 let socketQueue: string[] = [];
 
 // Initialize WebSocket for streaming events (like 'agent-event')
+/** Establishes a WebSocket connection for streaming events, with auto-reconnect. */
 function connectWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/api/ws`;
@@ -51,6 +52,7 @@ if (typeof window !== 'undefined') {
 }
 
 // Implement mock ipcRenderer
+/** Mock Electron ipcRenderer that routes IPC calls over HTTP fetch and WebSocket. */
 const mockIpcRenderer = {
   invoke: async (channel: string, ...args: any[]): Promise<any> => {
     try {
@@ -91,7 +93,7 @@ const mockIpcRenderer = {
   },
 
   send: (channel: string, ...args: any[]): void => {
-    // Non-blocking invocation via POST or WebSocket
+    // Route window commands to browser; everything else goes over WebSocket
     if (channel.startsWith('window-')) {
       console.log(`[IPC-Bridge] Intercepted desktop window command: ${channel}`);
       return; // Ignore desktop minimize/maximize/close on the web

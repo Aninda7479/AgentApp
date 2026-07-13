@@ -1,6 +1,7 @@
 import { BYOKProviderManager, ModelCapabilityRegistry, SkillStore, LearningLoopEngine, AgentMessage, SettingsStorage } from '@superagent/core';
 import { BUILTIN_THEMES } from './commands/theme.js';
 
+/** Represents a terminal keyboard input event with key modifiers. */
 export interface KeyInput {
   name?: string;
   tab?: boolean;
@@ -10,6 +11,7 @@ export interface KeyInput {
   sequence?: string;
 }
 
+/** Defines the color palette for a visual terminal theme. */
 export interface Theme {
   name: string;
   description: string;
@@ -24,6 +26,7 @@ export interface Theme {
   backgroundColor: string;
 }
 
+/** Tracks token consumption and cost for the current session. */
 export interface SessionTokenUsage {
   promptTokens: number;
   completionTokens: number;
@@ -31,12 +34,14 @@ export interface SessionTokenUsage {
   estimatedCost: number;
 }
 
+/** Standard result envelope returned by CLI command handlers. */
 export interface CLICommandResult {
   success: boolean;
   message: string;
   data?: unknown;
 }
 
+/** Holds all runtime state for an active CLI session. */
 export interface SessionContext {
   activeProvider: string;
   activeModel: string;
@@ -50,6 +55,11 @@ export interface SessionContext {
   messages: AgentMessage[];
 }
 
+/**
+ * Creates and initializes a new session context with saved settings.
+ * @param provider - AI provider name (e.g. 'openai')
+ * @param model - Model identifier (e.g. 'gpt-4o')
+ */
 export function createSessionContext(provider: string = 'openai', model: string = 'gpt-4o'): SessionContext {
   const byokManager = new BYOKProviderManager();
   const capabilityRegistry = new ModelCapabilityRegistry();
@@ -92,6 +102,7 @@ export function createSessionContext(provider: string = 'openai', model: string 
     backgroundColor: '#000000'
   };
 
+  // Restore last-used provider and model from persisted settings
   const savedThemeName = (savedSettings.theme?.cli || 'dark').toLowerCase();
   const activeTheme = BUILTIN_THEMES[savedThemeName] || defaultTheme;
 

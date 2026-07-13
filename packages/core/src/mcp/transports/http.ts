@@ -3,6 +3,7 @@ import {
   StreamableHTTPClientTransportOptions
 } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
+/** Options to configure an HTTP streamable MCP transport. */
 export interface MCPHTTPOptions {
   url: string | URL;
   bearerToken?: string;
@@ -12,6 +13,7 @@ export interface MCPHTTPOptions {
   reconnectionOptions?: StreamableHTTPClientTransportOptions['reconnectionOptions'];
 }
 
+/** MCP transport over the Streamable HTTP protocol (MCP spec 2025-03-26). */
 export class MCPHTTPTransport extends StreamableHTTPClientTransport {
   constructor(options: MCPHTTPOptions) {
     const targetUrl = typeof options.url === 'string' ? new URL(options.url) : options.url;
@@ -38,6 +40,7 @@ export class MCPHTTPTransport extends StreamableHTTPClientTransport {
   }
 }
 
+/** Creates an HTTP streamable transport from options. */
 export function createHTTPTransport(options: MCPHTTPOptions): MCPHTTPTransport {
   return new MCPHTTPTransport(options);
 }

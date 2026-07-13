@@ -174,6 +174,7 @@ interface CreateProjectModalProps {
   onCreate: (project: StoredProject) => void;
 }
 
+/** Modal dialog for creating a new project with a name and folder selection. */
 export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   isOpen,
   onClose,

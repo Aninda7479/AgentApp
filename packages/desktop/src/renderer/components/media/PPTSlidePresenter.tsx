@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 
+/** Data for a single presentation slide. */
 export interface SlideData {
   id: string;
   title: string;
@@ -10,6 +11,7 @@ export interface SlideData {
   imageUrl?: string;
 }
 
+/** Props for the PPTSlidePresenter component. */
 export interface PPTSlidePresenterProps {
   slides: SlideData[];
   initialSlide?: number;
@@ -44,6 +46,7 @@ const DEFAULT_SLIDES: SlideData[] = [
   },
 ];
 
+/** Slide presenter with navigation, auto-play, speaker notes, and thumbnail strip. */
 export const PPTSlidePresenter: React.FC<PPTSlidePresenterProps> = ({
   slides = DEFAULT_SLIDES,
   initialSlide = 0,

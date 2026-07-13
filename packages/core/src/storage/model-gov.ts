@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getConfigDirectory, SettingsStorage } from './settings-store.js';
 
+/** Capability scores (0-100) for a model across different dimensions. */
 export interface ModelScore {
   coding: number; // 0-100
   reasoning: number; // 0-100
@@ -9,11 +10,14 @@ export interface ModelScore {
   costEfficiency: number; // 0-100 (100 = free/cheapest, 0 = highest cost)
 }
 
+/** Manages model governance instructions, scoring, and auto-updates from OpenRouter. */
 export class ModelGovStorage {
+  /** Returns the file path to the model governance instructions markdown. */
   public static getInstructionsPath(): string {
     return path.join(getConfigDirectory(), 'model-gov-instructions.md');
   }
 
+  /** Loads governance instructions from disk, generating defaults if missing. */
   public static loadInstructions(): string {
     const filePath = this.getInstructionsPath();
     if (!fs.existsSync(filePath)) {
@@ -26,6 +30,7 @@ export class ModelGovStorage {
     }
   }
 
+  /** Writes governance instructions to disk. */
   public static saveInstructions(content: string): void {
     const filePath = this.getInstructionsPath();
     try {
@@ -39,6 +44,7 @@ export class ModelGovStorage {
   /**
    * Resolves capabilities scores based on model ID keywords.
    */
+  /** Resolves capability scores based on model ID keywords. */
   public static getModelScores(modelId: string): ModelScore {
     const id = modelId.toLowerCase();
     
@@ -96,6 +102,7 @@ export class ModelGovStorage {
   /**
    * Generates custom markdown instructions dynamically based on the active models in the pool.
    */
+  /** Generates custom markdown instructions dynamically based on active models. */
   public static generateDynamicInstructions(): string {
     const settings = SettingsStorage.loadSettings();
     const govEnabledIds = settings.modelGov?.enabledModels || [];
@@ -179,6 +186,7 @@ Fugu routing follows the Anthropic Fable-class conducting framework to minimize 
 `;
   }
 
+  /** Generates default governance instructions and writes them to disk. */
   public static generateAndSaveDefault(): void {
     const content = this.generateDynamicInstructions();
     this.saveInstructions(content);
@@ -188,6 +196,7 @@ Fugu routing follows the Anthropic Fable-class conducting framework to minimize 
    * Fetches latest pricing from OpenRouter API, updates settings model prices,
    * and compiles new customized instructions.
    */
+  /** Fetches latest pricing from OpenRouter API and regenerates instructions. */
   public static async autoUpdateInstructions(): Promise<string> {
     try {
       const res = await fetch('https://openrouter.ai/api/v1/models');

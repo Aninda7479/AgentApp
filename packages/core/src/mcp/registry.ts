@@ -2,11 +2,13 @@ import { ToolDefinition, BYOKConfig } from '../types/agent.js';
 import { MCPClient } from './client.js';
 import { MCPPermissionGuard, MCPToolContext } from './guard.js';
 
+/** Options for the MCP tool registry. */
 export interface MCPRegistryOptions {
   guard?: MCPPermissionGuard;
   prefixToolName?: boolean;
 }
 
+/** Discovers and registers tools from connected MCP servers, with optional permission gating. */
 export class MCPToolRegistry {
   private servers: Map<string, MCPClient> = new Map();
   private tools: Map<string, ToolDefinition> = new Map();

@@ -1,3 +1,4 @@
+/** A single step in a conversation trajectory (user message, assistant reply, tool call, etc.). */
 export interface TrajectoryStep {
   id: string;
   type: 'user' | 'assistant' | 'tool_call' | 'tool_result' | 'thought';
@@ -19,6 +20,7 @@ export interface TrajectoryStep {
   };
 }
 
+/** A configured AI provider with API credentials. */
 export interface StoredProvider {
   id: string;
   name: string;
@@ -27,6 +29,7 @@ export interface StoredProvider {
   baseUrl: string;
 }
 
+/** An AI model entry in the models catalog. */
 export interface StoredModel {
   id: string;
   name: string;
@@ -42,6 +45,7 @@ export interface StoredModel {
   type?: string;
 }
 
+/** A user-defined project with associated folders and allowed commands. */
 export interface StoredProject {
   name: string;
   folders: string[];
@@ -49,6 +53,7 @@ export interface StoredProject {
   storageKey?: string;
 }
 
+/** A persisted chat conversation with its trajectory steps and metadata. */
 export interface StoredChat {
   id: string;
   title: string;
@@ -62,6 +67,7 @@ export interface StoredChat {
   lastError?: string;
 }
 
+/** Top-level shape of all persisted conversation store data. */
 export interface StoreData {
   connectedProviders: StoredProvider[];
   modelsCatalog: StoredModel[];
@@ -69,6 +75,7 @@ export interface StoreData {
   chats?: StoredChat[];
 }
 
+/** Root directory paths for the conversation storage filesystem layout. */
 export interface ConversationRoots {
   userDataDir: string;
   baseDir: string;

@@ -1,5 +1,6 @@
 import { SSEClientTransport, SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
 
+/** Options to configure an SSE-based MCP transport. */
 export interface MCPSSEOptions {
   url: string | URL;
   bearerToken?: string;
@@ -8,6 +9,7 @@ export interface MCPSSEOptions {
   eventSourceInit?: Record<string, any>;
 }
 
+/** MCP transport over Server-Sent Events for remote HTTP servers. */
 export class MCPSSETransport extends SSEClientTransport {
   constructor(options: MCPSSEOptions) {
     const targetUrl = typeof options.url === 'string' ? new URL(options.url) : options.url;
@@ -41,6 +43,7 @@ export class MCPSSETransport extends SSEClientTransport {
   }
 }
 
+/** Creates an SSE transport from options. */
 export function createSSETransport(options: MCPSSEOptions): MCPSSETransport {
   return new MCPSSETransport(options);
 }

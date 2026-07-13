@@ -1,8 +1,10 @@
 import { EventEmitter } from 'events';
 import { ChannelAdapter, IncomingMessage, OutgoingMessage, ChannelType } from './channels/types';
 
+/** Lifecycle state of the omnichannel gateway daemon. */
 export type DaemonState = 'stopped' | 'starting' | 'running' | 'stopping' | 'error';
 
+/** Log entry for a dispatched inbound or outbound message. */
 export interface MessageLogRecord {
   direction: 'inbound' | 'outbound';
   timestamp: number;
@@ -13,6 +15,7 @@ export interface MessageLogRecord {
   success?: boolean;
 }
 
+/** Multi-channel gateway daemon that routes messages across registered adapters. */
 export class OmnichannelGatewayDaemon extends EventEmitter {
   private adapters: Map<ChannelType, ChannelAdapter> = new Map();
   private state: DaemonState = 'stopped';

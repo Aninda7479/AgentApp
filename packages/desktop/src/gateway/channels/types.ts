@@ -1,5 +1,7 @@
+/** Supported messaging channel identifiers. */
 export type ChannelType = 'telegram' | 'discord' | 'slack' | string;
 
+/** An inbound message received from a channel adapter. */
 export interface IncomingMessage {
   id: string;
   channelType: ChannelType;
@@ -11,6 +13,7 @@ export interface IncomingMessage {
   metadata?: Record<string, unknown>;
 }
 
+/** An outbound message to be dispatched through a channel adapter. */
 export interface OutgoingMessage {
   channelType: ChannelType;
   channelId: string;
@@ -19,6 +22,7 @@ export interface OutgoingMessage {
   metadata?: Record<string, unknown>;
 }
 
+/** Configuration options for initializing a channel adapter. */
 export interface ChannelAdapterConfig {
   enabled: boolean;
   botToken?: string;
@@ -29,6 +33,7 @@ export interface ChannelAdapterConfig {
   [key: string]: unknown;
 }
 
+/** Interface all channel adapters (Telegram, Slack, Discord) must implement. */
 export interface ChannelAdapter {
   readonly channelType: ChannelType;
   readonly isConnected: boolean;

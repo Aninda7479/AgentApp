@@ -1,5 +1,6 @@
 import { TrajectoryStep } from './components/TrajectoryCanvas';
 
+/** Persisted project record with folder paths and command permissions. */
 export interface StoredProject {
   name: string;
   folders: string[];
@@ -7,6 +8,7 @@ export interface StoredProject {
   storageKey?: string;
 }
 
+/** A single chat conversation with its trajectory steps and metadata. */
 export interface StoredChat {
   id: string;
   title: string;
@@ -20,4 +22,5 @@ export interface StoredChat {
   lastError?: string;
 }
 
+/** Theme preference: light, dark, or system-managed. */
 export type ThemeMode = 'light' | 'dark' | 'system';

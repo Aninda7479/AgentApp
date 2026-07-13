@@ -1,5 +1,7 @@
+/** Supported vector embedding providers. */
 export type EmbeddingProvider = 'openai' | 'custom' | 'local';
 
+/** Configuration for the vector embedding engine. */
 export interface VectorEmbeddingConfig {
   provider?: EmbeddingProvider;
   model?: string;

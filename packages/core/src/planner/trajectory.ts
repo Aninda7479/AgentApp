@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { AgentMessage, ToolCall } from '../types/agent.js';
 
+/** A single entry in a trajectory log file. */
 export interface TrajectoryLogEntry {
   sessionId: string;
   timestamp: number;
@@ -9,6 +10,7 @@ export interface TrajectoryLogEntry {
   payload: Record<string, unknown>;
 }
 
+/** Logs agent trajectories to JSONL files with secret sanitization. */
 export class TrajectoryLogger {
   private logDir: string;
 

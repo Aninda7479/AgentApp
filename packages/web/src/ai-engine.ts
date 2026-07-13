@@ -13,6 +13,7 @@
 
 // ─── Event Types ──────────────────────────────────────────────────────────────
 
+/** Discriminated union of all agent event types emitted during streaming. */
 export type AgentEventType =
   | 'token'          // streaming text token
   | 'tool_call'      // agent decided to call a tool
@@ -22,6 +23,7 @@ export type AgentEventType =
   | 'error'          // error occurred
   | 'abort';         // user stopped
 
+/** A single event emitted by the agent engine during a streaming run. */
 export interface AgentEvent {
   type: AgentEventType;
   sessionId: string;
@@ -39,6 +41,7 @@ export interface AgentEvent {
 
 // ─── Tool Definitions ─────────────────────────────────────────────────────────
 
+/** Defines a tool the agent can invoke, with JSON Schema parameters and an executor. */
 export interface ToolDefinition {
   name: string;
   description: string;
@@ -73,6 +76,7 @@ function makeSafeExec(projectRoot: string) {
   };
 }
 
+/** Creates the built-in file ops, search, and shell tools scoped to a project root. */
 export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDefinition[] {
   const safeExec = makeSafeExec(projectRoot);
 
@@ -208,6 +212,7 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
 
 // ─── Message Types ────────────────────────────────────────────────────────────
 
+/** A single message in the conversation history (system, user, assistant, or tool). */
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string | RichContentPart[];
@@ -230,6 +235,7 @@ type RichContentPart = RichTextPart | RichImagePart;
 
 // ─── Provider Config ──────────────────────────────────────────────────────────
 
+/** Configuration for creating a new AgentEngine instance. */
 export interface AgentEngineConfig {
   provider: string;
   apiKey: string;
@@ -245,6 +251,7 @@ export interface AgentEngineConfig {
 
 // ─── Agent Engine ─────────────────────────────────────────────────────────────
 
+/** Provider-agnostic streaming AI agent with built-in tool execution loop. */
 export class AgentEngine {
   private config: AgentEngineConfig;
   private tools: ToolDefinition[];
@@ -267,6 +274,7 @@ export class AgentEngine {
 
     // ── Build system prompt ────────────────────────────────────────────────
     // Inject attached file paths so the AI knows exactly what to read.
+    // Build system prompt with attachment and scope info
     const attachmentSection = (config.attachments && config.attachments.length > 0)
       ? `\n\nThe following files are attached to this chat session and are available for you to inspect:\n${config.attachments.map(p => `- ${p}`).join('\n')}\n\nWhen the latest prompt includes image attachments, inspect them directly from the multimodal input first. Use the read_file tool only for text-based attachments such as source files, markdown, or extracted text. Do not use OCR or shell commands for an image unless direct visual inspection is insufficient.`
       : '';
@@ -299,6 +307,7 @@ Key guidelines:
       return content;
     }
 
+    // Merge rich content parts (text + images) into a multimodal user message
     const parts: RichContentPart[] = [{ type: 'text', text: content }];
     for (const filePath of imageAttachments) {
       try {
@@ -359,9 +368,10 @@ Key guidelines:
     this.addUserMessage(userPrompt, currentAttachments);
 
     let iterations = 0;
-    const MAX_ITERATIONS = 16; // prevent infinite loops while allowing multi-step tool workflows
+    const MAX_ITERATIONS = 16; // safety cap to prevent infinite agent loops
 
     try {
+      // Main agent loop: stream response, execute tools, feed results back
       while (iterations < MAX_ITERATIONS) {
         iterations++;
 
@@ -450,6 +460,7 @@ Key guidelines:
   ): Promise<{ fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> }> {
     const { provider } = this.config;
 
+    // Route to the appropriate provider-specific streaming method
     const family = resolveProviderFamily(provider);
     if (family === 'anthropic') return this.streamAnthropic(onEvent, signal);
     if (family === 'gemini') return this.streamGemini(onEvent, signal);
@@ -461,6 +472,7 @@ Key guidelines:
   }
 
   // ── OpenAI / Custom (OpenAI-compatible) Streaming ────────────────────────
+  /** Streams a single response from an OpenAI-compatible provider. */
   private async streamOpenAI(
     onEvent: (event: AgentEvent) => void,
     signal: AbortSignal
@@ -469,7 +481,9 @@ Key guidelines:
     const url = `${baseUrl}/chat/completions`;
 
     // Convert history to OpenAI format (handle tool messages)
+    // Convert internal history to OpenAI Chat Completions format
     const messages = this.history.map(msg => {
+      // Tool result messages use a dedicated role
       if (msg.role === 'tool') {
         return {
           role: 'tool' as const,
@@ -572,7 +586,7 @@ Key guidelines:
       }
     }
 
-    // Parse accumulated tool calls
+    // Parse accumulated tool calls from streamed deltas
     const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
     for (const [, acc] of toolCallAccumulators) {
       try {
@@ -587,6 +601,7 @@ Key guidelines:
   }
 
   // ── Anthropic Claude Streaming ────────────────────────────────────────────
+  /** Streams a single response from the Anthropic Claude API. */
   private async streamAnthropic(
     onEvent: (event: AgentEvent) => void,
     signal: AbortSignal
@@ -594,7 +609,7 @@ Key guidelines:
     const anthropicHost = resolveBaseUrl('anthropic', this.config.baseUrl).replace(/\/v1\/?$/, '');
     const url = `${anthropicHost}/v1/messages`;
 
-    // Anthropic separates system from messages
+    // Convert history to Anthropic message format (system is separate)
     const systemMsg = this.history.find(m => m.role === 'system')?.content || '';
     const conversationMsgs = this.history
       .filter(m => m.role !== 'system')
@@ -721,6 +736,7 @@ Key guidelines:
   }
 
   // ── Google Gemini Streaming ───────────────────────────────────────────────
+  /** Streams a single response from the Google Gemini API. */
   private async streamGemini(
     onEvent: (event: AgentEvent) => void,
     signal: AbortSignal
@@ -729,7 +745,7 @@ Key guidelines:
     const geminiHost = resolveBaseUrl('google', this.config.baseUrl).replace(/\/+$/, '');
     const url = `${geminiHost}/v1beta/models/${model}:streamGenerateContent?key=${this.config.apiKey}&alt=sse`;
 
-    // Convert to Gemini format
+    // Convert history to Gemini format (system as separate instruction)
     const contents = this.history
       .filter(m => m.role !== 'system')
       .map(m => ({
@@ -822,6 +838,7 @@ Key guidelines:
   }
 
   // ── Ollama (local) Streaming ──────────────────────────────────────────────
+  /** Streams a single response from a local Ollama instance. */
   private async streamOllama(
     onEvent: (event: AgentEvent) => void,
     signal: AbortSignal
@@ -829,6 +846,7 @@ Key guidelines:
     const baseUrl = (this.config.baseUrl || 'http://localhost:11434').replace(/\/+$/, '');
     const url = `${baseUrl}/api/chat`;
 
+    // Map internal history to Ollama message format
     const messages = this.history.map(m => ({
       role: m.role === 'tool' ? 'tool' : m.role,
       content: Array.isArray(m.content)
@@ -929,4 +947,5 @@ export class MultiAgentManager {
   }
 }
 
+/** Shared singleton instance of MultiAgentManager. */
 export const multiAgentManager = new MultiAgentManager();

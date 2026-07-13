@@ -1,6 +1,7 @@
 import { BYOKConfig, AIProvider } from '../types/agent.js';
 import { SecureStorageManager, StorageOptions } from './storage.js';
 
+/** Manages Bring-Your-Own-Key provider configurations in memory and optionally persisted. */
 export class BYOKProviderManager {
   private configs: Map<string, BYOKConfig> = new Map();
   private storageManager?: SecureStorageManager;

@@ -1,14 +1,17 @@
 import { EventEmitter } from 'events';
 import { ChannelAdapter, ChannelAdapterConfig, IncomingMessage, OutgoingMessage, ChannelType } from './types';
 
+/** Telegram-specific adapter configuration. */
 export interface TelegramAdapterConfig extends ChannelAdapterConfig {
   botToken?: string;
   apiBaseUrl?: string;
   pollingIntervalMs?: number;
 }
 
+/** Type alias for the fetch API signature used by adapters. */
 export type FetchFunction = (url: string, init?: any) => Promise<{ ok: boolean; status: number; json: () => Promise<any> }>;
 
+/** Telegram Bot API channel adapter using long-polling for message delivery. */
 export class TelegramChannelAdapter extends EventEmitter implements ChannelAdapter {
   public readonly channelType: ChannelType = 'telegram';
   private connected: boolean = false;

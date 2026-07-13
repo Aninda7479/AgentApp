@@ -2,11 +2,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PermissionModeController } from './permissions.js';
 
+/** Options for atomic file write operations. */
 export interface WriteFileOptions {
   backup?: boolean;
   validateSyntax?: (content: string, filePath: string) => boolean | Promise<boolean>;
 }
 
+/** A chunk-based replacement targeting specific lines in a file. */
 export interface ReplacementChunk {
   startLine: number;
   endLine: number;
@@ -14,6 +16,7 @@ export interface ReplacementChunk {
   replacementContent: string;
 }
 
+/** Atomic file writer with permission gating, backup, and patch support. */
 export class AtomicFileWriter {
   private permissionController: PermissionModeController;
 

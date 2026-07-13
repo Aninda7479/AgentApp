@@ -1,6 +1,7 @@
 import { AgentMessage, ToolDefinition, ExecutionTrajectory, BYOKConfig } from '../types/agent.js';
 import { BYOKProviderManager } from '../providers/byok.js';
 
+/** High-level agent engine managing trajectory, tools, and turn queue. */
 export class SuperAgentEngine {
   private trajectory: ExecutionTrajectory;
   private tools: Map<string, ToolDefinition> = new Map();

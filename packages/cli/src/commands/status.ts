@@ -1,6 +1,7 @@
 import { TrajectoryTokenCounter } from '@superagent/core';
 import { SessionContext, CLICommandResult } from '../types.js';
 
+/** Snapshot of session statistics for display. */
 export interface StatusReport {
   sessionDurationSeconds: number;
   activeProvider: string;
@@ -15,9 +16,11 @@ export interface StatusReport {
   estimatedCostUSD: number;
 }
 
+/** Tracks token usage and generates status reports for the session. */
 export class SessionTracker {
   private tokenCounter: TrajectoryTokenCounter = new TrajectoryTokenCounter();
 
+  /** Records prompt and completion token usage for the session. */
   public recordTokenUsage(context: SessionContext, prompt: number, completion: number, costUSD?: number): void {
     context.tokenUsage.promptTokens += prompt;
     context.tokenUsage.completionTokens += completion;
@@ -27,6 +30,7 @@ export class SessionTracker {
     }
   }
 
+  /** Computes the current session status report with token metrics. */
   public getStatusReport(context: SessionContext): StatusReport {
     const now = Date.now();
     const duration = Math.floor((now - context.startTime) / 1000);
@@ -35,7 +39,7 @@ export class SessionTracker {
     const capability = context.capabilityRegistry.getCapability(context.activeModel);
     const limit = capability ? capability.contextWindow : 128000;
 
-    // Recalculate trajectory usage from messages if totalTokens is 0 or to ensure precision
+    // Recalculate trajectory usage from messages for precision
     const trajectoryUsage = this.tokenCounter.calculateTrajectoryUsage(
       context.messages,
       [],
@@ -63,6 +67,7 @@ export class SessionTracker {
     };
   }
 
+  /** Formats the status report as a human-readable multi-line string. */
   public formatStatusReport(context: SessionContext): string {
     const report = this.getStatusReport(context);
     const mins = Math.floor(report.sessionDurationSeconds / 60);
@@ -87,6 +92,7 @@ export class SessionTracker {
   }
 }
 
+/** Handles `/status` slash command: displays session token meter and config. */
 export function handleStatusCommand(args: string[], context: SessionContext): CLICommandResult {
   const tracker = new SessionTracker();
   const reportString = tracker.formatStatusReport(context);

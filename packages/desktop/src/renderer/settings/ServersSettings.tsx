@@ -1,9 +1,11 @@
 import React from 'react';
 
+/** Props for the MCP servers settings panel. */
 interface ServersSettingsProps {
   mcpDashboard: React.ReactNode;
 }
 
+/** Renders the MCP dashboard for connecting local or remote context servers. */
 export const ServersSettings: React.FC<ServersSettingsProps> = ({ mcpDashboard }) => {
   return (
     <div style={{ maxWidth: '780px' }}>

@@ -10,6 +10,7 @@ import { GeminiAdapter } from './gemini.js';
 import { CustomAdapter } from './custom.js';
 import { resolveProviderFamily } from './provider-meta.js';
 
+/** Creates the appropriate provider adapter based on the provider family. */
 export function createProviderAdapter(config: BYOKConfig): BaseProviderAdapter {
   const family = resolveProviderFamily(config.provider);
 
@@ -30,6 +31,7 @@ export function createProviderAdapter(config: BYOKConfig): BaseProviderAdapter {
   return new CustomAdapter(config);
 }
 
+/** Central registry of model capabilities (context window, features) with default presets. */
 export class ModelCapabilityRegistry {
   private capabilities: Map<string, ModelCapability> = new Map();
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 
+/** Information about a connected MCP server. */
 export interface MCPServerInfo {
   id: string;
   name: string;
@@ -11,6 +12,7 @@ export interface MCPServerInfo {
   latencyMs?: number;
 }
 
+/** Props for the MCPDashboard component. */
 export interface MCPDashboardProps {
   servers: MCPServerInfo[];
   onAddServer: (server: Partial<MCPServerInfo>) => void;
@@ -41,6 +43,7 @@ const getStatusLabel = (status: MCPServerInfo['status']) => {
   }
 };
 
+/** Dashboard for managing MCP servers with add, toggle, and remove actions. */
 export const MCPDashboard: React.FC<MCPDashboardProps> = ({
   servers,
   onAddServer,

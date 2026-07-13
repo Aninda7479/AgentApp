@@ -1,5 +1,7 @@
+/** Permission mode for MCP tool execution. */
 export type MCPPermissionMode = 'auto' | 'manual' | 'read-only';
 
+/** Context about a tool execution request for permission evaluation. */
 export interface MCPToolContext {
   serverName: string;
   toolName: string;
@@ -12,8 +14,10 @@ export interface MCPToolContext {
   };
 }
 
+/** Handler invoked when manual permission is required. */
 export type PermissionRequestHandler = (context: MCPToolContext) => Promise<boolean>;
 
+/** Options to configure the MCP permission guard. */
 export interface MCPPermissionGuardOptions {
   mode?: MCPPermissionMode;
   onPermissionRequest?: PermissionRequestHandler;
@@ -21,6 +25,7 @@ export interface MCPPermissionGuardOptions {
   blockedTools?: string[];
 }
 
+/** Enforces tool-level permission rules (allowlists, blocklists, read-only mode). */
 export class MCPPermissionGuard {
   private mode: MCPPermissionMode;
   private onPermissionRequest?: PermissionRequestHandler;

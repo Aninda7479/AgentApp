@@ -99,6 +99,7 @@ wss.on('connection', (ws) => {
   });
 });
 
+/** Broadcasts a message to all connected WebSocket clients. */
 function broadcast(channel: string, data: any) {
   const payload = JSON.stringify({ channel, data });
   connectedSockets.forEach((ws) => {
@@ -110,6 +111,7 @@ function broadcast(channel: string, data: any) {
 
 // ─── Browser Automation engine ────────────────────────────────────────────────
 let mainSharedBrowser: PlaywrightBrowserEngine | null = null;
+/** Lazily initializes and returns the shared Playwright browser instance. */
 async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
   if (!mainSharedBrowser) {
     let config: any = { headless: true };
@@ -137,8 +139,10 @@ async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
 }
 
 // ─── AI Orchestrator ────────────────────────────────────────────────────────
-const activeSessions = new Map<string, AgentEngine>();
+  // Map of active agent sessions by session ID
+  const activeSessions = new Map<string, AgentEngine>();
 
+/** Creates or reuses an AgentEngine for a session and runs it with streaming events. */
 async function runAgentEngine(
   sessionId: string,
   prompt: string,
@@ -149,6 +153,7 @@ async function runAgentEngine(
     let engine = activeSessions.get(sessionId);
     if (!engine) {
       const finalConfig = { ...config };
+      // Auto-route model if set to 'auto' or 'Model Governance'
       if (config.model === 'auto' || config.model === 'Model Governance') {
         const settings = SettingsStorage.loadSettings();
         const enabledModels = settings.models?.filter(m => m.enabled) || [];
@@ -164,10 +169,8 @@ async function runAgentEngine(
         }
       }
 
-      // Safety net: the client may send a model *display name* (e.g.
-      // "Google: Gemma 4 31B (free)") instead of the provider model *id* (slug).
-      // Resolve it to the real id so the upstream API is never sent a name.
-      if (finalConfig.model && /\s/.test(finalConfig.model) && finalConfig.provider) {
+        // Resolve model display names to actual IDs for the upstream API
+        if (finalConfig.model && /\s/.test(finalConfig.model) && finalConfig.provider) {
         const settings = SettingsStorage.loadSettings();
         const match = (settings.models || []).find(
           m => m.providerId === finalConfig.provider && m.name === finalConfig.model
@@ -199,11 +202,13 @@ async function runAgentEngine(
 
 // ─── Auto-detect Providers ───────────────────────────────────────────────────
 // Shared with the Desktop app via core's ProviderAutoDetector (single source of truth).
+/** Auto-detects AI providers from environment variables. */
 async function autoDetectProviders() {
   return ProviderAutoDetector.detect();
 }
 
 // ─── Model Governance Prompt Optimization ────────────────────────────────────
+/** Uses an AI engine to optimize the Model Governance system prompt. */
 async function optimizeInstructionsByAI() {
   const settings = SettingsStorage.loadSettings();
   const govEnabledIds = settings.modelGov?.enabledModels || [];
@@ -278,6 +283,7 @@ app.post('/api/ipc/:channel', async (req, res) => {
   const args = req.body.args || [];
   try {
     let result: any;
+    // Dispatch IPC channel to the corresponding handler
     switch (channel) {
       case 'store-read':
         result = readConversationStore(userDataDir);
@@ -373,8 +379,8 @@ app.post('/api/ipc/:channel', async (req, res) => {
         fs.mkdirSync(targetDir, { recursive: true });
         const destPath = path.join(targetDir, filename);
         
-        // Handle buffer raw formats coming from HTTP
-        const buf = Buffer.isBuffer(buffer) 
+  // Handle buffer formats from HTTP (Buffer or {data: Array})
+  const buf = Buffer.isBuffer(buffer) 
           ? buffer 
           : Buffer.from(buffer.data || buffer);
           

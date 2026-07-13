@@ -1,5 +1,6 @@
 import { BYOKConfig } from '../types/agent.js';
 
+/** Options for configuring an AI image generation request. */
 export interface ImageGenerationOptions {
   prompt: string;
   model?: string;

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MonitorSmartphone, Save, RefreshCw, AlertCircle, Eye, EyeOff, Play, Globe, Network, ShieldAlert, Cpu } from 'lucide-react';
 
+/** Props for the Browser Use settings panel. */
 interface BrowserUseSettingsProps {
   onSaveSettings: (patch: {
     browserUse: {
@@ -17,6 +18,7 @@ interface BrowserUseSettingsProps {
   }) => void;
 }
 
+/** Settings panel for Playwright browser connection profiles and live navigation testing. */
 export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
   onSaveSettings
 }) => {

@@ -1,11 +1,14 @@
+/** Risk level of a terminal command. */
 export type CommandRiskLevel = 'safe' | 'potentially_dangerous' | 'blocked';
 
+/** Result of inspecting a command against access control rules. */
 export interface CommandCheckResult {
   allowed: boolean;
   riskLevel: CommandRiskLevel;
   reason?: string;
 }
 
+/** Inspects commands against blocked/dangerous patterns with whitelist support. */
 export class TerminalAccessControl {
   private blockedPatterns: RegExp[] = [
     /\brm\s+-[rRfF]*\s+[\/\*]/i,

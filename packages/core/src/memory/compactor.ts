@@ -1,12 +1,14 @@
 import { AgentMessage } from '../types/agent.js';
 import { TrajectoryTokenCounter } from './tokens.js';
 
+/** Options controlling trajectory compaction behavior. */
 export interface CompactionOptions {
   maxContextTokens: number;
   triggerThresholdPercentage?: number; // Default: 80 (%)
   preserveRecentMessagesCount?: number; // Default: 4
 }
 
+/** Result of a compaction operation. */
 export interface CompactionResult {
   compactedMessages: AgentMessage[];
   wasCompacted: boolean;
@@ -15,6 +17,7 @@ export interface CompactionResult {
   summaryCreated?: string;
 }
 
+/** Compacts agent trajectories by summarizing older turns to fit within context window limits. */
 export class TrajectoryCompactor {
   private tokenCounter: TrajectoryTokenCounter;
 

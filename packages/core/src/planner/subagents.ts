@@ -1,5 +1,7 @@
+/** Lifecycle status of a subagent. */
 export type SubagentStatus = 'idle' | 'running' | 'completed' | 'failed' | 'terminated';
 
+/** A task assigned to a subagent for parallel execution. */
 export interface SubagentTask {
   id: string;
   parentId: string;
@@ -11,8 +13,10 @@ export interface SubagentTask {
   error?: string;
 }
 
+/** Function type for executing a subagent task. */
 export type SubagentExecutor = (subagentId: string, task: string) => Promise<string>;
 
+/** Manages forked subagents for parallel task execution. */
 export class SubagentManager {
   private subagents: Map<string, SubagentTask> = new Map();
 

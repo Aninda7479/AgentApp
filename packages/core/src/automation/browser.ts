@@ -1,5 +1,6 @@
 import { chromium, Browser, BrowserContext, Page, LaunchOptions } from 'playwright';
 
+/** Configuration for the Playwright-based browser engine. */
 export interface BrowserEngineConfig {
   headless?: boolean;
   viewport?: { width: number; height: number };
@@ -11,18 +12,21 @@ export interface BrowserEngineConfig {
   userProfilePath?: string;
 }
 
+/** Result of a page navigation action. */
 export interface NavigationResult {
   url: string;
   status: number;
   title: string;
 }
 
+/** Options for taking a page screenshot. */
 export interface ScreenshotOptions {
   fullPage?: boolean;
   type?: 'png' | 'jpeg';
   path?: string;
 }
 
+/** Playwright-based browser automation engine with support for persistent contexts and CDP. */
 export class PlaywrightBrowserEngine {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;

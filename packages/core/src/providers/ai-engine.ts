@@ -13,6 +13,7 @@
 
 // ─── Event Types ──────────────────────────────────────────────────────────────
 
+/** Types of events emitted during agent execution. */
 export type AgentEventType =
   | 'token'          // streaming text token
   | 'tool_call'      // agent decided to call a tool

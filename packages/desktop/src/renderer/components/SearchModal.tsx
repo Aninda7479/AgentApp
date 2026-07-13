@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, KeyboardEvent } from 'react';
 
+/** Props for the SearchModal component. */
 export interface SearchModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -19,6 +20,7 @@ interface SearchItem {
   actionKey: 'select-chat' | 'new-chat' | 'open-folder' | 'settings';
 }
 
+/** Command palette / search modal for navigating chats and triggering actions. */
 export const SearchModal: React.FC<SearchModalProps> = ({
   isOpen,
   onClose,

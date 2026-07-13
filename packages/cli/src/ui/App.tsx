@@ -6,6 +6,7 @@ import { TurnQueueManager } from '../shortcuts/queue.js';
 import { TranscriptManager } from '../shortcuts/transcript.js';
 import { PermissionLevel, cyclePermissionLevel, getPermissionLabel } from '../shortcuts/permissions.js';
 
+/** Root props for the SuperAgent TUI application. */
 export interface AppProps {
   provider?: string;
   model?: string;
@@ -13,6 +14,7 @@ export interface AppProps {
   initialVerbose?: boolean;
 }
 
+/** A single message displayed in the chat view. */
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -21,6 +23,7 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+/** Main SuperAgent Terminal TUI: manages chat messages, streaming, queue, and keyboard shortcuts. */
 export const App: React.FC<AppProps> = ({
   provider = 'openai',
   model = 'default',
@@ -85,7 +88,8 @@ export const App: React.FC<AppProps> = ({
       setMessages((prev) => [...prev, assistantMsg]);
       setIsStreaming(false);
 
-      const nextTurn = queueManager.dequeue();
+      // Process queued turns after each response completes
+    const nextTurn = queueManager.dequeue();
       setQueuedTurnsCount(queueManager.count());
       if (nextTurn) {
         handleSendMessage(nextTurn.prompt);

@@ -13,6 +13,7 @@ import { ModelGovSettings } from './ModelGovSettings';
 import { BrowserUseSettings } from './BrowserUseSettings';
 import { ComputerUseSettings } from './ComputerUseSettings';
 
+/** Top-level settings page that renders a sidebar and the active settings category panel. */
 export const SettingsView: React.FC<SettingsViewProps> = ({
   activeCategory,
   onSelectCategory,

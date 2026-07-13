@@ -11,18 +11,21 @@ import {
   UserCheck,
 } from 'lucide-react';
 
+/** Options returned by the Composer when a prompt is submitted. */
 export interface ComposerOptions {
   model: string;
   mode: 'auto' | 'plan' | 'bypass';
   attachments: string[];
 }
 
+/** A file attachment queued in the composer. */
 export interface AttachmentItem {
   filename: string;
   sourcePath?: string;
   buffer?: number[];
 }
 
+/** Props for the Composer prompt input component. */
 export interface ComposerProps {
   onSend: (prompt: string, options: ComposerOptions) => void;
   disabled?: boolean;
@@ -42,6 +45,7 @@ export interface ComposerProps {
   onRemoveAttachment?: (index: number) => void;
 }
 
+/** Main prompt composer with model selector, approval mode, and attachment support. */
 export const Composer: React.FC<ComposerProps> = ({
   onSend,
   disabled = false,

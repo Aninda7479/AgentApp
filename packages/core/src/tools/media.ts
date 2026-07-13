@@ -2,6 +2,7 @@ import { ToolDefinition, MediaGenerationRequest, BYOKConfig } from '../types/age
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import pptxgen from 'pptxgenjs';
 
+/** Creates the built-in media generation tool definition (PDF, PPT, image, audio, video). */
 export const createMediaTool = (): ToolDefinition => ({
   name: 'generate_media',
   description: 'Generate multimodal assets (Image, Audio, Video, PDF, PPT) using AI models driven by your BYOK keys.',

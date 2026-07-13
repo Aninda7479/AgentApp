@@ -1,9 +1,11 @@
+/** Supported installer targets per platform. */
 export interface TargetPlatformOptions {
   win?: ('nsis' | 'portable' | 'zip')[];
   mac?: ('dmg' | 'zip' | 'pkg')[];
   linux?: ('AppImage' | 'deb' | 'rpm' | 'tar.gz')[];
 }
 
+/** User-provided options for the release installer builder. */
 export interface ReleaseInstallerConfigOptions {
   appId?: string;
   productName?: string;
@@ -17,6 +19,7 @@ export interface ReleaseInstallerConfigOptions {
   asar?: boolean;
 }
 
+/** Fully resolved installer configuration with all defaults applied. */
 export interface ResolvedInstallerConfigOptions {
   appId: string;
   productName: string;
@@ -34,6 +37,7 @@ export interface ResolvedInstallerConfigOptions {
   asar: boolean;
 }
 
+/** Complete electron-builder configuration object. */
 export interface ElectronBuilderConfiguration {
   appId: string;
   productName: string;
@@ -66,6 +70,7 @@ export interface ElectronBuilderConfiguration {
   };
 }
 
+/** Result of a simulated build run. */
 export interface BuildResult {
   success: boolean;
   artifacts: string[];
@@ -73,6 +78,7 @@ export interface BuildResult {
   logs: string[];
 }
 
+/** Generates and validates electron-builder configurations for multi-platform releases. */
 export class ReleaseInstallerBuilder {
   private options: ResolvedInstallerConfigOptions;
 

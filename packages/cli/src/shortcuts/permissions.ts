@@ -1,9 +1,12 @@
 import { KeyInput } from '../types.js';
 
+/** Allowed execution permission levels for tool invocations. */
 export type PermissionLevel = 'ask' | 'auto' | 'deny';
 
+/** Ordered list of permission levels for cycling. */
 export const PERMISSION_LEVELS: PermissionLevel[] = ['ask', 'auto', 'deny'];
 
+/** Cycles to the next permission level in the cycle (ask -> auto -> deny -> ask). */
 export function cyclePermissionLevel(current: PermissionLevel): PermissionLevel {
   const index = PERMISSION_LEVELS.indexOf(current);
   if (index === -1) {
@@ -13,6 +16,7 @@ export function cyclePermissionLevel(current: PermissionLevel): PermissionLevel 
   return PERMISSION_LEVELS[nextIndex];
 }
 
+/** Returns a human-readable label for a permission level. */
 export function getPermissionLabel(level: PermissionLevel): string {
   switch (level) {
     case 'ask':
@@ -26,6 +30,13 @@ export function getPermissionLabel(level: PermissionLevel): string {
   }
 }
 
+/**
+ * Handles Shift+Tab shortcut to cycle execution permission level.
+ * @param key - Keyboard input event
+ * @param currentLevel - Current permission level
+ * @param onChangeLevel - Callback with the new permission level
+ * @returns true if the shortcut was matched and handled
+ */
 export function handlePermissionCycleShortcut(
   key: KeyInput,
   currentLevel: PermissionLevel,

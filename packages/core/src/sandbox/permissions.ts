@@ -1,5 +1,7 @@
+/** Sandbox permission mode: controls file edit and command execution policies. */
 export type PermissionMode = 'read-only' | 'auto-approve-edits' | 'full-autonomy';
 
+/** A request for user confirmation before performing an action. */
 export interface ConfirmationRequest {
   action: string;
   command?: string;
@@ -7,13 +9,16 @@ export interface ConfirmationRequest {
   details?: Record<string, unknown>;
 }
 
+/** Handler type for user-in-the-loop permission prompts. */
 export type ConfirmationHandler = (request: ConfirmationRequest) => Promise<boolean>;
 
+/** Options for the permission mode controller. */
 export interface PermissionControllerOptions {
   initialMode?: PermissionMode;
   onConfirmationRequired?: ConfirmationHandler;
 }
 
+/** Controls the sandbox permission mode and handles user confirmation requests. */
 export class PermissionModeController {
   private mode: PermissionMode;
   private onConfirmationRequired?: ConfirmationHandler;

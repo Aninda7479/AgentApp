@@ -72,7 +72,7 @@ export function verifySessionToken(token: string | undefined): string | null {
   const encoded = token.slice(0, dot);
   const signature = token.slice(dot + 1);
 
-  // Constant-time signature check.
+  // Constant-time signature comparison to prevent timing attacks
   const expected = sign(encoded);
   const sigBuf = Buffer.from(signature);
   const expBuf = Buffer.from(expected);
@@ -136,15 +136,20 @@ export function getAuthenticatedUser(req: IncomingMessage): string | null {
 
 // ─── Brute-force rate limiter (per IP) ───────────────────────────────────────
 
+/** Max failed login attempts before IP is locked out. */
 const MAX_ATTEMPTS = 8;
+/** Rolling time window (ms) for counting failed attempts. */
 const WINDOW_MS = 15 * 60 * 1000; // rolling window
+/** Duration (ms) of lockout after exceeding max attempts. */
 const LOCKOUT_MS = 15 * 60 * 1000; // lockout duration after too many failures
 
+/** Tracks login attempt count and lockout state for a single IP. */
 interface AttemptRecord {
   count: number;
   first: number;
   lockedUntil?: number;
 }
+/** Map of IP addresses to their login attempt records. */
 const attempts = new Map<string, AttemptRecord>();
 
 /** Best-effort client IP (respects a single X-Forwarded-For hop). */
@@ -156,6 +161,7 @@ function clientIp(req: Request): string {
 
 /** Checks whether the caller is currently allowed to attempt a login. */
 export function checkRateLimit(req: Request): { allowed: boolean; retryAfterMs?: number } {
+  // Check if caller is currently locked out from too many failures
   const ip = clientIp(req);
   const rec = attempts.get(ip);
   const now = Date.now();
@@ -206,6 +212,7 @@ const PUBLIC_PATHS = new Set([
  * API calls receive 401 JSON; page requests are redirected to `/login`.
  */
 export function authGate(req: Request, res: Response, next: NextFunction): void {
+  // Gate: allow public paths, require session for everything else
   if (isAuthDisabled()) return next();
   if (PUBLIC_PATHS.has(req.path)) return next();
 

@@ -16,12 +16,14 @@ import {
   Scale
 } from 'lucide-react';
 
+/** A single navigation entry in the settings sidebar. */
 interface SidebarItem {
   id: string;
   label: string;
   Icon: LucideIcon;
 }
 
+/** Props for the settings sidebar. */
 interface SettingsSidebarProps {
   activeCategory: string;
   onSelectCategory: (category: string) => void;
@@ -30,6 +32,7 @@ interface SettingsSidebarProps {
   setSearchQuery: (query: string) => void;
 }
 
+/** Grouped sidebar navigation items organized by category. */
 const CATEGORIES: Record<string, SidebarItem[]> = {
   Personal: [
     { id: 'general', label: 'General', Icon: Settings },
@@ -53,6 +56,7 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
   ]
 };
 
+/** Renders the left sidebar with categorized settings navigation and a search filter. */
 export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   activeCategory,
   onSelectCategory,

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
+/** A single image entry in the gallery. */
 export interface ImageItem {
   id: string;
   url: string;
@@ -9,6 +10,7 @@ export interface ImageItem {
   height?: number;
 }
 
+/** CSS filter values applied to the image. */
 export interface ImageFilters {
   brightness: number;
   contrast: number;
@@ -18,6 +20,7 @@ export interface ImageFilters {
   blur: number;
 }
 
+/** Rotation, flip, and zoom state for the image. */
 export interface ImageTransform {
   rotation: number;
   flipX: boolean;
@@ -25,6 +28,7 @@ export interface ImageTransform {
   zoom: number;
 }
 
+/** Props for the ImageGalleryModal component. */
 export interface ImageGalleryModalProps {
   images: ImageItem[];
   initialIndex?: number;
@@ -54,6 +58,7 @@ const DEFAULT_TRANSFORM: ImageTransform = {
   zoom: 1.0,
 };
 
+/** Modal with image gallery, editing transforms, filters, and filmstrip navigation. */
 export const ImageGalleryModal: React.FC<ImageGalleryModalProps> = ({
   images,
   initialIndex = 0,

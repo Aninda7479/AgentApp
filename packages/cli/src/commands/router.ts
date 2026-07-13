@@ -1,3 +1,4 @@
+/** Parsed representation of a slash command input. */
 export interface SlashCommandContext {
   command: string;
   args: string[];
@@ -5,14 +6,17 @@ export interface SlashCommandContext {
   fullInput: string;
 }
 
+/** Function signature for slash command handlers. */
 export type SlashCommandHandler = (context: SlashCommandContext) => Promise<SlashCommandResult> | SlashCommandResult;
 
+/** Metadata describing a slash command for help text. */
 export interface SlashCommandMetadata {
   description: string;
   aliases?: string[];
   usage?: string;
 }
 
+/** Result returned after executing a slash command. */
 export interface SlashCommandResult {
   success: boolean;
   command: string;
@@ -21,16 +25,19 @@ export interface SlashCommandResult {
   error?: string;
 }
 
+/** Associates a command name with its handler and metadata. */
 export interface SlashCommandDefinition {
   name: string;
   handler: SlashCommandHandler;
   metadata: SlashCommandMetadata;
 }
 
+/** Routes slash commands to their registered handlers. */
 export class SlashCommandRouter {
   private commands: Map<string, SlashCommandDefinition> = new Map();
   private aliases: Map<string, string> = new Map();
 
+  /** Registers a slash command with its handler, name, and metadata. */
   public register(name: string, handler: SlashCommandHandler, metadata: SlashCommandMetadata): void {
     const cleanName = name.startsWith('/') ? name.substring(1) : name;
     const def: SlashCommandDefinition = { name: cleanName, handler, metadata };
@@ -44,10 +51,12 @@ export class SlashCommandRouter {
     }
   }
 
+  /** Returns true if the input starts with '/'. */
   public isSlashCommand(input: string): boolean {
     return input.trim().startsWith('/');
   }
 
+  /** Parses a slash command string into a SlashCommandContext, or null if invalid. */
   public parse(input: string): SlashCommandContext | null {
     const trimmed = input.trim();
     if (!trimmed.startsWith('/')) return null;
@@ -68,6 +77,7 @@ export class SlashCommandRouter {
     };
   }
 
+  /** Executes a slash command string, resolving aliases and invoking the handler. */
   public async execute(input: string): Promise<SlashCommandResult> {
     const parsed = this.parse(input);
     if (!parsed) {
@@ -104,6 +114,7 @@ export class SlashCommandRouter {
     }
   }
 
+  /** Returns all registered command definitions. */
   public getCommands(): SlashCommandDefinition[] {
     return Array.from(this.commands.values());
   }
@@ -116,6 +127,11 @@ import { handleThemeCommand } from './theme.js';
 import { handleLearnCommand } from './learn.js';
 import { handleInitCommand } from './init.js';
 
+/**
+ * Convenience function: parses and executes a slash command string against built-in handlers.
+ * @param input - Raw slash command string (e.g. '/model list')
+ * @param context - Active session context
+ */
 export async function processSlashCommand(input: string, context: SessionContext): Promise<string> {
   const trimmed = input.trim();
   if (!trimmed.startsWith('/')) return 'Invalid slash command.';
@@ -124,6 +140,7 @@ export async function processSlashCommand(input: string, context: SessionContext
   const cmd = parts[0].toLowerCase();
   const args = parts.slice(1);
 
+  // Dispatch to built-in command handlers
   if (cmd === 'model') {
     return handleModelCommand(args, context).message;
   }

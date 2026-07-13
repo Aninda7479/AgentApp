@@ -5,6 +5,7 @@ import { SpeechSynthesizer, SpeechSynthesisOptions, SpeechSynthesisResult } from
 import { AudioTranscriber, AudioTranscriptionOptions, AudioTranscriptionResult } from './stt.js';
 import { VideoGenerator, VideoGenerationOptions, VideoGenerationJob } from './video.js';
 
+/** Supported media generation task types. */
 export type MediaTaskType =
   | 'image-generation'
   | 'image-inpainting'
@@ -12,6 +13,7 @@ export type MediaTaskType =
   | 'audio-transcription'
   | 'video-generation';
 
+/** A request to route to the appropriate media generation pipeline. */
 export interface MediaTaskRequest {
   id?: string;
   taskType: MediaTaskType;
@@ -22,6 +24,7 @@ export interface MediaTaskRequest {
   videoGen?: VideoGenerationOptions;
 }
 
+/** Union of possible media pipeline output types. */
 export type MediaTaskDataResult =
   | ImageGenerationResult
   | ImageInpaintResult
@@ -29,6 +32,7 @@ export type MediaTaskDataResult =
   | AudioTranscriptionResult
   | VideoGenerationJob;
 
+/** Result from a media generation pipeline. */
 export interface MediaTaskResult {
   taskId: string;
   taskType: MediaTaskType;
@@ -37,6 +41,7 @@ export interface MediaTaskResult {
   error?: string;
 }
 
+/** Routes media generation requests to the appropriate engine (image, audio, video, etc.). */
 export class MediaPipelineRouter {
   private imageGenerator: ImageGenerator;
   private imageInpainter: ImageInpainter;

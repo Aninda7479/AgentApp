@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 
 
+/** Props for the Sidebar navigation component. */
 export interface SidebarProps {
   activeTab: string;
   onSelectTab: (tab: string) => void;
@@ -48,6 +49,7 @@ export interface SidebarProps {
   onMobileClose?: () => void;
 }
 
+/** Collapsible sidebar with project tree, chat list, and navigation links. */
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onSelectTab,

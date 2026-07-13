@@ -3,6 +3,7 @@ import { EnvironmentSanitizer } from './sanitizer.js';
 import { TerminalAccessControl } from './access.js';
 import { PermissionModeController } from './permissions.js';
 
+/** Result of a terminal command execution. */
 export interface ExecutionResult {
   stdout: string;
   stderr: string;
@@ -11,6 +12,7 @@ export interface ExecutionResult {
   timedOut: boolean;
 }
 
+/** Options for running a terminal command. */
 export interface ExecutionOptions {
   cwd?: string;
   env?: Record<string, string>;
@@ -18,6 +20,7 @@ export interface ExecutionOptions {
   shell?: string | boolean;
 }
 
+/** Executes shell commands with permission gating, access control, and env sanitization. */
 export class TerminalShellExecutor {
   private sanitizer: EnvironmentSanitizer;
   private accessControl: TerminalAccessControl;

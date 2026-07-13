@@ -1,5 +1,6 @@
 import { AgentMessage, ChatMessage, ToolDefinition } from '../types/agent.js';
 
+/** Token usage breakdown for a full context window. */
 export interface TokenUsageReport {
   totalTokens: number;
   messageTokens: number;
@@ -9,7 +10,9 @@ export interface TokenUsageReport {
   usagePercentage: number;
 }
 
+/** Estimates token counts for messages, tools, and full trajectories. */
 export class TrajectoryTokenCounter {
+  /** Estimates tokens in a text (~4 chars per token). */
   public estimateTextTokens(text: string): number {
     if (!text || text.length === 0) return 0;
     // Standard approximation: ~4 characters per token for English text & code
@@ -20,6 +23,7 @@ export class TrajectoryTokenCounter {
     return Math.max(estimatedByChar, estimatedByWord);
   }
 
+  /** Estimates tokens in a single message including tool calls. */
   public estimateMessageTokens(message: AgentMessage | ChatMessage): number {
     let tokens = 4; // Base per message formatting overhead
     tokens += this.estimateTextTokens(message.content);
@@ -38,6 +42,7 @@ export class TrajectoryTokenCounter {
     return tokens;
   }
 
+  /** Estimates tokens consumed by tool definitions. */
   public estimateToolTokens(tools: ToolDefinition[]): number {
     let tokens = 0;
     for (const tool of tools) {
@@ -51,6 +56,7 @@ export class TrajectoryTokenCounter {
     return tokens;
   }
 
+  /** Calculates full token usage report for a message trajectory. */
   public calculateTrajectoryUsage(
     messages: (AgentMessage | ChatMessage)[],
     tools: ToolDefinition[] = [],

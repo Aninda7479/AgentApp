@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 
+/** Props for the BYOK (Bring Your Own Key) modal. */
 export interface BYOKModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -7,6 +8,7 @@ export interface BYOKModalProps {
   initialKeys?: Record<string, string>;
 }
 
+/** Modal for entering and testing API keys for multiple AI providers. */
 export const BYOKModal: React.FC<BYOKModalProps> = ({
   isOpen,
   onClose,

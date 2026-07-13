@@ -2,6 +2,7 @@ import React from 'react';
 import { Check, Code2, MessageSquare, Moon, Sun, Monitor } from 'lucide-react';
 import { ThemeMode } from '../types';
 
+/** Props for the general settings panel. */
 interface GeneralSettingsProps {
   themeMode: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
@@ -15,6 +16,7 @@ interface GeneralSettingsProps {
   onUnsandboxedActionsChange: (val: boolean) => void;
 }
 
+/** Props for a labeled boolean toggle row. */
 interface ToggleRowProps {
   label: string;
   description: string;
@@ -45,6 +47,7 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ label, description, value, onChan
   </div>
 );
 
+/** Renders appearance, work mode, and permission settings for the agent. */
 export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   themeMode,
   onThemeChange,

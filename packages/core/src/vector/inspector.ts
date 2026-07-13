@@ -1,21 +1,25 @@
+/** A single message in the LLM prompt context. */
 export interface ContextPayloadMessage {
   role: string;
   content: string;
   name?: string;
 }
 
+/** A tool function definition included in the prompt. */
 export interface ContextPayloadTool {
   name: string;
   description: string;
   parameters?: Record<string, unknown>;
 }
 
+/** A single vector-retrieval result injected into context. */
 export interface ContextPayloadVectorItem {
   source: string;
   content: string;
   score?: number;
 }
 
+/** The complete context payload being sent to an LLM. */
 export interface ContextPayload {
   systemPrompt?: string;
   messages?: ContextPayloadMessage[];
@@ -23,6 +27,7 @@ export interface ContextPayload {
   vectorContext?: ContextPayloadVectorItem[];
 }
 
+/** Token count breakdown across context sections. */
 export interface TokenDistribution {
   system: number;
   messages: number;
@@ -31,6 +36,7 @@ export interface TokenDistribution {
   total: number;
 }
 
+/** Full debug report with token estimates and formatted dump. */
 export interface ContextDebugReport {
   timestamp: string;
   totalEstimatedTokens: number;
@@ -43,6 +49,7 @@ export interface ContextDebugReport {
   };
 }
 
+/** Inspects LLM prompt context and generates token distribution reports. */
 export class ContextInspector {
   /**
    * Inspects LLM prompt payload and generates detailed token breakdown & raw debug dump.

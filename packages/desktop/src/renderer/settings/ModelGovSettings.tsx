@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ModelConfig } from './types';
 import { Scale, Save, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award, Sparkles } from 'lucide-react';
 
+/** Props for the Model Governance settings panel. */
 interface ModelGovSettingsProps {
   modelsCatalog: ModelConfig[];
   onSaveSettings: (patch: {
@@ -15,6 +16,7 @@ interface ModelGovSettingsProps {
   }) => void;
 }
 
+/** Settings panel for Fugu-based model orchestration, routing strategy, and system instructions. */
 export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
   modelsCatalog,
   onSaveSettings

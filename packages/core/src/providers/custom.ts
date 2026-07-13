@@ -8,6 +8,7 @@ import {
 } from '../types/agent.js';
 import { resolveBaseUrl, getProviderMeta } from './provider-meta.js';
 
+/** Generic provider adapter for OpenAI-compatible third-party / self-hosted endpoints. */
 export class CustomAdapter implements BaseProviderAdapter {
   public readonly provider: AIProvider;
   private apiKey: string;

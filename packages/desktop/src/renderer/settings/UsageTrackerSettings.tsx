@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Trash2, BarChart2, Coins, Cpu, Clock, RefreshCw } from 'lucide-react';
 
+/** Aggregated usage stats for a single model. */
 interface ModelUsageSummary {
   model: string;
   provider: string;
@@ -11,6 +12,7 @@ interface ModelUsageSummary {
   callCount: number;
 }
 
+/** Individual API call record with token counts and cost. */
 interface ModelUsageRecord {
   model: string;
   provider: string;
@@ -21,6 +23,7 @@ interface ModelUsageRecord {
   timestamp: string;
 }
 
+/** Settings panel showing AI usage metrics, cost breakdown, and transaction logs. */
 export const UsageTrackerSettings: React.FC = () => {
   const [summary, setSummary] = useState<ModelUsageSummary[]>([]);
   const [records, setRecords] = useState<ModelUsageRecord[]>([]);

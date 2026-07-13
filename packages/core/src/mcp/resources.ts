@@ -1,6 +1,7 @@
 import { AgentMessage } from '../types/agent.js';
 import { MCPClient } from './client.js';
 
+/** Manages MCP resource and prompt access, with template injection into agent messages. */
 export class MCPResourceManager {
   private clients: Map<string, MCPClient> = new Map();
 

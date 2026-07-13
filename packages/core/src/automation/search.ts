@@ -1,5 +1,7 @@
+/** Supported web search provider backends. */
 export type SearchProvider = 'serper' | 'tavily' | 'searxng' | 'mock';
 
+/** A single search result from any provider. */
 export interface SearchResultItem {
   title: string;
   url: string;
@@ -7,6 +9,7 @@ export interface SearchResultItem {
   score?: number;
 }
 
+/** Options for a web search query. */
 export interface SearchOptions {
   provider?: SearchProvider;
   apiKey?: string;
@@ -14,6 +17,7 @@ export interface SearchOptions {
   limit?: number;
 }
 
+/** Response from a web search operation. */
 export interface SearchResponse {
   query: string;
   results: SearchResultItem[];
@@ -21,6 +25,7 @@ export interface SearchResponse {
   totalResults?: number;
 }
 
+/** Multi-provider web search tool with automatic provider detection. */
 export class WebSearchTool {
   /**
    * Executes a web search against the configured provider.

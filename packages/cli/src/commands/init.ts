@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { CLICommandResult } from '../types.js';
 
+/** Metadata extracted from inspecting a project directory. */
 export interface ProjectContextMetadata {
   projectName: string;
   version: string;
@@ -13,7 +14,9 @@ export interface ProjectContextMetadata {
   generatedAt: string;
 }
 
+/** Generates project context metadata and AGENTS.md for autonomous agents. */
 export class ProjectContextGenerator {
+  /** Scans a directory for package.json, tsconfig, and entry points to build metadata. */
   public static async inspectDirectory(targetDir: string): Promise<ProjectContextMetadata> {
     let projectName = path.basename(path.resolve(targetDir));
     let version = '1.0.0';
@@ -32,6 +35,7 @@ export class ProjectContextGenerator {
       if (pkg.scripts) scripts = pkg.scripts;
 
       const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+      // Detect language and frameworks from dependencies
       if (allDeps.typescript) {
         language = 'TypeScript';
         frameworks.push('TypeScript');
@@ -55,6 +59,7 @@ export class ProjectContextGenerator {
     }
 
     const entryPoints: string[] = [];
+    // Check common entry point locations
     const possibleEntries = ['src/index.ts', 'src/index.js', 'src/main.ts', 'src/app.ts', 'index.js', 'index.ts'];
     for (const e of possibleEntries) {
       try {
@@ -77,6 +82,11 @@ export class ProjectContextGenerator {
     };
   }
 
+  /**
+   * Creates .agent/context.json and AGENTS.md in the target directory.
+   * @param targetDir - Directory to inspect and initialize
+   * @param force - If true, overwrites existing context files
+   */
   public static async generateContext(
     targetDir: string = process.cwd(),
     force: boolean = false
@@ -131,6 +141,7 @@ ${metadata.entryPoints.map(e => `- \`${e}\``).join('\n') || '- `src/index.ts`'}
   }
 }
 
+/** Handles `/init` slash command: generates project context files. */
 export async function handleInitCommand(args: string[], targetDir?: string): Promise<CLICommandResult> {
   const force = args.includes('--force') || args.includes('-f');
   const dirArg = args.find(a => !a.startsWith('-')) || targetDir || process.cwd();

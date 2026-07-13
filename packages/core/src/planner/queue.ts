@@ -1,7 +1,9 @@
 import { AgentMessage } from '../types/agent.js';
 
+/** Priority level for a queued agent turn. */
 export type TurnPriority = 'normal' | 'high' | 'system';
 
+/** A single turn waiting to be processed by the agent. */
 export interface QueuedTurn {
   id: string;
   prompt: string;
@@ -10,6 +12,7 @@ export interface QueuedTurn {
   metadata?: Record<string, unknown>;
 }
 
+/** Priority-based queue for managing agent conversation turns. */
 export class TurnQueue {
   private queue: QueuedTurn[] = [];
   private isProcessingFlag: boolean = false;

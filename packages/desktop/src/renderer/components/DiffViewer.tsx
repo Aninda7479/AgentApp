@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
+/** Props for the DiffViewer component. */
 export interface DiffViewerProps {
   originalCode: string;
   modifiedCode: string;
@@ -86,6 +87,7 @@ const computeDiff = (originalCode: string, modifiedCode: string): { lines: DiffL
   return { lines: diffLines, additions, deletions };
 };
 
+/** Side-by-side or unified diff viewer with accept/reject actions. */
 export const DiffViewer: React.FC<DiffViewerProps> = ({
   originalCode,
   modifiedCode,

@@ -1,18 +1,24 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 
+/** Props for the MarkdownStream component. */
 export interface MarkdownStreamProps {
   content: string;
   isStreaming?: boolean;
   verbose?: boolean;
 }
 
+/** Parsed markdown token representing a header, code block, bullet, or text line. */
 export interface MarkdownToken {
   type: 'header' | 'codeblock' | 'bullet' | 'text';
   text: string;
   language?: string;
 }
 
+/**
+ * Parses markdown text into tokens for terminal rendering.
+ * Supports headers, fenced code blocks, bullet lists, and plain text.
+ */
 export function parseMarkdownTokens(content: string): MarkdownToken[] {
   const lines = content.split('\n');
   const tokens: MarkdownToken[] = [];
@@ -21,6 +27,7 @@ export function parseMarkdownTokens(content: string): MarkdownToken[] {
   let codeBlockLang = '';
 
   for (const line of lines) {
+    // Toggle code block state on ``` fences
     if (line.startsWith('```')) {
       if (inCodeBlock) {
         tokens.push({
@@ -62,6 +69,7 @@ export function parseMarkdownTokens(content: string): MarkdownToken[] {
   return tokens;
 }
 
+/** Renders streaming markdown content with syntax-highlighted blocks and a cursor indicator. */
 export const MarkdownStream: React.FC<MarkdownStreamProps> = ({ content, isStreaming = false, verbose = false }) => {
   const tokens = parseMarkdownTokens(content);
 

@@ -7,6 +7,7 @@ import {
   AIProvider
 } from '../types/agent.js';
 
+/** Provider adapter for OpenAI-compatible Chat Completions API. */
 export class OpenAIAdapter implements BaseProviderAdapter {
   public readonly provider: AIProvider = 'openai';
   private apiKey: string;

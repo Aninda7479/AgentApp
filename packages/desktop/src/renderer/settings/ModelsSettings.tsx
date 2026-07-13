@@ -1,43 +1,32 @@
 import React, { useState } from 'react';
 import { ProviderConnection, ModelConfig } from './types';
+import { RefreshCw, ChevronDown } from 'lucide-react';
 
-const MODALITY_COLORS: Record<string, { bg: string; text: string; icon: string }> = {
-  text:  { bg: '#1e2d1e', text: '#4ade80', icon: '📝' },
-  image: { bg: '#1e1e2d', text: '#818cf8', icon: '🖼' },
-  audio: { bg: '#2d1e2d', text: '#e879f9', icon: '🎵' },
-  video: { bg: '#2d1a1a', text: '#f87171', icon: '🎬' },
+const MODALITY_STYLES: Record<string, string> = {
+  text:  'bg-emerald-500/12 text-emerald-400',
+  image: 'bg-indigo-500/12 text-indigo-400',
+  audio: 'bg-fuchsia-500/12 text-fuchsia-400',
+  video: 'bg-rose-500/12 text-rose-400'
 };
 
-const ModalityChip: React.FC<{ type: string; label?: string }> = ({ type, label }) => {
-  const c = MODALITY_COLORS[type] ?? { bg: '#2d2321', text: '#8a8a8a', icon: '?' };
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: '4px',
-      backgroundColor: c.bg, color: c.text,
-      padding: '2px 8px', borderRadius: '999px',
-      fontSize: '0.72rem', fontWeight: 500
-    }}>
-      {c.icon} {label ?? type}
-    </span>
-  );
-};
-
-const Toggle: React.FC<{ enabled: boolean; onToggle: () => void }> = ({ enabled, onToggle }) => (
-  <div
-    onClick={(e) => { e.stopPropagation(); onToggle(); }}
-    style={{
-      flexShrink: 0, width: '40px', height: '22px', borderRadius: '11px',
-      backgroundColor: enabled ? '#3b82f6' : '#2d2321',
-      padding: '2px', cursor: 'pointer',
-      transition: 'background-color 0.2s ease',
-      display: 'flex', alignItems: 'center',
-      justifyContent: enabled ? 'flex-end' : 'flex-start'
-    }}
-  >
-    <div style={{ width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.3)' }} />
-  </div>
+const ModalityChip: React.FC<{ type: string; label?: string }> = ({ type, label }) => (
+  <span className={`ui-chip ${MODALITY_STYLES[type] ?? 'bg-brand-popover text-brand-textMuted'}`}>
+    {label ?? type}
+  </span>
 );
 
+const Toggle: React.FC<{ enabled: boolean; onToggle: () => void }> = ({ enabled, onToggle }) => (
+  <button
+    type="button"
+    className="ui-toggle"
+    aria-checked={enabled}
+    onClick={(e) => { e.stopPropagation(); onToggle(); }}
+  >
+    <span />
+  </button>
+);
+
+/** Props for the grouped, searchable models list. */
 interface ModelsListProps {
   connectedProviders: ProviderConnection[];
   modelsCatalog: ModelConfig[];
@@ -47,7 +36,6 @@ interface ModelsListProps {
 
 const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatalog, modelSearch, onToggleModel }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  // Collapsed provider sections (clicking a provider header toggles it).
   const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
 
   const toggleProvider = (providerId: string) => {
@@ -61,8 +49,8 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
 
   if (connectedProviders.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px', border: '1px dashed #2d2321', borderRadius: '12px', color: '#8a8a8a' }}>
-        No models available. Connect a provider in the &ldquo;Providers&rdquo; tab first.
+      <div className="ui-card px-6 py-10 text-center text-sm text-brand-textMuted">
+        No models available. Connect a provider in the “Providers” tab first.
       </div>
     );
   }
@@ -78,141 +66,142 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
           .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
         if (models.length === 0) return null;
 
+        const collapsed = collapsedProviders.has(prov.id);
+
         return (
-          <div key={prov.id} style={{ marginBottom: '28px' }}>
-            <div
+          <div key={prov.id} className="mb-6">
+            <button
+              type="button"
               onClick={() => toggleProvider(prov.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', fontSize: '0.85rem', fontWeight: 600, color: '#6b6b6b', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', userSelect: 'none' }}
+              className="mb-2.5 flex items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wider text-brand-textMuted transition-colors hover:text-brand-textMain"
             >
-              <span style={{ color: '#ef4444', transition: 'transform 0.15s ease', transform: collapsedProviders.has(prov.id) ? 'rotate(-90deg)' : 'rotate(0deg)' }}>▾</span>
+              <ChevronDown size={14} className={`transition-transform ${collapsed ? '-rotate-90' : ''}`} />
               <span>{prov.name}</span>
-              <span style={{ marginLeft: '4px', fontSize: '0.75rem', fontWeight: 400, color: '#4b4b4b' }}>{models.length} model{models.length !== 1 ? 's' : ''}</span>
-            </div>
+              <span className="font-normal normal-case tracking-normal text-brand-textMuted/60">
+                {models.length} model{models.length !== 1 ? 's' : ''}
+              </span>
+            </button>
 
-            {!collapsedProviders.has(prov.id) && (
-            <div style={{ backgroundColor: '#1b1412', border: '1px solid #2d2321', borderRadius: '12px', overflow: 'hidden' }}>
-              {models.map((model, idx) => {
-                const isExpanded = expandedId === model.id;
-                const hasIn  = (model.inputModalities  ?? []).length > 0;
-                const hasOut = (model.outputModalities ?? []).length > 0;
-                const p = model.pricing;
+            {!collapsed && (
+              <div className="ui-card overflow-hidden">
+                {models.map((model, idx) => {
+                  const isExpanded = expandedId === model.id;
+                  const hasIn  = (model.inputModalities  ?? []).length > 0;
+                  const hasOut = (model.outputModalities ?? []).length > 0;
+                  const p = model.pricing;
 
-                return (
-                  <div key={model.id} style={{ borderBottom: idx === models.length - 1 ? 'none' : '1px solid #231c1a' }}>
-                    <div
-                      onClick={() => setExpandedId(isExpanded ? null : model.id)}
-                      style={{
-                        display: 'flex', alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '14px 20px', cursor: 'pointer',
-                        transition: 'background-color 0.15s ease',
-                        backgroundColor: isExpanded ? '#201918' : 'transparent',
-                      }}
-                      onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.backgroundColor = '#1e1614'; }}
-                      onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.backgroundColor = 'transparent'; }}
-                    >
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 500, fontSize: '0.92rem', color: '#ffffff' }}>{model.name}</span>
-                          {hasIn && (model.inputModalities ?? []).map(m => <ModalityChip key={m} type={m} />)}
+                  return (
+                    <div key={model.id} className={idx === models.length - 1 ? '' : 'border-b border-brand-border'}>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(isExpanded ? null : model.id)}
+                        className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors ${
+                          isExpanded ? 'bg-brand-popover' : 'hover:bg-brand-popover/50'
+                        }`}
+                      >
+                        <div className="flex min-w-0 flex-col gap-1.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium text-brand-textMain">{model.name}</span>
+                            {hasIn && (model.inputModalities ?? []).map(m => <ModalityChip key={m} type={m} />)}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-brand-textMuted">
+                            {model.contextLimit && (
+                              <span>ctx: <span className="text-brand-textMain">{model.contextLimit}</span></span>
+                            )}
+                            {p?.inputPer1M ? (
+                              <span>in: <span className="text-emerald-400">{p.inputPer1M}/1M</span></span>
+                            ) : model.contextLimit == null && !hasIn && (
+                              <span>pricing: N/A</span>
+                            )}
+                            {p?.outputPer1M && (
+                              <span>out: <span className="text-rose-400">{p.outputPer1M}/1M</span></span>
+                            )}
+                            {model.caching && (
+                              <span className="rounded bg-emerald-500/12 px-1.5 py-0.5 text-emerald-400">⚡ caching</span>
+                            )}
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-                          {model.contextLimit && (
-                            <span style={{ fontSize: '0.74rem', color: '#6b6b6b' }}>ctx: <span style={{ color: '#9a9a9a' }}>{model.contextLimit}</span></span>
+
+                        <div className="flex flex-shrink-0 items-center gap-3">
+                          <ChevronDown size={14} className={`text-brand-textMuted transition-transform ${isExpanded ? '' : 'rotate-180'}`} />
+                          <Toggle enabled={model.enabled} onToggle={() => onToggleModel(model.id)} />
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="border-t border-brand-border bg-brand-bg/40 px-4 py-4">
+                          {model.description && (
+                            <p className="mb-3 text-xs leading-relaxed text-brand-textMuted">{model.description}</p>
                           )}
-                          {p?.inputPer1M ? (
-                            <span style={{ fontSize: '0.74rem', color: '#6b6b6b' }}>in: <span style={{ color: '#a3e6c0' }}>{p.inputPer1M}/1M</span></span>
-                          ) : model.contextLimit == null && !hasIn && (
-                            <span style={{ fontSize: '0.74rem', color: '#4b4b4b' }}>pricing: N/A</span>
-                          )}
-                          {p?.outputPer1M && (
-                            <span style={{ fontSize: '0.74rem', color: '#6b6b6b' }}>out: <span style={{ color: '#fca5a5' }}>{p.outputPer1M}/1M</span></span>
-                          )}
-                          {model.caching && (
-                            <span style={{ fontSize: '0.72rem', backgroundColor: '#1a2d1a', color: '#4ade80', padding: '1px 6px', borderRadius: '4px' }}>⚡ caching</span>
+
+                          <div className="flex flex-wrap gap-5">
+                            {hasIn && (
+                              <div>
+                                <div className="ui-label mb-1.5">Input</div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {(model.inputModalities ?? []).map(m => <ModalityChip key={m} type={m} />)}
+                                </div>
+                              </div>
+                            )}
+                            {hasOut && (
+                              <div>
+                                <div className="ui-label mb-1.5">Output</div>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {(model.outputModalities ?? []).map(m => <ModalityChip key={m} type={m} />)}
+                                </div>
+                              </div>
+                            )}
+                            <div>
+                              <div className="ui-label mb-1.5">Context Window</div>
+                              <span className="text-sm font-medium text-brand-textMain">{model.contextLimit ?? 'N/A'}</span>
+                            </div>
+                            {model.outputLimit && (
+                              <div>
+                                <div className="ui-label mb-1.5">Max Output</div>
+                                <span className="text-sm font-medium text-brand-textMain">{model.outputLimit}</span>
+                              </div>
+                            )}
+                            <div>
+                              <div className="ui-label mb-1.5">Caching</div>
+                              <span className={`text-sm font-medium ${model.caching ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {model.caching ? '✓ Supported' : '✗ Not supported'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {p ? (
+                            <div className="mt-4">
+                              <div className="ui-label mb-2">Pricing (per 1M tokens)</div>
+                              <div className="flex flex-wrap gap-2.5">
+                                {p.inputPer1M && (
+                                  <div className="ui-card bg-brand-card px-3 py-2">
+                                    <div className="text-[10px] uppercase tracking-wide text-brand-textMuted">Input</div>
+                                    <div className="text-sm font-semibold text-emerald-400">{p.inputPer1M}</div>
+                                  </div>
+                                )}
+                                {p.outputPer1M && (
+                                  <div className="ui-card bg-brand-card px-3 py-2">
+                                    <div className="text-[10px] uppercase tracking-wide text-brand-textMuted">Output</div>
+                                    <div className="text-sm font-semibold text-rose-400">{p.outputPer1M}</div>
+                                  </div>
+                                )}
+                                {p.cachedInputPer1M && (
+                                  <div className="ui-card bg-brand-card px-3 py-2">
+                                    <div className="text-[10px] uppercase tracking-wide text-brand-textMuted">Cached Input</div>
+                                    <div className="text-sm font-semibold text-indigo-400">{p.cachedInputPer1M}</div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-xs text-brand-textMuted">Pricing not published by this provider.</p>
                           )}
                         </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-                        <span style={{ fontSize: '0.75rem', color: '#4b4b4b', userSelect: 'none' }}>{isExpanded ? '▲' : '▼'}</span>
-                        <Toggle enabled={model.enabled} onToggle={() => onToggleModel(model.id)} />
-                      </div>
+                      )}
                     </div>
-
-                    {isExpanded && (
-                      <div style={{ padding: '0 20px 16px 20px', borderTop: '1px solid #2a1e1c', backgroundColor: '#1a1210' }}>
-                        {model.description && (
-                          <p style={{ fontSize: '0.8rem', color: '#7a7a7a', margin: '12px 0 10px', lineHeight: 1.5 }}>{model.description}</p>
-                        )}
-
-                        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', marginTop: model.description ? 0 : '12px' }}>
-                          {hasIn && (
-                            <div>
-                              <div style={{ fontSize: '0.72rem', color: '#5a5a5a', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Input</div>
-                              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                                {(model.inputModalities ?? []).map(m => <ModalityChip key={m} type={m} />)}
-                              </div>
-                            </div>
-                          )}
-                          {hasOut && (
-                            <div>
-                              <div style={{ fontSize: '0.72rem', color: '#5a5a5a', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Output</div>
-                              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                                {(model.outputModalities ?? []).map(m => <ModalityChip key={m} type={m} />)}
-                              </div>
-                            </div>
-                          )}
-                          <div>
-                            <div style={{ fontSize: '0.72rem', color: '#5a5a5a', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Context Window</div>
-                            <span style={{ fontSize: '0.85rem', color: '#cccccc', fontWeight: 500 }}>{model.contextLimit ?? 'N/A'}</span>
-                          </div>
-                          {model.outputLimit && (
-                            <div>
-                              <div style={{ fontSize: '0.72rem', color: '#5a5a5a', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Max Output</div>
-                              <span style={{ fontSize: '0.85rem', color: '#cccccc', fontWeight: 500 }}>{model.outputLimit}</span>
-                            </div>
-                          )}
-                          <div>
-                            <div style={{ fontSize: '0.72rem', color: '#5a5a5a', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Caching</div>
-                            <span style={{ fontSize: '0.85rem', color: model.caching ? '#4ade80' : '#ef4444', fontWeight: 500 }}>{model.caching ? '✓ Supported' : '✗ Not supported'}</span>
-                          </div>
-                        </div>
-
-                        {p && (
-                          <div style={{ marginTop: '14px' }}>
-                            <div style={{ fontSize: '0.72rem', color: '#5a5a5a', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pricing (per 1M tokens)</div>
-                            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                              {p.inputPer1M && (
-                                <div style={{ backgroundColor: '#1a2520', border: '1px solid #2a3a2a', borderRadius: '8px', padding: '8px 14px' }}>
-                                  <div style={{ fontSize: '0.7rem', color: '#4b7b5a', marginBottom: '2px' }}>Input</div>
-                                  <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#a3e6c0' }}>{p.inputPer1M}</div>
-                                </div>
-                              )}
-                              {p.outputPer1M && (
-                                <div style={{ backgroundColor: '#251a1a', border: '1px solid #3a2a2a', borderRadius: '8px', padding: '8px 14px' }}>
-                                  <div style={{ fontSize: '0.7rem', color: '#7b4b4b', marginBottom: '2px' }}>Output</div>
-                                  <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fca5a5' }}>{p.outputPer1M}</div>
-                                </div>
-                              )}
-                              {p.cachedInputPer1M && (
-                                <div style={{ backgroundColor: '#1a1a25', border: '1px solid #2a2a3a', borderRadius: '8px', padding: '8px 14px' }}>
-                                  <div style={{ fontSize: '0.7rem', color: '#4b4b7b', marginBottom: '2px' }}>Cached Input</div>
-                                  <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#818cf8' }}>{p.cachedInputPer1M}</div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        {!p && (
-                          <p style={{ fontSize: '0.78rem', color: '#4b4b4b', marginTop: '12px' }}>Pricing not published by this provider.</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         );
@@ -221,6 +210,7 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
   );
 };
 
+/** Props for the models settings panel. */
 interface ModelsSettingsProps {
   connectedProviders: ProviderConnection[];
   modelsCatalog: ModelConfig[];
@@ -229,6 +219,7 @@ interface ModelsSettingsProps {
   enrichModel: (raw: any, providerId: string) => ModelConfig;
 }
 
+/** Displays the model catalog with search, per-model toggles, and a refresh-all button. */
 export const ModelsSettings: React.FC<ModelsSettingsProps> = ({
   connectedProviders,
   modelsCatalog,
@@ -332,57 +323,31 @@ export const ModelsSettings: React.FC<ModelsSettingsProps> = ({
   };
 
   return (
-    <div style={{ maxWidth: '780px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '1.6rem', fontWeight: 600, color: '#ffffff', margin: 0 }}>Models</h1>
+    <div className="mx-auto w-full max-w-3xl">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain sm:text-3xl">
+          Models
+        </h1>
         <button
           onClick={handleRefreshAllModels}
           disabled={refreshing || connectedProviders.length === 0}
           title={connectedProviders.length === 0 ? 'Connect a provider first' : 'Re-fetch models from all providers'}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            backgroundColor: refreshing ? '#1e1614' : '#2a1e1c',
-            border: '1px solid #3d2b29',
-            borderRadius: '8px', color: refreshing ? '#6b6b6b' : '#ffffff',
-            fontSize: '0.85rem', fontWeight: 500,
-            padding: '8px 14px', cursor: refreshing || connectedProviders.length === 0 ? 'not-allowed' : 'pointer',
-            transition: 'all 0.15s ease', opacity: connectedProviders.length === 0 ? 0.4 : 1
-          }}
-          onMouseEnter={e => { if (!refreshing && connectedProviders.length > 0) e.currentTarget.style.backgroundColor = '#3a2622'; }}
-          onMouseLeave={e => { if (!refreshing) e.currentTarget.style.backgroundColor = refreshing ? '#1e1614' : '#2a1e1c'; }}
+          className="ui-btn-primary disabled:opacity-40"
         >
-          <span style={{ display: 'inline-block', animation: refreshing ? 'spin 1s linear infinite' : 'none' }}>↻</span>
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
           {refreshing ? (refreshStatus || 'Refreshing...') : 'Refresh all'}
         </button>
       </div>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
 
-      <div
-        style={{
-          backgroundColor: '#1b1412',
-          border: '1px solid #2d2321',
-          borderRadius: '8px',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '10px 16px',
-          marginBottom: '24px'
-        }}
-      >
-        <span style={{ color: '#8a8a8a', marginRight: '8px' }}>🔍</span>
+      <div className="ui-input mb-6 flex items-center gap-2 border-transparent bg-brand-card">
+        <span className="text-brand-textMuted">🔍</span>
         <input
           data-testid="model-catalog-search"
           type="text"
           placeholder="Search models"
           value={modelSearch}
           onChange={(e) => setModelSearch(e.target.value)}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            outline: 'none',
-            color: '#ffffff',
-            fontSize: '0.9rem',
-            flex: 1
-          }}
+          className="w-full border-none bg-transparent text-sm text-brand-textMain outline-none placeholder:text-brand-textMuted/50"
         />
       </div>
 

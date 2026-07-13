@@ -1,11 +1,13 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
+/** A labeled section within project instructions. */
 export interface InstructionSection {
   title: string;
   content: string;
 }
 
+/** Parsed project instructions from AGENT.md, CLAUDE.md, .cursorrules, etc. */
 export interface ProjectInstruction {
   filePath: string;
   sourceType: 'agent' | 'claude' | 'cursor' | 'system' | 'custom';
@@ -14,6 +16,7 @@ export interface ProjectInstruction {
   rules: string[];
 }
 
+/** Parses and merges project instruction files (AGENT.md, CLAUDE.md, etc.). */
 export class ProjectInstructionsParser {
   private sanitizeContent(content: string): string {
     return content.replace(/sk-[a-zA-Z0-9_-]+/g, '[REDACTED_TOKEN]');

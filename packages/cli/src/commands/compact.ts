@@ -1,17 +1,20 @@
 import { SlashCommandRouter, SlashCommandContext, SlashCommandResult } from './router.js';
 
+/** A single message in the conversation context with role and content. */
 export interface ContextMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
   tokens?: number;
 }
 
+/** Configuration options for context compaction behavior. */
 export interface CompactOptions {
   maxTokens?: number;
   keepRecentCount?: number;
   summarizer?: (messages: ContextMessage[]) => Promise<string> | string;
 }
 
+/** Result of a context compression operation with token savings. */
 export interface CompactResult {
   originalCount: number;
   compactedCount: number;
@@ -20,11 +23,18 @@ export interface CompactResult {
   tokensSaved?: number;
 }
 
+/** Compresses conversation context by summarizing older messages. */
 export class ContextCompressor {
+  /** Estimates token count from text length (~4 chars per token). */
   public static estimateTokens(text: string): number {
     return Math.ceil(text.length / 4);
   }
 
+  /**
+   * Compresses messages by replacing middle turns with a summary.
+   * @param messages - Full conversation history
+   * @param options - Compaction options (keepRecentCount, summarizer, etc.)
+   */
   public static async compress(messages: ContextMessage[], options: CompactOptions = {}): Promise<CompactResult> {
     const keepRecent = options.keepRecentCount ?? 4;
     const originalCount = messages.length;
@@ -40,11 +50,13 @@ export class ContextCompressor {
 
     const systemMessages: ContextMessage[] = [];
     let startIndex = 0;
+    // Preserve leading system messages (e.g. initial instructions)
     while (startIndex < messages.length && messages[startIndex].role === 'system') {
       systemMessages.push(messages[startIndex]);
       startIndex++;
     }
 
+    // Split: recent messages to keep, middle messages to summarize
     const recentMessages = messages.slice(messages.length - keepRecent);
     const middleMessages = messages.slice(startIndex, messages.length - keepRecent);
 
@@ -83,6 +95,13 @@ export class ContextCompressor {
   }
 }
 
+/**
+ * Registers the `/compact` slash command for context compression.
+ * @param router - SlashCommandRouter to register on
+ * @param getMessages - Returns current conversation messages
+ * @param setMessages - Replaces conversation messages with compacted version
+ * @param options - Compaction configuration
+ */
 export function registerCompactCommand(
   router: SlashCommandRouter,
   getMessages: () => ContextMessage[],

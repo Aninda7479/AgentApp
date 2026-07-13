@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 
+/** Data for creating a desktop notification. */
 export interface NotificationPayload {
   title: string;
   body: string;
@@ -10,6 +11,7 @@ export interface NotificationPayload {
   data?: Record<string, unknown>;
 }
 
+/** Persistent record of a notification that was sent. */
 export interface DesktopNotificationRecord {
   id: string;
   title: string;
@@ -19,12 +21,14 @@ export interface DesktopNotificationRecord {
   data?: Record<string, unknown>;
 }
 
+/** Options for the DesktopNotificationSystem constructor. */
 export interface DesktopNotificationOptions {
   electronProvider?: {
     Notification: any;
   };
 }
 
+/** System for displaying desktop notifications with history tracking. */
 export class DesktopNotificationSystem extends EventEmitter {
   private history: DesktopNotificationRecord[] = [];
   private electronProvider: any;

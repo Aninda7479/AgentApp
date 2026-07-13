@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
+/** Metadata describing a skill: name, description, tags, version. */
 export interface SkillMetadata {
   name: string;
   description: string;
@@ -8,6 +9,7 @@ export interface SkillMetadata {
   version?: string;
 }
 
+/** A complete skill with metadata, instructions, and optional file path. */
 export interface SkillDefinition {
   id: string;
   metadata: SkillMetadata;
@@ -15,6 +17,7 @@ export interface SkillDefinition {
   directoryPath?: string;
 }
 
+/** In-memory store of registered skills with discovery and search. */
 export class SkillStore {
   private skillsMap: Map<string, SkillDefinition> = new Map();
 

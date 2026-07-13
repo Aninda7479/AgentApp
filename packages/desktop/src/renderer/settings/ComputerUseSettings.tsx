@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MousePointer2, Save, RefreshCw, AlertCircle, Play, Camera } from 'lucide-react';
 
+/** Props for the Computer Use settings panel. */
 interface ComputerUseSettingsProps {
   onSaveSettings: (patch: {
     computerUse: {
@@ -11,6 +12,7 @@ interface ComputerUseSettingsProps {
   }) => void;
 }
 
+/** Settings panel for desktop mouse/keyboard automation permissions and screen capture. */
 export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
   onSaveSettings
 }) => {

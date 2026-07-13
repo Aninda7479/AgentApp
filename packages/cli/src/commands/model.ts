@@ -1,11 +1,14 @@
 import { ModelCapability, SettingsStorage } from '@superagent/core';
 import { SessionContext, CLICommandResult } from '../types.js';
 
+/** Static methods for listing and switching AI models and providers. */
 export class ModelSwitcher {
+  /** Returns all registered model capabilities from the context registry. */
   public static listAvailableModels(context: SessionContext): ModelCapability[] {
     return context.capabilityRegistry.getAllCapabilities();
   }
 
+  /** Returns a formatted string of all available models with capability badges. */
   public static formatModelList(context: SessionContext): string {
     const models = this.listAvailableModels(context);
     if (models.length === 0) {
@@ -30,6 +33,7 @@ export class ModelSwitcher {
     return lines.join('\n');
   }
 
+  /** Switches the active model by ID or name, persisting the selection. */
   public static switchModel(context: SessionContext, targetModel: string): CLICommandResult {
     const models = this.listAvailableModels(context);
     const matched = models.find(
@@ -52,7 +56,7 @@ export class ModelSwitcher {
       };
     }
 
-    // Fallback if model ID is custom or not in default list
+    // Fallback for custom model IDs not in the registry
     context.activeModel = targetModel;
     SettingsStorage.saveSettings({
       lastUsedModel: {
@@ -66,12 +70,13 @@ export class ModelSwitcher {
     };
   }
 
+  /** Switches the active provider and picks the first matching model. */
   public static switchProvider(context: SessionContext, provider: string): CLICommandResult {
     const validProviders = ['openai', 'anthropic', 'gemini', 'deepseek', 'custom'];
     const p = provider.toLowerCase();
     
     context.activeProvider = p;
-    // Find first matching model for provider if available
+    // Auto-select first available model for the new provider
     const models = this.listAvailableModels(context).filter(m => m.provider === p);
     if (models.length > 0) {
       context.activeModel = models[0].id;
@@ -92,6 +97,7 @@ export class ModelSwitcher {
   }
 }
 
+/** Handles `/model` slash command: lists models or switches active model/provider. */
 export function handleModelCommand(args: string[], context: SessionContext): CLICommandResult {
   if (args.length === 0 || args[0] === 'list') {
     return {

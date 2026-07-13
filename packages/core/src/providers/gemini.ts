@@ -7,6 +7,7 @@ import {
   AIProvider
 } from '../types/agent.js';
 
+/** Provider adapter for the Google Gemini Generative Language API. */
 export class GeminiAdapter implements BaseProviderAdapter {
   public readonly provider: AIProvider = 'gemini';
   private apiKey: string;

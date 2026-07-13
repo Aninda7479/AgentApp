@@ -1,11 +1,13 @@
 import { BrowserWindow, BrowserWindowConstructorOptions, app, ipcMain } from 'electron';
 import path from 'path';
 
+/** Options for creating a managed BrowserWindow, with optional name and main-window flag. */
 export interface ManagedWindowOptions extends BrowserWindowConstructorOptions {
   name?: string;
   isMainWindow?: boolean;
 }
 
+/** Manages all BrowserWindows in the app — creation, lookup, and lifecycle. */
 export class WindowManager {
   private windows: Map<number, BrowserWindow> = new Map();
   private windowsByName: Map<string, number> = new Map();
@@ -15,6 +17,7 @@ export class WindowManager {
     this.setupIpcHandlers();
   }
 
+  /** Creates the primary application window with frameless defaults. */
   public createMainWindow(options: ManagedWindowOptions = {}): BrowserWindow {
     const defaultOptions: ManagedWindowOptions = {
       width: 1280,
@@ -38,6 +41,7 @@ export class WindowManager {
     return win;
   }
 
+  /** Creates or focuses an existing named window. */
   public createWindow(name: string, options: ManagedWindowOptions = {}): BrowserWindow {
     // If window with this name already exists and is not destroyed, focus it
     if (this.windowsByName.has(name)) {
@@ -84,15 +88,18 @@ export class WindowManager {
     return win;
   }
 
+  /** Returns the window matching the given Electron ID, if it exists. */
   public getWindow(id: number): BrowserWindow | undefined {
     return this.windows.get(id);
   }
 
+  /** Returns the window registered under the given name, if it exists. */
   public getWindowByName(name: string): BrowserWindow | undefined {
     const id = this.windowsByName.get(name);
     return id !== undefined ? this.windows.get(id) : undefined;
   }
 
+  /** Returns the main application window, or null if destroyed. */
   public getMainWindow(): BrowserWindow | null {
     if (this.mainWindowId !== null) {
       const win = this.windows.get(this.mainWindowId);
@@ -103,10 +110,12 @@ export class WindowManager {
     return null;
   }
 
+  /** Returns all non-destroyed windows. */
   public getAllWindows(): BrowserWindow[] {
     return Array.from(this.windows.values()).filter(win => !win.isDestroyed());
   }
 
+  /** Closes the window matching the given ID. */
   public closeWindow(id: number): void {
     const win = this.windows.get(id);
     if (win && !win.isDestroyed()) {
@@ -114,6 +123,7 @@ export class WindowManager {
     }
   }
 
+  /** Closes all managed windows and resets internal state. */
   public closeAllWindows(): void {
     for (const win of this.windows.values()) {
       if (!win.isDestroyed()) {
@@ -152,4 +162,5 @@ export class WindowManager {
   }
 }
 
+/** Singleton window manager used across the main process. */
 export const windowManager = new WindowManager();

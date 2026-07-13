@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 
+/** Props for the Composer input component. */
 export interface ComposerProps {
   onSubmit: (input: string) => void;
   onQueue?: (input: string) => void;
@@ -12,6 +13,7 @@ export interface ComposerProps {
   onChange?: (value: string) => void;
 }
 
+/** Interactive text input component with keyboard shortcuts for queue, permissions, and transcript toggle. */
 export const Composer: React.FC<ComposerProps> = ({
   onSubmit,
   onQueue,
