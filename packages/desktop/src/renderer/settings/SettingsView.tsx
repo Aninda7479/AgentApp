@@ -142,7 +142,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         setSearchQuery={setSearchQuery}
       />
 
-      <div className="flex-1 h-full overflow-y-auto px-8 py-8 md:px-14 md:py-10">
+      <div className="flex-1 h-full overflow-y-auto px-5 py-6 sm:px-8 sm:py-8 md:px-14 md:py-10">
         {activeCategory === 'general' && (
           <GeneralSettings
             themeMode={themeMode}

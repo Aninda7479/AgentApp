@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in · SuperAgent</title>
+  <style>
+    :root {
+      --bg: #0b0c10;
+      --panel: rgba(255, 255, 255, 0.04);
+      --border: rgba(255, 255, 255, 0.1);
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #7c3aed;
+      --accent2: #4f46e5;
+      --danger: #f87171;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg); color: var(--text);
+    }
+    body {
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(124, 58, 237, 0.14), transparent 40%),
+        radial-gradient(circle at 80% 80%, rgba(56, 189, 248, 0.10), transparent 40%),
+        var(--bg);
+    }
+    .card {
+      width: 100%; max-width: 400px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 36px 30px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      animation: rise 0.4s ease both;
+    }
+    @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    .logo {
+      width: 46px; height: 46px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      margin-bottom: 18px; font-size: 22px;
+      box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
+    }
+    h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.02em; }
+    p.sub { color: var(--muted); font-size: 13px; margin: 0 0 26px; }
+    label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
+    .field { margin-bottom: 16px; }
+    input {
+      width: 100%; padding: 11px 13px;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border);
+      border-radius: 10px; color: var(--text); font-size: 14px;
+      outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18); }
+    button {
+      width: 100%; padding: 12px; margin-top: 6px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff; border: none; border-radius: 10px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: transform 0.1s, filter 0.15s;
+    }
+    button:hover { filter: brightness(1.08); }
+    button:active { transform: scale(0.98); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .error {
+      display: none; margin-bottom: 16px; padding: 10px 12px;
+      background: rgba(248, 113, 113, 0.12);
+      border: 1px solid rgba(248, 113, 113, 0.3);
+      border-radius: 10px; color: var(--danger); font-size: 13px;
+    }
+    .error.show { display: block; animation: rise 0.2s ease both; }
+    .foot { margin-top: 22px; text-align: center; color: var(--muted); font-size: 11px; }
+  </style>
+</head>
+<body>
+  <form class="card" id="login-form" autocomplete="on">
+    <div class="logo">🚀</div>
+    <h1>Welcome back</h1>
+    <p class="sub">Sign in to your SuperAgent workspace</p>
+
+    <div class="error" id="error"></div>
+
+    <div class="field">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username" required autofocus />
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required />
+    </div>
+
+    <button type="submit" id="submit">Sign in</button>
+    <div class="foot">SuperAgent · Secure VPS Access</div>
+  </form>
+
+  <script>
+    (function () {
+      var form = document.getElementById('login-form');
+      var errorBox = document.getElementById('error');
+      var submitBtn = document.getElementById('submit');
+
+      function showError(msg) {
+        errorBox.textContent = msg;
+        errorBox.classList.add('show');
+      }
+
+      // If already authenticated, skip straight to the app.
+      fetch('/api/auth/status', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (s) { if (s && s.authenticated) window.location.replace('/'); })
+        .catch(function () {});
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        errorBox.classList.remove('show');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Signing in…';
+
+        fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            username: document.getElementById('username').value,
+            password: document.getElementById('password').value
+          })
+        })
+          .then(function (res) {
+            return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+          })
+          .then(function (result) {
+            if (result.ok) {
+              window.location.replace('/');
+            } else {
+              showError((result.data && result.data.error) || 'Sign in failed.');
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Sign in';
+            }
+          })
+          .catch(function () {
+            showError('Network error. Please try again.');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Sign in';
+          });
+      });
+    })();
+  </script>
+</body>
+</html>

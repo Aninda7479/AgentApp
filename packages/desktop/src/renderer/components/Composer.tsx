@@ -166,7 +166,7 @@ export const Composer: React.FC<ComposerProps> = ({
         />
 
         {/* Toolbar row inside box */}
-        <div className="flex items-center justify-between border-t border-brand-border/60 pt-4 mt-4">
+        <div className="flex items-center justify-between gap-2 flex-wrap border-t border-brand-border/60 pt-4 mt-4">
           {/* Left toolbar elements */}
           <div className="flex items-center gap-2 relative">
             {/* Plus button */}
@@ -183,10 +183,10 @@ export const Composer: React.FC<ComposerProps> = ({
               <button
                 data-testid="approval-dropdown-btn"
                 onClick={() => setShowApprovalDropdown(!showApprovalDropdown)}
-                className="bg-brand-popover border border-brand-border hover:border-violet-500/35 hover:bg-brand-card text-brand-textMain px-4 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all duration-150 cursor-pointer select-none active:scale-[0.98] shadow-sm"
+                className="bg-brand-popover border border-brand-border hover:border-violet-500/35 hover:bg-brand-card text-brand-textMain px-3 sm:px-4 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all duration-150 cursor-pointer select-none active:scale-[0.98] shadow-sm"
               >
                 <UserCheck className="w-3.5 h-3.5 text-brand-textMuted" />
-                <span>{getApprovalLabel()}</span>
+                <span className="hidden sm:inline">{getApprovalLabel()}</span>
                 <ChevronDown className="w-3 h-3 text-brand-textMuted" />
               </button>
 
@@ -243,7 +243,7 @@ export const Composer: React.FC<ComposerProps> = ({
                 }`}
               >
                 <Cpu className="w-3.5 h-3.5" />
-                <span>{hasModels ? selectedModel : 'No models are connected yet'}</span>
+                <span className="max-w-[110px] sm:max-w-none truncate">{hasModels ? selectedModel : 'No models are connected yet'}</span>
                 {hasModels && <ChevronDown className="w-3 h-3" />}
               </button>
 

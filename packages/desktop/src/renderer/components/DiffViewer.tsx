@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export interface DiffViewerProps {
   originalCode: string;
@@ -94,7 +94,19 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   onReject,
   onClose
 }) => {
-  const [viewMode, setViewMode] = useState<'split' | 'unified'>('split');
+  const [viewMode, setViewMode] = useState<'split' | 'unified'>(
+    typeof window !== 'undefined' && window.innerWidth < 768 ? 'unified' : 'split'
+  );
+  // Side-by-side diffs are unreadable on narrow screens — force unified below md.
+  const [isNarrow, setIsNarrow] = useState<boolean>(
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const effectiveViewMode = isNarrow ? 'unified' : viewMode;
 
   const { lines, additions, deletions } = computeDiff(originalCode, modifiedCode);
 
@@ -104,9 +116,9 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   return (
     <div className="flex flex-col h-full bg-brand-bg text-brand-textMain">
       {/* Header Toolbar */}
-      <div className="h-[50px] bg-brand-sidebar border-b border-brand-border flex items-center justify-between px-5 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <span className="font-semibold text-sm">📄 {filename}</span>
+      <div className="min-h-[50px] py-2 bg-brand-sidebar border-b border-brand-border flex items-center justify-between gap-2 flex-wrap px-3 sm:px-5 flex-shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="font-semibold text-sm truncate max-w-[45vw] sm:max-w-none">📄 {filename}</span>
           <span className="text-xs text-emerald-400 font-bold">+{additions}</span>
           <span className="text-xs text-red-400 font-bold">-{deletions}</span>
         </div>
@@ -114,9 +126,10 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
           <button
             data-testid="toggle-view-mode"
             onClick={() => setViewMode(viewMode === 'split' ? 'unified' : 'split')}
-            className="bg-white/5 border border-brand-border text-brand-textMuted hover:text-white rounded-lg px-3 py-1 text-xs cursor-pointer transition-colors"
+            disabled={isNarrow}
+            className="hidden sm:block bg-white/5 border border-brand-border text-brand-textMuted hover:text-white rounded-lg px-3 py-1 text-xs cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Mode: {viewMode === 'split' ? 'Side-by-Side' : 'Unified'}
+            Mode: {effectiveViewMode === 'split' ? 'Side-by-Side' : 'Unified'}
           </button>
 
           {onReject && (
@@ -153,7 +166,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
 
       {/* Main Diff Content */}
       <div className="flex-1 overflow-auto font-mono text-xs md:text-[13px] leading-relaxed">
-        {viewMode === 'split' ? (
+        {effectiveViewMode === 'split' ? (
           /* ── Split view with proper diff alignment ── */
           <div className="flex min-w-full" data-testid="split-diff-container">
             {/* Left: Original */}

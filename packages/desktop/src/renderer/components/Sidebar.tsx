@@ -42,6 +42,10 @@ export interface SidebarProps {
   onDeleteChat?: (id: string) => void;
   onSelectChat?: (id: string) => void;
   activeChatId?: string | null;
+  /** When true, the sidebar is shown as an off-canvas drawer on small screens. */
+  mobileOpen?: boolean;
+  /** Invoked to request closing the mobile drawer. */
+  onMobileClose?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -65,7 +69,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onConfigureProject,
   onDeleteChat,
   onSelectChat,
-  activeChatId = null
+  activeChatId = null,
+  mobileOpen = false,
+  onMobileClose
 }) => {
   // Each project tracks its own collapsed state (all expanded by default)
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
@@ -117,9 +123,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div
       data-testid="sidebar-container"
-      style={{ width: collapsed ? '70px' : '260px' }}
-      className="glass-panel border-r border-brand-border/50 flex flex-col p-4 h-full box-border transition-all duration-200 z-20"
+      style={{ width: collapsed ? '70px' : '260px', maxWidth: '85vw' }}
+      className={`glass-panel border-r border-brand-border/50 flex flex-col p-4 h-full box-border transition-transform duration-200 z-40
+        fixed inset-y-0 left-0 lg:static lg:translate-x-0
+        ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}`}
     >
+      {/* Mobile-only close button */}
+      {onMobileClose && (
+        <button
+          onClick={onMobileClose}
+          className="lg:hidden absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-white/10 transition-colors z-10"
+          title="Close menu"
+          aria-label="Close menu"
+        >
+          <PanelLeftClose className="w-4.5 h-4.5" />
+        </button>
+      )}
 
 
       {/* Main scrollable nav list */}

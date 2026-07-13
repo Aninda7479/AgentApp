@@ -1,5 +1,5 @@
 import React from 'react';
-import { Key, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
+import { Key, ChevronLeft, ChevronRight, Sparkles, Menu } from 'lucide-react';
 
 interface TitleBarProps {
   hasOpenAiKey: boolean;
@@ -10,7 +10,14 @@ interface TitleBarProps {
   onNavigateForward: () => void;
   canNavigateBack: boolean;
   canNavigateForward: boolean;
+  /** When provided, shows a hamburger button on small screens to toggle the nav drawer. */
+  onToggleMobileNav?: () => void;
 }
+
+// The web build injects a mock window.require, so that is NOT a reliable signal.
+// Electron's user agent uniquely contains "Electron".
+const isElectron =
+  typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '');
 
 export const TitleBar: React.FC<TitleBarProps> = ({
   hasOpenAiKey,
@@ -20,21 +27,34 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onNavigateBack,
   onNavigateForward,
   canNavigateBack,
-  canNavigateForward
+  canNavigateForward,
+  onToggleMobileNav
 }) => {
   return (
     <div
       data-testid="title-bar"
       className="h-10 bg-brand-sidebar border-b border-brand-border/40 flex items-center justify-between px-3 select-none drag-window z-30"
-      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      style={isElectron ? ({ WebkitAppRegion: 'drag' } as React.CSSProperties) : undefined}
     >
       {/* Left side: Logo, Nav History, and Application Menus */}
       <div
-        className="flex items-center gap-3 no-drag-window"
-        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        className="flex items-center gap-2 sm:gap-3 no-drag-window min-w-0"
+        style={isElectron ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
       >
+        {/* Mobile nav toggle (hamburger) */}
+        {onToggleMobileNav && (
+          <button
+            onClick={onToggleMobileNav}
+            className="lg:hidden w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer flex-shrink-0"
+            title="Menu"
+            aria-label="Toggle navigation menu"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        )}
+
         {/* App Logo */}
-        <div className="flex items-center text-violet-500 hover:text-violet-400 transition-colors">
+        <div className="flex items-center text-violet-500 hover:text-violet-400 transition-colors flex-shrink-0">
           <Sparkles className="w-4 h-4 animate-pulse" />
         </div>
 
@@ -67,7 +87,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         </div>
 
         {/* App Menus */}
-        <div className="flex items-center gap-0.5 text-brand-textMuted text-[11px] font-medium tracking-wide border-l border-brand-border/30 pl-3">
+        <div className="hidden md:flex items-center gap-0.5 text-brand-textMuted text-[11px] font-medium tracking-wide border-l border-brand-border/30 pl-3">
           {['File', 'Edit', 'View', 'Help'].map((item) => (
             <span
               key={item}
@@ -81,14 +101,14 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       </div>
 
       {/* Middle side: Window Title label */}
-      <div className="text-[11px] text-brand-textMuted/60 font-semibold absolute left-1/2 -translate-x-1/2 pointer-events-none select-none tracking-wider">
+      <div className="hidden sm:block text-[11px] text-brand-textMuted/60 font-semibold absolute left-1/2 -translate-x-1/2 pointer-events-none select-none tracking-wider">
         Agent Desktop
       </div>
 
       {/* Right side: BYOK status pill and custom Window controls */}
       <div
-        className="flex items-center gap-3 no-drag-window"
-        style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        className="flex items-center gap-2 sm:gap-3 no-drag-window flex-shrink-0"
+        style={isElectron ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
       >
         <button
           data-testid="byok-badge-trigger"
@@ -99,7 +119,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           <span>BYOK: {hasOpenAiKey ? 'OpenAI' : 'Configure'}</span>
         </button>
 
-        {/* Custom Window Controls */}
+        {/* Custom Window Controls — Electron desktop only */}
+        {isElectron && (
         <div className="flex items-center pl-1">
           {/* Minimize */}
           <button
@@ -137,6 +158,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             </svg>
           </button>
         </div>
+        )}
       </div>
     </div>
   );

@@ -57,8 +57,14 @@ const mockIpcRenderer = {
       const response = await fetch(`/api/ipc/${channel}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ args }),
       });
+      // Session expired or unauthenticated — bounce to the login page.
+      if (response.status === 401) {
+        window.location.replace('/login');
+        throw new Error('Authentication required');
+      }
       const result = await response.json();
       if (result.error) {
         throw new Error(result.error);

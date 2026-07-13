@@ -20,6 +20,14 @@ import {
 import { AgentEngine, AgentEngineConfig, AgentEvent } from './ai-engine.js';
 import { readConversationStore, writeConversationStore } from './storage/conversation-store.js';
 import { getChatDirectory } from './storage/paths.js';
+import {
+  getAuthConfig,
+  authGate,
+  handleLogin,
+  handleLogout,
+  handleStatus,
+  getAuthenticatedUser
+} from './auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -33,31 +41,35 @@ app.use(express.json({ limit: '50mb' }));
 
 const userDataDir = getUserDataDirectory();
 
-// ─── VPS Authentication Gate ────────────────────────────────────────────────
-const password = process.env.SUPERAGENT_PASSWORD || process.env.SUPERAGENT_WEB_PASSWORD;
-if (password) {
-  console.log('[Security] Exposing app with password authentication enabled.');
-  app.use((req, res, next) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      res.setHeader('WWW-Authenticate', 'Basic realm="SuperAgent VPS Secure Gate"');
-      return res.status(401).send('Authentication required');
-    }
-    const [type, credentials] = authHeader.split(' ');
-    if (type && type.toLowerCase() === 'basic' && credentials) {
-      const decoded = Buffer.from(credentials, 'base64').toString('utf-8');
-      const parts = decoded.split(':');
-      const pass = parts.length > 1 ? parts[1] : parts[0];
-      if (pass === password) {
-        return next();
-      }
-    }
-    res.setHeader('WWW-Authenticate', 'Basic realm="SuperAgent VPS Secure Gate"');
-    return res.status(401).send('Invalid credentials');
-  });
+// ─── VPS Authentication ─────────────────────────────────────────────────────
+// Session-based login system (see auth.ts). Falls back to open mode when no
+// SUPERAGENT_PASSWORD / SUPERAGENT_PASSWORD_HASH is configured.
+const authConfig = getAuthConfig();
+
+// Lightweight health check (always public).
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
+
+// Auth endpoints (must be registered before the gate).
+app.post('/api/auth/login', handleLogin);
+app.post('/api/auth/logout', handleLogout);
+app.get('/api/auth/status', handleStatus);
+
+// Serve the standalone login page (public).
+app.get('/login', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'login.html'));
+});
+
+if (authConfig.enabled) {
+  console.log(`[Security] Login enabled — username "${authConfig.username}". All routes require an authenticated session.`);
+  if (!process.env.SUPERAGENT_SESSION_SECRET) {
+    console.log('[Security] No SUPERAGENT_SESSION_SECRET set — using a random secret (sessions reset on restart).');
+  }
 } else {
-  console.log('[Security Warning] Running without a password! Set SUPERAGENT_PASSWORD env variable to secure your server.');
+  console.log('[Security Warning] Running without authentication! Set SUPERAGENT_PASSWORD (and optionally SUPERAGENT_USERNAME) to secure your server.');
 }
+
+// Gate everything else behind a valid session.
+app.use(authGate);
 
 // ─── WebSocket Event Hub ────────────────────────────────────────────────────
 const connectedSockets = new Set<WebSocket>();
@@ -498,6 +510,12 @@ const PORT = process.env.PORT || 3000;
 server.on('upgrade', (request, socket, head) => {
   const pathname = new URL(request.url || '', `http://${request.headers.host}`).pathname;
   if (pathname === '/api/ws') {
+    // Enforce authentication on the WebSocket handshake too.
+    if (authConfig.enabled && !getAuthenticatedUser(request)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit('connection', ws, request);
     });

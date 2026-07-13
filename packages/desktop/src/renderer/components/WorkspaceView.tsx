@@ -281,24 +281,24 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   return (
     <>
       {/* ── Workspace Header Bar ─────────────────────────────────────────── */}
-      <div className="h-9 border-b border-brand-border/60 flex items-center justify-between px-5 bg-brand-sidebar flex-shrink-0">
-        <div className="flex items-center gap-2 text-[11px] text-brand-textMuted">
-          <Folder size={11} className="text-amber-500" />
-          <span className="text-brand-textMain font-medium">
+      <div className="h-9 border-b border-brand-border/60 flex items-center justify-between gap-2 px-3 sm:px-5 bg-brand-sidebar flex-shrink-0">
+        <div className="flex items-center gap-2 text-[11px] text-brand-textMuted min-w-0">
+          <Folder size={11} className="text-amber-500 flex-shrink-0" />
+          <span className="text-brand-textMain font-medium truncate">
             {activeProject || 'Workspace'}
           </span>
-          {activeProject && <span className="text-brand-textMuted/50">/</span>}
-          <span className="text-brand-textMuted">
+          {activeProject && <span className="text-brand-textMuted/50 flex-shrink-0">/</span>}
+          <span className="text-brand-textMuted truncate">
             {activeSession?.label !== activeProject ? activeSession?.label : 'agent'}
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           {/* Running agents count badge */}
           {agentSessions.filter(s => s.isGenerating).length > 0 && (
             <div className="flex items-center gap-1.5 text-[11px] text-violet-400">
               <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
-              <span>{agentSessions.filter(s => s.isGenerating).length} agent{agentSessions.filter(s => s.isGenerating).length > 1 ? 's' : ''} running</span>
+              <span className="hidden sm:inline">{agentSessions.filter(s => s.isGenerating).length} agent{agentSessions.filter(s => s.isGenerating).length > 1 ? 's' : ''} running</span>
             </div>
           )}
 
@@ -306,7 +306,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           <ElapsedTimer startedAt={activeSession?.startedAt || Date.now()} running={activeSession?.isGenerating || false} />
 
           {/* MCP + Model info */}
-          <div className="flex items-center gap-2 text-[10px] text-brand-textMuted/70">
+          <div className="hidden sm:flex items-center gap-2 text-[10px] text-brand-textMuted/70">
             <span className="flex items-center gap-1">
               <span className={`w-1 h-1 rounded-full ${mcpServers.filter(s => s.enabled).length > 0 ? 'bg-emerald-500' : 'bg-brand-textMuted/30'}`} />
               <span>{mcpServers.filter(s => s.enabled).length} MCP</span>
@@ -384,7 +384,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             </div>
 
             {/* Recommendation cards */}
-            <div className="grid grid-cols-2 gap-2.5 w-full max-w-[680px] mb-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-[680px] mb-5">
               {recommendations.map(({ title, prompt, description, Icon, accent }) => (
                 <button
                   key={title}

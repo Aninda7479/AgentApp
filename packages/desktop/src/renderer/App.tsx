@@ -115,6 +115,7 @@ export const App: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<string>('trajectory');
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState<boolean>(false);
   const [isBYOKOpen, setIsBYOKOpen] = useState<boolean>(false);
   const [searchModalOpen, setSearchModalOpen] = useState<boolean>(false);
   const [profilePopoverOpen, setProfilePopoverOpen] = useState<boolean>(false);
@@ -500,6 +501,11 @@ export const App: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-close the mobile navigation drawer whenever the user navigates.
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [activeTab, activeChatId, activeProject]);
+
   const popoverRef = useRef<HTMLDivElement>(null);
 
   const [byokKeys, setByokKeys] = useState<Record<string, string>>({
@@ -833,41 +839,17 @@ export const App: React.FC = () => {
             let contentResult = '';
 
             if (isSummarizeRequest) {
-              const isMillionaire = firstFile.filename.toLowerCase().includes('millionaire') || prompt.toLowerCase().includes('millionaire');
-              if (isMillionaire) {
-                contentResult = `Here is a comprehensive summary of the attached ebook **Faceless Millionaire: 20 Most Profitable Faceless YouTube Channel Ideas with AI in 2024**:
+              contentResult = `Here is a summary of the parsed document **${firstFile.filename}**:
 
-### 📘 Executive Summary
-This ebook serves as a step-by-step blueprint for digital entrepreneurs to launch and monetize highly profitable faceless YouTube channels leveraging generative AI. It highlights how content creators can achieve significant financial returns without disclosing their identity.
+### 📘 Overview
+This is a demo-mode summary. Connect a real AI provider in **Settings → Providers** to generate an accurate, content-aware summary of your document.
 
-### 🎥 Key Niches Covered:
-1. **AI-Driven Gaming & Walkthroughs**: AI-assisted gameplay analysis, walkthroughs, and cheat codes.
-2. **AI-Generated Cooking Tutorials**: Tailored AI-generated recipes, cooking techniques, and culinary experiments.
-3. **AI-Powered Fitness Coaching**: Tailored exercise routines and workouts.
-4. **AI Language Hub**: Pronunciation drills and learning paths.
-5. **Music Production Studio**: AI-generated ambient tracks, remixes, and energetic beats.
-6. **Fashion Styling**: Dynamic outfit recommendations and style guides.
-7. **Virtual Travel Exploration**: Immersive landmark tours and guides.
-8. **Educational Platforms**: Custom tutorial lessons.
-9. **Comedy & Entertainment**: Generative humor sketches.
-10. **Personal Development**: Motivational speeches and growth strategies.
-11. **Artistic Creations**: Abstract generative art and sculptures.
-12. **Health & Wellness**: Mindfulness exercises and lifestyle tips.
-13. **News & Information**: Investigative reports and current events updates.
-14. **Product Reviews**: Automated shopping guides and comparisons.
-15. **Finance & Investments**: Data-driven portfolio management tips.
-16. **DIY & Craft Projects**: Craft ideas and home decor walkthroughs.
-17. **Mental Health Support**: Coping mechanisms and anonymous peer support.
-18. **Parenting Advice**: Automated child developmental insights.
-19. **Wildlife & Nature**: Cinematic documentaries and environmental highlights.
-20. **Mystery & Investigation**: detective stories and crime reconstructions.
+### 🔑 What a live summary includes
+- **Key points** extracted from the document's text.
+- **Section-by-section breakdown** of the main topics.
+- **Action items** or conclusions identified in the content.
 
-### 🚀 Core Strategy for Success:
-- **Automation Pipeline**: Use AI systems for scriptwriting (ChatGPT/Claude), voiceovers, and asset production.
-- **Scalability**: Anonymity combined with automated production workflows is the key to scaling content creation in 2024.`;
-              } else {
-                contentResult = `Here is the summary of the parsed document **${firstFile.filename}**:\n\nThe document details various conceptual methodologies, AI tool integrations, and automation workflows. Key takeaways include leveraging modern AI models for text parsing, media rendering, and local codebase synchronization.`;
-              }
+Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) is configured, the assistant reads the file directly and returns a grounded summary instead of this placeholder.`;
             } else {
               contentResult = `I have parsed the attached file **${firstFile.filename}**.\n\n${
                 isImage 
@@ -900,7 +882,7 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
           const assistantStep: TrajectoryStep = {
             id: `sim-assistant-${Date.now()}`,
             type: 'assistant',
-            content: 'Please attach a document or PDF file (such as `Faceless Millionaire.pdf`) for me to read and summarize directly.',
+            content: 'Please attach a document or PDF file for me to read and summarize directly.',
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
           finalizeSimulation([...currentSteps, assistantStep]);
@@ -931,12 +913,8 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
             const assistantStep: TrajectoryStep = {
               id: `sim-assistant-${Date.now()}`,
               type: 'assistant',
-              content: 'I have successfully generated the premium layout visualization. You can click to open or view the media file in your default system player.',
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              metadata: {
-                mediaType: 'image',
-                mediaPath: 'C:/Users/anind/OneDrive/Pictures/mockup.png'
-              }
+              content: 'This is a demo-mode response. Connect a real AI provider with image generation in **Settings → Providers** to generate and preview actual media assets here.',
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             };
             finalizeSimulation([...currentSteps, assistantStep]);
           }, 1200);
@@ -1007,7 +985,7 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
             type: 'tool_call',
             toolName: 'search_memory',
             status: 'success',
-            content: 'Found 1 memory block: "User studies CSE, resides in West Bengal, prefers clean, modern layouts and dark glassmorphic themes."',
+            content: 'No memory blocks found yet. Memory is populated as you interact with a connected AI provider.',
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           };
           updateChatSteps([...currentSteps, toolStep]);
@@ -1016,7 +994,7 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
             const assistantStep: TrajectoryStep = {
               id: `sim-assistant-${Date.now()}`,
               type: 'assistant',
-              content: 'According to your personal memories, you are a Computer Science student. You favor glassmorphism styles, dark palettes, and high performance desktop wrappers.',
+              content: 'I don\'t have any saved memories about you yet. This is demo mode — connect an AI provider in **Settings → Providers**, and I\'ll start building a personalized memory profile from your conversations.',
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             };
             finalizeSimulation([...currentSteps, assistantStep]);
@@ -1541,10 +1519,19 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
         onNavigateForward={handleNavigateForward}
         canNavigateBack={navigationIndex > 1}
         canNavigateForward={navigationIndex >= 0 && navigationIndex < navigationHistory.length - 1}
+        onToggleMobileNav={activeTab !== 'settings' ? () => setMobileNavOpen(prev => !prev) : undefined}
       />
 
       {/* Main Body container */}
       <div className="flex-1 flex overflow-hidden relative">
+        {/* Mobile drawer backdrop */}
+        {mobileNavOpen && activeTab !== 'settings' && (
+          <div
+            className="lg:hidden fixed inset-0 top-10 z-30 bg-black/50 backdrop-blur-sm"
+            onClick={() => setMobileNavOpen(false)}
+            aria-hidden="true"
+          />
+        )}
         {/* Hide main sidebar when viewing Settings page, matching Image 4 */}
         {activeTab !== 'settings' && (
           <Sidebar
@@ -1566,6 +1553,8 @@ This ebook serves as a step-by-step blueprint for digital entrepreneurs to launc
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
             mcpCount={mcpServers.filter((s) => s.enabled).length}
             onMenuClick={(menuName) => triggerToast(`${menuName} Menu`)}
+            mobileOpen={mobileNavOpen}
+            onMobileClose={() => setMobileNavOpen(false)}
 
             // Dynamic project & chat bindings
             projects={projects}

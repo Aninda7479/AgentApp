@@ -51,7 +51,40 @@ npm run start --workspace=@superagent/desktop
 ```bash
 npm run start --workspace=@superagent/web
 ```
-    
+
+The web UI is fully responsive and works on phones, tablets, and desktops
+(the sidebar becomes a slide-over drawer on small screens).
+
+#### 🔐 Securing the Web/VPS deployment (Login System)
+
+When exposing the server publicly, enable the built-in session login by setting
+a password. Authentication protects every route **and** the live WebSocket.
+
+```bash
+# Windows (PowerShell)
+$env:SUPERAGENT_USERNAME = "admin"          # optional, defaults to "admin"
+$env:SUPERAGENT_PASSWORD = "your-strong-password"
+npm run start --workspace=@superagent/web
+
+# Linux / macOS
+SUPERAGENT_USERNAME=admin \
+SUPERAGENT_PASSWORD='your-strong-password' \
+npm run start --workspace=@superagent/web
+```
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `SUPERAGENT_USERNAME` | Login username | `admin` |
+| `SUPERAGENT_PASSWORD` | Login password (plaintext) | — |
+| `SUPERAGENT_PASSWORD_HASH` | scrypt hash `scrypt$<saltHex>$<hashHex>` (overrides plaintext) | — |
+| `SUPERAGENT_SESSION_SECRET` | Secret used to sign session cookies (set this to keep sessions across restarts) | random |
+| `SUPERAGENT_SESSION_TTL` | Session lifetime in hours | `168` (7 days) |
+| `SUPERAGENT_SECURE_COOKIES` | Set to `true` when served over HTTPS | `false` |
+
+Sessions use signed, `HttpOnly` cookies, constant-time credential checks, and
+per-IP brute-force rate limiting. If no password is configured the server runs
+in open mode and prints a security warning.
+
 ---
 
 ## 📖 User Guide
