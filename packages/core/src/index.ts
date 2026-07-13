@@ -13,6 +13,7 @@ export * from './tools/media.js';
 export * from './tools/mcp.js';
 export * from './planner/agent.js';
 export * from './automation/browser.js';
+export * from './automation/browser-service.js';
 export * from './automation/extractor.js';
 export * from './automation/search.js';
 export * from './automation/computer-use.js';

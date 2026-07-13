@@ -8,35 +8,11 @@ app.setPath('userData', customUserDataPath);
 
 import { windowManager } from './main/window';
 import { readStore, writeStore, StoreData } from './main/store';
-import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, PlaywrightBrowserEngine, ComputerUse } from '@superagent/core';
+import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService } from '@superagent/core';
 import { getChatDirectory } from './main/storage/index.js';
 
-let mainSharedBrowser: PlaywrightBrowserEngine | null = null;
-
 async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
-  if (!mainSharedBrowser) {
-    let config: any = { headless: true };
-    try {
-      const settings = SettingsStorage.loadSettings();
-      if (settings.browserUse) {
-        config = {
-          headless: settings.browserUse.headless !== false,
-          viewport: settings.browserUse.width && settings.browserUse.height
-            ? { width: settings.browserUse.width, height: settings.browserUse.height }
-            : { width: 1280, height: 720 },
-          userAgent: settings.browserUse.userAgent,
-          timeout: settings.browserUse.timeout ? settings.browserUse.timeout * 1000 : 30000
-        };
-      }
-    } catch {
-      // Fallback
-    }
-    mainSharedBrowser = new PlaywrightBrowserEngine(config);
-  }
-  if (!mainSharedBrowser.isInitialized()) {
-    await mainSharedBrowser.initialize();
-  }
-  return mainSharedBrowser;
+  return await BrowserLifecycleService.getSharedInstance();
 }
 import https from 'https';
 import http from 'http';
@@ -258,6 +234,11 @@ ipcMain.handle('browser-screenshot', async (_event, { fullPage }) => {
 ipcMain.handle('screenshot_screen', async () => {
   const p = await ComputerUse.takeScreenshot();
   return `Screenshot captured successfully and saved to: ${p}`;
+});
+
+ipcMain.handle('browser-close', async () => {
+  await BrowserLifecycleService.closeSharedInstance();
+  return 'Browser successfully shut down.';
 });
 
 ipcMain.handle('select-project-folders', async () => {

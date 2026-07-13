@@ -56,36 +56,12 @@ import { promisify } from 'util';
 import { UsageTracker } from '../storage/usage-tracker.js';
 import { ComputerUse } from '../automation/computer-use.js';
 import { PlaywrightBrowserEngine } from '../automation/browser.js';
-import { SettingsStorage } from '../storage/settings-store.js';
+import { BrowserLifecycleService } from '../automation/browser-service.js';
 
 const execAsync = promisify(exec);
 
-let sharedBrowser: PlaywrightBrowserEngine | null = null;
-
 async function getBrowser(): Promise<PlaywrightBrowserEngine> {
-  if (!sharedBrowser) {
-    let config: any = { headless: true };
-    try {
-      const settings = SettingsStorage.loadSettings();
-      if (settings.browserUse) {
-        config = {
-          headless: settings.browserUse.headless !== false,
-          viewport: settings.browserUse.width && settings.browserUse.height
-            ? { width: settings.browserUse.width, height: settings.browserUse.height }
-            : { width: 1280, height: 720 },
-          userAgent: settings.browserUse.userAgent,
-          timeout: settings.browserUse.timeout ? settings.browserUse.timeout * 1000 : 30000
-        };
-      }
-    } catch {
-      // Fallback
-    }
-    sharedBrowser = new PlaywrightBrowserEngine(config);
-  }
-  if (!sharedBrowser.isInitialized()) {
-    await sharedBrowser.initialize();
-  }
-  return sharedBrowser;
+  return await BrowserLifecycleService.getSharedInstance();
 }
 
 function makeSafeExec(projectRoot: string) {
@@ -541,12 +517,8 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async () => {
-        if (sharedBrowser) {
-          await sharedBrowser.close();
-          sharedBrowser = null;
-          return 'Browser successfully shut down.';
-        }
-        return 'Browser is not currently running.';
+        await BrowserLifecycleService.closeSharedInstance();
+        return 'Browser successfully shut down.';
       }
     }
   ];
