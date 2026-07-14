@@ -1,7 +1,7 @@
 # Nous Research Hermes Agent — Features & Shortcuts Reference
 
 ## 1. Overview & Core Philosophy
-Hermes Agent is an open-source, 24/7 persistent AI agent framework developed by Nous Research. Unlike session-based AI tools that reset when closed, Hermes operates continuously on local or cloud infrastructure, featuring an autonomous "self-improving learning loop" and a unified cross-platform messaging gateway.
+Hermes Agent is an open-source, 24/7 persistent AI agent framework developed by Nous Research. Unlike session-based AI tools that reset when closed, Hermes operates continuously on local or cloud infrastructure, scaling from a local laptop to cloud clusters. It features an autonomous "self-improving learning loop", a unified cross-platform messaging gateway, and native multi-model capabilities.
 
 ---
 
@@ -19,10 +19,14 @@ Hermes Agent is an open-source, 24/7 persistent AI agent framework developed by 
 
 ### C. Execution & Infrastructure Flexibility
 * **Multi-Backend Runtime**: Can execute code locally, inside Docker containers, across remote SSH servers, or on serverless GPU clusters (e.g., Modal, Daytona).
+* **Worktree Isolation**: Supports launching agents within isolated git worktrees (`-w`) for parallel code editing.
 * **Low Resource Footprint**: Optimized to run efficiently on small $5 VPS instances or personal hardware.
 
-### D. Extended Tooling & Sub-Agents
-* **40+ Built-in Tools**: Web browsing, scraping, code generation, terminal execution, system monitoring, and media handling.
+### D. Model Provider Flexibility
+* **200+ Supported Models**: Provider agnostic integrations. Supports OpenRouter, Anthropic, OpenAI, DeepSeek, and local endpoints (e.g., Ollama, Llama.cpp).
+
+### E. Extended Tooling & Sub-Agents
+* **40+ Built-in Tools**: Web browsing, scraping, code generation, terminal execution, system monitoring, scheduler, and media handling.
 * **Sub-Agent Orchestration**: Spawns isolated concurrent sub-agents for heavy parallel work (e.g., background web research while generating code).
 
 ---
@@ -44,9 +48,16 @@ Hermes Agent is an open-source, 24/7 persistent AI agent framework developed by 
 | Command / Slash Command | Description |
 | :--- | :--- |
 | `hermes` / `hermes chat` | Start interactive CLI session |
+| `hermes setup` | Start the interactive configuration wizard |
+| `hermes setup --portal` | Setup using Nous Portal OAuth (OAuth for models and tools) |
+| `hermes gateway setup` | Setup wizard for messaging platform adapters (Telegram, Slack, Discord) |
+| `hermes chat -q "query"` | Run a single-query task in non-interactive mode |
+| `hermes --resume <session_id>` | Resume a specific previous conversation |
+| `hermes -w` | Open an isolated git worktree for running agents in parallel |
+| `hermes -s [skill_name]` | Start a session with specific skills preloaded |
 | `hermes --tui` | Launch rich full-screen Terminal User Interface |
 | `/learn` | Capture current workflow, prompt, or feedback to generate a persistent reusable skill |
-| `/model` | Switch LLM backends on the fly (e.g., Nous-Hermes, DeepSeek, Claude, OpenAI) |
+| `/model [provider:model]` | Switch LLM backends on the fly during a chat session |
 | `hermes skills` | Browse, install, audit, or edit agent skill modules |
 | `hermes backup` / `import` | Export or restore persistent memory databases, skill libraries, and configs |
 | `hermes config` | Modify infrastructure backends, API keys, and gateway tokens |

@@ -35,10 +35,16 @@ Claude Code is an agentic command-line interface (CLI) developed by Anthropic. I
 | :--- | :--- |
 | `Ctrl + O` | Toggle verbose transcript viewer (exposes inner thought chain, tool calls, and raw outputs) |
 | `Ctrl + R` | Reverse search through past prompt history |
-| `Ctrl + G` | Open current prompt in external text editor (e.g., VS Code, Vim, Nano) |
-| `Ctrl + C` | Cancel current agent execution or clear input buffer |
+| `Ctrl + G` (or `Ctrl + X, Ctrl + E`) | Open current prompt in configured external text editor (e.g., VS Code, Vim, Nano) |
+| `Ctrl + C` | Cancel current agent execution or clear input buffer (double-press to halt/exit) |
 | `Ctrl + V` / `Cmd + V` | Paste image directly from clipboard into active prompt |
 | `Shift + Tab` | Cycle through execution permission modes (e.g., Manual Approve vs Auto Approve) |
+| `Ctrl + B` | Background a long-running command to keep working |
+| `Ctrl + L` | Redraw the terminal screen / clear visual output (does not clear context) |
+| `Ctrl + ,` | Open Claude Code settings configuration |
+| `Ctrl + D` | Exit active CLI session |
+| `Esc` / `Esc + Esc` | Clear current input prompt or rewind conversation / code changes |
+| `Alt + Enter` / `Option + Enter` | Insert newline in prompt composer without sending the message |
 | `@<path>` | Mention/auto-complete file paths and directory context directly in prompt |
 
 ---
@@ -53,6 +59,21 @@ Claude Code is an agentic command-line interface (CLI) developed by Anthropic. I
 | `/diff` | Open an interactive visual diff viewer to inspect pending file modifications |
 | `/mcp` | List, inspect, add, or manage active Model Context Protocol (MCP) servers |
 | `/init` | Analyze project and auto-generate project-level `CLAUDE.md` rules |
+| `/goal` | Set a completion condition for Claude, which then works autonomously toward that end state |
+| `/plan` | Enter plan mode for planning large architectural/complex changes |
+| `/security-review` | Run automated security analysis on your codebase to identify vulnerabilities (SQL injection, XSS, etc.) |
+| `/code-review` / `/review` | Audit current changes or code diffs for issues |
+| `/cost` / `/stats` | View cumulative session costs and token statistics |
+| `/config` | View or modify configuration options (e.g. `/config verbose=true`) |
+| `/memory` | Open `CLAUDE.md` to add/edit project conventions |
+| `/status` | View current session status and active settings |
+| `/tasks` | List active background tasks or subagents |
+| `/doctor` | Run setup checkup/diagnostics to troubleshoot local configuration |
+| `/verify` | Run tests or app commands to verify recent changes |
+| `/btw` | Ask a side question without polluting the main conversation context window |
+| `/voice` | Toggle voice dictation mode |
+| `/bug` | Report issues with session logs directly to Anthropic |
+| `/login` / `/logout` | Authenticate or log out from your Anthropic account |
 
 ---
 

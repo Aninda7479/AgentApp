@@ -58,13 +58,13 @@ To maintain maximum community accessibility, code reuse, and seamless cross-plat
 | Feature | Desktop GUI App | Terminal CLI |
 | :--- | :--- | :--- |
 | **Media Output** | Interactive image gallery, built-in PDF viewer, audio/video player, PPT slide deck preview | Terminal ASCII previews, file paths, and external auto-launch openers |
-| **Keyboard Controls** | Standard desktop hotkeys + command palette (`Cmd/Ctrl + K`) | `Tab` turn queueing, `Ctrl+O` transcript view, `Shift+Tab` permissions |
-| **Visual Inspections**| GUI side-by-side git diff viewer, live agent tree node visualization | Terminal unified diffs (`/diff`), clean streaming logs |
+| **Keyboard Controls** | Standard desktop hotkeys + command palette (`Cmd/Ctrl + K`) | `Tab` turn queueing, `Ctrl+O` transcript view, `Shift+Tab` permissions, `Ctrl+B` backgrounding, settings configuration (`Ctrl+,`) |
+| **Visual Inspections**| GUI side-by-side git diff viewer, live agent tree node visualization | Terminal unified diffs (`/diff`), clean streaming logs, code review audits (`/review` / `/code-review`) |
 
 ### Engine Features (Supported in both Desktop & CLI)
-* **OpenAI Codex Features**: Asynchronous turn queueing (`Tab`), IDE context synchronization (`/ide`), and visual diff reviews (`/diff`).
-* **Anthropic Claude Code Features**: Project guidelines (`AGENT.md`), dynamic context compaction (`/compact`), isolated subagents, and detailed execution logging.
-* **Nous Hermes Agent Features**: Persistent user memory, self-improving skill loop (`/learn`), omnichannel daemon adapters (Telegram/Discord/Slack), and multi-backend sandboxing.
+* **OpenAI Codex Features**: Asynchronous turn queueing (`Tab`), IDE context synchronization (`/ide`), visual diff reviews (`/diff`), project-specific guidelines (`AGENTS.md`), custom skills folder (`.codex/skills`), configurable sandboxing (`on-request`, `untrusted`, `never`), ChatGPT account sign-in flow, and autonomous execution flags (`--yolo`).
+* **Anthropic Claude Code Features**: Project guidelines (`CLAUDE.md`), dynamic context compaction (`/compact`), isolated subagents, planning mode (`/plan`), autonomous task goals (`/goal`), automated security reviews (`/security-review`), setup verification checks (`/doctor`), testing runner (`/verify`), non-polluting side queries (`/btw`), voice dictation (`/voice`), and session settings management (`/config`).
+* **Nous Hermes Agent Features**: Persistent user memory, self-improving skill loop (`/learn`), omnichannel daemon adapters (Telegram/Discord/Slack), multi-backend sandboxing, Nous Portal setup portal (`setup --portal`), parallel git worktrees (`-w`), gateway configuration wizard (`gateway setup`), and provider-agnostic model routing (Ollama, OpenRouter, etc.).
 
 ---
 
