@@ -189,9 +189,9 @@ The ChatGPT Desktop App settings menu (accessed via `Cmd + ,` on macOS or `Ctrl 
 | :--- | :--- | :--- |
 | `/plan` ✅ | Work / Codex | Prompt the agent to draft and display a multi-step execution plan before editing files |
 | `/goal` | Work | Set a persistent condition that the agent must autonomously satisfy before finishing (not implemented) |
-| `/agent` | Work | Switch between active tool agents, specific connector integrations, or background threads (no `/agent` command in CLI) |
+| `/agent` | Work | Switch between active tool agents, specific connector integrations, or background threads |
 | `/model` ✅ | All | Switch the active model (Sol, Terra, Luna) or modify reasoning effort |
-| `/side` | All | Launch a quick side chat sandbox without polluting the current project context (CLI has `/btw` instead; not this command) |
+| `/side` | All | Launch a quick side chat sandbox without polluting the current project context |
 | `/permissions` ✅ | Work / Codex | Adjust autonomy levels (e.g., *Auto-approve edits*, *Ask before terminal commands*, *Read-only*) |
 | `/status` | All | Display session statistics, model rate limits, token usage, and active connectors (CLI `/status` only; no desktop view) |
 | `/review` ✅ | Codex | Initiate an automated code audit or debug current staging/local modifications |

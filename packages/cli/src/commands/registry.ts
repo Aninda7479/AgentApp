@@ -8,6 +8,8 @@ import { registerConfigCommand } from './config.js';
 import { registerCostCommand } from './cost.js';
 import { registerMemoryCommand } from './memory.js';
 import { registerGoalCommand } from './goal.js';
+import { registerSideCommand } from './side.js';
+import { registerAgentCommand } from './agent.js';
 import { registerPlanCommand, PlanGenerator } from './plan.js';
 import { registerTasksCommand, TaskManager } from './tasks.js';
 import { registerClearCommand } from './clear.js';
@@ -77,6 +79,8 @@ export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRou
   registerCostCommand(router, session);
   registerMemoryCommand(router, session);
   registerGoalCommand(router);
+  registerSideCommand(router);
+  registerAgentCommand(router);
   registerTasksCommand(router, taskManager);
   registerClearCommand(router, getMessages, setMessages);
 

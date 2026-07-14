@@ -65,7 +65,7 @@ OpenAI Codex CLI (packaged as `@openai/codex`) is a terminal-based, agentic soft
 | `/ide` | Pull current IDE active file context into prompt (not implemented) |
 | `/diff` ✅ | Review proposed file changes and unified diffs before applying |
 | `/review` ✅ | Prompts the agent to audit pending changes or debug generated code |
-| `/agent` | Switches between different active agent threads (no `/agent` command in CLI) |
+| `/agent` ✅ | Switches between different active agent threads |
 | `/theme` ✅ | Preview and switch TUI visual themes |
 | `/clear` ✅ | Hard reset current conversation context |
 | `! <command>` | Instantly run raw terminal command (not implemented in CLI TUI) |
