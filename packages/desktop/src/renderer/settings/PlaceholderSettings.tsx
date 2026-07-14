@@ -24,27 +24,21 @@ export const PlaceholderSettings: React.FC<PlaceholderSettingsProps> = ({
         <div
           className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
             isLive
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500'
-              : 'border-amber-500/30 bg-amber-500/10 text-amber-500'
+              ? 'border-[var(--neon-constructive)]/30 bg-[var(--neon-constructive)]/10 text-[var(--neon-constructive)]'
+              : 'border-[var(--neon-attention)]/30 bg-[var(--neon-attention)]/10 text-[var(--neon-attention)]'
           }`}
         >
           {isLive ? <Sparkles size={18} /> : <Construction size={18} />}
         </div>
         <div>
-          <h1 className="text-2xl font-semibold text-brand-textMain">{title}</h1>
-          <p className="text-sm text-brand-textMuted">{description}</p>
+          <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain sm:text-3xl">{title}</h1>
+          <p className="mt-1 text-sm text-brand-textMuted">{description}</p>
         </div>
       </div>
 
-      <div className="rounded-xl border border-brand-border bg-brand-card p-5 shadow-sm">
+      <div className="settings-section">
         <div className="mb-3 flex items-center gap-2">
-          <span
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              isLive
-                ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-500'
-                : 'border border-amber-500/30 bg-amber-500/10 text-amber-600'
-            }`}
-          >
+          <span className="settings-pill" style={isLive ? undefined : { background: 'var(--neon-attention)', color: '#0a0a0c', borderColor: 'transparent' }}>
             {isLive ? 'Available' : 'Under Construction'}
           </span>
           {liveLabel && <span className="text-xs text-brand-textMuted">{liveLabel}</span>}

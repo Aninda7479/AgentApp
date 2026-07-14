@@ -72,6 +72,16 @@
   --neon-destructive: #fb7185;    /* removed / reject / error */
   --neon-live: #38bdf8;           /* running / streaming / active */
   --neon-attention: #fbbf24;      /* setup needed / warning */
+
+  /* ── Soft premium accent (settings only): a single shaded translucent tint ──
+     Gives the settings surface depth without breaking the monochrome canvas.
+     Selection / focus / "live test" actions borrow this wash. */
+  --brand-accent: #a5b4fc;
+  --brand-accent-strong: #818cf8;
+  --brand-accent-tint: rgba(129, 140, 248, 0.14);
+  --brand-accent-tint-strong: rgba(129, 140, 248, 0.22);
+  --brand-accent-border: rgba(129, 140, 248, 0.34);
+  --brand-accent-glow: rgba(129, 140, 248, 0.22);
 }
 
 :root[data-theme='light'] {
@@ -105,6 +115,14 @@
   --neon-destructive: #e11d48;
   --neon-live: #0284c7;
   --neon-attention: #d97706;
+
+  /* Soft premium accent for light canvas */
+  --brand-accent: #4f46e5;
+  --brand-accent-strong: #4338ca;
+  --brand-accent-tint: rgba(79, 70, 229, 0.09);
+  --brand-accent-tint-strong: rgba(79, 70, 229, 0.16);
+  --brand-accent-border: rgba(79, 70, 229, 0.32);
+  --brand-accent-glow: rgba(79, 70, 229, 0.18);
 }
 
 html,
@@ -360,6 +378,218 @@ body {
   display: grid;
   gap: 1rem;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+/* Accent button — shaded translucent action for "live test" / connect actions */
+.ui-btn-accent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  border: 1px solid var(--brand-accent-border);
+  color: var(--brand-accent);
+  background: var(--brand-accent-tint);
+  transition: filter 0.15s ease, transform 0.1s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.ui-btn-accent:hover { background: var(--brand-accent-tint-strong); box-shadow: 0 0 22px var(--brand-accent-glow); }
+.ui-btn-accent:active { transform: scale(0.98); }
+.ui-btn-accent:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Accent toggle on-state (premium selection tint) */
+.ui-toggle-accent[aria-checked='true'] { background: var(--brand-accent); }
+.ui-toggle-accent[aria-checked='true'] > span { background: var(--brand-bg); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Settings — Premium surface system
+   One soft accent tint supplies shaded, translucent depth. Everything else
+   stays monochrome (glass + hairline). Selection / focus borrow the accent.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Sidebar navigation item */
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--brand-text-muted);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.settings-nav-item:hover {
+  color: var(--brand-text-main);
+  background: var(--brand-hover);
+}
+.settings-nav-item.active {
+  color: var(--brand-text-main);
+  background: var(--brand-accent-tint);
+  border-color: var(--brand-accent-border);
+  box-shadow: 0 0 0 1px var(--brand-accent-border), 0 0 18px var(--brand-accent-glow);
+}
+.settings-nav-item.active .settings-nav-icon { color: var(--brand-accent); }
+
+/* Group eyebrow */
+.settings-group-label {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--brand-text-muted);
+  padding: 0 0.7rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Premium section card */
+.settings-section {
+  background: color-mix(in srgb, var(--brand-card) 80%, transparent);
+  backdrop-filter: blur(18px) saturate(130%);
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  border: 1px solid var(--brand-border);
+  border-radius: 18px;
+  box-shadow: inset 0 0 0 1px var(--brand-border), var(--brand-shadow-soft);
+  padding: 1.25rem 1.5rem;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.settings-section:hover {
+  box-shadow: inset 0 0 0 1px var(--brand-border-strong), var(--brand-shadow-soft);
+}
+.settings-section-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--brand-text-main);
+  margin-bottom: 1rem;
+}
+.settings-section-sub {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--brand-text-muted);
+  margin-bottom: 1.25rem;
+}
+
+/* Selectable choice card (work mode, internet access, provider mode) */
+.settings-choice {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  gap: 0.4rem;
+  padding: 1rem 1.1rem;
+  border-radius: 14px;
+  border: 1px solid var(--brand-border);
+  background: var(--brand-bg);
+  color: var(--brand-text-main);
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+.settings-choice:hover {
+  border-color: var(--brand-border-strong);
+  background: var(--brand-hover);
+}
+.settings-choice.selected {
+  border-color: var(--brand-accent-border);
+  background: var(--brand-accent-tint);
+  box-shadow: 0 0 0 1px var(--brand-accent-border), 0 0 22px var(--brand-accent-glow);
+}
+.settings-choice.selected .settings-choice-icon { color: var(--brand-accent); }
+.settings-choice-icon {
+  color: var(--brand-text-muted);
+  margin-bottom: 0.35rem;
+  transition: color 0.18s ease;
+}
+.settings-choice-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--brand-text-main);
+}
+.settings-choice-desc {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--brand-text-muted);
+}
+
+/* Setting row inside a section */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.875rem 0;
+  border-bottom: 1px solid var(--brand-border);
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-row-label {
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--brand-text-main);
+}
+.settings-row-desc {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--brand-text-muted);
+  margin-top: 0.1rem;
+}
+
+/* Soft accent pill */
+.settings-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--brand-accent-tint);
+  color: var(--brand-accent);
+  border: 1px solid var(--brand-accent-border);
+}
+
+/* Premium segmented control (theme switch) */
+.settings-segment {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 12px;
+  border: 1px solid var(--brand-border);
+  background: var(--brand-bg);
+}
+
+/* Faint shaded ambient wash atop the settings content for premium depth */
+.settings-content {
+  background-image: radial-gradient(120% 55% at 50% -8%, var(--brand-accent-tint) 0%, transparent 58%);
+  background-repeat: no-repeat;
+}
+.settings-segment button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-width: 92px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 9px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--brand-text-muted);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.settings-segment button:hover { color: var(--brand-text-main); }
+.settings-segment button.selected {
+  background: var(--brand-accent-tint);
+  color: var(--brand-text-main);
+  border-color: var(--brand-accent-border);
+  box-shadow: 0 0 16px var(--brand-accent-glow);
 }
 
 /* Modal scaffolding */

@@ -19,7 +19,7 @@ export const ShortcutsSettings: React.FC = () => {
         View and manage keyboard combinations to quickly execute app operations.
       </p>
 
-      <div className="ui-card overflow-hidden">
+      <div className="settings-section overflow-hidden !p-0">
         {shortcutItems.map((item, idx) => (
           <div
             key={item.label}

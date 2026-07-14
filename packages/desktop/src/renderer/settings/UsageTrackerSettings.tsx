@@ -73,7 +73,7 @@ export const UsageTrackerSettings: React.FC = () => {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-brand-textMuted text-xs">
-        <RefreshCw className="w-5 h-5 animate-spin text-violet-400 mb-2" />
+        <RefreshCw className="w-5 h-5 animate-spin text-[var(--brand-accent)] mb-2" />
         <span>Loading usage logs...</span>
       </div>
     );
@@ -92,7 +92,7 @@ export const UsageTrackerSettings: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={loadStats}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-border bg-white/5 hover:bg-white/10 text-brand-textMain text-xs font-semibold cursor-pointer transition-all active:scale-[0.98]"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-border bg-brand-hover text-brand-textMain text-xs font-semibold cursor-pointer transition-all active:scale-[0.98]"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             <span>Refresh</span>
@@ -111,8 +111,8 @@ export const UsageTrackerSettings: React.FC = () => {
 
       {/* Metric Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="glass-card p-4 rounded-xl border border-violet-500/10 flex gap-4 items-center">
-          <div className="w-10 h-10 rounded-lg bg-violet-500/10 text-violet-400 flex items-center justify-center">
+        <div className="glass-card p-4 rounded-xl border border-[var(--brand-accent-border)] flex gap-4 items-center">
+          <div className="w-10 h-10 rounded-lg bg-[var(--brand-accent-tint)] text-[var(--brand-accent)] flex items-center justify-center">
             <Coins className="w-5 h-5" />
           </div>
           <div>
@@ -145,13 +145,13 @@ export const UsageTrackerSettings: React.FC = () => {
       {/* Model Breakdown */}
       {summary.length > 0 ? (
         <div className="glass-card rounded-xl border border-brand-border/60 overflow-hidden">
-          <div className="px-4 py-3 border-b border-brand-border/60 bg-white/2">
+          <div className="px-4 py-3 border-b border-brand-border/60 bg-brand-hover">
             <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider">Model breakdown</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-brand-border/60 text-brand-textMuted bg-white/1 select-none">
+                <tr className="border-b border-brand-border/60 text-brand-textMuted bg-brand-hover select-none">
                   <th className="px-4 py-2 font-semibold">Model</th>
                   <th className="px-4 py-2 font-semibold">Provider</th>
                   <th className="px-4 py-2 font-semibold text-right">Requests</th>
@@ -163,7 +163,7 @@ export const UsageTrackerSettings: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-brand-border/40">
                 {summary.map((row) => (
-                  <tr key={`${row.provider}-${row.model}`} className="hover:bg-white/2 text-brand-textMuted">
+                  <tr key={`${row.provider}-${row.model}`} className="hover:bg-brand-hover text-brand-textMuted">
                     <td className="px-4 py-2.5 font-medium text-brand-textMain">{row.model}</td>
                     <td className="px-4 py-2.5 capitalize">{row.provider}</td>
                     <td className="px-4 py-2.5 text-right font-mono">{row.callCount}</td>
@@ -192,7 +192,7 @@ export const UsageTrackerSettings: React.FC = () => {
           </div>
           <div className="max-h-[300px] overflow-y-auto border border-brand-border/60 rounded-xl divide-y divide-brand-border/40 bg-brand-card/40 custom-scrollbar">
             {records.map((r, idx) => (
-              <div key={idx} className="px-4 py-3 flex justify-between items-center hover:bg-white/2 transition-colors">
+              <div key={idx} className="px-4 py-3 flex justify-between items-center hover:bg-brand-hover transition-colors">
                 <div className="text-left">
                   <div className="text-xs font-semibold text-brand-textMain">{r.model}</div>
                   <div className="text-[10px] text-brand-textMuted mt-0.5 capitalize flex items-center gap-1.5">

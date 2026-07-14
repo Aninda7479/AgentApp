@@ -91,7 +91,7 @@ export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-brand-textMuted text-xs">
-        <RefreshCw className="w-5 h-5 animate-spin text-sky-400 mb-2" />
+        <RefreshCw className="w-5 h-5 animate-spin text-[var(--brand-accent)] mb-2" />
         <span>Loading Computer Use configurations...</span>
       </div>
     );
@@ -110,7 +110,7 @@ export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-xs font-semibold cursor-pointer disabled:opacity-50 transition-all"
+          className="ui-btn-primary text-xs"
         >
           <Save className="w-3.5 h-3.5" />
           <span>{saving ? 'Saving...' : 'Save Settings'}</span>
@@ -131,7 +131,7 @@ export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
         <div className="space-y-4">
           <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
             <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
-              <MousePointer2 size={14} className="text-sky-400" />
+              <MousePointer2 size={14} className="text-[var(--brand-accent)]" />
               <span>Permission Safety Controls</span>
             </h3>
 
@@ -145,8 +145,8 @@ export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
                 onClick={() => setEnableMouse(!enableMouse)}
                 className={`px-3 py-1 rounded-lg border text-xs transition-all ${
                   enableMouse 
-                    ? 'border-sky-500/35 bg-sky-500/10 text-sky-400' 
-                    : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-white/2'
+                    ? 'border-[var(--brand-accent-border)] bg-[var(--brand-accent-tint)] text-[var(--brand-accent)]'
+                    : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-brand-hover'
                 }`}
               >
                 <span>{enableMouse ? 'Granted' : 'Blocked'}</span>
@@ -163,8 +163,8 @@ export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
                 onClick={() => setEnableKeyboard(!enableKeyboard)}
                 className={`px-3 py-1 rounded-lg border text-xs transition-all ${
                   enableKeyboard 
-                    ? 'border-sky-500/35 bg-sky-500/10 text-sky-400' 
-                    : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-white/2'
+                    ? 'border-[var(--brand-accent-border)] bg-[var(--brand-accent-tint)] text-[var(--brand-accent)]'
+                    : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-brand-hover'
                 }`}
               >
                 <span>{enableKeyboard ? 'Granted' : 'Blocked'}</span>
@@ -178,7 +178,7 @@ export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
                 type="number"
                 value={actionDelay}
                 onChange={(e) => setActionDelay(parseInt(e.target.value) || 250)}
-                className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-sky-500/70"
+                className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-[var(--brand-accent-border)]"
               />
             </div>
           </div>
@@ -188,7 +188,7 @@ export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
         <div className="space-y-4">
           <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
             <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
-              <Camera size={14} className="text-sky-400" />
+              <Camera size={14} className="text-[var(--brand-accent)]" />
               <span>Desktop Capture Preview</span>
             </h3>
             <p className="text-[11px] text-brand-textMuted">
@@ -198,7 +198,7 @@ export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
             <button
               onClick={handleCaptureScreen}
               disabled={capturing}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400 hover:bg-sky-500/20 text-xs font-semibold cursor-pointer disabled:opacity-50 transition-all"
+              className="ui-btn-accent text-xs w-full"
             >
               {capturing ? <RefreshCw size={13} className="animate-spin" /> : <Camera size={13} />}
               <span>{capturing ? 'Capturing screen...' : 'Capture Screen Frame'}</span>

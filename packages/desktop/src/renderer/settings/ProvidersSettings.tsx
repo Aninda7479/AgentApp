@@ -17,7 +17,7 @@ const ProviderLogo: React.FC<{ providerId: string; org?: string; size?: number }
 
   if (error || !targetOrg) {
     return (
-      <div style={{ width: size, height: size }} className="flex flex-shrink-0 items-center justify-center rounded-md bg-violet-500/10 text-[0.6em] font-semibold text-brand-textMuted">
+      <div style={{ width: size, height: size }} className="flex flex-shrink-0 items-center justify-center rounded-md bg-brand-hover text-[0.6em] font-semibold text-brand-textMuted">
         ⚙️
       </div>
     );

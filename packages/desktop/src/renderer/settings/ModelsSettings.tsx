@@ -3,9 +3,9 @@ import { ProviderConnection, ModelConfig } from './types';
 import { RefreshCw, ChevronDown } from 'lucide-react';
 
 const MODALITY_STYLES: Record<string, string> = {
-  text:  'bg-emerald-500/12 text-emerald-400',
-  image: 'bg-indigo-500/12 text-indigo-400',
-  audio: 'bg-fuchsia-500/12 text-fuchsia-400',
+  text:  'bg-[var(--brand-accent-tint)] text-[var(--brand-accent)]',
+  image: 'bg-emerald-500/12 text-emerald-400',
+  audio: 'bg-sky-500/12 text-sky-400',
   video: 'bg-rose-500/12 text-rose-400'
 };
 
@@ -188,7 +188,7 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
                                 {p.cachedInputPer1M && (
                                   <div className="ui-card bg-brand-card px-3 py-2">
                                     <div className="text-[10px] uppercase tracking-wide text-brand-textMuted">Cached Input</div>
-                                    <div className="text-sm font-semibold text-indigo-400">{p.cachedInputPer1M}</div>
+                                    <div className="text-sm font-semibold text-[var(--brand-accent)]">{p.cachedInputPer1M}</div>
                                   </div>
                                 )}
                               </div>

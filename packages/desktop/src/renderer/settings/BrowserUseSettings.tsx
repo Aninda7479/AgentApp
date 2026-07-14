@@ -147,7 +147,7 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-brand-textMuted text-xs">
-        <RefreshCw className="w-5 h-5 animate-spin text-sky-400 mb-2" />
+        <RefreshCw className="w-5 h-5 animate-spin text-[var(--brand-accent)] mb-2" />
         <span>Loading Browser Use configurations...</span>
       </div>
     );
@@ -166,7 +166,7 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-xs font-semibold cursor-pointer disabled:opacity-50 transition-all"
+          className="ui-btn-primary text-xs"
         >
           <Save className="w-3.5 h-3.5" />
           <span>{saving ? 'Saving...' : 'Save Settings'}</span>
@@ -187,7 +187,7 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
         <div className="space-y-4">
           <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
             <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
-              <Network size={14} className="text-sky-400" />
+              <Network size={14} className="text-[var(--brand-accent)]" />
               <span>Browser Connection Profile</span>
             </h3>
 
@@ -197,8 +197,8 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
                 onClick={() => setMode('isolated')}
                 className={`py-2 rounded-lg border text-xs font-semibold flex flex-col items-center gap-1 cursor-pointer transition-all ${
                   mode === 'isolated'
-                    ? 'border-sky-500/40 bg-sky-500/10 text-brand-textMain'
-                    : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-white/2'
+                    ? 'border-[var(--brand-accent-border)] bg-[var(--brand-accent-tint)] text-brand-textMain'
+                    : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-brand-hover'
                 }`}
               >
                 <Cpu size={14} />
@@ -209,8 +209,8 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
                 onClick={() => setMode('cdp')}
                 className={`py-2 rounded-lg border text-xs font-semibold flex flex-col items-center gap-1 cursor-pointer transition-all ${
                   mode === 'cdp'
-                    ? 'border-sky-500/40 bg-sky-500/10 text-brand-textMain'
-                    : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-white/2'
+                    ? 'border-[var(--brand-accent-border)] bg-[var(--brand-accent-tint)] text-brand-textMain'
+                    : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-brand-hover'
                 }`}
               >
                 <Network size={14} />
@@ -221,8 +221,8 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
                 onClick={() => setMode('persistent')}
                 className={`py-2 rounded-lg border text-xs font-semibold flex flex-col items-center gap-1 cursor-pointer transition-all ${
                   mode === 'persistent'
-                    ? 'border-sky-500/40 bg-sky-500/10 text-brand-textMain'
-                    : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-white/2'
+                    ? 'border-[var(--brand-accent-border)] bg-[var(--brand-accent-tint)] text-brand-textMain'
+                    : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-brand-hover'
                 }`}
               >
                 <Eye size={14} />
@@ -239,7 +239,7 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
 
             {mode === 'cdp' && (
               <div className="space-y-3 pt-1">
-                <div className="bg-purple-500/10 border border-purple-500/20 text-purple-400 p-2.5 rounded-lg flex items-start gap-2 text-[10px]">
+                <div className="bg-[var(--neon-attention)]/10 border border-[var(--neon-attention)]/20 text-[var(--neon-attention)] p-2.5 rounded-lg flex items-start gap-2 text-[10px]">
                   <ShieldAlert size={14} className="mt-0.5 flex-shrink-0" />
                   <span>
                     To connect, launch Chrome from terminal using:
@@ -252,7 +252,7 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
                     type="number"
                     value={chromeDebugPort}
                     onChange={(e) => setChromeDebugPort(parseInt(e.target.value) || 9222)}
-                    className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-sky-500/70"
+                    className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-[var(--brand-accent-border)]"
                   />
                 </div>
               </div>
@@ -270,7 +270,7 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
                     placeholder="e.g. C:\Users\<Username>\AppData\Local\Google\Chrome\User Data"
                     value={userProfilePath}
                     onChange={(e) => setUserProfilePath(e.target.value)}
-                    className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-sky-500/70"
+                    className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-[var(--brand-accent-border)]"
                   />
                 </div>
               </div>
@@ -288,8 +288,8 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
                     onClick={() => setHeadless(!headless)}
                     className={`flex items-center gap-1 px-3 py-1 rounded-lg border text-xs transition-all ${
                       headless 
-                        ? 'border-sky-500/35 bg-sky-500/10 text-sky-400' 
-                        : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-white/2'
+                        ? 'border-[var(--brand-accent-border)] bg-[var(--brand-accent-tint)] text-[var(--brand-accent)]' 
+                        : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-brand-hover'
                     }`}
                   >
                     {headless ? <EyeOff size={13} /> : <Eye size={13} />}
@@ -306,7 +306,7 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
                     type="number"
                     value={width}
                     onChange={(e) => setWidth(parseInt(e.target.value) || 1280)}
-                    className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-sky-500/70"
+                    className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-[var(--brand-accent-border)]"
                   />
                 </div>
                 <div className="space-y-1">
@@ -315,7 +315,7 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
                     type="number"
                     value={height}
                     onChange={(e) => setHeight(parseInt(e.target.value) || 720)}
-                    className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-sky-500/70"
+                    className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-[var(--brand-accent-border)]"
                   />
                 </div>
               </div>
@@ -327,7 +327,7 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
                   type="number"
                   value={timeout}
                   onChange={(e) => setTimeoutVal(parseInt(e.target.value) || 30)}
-                  className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-sky-500/70"
+                  className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-[var(--brand-accent-border)]"
                 />
               </div>
 
@@ -339,7 +339,7 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
                   placeholder="Default Playwright user agent..."
                   value={userAgent}
                   onChange={(e) => setUserAgent(e.target.value)}
-                  className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-sky-500/70"
+                  className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-[var(--brand-accent-border)]"
                 />
               </div>
             </div>
@@ -350,7 +350,7 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
         <div className="space-y-4">
           <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
             <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
-              <Globe size={14} className="text-sky-400" />
+              <Globe size={14} className="text-[var(--brand-accent)]" />
               <span>Browser Live Playground</span>
             </h3>
             <p className="text-[11px] text-brand-textMuted">
@@ -363,12 +363,12 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
                 value={testUrl}
                 onChange={(e) => setTestUrl(e.target.value)}
                 placeholder="https://example.com"
-                className="flex-1 rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-sky-500/70"
+                className="flex-1 rounded-lg border border-brand-border bg-brand-bg px-3 py-1.5 text-xs text-brand-textMain outline-none focus:border-[var(--brand-accent-border)]"
               />
               <button
                 onClick={handleTestNavigate}
                 disabled={testing}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/30 text-sky-400 hover:bg-sky-500/20 text-xs font-semibold cursor-pointer disabled:opacity-50 transition-all"
+                className="ui-btn-accent text-xs"
               >
                 {testing ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} />}
                 <span>{testing ? 'Loading...' : 'Go'}</span>

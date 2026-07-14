@@ -37,7 +37,7 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ label, description, value, onChan
       type="button"
       onClick={() => onChange(!value)}
       className={`relative h-6 w-11 flex-shrink-0 rounded-full p-0.5 transition-colors ${
-        value ? 'bg-sky-500' : 'bg-brand-border'
+        value ? 'bg-[var(--brand-accent)]' : 'bg-brand-border'
       }`}
       aria-pressed={value}
     >
@@ -108,16 +108,18 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
 
   return (
     <div className="max-w-[680px] text-left">
-      <h1 className="mb-2 text-2xl font-semibold text-brand-textMain">General</h1>
-      <p className="mb-7 text-sm leading-6 text-brand-textMuted">
+      <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain sm:text-3xl">
+        General
+      </h1>
+      <p className="mb-7 mt-2 text-sm leading-relaxed text-brand-textMuted sm:text-base">
         Configure default behaviors, workspace appearance, and sandbox permissions for the agent.
       </p>
 
       <section className="mb-8">
-        <h3 className="mb-3 text-base font-semibold text-brand-textMain">Appearance</h3>
-        <div className="rounded-lg border border-brand-border bg-brand-card p-4">
-          <div className="mb-3 text-sm font-medium text-brand-textMain">Theme</div>
-          <div className="inline-flex rounded-lg border border-brand-border bg-brand-bg p-1">
+        <h3 className="settings-section-title mb-3">Appearance</h3>
+        <div className="settings-section">
+          <div className="ui-label mb-3">Theme</div>
+          <div className="settings-segment">
             {[
               { id: 'light' as const, label: 'Lite', Icon: Sun },
               { id: 'system' as const, label: 'System', Icon: Monitor },
@@ -129,15 +131,11 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
                   key={id}
                   type="button"
                   onClick={() => onThemeChange(id)}
-                  className={`flex min-w-[92px] items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                    selected
-                      ? 'bg-brand-popover text-brand-textMain shadow-sm ring-1 ring-brand-border'
-                      : 'text-brand-textMuted hover:text-brand-textMain'
-                  }`}
+                  className={selected ? 'selected' : ''}
                 >
                   <Icon size={15} />
                   <span>{label}</span>
-                  {selected && <Check size={14} className="text-emerald-500" />}
+                  {selected && <Check size={14} className="text-[var(--brand-accent)]" />}
                 </button>
               );
             })}
@@ -146,11 +144,11 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
       </section>
 
       <section className="mb-8">
-        <h3 className="mb-3 text-base font-semibold text-brand-textMain">Agent Personality & Mode</h3>
+        <h3 className="settings-section-title mb-3">Agent Personality &amp; Mode</h3>
         <span className="hidden">Work mode</span>
         <span className="hidden">For coding</span>
         <span className="hidden">Default permissions</span>
-        <div className="rounded-lg border border-brand-border bg-brand-card p-4">
+        <div className="settings-section">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {modes.map(({ id, label, description, Icon }) => {
               const selected = workMode === id;
@@ -159,15 +157,11 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
                   key={id}
                   type="button"
                   onClick={() => onWorkModeChange(id)}
-                  className={`rounded-lg border p-4 text-left transition-colors ${
-                    selected
-                      ? 'border-sky-500/70 bg-sky-500/10 text-brand-textMain'
-                      : 'border-brand-border bg-brand-bg text-brand-textMain hover:border-brand-textMuted/50'
-                  }`}
+                  className={`settings-choice ${selected ? 'selected' : ''}`}
                 >
-                  <Icon size={18} className={selected ? 'mb-2 text-sky-500' : 'mb-2 text-brand-textMuted'} />
-                  <div className="mb-1 text-sm font-semibold">{label}</div>
-                  <div className="text-xs leading-5 text-brand-textMuted">{description}</div>
+                  <Icon size={18} className="settings-choice-icon" />
+                  <div className="settings-choice-title">{label}</div>
+                  <div className="settings-choice-desc">{description}</div>
                 </button>
               );
             })}
@@ -176,8 +170,8 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
       </section>
 
       <section className="mb-8">
-        <h3 className="mb-3 text-base font-semibold text-brand-textMain">Permissions & Verification</h3>
-        <div className="rounded-lg border border-brand-border bg-brand-card px-5 py-1">
+        <h3 className="settings-section-title mb-3">Permissions &amp; Verification</h3>
+        <div className="settings-section px-5 py-1">
           <ToggleRow
             label="Confirm Shell Commands"
             description="Always prompt for approval before running terminal scripts or execution utilities."
@@ -200,8 +194,8 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
       </section>
 
       <section className="mb-8">
-        <h3 className="mb-3 text-base font-semibold text-brand-textMain">Internet Access</h3>
-        <p className="mb-3 text-xs leading-5 text-brand-textMuted">
+        <h3 className="settings-section-title mb-3">Internet Access</h3>
+        <p className="settings-section-sub">
           Controls whether the agent may reach the network on its own. This prevents autonomous, potentially
           dangerous internet actions. The AI provider API is always allowed so the assistant can still respond.
         </p>
@@ -214,18 +208,14 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
                 type="button"
                 data-testid={`internet-access-${id}`}
                 onClick={() => onInternetAccessLevelChange(id)}
-                className={`flex flex-col rounded-lg border p-4 text-left transition-colors ${
-                  selected
-                    ? 'border-sky-500/70 bg-sky-500/10 text-brand-textMain'
-                    : 'border-brand-border bg-brand-bg text-brand-textMain hover:border-brand-textMuted/50'
-                }`}
+                className={`settings-choice ${selected ? 'selected' : ''}`}
               >
-                <Icon size={18} className={selected ? 'mb-2 text-sky-500' : 'mb-2 text-brand-textMuted'} />
-                <div className="mb-1 flex items-center gap-1.5 text-sm font-semibold">
+                <Icon size={18} className="settings-choice-icon" />
+                <div className="flex items-center gap-1.5 settings-choice-title">
                   {label}
-                  {selected && <Check size={14} className="text-emerald-500" />}
+                  {selected && <Check size={14} className="text-[var(--brand-accent)]" />}
                 </div>
-                <div className="text-xs leading-5 text-brand-textMuted">{description}</div>
+                <div className="settings-choice-desc">{description}</div>
               </button>
             );
           })}

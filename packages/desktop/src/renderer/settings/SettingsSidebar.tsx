@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Archive,
   ArrowLeft,
+  Search,
   Bot,
   FolderArchive,
   LucideIcon,
@@ -67,28 +68,31 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   searchQuery,
   setSearchQuery
 }) => (
-  <aside className="flex h-auto lg:h-full w-full lg:w-[260px] flex-shrink-0 lg:min-h-0 flex-col lg:flex-col border-b lg:border-b-0 lg:border-r border-brand-border bg-brand-sidebar">
-    <div className="flex flex-col gap-3 px-3 lg:px-4 pt-3 lg:pt-5 pb-3">
+  <aside className="glass-panel flex h-auto lg:h-full w-full lg:w-[264px] flex-shrink-0 lg:min-h-0 flex-col border-b border-brand-border/60 lg:border-b-0 lg:border-r">
+    <div className="flex flex-col gap-3 px-3 lg:px-4 pt-4 lg:pt-6 pb-3">
       <button
         type="button"
         onClick={onBackToApp}
-        className="flex items-center justify-start gap-2 text-sm text-brand-textMuted hover:text-brand-textMain w-full"
+        className="flex items-center justify-start gap-2 rounded-lg px-2 py-1.5 text-sm text-brand-textMuted transition-colors hover:bg-brand-hover hover:text-brand-textMain w-full"
         title="Back to app"
       >
         <ArrowLeft size={15} />
         <span>Back to app</span>
       </button>
 
-      <input
-        type="text"
-        placeholder="Search settings..."
-        value={searchQuery}
-        onChange={(event) => setSearchQuery(event.target.value)}
-        className="w-full rounded-md border border-brand-border bg-brand-bg px-3 py-2 text-sm text-brand-textMain outline-none placeholder:text-brand-textMuted/70 focus:border-sky-500/70"
-      />
+      <div className="ui-input flex items-center gap-2 border-transparent bg-brand-card">
+        <Search size={14} className="flex-shrink-0 text-brand-textMuted" />
+        <input
+          type="text"
+          placeholder="Search settings..."
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          className="w-full border-none bg-transparent text-sm text-brand-textMain outline-none placeholder:text-brand-textMuted/60"
+        />
+      </div>
     </div>
 
-    <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-x-visible lg:overflow-y-auto scrollbar-none px-2 lg:px-4 pb-2 lg:pb-4">
+    <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-x-visible lg:overflow-y-auto scrollbar-none px-2 lg:px-3 pb-2 lg:pb-5">
       {Object.entries(CATEGORIES).map(([group, items]) => {
         const visibleItems = items.filter(
           (item) => !searchQuery || item.label.toLowerCase().includes(searchQuery.toLowerCase())
@@ -97,9 +101,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
 
         return (
           <div key={group} className="flex lg:flex-col gap-1 lg:mb-5 flex-shrink-0">
-            <div className="hidden lg:block mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-brand-textMuted/70">
-              {group}
-            </div>
+            <div className="settings-group-label hidden lg:block">{group}</div>
             {visibleItems.map(({ id, label, Icon }) => {
               const isActive = activeCategory === id;
               return (
@@ -109,13 +111,11 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
                   data-testid={`settings-category-${id}`}
                   onClick={() => onSelectCategory(id)}
                   title={label}
-                  className={`mb-0.5 flex w-full items-center justify-center lg:justify-start gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors flex-shrink-0 whitespace-nowrap ${
-                    isActive
-                      ? 'bg-brand-popover text-brand-textMain ring-1 ring-brand-border'
-                      : 'text-brand-textMuted hover:bg-brand-card hover:text-brand-textMain'
+                  className={`settings-nav-item flex-shrink-0 justify-center lg:justify-start whitespace-nowrap ${
+                    isActive ? 'active' : ''
                   }`}
                 >
-                  <Icon size={16} className="flex-shrink-0" />
+                  <Icon size={16} className="settings-nav-icon flex-shrink-0" />
                   <span>{label}</span>
                 </button>
               );
@@ -125,7 +125,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
       })}
     </div>
 
-    <div className="hidden lg:block flex-shrink-0 border-t border-brand-border px-6 py-3 text-left text-xs text-brand-textMuted">
+    <div className="hidden lg:block flex-shrink-0 border-t border-brand-border px-6 py-4 text-left text-xs font-medium tracking-wide text-brand-textMuted">
       SuperAgent
     </div>
   </aside>

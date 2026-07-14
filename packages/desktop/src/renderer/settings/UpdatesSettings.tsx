@@ -69,7 +69,7 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
               data-testid="check-for-updates"
               disabled={checking}
               onClick={onCheckForUpdates}
-              className="flex items-center gap-2 rounded-lg border border-brand-border bg-brand-bg px-4 py-2 text-sm font-medium text-brand-textMain transition-colors hover:border-brand-textMuted/50 disabled:opacity-50"
+              className="ui-btn"
             >
               <RefreshCw size={15} className={checking ? 'animate-spin' : ''} />
               {checking ? 'Checking…' : 'Check for Updates'}
@@ -87,7 +87,7 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
             href={githubUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 text-sky-400 hover:underline"
+            className="inline-flex items-center gap-1 text-[var(--brand-accent)] hover:underline"
           >
             <ExternalLink size={14} /> GitHub Releases
           </a>

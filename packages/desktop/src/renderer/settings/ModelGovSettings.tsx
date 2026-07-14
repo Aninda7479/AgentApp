@@ -155,7 +155,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-brand-textMuted text-xs">
-        <RefreshCw className="w-5 h-5 animate-spin text-sky-400 mb-2" />
+        <RefreshCw className="w-5 h-5 animate-spin text-[var(--brand-accent)] mb-2" />
         <span>Loading Model Governance system config...</span>
       </div>
     );
@@ -215,7 +215,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
           <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
-            <Sliders size={14} className="text-sky-400" />
+            <Sliders size={14} className="text-[var(--brand-accent)]" />
             <span>Optimization Goal</span>
           </h3>
           <div className="space-y-1">
@@ -234,7 +234,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
 
         <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
           <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
-            <Award size={14} className="text-sky-400" />
+            <Award size={14} className="text-[var(--brand-accent)]" />
             <span>Routing Strategy</span>
           </h3>
           <div className="space-y-1">
@@ -255,7 +255,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
         <div>
           <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
-            <Settings size={14} className="text-sky-400" />
+            <Settings size={14} className="text-[var(--brand-accent)]" />
             <span>Category Overrides</span>
           </h3>
           <p className="text-[11px] text-brand-textMuted mt-1">
@@ -306,7 +306,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-3">
         <div>
           <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
-            <CheckSquare size={14} className="text-sky-400" />
+            <CheckSquare size={14} className="text-[var(--brand-accent)]" />
             <span>Governance Swarm Pool</span>
           </h3>
           <p className="text-[11px] text-brand-textMuted mt-1">
@@ -324,8 +324,8 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
                   onClick={() => toggleModelSelection(m.id)}
                   className={`flex items-center justify-between p-3 rounded-lg border text-left cursor-pointer transition-all ${
                     isSelected
-                      ? 'bg-sky-500/10 border-sky-500/40 text-brand-textMain'
-                      : 'bg-white/1 border-brand-border/40 hover:bg-white/3 text-brand-textMuted'
+                      ? 'bg-[var(--brand-accent-tint)] border-[var(--brand-accent-border)] text-brand-textMain'
+                      : 'bg-brand-bg/40 border-brand-border/40 hover:bg-brand-hover text-brand-textMuted'
                   }`}
                 >
                   <div>
@@ -333,7 +333,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
                     <div className="text-[10px] opacity-70 mt-0.5 capitalize">{m.providerId}</div>
                   </div>
                   {isSelected ? (
-                    <CheckSquare size={16} className="text-sky-400 flex-shrink-0" />
+                    <CheckSquare size={16} className="text-[var(--brand-accent)] flex-shrink-0" />
                   ) : (
                     <Square size={16} className="text-brand-border flex-shrink-0" />
                   )}
@@ -352,7 +352,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-3">
         <div>
           <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
-            <FileText size={14} className="text-sky-400" />
+            <FileText size={14} className="text-[var(--brand-accent)]" />
             <span>Fugu System Instructions (model-gov-instructions.md) [Dynamic]</span>
           </h3>
           <p className="text-[11px] text-brand-textMuted mt-1">
@@ -363,7 +363,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
         <textarea
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
-          className="w-full h-80 rounded-lg border border-brand-border bg-brand-bg px-3 py-2 text-xs font-mono text-brand-textMain outline-none focus:border-sky-500/70 custom-scrollbar resize-none"
+          className="w-full h-80 rounded-lg border border-brand-border bg-brand-bg px-3 py-2 text-xs font-mono text-brand-textMain outline-none focus:border-[var(--brand-accent-border)] custom-scrollbar resize-none"
           placeholder="System instructions mapping tasks to capabilities..."
         />
       </div>
