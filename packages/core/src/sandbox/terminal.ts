@@ -1,4 +1,5 @@
-import { spawn } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
+import * as path from 'path';
 import { EnvironmentSanitizer } from './sanitizer.js';
 import { TerminalAccessControl } from './access.js';
 import { PermissionModeController } from './permissions.js';
@@ -76,11 +77,45 @@ export class TerminalShellExecutor {
       let timedOut = false;
 
       const mergedEnv = { ...process.env, ...(options.env ?? {}) };
-      const child = spawn(command, [], {
+      const spawnOpts = {
         cwd: options.cwd ?? process.cwd(),
-        env: mergedEnv as Record<string, string>,
-        shell: shellOption
-      });
+        env: mergedEnv as Record<string, string>
+      };
+
+      // Build the argv so the command reaches the shell predictably. Node's
+      // default Windows wrapping (`<shell> /d /s /c "<cmd>"`) is meant for
+      // cmd.exe and is not honored correctly by PowerShell, so we construct the
+      // invocation explicitly per shell. `shell: false` disables Node's wrapping.
+      let child: ChildProcess;
+      if (typeof shellOption === 'string') {
+        const shellName = path.basename(shellOption).toLowerCase();
+        const isPowershell =
+          shellName === 'powershell.exe' ||
+          shellName === 'powershell' ||
+          shellName === 'pwsh.exe' ||
+          shellName === 'pwsh';
+        if (isWindows && isPowershell) {
+          // -NoProfile avoids loading the user's profile on every spawn (slow
+          // and can error under redirection); -NonInteractive prevents prompts.
+          child = spawn(shellOption, ['-NoProfile', '-NonInteractive', '-Command', command], {
+            ...spawnOpts,
+            shell: false
+          });
+        } else if (isWindows) {
+          child = spawn(shellOption, ['/d', '/s', '/c', command], {
+            ...spawnOpts,
+            shell: false
+          });
+        } else {
+          child = spawn(shellOption, ['-c', command], {
+            ...spawnOpts,
+            shell: false
+          });
+        }
+      } else {
+        // Boolean shell: let Node choose the platform-appropriate shell.
+        child = spawn(command, [], { ...spawnOpts, shell: shellOption });
+      }
 
       const timer = setTimeout(() => {
         timedOut = true;
