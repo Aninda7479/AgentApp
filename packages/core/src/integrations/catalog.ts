@@ -8,6 +8,8 @@
  * Core rather than the UI.
  */
 
+import { GENERATED_MCP_CATALOG } from './catalog-data.js';
+
 /** A required or optional environment key an MCP server needs to run. */
 export interface McpEnvKey {
   /** Environment variable name, e.g. `GITHUB_PERSONAL_ACCESS_TOKEN`. */
@@ -51,6 +53,13 @@ export interface McpCatalogEntry {
   envKeys: McpEnvKey[];
   /** Free-form tags used for filtering/grouping in the UI. */
   tags: string[];
+  /** Human-readable category (e.g. "Databases", "Developer Tools"). */
+  category?: string;
+  /**
+   * Whether the server can be installed directly from the catalog. `false`
+   * means we only have a docs/homepage link. Absent is treated as installable.
+   */
+  installable?: boolean;
   /** Optional emoji/icon shown in the catalog card. */
   icon?: string;
   /** Optional homepage / docs link. */
@@ -112,12 +121,13 @@ export function searchMcpCatalog(query: string, catalog: McpCatalogEntry[] = MCP
     (entry) =>
       entry.name.toLowerCase().includes(q) ||
       entry.description.toLowerCase().includes(q) ||
-      entry.tags.some((tag) => tag.toLowerCase().includes(q))
+      entry.tags.some((tag) => tag.toLowerCase().includes(q)) ||
+      (entry.category?.toLowerCase().includes(q) ?? false)
   );
 }
 
 /** Popular, community-maintained MCP servers available for one-click install. */
-export const MCP_CATALOG: McpCatalogEntry[] = [
+const CURATED_MCP_CATALOG: McpCatalogEntry[] = [
   {
     id: 'filesystem',
     name: 'Filesystem',
@@ -362,6 +372,19 @@ export const MCP_CATALOG: McpCatalogEntry[] = [
     homepage: 'https://github.com/makenotion/notion-mcp-server'
   }
 ];
+
+/**
+ * The complete catalog: curated servers first, followed by every server parsed
+ * from the awesome-mcp-servers README. De-duplicated by id so curated entries
+ * take precedence over generated ones with the same id.
+ */
+const mergedCatalog = new Map<string, McpCatalogEntry>();
+for (const entry of CURATED_MCP_CATALOG) mergedCatalog.set(entry.id, entry);
+for (const entry of GENERATED_MCP_CATALOG) {
+  if (!mergedCatalog.has(entry.id)) mergedCatalog.set(entry.id, entry);
+}
+/** Full MCP catalog (curated + every awesome-mcp-servers entry). */
+export const MCP_CATALOG: McpCatalogEntry[] = [...mergedCatalog.values()];
 
 /** Looks up a single catalog entry by id. */
 export function getMcpCatalogEntry(id: string): McpCatalogEntry | undefined {

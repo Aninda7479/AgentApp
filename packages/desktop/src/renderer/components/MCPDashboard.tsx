@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Button, Input, Select, Toggle } from './ui';
-import { Terminal, Globe, Sparkles, Plus, RefreshCw, Server, Trash2 } from 'lucide-react';
+import { Terminal, Globe, Sparkles, Plus, RefreshCw, Server, Trash2, Search } from 'lucide-react';
 import { McpInstallModal } from './McpInstallModal';
 
 /** Information about a connected MCP server. */
@@ -35,6 +35,10 @@ export interface CatalogEntry {
   args: string[];
   envKeys: CatalogEnvKey[];
   tags: string[];
+  /** Human-readable category. */
+  category?: string;
+  /** Whether the server can be installed directly (absent = installable). */
+  installable?: boolean;
   icon?: string;
   homepage?: string;
 }
@@ -136,6 +140,7 @@ const CatalogCard: React.FC<{
   entry: CatalogEntry;
   onRequestInstall: (entry: CatalogEntry) => void;
 }> = ({ entry, onRequestInstall }) => {
+  const installable = entry.installable !== false;
   const needsKeys = entry.envKeys.length > 0;
 
   return (
@@ -153,18 +158,35 @@ const CatalogCard: React.FC<{
               entry.transport === 'stdio' ? 'bg-brand-textMuted/40' : 'bg-[var(--brand-accent)]'
             }`}
           />
+          {entry.category && (
+            <span className="truncate rounded-full bg-brand-bg px-1.5 py-0.5 text-[9px] font-medium text-brand-textMuted">
+              {entry.category}
+            </span>
+          )}
         </div>
         <p className="truncate text-[11px] leading-4 text-brand-textMuted">{entry.description}</p>
       </div>
-      <Button
-        data-testid={`mcp-install-${entry.id}`}
-        onClick={() => onRequestInstall(entry)}
-        variant="secondary"
-        size="sm"
-        className="flex-shrink-0"
-      >
-        {needsKeys ? 'Install' : '+ Install'}
-      </Button>
+      {installable ? (
+        <Button
+          data-testid={`mcp-install-${entry.id}`}
+          onClick={() => onRequestInstall(entry)}
+          variant="secondary"
+          size="sm"
+          className="flex-shrink-0"
+        >
+          {needsKeys ? 'Install' : '+ Install'}
+        </Button>
+      ) : (
+        <a
+          data-testid={`mcp-docs-${entry.id}`}
+          href={entry.homepage}
+          target="_blank"
+          rel="noreferrer"
+          className="ui-btn flex-shrink-0 text-xs"
+        >
+          Docs
+        </a>
+      )}
     </div>
   );
 };
@@ -184,6 +206,40 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
   const [newTransport, setNewTransport] = useState<'stdio' | 'sse'>('stdio');
   const [newCommandOrUrl, setNewCommandOrUrl] = useState('');
   const [installTarget, setInstallTarget] = useState<CatalogEntry | null>(null);
+
+  // Catalog browsing: search + progressive "Show more" reveal so the UI stays
+  // responsive even with the full (hundreds of entries) awesome-mcp catalog.
+  const [catalogQuery, setCatalogQuery] = useState('');
+  const [visibleCount, setVisibleCount] = useState(10);
+  useEffect(() => {
+    setVisibleCount(10);
+  }, [catalogQuery]);
+
+  const installedIds = useMemo(
+    () => new Set(servers.map((s) => s.id.replace(/^mcp-catalog-/, ''))),
+    [servers]
+  );
+
+  const filteredCatalog = useMemo(() => {
+    if (!catalog) return [];
+    const notInstalled = catalog.filter((e) => !installedIds.has(e.id));
+    const q = catalogQuery.trim().toLowerCase();
+    if (!q) {
+      // Default browse view: only directly installable servers, top picks first.
+      return notInstalled.filter((e) => e.installable !== false);
+    }
+    return notInstalled.filter(
+      (e) =>
+        e.name.toLowerCase().includes(q) ||
+        e.description.toLowerCase().includes(q) ||
+        e.tags.some((t) => t.toLowerCase().includes(q)) ||
+        (e.category?.toLowerCase().includes(q) ?? false)
+    );
+  }, [catalog, installedIds, catalogQuery]);
+
+  const visibleCatalog = filteredCatalog.slice(0, visibleCount);
+  const hasMore = filteredCatalog.length > visibleCount;
+  const installedHidden = catalog ? catalog.filter((e) => installedIds.has(e.id)).length : 0;
 
   const handleAdd = () => {
     if (!newServerName.trim() || !newCommandOrUrl.trim()) return;
@@ -291,19 +347,72 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
         </div>
       )}
 
-      {/* Popular Servers (one-click install) */}
+      {/* Catalog: searchable, progressively revealed, excludes installed */}
       {catalog && catalog.length > 0 && onInstallCatalog && (
         <div data-testid="mcp-popular" className="mb-7">
-          <div className="mb-3 flex items-center gap-2">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <Sparkles size={14} className="text-[var(--brand-accent)]" />
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-brand-textMain">Popular Servers</h3>
-            <span className="ui-label ml-auto">{catalog.length} · one-click install</span>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-brand-textMain">
+              {catalogQuery.trim() ? 'Search Results' : 'Browse MCP Servers'}
+            </h3>
+            <span className="ui-label ml-auto">
+              {filteredCatalog.length} {filteredCatalog.length === 1 ? 'server' : 'servers'}
+              {installedHidden > 0 && ` · ${installedHidden} installed (hidden)`}
+            </span>
           </div>
-          <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
-            {catalog.map((entry) => (
-              <CatalogCard key={entry.id} entry={entry} onRequestInstall={setInstallTarget} />
-            ))}
+
+          {/* Search bar */}
+          <div className="ui-input mb-4 flex items-center gap-2 border-transparent bg-brand-card">
+            <Search size={14} className="flex-shrink-0 text-brand-textMuted" />
+            <input
+              type="text"
+              data-testid="mcp-catalog-search"
+              placeholder="Search servers, descriptions, or categories…"
+              value={catalogQuery}
+              onChange={(e) => setCatalogQuery(e.target.value)}
+              className="w-full border-none bg-transparent text-sm text-brand-textMain outline-none placeholder:text-brand-textMuted/50"
+            />
+            {catalogQuery && (
+              <button
+                type="button"
+                onClick={() => setCatalogQuery('')}
+                className="flex-shrink-0 rounded px-1 text-brand-textMuted hover:text-brand-textMain"
+                aria-label="Clear search"
+              >
+                ×
+              </button>
+            )}
           </div>
+
+          {visibleCatalog.length === 0 ? (
+            <div
+              data-testid="mcp-catalog-empty"
+              className="rounded-xl border border-dashed border-brand-border bg-brand-card px-6 py-8 text-center text-xs text-brand-textMuted"
+            >
+              {catalogQuery.trim()
+                ? `No MCP servers match “${catalogQuery}”.`
+                : 'All listed servers are already installed.'}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
+              {visibleCatalog.map((entry) => (
+                <CatalogCard key={entry.id} entry={entry} onRequestInstall={setInstallTarget} />
+              ))}
+            </div>
+          )}
+
+          {hasMore && (
+            <div className="mt-4 flex justify-center">
+              <button
+                type="button"
+                data-testid="mcp-catalog-show-more"
+                onClick={() => setVisibleCount((c) => c + 60)}
+                className="ui-btn text-xs"
+              >
+                Show more ({filteredCatalog.length - visibleCount} more)
+              </button>
+            </div>
+          )}
         </div>
       )}
 
