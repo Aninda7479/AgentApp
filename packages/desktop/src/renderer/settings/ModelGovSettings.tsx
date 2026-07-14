@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ModelConfig } from './types';
-import { Scale, Save, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award, Sparkles } from 'lucide-react';
+import { Scale, Save, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award, Sparkles, Coins, Cpu, Layers, Zap, Bot } from 'lucide-react';
 import { Button, Select } from '../components/ui';
 
 /** Props for the Model Governance settings panel. */
@@ -222,9 +222,9 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
             <label className="text-[10px] text-brand-textMuted uppercase font-bold tracking-wider">Select routing objective</label>
             <Select
               options={[
-                { value: 'quality', label: 'Quality First (Prefer top-tier reasoning/coding)' },
-                { value: 'cost', label: 'Cost Saver (Prefer cheapest available models)' },
-                { value: 'balanced', label: 'Balanced (Optimal trade-off quality/cost)' }
+                { value: 'quality', label: 'Quality First (Prefer top-tier reasoning/coding)', icon: <Award className="w-3.5 h-3.5" /> },
+                { value: 'cost', label: 'Cost Saver (Prefer cheapest available models)', icon: <Coins className="w-3.5 h-3.5" /> },
+                { value: 'balanced', label: 'Balanced (Optimal trade-off quality/cost)', icon: <Scale className="w-3.5 h-3.5" /> }
               ]}
               value={optimizationGoal}
               onChange={(val) => setOptimizationGoal(val as any)}
@@ -241,8 +241,8 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
             <label className="text-[10px] text-brand-textMuted uppercase font-bold tracking-wider">Decentralization level</label>
             <Select
               options={[
-                { value: 'router', label: 'Single Model Router (Fastest execution)' },
-                { value: 'orchestrator', label: 'Orchestrator Mode (Decompose & collaborate)' }
+                { value: 'router', label: 'Single Model Router (Fastest execution)', icon: <Cpu className="w-3.5 h-3.5" /> },
+                { value: 'orchestrator', label: 'Orchestrator Mode (Decompose & collaborate)', icon: <Layers className="w-3.5 h-3.5" /> }
               ]}
               value={routingStrategy}
               onChange={(val) => setRoutingStrategy(val as any)}
@@ -267,7 +267,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
           <div className="space-y-1 text-left">
             <label className="text-[10px] text-brand-textMuted uppercase font-bold">Coding & engineering</label>
             <Select
-              options={[{ value: '', label: 'Dynamic Swarm Routing' }, ...activeSwarmModels.map(m => ({ value: m.id, label: m.name }))]}
+              options={[{ value: '', label: 'Dynamic Swarm Routing', icon: <Zap className="w-3.5 h-3.5" /> }, ...activeSwarmModels.map(m => ({ value: m.id, label: m.name, icon: <Bot className="w-3.5 h-3.5" /> }))]}
               value={categoryOverrides.coding || ''}
               onChange={(val) => handleOverrideChange('coding', val)}
             />
@@ -276,7 +276,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
           <div className="space-y-1 text-left">
             <label className="text-[10px] text-brand-textMuted uppercase font-bold">Logic & Reasoning</label>
             <Select
-              options={[{ value: '', label: 'Dynamic Swarm Routing' }, ...activeSwarmModels.map(m => ({ value: m.id, label: m.name }))]}
+              options={[{ value: '', label: 'Dynamic Swarm Routing', icon: <Zap className="w-3.5 h-3.5" /> }, ...activeSwarmModels.map(m => ({ value: m.id, label: m.name, icon: <Bot className="w-3.5 h-3.5" /> }))]}
               value={categoryOverrides.reasoning || ''}
               onChange={(val) => handleOverrideChange('reasoning', val)}
             />
@@ -285,7 +285,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
           <div className="space-y-1 text-left">
             <label className="text-[10px] text-brand-textMuted uppercase font-bold">Vision & Multimodal</label>
             <Select
-              options={[{ value: '', label: 'Dynamic Swarm Routing' }, ...activeSwarmModels.map(m => ({ value: m.id, label: m.name }))]}
+              options={[{ value: '', label: 'Dynamic Swarm Routing', icon: <Zap className="w-3.5 h-3.5" /> }, ...activeSwarmModels.map(m => ({ value: m.id, label: m.name, icon: <Bot className="w-3.5 h-3.5" /> }))]}
               value={categoryOverrides.vision || ''}
               onChange={(val) => handleOverrideChange('vision', val)}
             />
@@ -294,7 +294,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
           <div className="space-y-1 text-left">
             <label className="text-[10px] text-brand-textMuted uppercase font-bold">Conversations & Summary</label>
             <Select
-              options={[{ value: '', label: 'Dynamic Swarm Routing' }, ...activeSwarmModels.map(m => ({ value: m.id, label: m.name }))]}
+              options={[{ value: '', label: 'Dynamic Swarm Routing', icon: <Zap className="w-3.5 h-3.5" /> }, ...activeSwarmModels.map(m => ({ value: m.id, label: m.name, icon: <Bot className="w-3.5 h-3.5" /> }))]}
               value={categoryOverrides.conversations || ''}
               onChange={(val) => handleOverrideChange('conversations', val)}
             />

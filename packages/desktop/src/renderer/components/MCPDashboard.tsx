@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Input, Select, Toggle } from './ui';
+import { Terminal, Globe } from 'lucide-react';
 
 /** Information about a connected MCP server. */
 export interface MCPServerInfo {
@@ -128,8 +129,8 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
             />
             <Select
               options={[
-                { value: 'stdio', label: 'STDIO Process' },
-                { value: 'sse', label: 'HTTP SSE' }
+                { value: 'stdio', label: 'STDIO Process', icon: <Terminal className="w-3.5 h-3.5" /> },
+                { value: 'sse', label: 'HTTP SSE', icon: <Globe className="w-3.5 h-3.5" /> }
               ]}
               value={newTransport}
               onChange={(val) => setNewTransport(val as 'stdio' | 'sse')}

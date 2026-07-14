@@ -5,6 +5,7 @@ import { ChevronDown } from 'lucide-react';
 export interface SelectOption {
   value: string;
   label: string;
+  icon?: React.ReactNode;
 }
 
 export interface SelectProps {
@@ -91,8 +92,9 @@ export const Select: React.FC<SelectProps> = ({
           }
         }}
       >
-        <span className={selectedOption ? 'text-white' : 'text-brand-textMuted/50'}>
-          {selectedOption ? selectedOption.label : placeholder}
+        <span className={`flex items-center gap-2 ${selectedOption ? 'text-white' : 'text-brand-textMuted/50'}`}>
+          {selectedOption?.icon && <span className="flex-shrink-0">{selectedOption.icon}</span>}
+          <span>{selectedOption ? selectedOption.label : placeholder}</span>
         </span>
         <ChevronDown size={14} className={`text-brand-textMuted transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </div>
@@ -124,13 +126,14 @@ export const Select: React.FC<SelectProps> = ({
                   onChange(opt.value);
                   setIsOpen(false);
                 }}
-                className={`flex items-center px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
                   opt.value === value
                     ? 'bg-brand-highlight-bg-subtle text-brand-highlight-text border border-brand-highlight-border-subtle/50'
                     : 'text-brand-textMain hover:bg-brand-hover'
                 }`}
               >
-                {opt.label}
+                {opt.icon && <span className="flex-shrink-0">{opt.icon}</span>}
+                <span>{opt.label}</span>
               </div>
             ))
           )}

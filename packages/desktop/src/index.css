@@ -31,15 +31,15 @@
 :root,
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --brand-bg: #08090d;
-  --brand-sidebar: #0d0f15;
-  --brand-card: #141720;
-  --brand-popover: #191d28;
-  --brand-border: #252b38;
-  --brand-text-main: #f5f7fb;
-  --brand-text-muted: #9ca3b4;
-  --brand-hover: rgba(255, 255, 255, 0.06);
-  --brand-hover-strong: rgba(255, 255, 255, 0.1);
+  --brand-bg: #272822;
+  --brand-sidebar: #1e1f1c;
+  --brand-card: #32332b;
+  --brand-popover: #1e1f1c;
+  --brand-border: #49483e;
+  --brand-text-main: #f8f8f2;
+  --brand-text-muted: #90908a;
+  --brand-hover: rgba(255, 255, 255, 0.05);
+  --brand-hover-strong: rgba(255, 255, 255, 0.08);
   --brand-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
   --brand-shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.22);
   --brand-highlight: #a16207;       /* Dark yellow */
@@ -51,17 +51,17 @@
 
 :root[data-theme='light'] {
   color-scheme: light;
-  --brand-bg: #eef2f7;
-  --brand-sidebar: #ffffff;
-  --brand-card: #ffffff;
-  --brand-popover: #f8fafc;
-  --brand-border: #cbd5e1;
-  --brand-text-main: #101828;
-  --brand-text-muted: #475467;
-  --brand-hover: rgba(15, 23, 42, 0.06);
-  --brand-hover-strong: rgba(15, 23, 42, 0.1);
-  --brand-shadow: 0 18px 45px rgba(15, 23, 42, 0.16);
-  --brand-shadow-soft: 0 8px 22px rgba(15, 23, 42, 0.1);
+  --brand-bg: #fff2e8;
+  --brand-sidebar: #fcf6f0;
+  --brand-card: #fef9f4;
+  --brand-popover: #fef9f4;
+  --brand-border: #e0d5cb;
+  --brand-text-main: #2b221a;
+  --brand-text-muted: #6e5e50;
+  --brand-hover: rgba(15, 23, 42, 0.05);
+  --brand-hover-strong: rgba(15, 23, 42, 0.08);
+  --brand-shadow: 0 18px 45px rgba(15, 23, 42, 0.12);
+  --brand-shadow-soft: 0 8px 22px rgba(15, 23, 42, 0.08);
   --brand-highlight: #fef08a;       /* Lite yellow */
   --brand-highlight-hover: #fde047;
   --brand-highlight-text: #713f12;  /* Dark brown/gold */
@@ -139,20 +139,16 @@ body {
   color: var(--brand-text-main);
 }
 
-/* Glassmorphism helpers */
+/* Solid Panel & Card helpers */
 .glass-panel {
-  background-color: color-mix(in srgb, var(--brand-sidebar) 94%, transparent);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid color-mix(in srgb, var(--brand-border) 88%, transparent);
+  background-color: var(--brand-sidebar);
+  border: 1px solid var(--brand-border);
   box-shadow: var(--brand-shadow-soft);
 }
 
 .glass-card {
-  background-color: color-mix(in srgb, var(--brand-card) 96%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid color-mix(in srgb, var(--brand-border) 90%, transparent);
+  background-color: var(--brand-card);
+  border: 1px solid var(--brand-border);
   box-shadow: var(--brand-shadow-soft);
 }
 

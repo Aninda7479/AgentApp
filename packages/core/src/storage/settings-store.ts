@@ -219,13 +219,13 @@ export class SettingsStorage {
 
       const current = this.loadSettings();
       const updated: AppSettings = {
-        theme: settings.theme !== undefined ? { ...current.theme, ...settings.theme } : current.theme,
-        providers: settings.providers !== undefined ? settings.providers : current.providers,
-        models: settings.models !== undefined ? settings.models : current.models,
-        lastUsedModel: settings.lastUsedModel !== undefined ? { ...current.lastUsedModel, ...settings.lastUsedModel } : current.lastUsedModel,
-        general: settings.general !== undefined ? { ...current.general, ...settings.general } : current.general,
-        modelGov: settings.modelGov !== undefined ? { ...current.modelGov, ...settings.modelGov } : current.modelGov,
-        internetAccess: settings.internetAccess !== undefined ? { ...current.internetAccess, ...settings.internetAccess } : current.internetAccess
+        theme: settings.theme !== undefined ? (settings.theme === null ? undefined : { ...current.theme, ...settings.theme }) : current.theme,
+        providers: settings.providers !== undefined ? (settings.providers === null ? undefined : settings.providers) : current.providers,
+        models: settings.models !== undefined ? (settings.models === null ? undefined : settings.models) : current.models,
+        lastUsedModel: settings.lastUsedModel !== undefined ? (settings.lastUsedModel === null ? undefined : { ...current.lastUsedModel, ...settings.lastUsedModel }) : current.lastUsedModel,
+        general: settings.general !== undefined ? (settings.general === null ? undefined : { ...current.general, ...settings.general }) : current.general,
+        modelGov: settings.modelGov !== undefined ? (settings.modelGov === null ? undefined : { ...current.modelGov, ...settings.modelGov }) : current.modelGov,
+        internetAccess: settings.internetAccess !== undefined ? (settings.internetAccess === null ? undefined : { ...current.internetAccess, ...settings.internetAccess }) : current.internetAccess
       };
 
       this.cachedSettings = updated;

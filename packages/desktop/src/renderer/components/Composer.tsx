@@ -318,7 +318,7 @@ export const Composer: React.FC<ComposerProps> = ({
             {/* Model Badge */}
             <div className="relative">
               <Select
-                options={availableModels.map((model) => ({ value: model, label: model }))}
+                options={availableModels.map((model) => ({ value: model, label: model, icon: <Cpu className="w-3.5 h-3.5" /> }))}
                 value={selectedModel}
                 onChange={(model) => {
                   setSelectedModel(model);
