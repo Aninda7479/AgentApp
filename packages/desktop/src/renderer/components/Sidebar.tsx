@@ -15,6 +15,7 @@ import {
   SquarePen,
   MoreHorizontal,
   MessageSquarePlus,
+  PawPrint,
 } from 'lucide-react';
 
 
@@ -167,6 +168,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {renderNavItem('scheduled', 'Scheduled', Clock)}
           {renderNavItem('plugins', 'Plugins', Plug)}
+          {renderNavItem('partner', 'Partner', PawPrint)}
         </div>
 
         {/* ── PROJECTS Section ── */}

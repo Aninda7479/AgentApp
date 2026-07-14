@@ -19,6 +19,9 @@ import { AppToast } from './components/AppToast';
 import { WorkspaceView } from './components/WorkspaceView';
 import { builtinSuggestions, SkillInfo, BUILTIN_COMMANDS } from './components/slashCommands';
 import { BottomNav } from './components/BottomNav';
+import { usePartners } from './components/partner/library';
+import { PartnerView } from './components/partner/PartnerView';
+import { PartnerOverlay } from './components/partner/PartnerOverlay';
 import { StoredChat, StoredProject } from './types';
 import { useThemeMode } from './theme';
 import { getRouteFromLocation, pushRoute, subscribeRouteChange } from './urlSync';
@@ -91,6 +94,8 @@ function stampWorkedDuration(steps: TrajectoryStep[], workedDuration: string): T
  */
 export const App: React.FC = () => {
   const { themeMode, setThemeMode } = useThemeMode();
+  const partners = usePartners();
+  const [partnerVisible, setPartnerVisible] = useState<boolean>(true);
   const [workMode, setWorkMode] = useState<'coding' | 'everyday'>('coding');
   const [defaultPermissions, setDefaultPermissions] = useState<boolean>(true);
   const [autoReview, setAutoReview] = useState<boolean>(true);
@@ -769,6 +774,37 @@ export const App: React.FC = () => {
       window.removeEventListener('keydown', handleGlobalKeyDown);
     };
   }, []);
+
+  // Keep the desktop 3D Partner in sync with the active Partner selection.
+  useEffect(() => {
+    if (!ipc) return;
+    const active = partners.pets.find((p) => p.id === partners.activeId) || null;
+    ipc.invoke('pet-set-partner', active).catch(() => {});
+  }, [ipc, partners.pets, partners.activeId]);
+
+  // Relay demo-mode agent state (no real agent-events) to the 3D Partner.
+  useEffect(() => {
+    if (!ipc) return;
+    const mood = activeChat?.lastError ? 'sad' : isGenerating ? 'working' : 'idle';
+    ipc.send('pet-mood', mood);
+  }, [ipc, isGenerating, activeChat?.lastError]);
+
+  // Extension point: any UI surface can make the pet speak (e.g. when the app
+  // needs the user's input — opening the API-key modal, a confirm prompt, etc.)
+  // by dispatching `window.dispatchEvent(new CustomEvent('partner:say', {detail}))`
+  // where detail is a string or { text }. The main process owns the actual pet
+  // window, so we forward over IPC. The agent-driven "needs input" trigger is
+  // wired in main.ts directly from agent events.
+  useEffect(() => {
+    if (!ipc) return;
+    const onSay = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const text = typeof detail === 'string' ? detail : (detail && detail.text) || '';
+      if (text) ipc.invoke('pet-say', text).catch(() => {});
+    };
+    window.addEventListener('partner:say', onSay as EventListener);
+    return () => window.removeEventListener('partner:say', onSay as EventListener);
+  }, [ipc]);
 
   /** Shows a toast notification with auto-detection of error vs info type. */
   const triggerToast = (message: string, type: 'info' | 'error' = 'info') => {
@@ -2075,6 +2111,19 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
             />
           )}
 
+          {activeTab === 'partner' && (
+            <PartnerView
+              pets={partners.pets}
+              activeId={partners.activeId}
+              petRunning={partners.petRunning}
+              onSetActive={(id) => { partners.setActive(id); }}
+              onInstallFromFolder={() => { partners.installFromFolder(); }}
+              onInstallFromJson={(json) => { partners.installFromJson(json); }}
+              onRemove={(id) => { partners.remove(id); }}
+              onExport={(id) => { partners.exportPet(id); }}
+            />
+          )}
+
           {activeTab === 'settings' && (
             <SettingsView
               activeCategory={settingsCategory}
@@ -2197,6 +2246,19 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
       />
 
       <AppToast open={toastOpen} message={toastMessage} type={toastType} onClose={() => setToastOpen(false)} />
+
+      {/* Floating Partner / Pet companion. On the desktop the 3D overlay window
+          is the pet; in the web build there is no separate window, so we fall
+          back to this in-app 2D companion. */}
+      {isWebMode && (
+        <PartnerOverlay
+          manifest={partners.pets.find((p) => p.id === partners.activeId) || null}
+          visible={partnerVisible}
+          isGenerating={isGenerating}
+          lastError={activeChat?.lastError}
+          onToggle={() => setPartnerVisible((v) => !v)}
+        />
+      )}
     </div>
   );
 };
