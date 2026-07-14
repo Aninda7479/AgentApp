@@ -110,7 +110,6 @@ describe('PartnerView (gallery)', () => {
     expect(html).toContain('Partner');
     expect(html).toContain(DEFAULT_PARTNERS[0].name);
     expect(html).toContain(CUSTOM.name);
-    expect(html).toContain('data-testid="partner-create"');
     // Active badge for the default, Set active for the custom one.
     expect(html).toContain('Active');
     expect(html).toContain(`data-testid="partner-set-active-${CUSTOM.id}"`);

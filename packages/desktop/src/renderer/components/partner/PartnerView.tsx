@@ -152,9 +152,6 @@ export const PartnerView: React.FC<PartnerViewProps> = ({
           >
             <Download size={15} /> <span className="hidden sm:inline">Import 3D model</span>
           </button>
-          <button className="ui-btn-primary" data-testid="partner-create" onClick={openCreate}>
-            <Plus size={15} /> <span>Create</span>
-          </button>
         </div>
       </div>
 
@@ -231,21 +228,6 @@ export const PartnerView: React.FC<PartnerViewProps> = ({
                           Set active
                         </button>
                       )}
-                      <button
-                        data-testid={`partner-edit-${pet.id}`}
-                        className="ui-btn-ghost flex-shrink-0"
-                        onClick={() => openEdit(pet)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        data-testid={`partner-export-${pet.id}`}
-                        className="ui-btn-ghost flex-shrink-0"
-                        title="Export / reveal folder"
-                        onClick={() => { onExport(pet.id); flash(`Exported ${pet.name}.`); }}
-                      >
-                        <Download size={14} />
-                      </button>
                       {!isBuiltin && (
                         <button
                           data-testid={`partner-remove-${pet.id}`}

@@ -91,43 +91,52 @@ So you only *need* to define the moods you care about.
 
 ## 2. Import your Partner into the app
 
-You have three options:
+To add a Partner companion to your library:
 
-1. **Folder import (easiest).** Open the **Partner** tab → **Import folder**, and
-   pick the folder containing your `partner.json`. It is copied into
-   `~/AppData/Roaming/OpenSource/AgentApp/pets/<id>/` (your OS user-data dir),
-   including any `model`/`vrm` 3D files it contains.
-2. **In-app creator.** Open the **Partner** tab → **Create**, fill in the form,
-   hit **Save to library**. You can also paste an existing `partner.json` into the
-   creator's "Load an existing manifest" box to edit it.
-3. **Paste JSON.** Same as above — author the JSON, then **Save to library**.
+1. **Folder import.** Open the **Partner** tab → **Import folder**, and select the directory containing your `partner.json` manifest. It is copied into `~/AppData/Roaming/OpenSource/AgentApp/pets/<id>/` (your OS user-data directory), including any models, scripts, or image files.
+2. **Dynamic Script Loading.** If your folder contains a custom script (specified by `"script": "index.js"` in the manifest), the app loads the compiled JS script dynamically, resolving its metadata at runtime.
 
-**Import a 3D model file.** With an active Partner selected, click
-**Import 3D model** on the Partner tab and choose a `.vrm`, `.glb`, or `.gltf`
-file. The file is copied into that Partner's folder and recorded in its manifest
-(`vrm` for `.vrm`, otherwise `model`), so your choice is saved and restored.
-A `.glb`/`.gltf` takes precedence over a `.vrm` for the 3D pet.
+**Import a 3D model file.** With an active Partner selected, click **Import 3D model** on the Partner tab and choose a `.vrm`, `.glb`, or `.gltf` file. The file is copied into that Partner's folder and recorded in its manifest (`vrm` for `.vrm`, otherwise `model`), so your choice is saved and restored. A `.glb`/`.gltf` takes precedence over a `.vrm` for the 3D pet.
 
-By default, SuperAgent ships with a single built-in modular 3D companion named **Lily** (an anime-waifu companion). Custom partners can be imported or created freely.
+By default, SuperAgent ships with a single built-in modular 3D companion named **Lily** (a cute anime girl). Custom partners can be imported freely.
 
 ## 3. Set active, export, remove
 
 - **Set active** — the active Partner is the one shown as the 3D desktop pet (or the 2D companion in the web build).
-- **Export** — reveals the Partner's folder on disk so you can zip it and share it.
-- **Remove** — deletes a *custom* (imported/created) Partner from your library.
+- **Remove** — deletes a *custom* (imported) Partner from your library.
 
 ## 4. Share it
 
-Zip the Partner folder and share it anywhere (a repo, a Discord, a gist). Anyone
-who drops it into the **Import folder** dialog gets your companion. There is no
-registry and no gatekeeping — that's the point.
+Zip the Partner folder and share it anywhere (a repo, a Discord, a gist). Anyone who drops it into the **Import folder** dialog gets your companion. There is no registry and no gatekeeping.
 
 ## 5. Worked example / Custom Scripts
 
 A Partner can use a custom JavaScript class to define its own 3D model, animations, design, and sounds.
-To create a custom scripted partner:
-1. Create a `partner.json` referencing a script path (e.g. `"script": "index.js"`).
-2. Inside `index.js`, export a class implementing the `Character` interface:
+
+### Dynamic Script Metadata
+If your custom companion defines a script file (e.g., `index.js`), you can export metadata properties from the script to define how your character is represented in the Partner List UI. This overrides values defined statically in `partner.json`:
+
+```javascript
+// index.js metadata exports
+export const name = 'Lily';
+export const desc = 'A cute anime companion who works, sleeps, and keeps you company.';
+export const type = 'girl'; // Companion type: supports Boy/Girl/Pet
+export const dp = 'avatar.png'; // Display Picture: can be an emoji (e.g. '🧍') OR a local image file path
+```
+
+If you specify an image file for `dp` (such as `avatar.png` or `avatar.jpg`), simply place that image file in the same directory as your script. The app will resolve its path and render it as a rounded image avatar in the list UI instead of an emoji.
+
+### Divided Architecture
+For a clean, maintainable structure, it is recommended to divide your companion's codebase into specialized files (as implemented in the default **Lily** companion at `packages/desktop/models/lily/`):
+
+- **`index.ts`** / **`index.js`**: Main entry exporting the metadata and implementing the `Character` class interface.
+- **`model.ts`** / **`model.js`**: Contains geometry building, meshes, materials, and joint setup (`buildLilyGeometry`, `applyLilyRest`).
+- **`animations.ts`** / **`animations.js`**: Defines behavior targets, transition lerping, and bone modulations (`updateAnimations`, `poseFor`, `expressionFor`).
+- **`audio.ts`** / **`audio.js`**: Procedural sound and tone playing effects (isolated from media folders).
+
+### Character Interface
+
+Your main script class must export the class implementing the `Character` interface:
 
 ```typescript
 import * as THREE from 'three';
