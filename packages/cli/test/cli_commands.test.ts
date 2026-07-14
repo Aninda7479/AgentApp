@@ -274,7 +274,7 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
     });
 
     const names = router.getCommands().map((d) => d.name).sort();
-    expect(names).toEqual(['agent', 'btw', 'clear', 'compact', 'config', 'cost', 'diff', 'doctor', 'goal', 'init', 'learn', 'mcp', 'memory', 'model', 'permissions', 'plan', 'review', 'security-review', 'side', 'status', 'tasks', 'theme', 'verify']);
+    expect(names).toEqual(['agent', 'btw', 'bug', 'clear', 'compact', 'config', 'cost', 'diff', 'doctor', 'goal', 'help', 'init', 'learn', 'mcp', 'memory', 'model', 'permissions', 'plan', 'review', 'security-review', 'side', 'status', 'tasks', 'theme', 'verify', 'voice']);
   });
 
   it('should dispatch /model list through the wired router', async () => {

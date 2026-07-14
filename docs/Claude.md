@@ -116,8 +116,8 @@ Claude Desktop and Claude Code are designed as native MCP clients:
 | `/doctor` | Run setup checkup/diagnostics to troubleshoot local configuration (CLI `/doctor` only; not in desktop) |
 | `/verify` | Run tests or app commands to verify recent changes (CLI `/verify` only; not in desktop) |
 | `/btw` | Ask a side question without polluting the main conversation context window (CLI `/btw` only; not in desktop) |
-| `/voice` | Toggle voice dictation mode / microphone dictation (not implemented) |
-| `/bug` | Report issues with session logs directly to Anthropic (not implemented) |
+| `/voice` ✅ | Toggle voice dictation mode / microphone dictation (headless CLI acknowledges; Desktop/Web provide mic input) |
+| `/bug` ✅ | File a bug report (saved locally with environment context; no remote submission in CLI) |
 | `/login` / `/logout` | Authenticate or log out from your account / manage credentials (web build only; no CLI/desktop command) |
 
 ---
