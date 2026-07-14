@@ -30,6 +30,21 @@ export class ContextCompressor {
     return Math.ceil(text.length / 4);
   }
 
+  /** Sums estimated tokens across every message (using stored `tokens` when present). */
+  public static totalTokens(messages: ContextMessage[]): number {
+    return messages.reduce((acc, m) => acc + (m.tokens ?? ContextCompressor.estimateTokens(m.content)), 0);
+  }
+
+  /**
+   * Returns true when the estimated token total exceeds `threshold`, i.e. the
+   * conversation should be auto-compacted to avoid overflowing the context
+   * window. Returns false when no positive threshold is configured.
+   */
+  public static needsCompaction(messages: ContextMessage[], threshold?: number): boolean {
+    if (!threshold || threshold <= 0) return false;
+    return ContextCompressor.totalTokens(messages) > threshold;
+  }
+
   /**
    * Compresses messages by replacing middle turns with a summary.
    * @param messages - Full conversation history
@@ -111,6 +126,45 @@ export function registerCompactCommand(
   router.register(
     'compact',
     async (ctx: SlashCommandContext): Promise<SlashCommandResult> => {
+      const sub = ctx.args[0]?.toLowerCase();
+
+      // `/compact threshold <n>` — set (or clear, with 0) the auto-compact threshold.
+      if (sub === 'threshold') {
+        const value = Number.parseInt(ctx.args[1] ?? '', 10);
+        if (!Number.isFinite(value) || value < 0) {
+          return {
+            success: false,
+            command: ctx.command,
+            output: `Usage: /compact threshold <tokens>  (use 0 to disable auto-compaction)`
+          };
+        }
+        options.maxTokens = value;
+        return {
+          success: true,
+          command: ctx.command,
+          output:
+            value === 0
+              ? 'Auto-compaction disabled (threshold = 0).'
+              : `Auto-compaction threshold set to ${value} tokens. Compaction triggers automatically when the context exceeds this.`
+        };
+      }
+
+      // `/compact status` — report estimated tokens vs the configured threshold.
+      if (sub === 'status') {
+        const messages = getMessages();
+        const total = ContextCompressor.totalTokens(messages);
+        const threshold = options.maxTokens;
+        const trigger = ContextCompressor.needsCompaction(messages, threshold);
+        return {
+          success: true,
+          command: ctx.command,
+          output:
+            `Estimated context: ${total} tokens` +
+            (threshold && threshold > 0 ? ` / threshold ${threshold}` : ' (no auto-compact threshold set)') +
+            `\nAuto-compaction ${trigger ? 'WOULD trigger now' : 'is not pending'}.`
+        };
+      }
+
       const messages = getMessages();
       const result = await ContextCompressor.compress(messages, options);
 
@@ -134,7 +188,7 @@ export function registerCompactCommand(
     {
       description: 'Compress conversation context window and clear old message history',
       aliases: ['summarize', 'c'],
-      usage: '/compact'
+      usage: '/compact [threshold <tokens> | status]'
     }
   );
 }
