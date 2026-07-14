@@ -67,10 +67,32 @@ export interface ExecutionTrajectory {
   permissionMode: 'auto' | 'manual' | 'read-only';
 }
 
+/**
+ * A single content block within a multimodal chat message.
+ * - `text` blocks carry plain text.
+ * - `image_url` blocks carry an image, either as an `https:` URL or a
+ *   `data:image/<ext>;base64,<bytes>` URL (used for locally attached files).
+ */
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'auto' | 'high' } };
+
+/**
+ * A validated image attachment, ready to be embedded in a chat message.
+ * `dataUrl` is a `data:image/<ext>;base64,<bytes>` URL.
+ */
+export interface ImageAttachment {
+  path: string;
+  mediaType: string;
+  dataUrl: string;
+  size: number;
+}
+
 /** A chat message used in completion requests to provider APIs. */
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
+  /** Plain text, or a multimodal array of text/image blocks. */
+  content: string | ContentBlock[];
   name?: string;
   toolCallId?: string;
   toolCalls?: ToolCall[];

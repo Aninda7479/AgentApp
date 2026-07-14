@@ -4,6 +4,8 @@ import { registerDiffCommand, DiffReviewer } from './diff.js';
 import { registerReviewCommand, CodeReviewer } from './review.js';
 import { registerSecurityReviewCommand } from './security.js';
 import { registerExecSlashCommand } from './exec.js';
+import { registerAttachCommand } from './attach.js';
+import { ImageAttachment } from '@superagent/core';
 import { registerMCPCommand } from './mcp.js';
 import { registerConfigCommand } from './config.js';
 import { registerCostCommand } from './cost.js';
@@ -58,6 +60,12 @@ export interface SlashCommandDeps {
   setPermission: (level: PermissionLevel) => void;
   /** Background task manager used by the `/tasks` command (a fresh one is created if omitted). */
   taskManager?: TaskManager;
+  /**
+   * Shared, mutable queue of image attachments for the `/attach` command. The
+   * TUI merges these into the next message and clears the array. A fresh array
+   * is created if omitted.
+   */
+  pendingAttachments?: ImageAttachment[];
 }
 
 /**
@@ -71,6 +79,7 @@ export interface SlashCommandDeps {
 export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRouter {
   const { session, getMessages, setMessages, diffReviewer, compactOptions, permission, setPermission } = deps;
   const taskManager = deps.taskManager ?? new TaskManager();
+  const pendingAttachments = deps.pendingAttachments ?? [];
   const router = new SlashCommandRouter();
 
   registerCompactCommand(router, getMessages, setMessages, compactOptions);
@@ -91,6 +100,7 @@ export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRou
   registerTasksCommand(router, taskManager);
   registerClearCommand(router, getMessages, setMessages);
   registerExecSlashCommand(router, { permission });
+  registerAttachCommand(router, { pendingAttachments });
 
   router.register(
     'model',

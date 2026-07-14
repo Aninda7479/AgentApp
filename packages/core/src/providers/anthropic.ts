@@ -6,6 +6,7 @@ import {
   ModelCapability,
   AIProvider
 } from '../types/agent.js';
+import { toAnthropicMessages } from './multimodal.js';
 
 /** Provider adapter for the Anthropic Messages API (Claude). */
 export class AnthropicAdapter implements BaseProviderAdapter {
@@ -24,19 +25,7 @@ export class AnthropicAdapter implements BaseProviderAdapter {
     const model = request.model || this.defaultModel;
     const url = `${this.baseUrl}/v1/messages`;
 
-    let systemPrompt: string | undefined = undefined;
-    const filteredMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-
-    for (const msg of request.messages) {
-      if (msg.role === 'system') {
-        systemPrompt = systemPrompt ? `${systemPrompt}\n${msg.content}` : msg.content;
-      } else {
-        filteredMessages.push({
-          role: msg.role === 'assistant' ? 'assistant' : 'user',
-          content: msg.content
-        });
-      }
-    }
+    const { systemPrompt, messages: filteredMessages } = toAnthropicMessages(request.messages);
 
     if (filteredMessages.length === 0) {
       filteredMessages.push({ role: 'user', content: 'Hello' });
@@ -100,19 +89,7 @@ export class AnthropicAdapter implements BaseProviderAdapter {
     const model = request.model || this.defaultModel;
     const url = `${this.baseUrl}/v1/messages`;
 
-    let systemPrompt: string | undefined = undefined;
-    const filteredMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-
-    for (const msg of request.messages) {
-      if (msg.role === 'system') {
-        systemPrompt = systemPrompt ? `${systemPrompt}\n${msg.content}` : msg.content;
-      } else {
-        filteredMessages.push({
-          role: msg.role === 'assistant' ? 'assistant' : 'user',
-          content: msg.content
-        });
-      }
-    }
+    const { systemPrompt, messages: filteredMessages } = toAnthropicMessages(request.messages);
 
     const payload: Record<string, unknown> = {
       model,

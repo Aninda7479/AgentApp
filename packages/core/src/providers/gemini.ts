@@ -6,6 +6,7 @@ import {
   ModelCapability,
   AIProvider
 } from '../types/agent.js';
+import { contentToText } from './multimodal.js';
 
 /** Provider adapter for the Google Gemini Generative Language API. */
 export class GeminiAdapter implements BaseProviderAdapter {
@@ -29,12 +30,12 @@ export class GeminiAdapter implements BaseProviderAdapter {
 
     for (const msg of request.messages) {
       if (msg.role === 'system') {
-        systemText = systemText ? `${systemText}\n${msg.content}` : msg.content;
+        systemText = systemText ? `${systemText}\n${contentToText(msg.content)}` : contentToText(msg.content);
       } else {
         const geminiRole = msg.role === 'assistant' ? 'model' : 'user';
         contents.push({
           role: geminiRole,
-          parts: [{ text: msg.content }]
+          parts: [{ text: contentToText(msg.content) }]
         });
       }
     }
@@ -112,12 +113,12 @@ export class GeminiAdapter implements BaseProviderAdapter {
 
     for (const msg of request.messages) {
       if (msg.role === 'system') {
-        systemText = systemText ? `${systemText}\n${msg.content}` : msg.content;
+        systemText = systemText ? `${systemText}\n${contentToText(msg.content)}` : contentToText(msg.content);
       } else {
         const geminiRole = msg.role === 'assistant' ? 'model' : 'user';
         contents.push({
           role: geminiRole,
-          parts: [{ text: msg.content }]
+          parts: [{ text: contentToText(msg.content) }]
         });
       }
     }

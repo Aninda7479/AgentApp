@@ -12,6 +12,7 @@ export * from './providers/models.js';
 export * from './providers/provider-meta.js';
 export * from './providers/router.js';
 export * from './providers/autodetect.js';
+export { AgentEngine as SuperAgentEngine, type AgentEvent, type AgentEngineConfig } from './providers/ai-engine.js';
 export * from './tools/media.js';
 export * from './tools/mcp.js';
 export * from './planner/agent.js';

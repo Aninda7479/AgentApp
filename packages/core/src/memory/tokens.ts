@@ -1,4 +1,5 @@
 import { AgentMessage, ChatMessage, ToolDefinition } from '../types/agent.js';
+import { contentToText } from '../providers/multimodal.js';
 
 /** Token usage breakdown for a full context window. */
 export interface TokenUsageReport {
@@ -26,7 +27,7 @@ export class TrajectoryTokenCounter {
   /** Estimates tokens in a single message including tool calls. */
   public estimateMessageTokens(message: AgentMessage | ChatMessage): number {
     let tokens = 4; // Base per message formatting overhead
-    tokens += this.estimateTextTokens(message.content);
+    tokens += this.estimateTextTokens(contentToText(message.content));
 
     if (message.toolCalls && message.toolCalls.length > 0) {
       for (const tc of message.toolCalls) {

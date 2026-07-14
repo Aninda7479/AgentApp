@@ -59,6 +59,8 @@ import { ComputerUse } from '../automation/computer-use.js';
 import { PlaywrightBrowserEngine } from '../automation/browser.js';
 import { BrowserLifecycleService } from '../automation/browser-service.js';
 import { resolveProviderFamily, resolveBaseUrl } from './provider-meta.js';
+import { ContentBlock, ImageAttachment } from '../types/agent.js';
+import { toOpenAIMessages, toAnthropicMessages } from './multimodal.js';
 
 const execAsync = promisify(exec);
 
@@ -530,7 +532,7 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
+  content: string | ContentBlock[];
   toolCallId?: string;
   name?: string;
 }
@@ -579,8 +581,8 @@ Key guidelines:
     this.history.push({ role: 'system', content: sysPrompt });
   }
 
-  /** Add a user message to history */
-  public addUserMessage(content: string): void {
+  /** Add a user message to history (plain text or multimodal content blocks). */
+  public addUserMessage(content: string | ContentBlock[]): void {
     this.history.push({ role: 'user', content });
   }
 
@@ -605,10 +607,23 @@ Key guidelines:
   /** Main streaming agent run */
   public async run(
     userPrompt: string,
-    onEvent: (event: AgentEvent) => void
+    onEvent: (event: AgentEvent) => void,
+    attachments?: ImageAttachment[]
   ): Promise<void> {
     this.abortController = new AbortController();
-    this.addUserMessage(userPrompt);
+
+    // Build the user message. When attachments are present, emit a multimodal
+    // content array (one text block + one image_url block per attachment);
+    // otherwise keep the plain-string form for backward compatibility.
+    if (attachments && attachments.length > 0) {
+      const content: ContentBlock[] = [{ type: 'text', text: userPrompt }];
+      for (const att of attachments) {
+        content.push({ type: 'image_url', image_url: { url: att.dataUrl } });
+      }
+      this.addUserMessage(content);
+    } else {
+      this.addUserMessage(userPrompt);
+    }
 
     let iterations = 0;
     const MAX_ITERATIONS = 10; // prevent infinite loops
@@ -751,17 +766,8 @@ Key guidelines:
     const baseUrl = resolveBaseUrl(this.config.provider, this.config.baseUrl);
     const url = `${baseUrl}/chat/completions`;
 
-    // Convert history to OpenAI format (handle tool messages)
-    const messages = this.history.map(msg => {
-      if (msg.role === 'tool') {
-        return {
-          role: 'tool' as const,
-          content: msg.content,
-          tool_call_id: msg.toolCallId || 'unknown'
-        };
-      }
-      return { role: msg.role as 'system' | 'user' | 'assistant', content: msg.content };
-    });
+    // Convert history to OpenAI format (handles tool messages + multimodal content)
+    const messages = toOpenAIMessages(this.history);
 
     const payload = {
       model: this.config.model,
@@ -867,23 +873,8 @@ Key guidelines:
     const anthropicHost = resolveBaseUrl('anthropic', this.config.baseUrl).replace(/\/v1\/?$/, '');
     const url = `${anthropicHost}/v1/messages`;
 
-    // Anthropic separates system from messages
-    const systemMsg = this.history.find(m => m.role === 'system')?.content || '';
-    const conversationMsgs = this.history
-      .filter(m => m.role !== 'system')
-      .map(m => {
-        if (m.role === 'tool') {
-          return {
-            role: 'user' as const,
-            content: [{
-              type: 'tool_result' as const,
-              tool_use_id: m.toolCallId || 'unknown',
-              content: m.content
-            }]
-          };
-        }
-        return { role: m.role as 'user' | 'assistant', content: m.content };
-      });
+    // Anthropic separates system from messages (handles tool + multimodal content)
+    const { systemPrompt: systemMsg, messages: conversationMsgs } = toAnthropicMessages(this.history);
 
     const tools = this.tools.map(t => ({
       name: t.name,

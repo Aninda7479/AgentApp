@@ -26,10 +26,10 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/SuperAgent.git
+git clone https://github.com/Aninda7479/AgentApp.git
 
 # Navigate to project directory
-cd SuperAgent
+cd AgentApp
 
 # Install dependencies
 npm install

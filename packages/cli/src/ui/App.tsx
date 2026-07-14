@@ -10,6 +10,8 @@ import { buildSlashCommandRouter, formatSlashCommandHelp } from '../commands/reg
 import { DiffReviewer } from '../commands/diff.js';
 import { TaskManager } from '../commands/tasks.js';
 import { ContextMessage } from '../commands/compact.js';
+import { ImageAttachment } from '@superagent/core';
+import { prepareAttachments, formatBytes } from '../attachments.js';
 
 /** Root props for the SuperAgent TUI application. */
 export interface AppProps {
@@ -26,6 +28,8 @@ export interface ChatMessage {
   content: string;
   isStreaming?: boolean;
   timestamp: number;
+  /** Image attachments carried by this (user) message, if any. */
+  attachments?: ImageAttachment[];
 }
 
 /** Main SuperAgent Terminal TUI: manages chat messages, streaming, queue, and keyboard shortcuts. */
@@ -64,6 +68,11 @@ export const App: React.FC<AppProps> = ({
   const permissionRef = useRef<PermissionLevel>(permission);
   permissionRef.current = permission;
 
+  // Shared queue of image attachments populated by the `/attach` command and
+  // merged into the next user message. Held in a ref so the router (created
+  // once) and the send handler share the same array by reference.
+  const pendingAttachmentsRef = useRef<ImageAttachment[]>([]);
+
   // Bridge between the TUI's ChatMessage[] and the router's ContextMessage[]
   // used by the /compact command.
   const getContextMessages = (): ContextMessage[] =>
@@ -86,6 +95,7 @@ export const App: React.FC<AppProps> = ({
       setMessages: setContextMessages,
       diffReviewer: new DiffReviewer(),
       taskManager: new TaskManager(),
+      pendingAttachments: pendingAttachmentsRef.current,
       get permission() {
         return permissionRef.current;
       },
@@ -131,19 +141,20 @@ export const App: React.FC<AppProps> = ({
     }
 
     const isSlash = router.isSlashCommand(trimmed);
-    const userMsg: ChatMessage = {
-      id: `msg-${Date.now()}`,
-      role: 'user',
-      content: text,
-      timestamp: Date.now(),
-    };
 
-    transcriptManager.addRecord('user', text);
-    appendMessage(userMsg);
-    setIsStreaming(true);
+    // Slash commands: no attachment detection; execute against the router.
+    if (isSlash) {
+      const userMsg: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'user',
+        content: text,
+        timestamp: Date.now(),
+      };
+      transcriptManager.addRecord('user', text);
+      appendMessage(userMsg);
+      setIsStreaming(true);
 
-    setTimeout(() => {
-      if (isSlash) {
+      setTimeout(() => {
         router
           .execute(trimmed)
           .then((res) => {
@@ -162,20 +173,55 @@ export const App: React.FC<AppProps> = ({
             setIsStreaming(false);
             processNextQueuedTurn();
           });
-        return;
+      }, 100);
+      return;
+    }
+
+    // Regular prompt: detect image paths in the text (drag-and-drop inserts the
+    // path as text), then merge any images queued via `/attach`.
+    setIsStreaming(true);
+    void (async () => {
+      const { cleanText, attachments: detected } = await prepareAttachments(text);
+      const queued = pendingAttachmentsRef.current.splice(0);
+      const attachments = [...queued, ...detected];
+      const promptText = cleanText.trim().length > 0 ? cleanText : text;
+
+      const userMsg: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: 'user',
+        content: promptText,
+        timestamp: Date.now(),
+        attachments: attachments.length > 0 ? attachments : undefined,
+      };
+      transcriptManager.addRecord('user', promptText);
+      appendMessage(userMsg);
+
+      if (attachments.length > 0) {
+        const note = attachments
+          .map((a) => `📎 ${a.path.split(/[\\/]/).pop()} (${a.mediaType}, ${formatBytes(a.size)})`)
+          .join('\n');
+        appendMessage({
+          id: `msg-${Date.now() + 1}`,
+          role: 'system',
+          content: `Attached ${attachments.length} image(s):\n${note}`,
+          timestamp: Date.now(),
+        });
       }
 
       const assistantMsg: ChatMessage = {
-        id: `msg-${Date.now() + 1}`,
+        id: `msg-${Date.now() + 2}`,
         role: 'assistant',
-        content: `Received prompt: "${text}". Permission mode is [${permission}].`,
+        content:
+          `Received prompt: "${promptText}"` +
+          (attachments.length > 0 ? ` with ${attachments.length} image attachment(s)` : '') +
+          `. Permission mode is [${permission}].`,
         timestamp: Date.now(),
       };
       transcriptManager.addRecord('assistant', assistantMsg.content);
       appendMessage(assistantMsg);
       setIsStreaming(false);
       processNextQueuedTurn();
-    }, 100);
+    })();
   };
 
   const handleQueueTurn = (text: string): void => {

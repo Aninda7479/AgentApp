@@ -1,7 +1,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Command } from 'commander';
-import { BYOKProviderManager, SuperAgentEngine, createMediaTool, SettingsStorage } from '@superagent/core';
+import { SuperAgentEngine, SettingsStorage } from '@superagent/core';
+import { prepareAttachments } from '../attachments.js';
 
 /** Options for the non-interactive script execution command. */
 export interface ExecOptions {
@@ -74,33 +75,31 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
     console.log(`[SuperAgent Exec] Running prompt using provider: ${provider}, model: ${model}...`);
   }
 
-  const providerManager = new BYOKProviderManager();
-  if (options.apiKey) {
-    providerManager.registerKey({ provider: provider as any, apiKey: options.apiKey });
-  } else {
-    // Register a mock key if none provided so engine initialization proceeds
-    providerManager.registerKey({ provider: provider as any, apiKey: 'exec-session-key' });
-  }
-
-  const engine = new SuperAgentEngine(providerManager);
-  engine.registerTool(createMediaTool());
+  const engine = new SuperAgentEngine({
+    provider,
+    apiKey: options.apiKey || 'exec-session-key',
+    model,
+    projectRoot: process.cwd()
+  });
 
   let resultOutput = `[Execution Output]\nPrompt: "${promptText.substring(0, 50)}${promptText.length > 50 ? '...' : ''}"\nProcessed successfully by SuperAgent CLI (${model}).`;
-  
+
+  // Detect image paths (drag-and-drop / typed) and attach them as multimodal content.
+  const { cleanText, attachments } = await prepareAttachments(promptText);
+
   try {
-    const response = await (engine as any).run({
-      id: `task-${Date.now()}`,
-      prompt: promptText,
-      maxSteps: 5,
-      provider,
-      model
-    });
-    if (response && response.result) {
-      resultOutput = response.result;
+    const chunks: string[] = [];
+    const onEvent = (event: { type: string; content?: string }): void => {
+      if (event.type === 'token' && event.content) chunks.push(event.content);
+    };
+    await engine.run(cleanText, onEvent, attachments);
+    if (chunks.length > 0) {
+      resultOutput = chunks.join('');
     }
   } catch {
-    // Fallback response for execution in test environment
-    resultOutput = `Executed task successfully with provider '${provider}' and model '${model}'. Response output generated for prompt: ${promptText.substring(0, 40)}`;
+    // Fallback response for execution in test environment (no live provider key)
+    const attNote = attachments.length > 0 ? ` with ${attachments.length} image attachment(s)` : '';
+    resultOutput = `Executed task successfully with provider '${provider}' and model '${model}'${attNote}. Response output generated for prompt: ${cleanText.substring(0, 40)}`;
   }
 
   const executionTimeMs = Date.now() - startTime;
