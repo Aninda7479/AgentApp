@@ -7,6 +7,7 @@ export * from './commands/theme.js';
 export * from './commands/learn.js';
 export * from './commands/init.js';
 export * from './commands/doctor.js';
+export * from './commands/exec.js';
 export * from './commands/compact.js';
 export * from './commands/diff.js';
 export * from './commands/permissions.js';

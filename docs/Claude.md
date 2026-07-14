@@ -118,6 +118,7 @@ Claude Desktop and Claude Code are designed as native MCP clients:
 | `/btw` | Ask a side question without polluting the main conversation context window (CLI `/btw` only; not in desktop) |
 | `/voice` ✅ | Toggle voice dictation mode / microphone dictation (headless CLI acknowledges; Desktop/Web provide mic input) |
 | `/bug` ✅ | File a bug report (saved locally with environment context; no remote submission in CLI) |
+| `/exec` / `! <cmd>` | Run a raw shell command in the workspace through the sandbox executor, honoring the session permission level (CLI `/exec` and `!` prefix only; not in desktop) |
 | `/login` / `/logout` | Authenticate or log out from your account / manage credentials (web build only; no CLI/desktop command) |
 
 ---

@@ -3,6 +3,7 @@ import { registerCompactCommand, ContextMessage, CompactOptions } from './compac
 import { registerDiffCommand, DiffReviewer } from './diff.js';
 import { registerReviewCommand, CodeReviewer } from './review.js';
 import { registerSecurityReviewCommand } from './security.js';
+import { registerExecSlashCommand } from './exec.js';
 import { registerMCPCommand } from './mcp.js';
 import { registerConfigCommand } from './config.js';
 import { registerCostCommand } from './cost.js';
@@ -89,6 +90,7 @@ export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRou
   registerVoiceCommand(router);
   registerTasksCommand(router, taskManager);
   registerClearCommand(router, getMessages, setMessages);
+  registerExecSlashCommand(router, { permission });
 
   router.register(
     'model',

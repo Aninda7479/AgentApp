@@ -51,14 +51,28 @@ export class SlashCommandRouter {
     }
   }
 
-  /** Returns true if the input starts with '/'. */
+  /** Returns true if the input starts with '/' or with '!' (raw shell exec). */
   public isSlashCommand(input: string): boolean {
-    return input.trim().startsWith('/');
+    const trimmed = input.trim();
+    return trimmed.startsWith('/') || trimmed.startsWith('!');
   }
 
   /** Parses a slash command string into a SlashCommandContext, or null if invalid. */
   public parse(input: string): SlashCommandContext | null {
     const trimmed = input.trim();
+
+    // A leading '!' is shorthand for the `exec` command (run a raw shell command).
+    if (trimmed.startsWith('!')) {
+      const command = trimmed.substring(1).trim();
+      if (!command) return null;
+      return {
+        command: 'exec',
+        args: command.split(/\s+/),
+        rawArgs: command,
+        fullInput: input
+      };
+    }
+
     if (!trimmed.startsWith('/')) return null;
 
     const body = trimmed.substring(1);
