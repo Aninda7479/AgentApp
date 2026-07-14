@@ -7,6 +7,7 @@ import { handleStatusCommand } from './status.js';
 import { handleThemeCommand } from './theme.js';
 import { handleLearnCommand } from './learn.js';
 import { handleInitCommand } from './init.js';
+import { handleDoctorCommand } from './doctor.js';
 
 /** Converts a CLICommandResult into the router's SlashCommandResult shape. */
 function toSlashResult(command: string, res: CLICommandResult): SlashCommandResult {
@@ -94,6 +95,16 @@ export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRou
       description: 'Generate project AGENTS.md and agent context',
       aliases: ['i'],
       usage: '/init [--force]'
+    }
+  );
+
+  router.register(
+    'doctor',
+    (ctx: SlashCommandContext) => toSlashResult('doctor', handleDoctorCommand(ctx.args, session)),
+    {
+      description: 'Run setup checkup and configuration diagnostics',
+      aliases: ['diag', 'check'],
+      usage: '/doctor'
     }
   );
 

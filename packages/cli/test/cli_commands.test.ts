@@ -271,7 +271,7 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
     });
 
     const names = router.getCommands().map((d) => d.name).sort();
-    expect(names).toEqual(['compact', 'diff', 'init', 'learn', 'model', 'status', 'theme']);
+    expect(names).toEqual(['compact', 'diff', 'doctor', 'init', 'learn', 'model', 'status', 'theme']);
   });
 
   it('should dispatch /model list through the wired router', async () => {
@@ -382,10 +382,27 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
     });
 
     const help = formatSlashCommandHelp(router);
-    for (const name of ['model', 'status', 'theme', 'learn', 'init', 'compact', 'diff']) {
+    for (const name of ['model', 'status', 'theme', 'learn', 'init', 'compact', 'diff', 'doctor']) {
       expect(help).toContain(`/${name}`);
     }
     expect(help).toContain('/help');
     expect(help).toContain('/exit');
+  });
+
+  it('should run setup diagnostics via the wired /doctor command', async () => {
+    const session = createSessionContext();
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => [],
+      setMessages: () => {},
+      diffReviewer: new DiffReviewer()
+    });
+
+    const res = await router.execute('/doctor');
+    expect(res.success).toBe(true);
+    expect(res.output).toContain('=== SuperAgent Doctor (Setup Diagnostics) ===');
+    expect(res.output).toContain('[PASS]');
+    const report = res.data as { checks: { name: string }[] };
+    expect(report.checks.map((c) => c.name)).toContain('Node.js Runtime');
   });
 });

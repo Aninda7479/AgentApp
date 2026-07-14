@@ -12,7 +12,10 @@ import {
   SessionTracker,
   SkillCodifier,
   ProjectContextGenerator,
-  ThemeSwitcher
+  ThemeSwitcher,
+  SystemDoctor,
+  handleDoctorCommand,
+  MIN_NODE_MAJOR
 } from '../src/index.js';
 
 describe('CLI Command Unit Tools', () => {
@@ -136,6 +139,56 @@ describe('CLI Command Unit Tools', () => {
 
       const invalidRes = handleThemeCommand(['nonexistent'], context);
       expect(invalidRes.success).toBe(false);
+    });
+  });
+
+  describe('System Doctor (/doctor)', () => {
+    it('should detect a supported Node.js runtime version', () => {
+      const check = SystemDoctor.checkNodeVersion(MIN_NODE_MAJOR);
+      expect(check.name).toBe('Node.js Runtime');
+      expect(check.status).toBe('pass');
+      expect(check.detail).toContain('Node.js v');
+    });
+
+    it('should fail when the Node.js version is below the minimum', () => {
+      const check = SystemDoctor.checkNodeVersion(999);
+      expect(check.status).toBe('fail');
+    });
+
+    it('should warn when no provider API key is configured', () => {
+      const context = createSessionContext();
+      const check = SystemDoctor.checkProviderKeys(context);
+      expect(check.name).toBe('Provider API Keys');
+      expect(check.status).toBe('warn');
+    });
+
+    it('should pass when a provider API key is configured', () => {
+      const context = createSessionContext();
+      context.byokManager.registerKey({ provider: 'openai', apiKey: 'sk-test' });
+      const check = SystemDoctor.checkProviderKeys(context);
+      expect(check.status).toBe('pass');
+      expect(check.detail).toContain('1 provider key(s)');
+    });
+
+    it('should populate the model registry check', () => {
+      const context = createSessionContext();
+      const check = SystemDoctor.checkModelRegistry(context);
+      expect(check.name).toBe('Model Registry');
+      expect(check.status).toBe('pass');
+      expect(check.detail).toContain('model capabilities registered');
+    });
+
+    it('should run a full diagnostic report with four checks', () => {
+      const context = createSessionContext();
+      const report = SystemDoctor.run(context);
+      expect(report.checks).toHaveLength(4);
+      expect(typeof report.healthy).toBe('boolean');
+      const formatted = SystemDoctor.formatReport(report);
+      expect(formatted).toContain('=== SuperAgent Doctor (Setup Diagnostics) ===');
+
+      const cmdRes = handleDoctorCommand([], context);
+      expect(cmdRes.success).toBe(report.healthy);
+      expect(cmdRes.message).toBe(formatted);
     });
   });
 });
