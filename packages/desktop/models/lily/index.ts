@@ -9,9 +9,14 @@ import {
   updateAnimations
 } from './animations';
 import { buildLilyGeometry, applyLilyRest, makeMat } from './model';
-import { playSound } from './src/audio';
+import { playSound } from './audio';
 
 export { Behavior, ExpressionName, Pose, Vec3 };
+
+export const name = 'Lily';
+export const desc = 'A cute anime companion who works, sleeps, and keeps you company.';
+export const type = 'girl'; // Supports Boy/Girl/Pet
+export const dp = '🧍'; // Supports emoji or image file path (relative to partner folder)
 
 export interface Character {
   object: THREE.Object3D;

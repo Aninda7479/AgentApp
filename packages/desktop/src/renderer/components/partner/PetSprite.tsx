@@ -41,12 +41,25 @@ export const PetSprite: React.FC<PetSpriteProps> = ({ manifest, mood, size = 48,
       }}
       aria-label={`${manifest.name} (${mood})`}
     >
-      <span
-        className="select-none leading-none"
-        style={{ fontSize: size, filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.45))' }}
-      >
-        {emoji}
-      </span>
+      {manifest.dpUrl ? (
+        <img
+          src={manifest.dpUrl}
+          alt={manifest.name}
+          className="rounded-full object-cover select-none pointer-events-none"
+          style={{
+            width: size,
+            height: size,
+            filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.35))'
+          }}
+        />
+      ) : (
+        <span
+          className="select-none leading-none"
+          style={{ fontSize: size, filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.45))' }}
+        >
+          {emoji}
+        </span>
+      )}
     </div>
   );
 };

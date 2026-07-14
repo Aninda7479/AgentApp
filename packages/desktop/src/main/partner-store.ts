@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import url from 'url';
 
 /**
  * Main-process store for the open Partner/Pet ecosystem.
@@ -12,6 +13,30 @@ import path from 'path';
  */
 
 const ACTIVE_FILE = 'active.json';
+
+const DEFAULT_LILY_MANIFEST = {
+  schema: 'superagent-partner',
+  id: 'lily',
+  name: 'Lily',
+  kind: 'girl',
+  version: '1.0.0',
+  description: 'A cute anime companion who works, sleeps, and keeps you company.',
+  author: 'SuperAgent',
+  accent: '#ff8fb3',
+  emoji: '🧍',
+  script: 'models/lily/index.js',
+  laptop: true,
+  pillow: true,
+  reactions: {
+    idle:      { emoji: '🧍', line: 'Ready when you are.' },
+    thinking:  { emoji: '🤔', line: 'Hmm, let me think…' },
+    working:   { emoji: '💻', line: 'On it!' },
+    happy:     { emoji: '🙂', line: 'Nice.' },
+    celebrate: { emoji: '🎉', line: 'Done!' },
+    sad:       { emoji: '😢', line: 'That didn\'t go well.' },
+    sleeping:  { emoji: '😴', line: 'zzz' }
+  }
+};
 
 export interface StoredPartner {
   id: string;
@@ -48,25 +73,104 @@ function isValidManifest(raw: any): raw is Record<string, unknown> {
   return true;
 }
 
+function applyDynamicMetadata(manifest: any, folder: string): void {
+  const scriptFile = manifest && typeof manifest.script === 'string' ? manifest.script : null;
+  if (!scriptFile) return;
+
+  let scriptPath = '';
+  if (manifest.id === 'lily' && (scriptFile.startsWith('models/') || scriptFile.startsWith('dist/'))) {
+    scriptPath = path.join(__dirname, '..', scriptFile);
+    if (!fs.existsSync(scriptPath)) {
+      scriptPath = path.join(__dirname, scriptFile);
+    }
+  } else {
+    scriptPath = path.join(folder, scriptFile);
+  }
+
+  if (fs.existsSync(scriptPath)) {
+    try {
+      delete require.cache[require.resolve(scriptPath)];
+      const mod = require(scriptPath);
+      if (mod) {
+        if (typeof mod.name === 'string') manifest.name = mod.name;
+        if (typeof mod.desc === 'string') manifest.description = mod.desc;
+        else if (typeof mod.description === 'string') manifest.description = mod.description;
+        if (typeof mod.type === 'string') manifest.kind = mod.type;
+        else if (typeof mod.kind === 'string') manifest.kind = mod.kind;
+
+        if (typeof mod.dp === 'string') {
+          manifest.emoji = mod.dp;
+          if (/\.(png|jpg|jpeg|webp|gif)$/i.test(mod.dp)) {
+            manifest.dp = mod.dp;
+            const dpPath = path.join(folder, mod.dp);
+            manifest.dpPath = dpPath;
+            manifest.dpUrl = url.pathToFileURL(dpPath).href;
+          } else {
+            manifest.dp = undefined;
+            manifest.dpPath = undefined;
+            manifest.dpUrl = undefined;
+          }
+        } else if (typeof mod.emoji === 'string') {
+          manifest.emoji = mod.emoji;
+          manifest.dp = undefined;
+          manifest.dpPath = undefined;
+          manifest.dpUrl = undefined;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load dynamic metadata from script:', scriptPath, e);
+    }
+  }
+}
+
 /** Lists all installed Partner manifests. */
 export function listPartners(userData: string): Record<string, unknown>[] {
   const dir = petsDir(userData);
-  if (!fs.existsSync(dir)) return [];
   const out: Record<string, unknown>[] = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const manifestPath = path.join(dir, entry.name, 'partner.json');
-    const manifest = readJson<Record<string, unknown>>(manifestPath);
-    if (manifest && isValidManifest(manifest)) out.push(manifest);
+
+  // 1. Add built-in Lily partner with dynamic metadata
+  const lilyCopy = JSON.parse(JSON.stringify(DEFAULT_LILY_MANIFEST));
+  const lilyFolder = path.join(__dirname, '..');
+  lilyCopy.folder = lilyFolder;
+  applyDynamicMetadata(lilyCopy, lilyFolder);
+  out.push(lilyCopy);
+
+  // 2. Add custom installed partners
+  if (fs.existsSync(dir)) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name === 'lily') continue;
+      const folder = path.join(dir, entry.name);
+      const manifestPath = path.join(folder, 'partner.json');
+      const manifest = readJson<Record<string, unknown>>(manifestPath);
+      if (manifest && isValidManifest(manifest)) {
+        (manifest as any).folder = folder;
+        applyDynamicMetadata(manifest, folder);
+        out.push(manifest);
+      }
+    }
   }
   return out;
 }
 
 /** Reads a single Partner manifest by id (null if not installed). */
 export function getPartner(userData: string, id: string): Record<string, unknown> | null {
-  const manifestPath = path.join(petsDir(userData), id, 'partner.json');
+  if (id === 'lily') {
+    const lilyCopy = JSON.parse(JSON.stringify(DEFAULT_LILY_MANIFEST));
+    const lilyFolder = path.join(__dirname, '..');
+    lilyCopy.folder = lilyFolder;
+    applyDynamicMetadata(lilyCopy, lilyFolder);
+    return lilyCopy;
+  }
+  const folder = path.join(petsDir(userData), id);
+  const manifestPath = path.join(folder, 'partner.json');
   const manifest = readJson<Record<string, unknown>>(manifestPath);
-  return manifest && isValidManifest(manifest) ? manifest : null;
+  if (manifest && isValidManifest(manifest)) {
+    (manifest as any).folder = folder;
+    applyDynamicMetadata(manifest, folder);
+    return manifest;
+  }
+  return null;
 }
 
 /** Copies a Partner folder (chosen by the user) into the pets directory. */

@@ -25,7 +25,7 @@ export interface PartnerViewProps {
 const BUILTIN_IDS = new Set(DEFAULT_PARTNERS.map((p) => p.id));
 
 function openDocs(): void {
-  const url = 'https://github.com/Aninda7479/AgentApp/blob/main/docs\Partner-Pet.md';
+  const url = 'https://github.com/Aninda7479/AgentApp/blob/main/docs/Partner-Pet.md';
   try {
     const req = (window as any).require;
     if (req) {

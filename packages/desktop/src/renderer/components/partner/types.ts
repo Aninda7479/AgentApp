@@ -68,6 +68,10 @@ export interface PartnerManifest {
   accent?: string;
   /** Default emoji used when a mood has no specific emoji. */
   emoji?: string;
+  /** Display picture (can be an emoji or an image file path like dp.png). */
+  dp?: string;
+  /** Resolved absolute URL of the DP image file. */
+  dpUrl?: string;
   /** Optional sprite frames (asset filenames) for frame-by-frame animation. */
   frames?: string[];
   /**
@@ -199,6 +203,8 @@ export function normalizeManifest(raw: Record<string, unknown>): PartnerManifest
     author: typeof raw.author === 'string' ? raw.author : undefined,
     accent: typeof raw.accent === 'string' ? raw.accent : '#7c83ff',
     emoji: typeof raw.emoji === 'string' ? raw.emoji : '🐾',
+    dp: typeof raw.dp === 'string' ? raw.dp : undefined,
+    dpUrl: typeof raw.dpUrl === 'string' ? raw.dpUrl : undefined,
     frames: Array.isArray(raw.frames) ? (raw.frames as string[]) : undefined,
     model: typeof raw.model === 'string' ? raw.model : undefined,
     vrm: typeof raw.vrm === 'string' ? raw.vrm : undefined,
