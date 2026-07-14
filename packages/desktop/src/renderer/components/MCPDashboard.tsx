@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Input, Select, Toggle } from './ui';
-import { Terminal, Globe, Sparkles, KeyRound, ExternalLink } from 'lucide-react';
+import { Terminal, Globe, Sparkles, KeyRound, ExternalLink, Plus, RefreshCw, Server, Trash2 } from 'lucide-react';
 
 /** Information about a connected MCP server. */
 export interface MCPServerInfo {
@@ -51,16 +51,73 @@ export interface MCPDashboardProps {
   onInstallCatalog?: (entry: CatalogEntry, keys: Record<string, string>) => void;
 }
 
+/**
+ * Maps a catalog server id to the GitHub organization whose avatar is used as
+ * the brand logo (loaded from `https://github.com/<org>.png`). Falls back to
+ * the server's emoji icon if the image fails to load.
+ */
+const LOGO_ORG: Record<string, string> = {
+  filesystem: 'modelcontextprotocol',
+  memory: 'modelcontextprotocol',
+  'sequential-thinking': 'modelcontextprotocol',
+  fetch: 'modelcontextprotocol',
+  github: 'github',
+  'brave-search': 'brave',
+  puppeteer: 'puppeteer',
+  'google-drive': 'google',
+  slack: 'slackhq',
+  postgres: 'postgres',
+  sqlite: 'sqlite',
+  git: 'git',
+  notion: 'makenotion'
+};
+
+/** Renders a server's real brand logo with an emoji fallback tile. */
+const ServerLogo: React.FC<{ id?: string; icon?: string; size?: number }> = ({ id, icon, size = 30 }) => {
+  const [error, setError] = useState(false);
+  const org = id ? LOGO_ORG[id] : undefined;
+
+  if (error || !org) {
+    return (
+      <div
+        style={{ width: size, height: size }}
+        className="flex flex-shrink-0 items-center justify-center rounded-lg bg-brand-bg text-base"
+      >
+        {icon || '🔌'}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={`https://github.com/${org}.png?size=64`}
+      alt=""
+      onError={() => setError(true)}
+      style={{ width: size, height: size }}
+      className="flex-shrink-0 rounded-lg bg-brand-bg object-cover"
+    />
+  );
+};
+
+const getStatusDotClass = (status: MCPServerInfo['status']) => {
+  switch (status) {
+    case 'connected': return 'bg-emerald-400';
+    case 'connecting': return 'bg-amber-400 animate-pulse';
+    case 'error': return 'bg-red-400';
+    default: return 'bg-brand-textMuted/50';
+  }
+};
+
 const getStatusBadgeClass = (status: MCPServerInfo['status']) => {
   switch (status) {
     case 'connected':
-      return 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/40';
+      return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
     case 'connecting':
-      return 'bg-amber-950/80 text-amber-400 border border-amber-800/40';
+      return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
     case 'error':
-      return 'bg-red-950/80 text-red-400 border border-red-800/40';
+      return 'bg-red-500/10 text-red-400 border border-red-500/20';
     default:
-      return 'bg-brand-border/30 text-brand-textMuted border border-brand-border/40';
+      return 'bg-brand-bg text-brand-textMuted border border-brand-border/40';
   }
 };
 
@@ -73,6 +130,7 @@ const getStatusLabel = (status: MCPServerInfo['status']) => {
   }
 };
 
+/** A compact catalog card with a real logo and an inline key form on install. */
 const CatalogCard: React.FC<{
   entry: CatalogEntry;
   onInstall: (entry: CatalogEntry, keys: Record<string, string>) => void;
@@ -94,45 +152,50 @@ const CatalogCard: React.FC<{
     }
   };
 
+  const handleClick = () => {
+    if (needsKeys && !expanded) {
+      setExpanded(true);
+      return;
+    }
+    handleInstall();
+  };
+
   return (
     <div
       data-testid={`mcp-popular-card-${entry.id}`}
-      className="bg-brand-card border border-brand-border/60 rounded-2xl p-4 flex flex-col gap-3 shadow-[0_4px_12px_rgba(0,0,0,0.3)] hover:border-[var(--brand-accent-border)] transition-all duration-200"
+      className="group flex flex-col gap-2.5 rounded-xl border border-brand-border/60 bg-brand-card p-3 transition-all duration-200 hover:border-[var(--brand-accent-border)]"
     >
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand-bg text-xl">
-          {entry.icon || '🔌'}
-        </div>
+      <div className="flex items-center gap-3">
+        <ServerLogo id={entry.id} icon={entry.icon} size={30} />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-brand-textMain">{entry.name}</div>
-          <p className="text-xs leading-5 text-brand-textMuted mt-0.5 line-clamp-2">{entry.description}</p>
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-[13px] font-semibold text-brand-textMain">{entry.name}</span>
+            <span
+              title={entry.transport === 'stdio' ? 'Local (stdio)' : 'Remote'}
+              className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
+                entry.transport === 'stdio' ? 'bg-brand-textMuted/40' : 'bg-[var(--brand-accent)]'
+              }`}
+            />
+          </div>
+          <p className="truncate text-[11px] leading-4 text-brand-textMuted">{entry.description}</p>
         </div>
-        <span
-          className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex-shrink-0 ${
-            entry.transport === 'stdio'
-              ? 'bg-brand-bg text-brand-textMuted border border-brand-border/40'
-              : 'bg-[var(--brand-accent-tint)] text-[var(--brand-accent)] border border-[var(--brand-accent-border)]'
-          }`}
+        <Button
+          data-testid={`mcp-install-${entry.id}`}
+          onClick={handleClick}
+          variant={expanded ? 'primary' : 'secondary'}
+          size="sm"
+          disabled={installing || (expanded && requiredMissing)}
+          className="flex-shrink-0"
         >
-          {entry.transport}
-        </span>
+          {expanded ? (installing ? 'Connecting…' : 'Connect') : installing ? 'Connecting…' : needsKeys ? 'Install' : '+ Install'}
+        </Button>
       </div>
 
-      {entry.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {entry.tags.slice(0, 4).map((tag) => (
-            <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-md bg-brand-bg text-brand-textMuted">
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
-
       {expanded && (
-        <div className="flex flex-col gap-2.5 border-t border-brand-border/40 pt-3 animate-fade-in">
+        <div className="flex flex-col gap-2.5 border-t border-brand-border/40 pt-2.5 animate-fade-in">
           {entry.envKeys.map((envKey) => (
             <div key={envKey.key} className="flex flex-col gap-1">
-              <label className="text-[11px] font-medium text-brand-textMain flex items-center gap-1.5">
+              <label className="flex items-center gap-1.5 text-[11px] font-medium text-brand-textMain">
                 <KeyRound size={11} className="text-[var(--brand-accent)]" />
                 {envKey.label}
                 {envKey.required ? (
@@ -148,7 +211,7 @@ const CatalogCard: React.FC<{
                     onClick={(e) => e.stopPropagation()}
                     className="ml-auto inline-flex items-center gap-0.5 text-[10px] text-[var(--brand-accent)] hover:underline"
                   >
-                    <ExternalLink size={9} /> Get
+                    <ExternalLink size={9} /> Get key
                   </a>
                 )}
               </label>
@@ -156,50 +219,22 @@ const CatalogCard: React.FC<{
                 type={envKey.secret ? 'password' : 'text'}
                 value={values[envKey.key] || ''}
                 onChange={(e) => setValues((prev) => ({ ...prev, [envKey.key]: e.target.value }))}
-                placeholder={envKey.label}
+                placeholder={envKey.description || envKey.label}
               />
-              {envKey.description && (
-                <span className="text-[10px] text-brand-textMuted/80 leading-4">{envKey.description}</span>
-              )}
             </div>
           ))}
+          {entry.homepage && (
+            <a
+              href={entry.homepage}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[10px] text-brand-textMuted hover:text-[var(--brand-accent)]"
+            >
+              <ExternalLink size={9} /> Documentation
+            </a>
+          )}
         </div>
       )}
-
-      <div className="flex items-center justify-between gap-2 mt-1">
-        {entry.homepage && (
-          <a
-            href={entry.homepage}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 text-[11px] text-brand-textMuted hover:text-[var(--brand-accent)]"
-          >
-            <ExternalLink size={10} /> Docs
-          </a>
-        )}
-        {needsKeys ? (
-          <Button
-            data-testid={`mcp-install-${entry.id}`}
-            onClick={() => (expanded ? handleInstall() : setExpanded(true))}
-            variant={expanded ? 'primary' : 'secondary'}
-            size="sm"
-            disabled={expanded && requiredMissing}
-          >
-            {expanded ? (installing ? 'Connecting…' : 'Connect') : 'Install'}
-          </Button>
-        ) : (
-          <Button
-            data-testid={`mcp-install-${entry.id}`}
-            onClick={() => handleInstall()}
-            variant="primary"
-            size="sm"
-            disabled={installing}
-          >
-            {installing ? 'Connecting…' : 'Install'}
-          </Button>
-        )}
-      </div>
     </div>
   );
 };
@@ -237,38 +272,41 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
   return (
     <div
       data-testid="mcp-dashboard"
-      className="flex-1 px-4 md:px-8 py-6 bg-brand-bg text-brand-textMain overflow-y-auto"
+      className="h-full w-full overflow-y-auto px-4 py-5 text-brand-textMain md:px-6 md:py-6"
     >
-      {/* Dashboard Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-6 border-b border-brand-border pb-4">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold m-0 flex items-center gap-2.5 text-white">
-            🔌 Visual MCP Server Dashboard
-          </h1>
-          <p className="text-xs md:text-sm text-brand-textMuted mt-1">
-            Manage Model Context Protocol servers connected via STDIO or SSE
+      {/* Header */}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-brand-textMain">
+            <Server size={15} className="text-[var(--brand-accent)]" />
+            <span className="sr-only">Visual MCP Server Dashboard</span>
+            Model Context Protocol
+          </h2>
+          <p className="mt-0.5 text-[11px] text-brand-textMuted">
+            Connect servers via STDIO or SSE to give the agent live tools.
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-shrink-0 items-center gap-2">
           {onRefreshServers && (
-            <Button
+            <button
               data-testid="mcp-refresh-btn"
               onClick={onRefreshServers}
-              variant="secondary"
-              size="sm"
+              title="Refresh"
+              className="ui-btn text-xs"
             >
-              🔄 Refresh
-            </Button>
+              <RefreshCw size={13} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
           )}
-          <Button
+          <button
             data-testid="mcp-add-btn"
             onClick={() => setShowAddForm(!showAddForm)}
-            variant={showAddForm ? 'secondary' : 'primary'}
-            size="sm"
+            className={showAddForm ? 'ui-btn text-xs' : 'ui-btn-primary text-xs'}
           >
-            {showAddForm ? 'Cancel' : '+ Add MCP Server'}
-          </Button>
+            <Plus size={14} />
+            {showAddForm ? 'Cancel' : 'Add Server'}
+          </button>
         </div>
       </div>
 
@@ -276,10 +314,12 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
       {showAddForm && (
         <div
           data-testid="mcp-add-form"
-          className="bg-brand-card border border-blue-500 rounded-2xl p-5 mb-6 flex flex-col gap-3.5 shadow-lg"
+          className="glass-card mb-6 flex flex-col gap-3 rounded-xl border border-[var(--brand-accent-border)] p-4 animate-fade-in"
         >
-          <h3 className="text-base font-bold text-blue-400 m-0">Configure New MCP Server</h3>
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_2fr] gap-3 items-end">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-accent)]">
+            Configure New MCP Server
+          </h3>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_2fr] md:items-end">
             <Input
               data-testid="mcp-input-name"
               type="text"
@@ -322,13 +362,13 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
 
       {/* Popular Servers (one-click install) */}
       {catalog && catalog.length > 0 && onInstallCatalog && (
-        <div data-testid="mcp-popular" className="mb-8">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles size={16} className="text-[var(--brand-accent)]" />
-            <h2 className="text-sm font-semibold text-brand-textMain">Popular Servers</h2>
-            <span className="ui-label">{catalog.length} available · one-click install</span>
+        <div data-testid="mcp-popular" className="mb-7">
+          <div className="mb-3 flex items-center gap-2">
+            <Sparkles size={14} className="text-[var(--brand-accent)]" />
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-brand-textMain">Popular Servers</h3>
+            <span className="ui-label ml-auto">{catalog.length} · one-click install</span>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
             {catalog.map((entry) => (
               <CatalogCard key={entry.id} entry={entry} onInstall={onInstallCatalog} />
             ))}
@@ -336,62 +376,73 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
         </div>
       )}
 
-      {/* Connected Servers Grid */}
-      <h2 className="text-sm font-semibold text-brand-textMain mb-3">Connected Servers</h2>
+      {/* Connected Servers */}
+      <div className="mb-3 flex items-center gap-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-brand-textMain">Connected Servers</h3>
+        {servers.length > 0 && <span className="ui-label ml-auto">{servers.length} configured</span>}
+      </div>
       {servers.length === 0 ? (
         <div
           data-testid="mcp-empty-state"
-          className="text-center text-brand-textMuted py-16 bg-brand-card rounded-2xl border border-dashed border-brand-border"
+          className="rounded-xl border border-dashed border-brand-border bg-brand-card px-6 py-10 text-center text-xs text-brand-textMuted"
         >
-          No MCP servers registered yet. Click "+ Add MCP Server" above to register one!
+          No MCP servers registered yet. Install a popular server above or click "Add Server".
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
           {servers.map((srv) => (
             <div
               key={srv.id}
               data-testid={`mcp-card-${srv.id}`}
-              className={`bg-brand-card border ${srv.enabled ? 'border-brand-border' : 'border-brand-border/30'} rounded-2xl p-5 flex flex-col gap-3.5 ${srv.enabled ? 'opacity-100' : 'opacity-60'} shadow-[0_4px_12px_rgba(0,0,0,0.3)] hover:border-[var(--brand-accent)]/20 transition-all duration-200`}
+              className={`flex flex-col gap-2.5 rounded-xl border bg-brand-card p-3 transition-all duration-200 ${
+                srv.enabled ? 'border-brand-border/60 opacity-100' : 'border-brand-border/30 opacity-60'
+              } hover:border-[var(--brand-accent-border)]`}
             >
-              <div className="flex items-center justify-between">
-                <div className="font-bold text-base text-white">{srv.name}</div>
-                <span
-                  data-testid={`mcp-status-badge-${srv.id}`}
-                  className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${getStatusBadgeClass(srv.status)}`}
-                >
-                  {getStatusLabel(srv.status)}
+              <div className="flex items-center gap-3">
+                <div className="relative flex-shrink-0">
+                  <ServerLogo id={srv.id.replace(/^mcp-catalog-/, '')} size={30} />
+                  <span
+                    className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-brand-card ${getStatusDotClass(srv.status)}`}
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-[13px] font-semibold text-brand-textMain">{srv.name}</span>
+                    <span
+                      data-testid={`mcp-status-badge-${srv.id}`}
+                      className={`flex-shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${getStatusBadgeClass(srv.status)}`}
+                    >
+                      {getStatusLabel(srv.status)}
+                    </span>
+                  </div>
+                  <div className="truncate font-mono text-[10px] leading-4 text-brand-textMuted">
+                    <span className="font-bold text-[var(--brand-accent)]">[{srv.transport.toUpperCase()}]</span>{' '}
+                    {srv.commandOrUrl}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between border-t border-brand-border/40 pt-2 text-[11px] text-brand-textMuted">
+                <span>
+                  🛠 Tools Exposed: <strong className="text-brand-textMain">{srv.toolsCount}</strong>
+                  {srv.latencyMs !== undefined && <span className="ml-2">⚡ {srv.latencyMs}ms</span>}
                 </span>
-              </div>
-
-              <div className="bg-brand-bg/80 border border-brand-border/40 p-2.5 rounded-lg font-mono text-xs text-brand-textMuted overflow-x-auto whitespace-nowrap">
-                <span className="text-[var(--brand-highlight)] font-bold mr-1.5">
-                  [{srv.transport.toUpperCase()}]
-                </span>
-                {srv.commandOrUrl}
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-brand-textMuted">
-                <span>🛠 Tools Exposed: <strong className="text-white">{srv.toolsCount}</strong></span>
-                {srv.latencyMs !== undefined && <span>⚡ {srv.latencyMs}ms</span>}
-              </div>
-
-              <div className="flex items-center justify-between border-t border-brand-border/40 pt-3 mt-1">
-                <Toggle
-                  data-testid={`mcp-toggle-${srv.id}`}
-                  checked={srv.enabled}
-                  onChange={(checked) => onToggleServer(srv.id, checked)}
-                  label={srv.enabled ? 'Enabled' : 'Disabled'}
-                />
-
-                <Button
-                  data-testid={`mcp-delete-${srv.id}`}
-                  onClick={() => onRemoveServer(srv.id)}
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                >
-                  Remove 🗑
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Toggle
+                    data-testid={`mcp-toggle-${srv.id}`}
+                    checked={srv.enabled}
+                    onChange={(checked) => onToggleServer(srv.id, checked)}
+                    label={srv.enabled ? 'On' : 'Off'}
+                  />
+                  <button
+                    data-testid={`mcp-delete-${srv.id}`}
+                    onClick={() => onRemoveServer(srv.id)}
+                    title="Remove server"
+                    className="rounded-md p-1 text-brand-textMuted transition-colors hover:bg-red-500/10 hover:text-red-400"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
