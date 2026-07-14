@@ -2,8 +2,25 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ImageAttachment } from '@superagent/core';
 
-/** File extensions treated as attachable images. */
-export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'];
+/**
+ * File extensions treated as attachable images. Restricted to the formats that
+ * OpenAI and Anthropic vision models actually accept in chat content blocks
+ * (png/jpeg/gif/webp). `bmp`/`svg` are intentionally excluded: they pass our
+ * magic-byte sniff but are rejected by the provider APIs, so we reject them
+ * up-front instead of forwarding a request that returns a 400.
+ */
+export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
+
+/**
+ * Common video container extensions. Chat-completion APIs (OpenAI/Anthropic/
+ * Gemini) do not ingest video through message content, so these are never
+ * attached — `/attach <video>` reports this explicitly rather than failing with
+ * a misleading "not an image" error.
+ */
+export const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'm4v', 'ogv'];
+
+/** Largest image (bytes) a vision model will accept (~Anthropic's 5 MB cap). */
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 /**
  * Inspect the first bytes of a file to confirm it is a real image and return
@@ -66,6 +83,7 @@ export async function validateImageFile(filePath: string): Promise<ImageAttachme
     if (!fs.existsSync(resolved)) return null;
     const stat = fs.statSync(resolved);
     if (!stat.isFile()) return null;
+    if (stat.size > MAX_IMAGE_BYTES) return null;
 
     const ext = resolved.split('.').pop()?.toLowerCase() ?? '';
     if (!IMAGE_EXTENSIONS.includes(ext)) return null;

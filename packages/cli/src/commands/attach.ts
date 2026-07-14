@@ -1,6 +1,6 @@
 import { SlashCommandRouter, SlashCommandContext, SlashCommandResult } from './router.js';
 import { ImageAttachment } from '@superagent/core';
-import { validateImageFile, formatBytes } from '../attachments.js';
+import { validateImageFile, formatBytes, VIDEO_EXTENSIONS, MAX_IMAGE_BYTES } from '../attachments.js';
 
 /** Options for the `/attach` slash command. */
 export interface AttachCommandOptions {
@@ -54,12 +54,22 @@ export function registerAttachCommand(router: SlashCommandRouter, options: Attac
         return { success: false, command: ctx.command, output: 'Usage: /attach <image-path> | list | clear' };
       }
 
+      // Video containers can't be sent to vision models via chat completions.
+      const targetExt = target.split('.').pop()?.toLowerCase() ?? '';
+      if (VIDEO_EXTENSIONS.includes(targetExt)) {
+        return {
+          success: false,
+          command: ctx.command,
+          output: `Could not attach "${target}". Video files are not supported by vision models — attach an image instead (png/jpg/jpeg/gif/webp, under ${formatBytes(MAX_IMAGE_BYTES)}).`
+        };
+      }
+
       const att = await validateImageFile(target);
       if (!att) {
         return {
           success: false,
           command: ctx.command,
-          output: `Could not attach "${target}". It must be an existing, readable image file (png/jpg/jpeg/gif/webp/bmp/svg).`
+          output: `Could not attach "${target}". It must be an existing, readable image file (png/jpg/jpeg/gif/webp) under ${formatBytes(MAX_IMAGE_BYTES)}.`
         };
       }
 

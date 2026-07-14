@@ -7,7 +7,9 @@ import {
   validateImageFile,
   prepareAttachments,
   formatBytes,
-  IMAGE_EXTENSIONS
+  IMAGE_EXTENSIONS,
+  VIDEO_EXTENSIONS,
+  MAX_IMAGE_BYTES
 } from '../src/attachments.js';
 import { SlashCommandRouter } from '../src/commands/router.js';
 import { registerAttachCommand } from '../src/commands/attach.js';
@@ -48,9 +50,12 @@ describe('findImagePathCandidates', () => {
     expect(findImagePathCandidates('read notes.txt please')).toEqual([]);
   });
 
-  it('exposes the supported extension list', () => {
+  it('exposes the provider-supported vision extension list', () => {
     expect(IMAGE_EXTENSIONS).toContain('png');
-    expect(IMAGE_EXTENSIONS).toContain('svg');
+    expect(IMAGE_EXTENSIONS).toContain('webp');
+    // bmp/svg are excluded: vision APIs reject them, so we reject up-front.
+    expect(IMAGE_EXTENSIONS).not.toContain('svg');
+    expect(IMAGE_EXTENSIONS).not.toContain('bmp');
   });
 });
 
@@ -123,5 +128,48 @@ describe('/attach command', () => {
     const cleared = await router.execute('/attach clear');
     expect(cleared.success).toBe(true);
     expect(pending).toHaveLength(0);
+  });
+});
+
+describe('validateImageFile: unsupported formats and oversized files', () => {
+  it('rejects a .bmp even when it has valid BMP magic bytes', async () => {
+    const bmp = join(TMP, 'notsupported.bmp');
+    writeFileSync(bmp, Buffer.from([0x42, 0x4d, 0, 0, 0, 0, 0, 0]));
+    expect(await validateImageFile(bmp)).toBeNull();
+  });
+
+  it('rejects a .svg even when it has SVG markup', async () => {
+    const svg = join(TMP, 'notsupported.svg');
+    writeFileSync(svg, Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'));
+    expect(await validateImageFile(svg)).toBeNull();
+  });
+
+  it('rejects an image larger than the vision size cap', async () => {
+    const big = join(TMP, 'toobig.png');
+    const buf = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.alloc(MAX_IMAGE_BYTES + 1024, 0)
+    ]);
+    writeFileSync(big, buf);
+    expect(await validateImageFile(big)).toBeNull();
+  });
+});
+
+describe('/attach command: unsupported inputs', () => {
+  const pending: ImageAttachment[] = [];
+  const router = new SlashCommandRouter();
+  registerAttachCommand(router, { pendingAttachments: pending });
+
+  it('rejects a video file with a clear, specific message', async () => {
+    const video = join(TMP, 'clip.mp4');
+    writeFileSync(video, Buffer.from([0, 0, 0, 0]));
+    const res = await router.execute(`/attach ${video}`);
+    expect(res.success).toBe(false);
+    expect(res.output.toLowerCase()).toContain('video');
+  });
+
+  it('exposes the supported video extension list', () => {
+    expect(VIDEO_EXTENSIONS).toContain('mp4');
+    expect(VIDEO_EXTENSIONS).toContain('webm');
   });
 });
