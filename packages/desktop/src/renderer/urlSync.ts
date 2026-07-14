@@ -30,6 +30,10 @@ function isFileProtocol(): boolean {
 
 /** Reads the current route from the address bar. */
 export function getRouteFromLocation(): RouteState {
+  if (typeof window === 'undefined') {
+    // Server-side / test render with no DOM — fall back to the default view.
+    return { activeTab: 'trajectory', activeChatId: null, settingsCategory: 'general' };
+  }
   const raw = isFileProtocol()
     ? window.location.hash.replace(/^#/, '')
     : window.location.pathname;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SettingsViewProps, ModelConfig, ModelPricing } from './types';
+import { SettingsViewProps, ModelConfig, ModelPricing, UpdateStatus, InternetAccessLevel } from './types';
 export type { ProviderConnection, ModelConfig } from './types';
 import { SettingsSidebar } from './SettingsSidebar';
 import { GeneralSettings } from './GeneralSettings';
@@ -12,6 +12,7 @@ import { UsageTrackerSettings } from './UsageTrackerSettings';
 import { ModelGovSettings } from './ModelGovSettings';
 import { BrowserUseSettings } from './BrowserUseSettings';
 import { ComputerUseSettings } from './ComputerUseSettings';
+import { UpdatesSettings } from './UpdatesSettings';
 
 /** Top-level settings page that renders a sidebar and the active settings category panel. */
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -33,7 +34,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   autoReviewPlan,
   onAutoReviewPlanChange,
   unsandboxedActions,
-  onUnsandboxedActionsChange
+  onUnsandboxedActionsChange,
+  internetAccessLevel,
+  onInternetAccessLevelChange,
+  appVersion,
+  onCheckForUpdates,
+  updateStatus
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -156,6 +162,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onAutoReviewPlanChange={onAutoReviewPlanChange}
             unsandboxedActions={unsandboxedActions}
             onUnsandboxedActionsChange={onUnsandboxedActionsChange}
+            internetAccessLevel={internetAccessLevel}
+            onInternetAccessLevelChange={onInternetAccessLevelChange}
           />
         )}
         {activeCategory === 'shortcuts' && <ShortcutsSettings />}
@@ -240,6 +248,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             title="Archived Projects"
             description="Browse archived workspaces and restore them when needed."
             status="planned"
+          />
+        )}
+        {activeCategory === 'updates' && (
+          <UpdatesSettings
+            appVersion={appVersion}
+            updateStatus={updateStatus ?? null}
+            onCheckForUpdates={onCheckForUpdates ?? (() => {})}
+            checking={updateStatus?.status === 'checking'}
           />
         )}
       </div>

@@ -46,6 +46,24 @@ export interface LastUsedModelSettings {
   model?: string;
 }
 
+/**
+ * Internet access governance level. Controls whether the agent may reach the
+ * network on its own (web fetch, browser navigation, web search, remote MCP).
+ *
+ * - `all`        — unrestricted network access (default).
+ * - `observation`— read-only network access only (GET/HEAD). Mutating requests
+ *                  (POST/PUT/DELETE, form submissions, uploads) are blocked.
+ * - `none`       — the agent is fully air-gapped: all agent-initiated network
+ *                  access is blocked. The AI provider API itself is always
+ *                  allowed so the assistant can still answer.
+ */
+export type InternetAccessLevel = 'all' | 'observation' | 'none';
+
+/** Internet access governance settings. */
+export interface InternetAccessSettings {
+  level?: InternetAccessLevel;
+}
+
 /** General application-level preferences. */
 export interface GeneralAppSettings {
   workMode?: 'coding' | 'everyday';
@@ -93,6 +111,7 @@ export interface AppSettings {
   modelGov?: ModelGovSettings;
   browserUse?: BrowserUseSettings;
   computerUse?: ComputerUseSettings;
+  internetAccess?: InternetAccessSettings;
 }
 
 /** Resolved file system paths for user data and config files. */
@@ -205,7 +224,8 @@ export class SettingsStorage {
         models: settings.models !== undefined ? settings.models : current.models,
         lastUsedModel: settings.lastUsedModel !== undefined ? { ...current.lastUsedModel, ...settings.lastUsedModel } : current.lastUsedModel,
         general: settings.general !== undefined ? { ...current.general, ...settings.general } : current.general,
-        modelGov: settings.modelGov !== undefined ? { ...current.modelGov, ...settings.modelGov } : current.modelGov
+        modelGov: settings.modelGov !== undefined ? { ...current.modelGov, ...settings.modelGov } : current.modelGov,
+        internetAccess: settings.internetAccess !== undefined ? { ...current.internetAccess, ...settings.internetAccess } : current.internetAccess
       };
 
       this.cachedSettings = updated;

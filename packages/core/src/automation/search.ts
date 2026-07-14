@@ -25,12 +25,27 @@ export interface SearchResponse {
   totalResults?: number;
 }
 
+import { enforceNetworkAllowed } from '../security/internet-access.js';
+
 /** Multi-provider web search tool with automatic provider detection. */
 export class WebSearchTool {
   /**
    * Executes a web search against the configured provider.
    */
   public async search(query: string, options: SearchOptions = {}): Promise<SearchResponse> {
+    try {
+      enforceNetworkAllowed({ kind: 'search', method: 'GET' });
+    } catch (err: unknown) {
+      // Surface the policy block as an empty result set rather than throwing,
+      // so callers can relay the reason to the user gracefully.
+      return {
+        query,
+        results: [],
+        provider: options.provider ?? this.detectProvider(),
+        totalResults: 0
+      };
+    }
+
     const provider = options.provider ?? this.detectProvider();
     const limit = options.limit ?? 5;
 

@@ -13,7 +13,8 @@ import {
   SquareTerminal,
   MonitorSmartphone,
   MousePointer2,
-  Scale
+  Scale,
+  RefreshCw
 } from 'lucide-react';
 
 /** A single navigation entry in the settings sidebar. */
@@ -53,6 +54,9 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
   Archived: [
     { id: 'archived-chats', label: 'Archived Chats', Icon: Archive },
     { id: 'archived-projects', label: 'Archived Projects', Icon: FolderArchive }
+  ],
+  About: [
+    { id: 'updates', label: 'Updates', Icon: RefreshCw }
   ]
 };
 

@@ -14,6 +14,8 @@ import {
   Sun,
   HelpCircle,
   MoreHorizontal,
+  RefreshCw,
+  BookOpen,
 } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { ThemeMode } from '../types';
@@ -41,6 +43,8 @@ interface TitleBarProps {
   onAbout?: () => void;
   onToggleTheme?: () => void;
   themeMode?: ThemeMode;
+  onCheckUpdates?: () => void;
+  onOpenDocs?: () => void;
 }
 
 // The web build injects a mock window.require, so that is NOT a reliable signal.
@@ -80,6 +84,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onAbout,
   onToggleTheme,
   themeMode = 'dark',
+  onCheckUpdates,
+  onOpenDocs,
 }) => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -144,6 +150,9 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       key: 'help',
       label: 'Help',
       items: [
+        { label: 'Check for Updates', icon: RefreshCw, onClick: () => onCheckUpdates?.() },
+        { label: 'Documentation', icon: BookOpen, onClick: () => onOpenDocs?.() },
+        'sep',
         { label: 'About SuperAgent', icon: HelpCircle, onClick: () => onAbout?.() },
       ],
     },

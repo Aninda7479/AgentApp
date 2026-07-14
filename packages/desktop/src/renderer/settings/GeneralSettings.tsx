@@ -1,6 +1,7 @@
 import React from 'react';
-import { Check, Code2, MessageSquare, Moon, Sun, Monitor } from 'lucide-react';
+import { Check, Code2, MessageSquare, Moon, Sun, Monitor, Globe, Eye, Ban } from 'lucide-react';
 import { ThemeMode } from '../types';
+import { InternetAccessLevel } from './types';
 
 /** Props for the general settings panel. */
 interface GeneralSettingsProps {
@@ -14,6 +15,8 @@ interface GeneralSettingsProps {
   onAutoReviewPlanChange: (val: boolean) => void;
   unsandboxedActions: boolean;
   onUnsandboxedActionsChange: (val: boolean) => void;
+  internetAccessLevel: InternetAccessLevel;
+  onInternetAccessLevelChange: (level: InternetAccessLevel) => void;
 }
 
 /** Props for a labeled boolean toggle row. */
@@ -58,8 +61,36 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   autoReviewPlan,
   onAutoReviewPlanChange,
   unsandboxedActions,
-  onUnsandboxedActionsChange
+  onUnsandboxedActionsChange,
+  internetAccessLevel,
+  onInternetAccessLevelChange
 }) => {
+  const internetAccessOptions: {
+    id: InternetAccessLevel;
+    label: string;
+    description: string;
+    Icon: typeof Globe;
+  }[] = [
+    {
+      id: 'all',
+      label: 'All Access',
+      description: 'The agent may use the network freely — fetch, browse, search, and publish.',
+      Icon: Globe
+    },
+    {
+      id: 'observation',
+      label: 'Observation Only',
+      description: 'Read public web pages (GET) but cannot post, upload, or change remote state.',
+      Icon: Eye
+    },
+    {
+      id: 'none',
+      label: 'No Internet',
+      description: 'Fully air-gapped. The agent can only use local tools and the AI provider API.',
+      Icon: Ban
+    }
+  ];
+
   const modes = [
     {
       id: 'coding' as const,
@@ -165,6 +196,39 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
             value={unsandboxedActions}
             onChange={onUnsandboxedActionsChange}
           />
+        </div>
+      </section>
+
+      <section className="mb-8">
+        <h3 className="mb-3 text-base font-semibold text-brand-textMain">Internet Access</h3>
+        <p className="mb-3 text-xs leading-5 text-brand-textMuted">
+          Controls whether the agent may reach the network on its own. This prevents autonomous, potentially
+          dangerous internet actions. The AI provider API is always allowed so the assistant can still respond.
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {internetAccessOptions.map(({ id, label, description, Icon }) => {
+            const selected = internetAccessLevel === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                data-testid={`internet-access-${id}`}
+                onClick={() => onInternetAccessLevelChange(id)}
+                className={`flex flex-col rounded-lg border p-4 text-left transition-colors ${
+                  selected
+                    ? 'border-sky-500/70 bg-sky-500/10 text-brand-textMain'
+                    : 'border-brand-border bg-brand-bg text-brand-textMain hover:border-brand-textMuted/50'
+                }`}
+              >
+                <Icon size={18} className={selected ? 'mb-2 text-sky-500' : 'mb-2 text-brand-textMuted'} />
+                <div className="mb-1 flex items-center gap-1.5 text-sm font-semibold">
+                  {label}
+                  {selected && <Check size={14} className="text-emerald-500" />}
+                </div>
+                <div className="text-xs leading-5 text-brand-textMuted">{description}</div>
+              </button>
+            );
+          })}
         </div>
       </section>
     </div>

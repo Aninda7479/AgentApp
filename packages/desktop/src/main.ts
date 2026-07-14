@@ -1,4 +1,4 @@
-import { app, ipcMain, dialog, BrowserWindow } from 'electron';
+import { app, ipcMain, dialog, BrowserWindow, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 
@@ -9,7 +9,7 @@ app.setPath('userData', customUserDataPath);
 import { windowManager } from './main/window';
 import { setupAutoUpdater } from './main/updater';
 import { readStore, writeStore, StoreData } from './main/store';
-import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector } from '@superagent/core';
+import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed } from '@superagent/core';
 import { getChatDirectory } from './main/storage/index.js';
 
 async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
@@ -216,6 +216,11 @@ Please optimize these system instructions to:
 });
 
 ipcMain.handle('browser-navigate', async (_event, { url }) => {
+  try {
+    enforceNetworkAllowed({ kind: 'browser', url: url as string, method: 'GET' });
+  } catch (err: unknown) {
+    return `Blocked by Internet Access policy: ${(err as Error).message}`;
+  }
   const browser = await getMainBrowser();
   const res = await browser.navigate(url);
   return `Successfully navigated to ${res.url} (HTTP status: ${res.status}). Page Title: "${res.title}"`;
@@ -238,6 +243,67 @@ ipcMain.handle('screenshot_screen', async () => {
 ipcMain.handle('browser-close', async () => {
   await BrowserLifecycleService.closeSharedInstance();
   return 'Browser successfully shut down.';
+});
+
+// ─── IPC: App version & update checks ────────────────────────────────────────
+
+ipcMain.handle('app-version', () => {
+  return app.getVersion();
+});
+
+ipcMain.handle('open-external', async (_event, url: string) => {
+  try {
+    await shell.openExternal(url);
+    return { ok: true };
+  } catch (err: unknown) {
+    return { ok: false, error: (err as Error).message };
+  }
+});
+
+/**
+ * check-for-updates: Manually trigger an electron-updater update check.
+ * Returns a status object. In dev (no electron-updater) or when disabled, this
+ * degrades gracefully to a friendly message instead of throwing.
+ */
+ipcMain.handle('check-for-updates', async (): Promise<{
+  status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error';
+  version?: string;
+  message?: string;
+}> => {
+  if (process.env.SUPERAGENT_DISABLE_UPDATER === '1') {
+    return { status: 'unsupported', message: 'Auto-updates are disabled in this build.' };
+  }
+
+  try {
+    // @ts-ignore - optional dependency, present only in packaged builds
+    const { autoUpdater } = await import('electron-updater');
+
+    const result = await autoUpdater.checkForUpdates();
+    if (!result) {
+      return { status: 'unsupported', message: 'Update feed is unavailable.' };
+    }
+
+    if (result.isUpdateAvailable) {
+      return {
+        status: 'available',
+        version: result.updateInfo?.version,
+        message: `Update available: v${result.updateInfo?.version ?? '?'}`
+      };
+    }
+
+    return {
+      status: 'not-available',
+      version: result.updateInfo?.version,
+      message: `You are on the latest version (v${result.updateInfo?.version ?? app.getVersion()}).`
+    };
+  } catch (err: unknown) {
+    const message = (err as Error)?.message ?? String(err);
+    // A common dev scenario: no publish feed configured.
+    if (/Cannot find|ENOTFOUND|getLatestVersion|257|feed/i.test(message)) {
+      return { status: 'unsupported', message: 'No update feed configured (this is normal in dev).' };
+    }
+    return { status: 'error', message };
+  }
 });
 
 ipcMain.handle('select-project-folders', async () => {

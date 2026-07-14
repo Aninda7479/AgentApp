@@ -9,6 +9,7 @@ import { SearchModal } from './components/SearchModal';
 import { ScheduledView } from './components/ScheduledView';
 import { PluginsView } from './components/PluginsView';
 import { SettingsView, ProviderConnection, ModelConfig } from './settings/SettingsView';
+import type { InternetAccessLevel } from './settings/types';
 import { CreateProjectModal } from './components/CreateProjectModal';
 import { ConfigureProjectModal } from './components/ConfigureProjectModal';
 import { TitleBar } from './components/TitleBar';
@@ -92,6 +93,13 @@ export const App: React.FC = () => {
   const [autoReview, setAutoReview] = useState<boolean>(true);
   const [fullAccess, setFullAccess] = useState<boolean>(true);
   const [settingsHydrated, setSettingsHydrated] = useState<boolean>(false);
+  const [internetAccessLevel, setInternetAccessLevel] = useState<InternetAccessLevel>('all');
+  const [appVersion, setAppVersion] = useState<string>('');
+  const [updateStatus, setUpdateStatus] = useState<{
+    status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error';
+    version?: string;
+    message?: string;
+  } | null>(null);
 
   // Sync themeMode with settings.json
   useEffect(() => {
@@ -123,6 +131,39 @@ export const App: React.FC = () => {
     setFullAccess(val);
     ipc?.invoke('settings-write', { general: { unsandboxedActions: val } });
   };
+
+  const handleInternetAccessLevelChange = (level: InternetAccessLevel) => {
+    setInternetAccessLevel(level);
+    ipc?.invoke('settings-write', { internetAccess: { level } });
+  };
+
+  /** Triggers a manual update check via the main process. */
+  const handleCheckForUpdates = () => {
+    if (!ipc) {
+      setUpdateStatus({ status: 'unsupported', message: 'Updates are only available in the desktop app.' });
+      return;
+    }
+    // Surface the Updates panel so the result is visible.
+    setActiveTab('settings');
+    setSettingsCategory('updates');
+    setUpdateStatus({ status: 'checking', message: 'Checking for updates…' });
+    ipc.invoke('check-for-updates')
+      .then((res: { status: string; version?: string; message?: string } | null) => {
+        if (res) setUpdateStatus(res as typeof updateStatus);
+      })
+      .catch((err: Error) => {
+        setUpdateStatus({ status: 'error', message: err.message });
+      });
+  };
+
+  // Load the running app version for the Updates panel.
+  useEffect(() => {
+    if (!ipc) return;
+    ipc.invoke('app-version')
+      .then((v: string) => setAppVersion(v))
+      .catch(() => { /* non-fatal */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // URL-driven initial route (web: history path, desktop: file:// hash).
   const [initialRoute] = useState(() => getRouteFromLocation());
@@ -484,6 +525,9 @@ export const App: React.FC = () => {
             if (settings.general.autoReviewPlan !== undefined) setAutoReview(settings.general.autoReviewPlan);
             if (settings.general.unsandboxedActions !== undefined) setFullAccess(settings.general.unsandboxedActions);
           }
+          if (settings.internetAccess?.level) {
+            setInternetAccessLevel(settings.internetAccess.level);
+          }
           if (settings.lastUsedModel?.model) {
             setLastUsedModel(settings.lastUsedModel.model);
           }
@@ -687,6 +731,10 @@ export const App: React.FC = () => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         setSearchModalOpen((prev) => !prev);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        handleNewChat();
       }
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault();
@@ -1271,7 +1319,8 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
         baseUrl: activeProvider.baseUrl || undefined,
         model: resolvedModel,
         projectRoot: resolvedProjectRoot,
-        attachments: allAttachmentPaths.length > 0 ? allAttachmentPaths : undefined
+        attachments: allAttachmentPaths.length > 0 ? allAttachmentPaths : undefined,
+        internetAccess: internetAccessLevel
       };
 
       // Non-blocking: events come back via 'agent-event' IPC listener
@@ -1679,6 +1728,14 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
         onToggleSidebar={() => setSidebarCollapsed(c => !c)}
         onAbout={handleAbout}
         onToggleTheme={() => setThemeMode(themeMode === 'light' ? 'dark' : 'light')}
+        onCheckUpdates={handleCheckForUpdates}
+        onOpenDocs={() => {
+          if (ipc) {
+            ipc.invoke('open-external', 'https://github.com/Aninda7479/AgentApp#readme');
+          } else {
+            window.open('https://github.com/Aninda7479/AgentApp#readme', '_blank', 'noopener');
+          }
+        }}
       />
 
       {/* Main Body container */}
@@ -1808,6 +1865,11 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
               onAutoReviewPlanChange={handleAutoReviewPlanChange}
               unsandboxedActions={fullAccess}
               onUnsandboxedActionsChange={handleUnsandboxedActionsChange}
+              internetAccessLevel={internetAccessLevel}
+              onInternetAccessLevelChange={handleInternetAccessLevelChange}
+              appVersion={appVersion}
+              onCheckForUpdates={handleCheckForUpdates}
+              updateStatus={updateStatus}
             />
           )}
 

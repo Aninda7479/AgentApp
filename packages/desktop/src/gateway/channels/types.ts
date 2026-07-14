@@ -1,5 +1,5 @@
 /** Supported messaging channel identifiers. */
-export type ChannelType = 'telegram' | 'discord' | 'slack' | string;
+export type ChannelType = 'telegram' | 'discord' | 'slack' | 'whatsapp' | string;
 
 /** An inbound message received from a channel adapter. */
 export interface IncomingMessage {

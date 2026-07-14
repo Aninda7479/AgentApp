@@ -53,7 +53,14 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { resolveProviderFamily, resolveBaseUrl } from '@superagent/core';
+import {
+  resolveProviderFamily,
+  resolveBaseUrl,
+  enforceNetworkAllowed,
+  getInternetAccessLevel,
+  describeInternetAccessLevel,
+  InternetAccessLevel
+} from '@superagent/core';
 
 const execAsync = promisify(exec);
 
@@ -202,6 +209,40 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
           return `Error writing file: ${(err as Error).message}`;
         }
       }
+    },
+
+    {
+      name: 'web_fetch',
+      description: 'Fetch the contents of a public URL over the internet (read-only GET). Useful for reading docs, web pages, or API responses. Subject to the "Internet Access" policy.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'The fully-qualified URL to fetch' },
+          method: { type: 'string', description: 'HTTP method, defaults to GET. Only GET is permitted under "Observation only" access.' }
+        },
+        required: ['url'],
+        additionalProperties: false
+      },
+      execute: async ({ url, method }) => {
+        const httpMethod = (method as string) || 'GET';
+        try {
+          enforceNetworkAllowed({ kind: 'web-fetch', url: url as string, method: httpMethod });
+        } catch (err: unknown) {
+          return `Blocked by Internet Access policy: ${(err as Error).message}`;
+        }
+        try {
+          const response = await fetch(url as string, {
+            method: httpMethod,
+            headers: { 'User-Agent': 'SuperAgent/0.1 (+https://github.com/Aninda7479/AgentApp)' },
+            signal: AbortSignal.timeout(15000)
+          });
+          const text = await response.text();
+          const truncated = text.length > 8000 ? text.slice(0, 8000) + `\n\n... (truncated, ${text.length - 8000} more chars)` : text;
+          return `HTTP ${response.status} ${response.statusText}\n\n${truncated}`;
+        } catch (err: unknown) {
+          return `Error fetching ${url}: ${(err as Error).message}`;
+        }
+      }
     }
   ];
 }
@@ -241,6 +282,8 @@ export interface AgentEngineConfig {
   attachments?: string[];
   maxTokens?: number;
   temperature?: number;
+  /** Internet access governance level for this run (defaults to the saved setting). */
+  internetAccess?: InternetAccessLevel;
 }
 
 // ─── Agent Engine ─────────────────────────────────────────────────────────────
@@ -289,6 +332,19 @@ Key guidelines:
 - Be concise but thorough in explanations
 - When you edit files, mention which files changed and the diff summary
 - If a tool fails twice, stop retrying the same approach and explain the limitation instead` + attachmentSection + scopeSection);
+
+    // ── Internet Access policy ─────────────────────────────────────────────
+    // Inform the model of the governing network policy so it does not waste
+    // turns attempting blocked operations. Enforcement also happens server-side.
+    const effectiveLevel: InternetAccessLevel = config.internetAccess ?? getInternetAccessLevel();
+    const internetAccessSection = `\n\nINTERNET ACCESS POLICY (enforced): ${describeInternetAccessLevel(effectiveLevel)}\n` +
+      (effectiveLevel === 'none'
+        ? 'Do NOT attempt to fetch URLs, open web pages, run web searches, or contact remote services. Use only local file, shell, and reasoning tools.'
+        : effectiveLevel === 'observation'
+          ? 'You may read public web pages via web_fetch (GET), but you must NOT post, upload, submit forms, or mutate any remote state. If a task requires writing to the internet, tell the user their policy blocks it.'
+          : 'You may use the network freely, but prefer local tools when they suffice.');
+
+    this.history.push({ role: 'system', content: sysPrompt + internetAccessSection });
 
     this.history.push({ role: 'system', content: sysPrompt });
   }

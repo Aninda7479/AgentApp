@@ -1,6 +1,16 @@
 import React from 'react';
 import { ThemeMode } from '../types';
 
+/** Internet access governance level shown in settings. */
+export type InternetAccessLevel = 'all' | 'observation' | 'none';
+
+/** Status returned by the main-process update check. */
+export interface UpdateStatus {
+  status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error';
+  version?: string;
+  message?: string;
+}
+
 /** Persisted AI provider connection with API key and base URL. */
 export interface ProviderConnection {
   id: string;
@@ -54,4 +64,9 @@ export interface SettingsViewProps {
   onAutoReviewPlanChange: (val: boolean) => void;
   unsandboxedActions: boolean;
   onUnsandboxedActionsChange: (val: boolean) => void;
+  internetAccessLevel: InternetAccessLevel;
+  onInternetAccessLevelChange: (level: InternetAccessLevel) => void;
+  appVersion?: string;
+  onCheckForUpdates?: () => void;
+  updateStatus?: UpdateStatus | null;
 }
