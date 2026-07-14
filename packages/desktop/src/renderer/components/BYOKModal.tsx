@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button, Input } from './ui';
 
 /** Props for the BYOK (Bring Your Own Key) modal. */
 export interface BYOKModalProps {
@@ -88,13 +89,14 @@ export const BYOKModal: React.FC<BYOKModalProps> = ({
               </p>
             </div>
           </div>
-          <button
+          <Button
             data-testid="byok-close-btn"
             onClick={onClose}
-            className="bg-transparent border-none text-brand-textMuted hover:text-white text-lg cursor-pointer p-1 transition-colors"
+            variant="ghost"
+            className="text-lg p-1 h-auto"
           >
             ✕
-          </button>
+          </Button>
         </div>
 
         {/* Test Status */}
@@ -111,32 +113,33 @@ export const BYOKModal: React.FC<BYOKModalProps> = ({
         <div className="flex flex-col gap-4 max-h-[400px] overflow-y-auto">
           {providers.map((p) => (
             <div key={p.id} className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-brand-textMain">{p.label}</label>
-              <div className="flex gap-2">
-                <input
+              <div className="flex gap-2 items-end">
+                <Input
                   data-testid={`byok-input-${p.id}`}
                   type={p.isUrl || showKey[p.id] ? 'text' : 'password'}
                   value={keys[p.id] || ''}
                   onChange={(e) => handleChange(p.id, e.target.value)}
                   placeholder={p.placeholder}
-                  className="flex-1 bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-brand-textMuted/50 transition-colors placeholder-brand-textMuted/40"
+                  label={p.label}
                 />
                 {!p.isUrl && (
-                  <button
+                  <Button
                     data-testid={`byok-toggle-show-${p.id}`}
                     onClick={() => toggleShow(p.id)}
-                    className="bg-brand-card border border-brand-border text-brand-textMuted hover:text-white rounded-lg px-3 cursor-pointer text-xs font-medium transition-colors"
+                    variant="secondary"
+                    className="h-[38px] px-3 flex-shrink-0 text-xs font-semibold"
                   >
                     {showKey[p.id] ? '🔒 Hide' : '👁️ Show'}
-                  </button>
+                  </Button>
                 )}
-                <button
+                <Button
                   data-testid={`byok-test-btn-${p.id}`}
                   onClick={() => handleTestConnection(p.id)}
-                  className="bg-brand-popover border border-brand-border text-blue-400 hover:text-blue-300 rounded-lg px-3 cursor-pointer text-xs font-semibold transition-colors"
+                  variant="secondary"
+                  className="h-[38px] px-3 flex-shrink-0 text-xs font-semibold text-blue-400 hover:text-blue-300"
                 >
                   Test
-                </button>
+                </Button>
               </div>
             </div>
           ))}
@@ -144,20 +147,20 @@ export const BYOKModal: React.FC<BYOKModalProps> = ({
 
         {/* Footer */}
         <div className="flex justify-end gap-3 mt-6 border-t border-brand-border/60 pt-4">
-          <button
+          <Button
             data-testid="byok-cancel-btn"
             onClick={onClose}
-            className="bg-brand-card border border-brand-border text-brand-textMuted hover:text-white rounded-lg px-4 py-2 cursor-pointer text-sm transition-colors"
+            variant="secondary"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             data-testid="byok-save-btn"
             onClick={handleSave}
-            className="bg-white hover:bg-brand-textMain text-brand-bg rounded-lg px-5 py-2 font-bold cursor-pointer text-sm transition-all active:scale-[0.98]"
+            variant="primary"
           >
             Save Keys
-          </button>
+          </Button>
         </div>
       </div>
     </div>

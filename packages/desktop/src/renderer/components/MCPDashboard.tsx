@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button, Input, Select, Toggle } from './ui';
 
 /** Information about a connected MCP server. */
 export interface MCPServerInfo {
@@ -89,21 +90,23 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
 
         <div className="flex flex-wrap gap-3">
           {onRefreshServers && (
-            <button
+            <Button
               data-testid="mcp-refresh-btn"
               onClick={onRefreshServers}
-              className="bg-brand-card border border-brand-border text-brand-textMain hover:text-white rounded-lg px-3.5 py-2 cursor-pointer text-xs font-medium transition-colors active:scale-[0.98]"
+              variant="secondary"
+              size="sm"
             >
               🔄 Refresh
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             data-testid="mcp-add-btn"
             onClick={() => setShowAddForm(!showAddForm)}
-            className="bg-white hover:bg-brand-textMain text-brand-bg rounded-lg px-4 py-2 font-bold cursor-pointer text-xs transition-all active:scale-[0.98]"
+            variant={showAddForm ? 'secondary' : 'primary'}
+            size="sm"
           >
             {showAddForm ? 'Cancel' : '+ Add MCP Server'}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -114,51 +117,43 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
           className="bg-brand-card border border-blue-500 rounded-2xl p-5 mb-6 flex flex-col gap-3.5 shadow-lg"
         >
           <h3 className="text-base font-bold text-blue-400 m-0">Configure New MCP Server</h3>
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_2fr] gap-3">
-            <div>
-              <label className="text-xs text-brand-textMuted block mb-1 font-medium">Server Name</label>
-              <input
-                data-testid="mcp-input-name"
-                type="text"
-                value={newServerName}
-                onChange={(e) => setNewServerName(e.target.value)}
-                placeholder="e.g. Memory Server"
-                className="w-full bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50 transition-colors placeholder-brand-textMuted/40"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-brand-textMuted block mb-1 font-medium">Transport</label>
-              <select
-                data-testid="mcp-select-transport"
-                value={newTransport}
-                onChange={(e) => setNewTransport(e.target.value as 'stdio' | 'sse')}
-                className="w-full bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50 transition-colors"
-              >
-                <option value="stdio">STDIO Process</option>
-                <option value="sse">HTTP SSE</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-brand-textMuted block mb-1 font-medium">Command or SSE URL</label>
-              <input
-                data-testid="mcp-input-cmd"
-                type="text"
-                value={newCommandOrUrl}
-                onChange={(e) => setNewCommandOrUrl(e.target.value)}
-                placeholder={newTransport === 'stdio' ? 'npx -y @modelcontextprotocol/server-filesystem' : 'http://localhost:3001/sse'}
-                className="w-full bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500/50 transition-colors placeholder-brand-textMuted/40"
-              />
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_2fr] gap-3 items-end">
+            <Input
+              data-testid="mcp-input-name"
+              type="text"
+              value={newServerName}
+              onChange={(e) => setNewServerName(e.target.value)}
+              placeholder="e.g. Memory Server"
+              label="Server Name"
+            />
+            <Select
+              options={[
+                { value: 'stdio', label: 'STDIO Process' },
+                { value: 'sse', label: 'HTTP SSE' }
+              ]}
+              value={newTransport}
+              onChange={(val) => setNewTransport(val as 'stdio' | 'sse')}
+              label="Transport"
+            />
+            <Input
+              data-testid="mcp-input-cmd"
+              type="text"
+              value={newCommandOrUrl}
+              onChange={(e) => setNewCommandOrUrl(e.target.value)}
+              placeholder={newTransport === 'stdio' ? 'npx -y @modelcontextprotocol/server-filesystem' : 'http://localhost:3001/sse'}
+              label="Command or SSE URL"
+            />
           </div>
           <div className="flex justify-end">
-            <button
+            <Button
               data-testid="mcp-submit-add"
               onClick={handleAdd}
               disabled={!newServerName.trim() || !newCommandOrUrl.trim()}
-              className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg px-4 py-1.5 font-bold cursor-pointer text-xs transition-all active:scale-[0.98]"
+              variant="primary"
+              size="sm"
             >
               Save & Connect
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -177,7 +172,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
             <div
               key={srv.id}
               data-testid={`mcp-card-${srv.id}`}
-              className={`bg-brand-card border ${srv.enabled ? 'border-brand-border' : 'border-brand-border/30'} rounded-2xl p-5 flex flex-col gap-3.5 ${srv.enabled ? 'opacity-100' : 'opacity-60'} shadow-[0_4px_12px_rgba(0,0,0,0.3)] hover:border-purple-500/20 transition-all duration-200`}
+              className={`bg-brand-card border ${srv.enabled ? 'border-brand-border' : 'border-brand-border/30'} rounded-2xl p-5 flex flex-col gap-3.5 ${srv.enabled ? 'opacity-100' : 'opacity-60'} shadow-[0_4px_12px_rgba(0,0,0,0.3)] hover:border-[var(--brand-highlight)]/20 transition-all duration-200`}
             >
               <div className="flex items-center justify-between">
                 <div className="font-bold text-base text-white">{srv.name}</div>
@@ -190,7 +185,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
               </div>
 
               <div className="bg-brand-bg/80 border border-brand-border/40 p-2.5 rounded-lg font-mono text-xs text-brand-textMuted overflow-x-auto whitespace-nowrap">
-                <span className="text-purple-400 font-bold mr-1.5">
+                <span className="text-[var(--brand-highlight)] font-bold mr-1.5">
                   [{srv.transport.toUpperCase()}]
                 </span>
                 {srv.commandOrUrl}
@@ -202,24 +197,22 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
               </div>
 
               <div className="flex items-center justify-between border-t border-brand-border/40 pt-3 mt-1">
-                <label className="flex items-center gap-2 cursor-pointer text-xs text-brand-textMuted">
-                  <input
-                    data-testid={`mcp-toggle-${srv.id}`}
-                    type="checkbox"
-                    checked={srv.enabled}
-                    onChange={(e) => onToggleServer(srv.id, e.target.checked)}
-                    className="accent-purple-500"
-                  />
-                  <span>{srv.enabled ? 'Enabled' : 'Disabled'}</span>
-                </label>
+                <Toggle
+                  data-testid={`mcp-toggle-${srv.id}`}
+                  checked={srv.enabled}
+                  onChange={(checked) => onToggleServer(srv.id, checked)}
+                  label={srv.enabled ? 'Enabled' : 'Disabled'}
+                />
 
-                <button
+                <Button
                   data-testid={`mcp-delete-${srv.id}`}
                   onClick={() => onRemoveServer(srv.id)}
-                  className="bg-transparent border-none text-red-400 hover:text-red-300 cursor-pointer text-xs font-medium transition-colors"
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
                 >
                   Remove 🗑
-                </button>
+                </Button>
               </div>
             </div>
           ))}

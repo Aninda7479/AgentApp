@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ModelConfig } from './types';
 import { Scale, Save, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award, Sparkles } from 'lucide-react';
+import { Button, Select } from '../components/ui';
 
 /** Props for the Model Governance settings panel. */
 interface ModelGovSettingsProps {
@@ -171,30 +172,33 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
           </p>
         </div>
         <div className="flex gap-2">
-          <button
+          <Button
             onClick={handleAutoUpdateNow}
             disabled={updatingPrice}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 text-xs font-semibold cursor-pointer disabled:opacity-50 transition-all"
+            variant="secondary"
+            size="sm"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${updatingPrice ? 'animate-spin' : ''}`} />
             <span>Update Swarm Rates</span>
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleOptimizeByAI}
             disabled={optimizing}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 text-xs font-semibold cursor-pointer disabled:opacity-50 transition-all"
+            variant="secondary"
+            size="sm"
           >
             <Sparkles className={`w-3.5 h-3.5 ${optimizing ? 'animate-spin' : ''}`} />
             <span>Optimize by AI</span>
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-xs font-semibold cursor-pointer disabled:opacity-50 transition-all"
+            variant="primary"
+            size="sm"
           >
             <Save className="w-3.5 h-3.5" />
             <span>{saving ? 'Saving...' : 'Save Settings'}</span>
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -216,15 +220,15 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
           </h3>
           <div className="space-y-1">
             <label className="text-[10px] text-brand-textMuted uppercase font-bold tracking-wider">Select routing objective</label>
-            <select
+            <Select
+              options={[
+                { value: 'quality', label: 'Quality First (Prefer top-tier reasoning/coding)' },
+                { value: 'cost', label: 'Cost Saver (Prefer cheapest available models)' },
+                { value: 'balanced', label: 'Balanced (Optimal trade-off quality/cost)' }
+              ]}
               value={optimizationGoal}
-              onChange={(e) => setOptimizationGoal(e.target.value as any)}
-              className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-2 text-xs text-brand-textMain outline-none focus:border-sky-500/70"
-            >
-              <option value="quality">Quality First (Prefer top-tier reasoning/coding)</option>
-              <option value="cost">Cost Saver (Prefer cheapest available models)</option>
-              <option value="balanced">Balanced (Optimal trade-off quality/cost)</option>
-            </select>
+              onChange={(val) => setOptimizationGoal(val as any)}
+            />
           </div>
         </div>
 
@@ -235,14 +239,14 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
           </h3>
           <div className="space-y-1">
             <label className="text-[10px] text-brand-textMuted uppercase font-bold tracking-wider">Decentralization level</label>
-            <select
+            <Select
+              options={[
+                { value: 'router', label: 'Single Model Router (Fastest execution)' },
+                { value: 'orchestrator', label: 'Orchestrator Mode (Decompose & collaborate)' }
+              ]}
               value={routingStrategy}
-              onChange={(e) => setRoutingStrategy(e.target.value as any)}
-              className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-2 text-xs text-brand-textMain outline-none focus:border-sky-500/70"
-            >
-              <option value="router">Single Model Router (Fastest execution)</option>
-              <option value="orchestrator">Orchestrator Mode (Decompose & collaborate)</option>
-            </select>
+              onChange={(val) => setRoutingStrategy(val as any)}
+            />
           </div>
         </div>
       </div>
@@ -262,50 +266,38 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1 text-left">
             <label className="text-[10px] text-brand-textMuted uppercase font-bold">Coding & engineering</label>
-            <select
-              value={categoryOverrides.coding}
-              onChange={(e) => handleOverrideChange('coding', e.target.value)}
-              className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-2 text-xs text-brand-textMain outline-none focus:border-sky-500/70"
-            >
-              <option value="">Dynamic Swarm Routing</option>
-              {activeSwarmModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
+            <Select
+              options={[{ value: '', label: 'Dynamic Swarm Routing' }, ...activeSwarmModels.map(m => ({ value: m.id, label: m.name }))]}
+              value={categoryOverrides.coding || ''}
+              onChange={(val) => handleOverrideChange('coding', val)}
+            />
           </div>
 
           <div className="space-y-1 text-left">
             <label className="text-[10px] text-brand-textMuted uppercase font-bold">Logic & Reasoning</label>
-            <select
-              value={categoryOverrides.reasoning}
-              onChange={(e) => handleOverrideChange('reasoning', e.target.value)}
-              className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-2 text-xs text-brand-textMain outline-none focus:border-sky-500/70"
-            >
-              <option value="">Dynamic Swarm Routing</option>
-              {activeSwarmModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
+            <Select
+              options={[{ value: '', label: 'Dynamic Swarm Routing' }, ...activeSwarmModels.map(m => ({ value: m.id, label: m.name }))]}
+              value={categoryOverrides.reasoning || ''}
+              onChange={(val) => handleOverrideChange('reasoning', val)}
+            />
           </div>
 
           <div className="space-y-1 text-left">
             <label className="text-[10px] text-brand-textMuted uppercase font-bold">Vision & Multimodal</label>
-            <select
-              value={categoryOverrides.vision}
-              onChange={(e) => handleOverrideChange('vision', e.target.value)}
-              className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-2 text-xs text-brand-textMain outline-none focus:border-sky-500/70"
-            >
-              <option value="">Dynamic Swarm Routing</option>
-              {activeSwarmModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
+            <Select
+              options={[{ value: '', label: 'Dynamic Swarm Routing' }, ...activeSwarmModels.map(m => ({ value: m.id, label: m.name }))]}
+              value={categoryOverrides.vision || ''}
+              onChange={(val) => handleOverrideChange('vision', val)}
+            />
           </div>
 
           <div className="space-y-1 text-left">
             <label className="text-[10px] text-brand-textMuted uppercase font-bold">Conversations & Summary</label>
-            <select
-              value={categoryOverrides.conversations}
-              onChange={(e) => handleOverrideChange('conversations', e.target.value)}
-              className="w-full rounded-lg border border-brand-border bg-brand-bg px-3 py-2 text-xs text-brand-textMain outline-none focus:border-sky-500/70"
-            >
-              <option value="">Dynamic Swarm Routing</option>
-              {activeSwarmModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
+            <Select
+              options={[{ value: '', label: 'Dynamic Swarm Routing' }, ...activeSwarmModels.map(m => ({ value: m.id, label: m.name }))]}
+              value={categoryOverrides.conversations || ''}
+              onChange={(val) => handleOverrideChange('conversations', val)}
+            />
           </div>
         </div>
       </div>
