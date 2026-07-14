@@ -27,6 +27,18 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
 }) => {
   const [githubUrl] = useState(REPO_URL);
 
+  const ipc = typeof window !== 'undefined' && (window as any).require
+    ? (window as any).require('electron').ipcRenderer
+    : null;
+
+  const openInBrowser = (url: string) => {
+    if (ipc) {
+      ipc.invoke('open-external', url);
+    } else if (typeof window !== 'undefined') {
+      window.open(url, '_blank', 'noopener');
+    }
+  };
+
   const statusBanner = () => {
     if (!updateStatus) return null;
     const map = {
@@ -87,7 +99,11 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
             href={githubUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 text-[var(--brand-accent)] hover:underline"
+            onClick={(e) => {
+              e.preventDefault();
+              openInBrowser(githubUrl);
+            }}
+            className="inline-flex cursor-pointer items-center gap-1 text-[var(--brand-accent)] hover:underline"
           >
             <ExternalLink size={14} /> GitHub Releases
           </a>

@@ -1,4 +1,4 @@
-import { BrowserWindow, BrowserWindowConstructorOptions, app, ipcMain } from 'electron';
+import { BrowserWindow, BrowserWindowConstructorOptions, app, ipcMain, shell } from 'electron';
 import path from 'path';
 
 /** Options for creating a managed BrowserWindow, with optional name and main-window flag. */
@@ -68,6 +68,18 @@ export class WindowManager {
       },
       ...browserOptions
     });
+
+    // Open external links (http/https) in the OS default browser rather than a
+    // new Electron tab/window. Anything else is denied.
+    if (win.webContents?.setWindowOpenHandler) {
+      win.webContents.setWindowOpenHandler(({ url }) => {
+        if (/^https?:\/\//i.test(url)) {
+          shell.openExternal(url).catch(() => {});
+          return { action: 'deny' };
+        }
+        return { action: 'deny' };
+      });
+    }
 
     const windowId = win.id;
     this.windows.set(windowId, win);
