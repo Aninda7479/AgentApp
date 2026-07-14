@@ -75,7 +75,7 @@ export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRou
   registerCompactCommand(router, getMessages, setMessages, compactOptions);
   registerDiffCommand(router, diffReviewer);
   registerPlanCommand(router);
-  registerReviewCommand(router);
+  registerReviewCommand(router, { diffReviewer });
   registerSecurityReviewCommand(router);
   registerMCPCommand(router);
   registerConfigCommand(router);

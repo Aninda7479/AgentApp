@@ -281,23 +281,43 @@ export class CodeReviewer {
       );
       for (const f of sorted) {
         lines.push(`${icon[f.severity]} ${f.file}:${f.line} [${f.category}] ${f.message}`);
+        if (f.fix) {
+          const tag = f.fixRisk === 'safe' ? 'auto-fixable' : 'suggestion';
+          lines.push(`    → fix (${tag}): ${f.fix}`);
+        }
       }
     }
     return lines.join('\n');
   }
 }
 
+/** Options for {@link registerReviewCommand}. */
+export interface ReviewCommandOptions {
+  /** Optional diff reviewer; when provided, `--apply` registers each fixed file for review/accept. */
+  diffReviewer?: DiffReviewer;
+  /** Working directory used to discover changed files (defaults to process.cwd()). */
+  cwd?: string;
+}
+
 /**
  * Registers the `/review` slash command: reviews local working-tree changes
  * (or explicit files) and prints a severity-ranked static analysis report.
+ *
+ * Pass `--apply` to automatically apply only the "safe" fixes, write the
+ * cleaned content back to disk, and (when a `diffReviewer` was supplied)
+ * register each changed file as a pending diff so the user can accept/reject
+ * the edits through `/diff`.
  */
-export function registerReviewCommand(router: SlashCommandRouter): void {
+export function registerReviewCommand(router: SlashCommandRouter, options: ReviewCommandOptions = {}): void {
   router.register(
     'review',
     async (ctx: SlashCommandContext): Promise<SlashCommandResult> => {
+      const apply = ctx.args.includes('--apply');
+      const fileArgs = ctx.args.filter((a) => !a.startsWith('--'));
+
       let files: ReviewFile[];
-      if (ctx.args.length > 0) {
-        files = ctx.args
+      if (fileArgs.length > 0) {
+        files = fileArgs
           .filter((p) => existsSync(p))
           .map((p) => {
             try {
@@ -308,7 +328,7 @@ export function registerReviewCommand(router: SlashCommandRouter): void {
           })
           .filter((f): f is ReviewFile => f !== null);
       } else {
-        files = CodeReviewer.getChangedFiles();
+        files = CodeReviewer.getChangedFiles(options.cwd ?? process.cwd());
       }
 
       if (files.length === 0) {
@@ -320,17 +340,39 @@ export function registerReviewCommand(router: SlashCommandRouter): void {
       }
 
       const report = CodeReviewer.analyze(files);
+      const out: string[] = [CodeReviewer.formatReport(report)];
+
+      if (apply) {
+        let safe = 0;
+        for (const f of files) {
+          const { fixed, applied } = CodeReviewer.applySafeFixes(f);
+          if (applied.length === 0) continue;
+          try {
+            writeFileSync(f.path, fixed.content, 'utf8');
+          } catch {
+            out.push(`! Could not write ${f.path}; skipping safe-fix application.`);
+            continue;
+          }
+          safe += applied.length;
+          out.push(`✓ Applied ${applied.length} safe fix(es) in ${f.path}`);
+          if (options.diffReviewer) {
+            options.diffReviewer.addChange(f.path, f.content, fixed.content);
+          }
+        }
+        out.push(`Applied ${safe} safe fix(es) total. Risky findings were left untouched for manual review.`);
+      }
+
       return {
         success: true,
         command: ctx.command,
-        output: CodeReviewer.formatReport(report),
+        output: out.join('\n'),
         data: report
       };
     },
     {
       description: 'Static code review of working-tree changes (no network needed)',
       aliases: ['audit', 'cr'],
-      usage: '/review [file ...]'
+      usage: '/review [--apply] [file ...]'
     }
   );
 }
