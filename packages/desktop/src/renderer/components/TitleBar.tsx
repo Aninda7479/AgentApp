@@ -209,7 +209,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   return (
     <div
       data-testid="title-bar"
-      className="h-10 bg-brand-sidebar border-b border-brand-border/40 flex items-center justify-between px-3 select-none drag-window z-30"
+      className="h-10 bg-brand-sidebar border-b border-brand-border/40 flex items-center justify-between px-3 select-none drag-window z-[100]"
       style={isElectron ? ({ WebkitAppRegion: 'drag' } as React.CSSProperties) : undefined}
     >
       {/* Left side: Logo, Nav History, and Application Menu */}
