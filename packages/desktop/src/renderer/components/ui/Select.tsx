@@ -13,6 +13,7 @@ export interface SelectProps {
   label?: string;
   placeholder?: string;
   className?: string;
+  direction?: 'up' | 'down';
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -21,7 +22,8 @@ export const Select: React.FC<SelectProps> = ({
   onChange,
   label,
   placeholder = 'Select option...',
-  className = ''
+  className = '',
+  direction = 'down'
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -40,7 +42,7 @@ export const Select: React.FC<SelectProps> = ({
   }, []);
 
   return (
-    <div className={`flex flex-col gap-1.5 relative w-full text-left ${className}`} ref={containerRef}>
+    <div className={`flex flex-col gap-1.5 relative w-full text-left ${isOpen ? 'z-[1050]' : 'z-0'} ${className}`} ref={containerRef}>
       {label && (
         <span className="text-xs font-bold text-brand-textMain select-none">
           {label}
@@ -67,7 +69,11 @@ export const Select: React.FC<SelectProps> = ({
 
       {/* Popover Options List */}
       {isOpen && (
-        <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-[1100] bg-brand-popover border border-brand-border rounded-xl shadow-xl max-h-[220px] overflow-y-auto p-1.5 animate-in fade-in slide-in-from-top-1 duration-100">
+        <div className={`absolute left-0 right-0 z-[1100] bg-brand-popover border border-brand-border rounded-xl shadow-xl max-h-[220px] overflow-y-auto p-1.5 duration-100 ${
+          direction === 'up'
+            ? 'bottom-[calc(100%+4px)] animate-in fade-in slide-in-from-bottom-1'
+            : 'top-[calc(100%+4px)] animate-in fade-in slide-in-from-top-1'
+        }`}>
           {options.length === 0 ? (
             <div className="text-xs text-brand-textMuted p-2 text-center">No options available</div>
           ) : (

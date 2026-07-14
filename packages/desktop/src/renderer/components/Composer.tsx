@@ -1,4 +1,5 @@
 import React, { useState, KeyboardEvent, useEffect, useRef } from 'react';
+import { Select } from './ui';
 import {
   Plus,
   Cpu,
@@ -95,7 +96,7 @@ export const Composer: React.FC<ComposerProps> = ({
   const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [approvalMode, setApprovalMode] = useState<'always' | 'never' | 'ask'>('ask');
   const [showApprovalDropdown, setShowApprovalDropdown] = useState(false);
-  const [showModelDropdown, setShowModelDropdown] = useState(false);
+
 
   // Voice dictation
   const [listening, setListening] = useState(false);
@@ -316,40 +317,17 @@ export const Composer: React.FC<ComposerProps> = ({
           <div className="flex items-center gap-2.5">
             {/* Model Badge */}
             <div className="relative">
-              <button
-                data-testid="model-dropdown-btn"
-                disabled={!hasModels}
-                onClick={() => setShowModelDropdown(!showModelDropdown)}
-                className={`text-brand-textMuted hover:text-brand-textMain px-3 py-2 rounded-lg bg-brand-popover/60 hover:bg-brand-popover border border-brand-border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                  hasModels ? 'cursor-pointer' : 'cursor-not-allowed opacity-75'
-                }`}
-              >
-                <Cpu className="w-3.5 h-3.5" />
-                <span className="max-w-[110px] sm:max-w-none truncate">{hasModels ? selectedModel : 'No models are connected yet'}</span>
-                {hasModels && <ChevronDown className="w-3 h-3" />}
-              </button>
-
-              {hasModels && showModelDropdown && (
-                <div
-                  data-testid="model-dropdown-menu"
-                  className="absolute bottom-full right-0 mb-2 glass-panel rounded-lg shadow-lg z-50 w-[170px] overflow-hidden max-h-[50vh] overflow-y-auto"
-                >
-                  {availableModels.map((model) => (
-                    <div
-                      key={model}
-                      data-testid={`model-option-${model.replace(/\s+/g, '-')}`}
-                      onClick={() => {
-                        setSelectedModel(model);
-                        setShowModelDropdown(false);
-                        onModelChange?.(model);
-                      }}
-                      className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-purple-500/15 cursor-pointer transition-colors"
-                    >
-                      {model}
-                    </div>
-                  ))}
-                </div>
-              )}
+              <Select
+                options={availableModels.map((model) => ({ value: model, label: model }))}
+                value={selectedModel}
+                onChange={(model) => {
+                  setSelectedModel(model);
+                  onModelChange?.(model);
+                }}
+                placeholder={hasModels ? 'Select model...' : 'No models connected'}
+                direction="up"
+                className="w-[180px] sm:w-[220px]"
+              />
             </div>
 
             {/* Mic / voice dictation */}

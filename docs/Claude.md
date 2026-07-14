@@ -29,27 +29,27 @@ The Anthropic Claude Agent Ecosystem contains tools for both terminal-centric de
 ## 2. Comprehensive Feature Breakdown
 
 ### A. Claude Cowork (Co-Work) Features
-*   **Operating System Interaction** ✅: Cowork interacts directly with your local machine's file explorer, specific applications, and desktop browsers to gather information and automate work.
+*   **Operating System Interaction**: Cowork interacts directly with your local machine's file explorer, specific applications, and desktop browsers to gather information and automate work. (Desktop-only agent runtime; not in CLI)
 *   **Long-Running Tasks & Cloud Handoff**: Supports complex projects that run autonomously in the background. Long-horizon tasks can hand off execution to the cloud, allowing them to continue running even if your physical computer goes offline.
-*   **Scheduled Actions** ✅: Automates recurring workflows (e.g. daily code syncs, hourly system health checks, weekly report aggregation).
+*   **Scheduled Actions**: Automates recurring workflows (e.g. daily code syncs, hourly system health checks, weekly report aggregation). (Desktop ScheduledView UI only; no CLI; not wired to a scheduler)
 
 ### B. Claude Code Core Agentic Capabilities
-*   **Codebase Comprehension** ✅: Navigates file dependency layers, parses structures, and resolves import paths to build codebase maps.
-*   **Terminal & PTY Automation** ✅: Autonomous shell command execution (builds, lints, tests, package installations) with a configurable sandbox.
-*   **Multimodal Asset Parsing** ✅: Supports pasting screenshots or image paths directly into prompt contexts to analyze errors or mockups.
+*   **Codebase Comprehension**: Navigates file dependency layers, parses structures, and resolves import paths to build codebase maps. (Desktop agent runtime via read/list/grep tools; not in CLI)
+*   **Terminal & PTY Automation**: Autonomous shell command execution (builds, lints, tests, package installations) with a configurable sandbox. (Desktop `run_command` tool; not in CLI runtime)
+*   **Multimodal Asset Parsing**: Supports pasting screenshots or image paths directly into prompt contexts to analyze errors or mockups. (Desktop attachments; not in CLI runtime)
 
 ### C. Project Memory & Guidelines (`CLAUDE.md`)
-*   **Custom Rules Loading** ✅: Automatically reads `CLAUDE.md` in the project root to enforce code style rules, build commands, and testing configurations.
-*   **Setup Auto-Generation (`/init`)** ✅: Scans code directories and project stack to build a tailored `CLAUDE.md` config.
+*   **Custom Rules Loading**: Automatically reads `CLAUDE.md` in the project root to enforce code style rules, build commands, and testing configurations. (CLI `/init` only; not wired into desktop runtime)
+*   **Setup Auto-Generation (`/init`)**: Scans code directories and project stack to build a tailored `CLAUDE.md` config. (CLI `/init` only; not in desktop)
 
 ### D. Subagent Orchestration
-*   **Isolated Context Windows** ✅: Spawns independent concurrent subagents to handle complex parallel tasks (e.g. security audits, mock test writing) without polluting the main session's token window.
+*   **Isolated Context Windows**: Spawns independent concurrent subagents to handle complex parallel tasks (e.g. security audits, mock test writing) without polluting the main session's token window. (Core `planner/subagents.ts` exists but is not wired into either client runtime)
 
 ### E. Model Context Protocol (MCP) Integration
 Claude Desktop and Claude Code are designed as native MCP clients:
 *   **Desktop Extensions (`.mcpb`)**: Users can install and update third-party tools via a click-to-install interface under settings, bypassing manual configuration files.
 *   **Enterprise Administration**: IT administrators can centrally manage, audit, and configure available extensions across team or corporate accounts.
-*   **Manual Configuration (`claude_desktop_config.json`)** ✅: Configured servers are specified under the `mcpServers` parameter. Default paths:
+*   **Manual Configuration (`claude_desktop_config.json`)**: Configured servers are specified under the `mcpServers` parameter. Default paths:
     *   *macOS*: `~/Library/Application Support/Claude/claude_desktop_config.json`
     *   *Windows*: `%APPDATA%\Claude\claude_desktop_config.json`
 
