@@ -23,26 +23,27 @@
       #pet-canvas:active {
         cursor: grabbing;
       }
-      /* Bottom-right grip to resize the pet (drag up/right to enlarge). */
+      /* Bottom-left grip to resize the pet (drag left/down to enlarge). The
+         top-right corner stays anchored, matching the pet's top-right dock. */
       #pet-resize {
         position: absolute;
-        right: 0;
+        left: 0;
         bottom: 0;
         width: 22px;
         height: 22px;
-        cursor: nwse-resize;
+        cursor: nesw-resize;
         touch-action: none;
       }
       #pet-resize::after {
         content: "";
         position: absolute;
-        right: 4px;
+        left: 4px;
         bottom: 4px;
         width: 10px;
         height: 10px;
-        border-right: 2px solid rgba(255,255,255,0.5);
+        border-left: 2px solid rgba(255,255,255,0.5);
         border-bottom: 2px solid rgba(255,255,255,0.5);
-        border-bottom-right-radius: 4px;
+        border-bottom-left-radius: 4px;
       }
     </style>
   </head>

@@ -268,7 +268,7 @@ export class PetWindowManager {
         this.dragging = false;
         break;
       case 'pet-resize-delta':
-        // Grip drag: dx = grow right, dy = grow up (renderer flips screen-y).
+        // Bottom-left grip: dx = grow wider (drag left), dy = grow taller (drag down).
         this.applyResizeDelta(payload?.dx ?? 0, payload?.dy ?? 0);
         break;
       case 'pet-behavior':
@@ -288,24 +288,34 @@ export class PetWindowManager {
   private applyDragDelta(dx: number, dy: number): void {
     if (!this.win) return;
     const area = screen.getPrimaryDisplay().workAreaSize;
-    this.pos.x = Math.max(0, Math.min(area.width - this.size.width, this.pos.x - dx));
-    this.pos.y = Math.max(0, Math.min(area.height - this.size.height, this.pos.y - dy));
+    // dx/dy are screen-space mouse deltas: move right → window right (+dx),
+    // move down → window down (+dy). (Previously subtracted, which sent the
+    // window the wrong way and, with window-relative coords, made it run off.)
+    this.pos.x = Math.max(0, Math.min(area.width - this.size.width, this.pos.x + dx));
+    this.pos.y = Math.max(0, Math.min(area.height - this.size.height, this.pos.y + dy));
     this.win.setPosition(Math.round(this.pos.x), Math.round(this.pos.y));
   }
 
-  /** Resize from the corner grip. Anchors the bottom-left edge; clamps to min..screen. */
-  private applyResizeDelta(dx: number, dy: number): void {
+  /**
+   * Resize from the bottom-left grip. Anchors the TOP-RIGHT corner (matching the
+   * pet's top-right dock): `growW` widens leftward, `growH` grows downward, so
+   * the grip tracks the cursor. Clamps so the window stays on screen.
+   */
+  private applyResizeDelta(growW: number, growH: number): void {
     if (!this.win) return;
     const area = screen.getPrimaryDisplay().workAreaSize;
     const clampNum = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-    const newW = clampNum(this.size.width + dx, this.minWidth, area.width);
-    const newH = clampNum(this.size.height + dy, this.minHeight, area.height);
-    const growY = newH - this.size.height;
+    // Anchored edges: right edge and top stay fixed.
+    const rightEdge = this.pos.x + this.size.width;
+    const top = this.pos.y;
+    // Left edge can't pass x=0 (max width = rightEdge); bottom can't pass the
+    // screen (max height = area.height - top).
+    const newW = clampNum(this.size.width + growW, this.minWidth, rightEdge);
+    const newH = clampNum(this.size.height + growH, this.minHeight, area.height - top);
     this.size.width = newW;
     this.size.height = newH;
-    // Keep the bottom edge fixed: growing taller moves the top up.
-    this.pos.y = clampNum(this.pos.y - growY, 0, area.height - this.size.height);
-    // Re-derive the docked home so a resize keeps the top-right anchor correct.
+    this.pos.x = rightEdge - newW; // keep the right edge fixed
+    // top (pos.y) is unchanged — the top edge is anchored.
     this.homePos = computeHomePos(area, this.size);
     this.win.setBounds({
       x: Math.round(this.pos.x),

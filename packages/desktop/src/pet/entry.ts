@@ -54,6 +54,13 @@ interface Character {
   update(dt: number, t: number): void;
   raycastPart(ndc: THREE.Vector2, camera: THREE.Camera): string | null;
   dispose(): void;
+  /**
+   * Optional: the character's current UNSCALED feet-to-head height, excluding
+   * arms. Characters that dramatically change silhouette between poses (e.g. the
+   * procedural figure sitting vs. standing to walk) implement this so the app can
+   * keep their on-screen size constant. Omit it to keep a fixed scale.
+   */
+  measureCoreHeight?(): number;
 }
 
 interface PartnerPayload {
@@ -87,23 +94,71 @@ const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true 
 renderer.setClearColor(0x000000, 0);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+// Filmic tone mapping + soft shadow maps give the character a grounded, less
+// "plastic" look than raw linear output.
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
 camera.position.set(0, 0.45, 4.3);
 camera.lookAt(0, 0.35, 0);
 
-const ambient = new THREE.AmbientLight(0xffffff, 0.9);
+// Direct lights. Ambient is intentionally low — once the image-based
+// environment (below) resolves it provides the soft fill; until then these
+// carry the scene so the pet is never unlit.
+const ambient = new THREE.AmbientLight(0xffffff, 0.28);
 scene.add(ambient);
-const key = new THREE.DirectionalLight(0xffffff, 1.05);
-key.position.set(2, 3, 4);
+const key = new THREE.DirectionalLight(0xffffff, 1.35);
+key.position.set(2.5, 4, 3.5);
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
+key.shadow.camera.near = 0.5;
+key.shadow.camera.far = 20;
+key.shadow.camera.left = -3;
+key.shadow.camera.right = 3;
+key.shadow.camera.top = 3;
+key.shadow.camera.bottom = -3;
+key.shadow.bias = -0.0004;
+key.shadow.radius = 4;
 scene.add(key);
-const rim = new THREE.DirectionalLight(0x88aaff, 0.5);
+const rim = new THREE.DirectionalLight(0x88aaff, 0.45);
 rim.position.set(-3, 1, -2);
 scene.add(rim);
-const fill = new THREE.DirectionalLight(0xffd9ec, 0.35);
+const fill = new THREE.DirectionalLight(0xffd9ec, 0.22);
 fill.position.set(0, 1, 3);
 scene.add(fill);
+
+// Soft contact shadow: a plane that is invisible except where the key light's
+// shadow falls, grounding the character on the transparent desktop. Its height
+// is aligned to the character's feet whenever a character is (re)built/resized.
+const groundShadow = new THREE.Mesh(
+  new THREE.PlaneGeometry(24, 24),
+  new THREE.ShadowMaterial({ opacity: 0.28 })
+);
+groundShadow.rotation.x = -Math.PI / 2;
+groundShadow.receiveShadow = true;
+groundShadow.position.y = -1.1;
+scene.add(groundShadow);
+
+// Image-based lighting from a neutral studio room: drives realistic reflections
+// and soft fill on every PBR material. Loaded async so boot never blocks; if the
+// module is unavailable the direct lights above still light the scene.
+void (async () => {
+  try {
+    const envMod: any = await import('three/examples/jsm/environments/RoomEnvironment.js');
+    const RoomEnvironment = envMod.RoomEnvironment;
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+    const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = envTex;
+    pmrem.dispose();
+  } catch (err) {
+    console.error('[pet] environment map unavailable, using direct lights only', err);
+  }
+})();
 
 // ============================================================ ProceduralWaifu
 // A stylized, fully-posable figure made of primitives. All joints are separate
@@ -147,7 +202,14 @@ class ProceduralWaifu implements Character {
   }
 
   private makeMat(color: string, rough = 0.6, metal = 0.05) {
-    return new THREE.MeshStandardMaterial({ color: new THREE.Color(color), roughness: rough, metalness: metal });
+    return new THREE.MeshStandardMaterial({
+      color: new THREE.Color(color),
+      roughness: rough,
+      metalness: metal,
+      // Let the studio environment map read clearly for a softer, more lifelike
+      // shading than flat directional light alone.
+      envMapIntensity: 1.1
+    });
   }
 
   private build(accent: string) {
@@ -462,6 +524,27 @@ class ProceduralWaifu implements Character {
   }
 
   setScale(s: number): void { this.object.scale.setScalar(s); }
+
+  /**
+   * Feet-to-head height in UNSCALED units for the current pose (arms ignored, so
+   * a celebratory arms-up doesn't shrink the body). Used to keep the apparent
+   * size constant whether the figure is sitting (idle) or standing (walk).
+   */
+  measureCoreHeight(): number {
+    const s = this.object.scale.y || 1;
+    this.object.updateWorldMatrix(true, true);
+    const head = new THREE.Vector3();
+    const footL = new THREE.Vector3();
+    const footR = new THREE.Vector3();
+    this.joints.head.getWorldPosition(head);
+    this.joints.footL.getWorldPosition(footL);
+    this.joints.footR.getWorldPosition(footR);
+    const bottom = Math.min(footL.y, footR.y);
+    // getWorldPosition includes the object scale; divide it back out. Add a
+    // constant for the head/hair cap and foot thickness (also unscaled).
+    const span = (head.y - bottom) / s;
+    return Math.max(0.1, span + 0.35);
+  }
 
   raycastPart(ndc: THREE.Vector2, cam: THREE.Camera): string | null {
     const ray = new THREE.Raycaster();
@@ -960,6 +1043,11 @@ class PetApp {
   private lastX = 0;
   private lastY = 0;
   private clock = new THREE.Clock();
+  // Auto-fit: desiredH is the target on-screen character height; baseScale fits
+  // a standing (1.9u) figure to it; appliedScale is eased toward the per-pose fit.
+  private desiredH = 1.6;
+  private baseScale = 1;
+  private appliedScale = 1;
 
   constructor() {
     scene.add(this.root);
@@ -982,9 +1070,12 @@ class PetApp {
     canvas.addEventListener('pointerdown', (e) => {
       this.unlockAudio();
       if (e.button === 2) {
-        // right-drag → move window + walk
+        // right-drag → move window + walk. Track deltas in SCREEN coordinates:
+        // clientX/Y are window-relative, so once the window starts moving they
+        // shift on their own (a feedback loop that fought the drag). screenX/Y
+        // are unaffected by the window moving, so the drag stays 1:1 with the mouse.
         this.dragging = true;
-        this.lastX = e.clientX; this.lastY = e.clientY;
+        this.lastX = e.screenX; this.lastY = e.screenY;
         ipc.send('pet-drag-start');
         canvas.setPointerCapture(e.pointerId);
         if (this.current !== 'talking') this.setBehavior('walk');
@@ -1000,9 +1091,9 @@ class PetApp {
     });
     canvas.addEventListener('pointermove', (e) => {
       if (!this.dragging) return;
-      const dx = e.clientX - this.lastX;
-      const dy = e.clientY - this.lastY;
-      this.lastX = e.clientX; this.lastY = e.clientY;
+      const dx = e.screenX - this.lastX;
+      const dy = e.screenY - this.lastY;
+      this.lastX = e.screenX; this.lastY = e.screenY;
       ipc.send('pet-drag-delta', { dx, dy });
     });
     const end = () => {
@@ -1021,16 +1112,19 @@ class PetApp {
       grip.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
         this.resizing = true;
-        this.lastX = e.clientX; this.lastY = e.clientY;
+        this.lastX = e.screenX; this.lastY = e.screenY;
         grip.setPointerCapture(e.pointerId);
       });
       grip.addEventListener('pointermove', (e) => {
         if (!this.resizing) return;
-        const dx = e.clientX - this.lastX;
-        const dy = e.clientY - this.lastY;
-        this.lastX = e.clientX; this.lastY = e.clientY;
-        // dy is screen-down; growing the window means dragging up = taller
-        ipc.send('pet-resize-delta', { dx, dy: -dy });
+        // Screen coordinates: the grip lives at the window's edge, so resizing
+        // shifts its client coords under us. Bottom-left grip with the top-right
+        // corner anchored (matches the pet's top-right dock): drag left = wider,
+        // drag down = taller — so the grip tracks the cursor 1:1.
+        const dx = e.screenX - this.lastX;
+        const dy = e.screenY - this.lastY;
+        this.lastX = e.screenX; this.lastY = e.screenY;
+        ipc.send('pet-resize-delta', { dx: -dx, dy });
       });
       const endR = () => { this.resizing = false; };
       grip.addEventListener('pointerup', endR);
@@ -1052,12 +1146,41 @@ class PetApp {
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    // scale the character to fill ~85% of the viewport height at z=0
+    // Target: fill ~85% of the viewport height at z=0. baseScale fits a standing
+    // 1.9u figure; refitScale adapts per-pose so the size stays consistent.
     const dist = camera.position.z - 0;
     const visibleH = 2 * Math.tan((camera.fov * Math.PI) / 360) * dist;
-    const charH = 1.9;
-    const scale = (visibleH * 0.85) / charH;
-    this.character?.setScale(scale);
+    this.desiredH = visibleH * 0.85;
+    this.baseScale = this.desiredH / 1.9;
+    this.refitScale(true);
+  }
+
+  /**
+   * Keeps the character's apparent size constant across poses. Characters that
+   * report a per-pose core height (the procedural figure) are fit so sitting
+   * (idle) and standing (walk) read at the same on-screen size — the fix for the
+   * pet appearing to "grow" when right-dragged. Others keep the standing fit.
+   * `immediate` snaps (on resize / partner swap); otherwise it eases each frame.
+   */
+  private refitScale(immediate = false) {
+    const c = this.character;
+    if (!c) return;
+    let target = this.baseScale;
+    if (typeof c.measureCoreHeight === 'function') {
+      const core = c.measureCoreHeight();
+      if (Number.isFinite(core) && core > 0.1) {
+        // Fit the (arms-excluded) core height to desiredH so EVERY pose reads at
+        // the same on-screen size. Standing to walk makes the core taller, so the
+        // scale must go DOWN to compensate — hence we clamp the core input to a
+        // sane band (curled/flat poses aside) rather than clamping the scale,
+        // which previously pinned standing larger than sitting (the "grow" bug).
+        target = this.desiredH / clamp(core, 1.5, 3.5);
+      }
+    }
+    this.appliedScale = immediate ? target : lerp(this.appliedScale, target, 0.1);
+    c.setScale(this.appliedScale);
+    // Re-seat the contact shadow after a scale change moves the feet.
+    this.groundCharacter();
   }
 
   private unlockAudio() {
@@ -1100,8 +1223,20 @@ class PetApp {
       this.root.add(w.object);
       this.character = w;
     }
+    // Every mesh in the (possibly async-loaded) character should cast into the
+    // contact shadow. Cheap to (re)apply on each partner swap.
+    this.character?.object.traverse((o: any) => { if (o.isMesh) o.castShadow = true; });
     this.handleResize();
+    this.groundCharacter();
     this.setBehavior(this.current);
+  }
+
+  /** Drops the contact-shadow plane to the character's current feet level. */
+  private groundCharacter() {
+    if (!this.character) return;
+    this.character.object.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(this.character.object);
+    if (Number.isFinite(box.min.y)) groundShadow.position.y = box.min.y + 0.001;
   }
 
   setBehavior(b: Behavior) {
@@ -1140,6 +1275,9 @@ class PetApp {
         }
       }
       this.character?.update(dt, t);
+      // Ease the scale toward the current pose's fit so sit↔stand stays a
+      // constant on-screen size instead of visibly growing.
+      this.refitScale(false);
       renderer.render(scene, camera);
     };
     loop();
