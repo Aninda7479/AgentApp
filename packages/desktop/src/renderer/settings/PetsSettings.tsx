@@ -60,8 +60,8 @@ export const PetsSettings: React.FC = () => {
       <div>
         <h2 className="font-outfit text-lg font-semibold text-brand-textMain">Companion (Desktop Pet)</h2>
         <p className="mt-1 text-sm text-brand-textMuted">
-          A 3D character that roams your desktop and reacts to your agent. It never
-          starts on its own — launch it below.
+          A 3D character that greets you, then rests in the top-right corner and
+          reacts to your agent. It never starts on its own — launch it below.
         </p>
       </div>
 

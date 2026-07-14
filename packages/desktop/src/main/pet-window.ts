@@ -2,6 +2,14 @@ import { BrowserWindow, screen } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import type { PartnerManifest } from '../renderer/components/partner/types';
+import {
+  computeCenterPos,
+  computeHomePos,
+  computePetSize,
+  lerpPos,
+  type PetPos,
+  type PetSize
+} from './pet-geometry';
 
 export type PetMood =
   | 'idle'
@@ -13,11 +21,12 @@ export type PetMood =
   | 'sleeping';
 
 /**
- * Owns the transparent, always-on-top "Partner" overlay window — a free-roaming
- * 3D desktop pet. The window floats above everything (frameless + transparent)
- * and wanders across the bottom of the screen, bouncing off the edges. The 3D
- * character itself is rendered by src/pet/entry.ts; this class handles the
- * window, its movement, drag, and relays mood/partner state from the app.
+ * Owns the transparent, always-on-top "Partner" overlay window — a 3D desktop
+ * pet. The window floats above everything (frameless + transparent). On launch
+ * it appears centered, plays a one-time "hello" wave, then glides to the
+ * top-right corner and rests there (it does NOT wander). The 3D character itself
+ * is rendered by src/pet/entry.ts; this class handles the window, its intro
+ * glide, drag, and relays mood/partner state from the app.
  */
 export class PetWindowManager {
   private win: BrowserWindow | null = null;
@@ -25,25 +34,33 @@ export class PetWindowManager {
   private modelPath: string | null = null;
   private vrmPath: string | null = null;
   private mood: PetMood = 'idle';
-  private pos = { x: 0, y: 0 };
+  private pos: PetPos = { x: 0, y: 0 };
+  private size: PetSize = { width: 220, height: 320 };
+  private homePos: PetPos = { x: 0, y: 0 };
   // The pet can be resized from a small companion up to the full screen.
-  private width = 220;
-  private height = 320;
   private readonly minWidth = 160;
   private readonly minHeight = 220;
-  private readonly velocity = 0.6;
-  private vx = 1;
-  private vy = 1;
   private dragging = false;
-  private wanderTimer: ReturnType<typeof setInterval> | null = null;
 
-  // Idle → sleep → lay state machine.
+  // Intro choreography: the pet starts centered, waves "hello", then glides to
+  // its docked home in the top-right corner and stays put.
+  private introPhase: 'centered' | 'gliding' | 'home' = 'centered';
+  private introFrom: PetPos = { x: 0, y: 0 };
+  private introTo: PetPos = { x: 0, y: 0 };
+  private introStart = 0;
+  private introDurationMs = 1100;
+  // Used to delay the glide until the "hello" has had a moment to play.
+  private readonly helloHoldMs = 900;
+  private introTimer: ReturnType<typeof setTimeout> | null = null;
+  private glideTimer: ReturnType<typeof setInterval> | null = null;
+
+  // Idle → sleep → lay state machine (character poses; the window stays put).
   private readonly sleepAfterMs = 10 * 60 * 1000; // 10 min idle → sleeping
   private readonly layAfterMs = 30 * 60 * 1000;   // 30 min idle → laying lonely
   private idleSince = Date.now();
   private transientUntil = 0; // hold window for celebrate / sad / talking
   private behaviorState:
-    | 'idle' | 'sleeping' | 'laying' | 'working' | 'walk' | 'celebrate' | 'sad' | 'poke' | 'talking'
+    | 'idle' | 'sleeping' | 'laying' | 'working' | 'walk' | 'celebrate' | 'sad' | 'poke' | 'talking' | 'hello'
     = 'idle';
 
   /** Set SUPERAGENT_DISABLE_PET=1 to turn the desktop pet off entirely. */
@@ -56,16 +73,28 @@ export class PetWindowManager {
     return !!this.win && !this.win.isDestroyed();
   }
 
+  /** Compute the size + docked home for the current primary display. */
+  private measure(): void {
+    const area = screen.getPrimaryDisplay().workAreaSize;
+    this.size = computePetSize(area, this.minWidth, this.minHeight);
+    this.homePos = computeHomePos(area, this.size);
+  }
+
   /** Creates (once) and shows the pet overlay window. */
   create(): BrowserWindow | null {
     if (!this.enabled || this.win) return this.win;
 
+    this.measure();
     const area = screen.getPrimaryDisplay().workAreaSize;
-    this.pos = { x: area.width - this.width - 48, y: area.height - this.height - 48 };
+    // Start centered; the intro glide moves it to the top-right home.
+    this.pos = computeCenterPos(area, this.size);
+    // If the primary display changes later, re-derive the docked home too.
+    this.introFrom = { ...this.pos };
+    this.introTo = { ...this.homePos };
 
     this.win = new BrowserWindow({
-      width: this.width,
-      height: this.height,
+      width: this.size.width,
+      height: this.size.height,
       x: this.pos.x,
       y: this.pos.y,
       transparent: true,
@@ -85,19 +114,54 @@ export class PetWindowManager {
 
     this.win.loadFile(this.resolvePetHtml());
 
+    // Debug aid: SUPERAGENT_PET_DEBUG=1 forwards the pet renderer's console and
+    // any crash to the main-process log, and opens its devtools. Invaluable when
+    // the character fails to render (you'd otherwise only see the resize grip).
+    if (process.env.SUPERAGENT_PET_DEBUG === '1') {
+      this.win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+        console.log(`[pet-renderer:${level}] ${message} (${sourceId}:${line})`);
+      });
+      this.win.webContents.on('render-process-gone', (_e, details) => {
+        console.error('[pet-renderer] process gone:', details);
+      });
+      this.win.webContents.on('preload-error', (_e, preloadPath, error) => {
+        console.error('[pet-renderer] preload error:', preloadPath, error);
+      });
+      this.win.webContents.openDevTools({ mode: 'detach' });
+    }
+
     this.win.once('ready-to-show', () => this.win?.show());
+    if (process.env.SUPERAGENT_PET_DEBUG === '1') {
+      // Capture a screenshot of the pet a few seconds in, for visual debugging.
+      setTimeout(() => {
+        try {
+          this.win?.webContents.capturePage().then((img: any) => {
+            const out = require('path').join(require('os').tmpdir(), 'pet-screenshot.png');
+            require('fs').writeFileSync(out, img.toPNG());
+            console.log('[pet-debug] screenshot saved to', out);
+          });
+        } catch (e) {
+          console.error('[pet-debug] screenshot failed', e);
+        }
+      }, 4000);
+    }
     this.win.on('closed', () => {
       this.win = null;
-      this.stopWander();
+      this.stopIntro();
+      this.stopIdleWatch();
     });
 
-    this.startWander();
+    this.win.on('maximize', () => this.refreshHome());
+
+    this.startIntro();
+    this.startIdleWatch();
     return this.win;
   }
 
   /** Tears down the pet window. */
   destroy(): void {
-    this.stopWander();
+    this.stopIntro();
+    this.stopIdleWatch();
     if (this.win && !this.win.isDestroyed()) {
       this.win.close();
     }
@@ -165,7 +229,7 @@ export class PetWindowManager {
     if (b === 'working' || b === 'idle') this.idleSince = now;
     if (b === 'sleeping') this.idleSince = now - this.sleepAfterMs - 1;
     if (b === 'laying') this.idleSince = now - this.layAfterMs - 1;
-    if (b === 'celebrate' || b === 'sad' || b === 'talking') this.transientUntil = now + 4000;
+    if (b === 'celebrate' || b === 'sad' || b === 'talking' || b === 'hello') this.transientUntil = now + 4000;
   }
 
   /** Maps a raw agent-event type to a pet mood. */
@@ -224,8 +288,8 @@ export class PetWindowManager {
   private applyDragDelta(dx: number, dy: number): void {
     if (!this.win) return;
     const area = screen.getPrimaryDisplay().workAreaSize;
-    this.pos.x = Math.max(0, Math.min(area.width - this.width, this.pos.x - dx));
-    this.pos.y = Math.max(0, Math.min(area.height - this.height, this.pos.y - dy));
+    this.pos.x = Math.max(0, Math.min(area.width - this.size.width, this.pos.x - dx));
+    this.pos.y = Math.max(0, Math.min(area.height - this.size.height, this.pos.y - dy));
     this.win.setPosition(Math.round(this.pos.x), Math.round(this.pos.y));
   }
 
@@ -234,13 +298,15 @@ export class PetWindowManager {
     if (!this.win) return;
     const area = screen.getPrimaryDisplay().workAreaSize;
     const clampNum = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-    const newW = clampNum(this.width + dx, this.minWidth, area.width);
-    const newH = clampNum(this.height + dy, this.minHeight, area.height);
-    const growY = newH - this.height;
-    this.width = newW;
-    this.height = newH;
+    const newW = clampNum(this.size.width + dx, this.minWidth, area.width);
+    const newH = clampNum(this.size.height + dy, this.minHeight, area.height);
+    const growY = newH - this.size.height;
+    this.size.width = newW;
+    this.size.height = newH;
     // Keep the bottom edge fixed: growing taller moves the top up.
-    this.pos.y = clampNum(this.pos.y - growY, 0, area.height - this.height);
+    this.pos.y = clampNum(this.pos.y - growY, 0, area.height - this.size.height);
+    // Re-derive the docked home so a resize keeps the top-right anchor correct.
+    this.homePos = computeHomePos(area, this.size);
     this.win.setBounds({
       x: Math.round(this.pos.x),
       y: Math.round(this.pos.y),
@@ -260,26 +326,99 @@ export class PetWindowManager {
     this.win?.webContents.send('pet-context', { pct });
   }
 
-  private startWander(): void {
-    if (this.wanderTimer) return;
-    this.wanderTimer = setInterval(() => this.tick(), 33);
+  // ── Intro choreography ──────────────────────────────────────────────────────
+  /**
+   * Runs the launch sequence: show the pet centered, play a "hello" wave, then
+   * glide to the docked top-right home. The glide is driven by a short interval
+   * (it's a one-shot, so a timer — not a perpetual wander loop — is correct).
+   */
+  private startIntro(): void {
+    if (!this.win) return;
+    this.introPhase = 'centered';
+    this.introFrom = { ...this.pos };
+    this.introTo = { ...this.homePos };
+    this.introStart = Date.now();
+
+    // Greet immediately, then begin the glide after a short beat.
+    this.win.webContents.send('pet-behavior', 'hello');
+    this.introTimer = setTimeout(() => this.beginGlide(), this.helloHoldMs);
   }
 
-  private stopWander(): void {
-    if (this.wanderTimer) {
-      clearInterval(this.wanderTimer);
-      this.wanderTimer = null;
+  private beginGlide(): void {
+    if (!this.win) return;
+    this.introPhase = 'gliding';
+    this.introStart = Date.now();
+    this.glideTimer = setInterval(() => this.tickGlide(), 16);
+  }
+
+  private tickGlide(): void {
+    if (!this.win || this.dragging) return;
+    const t = Math.min(1, (Date.now() - this.introStart) / this.introDurationMs);
+    this.pos = lerpPos(this.introFrom, this.introTo, t);
+    this.win.setPosition(Math.round(this.pos.x), Math.round(this.pos.y));
+    if (t >= 1) {
+      this.stopGlide();
+      this.introPhase = 'home';
+      this.homePos = { ...this.pos };
+      // Settle into a calm idle once the greeting is done.
+      if (this.behaviorState === 'hello') {
+        this.behaviorState = 'idle';
+        this.idleSince = Date.now();
+        this.win.webContents.send('pet-behavior', 'idle');
+      }
+    }
+  }
+
+  private stopGlide(): void {
+    if (this.glideTimer) {
+      clearInterval(this.glideTimer);
+      this.glideTimer = null;
+    }
+  }
+
+  /** Cancels every intro timer. Should be called on destroy/close. */
+  private stopIntro(): void {
+    if (this.introTimer) {
+      clearTimeout(this.introTimer);
+      this.introTimer = null;
+    }
+    this.stopGlide();
+    this.introPhase = 'home';
+  }
+
+  /** Re-measures the docked home if the primary display changes. */
+  private refreshHome(): void {
+    const area = screen.getPrimaryDisplay().workAreaSize;
+    // Recompute home for the current size.
+    this.homePos = computeHomePos(area, this.size);
+    // If the user hasn't dragged it away, also re-dock the live position.
+    this.pos = { ...this.homePos };
+    this.win?.setPosition(Math.round(this.pos.x), Math.round(this.pos.y));
+  }
+
+  // ── Idle → sleep → lay watcher (character poses only; the window stays put) ──
+  private idleTimer: ReturnType<typeof setInterval> | null = null;
+
+  private startIdleWatch(): void {
+    if (this.idleTimer) return;
+    // Check a few times a minute — plenty for 10/30-minute thresholds.
+    this.idleTimer = setInterval(() => this.tickIdle(), 15_000);
+  }
+
+  private stopIdleWatch(): void {
+    if (this.idleTimer) {
+      clearInterval(this.idleTimer);
+      this.idleTimer = null;
     }
   }
 
   /**
-   * Per-tick: (1) revert transient celebrate/sad/talking; (2) promote idle →
-   * sleeping (after 10 min) → laying (after 30 min); (3) gentle roam for active
-   * behaviors, stand still otherwise.
+   * Promotes idle → sleeping (after 10 min) → laying (after 30 min) and reverts
+   * transient celebrate/sad/talking once their hold window elapses. This only
+   * drives the character's in-place pose; the window does not move.
    */
-  private tick(): void {
-    if (!this.win || this.dragging) return;
-    const area = screen.getPrimaryDisplay().workAreaSize;
+  private tickIdle(): void {
+    if (!this.win) return;
     const now = Date.now();
 
     // Revert transient behaviors once their hold window elapses.
@@ -300,26 +439,6 @@ export class PetWindowManager {
         this.behaviorState = want as any;
         this.win.webContents.send('pet-behavior', want);
       }
-    }
-
-    // Roam only for lively behaviors (walk is drag-driven, so it's excluded).
-    const minX = 0;
-    const maxX = area.width - this.width;
-    const minY = 0;
-    const maxY = area.height - this.height;
-    let speed = 0;
-    if (this.behaviorState === 'working') speed = this.velocity * 3.2;
-    else if (this.behaviorState === 'idle') speed = this.velocity * 0.8;
-    else if (this.behaviorState === 'celebrate') speed = this.velocity * 1.6;
-
-    if (speed > 0) {
-      this.pos.x += this.vx * speed;
-      this.pos.y += this.vy * speed * 0.6;
-      if (this.pos.x <= minX) { this.pos.x = minX; this.vx = 1; }
-      else if (this.pos.x >= maxX) { this.pos.x = maxX; this.vx = -1; }
-      if (this.pos.y <= minY) { this.pos.y = minY; this.vy = 1; }
-      else if (this.pos.y >= maxY) { this.pos.y = maxY; this.vy = -1; }
-      this.win.setPosition(Math.round(this.pos.x), Math.round(this.pos.y));
     }
   }
 }

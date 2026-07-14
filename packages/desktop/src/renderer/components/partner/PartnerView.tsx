@@ -18,6 +18,8 @@ export interface PartnerViewProps {
   onInstallFromJson: (json: string) => void | Promise<void>;
   onRemove: (id: string) => void;
   onExport: (id: string) => void;
+  /** Imports a 3D model file (.vrm/.glb/.gltf) and attaches it to a Partner. */
+  onImportModel?: (id: string, filePath: string) => Promise<string | null> | void;
 }
 
 const BUILTIN_IDS = new Set(DEFAULT_PARTNERS.map((p) => p.id));
@@ -37,6 +39,35 @@ function openDocs(): void {
 }
 
 /**
+ * Picks a 3D model file. Uses the native Electron dialog when available; in the
+ * web build it falls back to an <input type="file"> filtered to model types.
+ * Returns the chosen path/object URL, or null if cancelled.
+ */
+async function windowPickModelFile(): Promise<string | null> {
+  const req = (window as any).require;
+  if (req) {
+    try {
+      const ipc = req('electron').ipcRenderer;
+      const res = await ipc.invoke('partner-pick-model-file');
+      if (typeof res === 'string') return res;
+    } catch {
+      /* fall through to web fallback */
+    }
+  }
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.vrm,.glb,.gltf,model/gltf-binary,model/gltf+json';
+    input.onchange = () => {
+      const f = input.files && input.files[0];
+      resolve(f ? (window as any).URL?.createObjectURL?.(f) ?? null : null);
+    };
+    input.oncancel = () => resolve(null);
+    input.click();
+  });
+}
+
+/**
  * The Partner gallery: browse the installed/open Partners, set the active one,
  * import a folder, create your own, and export or remove.
  */
@@ -48,7 +79,8 @@ export const PartnerView: React.FC<PartnerViewProps> = ({
   onInstallFromFolder,
   onInstallFromJson,
   onRemove,
-  onExport
+  onExport,
+  onImportModel
 }) => {
   const [creatorOpen, setCreatorOpen] = useState(false);
   const [editing, setEditing] = useState<PartnerManifest | null>(null);
@@ -99,6 +131,26 @@ export const PartnerView: React.FC<PartnerViewProps> = ({
           </button>
           <button className="ui-btn" data-testid="partner-import-folder" onClick={onInstallFromFolder}>
             <FolderOpen size={15} /> <span className="hidden sm:inline">Import folder</span>
+          </button>
+          <button
+            className="ui-btn"
+            data-testid="partner-import-model"
+            disabled={!activeId || !onImportModel}
+            title={activeId ? 'Attach a 3D model to the active Partner' : 'Set an active Partner first'}
+            onClick={async () => {
+              if (!activeId || !onImportModel) return;
+              const filePath = await windowPickModelFile();
+              if (!filePath) return;
+              const model = await onImportModel(activeId, filePath);
+              if (model) {
+                const name = pets.find((p) => p.id === activeId)?.name ?? 'Partner';
+                flash(`Model attached to ${name}.`);
+              } else {
+                flash('Could not attach model (see console).');
+              }
+            }}
+          >
+            <Download size={15} /> <span className="hidden sm:inline">Import 3D model</span>
           </button>
           <button className="ui-btn-primary" data-testid="partner-create" onClick={openCreate}>
             <Plus size={15} /> <span>Create</span>
@@ -156,6 +208,16 @@ export const PartnerView: React.FC<PartnerViewProps> = ({
                     </div>
 
                     <p className="text-xs leading-relaxed text-brand-textMuted">{pet.description}</p>
+
+                    {(pet.model || pet.vrm) && (
+                      <div
+                        data-testid={`partner-model-${pet.id}`}
+                        className="ui-badge bg-[var(--brand-accent)]/12 text-[color:var(--brand-accent)]"
+                        title="Imported 3D character model"
+                      >
+                        3D · {pet.vrm ? 'VRM' : 'GLB'}: {pet.model || pet.vrm}
+                      </div>
+                    )}
 
                     <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
                       {isActive ? (

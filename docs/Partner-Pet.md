@@ -2,9 +2,9 @@
 
 SuperAgent ships with a small desktop companion called a **Partner** (you can
 think of it as a "Pet"). On the desktop it is a **3D character** in a
-transparent, always-on-top window that roams freely across your screen; in the
-web build it falls back to a 2D companion inside the app. Either way it keeps
-you company and reacts to what the agent is doing:
+transparent, always-on-top window; in the web build it falls back to a 2D
+companion inside the app. Either way it keeps you company and reacts to what the
+agent is doing:
 
 | Agent state | Partner mood | Default vibe |
 | --- | --- | --- |
@@ -66,8 +66,8 @@ Create a folder for your Partner and put a `partner.json` inside it:
 | `accent` | — | Hex color for the 3D glow / 2D ring. Defaults to `#7c83ff`. |
 | `emoji` | — | Default emoji when a mood has none. Defaults to `🐾`. Also rendered as the floating billboard on the 3D pet. |
 | `frames` | — | Optional list of asset filenames for frame-by-frame animation. |
-| `model` | — | Optional glTF (`.glb`) filename inside the Partner folder; overrides the built-in 3D creature. |
-| `animations` | — | Optional `{ mood: clipName }` map for the 3D model. |
+| `model` | — | Optional glTF (`.glb` / `.gltf`) filename inside the Partner folder; overrides the built-in 3D creature. |
+| `animations` | — | Reserved `{ mood: clipName }` map for 3D model clip animation (currently unused; behavior is driven by root posing). |
 | `personality` | — | `{ voice?, traits?[] }` — free-form metadata for the future. |
 | `reactions` | — | Map of mood → `{ emoji?, line?, animation?, asset? }`. Any mood may be omitted. |
 
@@ -97,11 +97,18 @@ You have three options:
 
 1. **Folder import (easiest).** Open the **Partner** tab → **Import folder**, and
    pick the folder containing your `partner.json`. It is copied into
-   `~/AppData/Roaming/OpenSource/AgentApp/pets/<id>/` (your OS user-data dir).
+   `~/AppData/Roaming/OpenSource/AgentApp/pets/<id>/` (your OS user-data dir),
+   including any `model`/`vrm` 3D files it contains.
 2. **In-app creator.** Open the **Partner** tab → **Create**, fill in the form,
    hit **Save to library**. You can also paste an existing `partner.json` into the
    creator's "Load an existing manifest" box to edit it.
 3. **Paste JSON.** Same as above — author the JSON, then **Save to library**.
+
+**Import a 3D model file.** With an active Partner selected, click
+**Import 3D model** on the Partner tab and choose a `.vrm`, `.glb`, or `.gltf`
+file. The file is copied into that Partner's folder and recorded in its manifest
+(`vrm` for `.vrm`, otherwise `model`), so your choice is saved and restored.
+A `.glb`/`.gltf` takes precedence over a `.vrm` for the 3D pet.
 
 Built-in Partners (`Pixel`, `Byte`, `Nova`) always ship with the app and can't be
 removed, but you can edit and re-save them as your own.
@@ -131,8 +138,12 @@ for a complete, ready-to-import Partner. To try it:
 ## 6. The 3D desktop pet
 
 On the desktop app your active Partner is rendered as a **3D character** in a
-transparent, always-on-top window that roams freely across your whole screen —
-it is not trapped inside the SuperAgent window.
+transparent, always-on-top window. When you launch it (Partner tab → **Start
+pet**, or Settings → **Companion**), it appears **centered** on screen, plays a
+one-time **"hello" wave**, then **glides to the top-right corner** (with a small
+top margin) and rests there at about **¼ of the screen height**. It does **not**
+wander around the screen — it stays put until you drag it or it reacts to the
+agent.
 
 The default character is an **anime-waifu companion** (a cute girl who sits with
 a laptop and a head pillow). She reacts to the agent and to you:
@@ -180,9 +191,13 @@ A Partner can reference either:
 
 - **`vrm`** — an anime character (`.vrm` from VRoid Studio). Recommended for the
   waifu look; gives you the facial expressions.
-- **`model`** — a glTF/`.glb` humanoid, with `animations` mapping each mood to a
-  named clip. (Auto-picks a clip by keyword — `idle`, `walk`, `cheer`, `sad` — if
-  a mood has no explicit clip, and falls back to the first clip.)
+- **`model`** — a glTF/`.glb`/`.gltf` file. Loaded with Three.js's bundled
+  `GLTFLoader` (no extra dependency). The whole model is posed by behavior
+  (sit / lean / lie down / wave), and the laptop + pillow props are attached.
+  A `model` takes precedence over a `vrm` for the 3D pet.
+
+You can attach a model file without hand-editing JSON via the **Import 3D model**
+button on the Partner tab (it sets the right field for you).
 
 ```json
 {
@@ -192,11 +207,10 @@ A Partner can reference either:
   "kind": "human",
   "description": "A cute anime companion.",
   "accent": "#ff8fb3",
-  "vrm": "character.vrm",
+  "model": "character.glb",
   "laptop": true,
   "pillow": true,
-  "dialogues": { "working": "Typing away…", "celebrate": "Yay! 🎉" },
-  "animations": { "idle": "Idle", "working": "Walk", "celebrate": "Cheer", "sad": "Sad" }
+  "dialogues": { "working": "Typing away…", "celebrate": "Yay! 🎉" }
 }
 ```
 

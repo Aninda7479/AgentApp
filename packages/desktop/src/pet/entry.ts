@@ -39,7 +39,8 @@ export type Behavior =
   | 'poke'
   | 'celebrate'
   | 'talking'
-  | 'sad';
+  | 'sad'
+  | 'hello';
 
 export type ExpressionName = 'neutral' | 'happy' | 'sad' | 'surprised' | 'angry';
 
@@ -276,6 +277,8 @@ class ProceduralWaifu implements Character {
     // Laptop (base + hinged screen)
     this.laptop = new THREE.Group();
     pelvis.add(this.laptop);
+    // Register as a "joint" so poses can move it and applyRest() can snapshot it.
+    this.joints.laptop = this.laptop;
     const baseMat = this.makeMat('#cfd6e6', 0.5, 0.3);
     const base = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.04, 0.46), baseMat);
     this.laptop.add(base);
@@ -294,6 +297,7 @@ class ProceduralWaifu implements Character {
     // Pillow
     this.pillow = new THREE.Group();
     pelvis.add(this.pillow);
+    this.joints.pillow = this.pillow;
     const pillowMesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.2, 0.42), this.makeMat('#f3e6f0', 0.9));
     pillowMesh.geometry.translate(0, 0, 0);
     this.pillow.add(pillowMesh);
@@ -395,6 +399,20 @@ class ProceduralWaifu implements Character {
         return { ...base, rot: { ...base.rot, head: [d2r(-2), 0, 0], armEL: [d2r(80), 0, 0], armER: [d2r(80), 0, 0] } };
       case 'sad':
         return { ...base, rot: { ...base.rot, torso: [d2r(8), 0, 0], head: [d2r(14), 0, 0], armUL: [0, 0, d2r(35)], armUR: [0, 0, d2r(-35)], armEL: [d2r(40), 0, 0], armER: [d2r(40), 0, 0] } };
+      case 'hello':
+        // Raise the right arm and give a friendly wave (oscillated in update()).
+        return {
+          ...base,
+          rot: {
+            ...base.rot,
+            torso: [d2r(-4), 0, 0],
+            head: [d2r(-8), 0, 0],
+            armUR: [0, 0, d2r(-150)],
+            armER: [d2r(20), 0, 0],
+            handR: [0, 0, 0]
+          },
+          screen: d2r(100)
+        };
     }
   }
 
@@ -418,6 +436,7 @@ class ProceduralWaifu implements Character {
     if (b === 'celebrate') return 'happy';
     if (b === 'sad') return 'sad';
     if (b === 'talking') return 'surprised';
+    if (b === 'hello') return 'happy';
     if (b === 'sleeping' || b === 'laying') return 'neutral';
     return this.darkCircles ? 'angry' : 'neutral';
   }
@@ -504,6 +523,13 @@ class ProceduralWaifu implements Character {
     }
     if (this.behavior === 'celebrate') {
       this.joints.pelvis.position.y = lerp(this.joints.pelvis.position.y, this.restPos.pelvis.y + Math.abs(Math.sin(t * 7)) * 0.2, 0.4);
+    }
+
+    // Hello wave: oscillate the raised right forearm (handR sits under armE).
+    if (this.behavior === 'hello') {
+      const w = Math.sin(t * 10) * 0.5;
+      this.joints.armER.rotation.z = lerp(this.joints.armER.rotation.z, d2r(20) + w, 0.5);
+      this.joints.handR.rotation.z = lerp(this.joints.handR.rotation.z, w, 0.5);
     }
 
     // poke decay
@@ -635,6 +661,7 @@ class VRMCharacter implements Character {
       case 'walk': map.spine = [r(2), 0, 0]; map.head = [r(-4), 0, 0]; map.leftUpperArm = [0, 0, r(40)]; map.rightUpperArm = [0, 0, r(-40)]; map.leftLowerArm = [r(55), 0, 0]; map.rightLowerArm = [r(55), 0, 0]; break;
       case 'celebrate': map.spine = [r(-2), 0, 0]; map.head = [r(-6), 0, 0]; map.leftUpperArm = [0, 0, r(150)]; map.rightUpperArm = [0, 0, r(-150)]; map.leftLowerArm = [r(20), 0, 0]; map.rightLowerArm = [r(20), 0, 0]; break;
       case 'sad': map.spine = [r(8), 0, 0]; map.head = [r(14), 0, 0]; map.leftUpperArm = [0, 0, r(35)]; map.rightUpperArm = [0, 0, r(-35)]; break;
+      case 'hello': map.spine = [r(-4), 0, 0]; map.head = [r(-8), 0, 0]; map.rightUpperArm = [0, 0, r(-150)]; map.rightLowerArm = [r(20), 0, 0]; break;
       case 'talking': map.head = [r(-2), 0, 0]; break;
     }
     return map;
@@ -651,6 +678,7 @@ class VRMCharacter implements Character {
     if (b === 'celebrate') return 'happy';
     if (b === 'sad') return 'sad';
     if (b === 'talking') return 'surprised';
+    if (b === 'hello') return 'happy';
     return this.darkCircles ? 'angry' : 'neutral';
   }
 
@@ -713,6 +741,199 @@ class VRMCharacter implements Character {
     const spine = this.bone('spine');
     if (spine) spine.rotation.x = lerp(spine.rotation.x, (this.target.spine?.[0] || 0) + breathe, k);
     this.vrm.update(dt);
+  }
+
+  dispose(): void {
+    this.object.traverse((o: any) => {
+      if (o.geometry) o.geometry.dispose?.();
+      if (o.material) { const m = o.material; Array.isArray(m) ? m.forEach((x) => x.dispose?.()) : m.dispose?.(); }
+    });
+  }
+}
+
+// ================================================================ GLBCharacter
+// Loads an arbitrary glTF/GLB model (three's bundled GLTFLoader — no extra
+// dependency). Because rigs vary wildly across models, this character drives
+// behavior by transforming the whole model root (sit / lean / lie down / wave)
+// and parenting the laptop + pillow props to it, rather than trying to pose a
+// specific skeleton. Falls back to ProceduralWaifu if the file fails to load.
+class GLBCharacter implements Character {
+  object = new THREE.Group();
+  private model: THREE.Object3D | null = null;
+  private behavior: Behavior = 'idle';
+  private expression: ExpressionName = 'neutral';
+  private lipSync = false;
+  private darkCircles = false;
+  private laptop: THREE.Group;
+  private pillow: THREE.Group;
+  private loaded = false;
+  private fallback: ProceduralWaifu | null = null;
+  private usingFallback = false;
+
+  constructor(accent: string) {
+    this.laptop = this.makeProp(accent);
+    this.pillow = this.makePillow();
+    this.object.add(this.laptop, this.pillow);
+  }
+
+  private makeProp(accent: string): THREE.Group {
+    const g = new THREE.Group();
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0xcfd6e6, roughness: 0.5, metalness: 0.3 });
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.04, 0.46), baseMat);
+    g.add(base);
+    const screen = new THREE.Mesh(
+      new THREE.BoxGeometry(0.7, 0.44, 0.03),
+      new THREE.MeshStandardMaterial({ color: 0x222633 })
+    );
+    screen.position.set(0, 0.23, -0.22);
+    g.add(screen);
+    g.visible = false;
+    return g;
+  }
+
+  private makePillow(): THREE.Group {
+    const g = new THREE.Group();
+    const pm = new THREE.Mesh(
+      new THREE.BoxGeometry(0.6, 0.2, 0.42),
+      new THREE.MeshStandardMaterial({ color: 0xf3e6f0, roughness: 0.9 })
+    );
+    g.add(pm);
+    g.visible = false;
+    return g;
+  }
+
+  async load(url: string): Promise<void> {
+    try {
+      // three's GLTFLoader ships with the `three` package — no new dependency.
+      const gltfMod: any = await import('three/examples/jsm/loaders/GLTFLoader.js');
+      const GLTFLoader = gltfMod.GLTFLoader;
+      const loader = new (GLTFLoader as any)();
+      const gltf: any = await loader.loadAsync(url);
+      let model = gltf.scene as THREE.Object3D;
+      if (!model) throw new Error('empty gltf');
+
+      // Normalize scale so the model fills a sensible portion of the stage, and
+      // lift it so its feet rest near y=0 (the waifu's ground plane).
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      const targetHeight = 1.7; // ~ the procedural character's height
+      const scale = targetHeight / maxDim;
+      model.scale.setScalar(scale);
+      const box2 = new THREE.Box3().setFromObject(model);
+      const center = new THREE.Vector3();
+      box2.getCenter(center);
+      model.position.x -= center.x;
+      model.position.z -= center.z;
+      model.position.y -= box2.min.y;
+
+      // Face the camera.
+      model.rotation.y = Math.PI;
+      this.model = model;
+      this.object.add(model);
+      this.loaded = true;
+
+      // Parent props to the model root so they move with it.
+      this.laptop.position.set(0, 0.0, 0.42);
+      this.object.add(this.laptop);
+      this.laptop.visible = true;
+      this.pillow.position.set(0, 0.0, -0.05);
+      this.object.add(this.pillow);
+      this.pillow.visible = true;
+    } catch (err) {
+      console.error('[pet] GLB load failed, using procedural fallback', err);
+      this.usingFallback = true;
+      this.fallback = new ProceduralWaifu('#7c83ff');
+      this.object.add(this.fallback.object);
+    }
+  }
+
+  private glbPoseFor(b: Behavior): { rot: Vec3; pos: Vec3 } {
+    const r = d2r;
+    switch (b) {
+      case 'working':
+        return { rot: [r(-10), 0, 0], pos: [0, 0, 0.15] };
+      case 'idle':
+        return { rot: [r(-4), 0, 0], pos: [0, 0, 0] };
+      case 'sleeping':
+        return { rot: [r(70), 0, r(8)], pos: [0.3, -0.2, 0.3] };
+      case 'laying':
+        return { rot: [r(82), 0, r(12)], pos: [0.35, -0.2, 0.1] };
+      case 'walk':
+        return { rot: [r(2), 0, 0], pos: [0, 0.1, 0] };
+      case 'celebrate':
+        return { rot: [r(-2), 0, 0], pos: [0, 0, 0] };
+      case 'hello':
+        return { rot: [r(-4), 0, 0], pos: [0, 0, 0] };
+      case 'talking':
+        return { rot: [r(-3), 0, 0], pos: [0, 0, 0.05] };
+      case 'sad':
+        return { rot: [r(8), 0, 0], pos: [0, 0, 0] };
+      case 'poke':
+        return { rot: [0, 0, 0], pos: [0, 0, 0] };
+      default:
+        return { rot: [r(-4), 0, 0], pos: [0, 0, 0] };
+    }
+  }
+
+  setBehavior(b: Behavior, _opts?: { part?: string }): void {
+    this.behavior = b;
+    if (this.usingFallback && this.fallback) { this.fallback.setBehavior(b, _opts); return; }
+    this.target = this.glbPoseFor(b);
+  }
+
+  setExpression(e: ExpressionName): void {
+    this.expression = e;
+    if (this.usingFallback && this.fallback) { this.fallback.setExpression(e); }
+  }
+
+  setLipSync(on: boolean): void {
+    this.lipSync = on;
+    if (this.usingFallback && this.fallback) { this.fallback.setLipSync(on); }
+  }
+
+  setDarkCircles(on: boolean): void {
+    this.darkCircles = on;
+    if (this.usingFallback && this.fallback) { this.fallback.setDarkCircles(on); }
+  }
+
+  setScale(s: number): void { this.object.scale.setScalar(s); }
+
+  raycastPart(ndc: THREE.Vector2, cam: THREE.Camera): string | null {
+    if (this.usingFallback && this.fallback) return this.fallback.raycastPart(ndc, cam);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, cam as THREE.PerspectiveCamera);
+    const hits = ray.intersectObject(this.object, true);
+    return hits.length ? (hits[0].object.userData?.part || 'body') : null;
+  }
+
+  private target: { rot: Vec3; pos: Vec3 } = { rot: [0, 0, 0], pos: [0, 0, 0] };
+
+  update(dt: number, t: number): void {
+    if (this.usingFallback && this.fallback) { this.fallback.update(dt, t); return; }
+    if (!this.loaded || !this.model) return;
+    const k = clamp(dt * 6, 0, 1);
+    const { rot, pos } = this.target;
+    this.model.rotation.x = lerp(this.model.rotation.x, rot[0], k);
+    this.model.rotation.y = lerp(this.model.rotation.y, Math.PI + rot[1], k);
+    this.model.rotation.z = lerp(this.model.rotation.z, rot[2], k);
+    this.model.position.x = lerp(this.model.position.x, pos[0], k);
+    this.model.position.z = lerp(this.model.position.z, pos[2], k);
+
+    // Gentle breathing / idle bob.
+    const breathe = Math.sin(t * 1.6) * 0.015;
+    this.model.position.y = lerp(this.model.position.y, (this as any)._groundY ?? 0, k) + breathe;
+
+    // Celebrate hop.
+    if (this.behavior === 'celebrate') {
+      this.model.position.y += Math.abs(Math.sin(t * 7)) * 0.12;
+    }
+
+    // Hello wave: a subtle side-to-side sway of the whole upper body.
+    if (this.behavior === 'hello') {
+      this.model.rotation.z = lerp(this.model.rotation.z, Math.sin(t * 10) * 0.06, 0.5);
+    }
   }
 
   dispose(): void {
@@ -869,6 +1090,11 @@ class PetApp {
       this.root.add(vrm.object);
       this.character = vrm;
       await vrm.load(nodeUrl.pathToFileURL(p.vrmPath).href, this.accent);
+    } else if (p.modelPath) {
+      const glb = new GLBCharacter(this.accent);
+      this.root.add(glb.object);
+      this.character = glb;
+      await glb.load(nodeUrl.pathToFileURL(p.modelPath).href);
     } else {
       const w = new ProceduralWaifu(this.accent);
       this.root.add(w.object);

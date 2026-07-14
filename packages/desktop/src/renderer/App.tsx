@@ -2121,6 +2121,7 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
               onInstallFromJson={(json) => { partners.installFromJson(json); }}
               onRemove={(id) => { partners.remove(id); }}
               onExport={(id) => { partners.exportPet(id); }}
+              onImportModel={(id, filePath) => partners.importModel(id, filePath)}
             />
           )}
 

@@ -523,6 +523,75 @@ ipcMain.handle('partner-export', (_event, id: string) => {
 });
 
 /**
+ * Opens a native file picker so the user can choose a 3D character file
+ * (.vrm / .glb / .gltf) to attach to a Partner. Returns the chosen absolute path
+ * (or null if cancelled). The actual copy + manifest update happens in
+ * 'partner-import-model'.
+ */
+ipcMain.handle('partner-pick-model-file', async () => {
+  try {
+    const win = windowManager.getMainWindow();
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Select a 3D model file',
+      properties: ['openFile'],
+      filters: [{ name: '3D model', extensions: ['vrm', 'glb', 'gltf'] }]
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  } catch (err: unknown) {
+    return { error: (err as Error).message };
+  }
+});
+
+/**
+ * Copies a chosen 3D model file into the Partner's folder, records it in the
+ * Partner's manifest (as `vrm` for .vrm, else `model`), and — if this is the
+ * active Partner — re-pushes it to the running pet. This persists the user's
+ * "which model I imported" choice on disk.
+ */
+ipcMain.handle('partner-import-model', async (_event, { id, sourcePath }: { id: string; sourcePath: string }) => {
+  try {
+    if (!id || !sourcePath) return { error: 'Missing partner id or model path.' };
+    if (!fs.existsSync(sourcePath)) return { error: 'Model file no longer exists.' };
+
+    const ext = path.extname(sourcePath).toLowerCase().replace('.', '');
+    if (!['vrm', 'glb', 'gltf'].includes(ext)) {
+      return { error: 'Unsupported model file. Use .vrm, .glb, or .gltf.' };
+    }
+
+    const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+    if (!fs.existsSync(folder)) return { error: 'Partner folder not found.' };
+
+    const fileName = `character.${ext}`;
+    fs.copyFileSync(sourcePath, path.join(folder, fileName));
+
+    // Read, patch, and rewrite the manifest to point at the imported file.
+    const manifestPath = path.join(folder, 'partner.json');
+    const manifest = PartnerStore.getPartner(app.getPath('userData'), id);
+    if (!manifest) return { error: 'Partner manifest not found.' };
+    const field = ext === 'vrm' ? 'vrm' : 'model';
+    manifest[field] = fileName;
+    // A .glb/.gltf model takes precedence over a .vrm for the 3D pet.
+    if (field === 'model') delete (manifest as any).vrm;
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
+
+    // If this is the active Partner, refresh the running pet immediately.
+    const activeId = PartnerStore.getActivePartner(app.getPath('userData'));
+    if (activeId === id) {
+      petWindowManager.setPartner(
+        manifest as any,
+        resolvePartnerModelPath(manifest),
+        resolvePartnerVrmPath(manifest)
+      );
+    }
+
+    return { ok: true, model: fileName, field };
+  } catch (err: unknown) {
+    return { error: (err as Error).message };
+  }
+});
+
+/**
  * Resolves the absolute filesystem path to a Partner's 3D model file (if any),
  * so the pet renderer can load it directly via file:// . Returns null when the
  * Partner has no `model` field, or the file doesn't exist on disk (e.g. a
@@ -693,6 +762,10 @@ app.whenReady().then(async () => {
   // NOTE: the 3D Partner does NOT auto-start. The user launches it manually from
   // the Partner page or Settings → Pets (see startPet / the 'pet-start' IPC).
   // Once running, Ctrl+Q closes it and it stays closed until started again.
+  // Debug/dev convenience: SUPERAGENT_PET_AUTOSTART=1 (or PET_DEBUG) launches it.
+  if (process.env.SUPERAGENT_PET_AUTOSTART === '1' || process.env.SUPERAGENT_PET_DEBUG === '1') {
+    setTimeout(() => startPet(), 1200);
+  }
 
   // Auto-update check (no-ops in dev where electron-updater isn't installed).
   setupAutoUpdater();

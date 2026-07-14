@@ -205,6 +205,36 @@ export const PartnerLibrary = {
     }
   },
 
+  /** Opens a native file picker for a 3D model. Returns the chosen path or null. */
+  async pickModelFile(): Promise<string | null> {
+    const ipc = getIpc();
+    if (!ipc) return null;
+    try {
+      const res = await ipc.invoke('partner-pick-model-file');
+      if (res && typeof res === 'string') return res;
+    } catch {
+      /* ignore */
+    }
+    return null;
+  },
+
+  /**
+   * Attaches a 3D model file to a Partner: copies it into the Partner's folder
+   * and records it in the manifest. Persists the user's "which model I imported"
+   * choice. Returns the stored model filename or null.
+   */
+  async importModel(id: string, sourcePath: string): Promise<string | null> {
+    const ipc = getIpc();
+    if (!ipc) return null;
+    try {
+      const res = await ipc.invoke('partner-import-model', { id, sourcePath });
+      if (res && res.ok) return res.model;
+    } catch {
+      /* ignore */
+    }
+    return null;
+  },
+
   /** Starts the single 3D desktop pet (manual launch; never auto-starts). */
   async startPet(): Promise<boolean> {
     const ipc = getIpc();
@@ -303,6 +333,15 @@ export function usePartners() {
 
   const exportPet = useCallback((id: string) => PartnerLibrary.exportPet(id), []);
 
+  const importModel = useCallback(async (id: string, filePath: string) => {
+    const model = await PartnerLibrary.importModel(id, filePath);
+    // Refresh the list so the attached model filename shows on the card.
+    const installed = await PartnerLibrary.list();
+    const merged = mergePets(DEFAULT_PARTNERS, installed);
+    setPets(merged);
+    return model;
+  }, []);
+
   const startPet = useCallback(async () => {
     const running = await PartnerLibrary.startPet();
     setPetRunning(running);
@@ -322,6 +361,7 @@ export function usePartners() {
     installFromJson,
     remove,
     exportPet,
+    importModel,
     startPet,
     stopPet,
     ready
