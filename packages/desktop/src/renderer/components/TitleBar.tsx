@@ -206,8 +206,6 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     </div>
   );
 
-  const openGroup = groups.find((g) => g.key === openMenu);
-
   return (
     <div
       data-testid="title-bar"
@@ -265,7 +263,6 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           </button>
         </div>
 
-        {/* Desktop application menu bar (File / Edit / View / Help) */}
         <div className="hidden lg:flex items-center gap-0.5 text-brand-textMuted text-[11px] font-medium tracking-wide border-l border-brand-border/30 pl-3">
           {groups.map((group) => (
             <div key={group.key} className="relative">
@@ -277,13 +274,13 @@ export const TitleBar: React.FC<TitleBarProps> = ({
               >
                 {group.label}
               </button>
+              {openMenu === group.key && (
+                <div className="absolute left-0 top-full mt-1 z-50">
+                  <div className="ui-menu">{renderGroup(group)}</div>
+                </div>
+              )}
             </div>
           ))}
-          {openGroup && (
-            <div className="absolute left-0 top-full mt-1 z-50">
-              <div className="ui-menu">{renderGroup(openGroup)}</div>
-            </div>
-          )}
         </div>
       </div>
 

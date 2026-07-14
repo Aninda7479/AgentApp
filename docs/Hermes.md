@@ -49,22 +49,24 @@ Hermes Agent is an open-source, 24/7 persistent AI agent framework developed by 
 
 | Command / Slash Command | Description |
 | :--- | :--- |
-| `hermes` / `hermes chat` ✅ | Start interactive CLI session / new session draft |
-| `hermes setup` ✅ | Start the interactive configuration wizard / settings view |
-| `hermes setup --portal` | Setup using Nous Portal OAuth (OAuth for models and tools) |
-| `hermes gateway setup` ✅ | Setup wizard for messaging platform adapters / gateway page |
-| `hermes chat -q "query"` ✅ | Run a single-query task in non-interactive mode |
-| `hermes --resume <session_id>` ✅ | Resume a specific previous conversation |
-| `hermes -w` ✅ | Open an isolated git worktree for running agents in parallel |
-| `hermes -s [skill_name]` | Start a session with specific skills preloaded |
-| `hermes --tui` ✅ | Launch rich full-screen Terminal User Interface |
-| `/learn` ✅ | Capture current workflow, prompt, or feedback to generate a persistent reusable skill |
+| `hermes` / `hermes chat` | Start interactive CLI session / new session draft (SuperAgent CLI is `superagent`; interactive TUI exists, but under a different command name) |
+| `hermes setup` | Start the interactive configuration wizard / settings view (not this command; settings via `/model` / settings UI) |
+| `hermes setup --portal` | Setup using Nous Portal OAuth (OAuth for models and tools) (not implemented) |
+| `hermes gateway setup` | Setup wizard for messaging platform adapters / gateway page (desktop gateway exists but is desktop-only) |
+| `hermes chat -q "query"` | Run a single-query task in non-interactive mode (CLI `exec` is a stub; not wired) |
+| `hermes --resume <session_id>` | Resume a specific previous conversation (no resume) |
+| `hermes -w` | Open an isolated git worktree for running agents in parallel (not implemented) |
+| `hermes -s [skill_name]` | Start a session with specific skills preloaded (not implemented) |
+| `hermes --tui` | Launch rich full-screen Terminal User Interface (SuperAgent CLI TUI exists but under a different command) |
+| `/learn` | Capture current workflow, prompt, or feedback to generate a persistent reusable skill (CLI `/learn` only; not in desktop) |
 | `/model [provider:model]` ✅ | Switch LLM backends on the fly during a chat session |
-| `hermes skills` ✅ | Browse, install, audit, or edit agent skill modules |
-| `hermes backup` / `import` ✅ | Export or restore persistent memory databases, skill libraries, and configs |
-| `hermes config` ✅ | Modify infrastructure backends, API keys, and gateway tokens |
-| `hermes logs` ✅ | Stream live system logs and execution traces from the background daemon |
-| `hermes update` ✅ | Pull latest code, migrate database schemas, and re-compile dependencies |
+| `hermes skills` | Browse, install, audit, or edit agent skill modules (CLI `/learn` skill store; not this command) |
+| `hermes backup` / `import` | Export or restore persistent memory databases, skill libraries, and configs (not implemented) |
+| `hermes config` | Modify infrastructure backends, API keys, and gateway tokens (settings persisted in both clients; not this command) |
+| `hermes logs` | Stream live system logs and execution traces from the background daemon (not implemented) |
+| `hermes update` | Pull latest code, migrate database schemas, and re-compile dependencies (desktop has an updater; not this command) |
+
+> ✅ = verified wired through `packages/core` into **both** `packages/cli` and `packages/desktop`. Only the model/provider switching feature (`/model` / "200+ Supported Models") qualifies.
 
 ---
 
