@@ -5,6 +5,7 @@ import { registerReviewCommand, CodeReviewer } from './review.js';
 import { registerSecurityReviewCommand } from './security.js';
 import { registerExecSlashCommand } from './exec.js';
 import { registerAttachCommand } from './attach.js';
+import { registerExportCommand } from './export.js';
 import { ImageAttachment } from '@superagent/core';
 import { registerMCPCommand } from './mcp.js';
 import { registerConfigCommand } from './config.js';
@@ -99,6 +100,7 @@ export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRou
   registerVoiceCommand(router);
   registerTasksCommand(router, taskManager);
   registerClearCommand(router, getMessages, setMessages);
+  registerExportCommand(router, { getMessages });
   registerExecSlashCommand(router, { permission });
   registerAttachCommand(router, { pendingAttachments });
 

@@ -274,7 +274,7 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
     });
 
     const names = router.getCommands().map((d) => d.name).sort();
-    expect(names).toEqual(['agent', 'attach', 'btw', 'bug', 'clear', 'compact', 'config', 'cost', 'diff', 'doctor', 'exec', 'goal', 'help', 'init', 'learn', 'mcp', 'memory', 'model', 'permissions', 'plan', 'review', 'security-review', 'side', 'status', 'tasks', 'theme', 'verify', 'voice']);
+    expect(names).toEqual(['agent', 'attach', 'btw', 'bug', 'clear', 'compact', 'config', 'cost', 'diff', 'doctor', 'exec', 'export', 'goal', 'help', 'init', 'learn', 'mcp', 'memory', 'model', 'permissions', 'plan', 'review', 'security-review', 'side', 'status', 'tasks', 'theme', 'verify', 'voice']);
   });
 
   it('should dispatch /model list through the wired router', async () => {
@@ -399,7 +399,7 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
     });
 
     const help = formatSlashCommandHelp(router);
-    for (const name of ['model', 'status', 'theme', 'learn', 'init', 'compact', 'diff', 'doctor', 'permissions', 'btw', 'verify', 'plan', 'review', 'clear', 'tasks']) {
+    for (const name of ['model', 'status', 'theme', 'learn', 'init', 'compact', 'diff', 'doctor', 'permissions', 'btw', 'verify', 'plan', 'review', 'clear', 'tasks', 'export']) {
       expect(help).toContain(`/${name}`);
     }
     expect(help).toContain('/help');
@@ -525,5 +525,30 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
     const res = await router.execute('/review src/commands/btw.ts');
     expect(res.success).toBe(true);
     expect(res.output).toContain('=== SuperAgent Code Review ===');
+  });
+
+  it('should export the conversation inline via /export', async () => {
+    const session = createSessionContext();
+    let ctxMessages: ContextMessage[] = [
+      { role: 'system', content: 'System prompt' },
+      { role: 'user', content: 'Hello there' },
+      { role: 'assistant', content: 'Hi! How can I help?' }
+    ];
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => ctxMessages,
+      setMessages: (m) => {
+        ctxMessages = m;
+      },
+      diffReviewer: new DiffReviewer(),
+      permission: 'ask',
+      setPermission: () => {}
+    });
+
+    const res = await router.execute('/export');
+    expect(res.success).toBe(true);
+    expect(res.output).toContain('# SuperAgent Conversation Export');
+    expect(res.output).toContain('Hello there');
+    expect(res.output).toContain('Hi! How can I help?');
   });
 });

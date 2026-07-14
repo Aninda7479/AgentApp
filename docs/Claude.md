@@ -119,6 +119,7 @@ Claude Desktop and Claude Code are designed as native MCP clients:
 | `/voice` ✅ | Toggle voice dictation mode / microphone dictation (headless CLI acknowledges; Desktop/Web provide mic input) |
 | `/bug` ✅ | File a bug report (saved locally with environment context; no remote submission in CLI) |
 | `/exec` / `! <cmd>` | Run a raw shell command in the workspace through the sandbox executor, honoring the session permission level (CLI `/exec` and `!` prefix only; not in desktop) |
+| `/export` | Save the current conversation to a file (Markdown by default, or JSON with `--json`). With a path it writes the transcript to that file (creating parent directories); without a path it prints the transcript to stdout. Aliases: `/save`, `/dump` (CLI `/export` only; not in desktop) |
 | `/attach <path>` / drag-and-drop | Attach an image to your next message. Drag an image file into the terminal (the path is inserted as text) or type its path, and it is validated and sent as a multimodal `image` content block to the model; `/attach list` and `/attach clear` manage the queue (CLI `/attach` only; not in desktop) |
 | `/login` / `/logout` | Authenticate or log out from your account / manage credentials (web build only; no CLI/desktop command) |
 
