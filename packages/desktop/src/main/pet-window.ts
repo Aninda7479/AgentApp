@@ -293,7 +293,12 @@ export class PetWindowManager {
     // window the wrong way and, with window-relative coords, made it run off.)
     this.pos.x = Math.max(0, Math.min(area.width - this.size.width, this.pos.x + dx));
     this.pos.y = Math.max(0, Math.min(area.height - this.size.height, this.pos.y + dy));
-    this.win.setPosition(Math.round(this.pos.x), Math.round(this.pos.y));
+    this.win.setBounds({
+      x: Math.round(this.pos.x),
+      y: Math.round(this.pos.y),
+      width: Math.round(this.size.width),
+      height: Math.round(this.size.height)
+    });
   }
 
   /**
@@ -365,7 +370,12 @@ export class PetWindowManager {
     if (!this.win || this.dragging) return;
     const t = Math.min(1, (Date.now() - this.introStart) / this.introDurationMs);
     this.pos = lerpPos(this.introFrom, this.introTo, t);
-    this.win.setPosition(Math.round(this.pos.x), Math.round(this.pos.y));
+    this.win.setBounds({
+      x: Math.round(this.pos.x),
+      y: Math.round(this.pos.y),
+      width: Math.round(this.size.width),
+      height: Math.round(this.size.height)
+    });
     if (t >= 1) {
       this.stopGlide();
       this.introPhase = 'home';
@@ -403,7 +413,12 @@ export class PetWindowManager {
     this.homePos = computeHomePos(area, this.size);
     // If the user hasn't dragged it away, also re-dock the live position.
     this.pos = { ...this.homePos };
-    this.win?.setPosition(Math.round(this.pos.x), Math.round(this.pos.y));
+    this.win?.setBounds({
+      x: Math.round(this.pos.x),
+      y: Math.round(this.pos.y),
+      width: Math.round(this.size.width),
+      height: Math.round(this.size.height)
+    });
   }
 
   // ── Idle → sleep → lay watcher (character poses only; the window stays put) ──

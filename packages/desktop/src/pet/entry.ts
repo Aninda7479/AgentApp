@@ -1077,23 +1077,48 @@ class PetApp {
     const grip = document.getElementById('pet-resize');
     if (grip) {
       grip.addEventListener('pointerdown', (e) => {
-        e.stopPropagation();
-        this.resizing = true;
-        this.lastX = e.screenX; this.lastY = e.screenY;
-        grip.setPointerCapture(e.pointerId);
+        if (e.button === 0) {
+          e.stopPropagation();
+          this.resizing = true;
+          this.lastX = e.screenX; this.lastY = e.screenY;
+          grip.setPointerCapture(e.pointerId);
+        } else if (e.button === 2) {
+          e.stopPropagation();
+          this.unlockAudio();
+          this.dragging = true;
+          this.lastX = e.screenX; this.lastY = e.screenY;
+          ipc.send('pet-drag-start');
+          grip.setPointerCapture(e.pointerId);
+          if (this.current !== 'talking') this.setBehavior('walk');
+        }
       });
       grip.addEventListener('pointermove', (e) => {
-        if (!this.resizing) return;
-        // Screen coordinates: the grip lives at the window's edge, so resizing
-        // shifts its client coords under us. Bottom-left grip with the top-right
-        // corner anchored (matches the pet's top-right dock): drag left = wider,
-        // drag down = taller — so the grip tracks the cursor 1:1.
-        const dx = e.screenX - this.lastX;
-        const dy = e.screenY - this.lastY;
-        this.lastX = e.screenX; this.lastY = e.screenY;
-        ipc.send('pet-resize-delta', { dx: -dx, dy });
+        if (this.resizing) {
+          // Screen coordinates: the grip lives at the window's edge, so resizing
+          // shifts its client coords under us. Bottom-left grip with the top-right
+          // corner anchored (matches the pet's top-right dock): drag left = wider,
+          // drag down = taller — so the grip tracks the cursor 1:1.
+          const dx = e.screenX - this.lastX;
+          const dy = e.screenY - this.lastY;
+          this.lastX = e.screenX; this.lastY = e.screenY;
+          ipc.send('pet-resize-delta', { dx: -dx, dy });
+        } else if (this.dragging) {
+          const dx = e.screenX - this.lastX;
+          const dy = e.screenY - this.lastY;
+          this.lastX = e.screenX; this.lastY = e.screenY;
+          ipc.send('pet-drag-delta', { dx, dy });
+        }
       });
-      const endR = () => { this.resizing = false; };
+      const endR = () => {
+        if (this.resizing) {
+          this.resizing = false;
+        }
+        if (this.dragging) {
+          this.dragging = false;
+          ipc.send('pet-drag-end');
+          if (this.current === 'walk') this.setBehavior(this.prevBeforeTalking || 'idle');
+        }
+      };
       grip.addEventListener('pointerup', endR);
       grip.addEventListener('pointercancel', endR);
     }
