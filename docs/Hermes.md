@@ -8,26 +8,28 @@ Hermes Agent is an open-source, 24/7 persistent AI agent framework developed by 
 ## 2. Comprehensive Feature Breakdown
 
 ### A. Self-Improving Learning Loop (`/learn`)
-* **Dynamic Skill Generation** ✅: Autonomously extracts patterns and workflows from successful task execution and codifies them into reusable skills.
-* **Continuous Skill Refinement** ✅: Continually updates and optimizes installed skills based on user interactions and execution outcomes.
-* **Persistent User Memory** ✅: Maintains a long-term memory store of user preferences, coding habits, system configurations, and past interactions across sessions.
+* **Dynamic Skill Generation**: Autonomously extracts patterns and workflows from successful task execution and codifies them into reusable skills. (CLI `/learn` + `packages/core` `memory/learn.ts`,`skills.ts`; CLI-only — ✅ removed)
+* **Continuous Skill Refinement**: Continually updates and optimizes installed skills based on user interactions and execution outcomes. (CLI `/learn` only — ✅ removed)
+* **Persistent User Memory**: Maintains a long-term memory store of user preferences, coding habits, system configurations, and past interactions across sessions. (`packages/core` `memory/*` + CLI; not wired into desktop runtime — ✅ removed)
 
 ### B. Platform-Agnostic Messaging Gateway ("Live Where You Do")
-* **Unified Background Daemon** ✅: Runs continuously in the background and bridges AI intelligence across multiple communication platforms.
-* **Multi-Platform Integration** ✅: Single agent identity accessible simultaneously via Telegram, Discord, Slack, WhatsApp, Signal, Email, Webhooks, and CLI.
-* **Omnichannel Context Synchronization** ✅: Memory and state are synchronized regardless of which client platform is used to interact with the agent.
+> ⚠️ The desktop ships a **gateway** with Telegram/Discord/Slack/WhatsApp channels, but it is desktop-only (no CLI) and not wired as a unified daemon. No ✅.
+
+* **Unified Background Daemon**: Runs continuously in the background and bridges AI intelligence across multiple communication platforms. (Desktop gateway daemon; desktop-only — ✅ removed)
+* **Multi-Platform Integration**: Single agent identity accessible simultaneously via Telegram, Discord, Slack, WhatsApp, Signal, Email, Webhooks, and CLI. (Desktop gateway channels; desktop-only — ✅ removed)
+* **Omnichannel Context Synchronization**: Memory and state are synchronized regardless of which client platform is used to interact with the agent. (Not implemented)
 
 ### C. Execution & Infrastructure Flexibility
-* **Multi-Backend Runtime** ✅: Can execute code locally, inside Docker containers, across remote SSH servers, or on serverless GPU clusters (e.g., Modal, Daytona).
-* **Worktree Isolation** ✅: Supports launching agents within isolated git worktrees (`-w`) for parallel code editing.
-* **Low Resource Footprint** ✅: Optimized to run efficiently on small $5 VPS instances or personal hardware.
+* **Multi-Backend Runtime**: Can execute code locally, inside Docker containers, across remote SSH servers, or on serverless GPU clusters (e.g., Modal, Daytona). (Agent runs locally in both clients; Docker/SSH/GPU backends not wired — ✅ removed)
+* **Worktree Isolation**: Supports launching agents within isolated git worktrees (`-w`) for parallel code editing. (Not implemented as a feature)
+* **Low Resource Footprint**: Optimized to run efficiently on small $5 VPS instances or personal hardware. (Design claim, not a verifiable feature — ✅ removed)
 
 ### D. Model Provider Flexibility
 * **200+ Supported Models** ✅: Provider agnostic integrations. Supports OpenRouter, Anthropic, OpenAI, DeepSeek, and local endpoints (e.g., Ollama, Llama.cpp).
 
 ### E. Extended Tooling & Sub-Agents
-* **40+ Built-in Tools** ✅: Web browsing, scraping, code generation, terminal execution, system monitoring, scheduler, and media handling.
-* **Sub-Agent Orchestration** ✅: Spawns isolated concurrent sub-agents for heavy parallel work (e.g., background web research while generating code).
+* **40+ Built-in Tools**: Web browsing, scraping, code generation, terminal execution, system monitoring, scheduler, and media handling. (Desktop `AgentEngine` exposes 6 file/shell tools + `web_fetch`; `packages/core` has more tool modules but most are unwired; not 40+ — ✅ removed)
+* **Sub-Agent Orchestration**: Spawns isolated concurrent sub-agents for heavy parallel work (e.g., background web research while generating code). (`packages/core` `planner/subagents.ts` exists but is not wired into either runtime — ✅ removed)
 
 ---
 
@@ -35,7 +37,7 @@ Hermes Agent is an open-source, 24/7 persistent AI agent framework developed by 
 
 | Shortcut | Action / Function |
 | :--- | :--- |
-| `Ctrl + C` ✅ | Interrupt current agent task (double-press forces exit / stop button) |
+| `Ctrl + C` | Interrupt current agent task (double-press forces exit / stop button) (CLI-only) |
 | `Ctrl + D` | Exit active CLI session |
 | `Ctrl + Z` | Suspend TUI process to background (Unix systems) |
 | `Ctrl + X, Ctrl + E` | Open prompt in configured external editor ($EDITOR) for long multi-line editing |

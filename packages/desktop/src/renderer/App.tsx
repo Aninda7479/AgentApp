@@ -4,6 +4,8 @@ import { TrajectoryStep } from './components/TrajectoryCanvas';
 import { ComposerOptions } from './components/Composer';
 import { DiffViewer } from './components/DiffViewer';
 import { BYOKModal } from './components/BYOKModal';
+import { ShortcutsModal } from './components/ShortcutsModal';
+import { DoctorModal } from './components/DoctorModal';
 import { MCPDashboard, MCPServerInfo } from './components/MCPDashboard';
 import { SearchModal } from './components/SearchModal';
 import { ScheduledView } from './components/ScheduledView';
@@ -172,6 +174,8 @@ export const App: React.FC = () => {
   const [mobileNavOpen, setMobileNavOpen] = useState<boolean>(false);
   const [isBYOKOpen, setIsBYOKOpen] = useState<boolean>(false);
   const [searchModalOpen, setSearchModalOpen] = useState<boolean>(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
+  const [isDoctorOpen, setIsDoctorOpen] = useState<boolean>(false);
   const [profilePopoverOpen, setProfilePopoverOpen] = useState<boolean>(false);
   const [settingsCategory, setSettingsCategory] = useState<string>(initialRoute.settingsCategory);
   const [activeProject, setActiveProject] = useState<string>('');
@@ -1757,6 +1761,8 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
         onAbout={handleAbout}
         onToggleTheme={() => setThemeMode(themeMode === 'light' ? 'dark' : 'light')}
         onCheckUpdates={handleCheckForUpdates}
+        onOpenShortcuts={() => setIsShortcutsOpen(true)}
+        onOpenDoctor={() => setIsDoctorOpen(true)}
         onOpenDocs={() => {
           if (ipc) {
             ipc.invoke('open-external', 'https://github.com/Aninda7479/AgentApp#readme');
@@ -1972,6 +1978,21 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
         onClose={() => setIsConfigureProjectOpen(false)}
         project={projectToConfigure}
         onSave={handleSaveProjectConfig}
+      />
+
+      {/* Keyboard Shortcuts Modal */}
+      <ShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+      />
+
+      {/* Doctor Diagnostics Modal */}
+      <DoctorModal
+        isOpen={isDoctorOpen}
+        onClose={() => setIsDoctorOpen(false)}
+        byokKeys={byokKeys}
+        modelsCatalog={modelsCatalog}
+        unsandboxedActions={fullAccess}
       />
 
       <AppToast open={toastOpen} message={toastMessage} type={toastType} onClose={() => setToastOpen(false)} />

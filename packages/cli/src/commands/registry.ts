@@ -3,6 +3,7 @@ import { registerCompactCommand, ContextMessage, CompactOptions } from './compac
 import { registerDiffCommand, DiffReviewer } from './diff.js';
 import { registerReviewCommand, CodeReviewer } from './review.js';
 import { registerSecurityReviewCommand } from './security.js';
+import { registerMCPCommand } from './mcp.js';
 import { registerPlanCommand, PlanGenerator } from './plan.js';
 import { registerTasksCommand, TaskManager } from './tasks.js';
 import { registerClearCommand } from './clear.js';
@@ -67,6 +68,7 @@ export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRou
   registerPlanCommand(router);
   registerReviewCommand(router);
   registerSecurityReviewCommand(router);
+  registerMCPCommand(router);
   registerTasksCommand(router, taskManager);
   registerClearCommand(router, getMessages, setMessages);
 

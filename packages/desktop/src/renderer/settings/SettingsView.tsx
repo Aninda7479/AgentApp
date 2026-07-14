@@ -3,7 +3,6 @@ import { SettingsViewProps, ModelConfig, ModelPricing, UpdateStatus, InternetAcc
 export type { ProviderConnection, ModelConfig } from './types';
 import { SettingsSidebar } from './SettingsSidebar';
 import { GeneralSettings } from './GeneralSettings';
-import { ShortcutsSettings } from './ShortcutsSettings';
 import { ServersSettings } from './ServersSettings';
 import { ProvidersSettings } from './ProvidersSettings';
 import { ModelsSettings } from './ModelsSettings';
@@ -166,7 +165,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onInternetAccessLevelChange={onInternetAccessLevelChange}
           />
         )}
-        {activeCategory === 'shortcuts' && <ShortcutsSettings />}
         {activeCategory === 'pets' && (
           <PlaceholderSettings
             title="Pets"

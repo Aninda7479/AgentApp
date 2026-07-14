@@ -54,14 +54,16 @@ Claude Desktop and Claude Code are designed as native MCP clients:
     *   *Windows*: `%APPDATA%\Claude\claude_desktop_config.json`
 
 #### Available Reference MCP Servers
-*   *Filesystem* ✅: Read, write, and inspect local directory structures securely.
-*   *Git* ✅: Perform git stage, commit, diff, branch management, and commit-history reviews.
-*   *Fetch* ✅: Scrape web page URLs and convert raw HTML into clean Markdown blocks.
-*   *Brave Search / Google Search* ✅: Execute live web search queries.
-*   *Database (Postgres / SQLite / MySQL)* ✅: Discover tables, suggest indices, and run raw SQL queries.
-*   *Puppeteer / Playwright* ✅: Script browser page automation and capture screenshot previews.
+> ⚠️ These describe *external* MCP servers the reference product connects to. SuperAgent ships an MCP **client** in `packages/core` (`mcp/*` with stdio/sse/http transports) but it is **not yet wired** into the CLI or desktop runtime, and these servers are not bundled. No ✅ until wired end-to-end.
+
+*   *Filesystem*: Read, write, and inspect local directory structures securely.
+*   *Git*: Perform git stage, commit, diff, branch management, and commit-history reviews.
+*   *Fetch*: Scrape web page URLs and convert raw HTML into clean Markdown blocks.
+*   *Brave Search / Google Search*: Execute live web search queries.
+*   *Database (Postgres / SQLite / MySQL)*: Discover tables, suggest indices, and run raw SQL queries.
+*   *Puppeteer / Playwright*: Script browser page automation and capture screenshot previews.
 *   *Sequential Thinking*: Provides a structured reasoning server to guide deep bug investigation.
-*   *Memory* ✅: Implements a persistent knowledge graph to recall facts and entities.
+*   *Memory*: Implements a persistent knowledge graph to recall facts and entities.
 *   *Jira & Confluence*: Connects to task dashboards and project wiki databases.
 *   *Sentry*: Gathers exception traces and debug logs.
 
@@ -74,47 +76,49 @@ Claude Desktop and Claude Code are designed as native MCP clients:
 
 | Shortcut | Action / Function |
 | :--- | :--- |
-| `Ctrl + O` | Toggle verbose transcript viewer (exposes inner thought chain, tool calls, and raw outputs) |
-| `Ctrl + R` | Reverse search through past prompt history |
-| `Ctrl + G` (or `Ctrl + X, Ctrl + E`) | Open current prompt in configured external text editor (e.g., VS Code, Vim, Nano) |
-| `Ctrl + C` ✅ | Cancel current agent execution or clear input buffer (double-press to halt/exit) |
-| `Ctrl + V` / `Cmd + V` ✅ | Paste image directly from clipboard into active prompt |
-| `Shift + Tab` ✅ | Cycle through execution permission modes (e.g., Manual Approve vs Auto Approve) |
-| `Ctrl + B` | Background a long-running command to keep working |
-| `Ctrl + L` | Redraw the terminal screen / clear visual output (does not clear context) |
-| `Ctrl + ,` ✅ | Open Claude Code settings configuration / desktop settings panel |
-| `Ctrl + D` | Exit active CLI session |
-| `Esc` / `Esc + Esc` ✅ | Clear current input prompt or rewind conversation / code changes |
-| `Alt + Enter` / `Option + Enter` ✅ | Insert newline in prompt composer without sending the message |
-| `@<path>` | Mention/auto-complete file paths and directory context directly in prompt |
+| `Ctrl + O` | Toggle verbose transcript viewer (CLI-only; desktop has no equivalent) |
+| `Ctrl + R` | Reverse search through past prompt history (CLI-only) |
+| `Ctrl + G` (or `Ctrl + X, Ctrl + E`) | Open current prompt in configured external text editor (e.g., VS Code, Vim, Nano) (not implemented) |
+| `Ctrl + C` | Cancel current agent execution or clear input buffer (double-press to halt/exit) (CLI-only) |
+| `Ctrl + V` / `Cmd + V` | Paste image directly from clipboard into active prompt (desktop-only; CLI runtime doesn't run agent) |
+| `Shift + Tab` | Cycle through execution permission modes (e.g., Manual Approve vs Auto Approve) (CLI-only; desktop uses settings toggles) |
+| `Ctrl + B` | Background a long-running command to keep working (not implemented) |
+| `Ctrl + L` | Redraw the terminal screen / clear visual output (does not clear context) (not implemented) |
+| `Ctrl + ,` | Open Claude Code settings configuration / desktop settings panel (desktop-only; CLI has no Ctrl+,) |
+| `Ctrl + D` | Exit active CLI session (CLI-only) |
+| `Esc` / `Esc + Esc` | Clear current input prompt or rewind conversation / code changes (not in both) |
+| `Alt + Enter` / `Option + Enter` | Insert newline in prompt composer without sending the message (desktop composer only) |
+| `@<path>` | Mention/auto-complete file paths and directory context directly in prompt (not implemented) |
 
 ---
 
 ## 4. Built-in Slash Commands
 
+> ✅ convention (verified against SuperAgent `packages/core` + `packages/cli` + `packages/desktop`): only features wired through core into **both** the CLI and desktop get ✅. CLI-only or desktop-only features are left unmarked.
+
 | Slash Command | Description |
 | :--- | :--- |
-| `/compact` | Compress and summarize conversation history to free up context tokens |
+| `/compact` | Compress and summarize conversation history to free up context tokens (CLI `/compact` only; not in desktop) |
 | `/clear` / `/reset` / `/new` ✅ | Hard reset current session and start a fresh context window |
 | `/model` ✅ | Switch between underlying Claude models (e.g., Sonnet 3.7, Opus 3.5) mid-session |
 | `/diff` ✅ | Open an interactive visual diff viewer to inspect pending file modifications |
-| `/mcp` ✅ | List, inspect, add, or manage active Model Context Protocol (MCP) servers |
-| `/init` ✅ | Analyze project and auto-generate project-level `CLAUDE.md` rules |
-| `/goal` | Set a completion condition for Claude, which then works autonomously toward that end state |
+| `/mcp` | List, inspect, add, or manage active Model Context Protocol (MCP) servers (no CLI command; desktop dashboard is a mock; core client not wired) |
+| `/init` | Analyze project and auto-generate project-level `CLAUDE.md` rules (CLI `/init` only; not in desktop) |
+| `/goal` | Set a completion condition for Claude, which then works autonomously toward that end state (not implemented) |
 | `/plan` ✅ | Enter plan mode for planning large architectural/complex changes |
-| `/security-review` ✅ | Run automated security analysis on your codebase to identify vulnerabilities (SQL injection, XSS, etc.) |
+| `/security-review` | Run automated security analysis on your codebase to identify vulnerabilities (SQL injection, XSS, etc.) (not implemented) |
 | `/code-review` / `/review` ✅ | Audit current changes or code diffs for issues |
-| `/cost` / `/stats` ✅ | View cumulative session costs and token statistics |
-| `/config` ✅ | View or modify configuration options (e.g. `/config verbose=true`) |
-| `/memory` ✅ | Open `CLAUDE.md` to add/edit project conventions / view memory profile |
-| `/status` ✅ | View current session status and active settings |
+| `/cost` / `/stats` | View cumulative session costs and token statistics (CLI `/status` token counter only; no desktop view) |
+| `/config` | View or modify configuration options (e.g. `/config verbose=true`) (no `/config` command) |
+| `/memory` | Open `CLAUDE.md` to add/edit project conventions / view memory profile (no `/memory` command) |
+| `/status` | View current session status and active settings (CLI `/status` only; no desktop view) |
 | `/tasks` ✅ | List active background tasks or subagents |
-| `/doctor` ✅ | Run setup checkup/diagnostics to troubleshoot local configuration |
-| `/verify` ✅ | Run tests or app commands to verify recent changes |
-| `/btw` ✅ | Ask a side question without polluting the main conversation context window |
-| `/voice` ✅ | Toggle voice dictation mode / microphone dictation |
-| `/bug` | Report issues with session logs directly to Anthropic |
-| `/login` / `/logout` ✅ | Authenticate or log out from your account / manage credentials |
+| `/doctor` | Run setup checkup/diagnostics to troubleshoot local configuration (CLI `/doctor` only; not in desktop) |
+| `/verify` | Run tests or app commands to verify recent changes (CLI `/verify` only; not in desktop) |
+| `/btw` | Ask a side question without polluting the main conversation context window (CLI `/btw` only; not in desktop) |
+| `/voice` | Toggle voice dictation mode / microphone dictation (not implemented) |
+| `/bug` | Report issues with session logs directly to Anthropic (not implemented) |
+| `/login` / `/logout` | Authenticate or log out from your account / manage credentials (web build only; no CLI/desktop command) |
 
 ---
 

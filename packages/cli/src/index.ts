@@ -14,6 +14,7 @@ export * from './commands/verify.js';
 export * from './commands/plan.js';
 export * from './commands/review.js';
 export * from './commands/security.js';
+export * from './commands/mcp.js';
 export * from './commands/tasks.js';
 export * from './commands/clear.js';
 export * from './commands/router.js';

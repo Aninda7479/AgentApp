@@ -38,9 +38,9 @@ Users can configure the reasoning effort of the Sol model to adjust computation 
 ChatGPT Work acts as an "execution layer" that automates workflows directly on the user's host system or cloud sandbox.
 
 ### A. Agentic Long-Horizon Execution
-*   **Autonomous Step Planning** ✅: When given a high-level goal, the agent decomposes it into a series of structured steps, creating a visible plan before executing.
-*   **Background Processing** ✅: Runs complex research or document generation tasks in the background, allowing the user to minimize the window and focus on other activities.
-*   **Self-Healing Loop** ✅: If a terminal command, script execution, or API request fails, the agent inspects the error message, refactors its code or parameters, and automatically retries.
+*   **Autonomous Step Planning**: When given a high-level goal, the agent decomposes it into a series of structured steps, creating a visible plan before executing. (Desktop agent does multi-step tool loops; not in CLI — ✅ removed)
+*   **Background Processing**: Runs complex research or document generation tasks in the background, allowing the user to minimize the window and focus on other activities. (Desktop `isGenerating`/stop only; not in CLI — ✅ removed)
+*   **Self-Healing Loop**: If a terminal command, script execution, or API request fails, the agent inspects the error message, refactors its code or parameters, and automatically retries. (Not implemented as an explicit retry loop — ✅ removed)
 
 ### B. Sites Integration (`@Sites` / `/site`)
 *   **Interactive Prototyping**: Users can ask ChatGPT to "build a website" or type `/site` to generate fully functional React/static frontends or dashboards.
@@ -51,28 +51,30 @@ ChatGPT Work acts as an "execution layer" that automates workflows directly on t
 Connectors and App integrations replace the legacy ChatGPT plugin system, offering secure OAuth-based links to corporate productivity and developer suites. 
 
 #### Available Connectors & Apps List
-*   **Google Workspace Suite** ✅:
+> ⚠️ None of these OAuth connectors are implemented in SuperAgent. The desktop ships a messaging **gateway** (Telegram / Discord / Slack / WhatsApp channels) but it is desktop-only (no CLI) and not wired as "connectors". No ✅.
+
+*   **Google Workspace Suite**:
     *   *Google Drive*: Reference, read, and write files across shared drives.
     *   *Google Docs / Sheets / Slides*: Retrieve contents, append logs, write cells, or structure presentation templates.
     *   *Gmail & Google Calendar*: Read schedules, book calendar invites, and draft/send emails.
-*   **Microsoft 365 Suite** ✅:
+*   **Microsoft 365 Suite**:
     *   *OneDrive & SharePoint*: Browse directory structures, extract document text, and save project outputs.
     *   *Outlook*: Access email threads and draft calendar invites.
     *   *Microsoft Teams*: Sync team chat topics and read logs.
-*   **Cloud Storage Integrations** ✅:
+*   **Cloud Storage Integrations**:
     *   *Dropbox*: Ingest spreadsheets and large media assets.
     *   *Box*: Fetch legacy corporate file caches.
-*   **Developer & Project Management** ✅:
+*   **Developer & Project Management**:
     *   *GitHub*: Query repositories, audit pull requests, create issues, and manage commits.
     *   *GitLab*: Trigger CI/CD pipelines and inspect builds.
     *   *Jira & Confluence*: Update task tickets, sync backlogs, and pull knowledge base articles.
     *   *Linear*: Access sprint boards and create tasks.
     *   *Asana & Trello*: Track tasks and update board states.
-*   **CRM & Business Operations** ✅:
+*   **CRM & Business Operations**:
     *   *Salesforce*: Retrieve lead statistics, update account records, and parse sales funnels.
     *   *HubSpot*: Check customer interactions and automate outreach logs.
     *   *Zendesk*: Review support tickets and search customer history logs.
-*   **Productivity & Communication** ✅:
+*   **Productivity & Communication**:
     *   *Slack*: Direct workspace channel integrations to query messages, summarize channels, or post alerts.
     *   *Notion*: Extract workspace databases, modify pages, and query wikis.
     *   *Zoom*: Fetch meeting schedules and transcribes.
@@ -83,54 +85,58 @@ Connectors and App integrations replace the legacy ChatGPT plugin system, offeri
 Skills are pre-built, reusable workflow templates that instruct the agent on how to perform specific tasks using connected resources and instructions.
 
 #### Available Skills List
-*   **Document & Content Generation** ✅:
+> ⚠️ These are example playbooks from the reference product, not implemented SuperAgent skills. The desktop has a `PluginsView` (skill toggles are console-logged only) and the CLI has `/learn` (skill store) — but no pre-built playbooks ship. No ✅.
+
+*   **Document & Content Generation**:
     *   *Weekly Report Generator*: Aggregates Jira task summaries, Slack commits, and Google Calendar events into formatted reports.
     *   *Presentation Slide Formatter*: Takes outline text and auto-compiles PPT slides using corporate design tokens.
     *   *Release Notes Compiler*: Audits GitHub commit history to generate user-friendly changelogs.
     *   *Email Draft Composer*: Generates professional email copy based on brief bullet-point notes.
-*   **Data Processing & Analysis** ✅:
+*   **Data Processing & Analysis**:
     *   *Data Cleaning & Normalization*: Parses dirty CSVs or Excel sheets to repair typos, drop duplicates, and format dates.
     *   *CSV-to-Chart Visualizer*: Converts spreadsheet metrics into interactive SVG graphs or dashboards.
     *   *Sentiment Analysis Pipeline*: Processes customer feedback logs to score user satisfaction.
     *   *SQL Query Optimizer*: Analyzes execution plans of databases to propose index improvements.
-*   **Development & Coding** ✅:
+*   **Development & Coding**:
     *   *Code Auditor & Linter*: Scans codebase files to find formatting issues, syntax problems, and potential bugs.
     *   *API Documentation Generator*: Generates OpenAPI / Swagger specs directly from source files.
     *   *Test Suite Auto-Writer*: Examines source code modules to generate comprehensive unit tests.
     *   *Git Commit Formatter*: Formats staging area diffs into standard Conventional Commits.
-*   **Project & Task Management** ✅:
+*   **Project & Task Management**:
     *   *Meeting Minutes Summarizer*: Transcribes and extracts action items, decisions, and summaries from meeting audio.
     *   *Daily Standup Compiler*: Scans calendar events and Slack history to compile daily update reports.
     *   *Task Scheduler & Reminder*: Watches calendars and automatically alerts via Slack when deadlines approach.
 
 ### E. Computer Use & Sandboxed GUI Automation
-*   **GUI Control** ✅: In the desktop client, the agent can obtain permission to simulate mouse movement, clicks, keyboard inputs, and interact with local applications and browsers.
-*   **Picture-in-Picture (PiP) Mirror**: Operates via a visual PIP screen, enabling real-time human monitoring of the agent's actions on the desktop.
-*   **Sandboxing Safeguards** ✅: Execute shell scripts or run untrusted builds safely using isolated environments, utilizing **Windows Sandbox (WSL2)** or macOS sandbox wrappers.
+*   **GUI Control**: In the desktop client, the agent can obtain permission to simulate mouse movement, clicks, keyboard inputs, and interact with local applications and browsers. (`packages/core` has `automation/computer-use.ts` + desktop `ComputerUseSettings`, but it is **not wired** into the runtime — ✅ removed)
+*   **Picture-in-Picture (PiP) Mirror**: Operates via a visual PIP screen, enabling real-time human monitoring of the agent's actions on the desktop. (Not implemented)
+*   **Sandboxing Safeguards**: Execute shell scripts or run untrusted builds safely using isolated environments, utilizing **Windows Sandbox (WSL2)** or macOS sandbox wrappers. (`packages/core` has `sandbox/*`; desktop runs shell commands sandboxed to `projectRoot` only — partial, desktop-only — ✅ removed)
 
 ### F. Scheduled & Remote Tasks
-*   **Task Scheduling** ✅: Schedule agents to run checks, compile reports, or synchronize directories at specific intervals (e.g., hourly, daily).
-*   **Mobile-to-Desktop Handoff**: Users can queue or monitor background execution tasks from their mobile app, which then run on their local desktop daemon.
+*   **Task Scheduling**: Schedule agents to run checks, compile reports, or synchronize directories at specific intervals (e.g., hourly, daily). (Desktop `ScheduledView` is UI-only; no real cron/scheduler wired; no CLI — ✅ removed)
+*   **Mobile-to-Desktop Handoff**: Users can queue or monitor background execution tasks from their mobile app, which then run on their local desktop daemon. (Not implemented)
 
 ### G. Ingestion & Media Processing
-*   **Drag-and-Drop Ingestion** ✅: Drop files (PDFs, CSVs, scripts) directly into the composer.
-*   **Visual Screenshot Analysis** ✅: Use the system camera or take instant screen clips for immediate visual debugging, design review, or OCR parsing.
+*   **Drag-and-Drop Ingestion**: Drop files (PDFs, CSVs, scripts) directly into the composer. (Desktop `handleAttachFiles` only; not in CLI — ✅ removed)
+*   **Visual Screenshot Analysis**: Use the system camera or take instant screen clips for immediate visual debugging, design review, or OCR parsing. (Desktop paste-image only; not in CLI — ✅ removed)
 
 ### H. Model Context Protocol (MCP) Integration
 Exposes standard support for external tools and agents via the Model Context Protocol, enabling real-time expansion of the agent's capabilities:
-*   **Multi-Transport Support** ✅: Connects to MCP servers via standard input/output (`stdio`), Server-Sent Events (`sse`), and remote `http`/`https` endpoints.
-*   **Command Line Management** ✅: Exposes commands to configure active servers on the fly (e.g. `codex mcp add <name> -- <command>`).
-*   **Session Diagnostics** ✅: Inline commands like `/mcp` or `/status` display connection logs, active endpoint tools, and runtime status.
+> ⚠️ `packages/core` ships an MCP **client** (`mcp/*`, stdio/sse/http transports, registry, guard) but it is **not wired** into the CLI or desktop runtime, and these reference servers are not bundled. No ✅ until wired end-to-end.
+
+*   **Multi-Transport Support**: Connects to MCP servers via standard input/output (`stdio`), Server-Sent Events (`sse`), and remote `http`/`https` endpoints.
+*   **Command Line Management**: Exposes commands to configure active servers on the fly (e.g. `codex mcp add <name> -- <command>`). (No CLI `/mcp`; desktop dashboard is a mock)
+*   **Session Diagnostics**: Inline commands like `/mcp` or `/status` display connection logs, active endpoint tools, and runtime status.
 
 #### Available Reference MCP Servers List
-*   **Filesystem** ✅: Provides secure, sandboxed file operations (read, write, list, search, stats) within user-authorized directories.
-*   **Git** ✅: Enables repository queries, branch checking, staging, committing, and inspecting logs.
-*   **Fetch** ✅: Downloads website contents and converts raw HTML into clean, readable Markdown format for LLM reasoning.
-*   **Brave Search / Google Search** ✅: Connects to search engines to query web indexes and retrieve snippet contexts.
-*   **Database (Postgres / Sqlite / MySQL)** ✅: Enables safe database schema discovery, index suggestions, and SQL query execution.
-*   **Puppeteer / Playwright** ✅: Powers automated browser scripting, page screenshots, and headless web app testing.
+*   **Filesystem**: Provides secure, sandboxed file operations (read, write, list, search, stats) within user-authorized directories.
+*   **Git**: Enables repository queries, branch checking, staging, committing, and inspecting logs.
+*   **Fetch**: Downloads website contents and converts raw HTML into clean, readable Markdown format for LLM reasoning.
+*   **Brave Search / Google Search**: Connects to search engines to query web indexes and retrieve snippet contexts.
+*   **Database (Postgres / Sqlite / MySQL)**: Enables safe database schema discovery, index suggestions, and SQL query execution.
+*   **Puppeteer / Playwright**: Powers automated browser scripting, page screenshots, and headless web app testing.
 *   **Sequential Thinking**: A reasoning server that implements a structured step-by-step thinking loop for difficult bugs and architectural decisions.
-*   **Memory** ✅: Maintains a persistent local knowledge graph database to track cross-session facts, entities, and relationships.
+*   **Memory**: Maintains a persistent local knowledge graph database to track cross-session facts, entities, and relationships.
 *   **Jira & Confluence**: Integrates issue tracking, updates sprint boards, and extracts documentation wiki articles.
 *   **Sentry**: Retrieves recent software exceptions, logs, and stack traces to automate debugging.
 
@@ -139,19 +145,21 @@ Exposes standard support for external tools and agents via the Model Context Pro
 ### I. App Settings & Advanced Configuration Options
 The ChatGPT Desktop App settings menu (accessed via `Cmd + ,` on macOS or `Ctrl + ,` on Windows) allows users to configure agent execution, system sandboxing, and general workflow behaviors:
 
-*   **General Settings** ✅:
+> ⚠️ These settings exist as desktop UI (`SettingsView` + sub-panels) only. There is no CLI equivalent, so per the core+cli+desktop rule they are **not** marked ✅.
+
+*   **General Settings**:
     *   *Require Cmd/Ctrl + Enter*: Configures the composer to insert a newline when `Enter` is pressed, preventing accidental message sending during multiline drafts.
     *   *Prevent sleep during execution*: Keeps the host computer awake during long background agent tasks (e.g. compiling large datasets or running test suites).
     *   *Follow-up behavior*: Customizes whether the app automatically switches focus back to the IDE or active terminal when a task finishes.
-*   **Agent Execution & Permissions** ✅:
+*   **Agent Execution & Permissions**:
     *   Allows configuration of autonomy levels for local execution:
         *   *Ask for approval*: Prompts the user before any file edits, command runs, or outbound connector updates.
         *   *Auto-review*: Runs automated background checks but requires confirmation for high-risk system commands.
         *   *Full access*: Gives the agent complete, uninterrupted read/write access.
-*   **Developer Sandbox Configuration** ✅:
+*   **Developer Sandbox Configuration**:
     *   *Sandbox Runtime*: Selects the underlying sandbox runner environment (e.g., native OS, Windows Subsystem for Linux (WSL2), or Docker containers).
     *   *Terminal Emulator Integration*: Configures shell launch commands and environment profiles for the integrated PTY window.
-*   **Appearance & Editor Tuning** ✅:
+*   **Appearance & Editor Tuning**:
     *   Customizes themes, window transparency settings (accent/glassmorphism overlays), code font selections, and terminal font sizing.
 
 ---
@@ -160,16 +168,18 @@ The ChatGPT Desktop App settings menu (accessed via `Cmd + ,` on macOS or `Ctrl 
 
 | Category | Shortcut | Action / Function |
 | :--- | :--- | :--- |
-| **Global Overlay** | `Alt + Space` (Win) / `Option + Space` (Mac) | Summon/dismiss the ChatGPT Companion overlay anywhere |
-| **Interface** | `Ctrl/Cmd + /` ✅ | Display the full keyboard shortcut reference panel |
-| **Interface** | `Ctrl/Cmd + ,` ✅ | Open Settings and Preferences configuration panel |
-| **Interface** | `Ctrl/Cmd + Shift + S` ✅ | Toggle sidebar navigation panel |
-| **Interface** | `Ctrl/Cmd + Shift + B` ✅ | Toggle the built-in browser viewport panel |
-| **Conversation** | `Ctrl/Cmd + Shift + O` ✅ | Start a fresh chat session / clear current composer |
-| **Conversation** | `Shift + Esc` ✅ | Move focus directly to the composer input bar |
-| **Conversation** | `Shift + Enter` ✅ | Insert a newline in the input composer (without sending) |
-| **Utility** | `Ctrl/Cmd + Shift + C` ✅ | Copy the text of the latest model response to clipboard |
-| **Utility** | `Ctrl/Cmd + Shift + ;` ✅ | Copy the code block from the latest response to clipboard |
+| **Global Overlay** | `Alt + Space` (Win) / `Option + Space` (Mac) | Summon/dismiss the ChatGPT Companion overlay anywhere (not implemented) |
+| **Interface** | `Ctrl/Cmd + /` | Display the full keyboard shortcut reference panel (not implemented) |
+| **Interface** | `Ctrl/Cmd + ,` | Open Settings and Preferences configuration panel (desktop-only) |
+| **Interface** | `Ctrl/Cmd + Shift + S` | Toggle sidebar navigation panel (not implemented) |
+| **Interface** | `Ctrl/Cmd + Shift + B` | Toggle the built-in browser viewport panel (not implemented) |
+| **Conversation** | `Ctrl/Cmd + Shift + O` | Start a fresh chat session / clear current composer (not implemented) |
+| **Conversation** | `Shift + Esc` | Move focus directly to the composer input bar (not implemented) |
+| **Conversation** | `Shift + Enter` | Insert a newline in the input composer (without sending) (desktop composer only) |
+| **Utility** | `Ctrl/Cmd + Shift + C` | Copy the text of the latest model response to clipboard (not implemented) |
+| **Utility** | `Ctrl/Cmd + Shift + ;` | Copy the code block from the latest response to clipboard (not implemented) |
+
+> These are shortcuts of the *reference product*. SuperAgent's actual shortcuts: CLI has `Ctrl+O` (transcript/verbose), `Ctrl+R` (history search), `Shift+Tab` (cycle permission), `Tab` (queue turn) — all CLI-only. Desktop has `Ctrl+P` (search), `Ctrl+N` (new chat), `Ctrl+,` (settings) — desktop-only. None are in both clients, so none get ✅.
 
 ---
 
@@ -178,14 +188,16 @@ The ChatGPT Desktop App settings menu (accessed via `Cmd + ,` on macOS or `Ctrl 
 | Slash Command | Mode Availability | Description |
 | :--- | :--- | :--- |
 | `/plan` ✅ | Work / Codex | Prompt the agent to draft and display a multi-step execution plan before editing files |
-| `/goal` | Work | Set a persistent condition that the agent must autonomously satisfy before finishing |
-| `/agent` ✅ | Work | Switch between active tool agents, specific connector integrations, or background threads |
+| `/goal` | Work | Set a persistent condition that the agent must autonomously satisfy before finishing (not implemented) |
+| `/agent` | Work | Switch between active tool agents, specific connector integrations, or background threads (no `/agent` command in CLI) |
 | `/model` ✅ | All | Switch the active model (Sol, Terra, Luna) or modify reasoning effort |
-| `/side` ✅ | All | Launch a quick side chat sandbox without polluting the current project context |
+| `/side` | All | Launch a quick side chat sandbox without polluting the current project context (CLI has `/btw` instead; not this command) |
 | `/permissions` ✅ | Work / Codex | Adjust autonomy levels (e.g., *Auto-approve edits*, *Ask before terminal commands*, *Read-only*) |
-| `/status` ✅ | All | Display session statistics, model rate limits, token usage, and active connectors |
+| `/status` | All | Display session statistics, model rate limits, token usage, and active connectors (CLI `/status` only; no desktop view) |
 | `/review` ✅ | Codex | Initiate an automated code audit or debug current staging/local modifications |
-| `/site` | Work | Open the interactive Sites preview window and deploy the current application prototype |
+| `/site` | Work | Open the interactive Sites preview window and deploy the current application prototype (not implemented) |
+
+> ✅ = verified wired through `packages/core` into **both** `packages/cli` and `packages/desktop`. Only `/plan`, `/model`, `/permissions`, `/review` qualify.
 
 ---
 

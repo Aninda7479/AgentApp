@@ -16,6 +16,8 @@ import {
   MoreHorizontal,
   RefreshCw,
   BookOpen,
+  Keyboard,
+  Stethoscope,
 } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { ThemeMode } from '../types';
@@ -45,6 +47,8 @@ interface TitleBarProps {
   themeMode?: ThemeMode;
   onCheckUpdates?: () => void;
   onOpenDocs?: () => void;
+  onOpenShortcuts?: () => void;
+  onOpenDoctor?: () => void;
   /** True when running in the browser/web build (no Electron). */
   isWebMode?: boolean;
   /** Opens the account/settings page (web build only). */
@@ -92,6 +96,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   themeMode = 'dark',
   onCheckUpdates,
   onOpenDocs,
+  onOpenShortcuts,
+  onOpenDoctor,
   isWebMode = false,
   onOpenAccount,
   onLogout,
@@ -160,6 +166,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       label: 'Help',
       items: [
         { label: 'Check for Updates', icon: RefreshCw, onClick: () => onCheckUpdates?.() },
+        { label: 'Keyboard Shortcuts', icon: Keyboard, onClick: () => onOpenShortcuts?.() },
+        { label: 'Doctor Diagnostics', icon: Stethoscope, onClick: () => onOpenDoctor?.() },
         { label: 'Documentation', icon: BookOpen, onClick: () => onOpenDocs?.() },
         ...(isWebMode
           ? [

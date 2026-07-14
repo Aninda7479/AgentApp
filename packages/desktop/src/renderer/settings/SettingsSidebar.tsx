@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   Bot,
   FolderArchive,
-  Keyboard,
   LucideIcon,
   PawPrint,
   Plug,
@@ -37,7 +36,6 @@ interface SettingsSidebarProps {
 const CATEGORIES: Record<string, SidebarItem[]> = {
   Personal: [
     { id: 'general', label: 'General', Icon: Settings },
-    { id: 'shortcuts', label: 'Keyboard Shortcuts', Icon: Keyboard },
     { id: 'pets', label: 'Pets', Icon: PawPrint }
   ],
   "AI Config": [
