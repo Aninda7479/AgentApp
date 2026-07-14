@@ -42,6 +42,9 @@ export * from './mcp/resources.js';
 export * from './mcp/guard.js';
 export * from './mcp/ide.js';
 
+export * from './integrations/catalog.js';
+export * from './integrations/plugins.js';
+
 export * from './media/router.js';
 export * from './media/image.js';
 export * from './media/inpaint.js';

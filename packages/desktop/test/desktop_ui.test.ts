@@ -78,6 +78,7 @@ import { SearchModal } from '../src/renderer/components/SearchModal';
 import { ScheduledView } from '../src/renderer/components/ScheduledView';
 import { PluginsView } from '../src/renderer/components/PluginsView';
 import { SettingsView } from '../src/renderer/settings/SettingsView';
+import { IntegrationsSettings } from '../src/renderer/settings/IntegrationsSettings';
 import { App } from '../src/renderer/App';
 
 describe('Step 081: Electron Main Process & Multi-Window Manager', () => {
@@ -462,6 +463,11 @@ describe('Step 082b: Additional Codex UI Sub-components', () => {
         onConnectProvider: () => {},
         onDisconnectProvider: () => {},
         onToggleModel: () => {},
+        skills: [],
+        onToggleSkill: () => {},
+        pluginCatalog: [],
+        pluginEnabled: {},
+        onTogglePlugin: () => {},
         workMode: 'coding',
         onWorkModeChange: () => {},
         confirmShellCommands: true,
@@ -478,5 +484,69 @@ describe('Step 082b: Additional Codex UI Sub-components', () => {
     expect(html).toContain('For coding');
     expect(html).toContain('Default permissions');
     expect(html).toContain('SuperAgent');
+  });
+});
+
+describe('Step 094: Integrations (Skills / Plugins / MCP) Panel', () => {
+  const pluginCatalog = [
+    { id: 'browser-use', name: 'Browser Use', description: 'Drive a browser.', icon: '🌐', category: 'automation', tags: ['web'], defaultEnabled: true },
+    { id: 'computer-use', name: 'Computer Use', description: 'Control the desktop.', icon: '🖥️', category: 'automation', tags: ['desktop'], defaultEnabled: true },
+    { id: 'document', name: 'Document', description: 'Author documents.', icon: '📄', category: 'document', tags: ['office'], defaultEnabled: true },
+    { id: 'pdf', name: 'PDF', description: 'Generate PDFs.', icon: '📕', category: 'document', tags: ['pdf'], defaultEnabled: true },
+    { id: 'spreadsheets', name: 'Spreadsheets', description: 'Edit spreadsheets.', icon: '📊', category: 'document', tags: ['data'], defaultEnabled: true },
+    { id: 'presentations', name: 'Presentations', description: 'Build slides.', icon: '📽️', category: 'media', tags: ['slides'], defaultEnabled: true },
+    { id: 'visualize', name: 'Visualize', description: 'Render charts.', icon: '📈', category: 'media', tags: ['data'], defaultEnabled: false }
+  ];
+  const skills = [
+    { id: 'graphify', name: 'Graphify', description: 'Index a codebase.' },
+    { id: 'docs', name: 'Docs', description: 'Reference docs.' }
+  ];
+
+  const render = (tab = 'mcp') =>
+    renderToString(
+      React.createElement(IntegrationsSettings, {
+        mcpDashboard: React.createElement('div', { id: 'mcp-stub' }, 'MCP Stub'),
+        skills,
+        onToggleSkill: () => {},
+        pluginCatalog,
+        pluginEnabled: { 'browser-use': true, 'visualize': false },
+        onTogglePlugin: () => {},
+        ...(tab === 'mcp' ? {} : {})
+      })
+    );
+
+  it('should render the Integrations panel with three tabs', () => {
+    const html = render();
+    expect(html).toContain('Integrations');
+    expect(html).toContain('integration-tab-skills');
+    expect(html).toContain('integration-tab-plugins');
+    expect(html).toContain('integration-tab-mcp');
+  });
+
+  it('should list all seven built-in plugins by default', () => {
+    const html = renderToString(
+      React.createElement(IntegrationsSettings, {
+        mcpDashboard: React.createElement('div', { id: 'mcp-stub' }, 'MCP Stub'),
+        skills,
+        onToggleSkill: () => {},
+        pluginCatalog,
+        pluginEnabled: { 'browser-use': true, 'visualize': false },
+        onTogglePlugin: () => {},
+        defaultTab: 'plugins'
+      })
+    );
+    expect(html).toContain('integration-plugin-browser-use');
+    expect(html).toContain('integration-plugin-computer-use');
+    expect(html).toContain('integration-plugin-document');
+    expect(html).toContain('integration-plugin-pdf');
+    expect(html).toContain('integration-plugin-spreadsheets');
+    expect(html).toContain('integration-plugin-presentations');
+    expect(html).toContain('integration-plugin-visualize');
+  });
+
+  it('should render the MCP dashboard inside the MCP tab', () => {
+    const html = render('mcp');
+    expect(html).toContain('integration-mcp');
+    expect(html).toContain('MCP Stub');
   });
 });

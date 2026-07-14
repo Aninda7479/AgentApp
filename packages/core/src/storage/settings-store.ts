@@ -101,6 +101,9 @@ export interface ComputerUseSettings {
   actionDelay?: number;
 }
 
+/** Map of built-in plugin id → whether the user has enabled it. */
+export type PluginsSettings = Record<string, boolean>;
+
 /** Top-level application settings object persisted to disk. */
 export interface AppSettings {
   theme?: ThemeSettings;
@@ -112,6 +115,7 @@ export interface AppSettings {
   browserUse?: BrowserUseSettings;
   computerUse?: ComputerUseSettings;
   internetAccess?: InternetAccessSettings;
+  plugins?: PluginsSettings;
 }
 
 /** Resolved file system paths for user data and config files. */
@@ -225,7 +229,8 @@ export class SettingsStorage {
         lastUsedModel: settings.lastUsedModel !== undefined ? (settings.lastUsedModel === null ? undefined : { ...current.lastUsedModel, ...settings.lastUsedModel }) : current.lastUsedModel,
         general: settings.general !== undefined ? (settings.general === null ? undefined : { ...current.general, ...settings.general }) : current.general,
         modelGov: settings.modelGov !== undefined ? (settings.modelGov === null ? undefined : { ...current.modelGov, ...settings.modelGov }) : current.modelGov,
-        internetAccess: settings.internetAccess !== undefined ? (settings.internetAccess === null ? undefined : { ...current.internetAccess, ...settings.internetAccess }) : current.internetAccess
+        internetAccess: settings.internetAccess !== undefined ? (settings.internetAccess === null ? undefined : { ...current.internetAccess, ...settings.internetAccess }) : current.internetAccess,
+        plugins: settings.plugins !== undefined ? (settings.plugins === null ? undefined : { ...current.plugins, ...settings.plugins }) : current.plugins
       };
 
       this.cachedSettings = updated;

@@ -3,7 +3,7 @@ import { SettingsViewProps, ModelConfig, ModelPricing, UpdateStatus, InternetAcc
 export type { ProviderConnection, ModelConfig } from './types';
 import { SettingsSidebar } from './SettingsSidebar';
 import { GeneralSettings } from './GeneralSettings';
-import { ServersSettings } from './ServersSettings';
+import { IntegrationsSettings, IntegrationsSkill, IntegrationsPlugin } from './IntegrationsSettings';
 import { ProvidersSettings } from './ProvidersSettings';
 import { ModelsSettings } from './ModelsSettings';
 import { PlaceholderSettings } from './PlaceholderSettings';
@@ -26,6 +26,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onConnectProvider,
   onDisconnectProvider,
   onToggleModel,
+  skills,
+  onToggleSkill,
+  pluginCatalog,
+  pluginEnabled,
+  onTogglePlugin,
   workMode,
   onWorkModeChange,
   confirmShellCommands,
@@ -205,7 +210,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           />
         )}
         {activeCategory === 'usage' && <UsageTrackerSettings />}
-        {activeCategory === 'mcp' && <ServersSettings mcpDashboard={mcpDashboard} />}
+        {activeCategory === 'mcp' && (
+          <IntegrationsSettings
+            mcpDashboard={mcpDashboard}
+            skills={skills}
+            onToggleSkill={onToggleSkill}
+            pluginCatalog={pluginCatalog}
+            pluginEnabled={pluginEnabled}
+            onTogglePlugin={onTogglePlugin}
+          />
+        )}
         {activeCategory === 'browser-use' && (
           <BrowserUseSettings
             onSaveSettings={(patch) => {

@@ -56,6 +56,11 @@ export interface SettingsViewProps {
   onConnectProvider: (provider: ProviderConnection, models: ModelConfig[]) => void;
   onDisconnectProvider: (providerId: string) => void;
   onToggleModel: (modelId: string) => void;
+  skills: import('./IntegrationsSettings').IntegrationsSkill[];
+  onToggleSkill: (id: string, enabled: boolean) => void;
+  pluginCatalog: import('./IntegrationsSettings').IntegrationsPlugin[];
+  pluginEnabled: Record<string, boolean>;
+  onTogglePlugin: (id: string, enabled: boolean) => void;
   workMode: 'coding' | 'everyday';
   onWorkModeChange: (mode: 'coding' | 'everyday') => void;
   confirmShellCommands: boolean;

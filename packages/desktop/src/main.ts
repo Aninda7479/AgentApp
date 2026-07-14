@@ -9,7 +9,7 @@ app.setPath('userData', customUserDataPath);
 import { windowManager } from './main/window';
 import { setupAutoUpdater } from './main/updater';
 import { readStore, writeStore, StoreData } from './main/store';
-import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed } from '@superagent/core';
+import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG } from '@superagent/core';
 import { getChatDirectory } from './main/storage/index.js';
 
 async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
@@ -153,6 +153,45 @@ ipcMain.handle('mcp-call', async (_event, { id, tool, args }: {
     return `Error: ${(err as Error).message}`;
   }
 });
+
+// ─── IPC: Curated MCP catalog (one-click install) ────────────────────────────
+ipcMain.handle('mcp-catalog', () => MCP_CATALOG);
+
+ipcMain.handle('mcp-install', async (_event, { id, keys }: {
+  id: string;
+  keys?: Record<string, string>;
+}) => {
+  const entry = getMcpCatalogEntry(id);
+  if (!entry) {
+    return { success: false, error: `Unknown MCP server: ${id}` };
+  }
+  // Validate that all required keys are present.
+  const provided = keys || {};
+  const missing = entry.envKeys.filter((k) => k.required && !(provided[k.key] && provided[k.key].trim()));
+  if (missing.length > 0) {
+    return {
+      success: false,
+      error: `Missing required key(s): ${missing.map((k) => k.key).join(', ')}`
+    };
+  }
+  const resolved = resolveMcpServer(entry, provided);
+  const serverId = `mcp-catalog-${entry.id}`;
+  try {
+    const res = await connectServer({
+      id: serverId,
+      name: entry.name,
+      transport: resolved.transport,
+      commandOrUrl: resolved.commandOrUrl,
+      env: resolved.env
+    });
+    return { success: true, ...res };
+  } catch (err: unknown) {
+    return { success: false, error: (err as Error).message };
+  }
+});
+
+// ─── IPC: Built-in Plugin catalog ────────────────────────────────────────────
+ipcMain.handle('plugins-catalog', () => PLUGIN_CATALOG);
 
 
 

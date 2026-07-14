@@ -624,6 +624,35 @@ export const App: React.FC = () => {
     }
   ]);
 
+  // ── Curated MCP + Plugin catalogs (sourced from Core) ───────────────────────
+  const [mcpCatalog, setMcpCatalog] = useState<any[]>([]);
+  const [pluginCatalog, setPluginCatalog] = useState<any[]>([]);
+  const [pluginEnabled, setPluginEnabled] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!ipc) return;
+    ipc
+      .invoke('mcp-catalog')
+      .then((list: any) => setMcpCatalog(Array.isArray(list) ? list : []))
+      .catch(() => setMcpCatalog([]));
+    ipc
+      .invoke('plugins-catalog')
+      .then((list: any) => {
+        const catalog = Array.isArray(list) ? list : [];
+        setPluginCatalog(catalog);
+        ipc
+          .invoke('settings-read')
+          .then((current: any) => {
+            const saved = (current?.plugins as Record<string, boolean>) || {};
+            const state: Record<string, boolean> = {};
+            for (const p of catalog) state[p.id] = saved[p.id] ?? p.defaultEnabled;
+            setPluginEnabled(state);
+          })
+          .catch(() => {});
+      })
+      .catch(() => setPluginCatalog([]));
+  }, [ipc]);
+
   // ── Slash-command catalog + discovered skills ───────────────────────────────
   const slashCommands = useMemo(() => builtinSuggestions(), []);
   const [skills, setSkills] = useState<(SkillInfo & { instructions?: string })[]>([]);
@@ -1601,6 +1630,65 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
     setMcpServers((prev) => prev.map((s) => (s.id === id ? { ...s, enabled } : s)));
   };
 
+  /** Installs a curated catalog server (resolving any required keys via Core). */
+  const handleInstallCatalogServer = (entry: any, keys: Record<string, string>) => {
+    const createdId = `mcp-catalog-${entry.id}`;
+    setMcpServers((prev) => [
+      ...prev,
+      {
+        id: createdId,
+        name: entry.name,
+        transport: entry.transport,
+        commandOrUrl: '(installing…)',
+        status: 'connecting',
+        enabled: true,
+        toolsCount: 0,
+        latencyMs: 15
+      }
+    ]);
+
+    ipc
+      ?.invoke('mcp-install', { id: entry.id, keys })
+      .then((res: any) => {
+        const tools = res?.tools || [];
+        setMcpServers((prev) =>
+          prev.map((s) =>
+            s.id === createdId
+              ? {
+                  ...s,
+                  status: res?.success ? 'connected' : 'error',
+                  commandOrUrl: res?.success ? entry.command : s.commandOrUrl,
+                  toolsCount: tools.length,
+                  latencyMs: res?.success ? Math.max(1, Math.round((res?.latencyMs as number) || 12)) : s.latencyMs
+                }
+              : s
+          )
+        );
+        if (res?.success) {
+          triggerToast(`Connected to ${entry.name} (${tools.length} tools)`);
+        } else {
+          triggerToast(`Failed to connect to ${entry.name}: ${res?.error || 'unknown error'}`, 'error');
+        }
+      })
+      .catch((err: unknown) => {
+        setMcpServers((prev) => prev.map((s) => (s.id === createdId ? { ...s, status: 'error' } : s)));
+        triggerToast(`Failed to connect to ${entry.name}: ${(err as Error).message}`, 'error');
+      });
+  };
+
+  /** Toggles a built-in plugin on/off and persists the choice to settings. */
+  const handleTogglePlugin = (id: string, enabled: boolean) => {
+    setPluginEnabled((prev) => {
+      const next = { ...prev, [id]: enabled };
+      if (ipc) {
+        ipc.invoke('settings-read').then((current: any) => {
+          ipc.invoke('settings-write', { ...current, plugins: next });
+        });
+      }
+      return next;
+    });
+  };
+
   const handleWindowControl = (action: 'minimize' | 'maximize' | 'close') => {
     if (typeof window !== 'undefined' && (window as any).require) {
       try {
@@ -2088,6 +2176,8 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
                   onAddServer={handleAddMcpServer}
                   onRemoveServer={handleRemoveMcpServer}
                   onToggleServer={handleToggleMcpServer}
+                  catalog={mcpCatalog}
+                  onInstallCatalog={handleInstallCatalogServer}
                 />
               }
               connectedProviders={connectedProviders}
@@ -2095,6 +2185,11 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
               onConnectProvider={handleConnectProvider}
               onDisconnectProvider={handleDisconnectProvider}
               onToggleModel={handleToggleModel}
+              skills={skills}
+              onToggleSkill={(skillId, enabled) => console.log(`Toggled skill ${skillId}: ${enabled}`)}
+              pluginCatalog={pluginCatalog}
+              pluginEnabled={pluginEnabled}
+              onTogglePlugin={handleTogglePlugin}
               workMode={workMode}
               onWorkModeChange={handleWorkModeChange}
               confirmShellCommands={defaultPermissions}

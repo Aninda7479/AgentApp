@@ -12,6 +12,8 @@ export interface MCPServerSpec {
   name: string;
   transport: 'stdio' | 'sse' | 'http';
   commandOrUrl: string;
+  /** Environment variables to inject into a stdio server process. */
+  env?: Record<string, string>;
 }
 
 interface ConnectedServer {
@@ -28,7 +30,7 @@ const servers = new Map<string, ConnectedServer>();
 function buildTransport(spec: MCPServerSpec) {
   if (spec.transport === 'stdio') {
     const [command, ...args] = spec.commandOrUrl.split(/\s+/);
-    return createStdioTransport({ command, args });
+    return createStdioTransport({ command, args, env: spec.env });
   }
   if (spec.transport === 'sse') {
     return createSSETransport({ url: spec.commandOrUrl });
