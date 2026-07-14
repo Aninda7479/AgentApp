@@ -17,6 +17,7 @@ import { WorkspaceView } from './components/WorkspaceView';
 import { BottomNav } from './components/BottomNav';
 import { StoredChat, StoredProject } from './types';
 import { useThemeMode } from './theme';
+import { getRouteFromLocation, pushRoute, subscribeRouteChange } from './urlSync';
 
 /** Captures the full navigation state so we can restore it on back/forward. */
 interface NavigationSnapshot {
@@ -123,13 +124,15 @@ export const App: React.FC = () => {
     ipc?.invoke('settings-write', { general: { unsandboxedActions: val } });
   };
 
-  const [activeTab, setActiveTab] = useState<string>('trajectory');
+  // URL-driven initial route (web: history path, desktop: file:// hash).
+  const [initialRoute] = useState(() => getRouteFromLocation());
+  const [activeTab, setActiveTab] = useState<string>(initialRoute.activeTab);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [mobileNavOpen, setMobileNavOpen] = useState<boolean>(false);
   const [isBYOKOpen, setIsBYOKOpen] = useState<boolean>(false);
   const [searchModalOpen, setSearchModalOpen] = useState<boolean>(false);
   const [profilePopoverOpen, setProfilePopoverOpen] = useState<boolean>(false);
-  const [settingsCategory, setSettingsCategory] = useState<string>('general');
+  const [settingsCategory, setSettingsCategory] = useState<string>(initialRoute.settingsCategory);
   const [activeProject, setActiveProject] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [toastOpen, setToastOpen] = useState<boolean>(false);
@@ -146,7 +149,7 @@ export const App: React.FC = () => {
   // Dynamic projects & chats state
   const [projects, setProjects] = useState<StoredProject[]>([]);
   const [chats, setChats] = useState<StoredChat[]>([]);
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [activeChatId, setActiveChatId] = useState<string | null>(initialRoute.activeChatId);
   const [draftProject, setDraftProject] = useState<string>('');
   /** Last model the user selected; persisted to disk via core settings store. */
   const [lastUsedModel, setLastUsedModel] = useState<string>('');
@@ -661,6 +664,22 @@ export const App: React.FC = () => {
     setNavigationIndex(nextIndex);
     restoreNavigationSnapshot(snapshot);
   };
+
+  // ─── URL synchronization (web: history API, desktop: location hash) ───────
+  // Keep the address bar in sync with the active view so each page has its own
+  // URL (e.g. /settings, /chat/<id>, /plugins) and back/forward works.
+  useEffect(() => {
+    pushRoute({ activeTab, activeChatId, settingsCategory });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, activeChatId, settingsCategory]);
+
+  useEffect(() => {
+    return subscribeRouteChange((route) => {
+      setActiveTab(route.activeTab);
+      setActiveChatId(route.activeChatId);
+      setSettingsCategory(route.settingsCategory);
+    });
+  }, [setActiveTab, setActiveChatId, setSettingsCategory]);
 
   // Keyboard shortcut listeners
   useEffect(() => {

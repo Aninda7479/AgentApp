@@ -7,6 +7,7 @@ const customUserDataPath = path.join(app.getPath('appData'), 'OpenSource', 'Agen
 app.setPath('userData', customUserDataPath);
 
 import { windowManager } from './main/window';
+import { setupAutoUpdater } from './main/updater';
 import { readStore, writeStore, StoreData } from './main/store';
 import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector } from '@superagent/core';
 import { getChatDirectory } from './main/storage/index.js';
@@ -359,6 +360,8 @@ function setupDevWatcher() {
 app.whenReady().then(async () => {
   initApp();
   setupDevWatcher();
+  // Auto-update check (no-ops in dev where electron-updater isn't installed).
+  setupAutoUpdater();
 
   // Model Gov startup instructions auto-update check
   try {

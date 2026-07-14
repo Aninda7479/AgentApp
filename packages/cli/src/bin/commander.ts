@@ -44,9 +44,8 @@ export function createCliProgram(onExecute?: (options: CliOptions, prompt?: stri
         interactive: !prompt && Boolean(options.interactive ?? true),
       };
 
-      if (onExecute) {
-        onExecute(mergedOptions, prompt);
-      }
+      // Return the (possibly async) result so `program.parseAsync` awaits it.
+      return onExecute?.(mergedOptions, prompt);
     });
 
   return program;

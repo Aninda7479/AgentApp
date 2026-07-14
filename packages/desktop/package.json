@@ -2,16 +2,18 @@
   "name": "@superagent/desktop",
   "version": "0.1.0",
   "description": "SuperAgent desktop app (Electron) — a Codex-inspired autonomous AI agent UI",
+  "license": "GPL-3.0-or-later",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "npx @tailwindcss/cli -i src/index.css -o dist/index.css && tsc && node -e \"require('fs').copyFileSync('src/ui.html', 'dist/ui.html')\"",
     "dev": "node -e \"require('fs').mkdirSync('dist', { recursive: true }); require('fs').copyFileSync('src/ui.html', 'dist/ui.html')\" && concurrently -n \"tailwind,tsc,electron\" -c \"blue,green,magenta\" \"npx @tailwindcss/cli -i src/index.css -o dist/index.css --watch\" \"tsc -w\" \"nodemon --watch dist/main.js --watch dist/main --watch dist/gateway --watch dist/builder --exec electron dist/main.js --dev\"",
     "start": "electron dist/main.js",
+    "pack": "electron-builder",
     "test": "vitest run"
   },
   "dependencies": {
-    "@superagent/core": "*",
+    "@superagent/core": "^0.1.0",
     "lucide-react": "^1.22.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
@@ -23,9 +25,46 @@
     "@types/react-dom": "^18.3.0",
     "concurrently": "^10.0.3",
     "electron": "^43.0.0",
+    "electron-builder": "^26.0.0",
+    "electron-updater": "^6.3.0",
     "nodemon": "^3.1.14",
     "tailwindcss": "^4.3.2",
     "typescript": "^5.6.0",
     "vitest": "^4.1.9"
+  },
+  "build": {
+    "appId": "com.opensource.agentapp",
+    "productName": "SuperAgent",
+    "directories": {
+      "output": "dist-release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tool"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    }
   }
 }

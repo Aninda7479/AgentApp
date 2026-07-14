@@ -3,17 +3,33 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Terminal TUI application for SuperAgent",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/SuperAgent.git",
+    "directory": "packages/cli"
+  },
   "main": "dist/index.js",
   "bin": {
-    "superagent": "dist/index.js"
+    "superagent": "dist/bin/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/bin/main.js",
     "test": "vitest run"
   },
   "dependencies": {
-    "@superagent/core": "*",
+    "@superagent/core": "^0.1.0",
     "commander": "^12.1.0",
     "ink": "^4.4.1",
     "react": "^18.3.1"

@@ -2,6 +2,19 @@
   "name": "superagent-monorepo",
   "private": true,
   "description": "SuperAgent — open-source autonomous AI agent for coding, browser automation, and multimodal media generation (Desktop + Web).",
+  "license": "GPL-3.0-or-later",
+  "author": "SuperAgent Contributors",
+  "homepage": "https://github.com/Aninda7479/AgentApp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Aninda7479/AgentApp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Aninda7479/AgentApp/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "workspaces": [
     "packages/*"
   ],
@@ -10,6 +23,8 @@
     "dev": "npm run dev --workspace=@superagent/desktop",
     "web:dev": "npm run dev --workspace=@superagent/web",
     "web:start": "npm run start --workspace=@superagent/web",
-    "test": "npm test --workspace=@superagent/core && npm test --workspace=@superagent/cli && npm test --workspace=@superagent/desktop"
+    "test": "npm test --workspace=@superagent/core && npm test --workspace=@superagent/cli && npm test --workspace=@superagent/desktop",
+    "pub:core": "npm publish --workspace=@superagent/core --access public",
+    "pub:cli": "npm publish --workspace=@superagent/cli --access public"
   }
 }

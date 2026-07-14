@@ -2,10 +2,26 @@
   "name": "@superagent/core",
   "version": "0.1.0",
   "description": "Shared agent intelligence core for SuperAgent (Desktop, Web, and CLI)",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/SuperAgent.git",
+    "directory": "packages/core"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "test": "vitest run"
   },
   "dependencies": {

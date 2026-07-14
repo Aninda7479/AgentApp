@@ -12,7 +12,7 @@
     "dev": "npm run build:client && concurrently -n \"tsc,server\" -c \"green,magenta\" \"tsc -w\" \"nodemon --watch dist/server.js dist/server.js\""
   },
   "dependencies": {
-    "@superagent/core": "*",
+    "@superagent/core": "^0.1.0",
     "express": "^4.19.2",
     "ws": "^8.17.0"
   },
