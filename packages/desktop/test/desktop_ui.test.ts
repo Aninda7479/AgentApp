@@ -79,6 +79,7 @@ import { ScheduledView } from '../src/renderer/components/ScheduledView';
 import { PluginsView } from '../src/renderer/components/PluginsView';
 import { SettingsView } from '../src/renderer/settings/SettingsView';
 import { IntegrationsSettings } from '../src/renderer/settings/IntegrationsSettings';
+import { McpInstallModal } from '../src/renderer/components/McpInstallModal';
 import { App } from '../src/renderer/App';
 
 describe('Step 081: Electron Main Process & Multi-Window Manager', () => {
@@ -548,5 +549,61 @@ describe('Step 094: Integrations (Skills / Plugins / MCP) Panel', () => {
     const html = render('mcp');
     expect(html).toContain('integration-mcp');
     expect(html).toContain('MCP Stub');
+  });
+});
+
+describe('Step 095: MCP Install Modal (Popup for Required Details)', () => {
+  const githubEntry = {
+    id: 'github',
+    name: 'GitHub',
+    description: 'Repository, issue, and pull-request automation.',
+    transport: 'stdio' as const,
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-github'],
+    envKeys: [
+      {
+        key: 'GITHUB_PERSONAL_ACCESS_TOKEN',
+        label: 'GitHub Personal Access Token',
+        required: true,
+        secret: true,
+        url: 'https://github.com/settings/tokens'
+      }
+    ],
+    tags: ['devtools'],
+    icon: '🐙',
+    homepage: 'https://github.com/modelcontextprotocol/servers'
+  };
+
+  it('should render a popup asking for required keys with industry framing', () => {
+    const html = renderToString(
+      React.createElement(McpInstallModal, {
+        isOpen: true,
+        entry: githubEntry as any,
+        onClose: () => {},
+        onInstall: () => {}
+      })
+    );
+    expect(html).toContain('mcp-install-modal-content');
+    expect(html).toContain('How this works');
+    expect(html).toContain('GITHUB_PERSONAL_ACCESS_TOKEN');
+    expect(html).toContain('/mcp');
+    expect(html).toContain('toolName');
+    expect(html).toContain('mcp-install-submit-github');
+    // Surfaces the skills/capabilities the server unlocks
+    expect(html).toContain('create-pr');
+    expect(html).toContain('triage-issues');
+    expect(html).toContain('Computer Use');
+  });
+
+  it('should not render when closed', () => {
+    const html = renderToString(
+      React.createElement(McpInstallModal, {
+        isOpen: false,
+        entry: githubEntry as any,
+        onClose: () => {},
+        onInstall: () => {}
+      })
+    );
+    expect(html).not.toContain('mcp-install-modal-content');
   });
 });

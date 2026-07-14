@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Button, Input, Select, Toggle } from './ui';
-import { Terminal, Globe, Sparkles, KeyRound, ExternalLink, Plus, RefreshCw, Server, Trash2 } from 'lucide-react';
+import { Terminal, Globe, Sparkles, Plus, RefreshCw, Server, Trash2 } from 'lucide-react';
+import { McpInstallModal } from './McpInstallModal';
 
 /** Information about a connected MCP server. */
 export interface MCPServerInfo {
@@ -130,111 +131,40 @@ const getStatusLabel = (status: MCPServerInfo['status']) => {
   }
 };
 
-/** A compact catalog card with a real logo and an inline key form on install. */
+/** A compact catalog card with a real logo; clicking Install opens the modal. */
 const CatalogCard: React.FC<{
   entry: CatalogEntry;
-  onInstall: (entry: CatalogEntry, keys: Record<string, string>) => void;
-}> = ({ entry, onInstall }) => {
-  const [expanded, setExpanded] = useState(false);
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [installing, setInstalling] = useState(false);
-
-  const requiredMissing = entry.envKeys.some((k) => k.required && !values[k.key]?.trim());
+  onRequestInstall: (entry: CatalogEntry) => void;
+}> = ({ entry, onRequestInstall }) => {
   const needsKeys = entry.envKeys.length > 0;
-
-  const handleInstall = async () => {
-    setInstalling(true);
-    try {
-      await onInstall(entry, values);
-    } finally {
-      setInstalling(false);
-      setExpanded(false);
-    }
-  };
-
-  const handleClick = () => {
-    if (needsKeys && !expanded) {
-      setExpanded(true);
-      return;
-    }
-    handleInstall();
-  };
 
   return (
     <div
       data-testid={`mcp-popular-card-${entry.id}`}
-      className="group flex flex-col gap-2.5 rounded-xl border border-brand-border/60 bg-brand-card p-3 transition-all duration-200 hover:border-[var(--brand-accent-border)]"
+      className="group flex items-center gap-3 rounded-xl border border-brand-border/60 bg-brand-card p-3 transition-all duration-200 hover:border-[var(--brand-accent-border)]"
     >
-      <div className="flex items-center gap-3">
-        <ServerLogo id={entry.id} icon={entry.icon} size={30} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-[13px] font-semibold text-brand-textMain">{entry.name}</span>
-            <span
-              title={entry.transport === 'stdio' ? 'Local (stdio)' : 'Remote'}
-              className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
-                entry.transport === 'stdio' ? 'bg-brand-textMuted/40' : 'bg-[var(--brand-accent)]'
-              }`}
-            />
-          </div>
-          <p className="truncate text-[11px] leading-4 text-brand-textMuted">{entry.description}</p>
+      <ServerLogo id={entry.id} icon={entry.icon} size={30} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-[13px] font-semibold text-brand-textMain">{entry.name}</span>
+          <span
+            title={entry.transport === 'stdio' ? 'Local (stdio)' : 'Remote'}
+            className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
+              entry.transport === 'stdio' ? 'bg-brand-textMuted/40' : 'bg-[var(--brand-accent)]'
+            }`}
+          />
         </div>
-        <Button
-          data-testid={`mcp-install-${entry.id}`}
-          onClick={handleClick}
-          variant={expanded ? 'primary' : 'secondary'}
-          size="sm"
-          disabled={installing || (expanded && requiredMissing)}
-          className="flex-shrink-0"
-        >
-          {expanded ? (installing ? 'Connecting…' : 'Connect') : installing ? 'Connecting…' : needsKeys ? 'Install' : '+ Install'}
-        </Button>
+        <p className="truncate text-[11px] leading-4 text-brand-textMuted">{entry.description}</p>
       </div>
-
-      {expanded && (
-        <div className="flex flex-col gap-2.5 border-t border-brand-border/40 pt-2.5 animate-fade-in">
-          {entry.envKeys.map((envKey) => (
-            <div key={envKey.key} className="flex flex-col gap-1">
-              <label className="flex items-center gap-1.5 text-[11px] font-medium text-brand-textMain">
-                <KeyRound size={11} className="text-[var(--brand-accent)]" />
-                {envKey.label}
-                {envKey.required ? (
-                  <span className="text-red-400">*</span>
-                ) : (
-                  <span className="text-brand-textMuted/70">(optional)</span>
-                )}
-                {envKey.url && (
-                  <a
-                    href={envKey.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="ml-auto inline-flex items-center gap-0.5 text-[10px] text-[var(--brand-accent)] hover:underline"
-                  >
-                    <ExternalLink size={9} /> Get key
-                  </a>
-                )}
-              </label>
-              <Input
-                type={envKey.secret ? 'password' : 'text'}
-                value={values[envKey.key] || ''}
-                onChange={(e) => setValues((prev) => ({ ...prev, [envKey.key]: e.target.value }))}
-                placeholder={envKey.description || envKey.label}
-              />
-            </div>
-          ))}
-          {entry.homepage && (
-            <a
-              href={entry.homepage}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[10px] text-brand-textMuted hover:text-[var(--brand-accent)]"
-            >
-              <ExternalLink size={9} /> Documentation
-            </a>
-          )}
-        </div>
-      )}
+      <Button
+        data-testid={`mcp-install-${entry.id}`}
+        onClick={() => onRequestInstall(entry)}
+        variant="secondary"
+        size="sm"
+        className="flex-shrink-0"
+      >
+        {needsKeys ? 'Install' : '+ Install'}
+      </Button>
     </div>
   );
 };
@@ -253,6 +183,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
   const [newServerName, setNewServerName] = useState('');
   const [newTransport, setNewTransport] = useState<'stdio' | 'sse'>('stdio');
   const [newCommandOrUrl, setNewCommandOrUrl] = useState('');
+  const [installTarget, setInstallTarget] = useState<CatalogEntry | null>(null);
 
   const handleAdd = () => {
     if (!newServerName.trim() || !newCommandOrUrl.trim()) return;
@@ -370,7 +301,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
           </div>
           <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
             {catalog.map((entry) => (
-              <CatalogCard key={entry.id} entry={entry} onInstall={onInstallCatalog} />
+              <CatalogCard key={entry.id} entry={entry} onRequestInstall={setInstallTarget} />
             ))}
           </div>
         </div>
@@ -448,6 +379,15 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
           ))}
         </div>
       )}
+
+      <McpInstallModal
+        isOpen={installTarget !== null}
+        entry={installTarget}
+        onClose={() => setInstallTarget(null)}
+        onInstall={async (entry, keys) => {
+          await onInstallCatalog?.(entry, keys);
+        }}
+      />
     </div>
   );
 };
