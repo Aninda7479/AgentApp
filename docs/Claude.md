@@ -104,13 +104,13 @@ Claude Desktop and Claude Code are designed as native MCP clients:
 | `/diff` ✅ | Open an interactive visual diff viewer to inspect pending file modifications |
 | `/mcp` ✅ | List, inspect, add, or manage active Model Context Protocol (MCP) servers (CLI `/mcp` wired; desktop dashboard remains a mock) |
 | `/init` | Analyze project and auto-generate project-level `CLAUDE.md` rules (CLI `/init` only; not in desktop) |
-| `/goal` | Set a completion condition for Claude, which then works autonomously toward that end state (not implemented) |
+| `/goal` ✅ | Set a completion condition for Claude, which then works autonomously toward that end state |
 | `/plan` ✅ | Enter plan mode for planning large architectural/complex changes |
 | `/security-review` ✅ | Run automated security analysis on your codebase to identify vulnerabilities (SQL injection, XSS, etc.) |
 | `/code-review` / `/review` ✅ | Audit current changes or code diffs for issues |
-| `/cost` / `/stats` | View cumulative session costs and token statistics (CLI `/status` token counter only; no desktop view) |
-| `/config` | View or modify configuration options (e.g. `/config verbose=true`) (no `/config` command) |
-| `/memory` | Open `CLAUDE.md` to add/edit project conventions / view memory profile (no `/memory` command) |
+| `/cost` / `/stats` ✅ | View cumulative session costs and token statistics |
+| `/config` ✅ | View or modify configuration options (e.g. `/config verbose=true`) |
+| `/memory` ✅ | View agent memory profile: installed skills and learned insights |
 | `/status` | View current session status and active settings (CLI `/status` only; no desktop view) |
 | `/tasks` ✅ | List active background tasks or subagents |
 | `/doctor` | Run setup checkup/diagnostics to troubleshoot local configuration (CLI `/doctor` only; not in desktop) |

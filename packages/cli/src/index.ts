@@ -18,6 +18,8 @@ export * from './commands/security.js';
 export * from './commands/mcp.js';
 export * from './commands/config.js';
 export * from './commands/cost.js';
+export * from './commands/memory.js';
+export * from './commands/goal.js';
 export * from './commands/tasks.js';
 export * from './commands/clear.js';
 export * from './commands/router.js';
