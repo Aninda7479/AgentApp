@@ -1677,6 +1677,34 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
     triggerToast('SuperAgent — open-source autonomous AI agent');
   };
 
+  // ── Web-mode account actions (seamless login/logout) ───────────────────────
+  // In the web/VPS build the same renderer runs in a browser with no Electron
+  // IPC. Auth is handled by the web server's /api/auth/* routes, so we expose
+  // one-click navigation to the account page and a logout that returns to login
+  // without the user manually typing a URL.
+  const isWebMode = !ipc;
+
+  const handleOpenAccount = () => {
+    if (isWebMode) {
+      window.location.href = '/account';
+    } else {
+      triggerToast('Account management is available in the web deployment.');
+    }
+  };
+
+  const handleLogout = async () => {
+    if (!isWebMode) {
+      triggerToast('Logout is available in the web deployment.');
+      return;
+    }
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch {
+      // Best-effort; proceed to login regardless.
+    }
+    window.location.href = '/login';
+  };
+
   /** Undoes the most recent step in the active chat. */
   const handleUndoLastStep = () => {
     const chat = activeChat;
@@ -1736,6 +1764,9 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
             window.open('https://github.com/Aninda7479/AgentApp#readme', '_blank', 'noopener');
           }
         }}
+        isWebMode={isWebMode}
+        onOpenAccount={handleOpenAccount}
+        onLogout={handleLogout}
       />
 
       {/* Main Body container */}

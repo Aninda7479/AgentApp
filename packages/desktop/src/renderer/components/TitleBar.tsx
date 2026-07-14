@@ -45,6 +45,12 @@ interface TitleBarProps {
   themeMode?: ThemeMode;
   onCheckUpdates?: () => void;
   onOpenDocs?: () => void;
+  /** True when running in the browser/web build (no Electron). */
+  isWebMode?: boolean;
+  /** Opens the account/settings page (web build only). */
+  onOpenAccount?: () => void;
+  /** Logs the user out and returns to the login page (web build only). */
+  onLogout?: () => void;
 }
 
 // The web build injects a mock window.require, so that is NOT a reliable signal.
@@ -86,6 +92,9 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   themeMode = 'dark',
   onCheckUpdates,
   onOpenDocs,
+  isWebMode = false,
+  onOpenAccount,
+  onLogout,
 }) => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -152,6 +161,13 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       items: [
         { label: 'Check for Updates', icon: RefreshCw, onClick: () => onCheckUpdates?.() },
         { label: 'Documentation', icon: BookOpen, onClick: () => onOpenDocs?.() },
+        ...(isWebMode
+          ? [
+              'sep' as const,
+              { label: 'Account', icon: Settings, onClick: () => onOpenAccount?.() },
+              { label: 'Log out', icon: Power, danger: true, onClick: () => onLogout?.() }
+            ]
+          : []),
         'sep',
         { label: 'About SuperAgent', icon: HelpCircle, onClick: () => onAbout?.() },
       ],

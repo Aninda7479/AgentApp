@@ -7,7 +7,7 @@ To Prevent Agent Do Autonomusly Doing Dangerous Acts. Add a Feature in settings 
 ## Random Features
 
 1. Seamless Login / Logout for web. To visit Account.html and other pages and Do Login Logout when work is done, seamlessly without manually typing that URL.
-   - [ ] Pending — web `auth.ts`/`login.html`/`account.html` already exist; wire a one-click "Open Account" action (reuse the new `open-external` IPC concept).
+   - [x] **DONE** — in the browser/web build (no Electron), the Help menu now shows **Account** (navigates to `/account`) and **Log out** (POSTs to `/api/auth/logout` then redirects to `/login`). One click, no manual URL typing. Wired in `App.tsx` + `TitleBar.tsx` via `isWebMode`.
 2. Communication — Connect Telegram, WhatsApp, etc.
    - [x] **DONE** — added a `WhatsAppChannelAdapter` (Meta Cloud API) alongside the existing Telegram/Discord/Slack adapters, plus a `createDefaultGateway()` factory in `packages/desktop/src/gateway/index.ts`. Supports outbound messages, webhook verification, and inbound parsing. A settings UI to manage connections is still pending.
 3. Check For Update In Settings.
