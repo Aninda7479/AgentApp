@@ -23,8 +23,8 @@ SuperAgent uses an `npm` workspace monorepo layout:
 ### 2. Workspace Initialization
 Clone your fork and install dependencies for all packages:
 ```bash
-git clone https://github.com/your-username/SuperAgent.git
-cd SuperAgent
+git clone https://github.com/Aninda7479/AgentApp.git
+cd AgentApp
 npm install
 ```
 
