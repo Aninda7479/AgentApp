@@ -10,7 +10,7 @@ OpenAI Codex CLI (packaged as `@openai/codex`) is a terminal-based, agentic soft
 ### A. Terminal UI (TUI) & Interactive Flow
 * **Full-Screen TUI**: Interactive terminal interface displaying streaming model responses, code block previews, and diff reviews. (CLI TUI is `packages/cli`; desktop is a separate GUI — not a single "both" feature)
 * **Non-Interactive Mode (`exec`)**: Run one-off commands programmatically for CI/CD or scripts (e.g., `codex exec "refactor database module"`). (CLI `exec` exists but is a stub returning a mock — not wired to a real engine)
-* **Multimodal Input Support**: Supports code snippets, text instructions, and image inputs (screenshots, design mockups, error diagrams). (Desktop attachments only; not in CLI runtime — ✅ removed)
+* **Multimodal Input Support**: Supports code snippets, text instructions, and image inputs (screenshots, design mockups, error diagrams). (Desktop attachments; CLI now supports `/attach` plus drag-and-drop / typed image-path detection that forwards images as multimodal content blocks)
 * **Turn Queueing**: Allows users to type and queue follow-up instructions while the agent is actively executing a task. (CLI turn queue exists; CLI-only)
 
 ### B. Execution Sandbox & Security Controls
