@@ -21,6 +21,14 @@ async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
 // via Electron IPC (replaces HTTP SSE in desktop context)
 
 import { AgentEngine, AgentEngineConfig, AgentEvent } from './main/ai-engine';
+import { listSkills } from './main/skills';
+import {
+  connectServer,
+  disconnectServer,
+  listServers,
+  callTool,
+  connectedTools
+} from './main/mcp-manager';
 
 
 // Track active agent sessions per window: sessionId → engine
@@ -60,6 +68,7 @@ ipcMain.handle('agent-run', async (event, {
           }
         }
       }
+      finalConfig.extraTools = connectedTools();
       engine = new AgentEngine(finalConfig, sessionId);
       activeSessions.set(sessionId, engine);
     }
@@ -100,6 +109,49 @@ ipcMain.handle('agent-stop', (_event, sessionId: string) => {
  */
 ipcMain.handle('agent-list', () => {
   return { sessions: Array.from(activeSessions.keys()) };
+});
+
+// ─── IPC: Skills discovery (for the Composer slash autocomplete) ──────────────
+ipcMain.handle('skills-list', (_event, { dir }: { dir?: string }) => {
+  try {
+    return listSkills(dir);
+  } catch {
+    return [];
+  }
+});
+
+// ─── IPC: MCP server connections ─────────────────────────────────────────────
+ipcMain.handle('mcp-connect', async (_event, server: {
+  id: string;
+  name: string;
+  transport: 'stdio' | 'sse' | 'http';
+  commandOrUrl: string;
+}) => {
+  try {
+    const res = await connectServer(server);
+    return { success: true, ...res };
+  } catch (err: unknown) {
+    return { success: false, error: (err as Error).message };
+  }
+});
+
+ipcMain.handle('mcp-disconnect', async (_event, id: string) => {
+  await disconnectServer(id);
+  return { success: true };
+});
+
+ipcMain.handle('mcp-list', () => listServers());
+
+ipcMain.handle('mcp-call', async (_event, { id, tool, args }: {
+  id: string;
+  tool: string;
+  args?: Record<string, any>;
+}) => {
+  try {
+    return await callTool(id, tool, args || {});
+  } catch (err: unknown) {
+    return `Error: ${(err as Error).message}`;
+  }
 });
 
 

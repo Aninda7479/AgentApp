@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { TrajectoryStep } from './components/TrajectoryCanvas';
 import { ComposerOptions } from './components/Composer';
@@ -17,6 +17,7 @@ import { ConfigureProjectModal } from './components/ConfigureProjectModal';
 import { TitleBar } from './components/TitleBar';
 import { AppToast } from './components/AppToast';
 import { WorkspaceView } from './components/WorkspaceView';
+import { builtinSuggestions, SkillInfo, BUILTIN_COMMANDS } from './components/slashCommands';
 import { BottomNav } from './components/BottomNav';
 import { StoredChat, StoredProject } from './types';
 import { useThemeMode } from './theme';
@@ -623,6 +624,23 @@ export const App: React.FC = () => {
     }
   ]);
 
+  // ── Slash-command catalog + discovered skills ───────────────────────────────
+  const slashCommands = useMemo(() => builtinSuggestions(), []);
+  const [skills, setSkills] = useState<(SkillInfo & { instructions?: string })[]>([]);
+
+  useEffect(() => {
+    if (!ipc) return;
+    const proj = projects.find((p) => p.name === activeProject);
+    const root = proj?.folders?.[0];
+    ipc
+      .invoke('skills-list', { dir: root ? `${root}/skills` : undefined })
+      .then((res: any) => {
+        const list = Array.isArray(res) ? res : (res?.skills ?? []);
+        setSkills(Array.isArray(list) ? list : []);
+      })
+      .catch(() => setSkills([]));
+  }, [ipc, projects, activeProject]);
+
   const [trajectorySteps, setTrajectorySteps] = useState<TrajectoryStep[]>([
     {
       id: 'step-1',
@@ -1144,10 +1162,155 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
   };
 
   /**
+   * Routes a leading-slash prompt to a desktop action, skill, or MCP tool.
+   * Returns true if the input was consumed (should not be sent as a normal prompt).
+   */
+  const handleSlashCommand = async (raw: string, options: ComposerOptions): Promise<boolean> => {
+    const body = raw.replace(/^\//, '').trim();
+    const parts = body.length ? body.split(/\s+/) : [];
+    const cmd = (parts[0] || '').toLowerCase();
+    const args = parts.slice(1);
+    const rawArgs = args.join(' ');
+
+    // Skills are addressed by their id (e.g. "/graphify").
+    const skill = skills.find((s) => s.id.toLowerCase() === cmd);
+    if (skill) {
+      const composed = `Skill: ${skill.name}\n${skill.instructions || skill.description}\n\nUser request: ${rawArgs}`;
+      await handleSendPrompt(composed, options);
+      return true;
+    }
+
+    switch (cmd) {
+      case 'init':
+        setIsConfigureProjectOpen(true);
+        return true;
+      case 'doctor':
+        setIsDoctorOpen(true);
+        return true;
+      case 'clear':
+        setActiveChatId('draft-chat');
+        setTrajectorySteps([]);
+        triggerToast('Conversation cleared');
+        return true;
+      case 'mcp': {
+        if (args.length === 0) {
+          setActiveTab('mcp');
+          return true;
+        }
+        const [serverName, toolName, ...rest] = args;
+        const server = mcpServers.find((s) => s.name.toLowerCase() === serverName.toLowerCase());
+        if (!server) {
+          triggerToast(`Unknown MCP server: ${serverName}`, 'error');
+          return true;
+        }
+        if (!toolName) {
+          setActiveTab('mcp');
+          triggerToast(`Server "${server.name}" exposes ${server.toolsCount} tool(s)`);
+          return true;
+        }
+        const argStr = rest.join(' ');
+        let parsedArgs: Record<string, any> = {};
+        if (argStr) {
+          try {
+            parsedArgs = JSON.parse(argStr);
+          } catch {
+            triggerToast('MCP tool args must be valid JSON', 'error');
+            return true;
+          }
+        }
+        try {
+          const res = await ipc?.invoke('mcp-call', { id: server.id, tool: toolName, args: parsedArgs });
+          const resultText = typeof res === 'string' ? res : JSON.stringify(res, null, 2);
+          const step: TrajectoryStep = {
+            id: `step-mcp-${Date.now()}`,
+            type: 'assistant',
+            content: `🔧 MCP ${server.name}.${toolName}\n\n${resultText}`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          };
+          setTrajectorySteps((prev) => [...prev, step]);
+          if (!activeChatId) setActiveChatId('draft-chat');
+        } catch (err: unknown) {
+          triggerToast(`MCP call failed: ${(err as Error).message}`, 'error');
+        }
+        return true;
+      }
+      case 'model': {
+        const enabled = modelsCatalog.filter((m) => m.enabled).map((m) => m.name);
+        if (args[0] === 'set' && args[1]) {
+          const name = args[1];
+          if (enabled.includes(name)) {
+            persistLastUsedModel(name);
+            triggerToast(`Model set to ${name}`);
+          } else {
+            triggerToast(`Unknown model: ${name}`, 'error');
+          }
+        } else {
+          triggerToast(`Models: ${enabled.slice(0, 8).join(', ')}${enabled.length > 8 ? '…' : ''}`);
+        }
+        return true;
+      }
+      case 'status': {
+        const prov = connectedProviders.find((p) => p.apiKey)?.name || 'none';
+        triggerToast(`Provider: ${prov} | Model: ${options.model} | MCP: ${mcpServers.filter((s) => s.enabled).length}`);
+        return true;
+      }
+      case 'theme': {
+        const t = args[0];
+        if (t === 'light' || t === 'dark') setThemeMode(t as any);
+        else setThemeMode(themeMode === 'light' ? 'dark' : 'light');
+        return true;
+      }
+      case 'help': {
+        const helpText = BUILTIN_COMMANDS.map((c) => `/${c.name} — ${c.description}`).join('\n');
+        const step: TrajectoryStep = {
+          id: `step-help-${Date.now()}`,
+          type: 'assistant',
+          content: `**Available slash commands:**\n${helpText}`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setTrajectorySteps((prev) => [...prev, step]);
+        if (!activeChatId) setActiveChatId('draft-chat');
+        return true;
+      }
+      case 'review':
+      case 'diff':
+        setActiveTab('diff');
+        return true;
+      case 'config':
+        setActiveTab('settings');
+        return true;
+      case 'compact':
+        triggerToast('Context compaction runs automatically during long sessions');
+        return true;
+      case 'learn':
+      case 'permissions':
+      case 'btw':
+      case 'verify':
+      case 'plan':
+      case 'tasks':
+      case 'cost':
+      case 'security':
+        triggerToast(`"/${cmd}" is handled by the agent — ask as a normal request (desktop UI support coming soon)`);
+        return true;
+      default:
+        triggerToast(`Unknown command: /${cmd}`, 'error');
+        return true;
+    }
+  };
+
+  /**
    * Main prompt submission handler.
    * Creates or updates a chat, copies attachments, then routes to real AI or simulation.
    */
   const handleSendPrompt = async (prompt: string, options: ComposerOptions) => {
+    const trimmed = prompt.trim();
+    if (trimmed.startsWith('/')) {
+      const consumed = await handleSlashCommand(trimmed, options);
+      if (consumed) {
+        setComposerPrompt('');
+        return;
+      }
+    }
     setComposerPrompt('');
     const attachmentsToSave = [...composerAttachments];
     setComposerAttachments([]);
@@ -1386,15 +1549,51 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
       name: newServer.name || 'Custom Server',
       transport: newServer.transport || 'stdio',
       commandOrUrl: newServer.commandOrUrl || '',
-      status: 'connected',
+      status: 'connecting',
       enabled: true,
-      toolsCount: 3,
+      toolsCount: 0,
       latencyMs: 15
     };
     setMcpServers((prev) => [...prev, created]);
+
+    // Attempt a real connection so the server's tools become available.
+    ipc
+      ?.invoke('mcp-connect', {
+        id: created.id,
+        name: created.name,
+        transport: created.transport,
+        commandOrUrl: created.commandOrUrl
+      })
+      .then((res: any) => {
+        const tools = res?.tools || [];
+        setMcpServers((prev) =>
+          prev.map((s) =>
+            s.id === created.id
+              ? {
+                  ...s,
+                  status: res?.success ? 'connected' : 'error',
+                  toolsCount: tools.length,
+                  latencyMs: res?.success ? Math.max(1, Math.round((res?.latencyMs as number) || 12)) : s.latencyMs
+                }
+              : s
+          )
+        );
+        if (res?.success) {
+          triggerToast(`Connected to ${created.name} (${tools.length} tools)`);
+        } else {
+          triggerToast(`Failed to connect to ${created.name}: ${res?.error || 'unknown error'}`, 'error');
+        }
+      })
+      .catch((err: unknown) => {
+        setMcpServers((prev) =>
+          prev.map((s) => (s.id === created.id ? { ...s, status: 'error' } : s))
+        );
+        triggerToast(`Failed to connect to ${created.name}: ${(err as Error).message}`, 'error');
+      });
   };
 
   const handleRemoveMcpServer = (id: string) => {
+    ipc?.invoke('mcp-disconnect', id).catch(() => {});
     setMcpServers((prev) => prev.filter((s) => s.id !== id));
   };
 
@@ -1856,6 +2055,8 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
               unsandboxedActions={fullAccess}
               onUnsandboxedActionsChange={handleUnsandboxedActionsChange}
               onMicUnavailable={() => triggerToast('Voice input is not supported in this browser')}
+              slashCommands={slashCommands}
+              skills={skills}
             />
           )}
 

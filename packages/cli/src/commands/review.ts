@@ -1,9 +1,13 @@
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { SlashCommandRouter, SlashCommandContext, SlashCommandResult } from './router.js';
+import { DiffReviewer } from './diff.js';
 
 /** Severity tier for a code-review finding. */
 export type ReviewSeverity = 'critical' | 'warning' | 'info';
+
+/** Risk level of an auto-fix: safe (line removal) vs risky (needs review). */
+export type FixRisk = 'safe' | 'risky';
 
 /** A single issue surfaced while reviewing source files. */
 export interface ReviewFinding {
@@ -12,6 +16,10 @@ export interface ReviewFinding {
   severity: ReviewSeverity;
   category: string;
   message: string;
+  /** Optional suggested remediation. */
+  fix?: string;
+  /** Whether the fix can be applied automatically without breaking behavior. */
+  fixRisk?: FixRisk;
 }
 
 /** Aggregated result of a static code review. */
@@ -27,6 +35,19 @@ export interface ReviewFile {
   content: string;
 }
 
+/** A single detection rule used by the static reviewer. */
+export interface ReviewRule {
+  severity: ReviewSeverity;
+  category: string;
+  title: string;
+  detail: string;
+  test: RegExp;
+  fixRisk: FixRisk;
+  fix?: string;
+  /** Optional guard: when this matches the line, the rule is skipped. */
+  skipIf?: RegExp;
+}
+
 /**
  * Heuristic, network-free static code reviewer (maps to the Claude
  * `/code-review` and Codex `/review` slash commands described in the docs).
@@ -34,91 +55,168 @@ export interface ReviewFile {
  * It scans changed source for common pitfalls — leftover debug output,
  * `TODO`/`FIXME` markers, `eval`, `innerHTML`, hardcoded secrets, loose
  * TypeScript `any`, empty `catch` blocks, and SQL concatenation — and returns
- * structured, severity-ranked findings. Designed to be fully testable with
- * in-memory file content (no git or LLM required).
+ * structured, severity-ranked findings, each optionally carrying a suggested
+ * fix. "Safe" fixes (stray debug leftovers) can be auto-applied with
+ * `/review --apply`; "risky" findings are reported with a suggestion only.
+ * Designed to be fully testable with in-memory file content.
  */
 export class CodeReviewer {
+  /** A single detection rule with an optional auto-fix. */
+  private static readonly RULES: ReviewRule[] = [
+    {
+      severity: 'warning',
+      category: 'debug-output',
+      title: 'Leftover debug logging',
+      detail: 'Remove stray console.log/debug/info calls before shipping.',
+      test: /\bconsole\.(log|debug|info)\s*\(/,
+      fixRisk: 'safe',
+      fix: 'Remove the console.log/debug/info statement.'
+    },
+    {
+      severity: 'info',
+      category: 'todo-marker',
+      title: 'TODO/FIXME marker',
+      detail: 'Convert the marker into a tracked task or resolve it.',
+      test: /^\s*\/\/\s*(TODO|FIXME|XXX|HACK)\b/,
+      fixRisk: 'safe',
+      fix: 'Remove the comment-only TODO/FIXME marker.'
+    },
+    {
+      severity: 'critical',
+      category: 'code-injection',
+      title: 'eval() usage',
+      detail: 'Replace eval() with a safe parser or structured approach.',
+      test: /\beval\s*\(/,
+      fixRisk: 'risky',
+      fix: 'Avoid eval(); use a dedicated parser or Function construction with care.'
+    },
+    {
+      severity: 'warning',
+      category: 'xss-risk',
+      title: 'Untrusted innerHTML',
+      detail: 'Assigning to innerHTML/outerHTML may enable XSS; sanitize or use textContent.',
+      test: /\.(innerHTML|outerHTML)\s*=|insertAdjacentHTML\s*\(/,
+      fixRisk: 'risky',
+      fix: 'Sanitize HTML or use textContent / a vetted sanitizer before inserting.'
+    },
+    {
+      severity: 'critical',
+      category: 'hardcoded-secret',
+      title: 'Hardcoded credential',
+      detail: 'Move secrets to environment variables or a secret manager.',
+      test: /(api[_-]?key|secret|token|passwd|password|access[_-]?key)\s*[:=]\s*['"]([^'"]{8,})['"]/i,
+      skipIf: /(your[-_]?|example|xxxx|placeholder|changeme|<|\$\{|process\.env|import\.meta\.env)/i,
+      fixRisk: 'risky',
+      fix: 'Load the value from process.env / a secret store instead of hardcoding.'
+    },
+    {
+      severity: 'info',
+      category: 'loose-typing',
+      title: 'Loose TypeScript any',
+      detail: 'Replace `any` with a precise type or unknown.',
+      test: /:\s*any\b|<any>|\bas any\b/,
+      fixRisk: 'risky',
+      fix: 'Use a specific type or `unknown` instead of `any`.'
+    },
+    {
+      severity: 'warning',
+      category: 'empty-catch',
+      title: 'Empty catch block',
+      detail: 'Log or handle the error instead of swallowing it.',
+      test: /catch\s*\([^)]*\)\s*\{\s*\}/,
+      fixRisk: 'risky',
+      fix: 'Add error handling or a log statement inside the catch.'
+    },
+    {
+      severity: 'warning',
+      category: 'sql-injection',
+      title: 'SQL string concatenation',
+      detail: 'Use parameterized queries / prepared statements.',
+      test: /\b(SELECT|INSERT|UPDATE|DELETE|ALTER)\b[\s\S]{0,80}\+|\+[\s\S]{0,80}\b(SELECT|INSERT|UPDATE|DELETE)\b/i,
+      skipIf: /execute\s*\([^)]*\)\s*,\s*\[/,
+      fixRisk: 'risky',
+      fix: 'Parameterize the query instead of concatenating input.'
+    },
+    {
+      severity: 'info',
+      category: 'debug-alert',
+      title: 'Stray alert()',
+      detail: 'Remove debug alert() calls.',
+      test: /\balert\s*\(/,
+      fixRisk: 'safe',
+      fix: 'Remove the alert() call.'
+    },
+    {
+      severity: 'warning',
+      category: 'debugger',
+      title: 'Leftover debugger',
+      detail: 'Remove the debugger; statement.',
+      test: /\bdebugger\s*;/,
+      fixRisk: 'safe',
+      fix: 'Remove the debugger; statement.'
+    }
+  ];
+
   /**
-   * Scans a single file's content and returns findings with line numbers.
+   * Scans a single file's content and returns findings with line numbers and
+   * (optionally) fix suggestions.
    */
   public static analyzeFile(path: string, content: string): ReviewFinding[] {
     const findings: ReviewFinding[] = [];
     const lines = content.split(/\r?\n/);
 
-    const push = (line: number, severity: ReviewSeverity, category: string, message: string): void => {
-      findings.push({ file: path, line, severity, category, message });
-    };
-
     lines.forEach((raw, idx) => {
       const lineNo = idx + 1;
-      const line = raw.trim();
-
-      if (line.length === 0 || line.startsWith('//') || line.startsWith('*') || line.startsWith('#')) {
-        // Still scan comments for TODO-style markers below.
-      }
-
-      // Leftover debug output (console.warn/error are treated as legitimate)
-      const consoleMatch = line.match(/\bconsole\.(log|debug|info)\s*\(/);
-      if (consoleMatch) {
-        push(lineNo, 'warning', 'debug-output', 'Leftover debug logging via console.' + consoleMatch[1] + '()');
-      }
-
-      // TODO / FIXME / XXX / HACK markers
-      const todoMatch = line.match(/\b(TODO|FIXME|XXX|HACK)\b\s*[:\-]?\s*(.*)$/);
-      if (todoMatch) {
-        const detail = todoMatch[2] ? `: "${todoMatch[2].slice(0, 60)}"` : '';
-        push(lineNo, 'info', 'todo-marker', `${todoMatch[1]} marker left in code${detail}`);
-      }
-
-      // eval() — arbitrary code execution risk
-      if (/\beval\s*\(/.test(line)) {
-        push(lineNo, 'critical', 'code-injection', 'Use of eval() allows arbitrary code execution');
-      }
-
-      // Direct innerHTML / outerHTML assignment — XSS risk
-      if (/\.(innerHTML|outerHTML)\s*=/.test(line) || /\binsertAdjacentHTML\s*\(/.test(line)) {
-        push(lineNo, 'warning', 'xss-risk', 'Untrusted assignment to innerHTML/outerHTML may enable XSS');
-      }
-
-      // Hardcoded secrets (skips obvious placeholders / env references)
-      const secretMatch = line.match(/(api[_-]?key|secret|token|passwd|password|access[_-]?key)\s*[:=]\s*['"]([^'"]{8,})['"]/i);
-      if (secretMatch) {
-        const value = secretMatch[2];
-        const isPlaceholder = /(your[-_]?|example|xxxx|placeholder|changeme|<|\$\{|process\.env|import\.meta\.env)/i.test(value);
-        if (!isPlaceholder) {
-          push(lineNo, 'critical', 'hardcoded-secret', `Possible hardcoded credential in assignment to "${secretMatch[1]}"`);
+      for (const rule of CodeReviewer.RULES) {
+        if (rule.test.test(raw) && !(rule.skipIf && rule.skipIf.test(raw))) {
+          findings.push({
+            file: path,
+            line: lineNo,
+            severity: rule.severity,
+            category: rule.category,
+            message: `${rule.title} — ${rule.detail}`,
+            fix: rule.fix,
+            fixRisk: rule.fixRisk
+          });
         }
-      }
-
-      // Loose TypeScript any typing
-      if (/:\s*any\b/.test(line) || /<any>/.test(line) || /\bas any\b/.test(line)) {
-        push(lineNo, 'info', 'loose-typing', 'Use of `any` weakens type safety');
-      }
-
-      // Empty catch block
-      if (/catch\s*\([^)]*\)\s*\{\s*\}/.test(line)) {
-        push(lineNo, 'warning', 'empty-catch', 'Empty catch block swallows errors silently');
-      }
-
-      // SQL built via string concatenation — injection risk
-      if (/\b(SELECT|INSERT|UPDATE|DELETE|ALTER)\b[\s\S]{0,80}\+/.test(line) || /\+[\s\S]{0,80}\b(SELECT|INSERT|UPDATE|DELETE)\b/i.test(line)) {
-        if (!/execute\s*\([^)]*\)\s*,\s*\[/.test(line)) {
-          push(lineNo, 'warning', 'sql-injection', 'SQL statement assembled via string concatenation may allow injection');
-        }
-      }
-
-      // alert() debugging
-      if (/\balert\s*\(/.test(line)) {
-        push(lineNo, 'info', 'debug-alert', 'Stray alert() call (likely debug leftover)');
-      }
-
-      // debugger statement
-      if (/\bdebugger\s*;/.test(line)) {
-        push(lineNo, 'warning', 'debugger', 'Leftover debugger; statement');
       }
     });
 
     return findings;
+  }
+
+  /**
+   * Applies only the "safe" auto-fixes (line-level removals) to a file's
+   * content, returning the cleaned content and the findings that were fixed.
+   * Risky findings are never auto-applied.
+   */
+  public static applySafeFixes(file: ReviewFile): { fixed: ReviewFile; applied: ReviewFinding[] } {
+    const lines = file.content.split(/\r?\n/);
+    const applied: ReviewFinding[] = [];
+    const kept: string[] = [];
+
+    lines.forEach((raw, idx) => {
+      const lineNo = idx + 1;
+      const safeHit = CodeReviewer.RULES.find(
+        (r) => r.fixRisk === 'safe' && r.test.test(raw) && !(r.skipIf && r.skipIf.test(raw))
+      );
+      if (safeHit) {
+        applied.push({
+          file: file.path,
+          line: lineNo,
+          severity: safeHit.severity,
+          category: safeHit.category,
+          message: `${safeHit.title} — ${safeHit.detail}`,
+          fix: safeHit.fix,
+          fixRisk: 'safe'
+        });
+        // Drop the whole line for safe removals.
+      } else {
+        kept.push(raw);
+      }
+    });
+
+    return { fixed: { path: file.path, content: kept.join('\n') }, applied };
   }
 
   /**

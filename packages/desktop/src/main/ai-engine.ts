@@ -284,6 +284,8 @@ export interface AgentEngineConfig {
   temperature?: number;
   /** Internet access governance level for this run (defaults to the saved setting). */
   internetAccess?: InternetAccessLevel;
+  /** Additional tools (e.g. discovered MCP tools) merged into the agent's toolset. */
+  extraTools?: ToolDefinition[];
 }
 
 // ─── Agent Engine ─────────────────────────────────────────────────────────────
@@ -305,7 +307,7 @@ export class AgentEngine {
     const effectiveRoot = config.projectRoot
       || (config.attachments?.[0] ? path.dirname(config.attachments[0]) : process.cwd());
 
-    this.tools = createBuiltinTools(effectiveRoot);
+    this.tools = [...createBuiltinTools(effectiveRoot), ...(config.extraTools ?? [])];
     this.history = [];
 
     // ── Build system prompt ────────────────────────────────────────────────

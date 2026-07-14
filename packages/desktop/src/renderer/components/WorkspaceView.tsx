@@ -50,6 +50,10 @@ interface WorkspaceViewProps {
   onUnsandboxedActionsChange?: (value: boolean) => void;
   /** Invoked when voice dictation is unavailable in this environment. */
   onMicUnavailable?: () => void;
+  /** Built-in slash commands for the composer autocomplete. */
+  slashCommands?: import('./slashCommands').SlashSuggestion[];
+  /** Discovered skills for the composer autocomplete. */
+  skills?: import('./slashCommands').SkillInfo[];
 }
 
 const recommendations = [
@@ -200,7 +204,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   onSelectProject,
   unsandboxedActions = false,
   onUnsandboxedActionsChange,
-  onMicUnavailable
+  onMicUnavailable,
+  slashCommands,
+  skills = []
 }) => {
   const enabledModels = modelsCatalog.filter(model => model.enabled);
 
@@ -473,6 +479,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         sandbox={!unsandboxedActions}
         onSandboxChange={(v) => onUnsandboxedActionsChange?.(!v)}
         onMicUnavailable={onMicUnavailable}
+        slashCommands={slashCommands}
+        skills={skills}
+        mcpServers={mcpServers.map((s) => ({ name: s.name, id: s.id }))}
       />
     </>
   );

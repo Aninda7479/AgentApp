@@ -29,6 +29,10 @@ export const Select: React.FC<SelectProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  // The popup is rendered through a React Portal into document.body, so it lives
+  // outside containerRef. We keep a direct ref to it so the outside-click handler
+  // can recognise clicks inside the popup as "inside" rather than "outside".
+  const popupRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, height: 0 });
   
   const selectedOption = options.find((opt) => opt.value === value);
@@ -48,7 +52,13 @@ export const Select: React.FC<SelectProps> = ({
   // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      // Ignore clicks inside the trigger (containerRef) or inside the portal
+      // popup (popupRef) — otherwise selecting an option would close the menu
+      // before the option's onClick could fire.
+      const insideContainer = containerRef.current?.contains(target) ?? false;
+      const insidePopup = popupRef.current?.contains(target) ?? false;
+      if (!insideContainer && !insidePopup) {
         setIsOpen(false);
       }
     };
@@ -102,6 +112,7 @@ export const Select: React.FC<SelectProps> = ({
       {/* Popover Options List using React Portal to prevent layout clipping */}
       {isOpen && createPortal(
         <div
+          ref={popupRef}
           style={{
             position: 'fixed',
             left: `${coords.left}px`,

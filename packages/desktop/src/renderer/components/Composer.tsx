@@ -1,4 +1,4 @@
-import React, { useState, KeyboardEvent, useEffect, useRef } from 'react';
+import React, { useState, KeyboardEvent, useEffect, useRef, useMemo } from 'react';
 import { Select } from './ui';
 import {
   Plus,
@@ -12,6 +12,12 @@ import {
   ShieldCheck,
   ShieldAlert,
 } from 'lucide-react';
+import {
+  SlashSuggestion,
+  SkillInfo,
+  builtinSuggestions,
+  buildSuggestions,
+} from './slashCommands';
 
 /** Options returned by the Composer when a prompt is submitted. */
 export interface ComposerOptions {
@@ -59,6 +65,14 @@ export interface ComposerProps {
   onSandboxChange?: (value: boolean) => void;
   /** Invoked when the browser/Electron lacks the Web Speech API. */
   onMicUnavailable?: () => void;
+
+  // ── Slash-command autocomplete ──
+  /** Built-in slash commands shown in the `/` autocomplete. */
+  slashCommands?: SlashSuggestion[];
+  /** Discovered skills shown in the `/` autocomplete. */
+  skills?: SkillInfo[];
+  /** Configured MCP servers shown in the `/` autocomplete. */
+  mcpServers?: { name: string; id: string; tools?: { name: string; description?: string }[] }[];
 }
 
 // Web Speech API types are not in the standard lib; treat as any.
@@ -88,6 +102,9 @@ export const Composer: React.FC<ComposerProps> = ({
   sandbox = true,
   onSandboxChange,
   onMicUnavailable,
+  slashCommands,
+  skills = [],
+  mcpServers = [],
 }) => {
   const [localPrompt, setLocalPrompt] = useState('');
   const prompt = promptValue !== undefined ? promptValue : localPrompt;
@@ -119,6 +136,85 @@ export const Composer: React.FC<ComposerProps> = ({
   useEffect(() => {
     adjustTextareaHeight();
   }, [prompt]);
+
+  // ── Slash-command autocomplete ───────────────────────────────────────────────
+  const [slashStart, setSlashStart] = useState<number | null>(null);
+  const [slashQuery, setSlashQuery] = useState('');
+  const [slashIndex, setSlashIndex] = useState(0);
+
+  const allSuggestions = useMemo(
+    () =>
+      buildSuggestions(
+        slashCommands && slashCommands.length ? slashCommands : builtinSuggestions(),
+        skills,
+        mcpServers
+      ),
+    [slashCommands, skills, mcpServers]
+  );
+
+  const filtered = useMemo(() => {
+    const q = slashQuery.toLowerCase();
+    if (!q) return allSuggestions;
+    return allSuggestions.filter(
+      (s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q)
+    );
+  }, [allSuggestions, slashQuery]);
+
+  const menuOpen = slashStart !== null;
+  const activeIndex = filtered.length ? Math.min(slashIndex, filtered.length - 1) : 0;
+
+  // Keeps the highlighted item visible as the user arrows through the list.
+  const activeItemRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (menuOpen) {
+      activeItemRef.current?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [activeIndex, menuOpen]);
+
+  /** Recompute the active slash token from the caret position. */
+  const updateSlashFromCaret = (value: string, caret: number) => {
+    let start = caret;
+    while (start > 0 && !/\s/.test(value[start - 1])) start--;
+    const token = value.slice(start, caret);
+    if (token.startsWith('/')) {
+      const q = token.slice(1);
+      // Only reset the highlight to the first item when the query text changes
+      // (typing a new character). Caret/arrow movement within the same token
+      // must not reset the selection — otherwise ArrowUp/Down can't navigate.
+      if (q !== slashQuery) setSlashIndex(0);
+      setSlashStart(start);
+      setSlashQuery(q);
+    } else {
+      setSlashStart(null);
+      setSlashQuery('');
+    }
+  };
+
+  const syncSlash = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    updateSlashFromCaret(el.value, el.selectionStart ?? el.value.length);
+  };
+
+  /** Insert a selected suggestion at the caret, replacing the in-progress token. */
+  const acceptSlash = (item: SlashSuggestion) => {
+    const el = textareaRef.current;
+    const value = prompt;
+    const caret = el?.selectionStart ?? value.length;
+    const start = slashStart ?? caret;
+    const newValue = value.slice(0, start) + item.insertText + value.slice(caret);
+    setPrompt(newValue);
+    setSlashStart(null);
+    setSlashQuery('');
+    const newCaret = start + item.insertText.length;
+    requestAnimationFrame(() => {
+      const t = textareaRef.current;
+      if (t) {
+        t.focus();
+        t.setSelectionRange(newCaret, newCaret);
+      }
+    });
+  };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const files = e.clipboardData?.files;
@@ -197,6 +293,29 @@ export const Composer: React.FC<ComposerProps> = ({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (menuOpen && filtered.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashIndex((i) => (i + 1) % filtered.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashIndex((i) => (i - 1 + filtered.length) % filtered.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        acceptSlash(filtered[activeIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setSlashStart(null);
+        setSlashQuery('');
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -239,10 +358,15 @@ export const Composer: React.FC<ComposerProps> = ({
           ref={textareaRef}
           data-testid="composer-input"
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onChange={(e) => {
+            setPrompt(e.target.value);
+            updateSlashFromCaret(e.target.value, e.target.selectionStart ?? e.target.value.length);
+          }}
           onKeyDown={handleKeyDown}
+          onClick={syncSlash}
+          onSelect={syncSlash}
           onPaste={handlePaste}
-          placeholder={hasModels ? "Do anything" : "No models are connected yet. Please go to Settings to connect a provider."}
+          placeholder={hasModels ? "Do anything — type / for commands, skills & MCP tools" : "No models are connected yet. Please go to Settings to connect a provider."}
           disabled={disabled}
           rows={1}
           className="bg-transparent border-none outline-none text-brand-textMain text-sm resize-none w-full min-h-[44px] leading-relaxed placeholder-brand-textMuted/55 font-sans disabled:opacity-50"
@@ -369,6 +493,52 @@ export const Composer: React.FC<ComposerProps> = ({
             )}
           </div>
         </div>
+
+        {/* Slash-command autocomplete popover */}
+        {menuOpen && (
+          <div
+            data-testid="slash-menu"
+            className="absolute bottom-full left-0 mb-2 ui-popover w-[440px] max-w-[90vw] p-1.5 z-50 max-h-[320px] overflow-y-auto"
+          >
+            <div className="ui-menu-label px-2 py-1">Slash commands &amp; tools</div>
+            {filtered.length === 0 && (
+              <div className="px-3 py-2 text-xs text-brand-textMuted">No matching commands</div>
+            )}
+            {filtered.map((s, i) => (
+              <button
+                key={s.name}
+                type="button"
+                data-testid={`slash-item-${s.name}`}
+                ref={i === activeIndex ? activeItemRef : undefined}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  acceptSlash(s);
+                }}
+                onMouseEnter={() => setSlashIndex(i)}
+                className={`ui-popover-item flex flex-col items-start gap-0.5 text-left ${i === activeIndex ? 'active' : ''}`}
+              >
+                <div className="flex items-center gap-2 w-full">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      s.category === 'builtin'
+                        ? 'bg-violet-400'
+                        : s.category === 'skill'
+                        ? 'bg-emerald-400'
+                        : 'bg-sky-400'
+                    }`}
+                  />
+                  <span className="font-mono text-xs font-semibold text-brand-textMain truncate">{s.label}</span>
+                  {s.usage && (
+                    <span className="ml-auto text-[10px] text-brand-textMuted font-mono truncate max-w-[200px] pl-2">
+                      {s.usage}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] text-brand-textMuted pl-3.5 truncate w-full">{s.description}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Dictation indicator */}
         {listening && (
