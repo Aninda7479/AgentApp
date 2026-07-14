@@ -122,6 +122,7 @@ Claude Desktop and Claude Code are designed as native MCP clients:
 | `/export` | Save the current conversation to a file (Markdown by default, or JSON with `--json`). With a path it writes the transcript to that file (creating parent directories); without a path it prints the transcript to stdout. Aliases: `/save`, `/dump` (CLI `/export` only; not in desktop) |
 | `/attach <path>` / drag-and-drop | Attach an image to your next message. Drag an image file into the terminal (the path is inserted as text) or type its path, and it is validated and sent as a multimodal `image` content block to the model; `/attach list` and `/attach clear` manage the queue. Supported formats are png/jpg/jpeg/gif/webp under 5 MB (vision models reject bmp/svg and video is unsupported) (CLI `/attach` only; not in desktop) |
 | `/login` / `/logout` | Authenticate or log out from your account / manage credentials (web build only; no CLI/desktop command) |
+| `/last` / `/recall` | Re-display the last assistant (or tool) message so you can re-read or copy it without scrolling back through the transcript (CLI `/last` only; not in desktop) |
 
 ---
 

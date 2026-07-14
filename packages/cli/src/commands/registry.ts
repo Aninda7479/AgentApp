@@ -6,6 +6,7 @@ import { registerSecurityReviewCommand } from './security.js';
 import { registerExecSlashCommand } from './exec.js';
 import { registerAttachCommand } from './attach.js';
 import { registerExportCommand } from './export.js';
+import { registerLastCommand } from './last.js';
 import { ImageAttachment } from '@superagent/core';
 import { registerMCPCommand } from './mcp.js';
 import { registerConfigCommand } from './config.js';
@@ -101,6 +102,7 @@ export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRou
   registerTasksCommand(router, taskManager);
   registerClearCommand(router, getMessages, setMessages);
   registerExportCommand(router, { getMessages });
+  registerLastCommand(router, { getMessages });
   registerExecSlashCommand(router, { permission });
   registerAttachCommand(router, { pendingAttachments });
 

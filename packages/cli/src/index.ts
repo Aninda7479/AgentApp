@@ -31,6 +31,7 @@ export * from './commands/voice.js';
 export * from './commands/tasks.js';
 export * from './commands/clear.js';
 export * from './commands/export.js';
+export * from './commands/last.js';
 export * from './commands/router.js';
 export * from './commands/registry.js';
 export * from './shortcuts/permissions.js';
