@@ -1,0 +1,31 @@
+{
+  "schema": "superagent-partner",
+  "id": "lily",
+  "name": "Lily",
+  "kind": "girl",
+  "version": "1.0.0",
+  "description": "A cute anime girl in a red dress who works, sleeps, and keeps you company.",
+  "author": "@you",
+  "accent": "#ff8fb3",
+  "emoji": "🧍",
+  "vrm": "character.vrm",
+  "laptop": true,
+  "pillow": true,
+  "dialogues": {
+    "working": "Typing away… almost there!",
+    "idle": "What should we build next?",
+    "celebrate": "Yay! We did it! 🎉",
+    "sad": "That didn't work… want me to retry?",
+    "sleeping": "zzz…",
+    "thinking": "Hmm, let me think…"
+  },
+  "reactions": {
+    "idle":      { "emoji": "🧍", "line": "Ready when you are." },
+    "thinking":  { "emoji": "🤔", "line": "Hmm, let me think…" },
+    "working":   { "emoji": "💻", "line": "On it!" },
+    "happy":     { "emoji": "🙂", "line": "Nice." },
+    "celebrate": { "emoji": "🎉", "line": "Done!" },
+    "sad":       { "emoji": "😢", "line": "That didn't go well." },
+    "sleeping":  { "emoji": "😴", "line": "zzz" }
+  }
+}

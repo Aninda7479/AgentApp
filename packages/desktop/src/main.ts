@@ -1,4 +1,4 @@
-import { app, ipcMain, dialog, BrowserWindow, shell } from 'electron';
+import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut } from 'electron';
 import path from 'path';
 import fs from 'fs';
 
@@ -11,6 +11,13 @@ import { setupAutoUpdater } from './main/updater';
 import { readStore, writeStore, StoreData } from './main/store';
 import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG } from '@superagent/core';
 import { getChatDirectory } from './main/storage/index.js';
+import * as PartnerStore from './main/partner-store';
+import { petWindowManager } from './main/pet-window';
+
+// Tracks context-window usage so the pet can show "dark circles" when the
+// conversation approaches the model's capacity.
+let petContextMax = 0;
+let petContextTotal = 0;
 
 async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
   return await BrowserLifecycleService.getSharedInstance();
@@ -71,6 +78,9 @@ ipcMain.handle('agent-run', async (event, {
       finalConfig.extraTools = connectedTools();
       engine = new AgentEngine(finalConfig, sessionId);
       activeSessions.set(sessionId, engine);
+      // Reset context-usage tracking for this run.
+      petContextMax = finalConfig.maxTokens ?? 0;
+      petContextTotal = 0;
     }
 
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -79,6 +89,23 @@ ipcMain.handle('agent-run', async (event, {
     await engine.run(prompt, (agentEvent: AgentEvent) => {
       if (win && !win.isDestroyed()) {
         win.webContents.send('agent-event', agentEvent);
+        // Relay to the free-roaming 3D Partner so it reacts in real time.
+        const petMood = petWindowManager.moodFromAgentEvent(agentEvent.type);
+        if (petMood) petWindowManager.setMood(petMood);
+
+        // Context-window usage → dark circles when near capacity.
+        if (agentEvent.usage) {
+          petContextTotal = agentEvent.usage.totalTokens || petContextTotal;
+          if (petContextMax > 0) {
+            petWindowManager.setContext(petContextTotal / petContextMax);
+          }
+        }
+
+        // "Needs input" → the pet speaks + plays a sound.
+        if (agentEvent.type === 'error' && agentEvent.error &&
+            /api key|apikey|permission|approve|confirm|sign ?in|log ?in|needs? input|provide (a|an|your)/i.test(agentEvent.error)) {
+          petWindowManager.say(agentEvent.error);
+        }
       }
     }, currentAttachments);
 
@@ -466,6 +493,274 @@ ipcMain.handle('save-chat-media-buffer', async (_event, { buffer, filename, chat
   };
 });
 
+// ─── IPC: Partner / Pet ecosystem (open companion import/export) ─────────────
+// Reads/writes partner.json folders under <userData>/pets. The format is fully
+// open: anyone can author a Partner and import it here.
+
+ipcMain.handle('partner-list', () => {
+  return PartnerStore.listPartners(app.getPath('userData'));
+});
+
+ipcMain.handle('partner-get', (_event, id: string) => {
+  return PartnerStore.getPartner(app.getPath('userData'), id);
+});
+
+ipcMain.handle('partner-install', async () => {
+  try {
+    const win = windowManager.getMainWindow();
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Select a Partner folder',
+      properties: ['openDirectory']
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return null;
+    }
+    const installed = PartnerStore.installPartnerFolder(app.getPath('userData'), result.filePaths[0]);
+    return installed;
+  } catch (err: unknown) {
+    return { error: (err as Error).message };
+  }
+});
+
+ipcMain.handle('partner-import-json', (_event, json: string) => {
+  try {
+    return PartnerStore.importPartnerJson(app.getPath('userData'), json);
+  } catch (err: unknown) {
+    return { error: (err as Error).message };
+  }
+});
+
+ipcMain.handle('partner-remove', (_event, id: string) => {
+  PartnerStore.removePartner(app.getPath('userData'), id);
+  return { success: true };
+});
+
+ipcMain.handle('partner-set-active', (_event, id: string | null) => {
+  PartnerStore.setActivePartner(app.getPath('userData'), id);
+  // Push the now-active Partner (with its resolved 3D model / VRM/script paths) to the pet.
+  const manifest = id ? PartnerStore.getPartner(app.getPath('userData'), id) : null;
+  const modelPath = manifest ? resolvePartnerModelPath(manifest) : null;
+  const vrmPath = manifest ? resolvePartnerVrmPath(manifest) : null;
+  const scriptPath = manifest ? resolvePartnerScriptPath(manifest) : null;
+  petWindowManager.setPartner(manifest as any, modelPath, vrmPath, scriptPath);
+  return { success: true };
+});
+
+ipcMain.handle('partner-get-active', () => {
+  return PartnerStore.getActivePartner(app.getPath('userData'));
+});
+
+ipcMain.handle('partner-export', (_event, id: string) => {
+  try {
+    const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+    if (fs.existsSync(folder)) {
+      shell.showItemInFolder(folder);
+    }
+    return { success: true, folder };
+  } catch (err: unknown) {
+    return { error: (err as Error).message };
+  }
+});
+
+/**
+ * Opens a native file picker so the user can choose a 3D character file
+ * (.vrm / .glb / .gltf) to attach to a Partner. Returns the chosen absolute path
+ * (or null if cancelled). The actual copy + manifest update happens in
+ * 'partner-import-model'.
+ */
+ipcMain.handle('partner-pick-model-file', async () => {
+  try {
+    const win = windowManager.getMainWindow();
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Select a 3D model file',
+      properties: ['openFile'],
+      filters: [{ name: '3D model', extensions: ['vrm', 'glb', 'gltf'] }]
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  } catch (err: unknown) {
+    return { error: (err as Error).message };
+  }
+});
+
+/**
+ * Copies a chosen 3D model file into the Partner's folder, records it in the
+ * Partner's manifest (as `vrm` for .vrm, else `model`), and — if this is the
+ * active Partner — re-pushes it to the running pet. This persists the user's
+ * "which model I imported" choice on disk.
+ */
+ipcMain.handle('partner-import-model', async (_event, { id, sourcePath }: { id: string; sourcePath: string }) => {
+  try {
+    if (!id || !sourcePath) return { error: 'Missing partner id or model path.' };
+    if (!fs.existsSync(sourcePath)) return { error: 'Model file no longer exists.' };
+
+    const ext = path.extname(sourcePath).toLowerCase().replace('.', '');
+    if (!['vrm', 'glb', 'gltf'].includes(ext)) {
+      return { error: 'Unsupported model file. Use .vrm, .glb, or .gltf.' };
+    }
+
+    const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+    if (!fs.existsSync(folder)) return { error: 'Partner folder not found.' };
+
+    const fileName = `character.${ext}`;
+    fs.copyFileSync(sourcePath, path.join(folder, fileName));
+
+    // Read, patch, and rewrite the manifest to point at the imported file.
+    const manifestPath = path.join(folder, 'partner.json');
+    const manifest = PartnerStore.getPartner(app.getPath('userData'), id);
+    if (!manifest) return { error: 'Partner manifest not found.' };
+    const field = ext === 'vrm' ? 'vrm' : 'model';
+    manifest[field] = fileName;
+    // A .glb/.gltf model takes precedence over a .vrm for the 3D pet.
+    if (field === 'model') delete (manifest as any).vrm;
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
+
+    // If this is the active Partner, refresh the running pet immediately.
+    const activeId = PartnerStore.getActivePartner(app.getPath('userData'));
+    if (activeId === id) {
+      petWindowManager.setPartner(
+        manifest as any,
+        resolvePartnerModelPath(manifest),
+        resolvePartnerVrmPath(manifest),
+        resolvePartnerScriptPath(manifest)
+      );
+    }
+
+    return { ok: true, model: fileName, field };
+  } catch (err: unknown) {
+    return { error: (err as Error).message };
+  }
+});
+
+/**
+ * Resolves the absolute filesystem path to a Partner's 3D model file (if any),
+ * so the pet renderer can load it directly via file:// . Returns null when the
+ * Partner has no `model` field, or the file doesn't exist on disk (e.g. a
+ * built-in Partner without an on-disk folder, or a missing asset).
+ */
+function resolvePartnerModelPath(manifest: any): string | null {
+  const model = manifest && typeof manifest.model === 'string' ? manifest.model : null;
+  if (!model) return null;
+  const id = manifest && typeof manifest.id === 'string' ? manifest.id : null;
+  if (!id) return null;
+  const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+  const full = path.join(folder, model);
+  return fs.existsSync(full) ? full : null;
+}
+
+/** Like resolvePartnerModelPath but for a VRM character file (`vrm` field). */
+function resolvePartnerVrmPath(manifest: any): string | null {
+  const vrm = manifest && typeof manifest.vrm === 'string' ? manifest.vrm : null;
+  if (!vrm) return null;
+  const id = manifest && typeof manifest.id === 'string' ? manifest.id : null;
+  if (!id) return null;
+  const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+  const full = path.join(folder, vrm);
+  return fs.existsSync(full) ? full : null;
+}
+
+function resolvePartnerScriptPath(manifest: any): string | null {
+  const script = manifest && typeof manifest.script === 'string' ? manifest.script : null;
+  if (!script) return null;
+  const id = manifest && typeof manifest.id === 'string' ? manifest.id : null;
+  if (!id) return null;
+  const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+  const full = path.join(folder, script);
+  return fs.existsSync(full) ? full : null;
+}
+
+// ─── IPC: 3D desktop Partner overlay window ─────────────────────────────────
+// The pet renderer (separate transparent window) talks back via these channels;
+// the app shell pushes the active Partner + visibility here.
+
+['pet-ready', 'pet-drag-start', 'pet-drag-delta', 'pet-drag-end', 'pet-resize-delta', 'pet-behavior', 'pet-mood'].forEach((channel) => {
+  ipcMain.on(channel, (_event, payload) => {
+    if (channel === 'pet-mood') {
+      petWindowManager.setMood(payload);
+    } else {
+      petWindowManager.handleRendererMessage(channel, payload);
+    }
+  });
+});
+
+ipcMain.handle('pet-set-partner', (_event, manifest) => {
+  const modelPath = manifest ? resolvePartnerModelPath(manifest) : null;
+  const vrmPath = manifest ? resolvePartnerVrmPath(manifest) : null;
+  const scriptPath = manifest ? resolvePartnerScriptPath(manifest) : null;
+  petWindowManager.setPartner(manifest, modelPath, vrmPath, scriptPath);
+  return { ok: true };
+});
+
+ipcMain.handle('pet-say', (_event, text: string) => {
+  petWindowManager.say(text);
+  return { ok: true };
+});
+
+// ── Manual start / stop of the single 3D pet (never auto-starts) ─────────────
+
+/** Notifies the main window whenever the pet's running state changes. */
+function broadcastPetRunning(): void {
+  const mw = windowManager.getMainWindow();
+  mw?.webContents.send('pet-running', petWindowManager.isRunning());
+}
+
+/** Ctrl+Q closes the running pet (registered only while it's up). */
+function registerPetQuitShortcut(): void {
+  try {
+    globalShortcut.register('CommandOrControl+Q', () => stopPet());
+  } catch {
+    /* ignore registration failures */
+  }
+}
+
+/** Launches the single pet with the active Partner. No-op if already running. */
+function startPet(): boolean {
+  if (!petWindowManager.enabled) return false;
+  if (petWindowManager.isRunning()) return true; // only one at a time
+  const activeId = PartnerStore.getActivePartner(app.getPath('userData'));
+  if (activeId) {
+    const manifest = PartnerStore.getPartner(app.getPath('userData'), activeId);
+    if (manifest) {
+      petWindowManager.setPartner(
+        manifest as any,
+        resolvePartnerModelPath(manifest),
+        resolvePartnerVrmPath(manifest),
+        resolvePartnerScriptPath(manifest)
+      );
+    }
+  }
+  petWindowManager.create();
+  registerPetQuitShortcut();
+  broadcastPetRunning();
+  return petWindowManager.isRunning();
+}
+
+/** Closes the pet and releases the Ctrl+Q shortcut. */
+function stopPet(): void {
+  petWindowManager.destroy();
+  globalShortcut.unregister('CommandOrControl+Q');
+  broadcastPetRunning();
+}
+
+ipcMain.handle('pet-start', () => {
+  startPet();
+  return { running: petWindowManager.isRunning() };
+});
+
+ipcMain.handle('pet-stop', () => {
+  stopPet();
+  return { running: petWindowManager.isRunning() };
+});
+
+ipcMain.handle('pet-status', () => {
+  return { running: petWindowManager.isRunning(), enabled: petWindowManager.enabled };
+});
+
+ipcMain.handle('pet-set-visible', (_event, visible: boolean) => {
+  petWindowManager.setVisible(Boolean(visible));
+  return { ok: true };
+});
+
 // ─── IPC: Auto-detect local providers on startup ─────────────────────────────
 // Delegates to core's ProviderAutoDetector (shared with the Web server) so both
 // surfaces discover providers identically.
@@ -515,8 +810,37 @@ function setupDevWatcher() {
 }
 
 app.whenReady().then(async () => {
+  // Cleanup outdated partner directories to ensure Lily and Waifu are merged
+  try {
+    const petsDir = path.join(app.getPath('userData'), 'pets');
+    ['waifu', 'pixel', 'byte', 'nova'].forEach((oldId) => {
+      const dir = path.join(petsDir, oldId);
+      if (fs.existsSync(dir)) {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+    // Also reset active partner if it was one of the outdated ones
+    const activeFile = path.join(petsDir, 'active.json');
+    if (fs.existsSync(activeFile)) {
+      const activeData = JSON.parse(fs.readFileSync(activeFile, 'utf-8'));
+      if (activeData && (activeData.id === 'waifu' || activeData.id === 'pixel' || activeData.id === 'byte' || activeData.id === 'nova')) {
+        fs.writeFileSync(activeFile, JSON.stringify({ id: 'lily' }), 'utf-8');
+      }
+    }
+  } catch (e) {
+    console.error('Failed to cleanup outdated pets:', e);
+  }
+
   initApp();
   setupDevWatcher();
+  // NOTE: the 3D Partner does NOT auto-start. The user launches it manually from
+  // the Partner page or Settings → Pets (see startPet / the 'pet-start' IPC).
+  // Once running, Ctrl+Q closes it and it stays closed until started again.
+  // Debug/dev convenience: SUPERAGENT_PET_AUTOSTART=1 (or PET_DEBUG) launches it.
+  if (process.env.SUPERAGENT_PET_AUTOSTART === '1' || process.env.SUPERAGENT_PET_DEBUG === '1') {
+    setTimeout(() => startPet(), 1200);
+  }
+
   // Auto-update check (no-ops in dev where electron-updater isn't installed).
   setupAutoUpdater();
 
@@ -536,5 +860,10 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  petWindowManager.destroy();
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });

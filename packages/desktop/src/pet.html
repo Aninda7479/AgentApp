@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SuperAgent Partner</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+      }
+      #pet-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        /* Left-click = poke a body part, right-drag = walk/move. */
+        cursor: pointer;
+      }
+      #pet-canvas:active {
+        cursor: grabbing;
+      }
+      /* Bottom-left grip to resize the pet (drag left/down to enlarge). The
+         top-right corner stays anchored, matching the pet's top-right dock. */
+      #pet-resize {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        width: 22px;
+        height: 22px;
+        cursor: nesw-resize;
+        touch-action: none;
+      }
+      #pet-resize::after {
+        content: "";
+        position: absolute;
+        left: 4px;
+        bottom: 4px;
+        width: 10px;
+        height: 10px;
+        border-left: 2px solid rgba(255,255,255,0.5);
+        border-bottom: 2px solid rgba(255,255,255,0.5);
+        border-bottom-left-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="pet-canvas"></canvas>
+    <div id="pet-resize" title="Drag to resize"></div>
+    <script>
+      window.exports = window.exports || {};
+      require('./pet/entry.js');
+    </script>
+  </body>
+</html>

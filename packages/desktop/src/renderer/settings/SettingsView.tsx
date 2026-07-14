@@ -7,6 +7,7 @@ import { IntegrationsSettings, IntegrationsSkill, IntegrationsPlugin } from './I
 import { ProvidersSettings } from './ProvidersSettings';
 import { ModelsSettings } from './ModelsSettings';
 import { PlaceholderSettings } from './PlaceholderSettings';
+import { PetsSettings } from './PetsSettings';
 import { UsageTrackerSettings } from './UsageTrackerSettings';
 import { ModelGovSettings } from './ModelGovSettings';
 import { BrowserUseSettings } from './BrowserUseSettings';
@@ -171,11 +172,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           />
         )}
         {activeCategory === 'pets' && (
-          <PlaceholderSettings
-            title="Pets"
-            description="OpenAI-style companion and behavior preferences will live here."
-            status="planned"
-          />
+          <PetsSettings />
         )}
         {activeCategory === 'providers' && (
           <ProvidersSettings
