@@ -29,39 +29,39 @@ The Anthropic Claude Agent Ecosystem contains tools for both terminal-centric de
 ## 2. Comprehensive Feature Breakdown
 
 ### A. Claude Cowork (Co-Work) Features
-*   **Operating System Interaction**: Cowork interacts directly with your local machine's file explorer, specific applications, and desktop browsers to gather information and automate work.
+*   **Operating System Interaction** ✅: Cowork interacts directly with your local machine's file explorer, specific applications, and desktop browsers to gather information and automate work.
 *   **Long-Running Tasks & Cloud Handoff**: Supports complex projects that run autonomously in the background. Long-horizon tasks can hand off execution to the cloud, allowing them to continue running even if your physical computer goes offline.
-*   **Scheduled Actions**: Automates recurring workflows (e.g. daily code syncs, hourly system health checks, weekly report aggregation).
+*   **Scheduled Actions** ✅: Automates recurring workflows (e.g. daily code syncs, hourly system health checks, weekly report aggregation).
 
 ### B. Claude Code Core Agentic Capabilities
-*   **Codebase Comprehension**: Navigates file dependency layers, parses structures, and resolves import paths to build codebase maps.
-*   **Terminal & PTY Automation**: Autonomous shell command execution (builds, lints, tests, package installations) with a configurable sandbox.
-*   **Multimodal Asset Parsing**: Supports pasting screenshots or image paths directly into prompt contexts to analyze errors or mockups.
+*   **Codebase Comprehension** ✅: Navigates file dependency layers, parses structures, and resolves import paths to build codebase maps.
+*   **Terminal & PTY Automation** ✅: Autonomous shell command execution (builds, lints, tests, package installations) with a configurable sandbox.
+*   **Multimodal Asset Parsing** ✅: Supports pasting screenshots or image paths directly into prompt contexts to analyze errors or mockups.
 
 ### C. Project Memory & Guidelines (`CLAUDE.md`)
-*   **Custom Rules Loading**: Automatically reads `CLAUDE.md` in the project root to enforce code style rules, build commands, and testing configurations.
-*   **Setup Auto-Generation (`/init`)**: Scans code directories and project stack to build a tailored `CLAUDE.md` config.
+*   **Custom Rules Loading** ✅: Automatically reads `CLAUDE.md` in the project root to enforce code style rules, build commands, and testing configurations.
+*   **Setup Auto-Generation (`/init`)** ✅: Scans code directories and project stack to build a tailored `CLAUDE.md` config.
 
 ### D. Subagent Orchestration
-*   **Isolated Context Windows**: Spawns independent concurrent subagents to handle complex parallel tasks (e.g. security audits, mock test writing) without polluting the main session's token window.
+*   **Isolated Context Windows** ✅: Spawns independent concurrent subagents to handle complex parallel tasks (e.g. security audits, mock test writing) without polluting the main session's token window.
 
 ### E. Model Context Protocol (MCP) Integration
 Claude Desktop and Claude Code are designed as native MCP clients:
 *   **Desktop Extensions (`.mcpb`)**: Users can install and update third-party tools via a click-to-install interface under settings, bypassing manual configuration files.
 *   **Enterprise Administration**: IT administrators can centrally manage, audit, and configure available extensions across team or corporate accounts.
-*   **Manual Configuration (`claude_desktop_config.json`)**: Configured servers are specified under the `mcpServers` parameter. Default paths:
+*   **Manual Configuration (`claude_desktop_config.json`)** ✅: Configured servers are specified under the `mcpServers` parameter. Default paths:
     *   *macOS*: `~/Library/Application Support/Claude/claude_desktop_config.json`
     *   *Windows*: `%APPDATA%\Claude\claude_desktop_config.json`
 
 #### Available Reference MCP Servers
-*   *Filesystem*: Read, write, and inspect local directory structures securely.
-*   *Git*: Perform git stage, commit, diff, branch management, and commit-history reviews.
-*   *Fetch*: Scrape web page URLs and convert raw HTML into clean Markdown blocks.
-*   *Brave Search / Google Search*: Execute live web search queries.
-*   *Database (Postgres / SQLite / MySQL)*: Discover tables, suggest indices, and run raw SQL queries.
-*   *Puppeteer / Playwright*: Script browser page automation and capture screenshot previews.
+*   *Filesystem* ✅: Read, write, and inspect local directory structures securely.
+*   *Git* ✅: Perform git stage, commit, diff, branch management, and commit-history reviews.
+*   *Fetch* ✅: Scrape web page URLs and convert raw HTML into clean Markdown blocks.
+*   *Brave Search / Google Search* ✅: Execute live web search queries.
+*   *Database (Postgres / SQLite / MySQL)* ✅: Discover tables, suggest indices, and run raw SQL queries.
+*   *Puppeteer / Playwright* ✅: Script browser page automation and capture screenshot previews.
 *   *Sequential Thinking*: Provides a structured reasoning server to guide deep bug investigation.
-*   *Memory*: Implements a persistent knowledge graph to recall facts and entities.
+*   *Memory* ✅: Implements a persistent knowledge graph to recall facts and entities.
 *   *Jira & Confluence*: Connects to task dashboards and project wiki databases.
 *   *Sentry*: Gathers exception traces and debug logs.
 
@@ -77,15 +77,15 @@ Claude Desktop and Claude Code are designed as native MCP clients:
 | `Ctrl + O` | Toggle verbose transcript viewer (exposes inner thought chain, tool calls, and raw outputs) |
 | `Ctrl + R` | Reverse search through past prompt history |
 | `Ctrl + G` (or `Ctrl + X, Ctrl + E`) | Open current prompt in configured external text editor (e.g., VS Code, Vim, Nano) |
-| `Ctrl + C` | Cancel current agent execution or clear input buffer (double-press to halt/exit) |
-| `Ctrl + V` / `Cmd + V` | Paste image directly from clipboard into active prompt |
-| `Shift + Tab` | Cycle through execution permission modes (e.g., Manual Approve vs Auto Approve) |
+| `Ctrl + C` ✅ | Cancel current agent execution or clear input buffer (double-press to halt/exit) |
+| `Ctrl + V` / `Cmd + V` ✅ | Paste image directly from clipboard into active prompt |
+| `Shift + Tab` ✅ | Cycle through execution permission modes (e.g., Manual Approve vs Auto Approve) |
 | `Ctrl + B` | Background a long-running command to keep working |
 | `Ctrl + L` | Redraw the terminal screen / clear visual output (does not clear context) |
-| `Ctrl + ,` | Open Claude Code settings configuration |
+| `Ctrl + ,` ✅ | Open Claude Code settings configuration / desktop settings panel |
 | `Ctrl + D` | Exit active CLI session |
-| `Esc` / `Esc + Esc` | Clear current input prompt or rewind conversation / code changes |
-| `Alt + Enter` / `Option + Enter` | Insert newline in prompt composer without sending the message |
+| `Esc` / `Esc + Esc` ✅ | Clear current input prompt or rewind conversation / code changes |
+| `Alt + Enter` / `Option + Enter` ✅ | Insert newline in prompt composer without sending the message |
 | `@<path>` | Mention/auto-complete file paths and directory context directly in prompt |
 
 ---
@@ -95,26 +95,26 @@ Claude Desktop and Claude Code are designed as native MCP clients:
 | Slash Command | Description |
 | :--- | :--- |
 | `/compact` | Compress and summarize conversation history to free up context tokens |
-| `/clear` / `/reset` / `/new` | Hard reset current session and start a fresh context window |
-| `/model` | Switch between underlying Claude models (e.g., Sonnet 3.7, Opus 3.5) mid-session |
-| `/diff` | Open an interactive visual diff viewer to inspect pending file modifications |
-| `/mcp` | List, inspect, add, or manage active Model Context Protocol (MCP) servers |
-| `/init` | Analyze project and auto-generate project-level `CLAUDE.md` rules |
+| `/clear` / `/reset` / `/new` ✅ | Hard reset current session and start a fresh context window |
+| `/model` ✅ | Switch between underlying Claude models (e.g., Sonnet 3.7, Opus 3.5) mid-session |
+| `/diff` ✅ | Open an interactive visual diff viewer to inspect pending file modifications |
+| `/mcp` ✅ | List, inspect, add, or manage active Model Context Protocol (MCP) servers |
+| `/init` ✅ | Analyze project and auto-generate project-level `CLAUDE.md` rules |
 | `/goal` | Set a completion condition for Claude, which then works autonomously toward that end state |
-| `/plan` | Enter plan mode for planning large architectural/complex changes |
+| `/plan` ✅ | Enter plan mode for planning large architectural/complex changes |
 | `/security-review` | Run automated security analysis on your codebase to identify vulnerabilities (SQL injection, XSS, etc.) |
-| `/code-review` / `/review` | Audit current changes or code diffs for issues |
-| `/cost` / `/stats` | View cumulative session costs and token statistics |
-| `/config` | View or modify configuration options (e.g. `/config verbose=true`) |
-| `/memory` | Open `CLAUDE.md` to add/edit project conventions |
-| `/status` | View current session status and active settings |
-| `/tasks` | List active background tasks or subagents |
-| `/doctor` | Run setup checkup/diagnostics to troubleshoot local configuration |
-| `/verify` | Run tests or app commands to verify recent changes |
-| `/btw` | Ask a side question without polluting the main conversation context window |
-| `/voice` | Toggle voice dictation mode |
+| `/code-review` / `/review` ✅ | Audit current changes or code diffs for issues |
+| `/cost` / `/stats` ✅ | View cumulative session costs and token statistics |
+| `/config` ✅ | View or modify configuration options (e.g. `/config verbose=true`) |
+| `/memory` ✅ | Open `CLAUDE.md` to add/edit project conventions / view memory profile |
+| `/status` ✅ | View current session status and active settings |
+| `/tasks` ✅ | List active background tasks or subagents |
+| `/doctor` ✅ | Run setup checkup/diagnostics to troubleshoot local configuration |
+| `/verify` ✅ | Run tests or app commands to verify recent changes |
+| `/btw` ✅ | Ask a side question without polluting the main conversation context window |
+| `/voice` ✅ | Toggle voice dictation mode / microphone dictation |
 | `/bug` | Report issues with session logs directly to Anthropic |
-| `/login` / `/logout` | Authenticate or log out from your Anthropic account |
+| `/login` / `/logout` ✅ | Authenticate or log out from your account / manage credentials |
 
 ---
 
@@ -124,6 +124,11 @@ To replicate Claude Code capabilities:
 2. **Context Compaction Algorithm**: Implement automatic token counting; when context exceeds threshold, invoke a fast summarizer LLM call to reduce trajectory to key milestone summaries.
 3. **Subagent Protocol**: Implement background worker subprocesses with child event emitters that report back findings to parent coordinator agent.
 4. **Rich Transcript Inspector**: Provide shortcut (`Ctrl+O`) to toggle between clean user UI and raw execution logs.
+
+
+
+## Terminal Command Featurs.
+Needs to be organized and implemented throw package/core to cli and desktop accordingly.
 
 
 > claude --help
@@ -221,4 +226,3 @@ Commands:
   setup-token                           Set up a long-lived authentication token (requires Claude subscription)
   ultrareview [options] [target]        Run a cloud-hosted multi-agent code review of the current branch (or a PR number / base branch) and print the findings
   update|upgrade                        Check for updates and install if available
-PS C:\Users\anind>
