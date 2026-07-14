@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 
 export interface SelectOption {
@@ -27,8 +28,21 @@ export const Select: React.FC<SelectProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, height: 0 });
   
   const selectedOption = options.find((opt) => opt.value === value);
+
+  const updateCoords = () => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setCoords({
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height
+      });
+    }
+  };
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -41,8 +55,24 @@ export const Select: React.FC<SelectProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Update layout coordinates dynamically on scroll/resize when open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    updateCoords();
+
+    // Use event capture to track scroll events inside nested scrollable containers
+    window.addEventListener('scroll', updateCoords, true);
+    window.addEventListener('resize', updateCoords);
+
+    return () => {
+      window.removeEventListener('scroll', updateCoords, true);
+      window.removeEventListener('resize', updateCoords);
+    };
+  }, [isOpen]);
+
   return (
-    <div className={`flex flex-col gap-1.5 relative w-full text-left ${isOpen ? 'z-[1050]' : 'z-0'} ${className}`} ref={containerRef}>
+    <div className={`flex flex-col gap-1.5 relative w-full text-left ${className}`} ref={containerRef}>
       {label && (
         <span className="text-xs font-bold text-brand-textMain select-none">
           {label}
@@ -67,13 +97,23 @@ export const Select: React.FC<SelectProps> = ({
         <ChevronDown size={14} className={`text-brand-textMuted transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </div>
 
-      {/* Popover Options List */}
-      {isOpen && (
-        <div className={`absolute left-0 right-0 z-[1100] bg-brand-popover border border-brand-border rounded-xl shadow-xl max-h-[220px] overflow-y-auto p-1.5 duration-100 ${
-          direction === 'up'
-            ? 'bottom-[calc(100%+4px)] animate-in fade-in slide-in-from-bottom-1'
-            : 'top-[calc(100%+4px)] animate-in fade-in slide-in-from-top-1'
-        }`}>
+      {/* Popover Options List using React Portal to prevent layout clipping */}
+      {isOpen && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            left: `${coords.left}px`,
+            width: `${coords.width}px`,
+            ...(direction === 'up'
+              ? { bottom: `${window.innerHeight - coords.top + 4}px` }
+              : { top: `${coords.top + coords.height + 4}px` })
+          }}
+          className={`z-[9999] bg-brand-popover border border-brand-border rounded-xl shadow-xl max-h-[220px] overflow-y-auto p-1.5 duration-100 animate-in fade-in ${
+            direction === 'up'
+              ? 'slide-in-from-bottom-1'
+              : 'slide-in-from-top-1'
+          }`}
+        >
           {options.length === 0 ? (
             <div className="text-xs text-brand-textMuted p-2 text-center">No options available</div>
           ) : (
@@ -94,7 +134,8 @@ export const Select: React.FC<SelectProps> = ({
               </div>
             ))
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
