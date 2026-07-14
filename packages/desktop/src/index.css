@@ -8,15 +8,17 @@
   --color-brand-border: var(--brand-border);
   --color-brand-textMain: var(--brand-text-main);
   --color-brand-textMuted: var(--brand-text-muted);
-  
-  --color-violet-400: var(--brand-highlight);
-  --color-violet-500: var(--brand-highlight);
-  --color-violet-600: var(--brand-highlight-hover);
-  --color-indigo-500: var(--brand-highlight);
-  --color-indigo-600: var(--brand-highlight-hover);
-  --color-sky-400: var(--brand-highlight);
-  --color-sky-500: var(--brand-highlight);
-  --color-sky-600: var(--brand-highlight-hover);
+
+  /* Branding accents are intentionally routed to the monochrome canvas.
+     Depth + quiet form: violet/indigo resolve to neutral text tones, never color.
+     Sky is deliberately NOT mapped here so it keeps its real "live" blue for
+     running/active state indicators. Emerald/rose/amber stay real for
+     constructive/destructive/attention state coding. */
+  --color-violet-400: var(--brand-text-muted);
+  --color-violet-500: var(--brand-text-main);
+  --color-violet-600: var(--brand-text-muted);
+  --color-indigo-500: var(--brand-text-main);
+  --color-indigo-600: var(--brand-text-muted);
 
   --font-sans: 'Inter', -apple-system, sans-serif;
   --font-outfit: 'Outfit', sans-serif;
@@ -28,45 +30,81 @@
   --animate-float: float 4s infinite ease-in-out;
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+   MONOLITH — High-Utility Minimalist Canvas
+   Monochrome tonal system: depth is expressed through lightness shifts and
+   glass blur rather than borders. Color is reserved exclusively for state
+   (constructive / destructive / live / attention).
+   ════════════════════════════════════════════════════════════════════════ */
 :root,
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --brand-bg: #272822;
-  --brand-sidebar: #1e1f1c;
-  --brand-card: #32332b;
-  --brand-popover: #1e1f1c;
-  --brand-border: #49483e;
-  --brand-text-main: #f8f8f2;
-  --brand-text-muted: #90908a;
+
+  /* ── Canvas & tonal elevation steps (deepest → highest) ── */
+  --brand-bg: #0a0a0c;
+  --brand-sidebar: #111114;
+  --brand-card: #17171b;
+  --brand-popover: #1a1a1f;
+
+  /* ── Hairlines (subtle, never structural borders) ── */
+  --brand-border: rgba(255, 255, 255, 0.07);
+  --brand-border-strong: rgba(255, 255, 255, 0.13);
+
+  /* ── Typography ── */
+  --brand-text-main: #ECEDEF;
+  --brand-text-muted: #86868F;
+
+  /* ── Interaction fills ── */
   --brand-hover: rgba(255, 255, 255, 0.05);
-  --brand-hover-strong: rgba(255, 255, 255, 0.08);
-  --brand-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
-  --brand-shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.22);
-  --brand-highlight: #a16207;       /* Dark yellow */
-  --brand-highlight-hover: #854d0e;
-  --brand-highlight-text: #fef9c3;
-  --brand-highlight-bg-subtle: rgba(161, 98, 7, 0.14);
-  --brand-highlight-border-subtle: rgba(161, 98, 7, 0.35);
+  --brand-hover-strong: rgba(255, 255, 255, 0.09);
+  --brand-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+  --brand-shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.38);
+
+  /* ── Primary action: quiet monochrome (near-white pill, dark ink) ── */
+  --brand-highlight: #E6E6EA;
+  --brand-highlight-hover: #F4F4F6;
+  --brand-highlight-text: #0a0a0c;
+  --brand-highlight-bg-subtle: rgba(230, 230, 234, 0.10);
+  --brand-highlight-border-subtle: rgba(230, 230, 234, 0.22);
+
+  /* ── Neon state accents (the only color in the system) ── */
+  --neon-constructive: #34d399;   /* added / success / connected */
+  --neon-destructive: #fb7185;    /* removed / reject / error */
+  --neon-live: #38bdf8;           /* running / streaming / active */
+  --neon-attention: #fbbf24;      /* setup needed / warning */
 }
 
 :root[data-theme='light'] {
   color-scheme: light;
-  --brand-bg: #fff2e8;
-  --brand-sidebar: #fcf6f0;
-  --brand-card: #fef9f4;
-  --brand-popover: #fef9f4;
-  --brand-border: #e0d5cb;
-  --brand-text-main: #2b221a;
-  --brand-text-muted: #6e5e50;
-  --brand-hover: rgba(15, 23, 42, 0.05);
-  --brand-hover-strong: rgba(15, 23, 42, 0.08);
-  --brand-shadow: 0 18px 45px rgba(15, 23, 42, 0.12);
-  --brand-shadow-soft: 0 8px 22px rgba(15, 23, 42, 0.08);
-  --brand-highlight: #fef08a;       /* Lite yellow */
-  --brand-highlight-hover: #fde047;
-  --brand-highlight-text: #713f12;  /* Dark brown/gold */
-  --brand-highlight-bg-subtle: rgba(254, 240, 138, 0.16);
-  --brand-highlight-border-subtle: rgba(254, 240, 138, 0.45);
+
+  --brand-bg: #f3f3f4;
+  --brand-sidebar: #fbfbfc;
+  --brand-card: #ffffff;
+  --brand-popover: #ffffff;
+
+  --brand-border: rgba(0, 0, 0, 0.08);
+  --brand-border-strong: rgba(0, 0, 0, 0.15);
+
+  --brand-text-main: #16161a;
+  --brand-text-muted: #65656d;
+
+  --brand-hover: rgba(0, 0, 0, 0.04);
+  --brand-hover-strong: rgba(0, 0, 0, 0.07);
+  --brand-shadow: 0 18px 50px rgba(15, 23, 42, 0.14);
+  --brand-shadow-soft: 0 8px 22px rgba(15, 23, 42, 0.09);
+
+  /* Quiet monochrome primary (near-black pill, light ink) */
+  --brand-highlight: #16161a;
+  --brand-highlight-hover: #000000;
+  --brand-highlight-text: #fafafa;
+  --brand-highlight-bg-subtle: rgba(22, 22, 26, 0.08);
+  --brand-highlight-border-subtle: rgba(22, 22, 26, 0.18);
+
+  /* Neon state accents tuned for light-canvas contrast */
+  --neon-constructive: #0fae7a;
+  --neon-destructive: #e11d48;
+  --neon-live: #0284c7;
+  --neon-attention: #d97706;
 }
 
 html,
@@ -75,8 +113,7 @@ body {
   color: var(--brand-text-main);
 }
 
-/* Mobile / touch polish: remove tap flash, prevent double-tap zoom,
-   allow momentum scrolling, and keep smooth in-app navigation. */
+/* Mobile / touch polish */
 html {
   -webkit-tap-highlight-color: transparent;
 }
@@ -111,7 +148,7 @@ body {
   50% { transform: translateY(-4px); animation-timing-function: cubic-bezier(0, 0, 0.2, 1); }
 }
 
-/* Custom Scrollbar */
+/* Custom Scrollbar — thin, neutral, recedes */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -120,62 +157,71 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(128, 128, 128, 0.18);
   border-radius: 99px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(128, 128, 128, 0.32);
 }
 
 /* Global transitions & selection */
 * {
-  transition-property: background-color, border-color, text-decoration-color, fill, stroke;
+  transition-property: background-color, border-color, text-decoration-color, fill, stroke, box-shadow;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
 
 ::selection {
-  background: var(--brand-highlight-bg-subtle);
+  background: var(--brand-hover-strong);
   color: var(--brand-text-main);
 }
 
-/* Solid Panel & Card helpers */
+/* ════════════════════════════════════════════════════════════════════════
+   Glassmorphism surfaces — elevation through translucency + blur + an inset
+   hairline, replacing hard borders.
+   ════════════════════════════════════════════════════════════════════════ */
 .glass-panel {
-  background-color: var(--brand-sidebar);
-  border: 1px solid var(--brand-border);
-  box-shadow: var(--brand-shadow-soft);
+  background: color-mix(in srgb, var(--brand-sidebar) 80%, transparent);
+  backdrop-filter: blur(22px) saturate(135%);
+  -webkit-backdrop-filter: blur(22px) saturate(135%);
+  box-shadow: inset 0 0 0 1px var(--brand-border), var(--brand-shadow-soft);
 }
-
 .glass-card {
-  background-color: var(--brand-card);
-  border: 1px solid var(--brand-border);
-  box-shadow: var(--brand-shadow-soft);
+  background: color-mix(in srgb, var(--brand-card) 82%, transparent);
+  backdrop-filter: blur(18px) saturate(130%);
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  box-shadow: inset 0 0 0 1px var(--brand-border), var(--brand-shadow-soft);
+}
+/* Stronger, more opaque glass for floating popovers & modals */
+.glass-strong {
+  background: color-mix(in srgb, var(--brand-popover) 94%, transparent);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  box-shadow: inset 0 0 0 1px var(--brand-border-strong), var(--brand-shadow);
 }
 
-
+/* Quiet hover lift (neutral, no colored glow) */
 .glow-hover {
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease;
 }
 .glow-hover:hover {
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.12);
-  border-color: rgba(139, 92, 246, 0.25);
+  box-shadow: 0 0 0 1px var(--brand-border-strong), var(--brand-shadow-soft);
   transform: translateY(-1px);
 }
 
-/* Pulse Glow */
+/* Subtle neutral pulse for live/active surfaces */
 .pulse-glow {
-  box-shadow: 0 0 12px rgba(139, 92, 246, 0.15);
-  animation: borderGlow 2s infinite ease-in-out;
+  box-shadow: 0 0 0 1px var(--brand-border-strong);
+  animation: borderGlow 2.4s infinite ease-in-out;
 }
-
 @keyframes borderGlow {
-  0%, 100% { box-shadow: 0 0 12px rgba(139, 92, 246, 0.1); border-color: rgba(139, 92, 246, 0.2); }
-  50% { box-shadow: 0 0 16px rgba(139, 92, 246, 0.25); border-color: rgba(139, 92, 246, 0.4); }
+  0%, 100% { box-shadow: 0 0 0 1px var(--brand-border), 0 0 14px rgba(255, 255, 255, 0.04); }
+  50% { box-shadow: 0 0 0 1px var(--brand-border-strong), 0 0 20px rgba(255, 255, 255, 0.09); }
 }
 
-/* ─── Shared UI primitives ──────────────────────────────────────────────────
-   One cohesive visual language for every surface (desktop + web). Built on the
-   brand CSS variables so they automatically follow dark/light themes. */
+/* ════════════════════════════════════════════════════════════════════════
+   Shared UI primitives — one cohesive monochrome language.
+   ════════════════════════════════════════════════════════════════════════ */
 .ui-card {
   background: var(--brand-card);
   border: 1px solid var(--brand-border);
@@ -200,8 +246,22 @@ body {
 .ui-input::placeholder { color: color-mix(in srgb, var(--brand-text-muted) 55%, transparent); }
 .ui-input:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--brand-text-muted) 60%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-text-muted) 14%, transparent);
+  border-color: var(--brand-border-strong);
+  box-shadow: 0 0 0 3px var(--brand-hover);
+}
+/* Extreme-weight-contrast typography helpers */
+.ui-eyebrow {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--brand-text-muted);
+}
+.ui-display {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--brand-text-main);
 }
 .ui-label {
   font-size: 0.7rem;
@@ -229,7 +289,7 @@ body {
   color: var(--brand-text-main);
   transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease, filter 0.15s ease;
 }
-.ui-btn:hover { background: color-mix(in srgb, var(--brand-text-main) 8%, transparent); border-color: color-mix(in srgb, var(--brand-text-muted) 45%, transparent); }
+.ui-btn:hover { background: var(--brand-hover); border-color: var(--brand-border-strong); }
 .ui-btn:active { transform: scale(0.98); }
 .ui-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -267,7 +327,7 @@ body {
   color: var(--brand-text-muted);
   transition: color 0.15s ease, background-color 0.15s ease;
 }
-.ui-btn-ghost:hover { color: var(--brand-text-main); background: color-mix(in srgb, var(--brand-text-main) 8%, transparent); }
+.ui-btn-ghost:hover { color: var(--brand-text-main); background: var(--brand-hover); }
 
 /* Pills / chips */
 .ui-chip {
@@ -278,7 +338,7 @@ body {
   padding: 0.15rem 0.55rem;
   font-size: 0.72rem;
   font-weight: 500;
-  background: color-mix(in srgb, var(--brand-text-main) 8%, transparent);
+  background: var(--brand-hover);
   color: var(--brand-text-muted);
   border: 1px solid var(--brand-border);
   white-space: nowrap;
@@ -295,7 +355,7 @@ body {
   text-transform: uppercase;
 }
 
-/* Responsive auto grid for cards (1 col on phones, more as space allows) */
+/* Responsive auto grid for cards */
 .ui-grid-auto {
   display: grid;
   gap: 1rem;
@@ -306,9 +366,9 @@ body {
 .ui-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -320,10 +380,12 @@ body {
   max-width: 460px;
   max-height: calc(100dvh - 2rem);
   overflow-y: auto;
-  background: var(--brand-sidebar);
-  border: 1px solid var(--brand-border);
-  border-radius: 16px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  background: color-mix(in srgb, var(--brand-sidebar) 96%, transparent);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  border: 1px solid var(--brand-border-strong);
+  border-radius: 18px;
+  box-shadow: var(--brand-shadow);
   color: var(--brand-text-main);
 }
 
@@ -338,39 +400,35 @@ body {
   cursor: pointer;
   border: none;
   transition: background-color 0.2s ease;
-  background: var(--brand-border);
+  background: var(--brand-border-strong);
 }
-.ui-toggle[aria-checked='true'] { background: var(--brand-highlight); }
+.ui-toggle[aria-checked='true'] { background: var(--brand-text-main); }
 .ui-toggle > span {
   display: block;
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--brand-bg);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   transition: transform 0.2s ease;
 }
 .ui-toggle[aria-checked='true'] > span { transform: translateX(20px); }
 
-/* Hide scrollbar but keep scroll (used in horizontal tab bars) */
+/* Hide scrollbar but keep scroll */
 .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
 .scrollbar-none::-webkit-scrollbar { display: none; }
 
-/* ─── Responsive shell primitives ──────────────────────────────────────────
-   New surfaces introduced for the all-screen-size redesign. Built on the same
-   brand CSS variables so they follow dark/light themes automatically. */
-
-/* Clears the mobile home indicator / safe area */
+/* ════════════════════════════════════════════════════════════════════════
+   Responsive shell primitives
+   ════════════════════════════════════════════════════════════════════════ */
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 
-/* Shared focus ring for keyboard users */
 .ui-focus:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-text-main) 14%, transparent),
-              0 0 0 4px rgba(139, 92, 246, 0.35);
+  box-shadow: 0 0 0 2px var(--brand-bg), 0 0 0 4px var(--brand-border-strong);
 }
 
-/* Compact top app bar (mobile / non-Electron) */
+/* Compact top app bar */
 .ui-appbar {
   height: 52px;
   flex-shrink: 0;
@@ -379,15 +437,19 @@ body {
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0 0.75rem;
-  background: var(--brand-sidebar);
+  background: color-mix(in srgb, var(--brand-sidebar) 88%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--brand-border);
 }
 
-/* Top-application menu (File / Edit / View / Help) dropdown */
+/* Top-application menu */
 .ui-menu {
   min-width: 208px;
-  background: var(--brand-popover);
-  border: 1px solid var(--brand-border);
+  background: color-mix(in srgb, var(--brand-popover) 96%, transparent);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  border: 1px solid var(--brand-border-strong);
   border-radius: 12px;
   box-shadow: var(--brand-shadow);
   padding: 0.375rem;
@@ -395,9 +457,9 @@ body {
   animation: fadeIn 0.14s ease-out;
 }
 .ui-menu-label {
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--brand-text-muted);
   padding: 0.4rem 0.6rem 0.15rem;
@@ -415,9 +477,9 @@ body {
   cursor: pointer;
   transition: background-color 0.12s ease, color 0.12s ease;
 }
-.ui-menu-item:hover { background: color-mix(in srgb, var(--brand-text-main) 8%, transparent); }
-.ui-menu-item.danger { color: #f87171; }
-.ui-menu-item.danger:hover { background: rgba(239, 68, 68, 0.1); }
+.ui-menu-item:hover { background: var(--brand-hover); }
+.ui-menu-item.danger { color: var(--neon-destructive); }
+.ui-menu-item.danger:hover { background: color-mix(in srgb, var(--neon-destructive) 12%, transparent); }
 .ui-menu-item .kbd {
   margin-left: auto;
   font-size: 0.62rem;
@@ -426,10 +488,12 @@ body {
 }
 .ui-menu-sep { height: 1px; background: var(--brand-border); margin: 0.3rem 0.25rem; }
 
-/* Floating popover (project switcher, sandbox toggle, etc.) */
+/* Floating popover */
 .ui-popover {
-  background: var(--brand-popover);
-  border: 1px solid var(--brand-border);
+  background: color-mix(in srgb, var(--brand-popover) 96%, transparent);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  border: 1px solid var(--brand-border-strong);
   border-radius: 14px;
   box-shadow: var(--brand-shadow);
   color: var(--brand-text-main);
@@ -448,13 +512,13 @@ body {
   cursor: pointer;
   transition: background-color 0.12s ease;
 }
-.ui-popover-item:hover { background: color-mix(in srgb, var(--brand-text-main) 8%, transparent); }
-.ui-popover-item.active { background: var(--brand-highlight-bg-subtle); color: var(--brand-highlight-text); border: 1px solid var(--brand-highlight-border-subtle); }
+.ui-popover-item:hover { background: var(--brand-hover); }
+.ui-popover-item.active {
+  background: var(--brand-hover-strong);
+  border: 1px solid var(--brand-border-strong);
+}
 
-/* ── Mobile bottom navigation bar ──────────────────────────────────────────
-   Hidden by default; only shown on small (phone) screens. The reveal is done
-   with an explicit max-width media query (not Tailwind's md:hidden) so it
-   cannot be overridden by this rule's own display:flex in the cascade. */
+/* ── Mobile bottom navigation bar ── */
 .ui-bottom-nav {
   position: fixed;
   left: 0;
@@ -466,9 +530,9 @@ body {
   gap: 0.25rem;
   padding: 0.35rem 0.5rem;
   padding-bottom: calc(0.35rem + env(safe-area-inset-bottom));
-  background: color-mix(in srgb, var(--brand-sidebar) 94%, transparent);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  background: color-mix(in srgb, var(--brand-sidebar) 90%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border-top: 1px solid var(--brand-border);
 }
 @media (max-width: 767px) {
@@ -492,15 +556,18 @@ body {
 .ui-bottom-nav-item svg { width: 20px; height: 20px; transition: color 0.15s ease, transform 0.15s ease; }
 .ui-bottom-nav-item:active { transform: scale(0.96); }
 .ui-bottom-nav-item.active {
-  color: var(--brand-highlight-text);
-  background: var(--brand-highlight-bg-subtle);
-  border: 1px solid var(--brand-highlight-border-subtle);
+  color: var(--brand-text-main);
+  background: var(--brand-hover-strong);
+  border: 1px solid var(--brand-border-strong);
 }
-.ui-bottom-nav-item.active svg { color: var(--brand-highlight); }
+.ui-bottom-nav-item.active svg { color: var(--brand-text-main); }
 
-/* Subtle highlight text used for brand / hero emphasis */
+/* Subtle highlight text — quiet neutral gradient instead of color */
 .text-gradient {
-  color: var(--brand-highlight);
+  background: linear-gradient(90deg, var(--brand-text-main), var(--brand-text-muted));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* Hairline divider that adapts to theme */
@@ -509,37 +576,25 @@ body {
 /* Smooth scroll for horizontally-scrolling tab rows */
 .scroll-smooth-x { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
 
+/* Light-mode fallbacks for legacy white-based utilities */
 :root[data-theme='light'] .bg-white\/5 {
-  background-color: rgba(15, 23, 42, 0.055);
+  background-color: rgba(0, 0, 0, 0.045);
 }
-
 :root[data-theme='light'] .hover\:bg-white\/5:hover {
-  background-color: rgba(15, 23, 42, 0.075);
+  background-color: rgba(0, 0, 0, 0.06);
 }
-
 :root[data-theme='light'] .hover\:bg-white\/10:hover {
-  background-color: rgba(15, 23, 42, 0.105);
+  background-color: rgba(0, 0, 0, 0.08);
 }
-
 :root[data-theme='light'] .border-white\/5 {
-  border-color: rgba(15, 23, 42, 0.08);
+  border-color: rgba(0, 0, 0, 0.06);
 }
-
 :root[data-theme='light'] .text-white,
 :root[data-theme='light'] .hover\:text-white:hover {
   color: var(--brand-text-main);
 }
-
 :root[data-theme='light'] .shadow-2xl,
 :root[data-theme='light'] .shadow-lg,
 :root[data-theme='light'] .shadow-md {
   box-shadow: var(--brand-shadow-soft);
-}
-
-:root[data-theme='light'] .shadow-\[0_4px_20px_rgba\(0\,0\,0\,0\.25\)\],
-:root[data-theme='light'] .shadow-\[0_8px_32px_rgba\(0\,0\,0\,0\.3\)\],
-:root[data-theme='light'] .shadow-\[0_12px_40px_rgba\(0\,0\,0\,0\.5\)\],
-:root[data-theme='light'] .shadow-\[0_20px_40px_rgba\(0\,0\,0\,0\.5\)\],
-:root[data-theme='light'] .shadow-\[0_20px_50px_rgba\(0\,0\,0\,0\.8\)\] {
-  box-shadow: var(--brand-shadow);
 }

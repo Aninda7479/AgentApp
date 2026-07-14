@@ -231,7 +231,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         )}
 
         {/* App Logo */}
-        <div className="flex items-center text-violet-500 hover:text-violet-400 transition-colors flex-shrink-0">
+        <div className="flex items-center text-brand-textMain transition-colors flex-shrink-0">
           <BrandLogo size={22} />
         </div>
 

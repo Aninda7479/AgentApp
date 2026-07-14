@@ -93,7 +93,7 @@ export const Select: React.FC<SelectProps> = ({
       {/* Trigger Button */}
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-white cursor-pointer select-none outline-none hover:border-brand-textMuted/40 focus:border-brand-highlight transition-all"
+        className="flex items-center justify-between bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-white cursor-pointer select-none outline-none hover:border-brand-border-strong focus:border-brand-border-strong transition-all"
         tabIndex={0}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -139,7 +139,7 @@ export const Select: React.FC<SelectProps> = ({
                 }}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
                   opt.value === value
-                    ? 'bg-brand-highlight-bg-subtle text-brand-highlight-text border border-brand-highlight-border-subtle/50'
+                    ? 'bg-brand-hover-strong text-brand-textMain border border-brand-border-strong'
                     : 'text-brand-textMain hover:bg-brand-hover'
                 }`}
               >

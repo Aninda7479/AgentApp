@@ -334,7 +334,7 @@ export const Composer: React.FC<ComposerProps> = ({
       className="px-4 pt-2 pb-4 max-w-[940px] w-full mx-auto flex flex-col gap-2 box-border relative z-10"
     >
       {/* The main input composer card */}
-      <div className="glass-panel rounded-xl p-3 flex flex-col shadow-sm relative transition-all duration-300 focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/10">
+      <div className="glass-panel rounded-xl p-3 flex flex-col shadow-sm relative transition-all duration-300 focus-within:border-brand-border-strong focus-within:ring-2 focus-within:ring-brand-hover-strong">
         {/* Composer Attachments Queue Row */}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-3 pb-3 border-b border-brand-border/40 select-none">
@@ -390,7 +390,7 @@ export const Composer: React.FC<ComposerProps> = ({
               <button
                 data-testid="approval-dropdown-btn"
                 onClick={() => setShowApprovalDropdown(!showApprovalDropdown)}
-                className="bg-brand-popover border border-brand-border hover:border-violet-500/35 hover:bg-brand-card text-brand-textMain px-3 sm:px-4 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all duration-150 cursor-pointer select-none active:scale-[0.98] shadow-sm"
+                className="bg-brand-popover border border-brand-border hover:border-brand-border-strong hover:bg-brand-card text-brand-textMain px-3 sm:px-4 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all duration-150 cursor-pointer select-none active:scale-[0.98] shadow-sm"
               >
                 <UserCheck className="w-3.5 h-3.5 text-brand-textMuted" />
                 <span className="hidden sm:inline">{getApprovalLabel()}</span>
@@ -408,7 +408,7 @@ export const Composer: React.FC<ComposerProps> = ({
                       setApprovalMode('ask');
                       setShowApprovalDropdown(false);
                     }}
-                    className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-purple-500/15 cursor-pointer transition-colors"
+                    className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-brand-hover cursor-pointer transition-colors"
                   >
                     Ask for approval
                   </div>
@@ -418,7 +418,7 @@ export const Composer: React.FC<ComposerProps> = ({
                       setApprovalMode('always');
                       setShowApprovalDropdown(false);
                     }}
-                    className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-purple-500/15 cursor-pointer transition-colors"
+                    className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-brand-hover cursor-pointer transition-colors"
                   >
                     Always approve
                   </div>
@@ -428,7 +428,7 @@ export const Composer: React.FC<ComposerProps> = ({
                       setApprovalMode('never');
                       setShowApprovalDropdown(false);
                     }}
-                    className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-purple-500/15 cursor-pointer transition-colors"
+                    className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-brand-hover cursor-pointer transition-colors"
                   >
                     Never approve
                   </div>
@@ -485,7 +485,7 @@ export const Composer: React.FC<ComposerProps> = ({
                 className={`rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150 ${
                   !prompt.trim() || disabled || !hasModels
                     ? 'bg-brand-popover text-brand-textMuted/40 cursor-not-allowed border border-brand-border'
-                    : 'bg-amber-400 hover:bg-amber-300 hover:shadow-[0_0_12px_rgba(251,191,36,0.45)] text-brand-bg cursor-pointer active:scale-[0.92] border border-amber-300'
+                    : 'bg-brand-highlight hover:bg-brand-highlight-hover text-brand-highlight-text cursor-pointer active:scale-[0.92] border border-brand-highlight-border-subtle'
                 }`}
               >
                 <ArrowUp className="w-4 h-4" />
@@ -521,7 +521,7 @@ export const Composer: React.FC<ComposerProps> = ({
                   <span
                     className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                       s.category === 'builtin'
-                        ? 'bg-violet-400'
+                        ? 'bg-brand-textMuted'
                         : s.category === 'skill'
                         ? 'bg-emerald-400'
                         : 'bg-sky-400'
@@ -558,10 +558,10 @@ export const Composer: React.FC<ComposerProps> = ({
               data-testid="badge-project"
               onClick={() => projects.length > 0 && setProjectMenuOpen((v) => !v)}
               className={`bg-brand-card border border-brand-border rounded-full text-brand-textMain px-3 py-1.5 text-[10px] font-semibold flex items-center gap-1 select-none shadow-sm transition-all duration-150 active:scale-[0.98] ${
-                projects.length > 0 ? 'cursor-pointer hover:border-violet-500/35 hover:bg-brand-popover' : 'cursor-default'
+                projects.length > 0 ? 'cursor-pointer hover:border-brand-border-strong hover:bg-brand-popover' : 'cursor-default'
               }`}
             >
-              <Folder className="w-3 h-3 text-indigo-400" />
+              <Folder className="w-3 h-3 text-brand-textMuted" />
               <span className="max-w-[120px] truncate">{activeProject}</span>
               {projects.length > 0 && <ChevronDown className="w-2 h-2 text-brand-textMuted" />}
             </button>
@@ -578,7 +578,7 @@ export const Composer: React.FC<ComposerProps> = ({
                     }}
                     className={`ui-popover-item ${p.name === activeProject ? 'active' : ''}`}
                   >
-                    <Folder className="w-3.5 h-3.5 text-indigo-400" />
+                    <Folder className="w-3.5 h-3.5 text-brand-textMuted" />
                     <span className="truncate">{p.name}</span>
                     {p.name === activeProject && <Check className="w-3.5 h-3.5 ml-auto" />}
                   </button>

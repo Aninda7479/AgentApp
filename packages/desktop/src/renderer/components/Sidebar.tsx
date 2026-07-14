@@ -114,9 +114,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }`}
       >
         {isActive && (
-          <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-gradient-to-b from-violet-500 to-indigo-500" />
+          <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-brand-textMain" />
         )}
-        <IconComponent className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isActive ? 'scale-110 text-violet-400' : ''}`} />
+        <IconComponent className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isActive ? 'scale-110 text-brand-textMain' : ''}`} />
         {!collapsed && <span>{label}</span>}
       </button>
     );
@@ -126,7 +126,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <div
       data-testid="sidebar-container"
       style={{ width: collapsed ? '70px' : '260px', maxWidth: '85vw' }}
-      className={`glass-panel border-r border-brand-border/50 flex flex-col p-4 h-full box-border transition-transform duration-200 z-40 pb-[68px] md:pb-4
+      className={`glass-panel flex flex-col p-4 h-full box-border transition-transform duration-200 z-40 pb-[68px] md:pb-4
         fixed inset-y-0 left-0 lg:static lg:translate-x-0
         ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}`}
     >
@@ -150,7 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             data-testid="nav-new-chat"
             onClick={() => onNewChat && onNewChat()}
-            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-3.5 rounded-xl text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 hover:shadow-lg hover:shadow-violet-600/25 active:scale-[0.98] transition-all duration-200 text-sm font-semibold mb-3 select-none cursor-pointer border border-violet-500/20`}
+            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-3.5 rounded-xl text-brand-highlight-text bg-brand-highlight hover:bg-brand-highlight-hover active:scale-[0.98] transition-all duration-200 text-sm font-semibold mb-3 select-none cursor-pointer border border-brand-highlight-border-subtle`}
           >
             <Plus className="w-4 h-4 flex-shrink-0 text-white" />
             {!collapsed && <span>New chat</span>}
@@ -174,7 +174,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="mb-4">
             {/* Section header */}
             <div className="flex items-center justify-between px-1 py-2 mb-1 select-none">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-brand-textMuted/50">
+              <span className="ui-eyebrow">
                 Projects
               </span>
               <button
@@ -224,7 +224,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         }}
                         className="flex items-center gap-2 flex-1 overflow-hidden"
                       >
-                        <FileText className={`w-3.5 h-3.5 flex-shrink-0 ${isProjectActive && !activeChatId ? 'text-violet-400' : 'text-brand-textMuted/70'}`} />
+                        <FileText className={`w-3.5 h-3.5 flex-shrink-0 ${isProjectActive && !activeChatId ? 'text-brand-textMain' : 'text-brand-textMuted/70'}`} />
                         <span className="truncate font-medium text-[13px]">{proj.name}</span>
                       </div>
 
@@ -327,7 +327,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 }`}
                               >
                                 {isChatSelected && (
-                                  <span className="absolute left-[-10px] top-2 bottom-2 w-[2px] rounded-r-full bg-gradient-to-b from-violet-500 to-indigo-500" />
+                                  <span className="absolute left-[-10px] top-2 bottom-2 w-[2px] rounded-r-full bg-brand-textMain" />
                                 )}
                                 {isChatRunning && (
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
@@ -363,7 +363,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {projects.length === 0 && (
                 <button
                   onClick={onCreateProjectClick}
-                  className="flex items-center gap-2 px-3 py-2.5 text-xs text-brand-textMuted/60 hover:text-brand-textMain hover:bg-white/5 rounded-lg transition-all cursor-pointer w-full border border-dashed border-brand-border/30 hover:border-violet-500/30 mt-1"
+                  className="flex items-center gap-2 px-3 py-2.5 text-xs text-brand-textMuted/60 hover:text-brand-textMain hover:bg-white/5 rounded-lg transition-all cursor-pointer w-full border border-dashed border-brand-border/30 hover:border-brand-border-strong mt-1"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Create your first project</span>
@@ -380,7 +380,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="flex items-center justify-between px-1 py-2 mb-1 select-none cursor-pointer group"
               onClick={() => setChatsCollapsed(!chatsCollapsed)}
             >
-              <span className="text-[10px] font-bold uppercase tracking-widest text-brand-textMuted/50 group-hover:text-brand-textMuted/80 transition-colors">
+              <span className="ui-eyebrow group-hover:text-brand-textMuted transition-colors">
                 Chats
               </span>
               <span className="text-brand-textMuted/40">
@@ -411,7 +411,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       }}
                     >
                       {isSelected && (
-                        <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-gradient-to-b from-violet-500 to-indigo-500" />
+                        <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-brand-textMain" />
                       )}
                       {isChatRunning && (
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
@@ -463,9 +463,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }`}
         >
           {activeTab === 'settings' && (
-            <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-gradient-to-b from-violet-500 to-indigo-500" />
+            <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-brand-textMain" />
           )}
-          <Settings className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 ${activeTab === 'settings' ? 'scale-110 text-violet-400' : ''}`} />
+          <Settings className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 ${activeTab === 'settings' ? 'scale-110 text-brand-textMain' : ''}`} />
           {!collapsed && <span>Settings</span>}
         </button>
         {onToggleCollapse && (

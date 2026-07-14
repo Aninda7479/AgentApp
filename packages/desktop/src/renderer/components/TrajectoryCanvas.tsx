@@ -163,7 +163,7 @@ const WorkedHeader: React.FC<WorkedHeaderProps> = ({
           {editedFiles.map((ef, i) => (
             <div key={i} className="flex items-center gap-2 text-[11px]">
               <FileText size={11} className="text-brand-textMuted/70 flex-shrink-0" />
-              <span className="text-violet-400 font-medium">M→</span>
+              <span className="text-brand-textMuted font-medium">M→</span>
               <span className="text-brand-textMain font-medium font-mono">{ef.name}</span>
               {ef.added > 0 && (
                 <span className="text-emerald-500 font-semibold">+{ef.added}</span>
@@ -201,7 +201,7 @@ const FileChangedChip: React.FC<FileChangedChipProps> = ({ count, added, removed
     {onReview && (
       <button
         onClick={onReview}
-        className="flex items-center gap-1.5 text-[11px] text-brand-textMuted hover:text-brand-textMain border border-brand-border hover:border-violet-500/40 px-2.5 py-1 rounded-md transition-all select-none"
+        className="flex items-center gap-1.5 text-[11px] text-brand-textMuted hover:text-brand-textMain border border-brand-border hover:border-brand-border-strong px-2.5 py-1 rounded-md transition-all select-none"
       >
         <Eye size={11} />
         <span>Review</span>
@@ -279,7 +279,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({ content, onThumbsUp, on
 // ─── Streaming Cursor ─────────────────────────────────────────────────────────
 const StreamingCursor: React.FC = () => (
   <span
-    className="inline-block w-[2px] h-[1.1em] bg-violet-400 ml-0.5 align-middle animate-[blink_1s_step-end_infinite] rounded-sm"
+    className="inline-block w-[2px] h-[1.1em] bg-brand-textMain ml-0.5 align-middle animate-[blink_1s_step-end_infinite] rounded-sm"
     style={{ animation: 'blink 0.9s step-end infinite' }}
   />
 );
@@ -359,7 +359,7 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
       if (codeMatch) {
         if (codeMatch[1]) parts.push(<span key={keyIdx++}>{renderBoldItalic(codeMatch[1])}</span>);
         parts.push(
-          <code key={keyIdx++} className="font-mono text-[12px] bg-brand-card border border-brand-border/60 px-1.5 py-0.5 rounded text-amber-300">
+          <code key={keyIdx++} className="font-mono text-[12px] bg-brand-card border border-brand-border/60 px-1.5 py-0.5 rounded text-brand-textMain">
             {codeMatch[2]}
           </code>
         );
@@ -501,7 +501,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
             <div className="flex justify-center mb-6 mt-2">
               <div
                 data-testid={`step-user-${turn.userSteps[0]?.id || turnIdx}`}
-                className="relative group bg-brand-card border border-brand-border/80 rounded-2xl px-5 py-3 max-w-[88%] text-brand-textMain text-[13px] leading-relaxed shadow-sm hover:border-violet-500/25 transition-all"
+                className="relative group bg-brand-card border border-brand-border/80 rounded-2xl px-5 py-3 max-w-[88%] text-brand-textMain text-[13px] leading-relaxed shadow-sm hover:border-brand-border-strong transition-all"
               >
                 {turn.userSteps.map((step, idx) => (
                   <div key={step.id} className={idx > 0 ? 'mt-2.5' : ''}>
@@ -570,9 +570,9 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
         {isStreaming && turns.length > 0 && turns[turns.length - 1].agentSteps.length === 0 && (
           <div className="flex items-center gap-2 text-brand-textMuted text-[12px] px-1 py-2 mb-4 select-none">
             <span className="flex gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-textMuted animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-textMuted animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-textMuted animate-bounce" style={{ animationDelay: '300ms' }} />
             </span>
             <span>Thinking...</span>
           </div>
@@ -652,7 +652,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
               key={step.id}
               className="flex items-start gap-2 text-[11px] text-brand-textMuted/80 italic"
             >
-              <span className="text-violet-400/70 mt-0.5 select-none">◈</span>
+              <span className="text-brand-textMuted mt-0.5 select-none">◈</span>
               <span>{step.content}</span>
             </div>
           ))}
@@ -705,7 +705,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
                 </span>
                 <button
                   onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
-                  className="bg-violet-600 hover:bg-violet-500 text-white px-3 py-1.5 rounded-lg cursor-pointer text-xs font-semibold transition-all active:scale-[0.97]"
+                  className="bg-brand-highlight hover:bg-brand-highlight-hover text-brand-highlight-text px-3 py-1.5 rounded-lg cursor-pointer text-xs font-semibold transition-all active:scale-[0.97]"
                 >
                   Open
                 </button>

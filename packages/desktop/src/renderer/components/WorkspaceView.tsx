@@ -88,10 +88,10 @@ const recommendations = [
 ];
 
 const accentClasses: Record<string, string> = {
-  violet: 'bg-violet-500/10 text-violet-400 border-violet-500/25',
-  emerald: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25',
-  sky: 'bg-sky-500/10 text-sky-400 border-sky-500/25',
-  rose: 'bg-rose-500/10 text-rose-400 border-rose-500/25'
+  violet: 'bg-brand-hover text-brand-textMain border-brand-border',
+  emerald: 'bg-brand-hover text-brand-textMain border-brand-border',
+  sky: 'bg-brand-hover text-brand-textMain border-brand-border',
+  rose: 'bg-brand-hover text-brand-textMain border-brand-border'
 };
 
 // ─── Elapsed time display ─────────────────────────────────────────────────────
@@ -146,10 +146,10 @@ const AgentTabBar: React.FC<AgentTabBarProps> = ({
             : 'text-brand-textMuted hover:text-brand-textMain hover:bg-white/5'
         }`}
       >
-        <Bot size={11} className={session.isGenerating ? 'text-violet-400 animate-pulse' : 'text-brand-textMuted'} />
+        <Bot size={11} className={session.isGenerating ? 'text-[var(--neon-live)] animate-pulse' : 'text-brand-textMuted'} />
         <span className="max-w-[100px] truncate">{session.label}</span>
         {session.isGenerating && (
-          <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse flex-shrink-0" />
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--neon-live)] animate-pulse flex-shrink-0" />
         )}
         {sessions.length > 1 && (
           <span
@@ -166,7 +166,7 @@ const AgentTabBar: React.FC<AgentTabBarProps> = ({
     <button
       onClick={onAddSession}
       title="Run another agent in parallel"
-      className="flex items-center gap-1 px-2 py-1.5 rounded-md text-brand-textMuted hover:text-violet-400 hover:bg-violet-500/10 transition-all select-none flex-shrink-0"
+      className="flex items-center gap-1 px-2 py-1.5 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-all select-none flex-shrink-0"
     >
       <Plus size={12} />
       <span className="text-[11px]">New agent</span>
@@ -308,9 +308,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   return (
     <>
       {/* ── Workspace Header Bar ─────────────────────────────────────────── */}
-      <div className="h-9 border-b border-brand-border/60 flex items-center justify-between gap-2 px-3 sm:px-5 bg-brand-sidebar flex-shrink-0">
+      <div className="h-9 border-b border-brand-border flex items-center justify-between gap-2 px-3 sm:px-5 bg-brand-sidebar/80 backdrop-blur-xl flex-shrink-0">
         <div className="flex items-center gap-2 text-[11px] text-brand-textMuted min-w-0">
-          <Folder size={11} className="text-amber-500 flex-shrink-0" />
+          <Folder size={11} className="text-brand-textMuted flex-shrink-0" />
           <span className="text-brand-textMain font-medium truncate">
             {activeProject || 'Workspace'}
           </span>
@@ -323,8 +323,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           {/* Running agents count badge */}
           {agentSessions.filter(s => s.isGenerating).length > 0 && (
-            <div className="flex items-center gap-1.5 text-[11px] text-violet-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+            <div className="flex items-center gap-1.5 text-[11px] text-[var(--neon-live)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--neon-live)] animate-pulse" />
               <span className="hidden sm:inline">{agentSessions.filter(s => s.isGenerating).length} agent{agentSessions.filter(s => s.isGenerating).length > 1 ? 's' : ''} running</span>
             </div>
           )}
@@ -376,7 +376,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         {(activeSessionId === 'session-main' ? trajectorySteps : (activeSession?.steps || [])).length === 0 && (
           <div className="flex flex-col items-center justify-center px-4 max-w-[760px] w-full mx-auto mt-6 mb-4 animate-fade-in relative">
             {/* Glow blob */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[360px] h-[360px] bg-violet-500/4 rounded-full blur-[90px] pointer-events-none" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[360px] h-[360px] bg-brand-textMuted/5 rounded-full blur-[90px] pointer-events-none" />
 
             {/* Title */}
             <div
@@ -386,7 +386,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
               {activeProject ? (
                 <>
                   What should we build in{' '}
-                  <span className="bg-gradient-to-r from-violet-400 via-sky-400 to-teal-400 bg-clip-text text-transparent">
+                  <span className="text-brand-textMain">
                     {activeProject}
                   </span>
                   ?
@@ -400,10 +400,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             </p>
 
             {/* Status bar */}
-            <div className="w-full max-w-[680px] mb-4 px-3.5 py-2.5 glass-card rounded-lg text-[11px] text-brand-textMuted flex gap-2 items-center border border-violet-500/12">
-              <Terminal size={13} className="text-violet-400 flex-shrink-0" />
+            <div className="w-full max-w-[680px] mb-4 px-3.5 py-2.5 glass-card rounded-lg text-[11px] text-brand-textMuted flex gap-2 items-center border border-brand-border">
+              <Terminal size={13} className="text-brand-textMuted flex-shrink-0" />
               <div>
-                <span className="font-bold text-violet-400 mr-1.5 uppercase tracking-wider text-[9px]">
+                <span className="font-bold text-brand-textMuted mr-1.5 uppercase tracking-wider text-[9px]">
                   System:
                 </span>
                 <span>SuperAgent Desktop ready — {enabledModels.length > 0 ? `${enabledModels.length} model${enabledModels.length !== 1 ? 's' : ''} connected` : 'configure providers in Settings'}</span>
@@ -445,7 +445,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
               </div>
               <button
                 onClick={handleAddAgentSession}
-                className="flex items-center gap-1.5 bg-violet-500/10 border border-violet-500/25 hover:border-violet-500/45 px-2.5 py-1 rounded-full text-violet-400 transition-all cursor-pointer"
+                className="flex items-center gap-1.5 bg-brand-hover border border-brand-border hover:border-brand-border-strong px-2.5 py-1 rounded-full text-brand-textMain transition-all cursor-pointer"
               >
                 <Bot size={10} />
                 <span>Run parallel agent</span>

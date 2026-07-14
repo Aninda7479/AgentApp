@@ -236,7 +236,7 @@ export const PluginsView: React.FC<PluginsViewProps> = ({
                     <span
                       data-testid={`skill-check-${s.id}`}
                       className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                        s.enabled ? 'bg-violet-500/15 text-violet-400' : 'bg-brand-bg text-brand-textMuted'
+                        s.enabled ? 'bg-brand-hover text-brand-textMain' : 'bg-brand-bg text-brand-textMuted'
                       }`}
                     >
                       {s.enabled ? <Check size={14} /> : <Sparkles size={12} />}

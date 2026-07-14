@@ -34,11 +34,12 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
       role="img"
       aria-label={title}
     >
-      <rect x="2" y="2" width="28" height="28" rx="8" fill="var(--brand-highlight, #a16207)" />
+      {/* Monochrome mark: neutral plate, ink stroke — no hue, reads in any theme */}
+      <rect x="2" y="2" width="28" height="28" rx="8" fill="var(--brand-card, #17171b)" stroke="var(--brand-border-strong, rgba(255,255,255,0.13))" strokeWidth="1" />
       {/* Stylized "A" / orbit mark */}
-      <path d="M11 22L16 10l5 12" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-      <circle cx="16" cy="22.5" r="1.8" fill="#ffffff" />
-      <circle cx="21" cy="10" r="1.8" fill="#ffffff" opacity="0.9" />
+      <path d="M11 22L16 10l5 12" stroke="var(--brand-text-main, #ECEDEF)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      <circle cx="16" cy="22.5" r="1.8" fill="var(--brand-text-main, #ECEDEF)" />
+      <circle cx="21" cy="10" r="1.8" fill="var(--brand-text-main, #ECEDEF)" opacity="0.55" />
     </svg>
   );
 
@@ -48,7 +49,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
         {glyph}
         <span className="font-outfit font-bold tracking-tight text-brand-textMain text-[15px]">
           Super
-          <span className="text-[var(--brand-highlight,#a16207)]">
+          <span className="text-brand-textMuted">
             Agent
           </span>
         </span>
@@ -59,6 +60,6 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
   return glyph;
 };
 
-/** Inline SVG favicon as a data URI (single gradient source, no external file). */
+/** Inline SVG favicon as a data URI (monochrome, no external file). */
 export const BRAND_FAVICON =
-  "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23a16207'/><path d='M11 22L16 10l5 12' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/><circle cx='16' cy='22.5' r='1.8' fill='white'/><circle cx='21' cy='10' r='1.8' fill='white'/></svg>";
+  "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2316161a'/><path d='M11 22L16 10l5 12' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/><circle cx='16' cy='22.5' r='1.8' fill='white'/><circle cx='21' cy='10' r='1.8' fill='white' opacity='0.55'/></svg>";
