@@ -1,6 +1,10 @@
 import { SlashCommandRouter, SlashCommandContext, SlashCommandResult } from './router.js';
 import { registerCompactCommand, ContextMessage, CompactOptions } from './compact.js';
 import { registerDiffCommand, DiffReviewer } from './diff.js';
+import { registerReviewCommand, CodeReviewer } from './review.js';
+import { registerPlanCommand, PlanGenerator } from './plan.js';
+import { registerTasksCommand, TaskManager } from './tasks.js';
+import { registerClearCommand } from './clear.js';
 import { SessionContext, CLICommandResult } from '../types.js';
 import { handleModelCommand } from './model.js';
 import { handleStatusCommand } from './status.js';
@@ -8,6 +12,11 @@ import { handleThemeCommand } from './theme.js';
 import { handleLearnCommand } from './learn.js';
 import { handleInitCommand } from './init.js';
 import { handleDoctorCommand } from './doctor.js';
+import { handlePermissionsCommand } from './permissions.js';
+import { handleBtwCommand } from './btw.js';
+import { handleVerifyCommand } from './verify.js';
+import { PermissionLevel } from '../shortcuts/permissions.js';
+
 
 /** Converts a CLICommandResult into the router's SlashCommandResult shape. */
 function toSlashResult(command: string, res: CLICommandResult): SlashCommandResult {
@@ -31,6 +40,12 @@ export interface SlashCommandDeps {
   diffReviewer: DiffReviewer;
   /** Optional compaction tuning (keepRecentCount, summarizer, etc.). */
   compactOptions?: CompactOptions;
+  /** Current TUI permission level. */
+  permission: PermissionLevel;
+  /** Sets the TUI permission level. */
+  setPermission: (level: PermissionLevel) => void;
+  /** Background task manager used by the `/tasks` command (a fresh one is created if omitted). */
+  taskManager?: TaskManager;
 }
 
 /**
@@ -42,11 +57,16 @@ export interface SlashCommandDeps {
  * @param deps - session context plus message/diff hooks
  */
 export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRouter {
-  const { session, getMessages, setMessages, diffReviewer, compactOptions } = deps;
+  const { session, getMessages, setMessages, diffReviewer, compactOptions, permission, setPermission } = deps;
+  const taskManager = deps.taskManager ?? new TaskManager();
   const router = new SlashCommandRouter();
 
   registerCompactCommand(router, getMessages, setMessages, compactOptions);
   registerDiffCommand(router, diffReviewer);
+  registerPlanCommand(router);
+  registerReviewCommand(router);
+  registerTasksCommand(router, taskManager);
+  registerClearCommand(router, getMessages, setMessages);
 
   router.register(
     'model',
@@ -105,6 +125,36 @@ export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRou
       description: 'Run setup checkup and configuration diagnostics',
       aliases: ['diag', 'check'],
       usage: '/doctor'
+    }
+  );
+
+  router.register(
+    'permissions',
+    (ctx: SlashCommandContext) => toSlashResult('permissions', handlePermissionsCommand(ctx.args, permission, setPermission)),
+    {
+      description: 'Show, set, or cycle tool execution permission levels',
+      aliases: ['perm', 'permission'],
+      usage: '/permissions [set] [ask | auto | deny]'
+    }
+  );
+
+  router.register(
+    'btw',
+    async (ctx: SlashCommandContext) => toSlashResult('btw', await handleBtwCommand(ctx.args, session)),
+    {
+      description: 'Ask a side question without polluting the main conversation history',
+      aliases: ['bytheway'],
+      usage: '/btw <question>'
+    }
+  );
+
+  router.register(
+    'verify',
+    async (ctx: SlashCommandContext) => toSlashResult('verify', await handleVerifyCommand(ctx.args)),
+    {
+      description: 'Run workspace test suite or custom command validation',
+      aliases: ['test', 'check-changes'],
+      usage: '/verify [command]'
     }
   );
 

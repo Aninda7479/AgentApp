@@ -12,7 +12,8 @@ import {
   DiffReviewer,
   registerDiffCommand,
   buildSlashCommandRouter,
-  formatSlashCommandHelp
+  formatSlashCommandHelp,
+  PermissionLevel
 } from '../src/index.js';
 
 describe('CLI Shortcuts & Slash Commands Suite (Steps 068 - 073)', () => {
@@ -267,11 +268,13 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
       setMessages: (m) => {
         ctxMessages = m;
       },
-      diffReviewer: new DiffReviewer()
+      diffReviewer: new DiffReviewer(),
+      permission: 'ask',
+      setPermission: () => {}
     });
 
     const names = router.getCommands().map((d) => d.name).sort();
-    expect(names).toEqual(['compact', 'diff', 'doctor', 'init', 'learn', 'model', 'status', 'theme']);
+    expect(names).toEqual(['btw', 'clear', 'compact', 'diff', 'doctor', 'init', 'learn', 'model', 'permissions', 'plan', 'review', 'status', 'tasks', 'theme', 'verify']);
   });
 
   it('should dispatch /model list through the wired router', async () => {
@@ -280,7 +283,9 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
       session,
       getMessages: () => [],
       setMessages: () => {},
-      diffReviewer: new DiffReviewer()
+      diffReviewer: new DiffReviewer(),
+      permission: 'ask',
+      setPermission: () => {}
     });
 
     const res = await router.execute('/model list');
@@ -294,7 +299,9 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
       session,
       getMessages: () => [],
       setMessages: () => {},
-      diffReviewer: new DiffReviewer()
+      diffReviewer: new DiffReviewer(),
+      permission: 'ask',
+      setPermission: () => {}
     });
 
     const res = await router.execute('/status');
@@ -308,7 +315,9 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
       session,
       getMessages: () => [],
       setMessages: () => {},
-      diffReviewer: new DiffReviewer()
+      diffReviewer: new DiffReviewer(),
+      permission: 'ask',
+      setPermission: () => {}
     });
 
     const res = await router.execute('/theme cyberpunk');
@@ -333,7 +342,9 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
       setMessages: (m) => {
         ctxMessages = m;
       },
-      diffReviewer: new DiffReviewer()
+      diffReviewer: new DiffReviewer(),
+      permission: 'ask',
+      setPermission: () => {}
     });
 
     const res = await router.execute('/compact');
@@ -349,7 +360,9 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
       session,
       getMessages: () => [],
       setMessages: () => {},
-      diffReviewer: reviewer
+      diffReviewer: reviewer,
+      permission: 'ask',
+      setPermission: () => {}
     });
 
     reviewer.addChange('src/x.ts', 'const x = 1;', 'const x = 2;');
@@ -364,7 +377,9 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
       session,
       getMessages: () => [],
       setMessages: () => {},
-      diffReviewer: new DiffReviewer()
+      diffReviewer: new DiffReviewer(),
+      permission: 'ask',
+      setPermission: () => {}
     });
 
     const res = await router.execute('/frobnicate');
@@ -378,11 +393,13 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
       session,
       getMessages: () => [],
       setMessages: () => {},
-      diffReviewer: new DiffReviewer()
+      diffReviewer: new DiffReviewer(),
+      permission: 'ask',
+      setPermission: () => {}
     });
 
     const help = formatSlashCommandHelp(router);
-    for (const name of ['model', 'status', 'theme', 'learn', 'init', 'compact', 'diff', 'doctor']) {
+    for (const name of ['model', 'status', 'theme', 'learn', 'init', 'compact', 'diff', 'doctor', 'permissions', 'btw', 'verify', 'plan', 'review', 'clear', 'tasks']) {
       expect(help).toContain(`/${name}`);
     }
     expect(help).toContain('/help');
@@ -395,7 +412,9 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
       session,
       getMessages: () => [],
       setMessages: () => {},
-      diffReviewer: new DiffReviewer()
+      diffReviewer: new DiffReviewer(),
+      permission: 'ask',
+      setPermission: () => {}
     });
 
     const res = await router.execute('/doctor');
@@ -404,5 +423,107 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
     expect(res.output).toContain('[PASS]');
     const report = res.data as { checks: { name: string }[] };
     expect(report.checks.map((c) => c.name)).toContain('Node.js Runtime');
+  });
+
+  it('should list current permission level via /permissions', async () => {
+    const session = createSessionContext();
+    let perm: PermissionLevel = 'ask';
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => [],
+      setMessages: () => {},
+      diffReviewer: new DiffReviewer(),
+      permission: perm,
+      setPermission: (p) => { perm = p; }
+    });
+
+    const res = await router.execute('/permissions');
+    expect(res.success).toBe(true);
+    expect(res.output).toContain('Ask Before Execution (ask)');
+  });
+
+  it('should switch permission level via /permissions set auto', async () => {
+    const session = createSessionContext();
+    let perm: PermissionLevel = 'ask';
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => [],
+      setMessages: () => {},
+      diffReviewer: new DiffReviewer(),
+      permission: perm,
+      setPermission: (p) => { perm = p; }
+    });
+
+    const res = await router.execute('/permissions set auto');
+    expect(res.success).toBe(true);
+    expect(res.output).toContain('Auto-Execute Tools (auto)');
+    expect(perm).toBe('auto');
+  });
+
+  it('should run a side question using /btw', async () => {
+    const session = createSessionContext();
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => [],
+      setMessages: () => {},
+      diffReviewer: new DiffReviewer(),
+      permission: 'ask',
+      setPermission: () => {}
+    });
+
+    const res = await router.execute('/btw What is 2+2?');
+    expect(res.success).toBe(true);
+    expect(res.output).toContain('[BTW Output]');
+  });
+
+  it('should run a workspace check using /verify', async () => {
+    const session = createSessionContext();
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => [],
+      setMessages: () => {},
+      diffReviewer: new DiffReviewer(),
+      permission: 'ask',
+      setPermission: () => {}
+    });
+
+    // Run /verify with a fast command to ensure it executes
+    const res = await router.execute('/verify echo "Verification test"');
+    expect(res.success).toBe(true);
+    expect(res.output).toContain('Verification Succeeded');
+    expect(res.output).toContain('echo "Verification test"');
+  });
+
+  it('should draft an execution plan using /plan', async () => {
+    const session = createSessionContext();
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => [],
+      setMessages: () => {},
+      diffReviewer: new DiffReviewer(),
+      permission: 'ask',
+      setPermission: () => {}
+    });
+
+    const res = await router.execute('/plan Refactor the auth module');
+    expect(res.success).toBe(true);
+    expect(res.output).toContain('=== Execution Plan ===');
+    expect(res.output).toContain('Goal: Refactor the auth module');
+  });
+
+  it('should run a static code review using /review', async () => {
+    const session = createSessionContext();
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => [],
+      setMessages: () => {},
+      diffReviewer: new DiffReviewer(),
+      permission: 'ask',
+      setPermission: () => {}
+    });
+
+    const res = await router.execute('/review src/commands/btw.ts');
+    expect(res.success).toBe(true);
+    expect(res.output).toContain('=== SuperAgent Code Review ===');
   });
 });

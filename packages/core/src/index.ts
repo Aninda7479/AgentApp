@@ -23,6 +23,7 @@ export * from './automation/computer-use.js';
 export * from './vector/embedding.js';
 export * from './vector/retriever.js';
 export * from './vector/inspector.js';
+export * from './sandbox/index.js';
 
 export * from './memory/instructions.js';
 export * from './memory/profile.js';

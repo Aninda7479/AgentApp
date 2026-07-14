@@ -54,3 +54,4 @@ tmp/
 temp/
 .gemini/
 graphify-out/
+.superagent/

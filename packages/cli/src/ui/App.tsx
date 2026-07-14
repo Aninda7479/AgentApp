@@ -8,6 +8,7 @@ import { PermissionLevel, cyclePermissionLevel, getPermissionLabel } from '../sh
 import { createSessionContext } from '../types.js';
 import { buildSlashCommandRouter, formatSlashCommandHelp } from '../commands/registry.js';
 import { DiffReviewer } from '../commands/diff.js';
+import { TaskManager } from '../commands/tasks.js';
 import { ContextMessage } from '../commands/compact.js';
 
 /** Root props for the SuperAgent TUI application. */
@@ -58,6 +59,11 @@ export const App: React.FC<AppProps> = ({
     setMessagesState(next);
   };
 
+  // Mirror of `permission` so the slash-command router closures always read the
+  // latest permission level even though the router is created once.
+  const permissionRef = useRef<PermissionLevel>(permission);
+  permissionRef.current = permission;
+
   // Bridge between the TUI's ChatMessage[] and the router's ContextMessage[]
   // used by the /compact command.
   const getContextMessages = (): ContextMessage[] =>
@@ -79,6 +85,14 @@ export const App: React.FC<AppProps> = ({
       getMessages: getContextMessages,
       setMessages: setContextMessages,
       diffReviewer: new DiffReviewer(),
+      taskManager: new TaskManager(),
+      get permission() {
+        return permissionRef.current;
+      },
+      setPermission: (level) => {
+        permissionRef.current = level;
+        setPermission(level);
+      },
     })
   );
 
