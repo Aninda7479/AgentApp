@@ -8,6 +8,7 @@ export * from './commands/init.js';
 export * from './commands/compact.js';
 export * from './commands/diff.js';
 export * from './commands/router.js';
+export * from './commands/registry.js';
 export * from './shortcuts/permissions.js';
 export * from './shortcuts/queue.js';
 export * from './shortcuts/transcript.js';

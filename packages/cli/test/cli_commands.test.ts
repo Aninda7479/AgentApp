@@ -4,12 +4,15 @@ import {
   EditorBridge,
   ClipboardCopier,
   MockClipboard,
+  createSessionContext,
   SlashCommandRouter,
   ContextCompressor,
   registerCompactCommand,
   ContextMessage,
   DiffReviewer,
-  registerDiffCommand
+  registerDiffCommand,
+  buildSlashCommandRouter,
+  formatSlashCommandHelp
 } from '../src/index.js';
 
 describe('CLI Shortcuts & Slash Commands Suite (Steps 068 - 073)', () => {
@@ -247,5 +250,142 @@ describe('CLI Shortcuts & Slash Commands Suite (Steps 068 - 073)', () => {
       expect(resView.success).toBe(true);
       expect(resView.output).toContain('=== Diff: test.txt ===');
     });
+  });
+});
+
+describe('CLI Wired Slash Command Router (Step 074)', () => {
+  it('should register every built-in command from the docs in a single router', () => {
+    const session = createSessionContext();
+    let ctxMessages: ContextMessage[] = [
+      { role: 'system', content: 'System' },
+      { role: 'user', content: 'Hi' },
+      { role: 'assistant', content: 'Hello' }
+    ];
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => ctxMessages,
+      setMessages: (m) => {
+        ctxMessages = m;
+      },
+      diffReviewer: new DiffReviewer()
+    });
+
+    const names = router.getCommands().map((d) => d.name).sort();
+    expect(names).toEqual(['compact', 'diff', 'init', 'learn', 'model', 'status', 'theme']);
+  });
+
+  it('should dispatch /model list through the wired router', async () => {
+    const session = createSessionContext();
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => [],
+      setMessages: () => {},
+      diffReviewer: new DiffReviewer()
+    });
+
+    const res = await router.execute('/model list');
+    expect(res.success).toBe(true);
+    expect(res.output).toContain('=== Available AI Models ===');
+  });
+
+  it('should dispatch /status through the wired router', async () => {
+    const session = createSessionContext();
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => [],
+      setMessages: () => {},
+      diffReviewer: new DiffReviewer()
+    });
+
+    const res = await router.execute('/status');
+    expect(res.success).toBe(true);
+    expect(res.output).toContain('=== Session Status & Token Meter ===');
+  });
+
+  it('should switch the active theme via /theme cyberpunk', async () => {
+    const session = createSessionContext();
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => [],
+      setMessages: () => {},
+      diffReviewer: new DiffReviewer()
+    });
+
+    const res = await router.execute('/theme cyberpunk');
+    expect(res.success).toBe(true);
+    expect(session.activeTheme.name).toBe('cyberpunk');
+  });
+
+  it('should compact context via the wired /compact command', async () => {
+    const session = createSessionContext();
+    let ctxMessages: ContextMessage[] = [
+      { role: 'system', content: 'System prompt' },
+      { role: 'user', content: 'Msg 1' },
+      { role: 'assistant', content: 'Ans 1' },
+      { role: 'user', content: 'Msg 2' },
+      { role: 'assistant', content: 'Ans 2' },
+      { role: 'user', content: 'Msg 3' },
+      { role: 'assistant', content: 'Ans 3' }
+    ];
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => ctxMessages,
+      setMessages: (m) => {
+        ctxMessages = m;
+      },
+      diffReviewer: new DiffReviewer()
+    });
+
+    const res = await router.execute('/compact');
+    expect(res.success).toBe(true);
+    expect(res.output).toContain('Context compacted!');
+    expect(ctxMessages.length).toBeLessThan(7);
+  });
+
+  it('should manage diffs via the wired /diff command', async () => {
+    const session = createSessionContext();
+    const reviewer = new DiffReviewer();
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => [],
+      setMessages: () => {},
+      diffReviewer: reviewer
+    });
+
+    reviewer.addChange('src/x.ts', 'const x = 1;', 'const x = 2;');
+    const res = await router.execute('/diff list');
+    expect(res.success).toBe(true);
+    expect(res.output).toContain('Pending Diffs: 1/1 files.');
+  });
+
+  it('should return an error for unknown slash commands', async () => {
+    const session = createSessionContext();
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => [],
+      setMessages: () => {},
+      diffReviewer: new DiffReviewer()
+    });
+
+    const res = await router.execute('/frobnicate');
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('Unknown slash command');
+  });
+
+  it('should render a help listing of every registered command', () => {
+    const session = createSessionContext();
+    const router = buildSlashCommandRouter({
+      session,
+      getMessages: () => [],
+      setMessages: () => {},
+      diffReviewer: new DiffReviewer()
+    });
+
+    const help = formatSlashCommandHelp(router);
+    for (const name of ['model', 'status', 'theme', 'learn', 'init', 'compact', 'diff']) {
+      expect(help).toContain(`/${name}`);
+    }
+    expect(help).toContain('/help');
+    expect(help).toContain('/exit');
   });
 });

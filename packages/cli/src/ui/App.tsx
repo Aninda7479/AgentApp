@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Box, Text, useApp } from 'ink';
 import { MarkdownStream } from './MarkdownStream.js';
 import { Composer } from './Composer.js';
 import { TurnQueueManager } from '../shortcuts/queue.js';
 import { TranscriptManager } from '../shortcuts/transcript.js';
 import { PermissionLevel, cyclePermissionLevel, getPermissionLabel } from '../shortcuts/permissions.js';
+import { createSessionContext } from '../types.js';
+import { buildSlashCommandRouter, formatSlashCommandHelp } from '../commands/registry.js';
+import { DiffReviewer } from '../commands/diff.js';
+import { ContextMessage } from '../commands/compact.js';
 
 /** Root props for the SuperAgent TUI application. */
 export interface AppProps {
@@ -33,7 +37,7 @@ export const App: React.FC<AppProps> = ({
   const { exit } = useApp();
   const [permission, setPermission] = useState<PermissionLevel>(initialPermission);
   const [verbose, setVerbose] = useState<boolean>(initialVerbose);
-  const [messages, setMessages] = useState<ChatMessage[]>([
+  const [messages, setMessagesState] = useState<ChatMessage[]>([
     {
       id: 'sys-1',
       role: 'system',
@@ -46,26 +50,73 @@ export const App: React.FC<AppProps> = ({
   const [transcriptManager] = useState(() => new TranscriptManager());
   const [queuedTurnsCount, setQueuedTurnsCount] = useState<number>(0);
 
-  const handleSendMessage = (text: string) => {
-    if (text === '/exit') {
+  // Mirror of `messages` so the slash-command router closures always read the
+  // latest conversation even though the router is created once.
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  const setMessages = (next: ChatMessage[]): void => {
+    messagesRef.current = next;
+    setMessagesState(next);
+  };
+
+  // Bridge between the TUI's ChatMessage[] and the router's ContextMessage[]
+  // used by the /compact command.
+  const getContextMessages = (): ContextMessage[] =>
+    messagesRef.current.map((m) => ({ role: m.role, content: m.content }));
+  const setContextMessages = (ctxMsgs: ContextMessage[]): void => {
+    setMessages(
+      ctxMsgs.map((m, i) => ({
+        id: `c-${i}-${m.role}`,
+        role: m.role as ChatMessage['role'],
+        content: m.content,
+        timestamp: Date.now(),
+      }))
+    );
+  };
+
+  const [router] = useState(() =>
+    buildSlashCommandRouter({
+      session: createSessionContext(provider, model),
+      getMessages: getContextMessages,
+      setMessages: setContextMessages,
+      diffReviewer: new DiffReviewer(),
+    })
+  );
+
+  const appendMessage = (msg: ChatMessage): void => {
+    setMessages([...messagesRef.current, msg]);
+  };
+
+  const processNextQueuedTurn = (): void => {
+    const nextTurn = queueManager.dequeue();
+    setQueuedTurnsCount(queueManager.count());
+    if (nextTurn) {
+      handleSendMessage(nextTurn.prompt);
+    }
+  };
+
+  const handleSendMessage = (text: string): void => {
+    const trimmed = text.trim();
+
+    if (trimmed === '/exit') {
       exit();
       return;
     }
-    if (text === '/clear') {
+    if (trimmed === '/clear') {
       setMessages([]);
       return;
     }
-    if (text === '/help') {
+    if (trimmed === '/help') {
       const helpMsg: ChatMessage = {
         id: `msg-${Date.now()}`,
         role: 'system',
-        content: `**Shortcuts & Commands:**\n- **Tab**: Queue turn\n- **Ctrl+O**: Toggle verbose mode\n- **Shift+Tab**: Cycle execution permissions\n- **/clear**: Clear messages\n- **/exit**: Quit CLI`,
+        content: formatSlashCommandHelp(router),
         timestamp: Date.now(),
       };
-      setMessages((prev) => [...prev, helpMsg]);
+      appendMessage(helpMsg);
       return;
     }
 
+    const isSlash = router.isSlashCommand(trimmed);
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: 'user',
@@ -74,10 +125,32 @@ export const App: React.FC<AppProps> = ({
     };
 
     transcriptManager.addRecord('user', text);
-    setMessages((prev) => [...prev, userMsg]);
+    appendMessage(userMsg);
     setIsStreaming(true);
 
     setTimeout(() => {
+      if (isSlash) {
+        router
+          .execute(trimmed)
+          .then((res) => {
+            const out = res.success
+              ? res.output ?? ''
+              : `Error: ${res.error ?? 'command failed'}`;
+            transcriptManager.addRecord('system', out);
+            appendMessage({
+              id: `msg-${Date.now() + 1}`,
+              role: 'system',
+              content: out,
+              timestamp: Date.now(),
+            });
+          })
+          .finally(() => {
+            setIsStreaming(false);
+            processNextQueuedTurn();
+          });
+        return;
+      }
+
       const assistantMsg: ChatMessage = {
         id: `msg-${Date.now() + 1}`,
         role: 'assistant',
@@ -85,29 +158,23 @@ export const App: React.FC<AppProps> = ({
         timestamp: Date.now(),
       };
       transcriptManager.addRecord('assistant', assistantMsg.content);
-      setMessages((prev) => [...prev, assistantMsg]);
+      appendMessage(assistantMsg);
       setIsStreaming(false);
-
-      // Process queued turns after each response completes
-    const nextTurn = queueManager.dequeue();
-      setQueuedTurnsCount(queueManager.count());
-      if (nextTurn) {
-        handleSendMessage(nextTurn.prompt);
-      }
+      processNextQueuedTurn();
     }, 100);
   };
 
-  const handleQueueTurn = (text: string) => {
+  const handleQueueTurn = (text: string): void => {
     queueManager.enqueue(text);
     setQueuedTurnsCount(queueManager.count());
     transcriptManager.addRecord('system', `Queued turn: ${text}`);
   };
 
-  const handleToggleTranscript = () => {
+  const handleToggleTranscript = (): void => {
     setVerbose((prev) => !prev);
   };
 
-  const handleCyclePermission = () => {
+  const handleCyclePermission = (): void => {
     setPermission((prev) => cyclePermissionLevel(prev));
   };
 
@@ -127,7 +194,7 @@ export const App: React.FC<AppProps> = ({
           <Text color="magenta">{queuedTurnsCount}</Text>
         </Text>
         <Text dimColor color="gray">
-          Shortcuts: [Tab] Queue Turn | [Shift+Tab] Cycle Permission | [Ctrl+O] Toggle Verbose
+          Shortcuts: [Tab] Queue Turn | [Shift+Tab] Cycle Permission | [Ctrl+O] Toggle Verbose | Type /help for commands
         </Text>
       </Box>
 
