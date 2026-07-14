@@ -14,7 +14,7 @@ import { playSound } from './audio';
 export { Behavior, ExpressionName, Pose, Vec3 };
 
 export const name = 'Lily';
-export const desc = 'A cute anime companion who works, sleeps, and keeps you company.';
+export const desc = 'A cute anime girl in a red dress who works, sleeps, and keeps you company.';
 export const type = 'girl'; // Supports Boy/Girl/Pet
 export const dp = '🧍'; // Supports emoji or image file path (relative to partner folder)
 

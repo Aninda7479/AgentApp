@@ -287,7 +287,7 @@ export function updateAnimations(lily: any, dt: number, t: number): void {
     0.5
   );
   lily.mouth.scale.set(1, 1, lily.mouthOpen * 3 + 0.2);
-  lily.mouth.position.y = lerp(lily.mouth.position.y, -0.13 - lily.mouthOpen * 0.02, 0.3);
+  lily.mouth.position.y = lerp(lily.mouth.position.y, 0.04 - lily.mouthOpen * 0.02, 0.3);
   
   lily.darkVis = lerp(lily.darkVis, lily.darkVisTarget, k);
   lily.darkL.visible = lily.darkVis > 0.02;
