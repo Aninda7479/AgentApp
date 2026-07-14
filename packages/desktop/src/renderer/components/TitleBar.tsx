@@ -8,6 +8,8 @@ import {
   FolderOpen,
   Settings,
   Power,
+  User,
+  LogOut,
   Undo2,
   PanelLeft,
   Moon,
@@ -139,7 +141,12 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         { label: 'Open folder…', icon: FolderOpen, onClick: () => onOpenFolder?.() },
         'sep',
         { label: 'Settings', icon: Settings, onClick: () => onOpenSettings?.() },
-        { label: 'Quit SuperAgent', icon: Power, danger: true, onClick: () => onQuit?.() },
+        ...(!isWebMode
+          ? [
+              'sep' as const,
+              { label: 'Quit SuperAgent', icon: Power, danger: true, onClick: () => onQuit?.() },
+            ]
+          : []),
       ],
     },
     {
@@ -303,6 +310,28 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         >
           {themeMode === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
         </button>
+
+        {/* Web-only: Account + Log out sit next to the theme toggle. */}
+        {isWebMode && (
+          <div className="hidden sm:flex items-center gap-1">
+            <button
+              onClick={onOpenAccount}
+              className="w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
+              title="Account / change password"
+              aria-label="Account"
+            >
+              <User className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onLogout}
+              className="w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
+              title="Log out"
+              aria-label="Log out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         <button
           data-testid="byok-badge-trigger"

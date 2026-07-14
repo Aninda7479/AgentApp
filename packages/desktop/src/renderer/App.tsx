@@ -220,6 +220,12 @@ export const App: React.FC = () => {
     ? (window as any).require('electron').ipcRenderer
     : null;
 
+  // NOTE: The web build injects a *mock* window.require (see packages/web/src/ipc-bridge.ts),
+  // so `ipc` is truthy in the browser too. We therefore can't use `!ipc` to detect web mode.
+  // Electron's user agent uniquely contains "Electron" — use that as the reliable signal.
+  const isElectron =
+    typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '');
+
   // Persist helpers — write every change back to the JSON store on disk
   /** Writes the current in-memory state to the on-disk JSON store via IPC. */
   const persistStore = (
@@ -1973,7 +1979,7 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
   // IPC. Auth is handled by the web server's /api/auth/* routes, so we expose
   // one-click navigation to the account page and a logout that returns to login
   // without the user manually typing a URL.
-  const isWebMode = !ipc;
+  const isWebMode = !isElectron;
 
   const handleOpenAccount = () => {
     if (isWebMode) {

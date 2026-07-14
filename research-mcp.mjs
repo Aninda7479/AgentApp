@@ -2,9 +2,11 @@
 // known (docs-only), fetch its GitHub repo README and research the real launch
 // command (npx/uvx/docker/bunx/deno/...) or SSE/HTTP endpoint.
 //
-// Design: fetch is expensive, filtering is cheap. We cache the *loosely*
-// extracted candidate per repo, then re-apply the (tightenable) strict rules on
-// every run — so changing the rules never requires re-fetching 2,500 repos.
+// Design: fetch is expensive, filtering is cheap. We cache the *raw README
+// snippet* per repo (truncated), then re-apply the (tightenable) strict rules on
+// every run — so changing the extraction/qualification rules never requires
+// re-fetching 2,500+ repos. The cache also records a `miss` flag for repos that
+// failed to fetch so we can retry them once.
 //
 // Run: node research-mcp.mjs            (full pass; uses cache)
 //      RESEARCH_LIMIT=20 node research-mcp.mjs   (subset, for testing)
@@ -13,9 +15,10 @@ import { readFileSync, writeFileSync, existsSync } from 'fs';
 
 const FILE = 'packages/core/src/integrations/catalog-data.ts';
 const CACHE_FILE = 'research-cache.json';
+const CONCURRENCY = 6;
+
 const text = readFileSync(FILE, 'utf-8');
-const start = text.indexOf('= [');
-const arrStart = text.indexOf('[', start);
+const arrStart = text.indexOf('[', text.indexOf('= ['));
 const arrEnd = text.lastIndexOf('];');
 const entries = JSON.parse(text.slice(arrStart, arrEnd + 1));
 
@@ -23,6 +26,7 @@ const entries = JSON.parse(text.slice(arrStart, arrEnd + 1));
 const CODE_HOSTS = ['github.com', 'gitlab.com', 'bitbucket.org', 'gitee.com', 'codeberg.org'];
 const INFO_HOSTS = ['glama.ai', 'mcp.run', 'smithery.ai', 'mcpservers.org', 'pulsemcp.com', 'mcpverse.ai'];
 const BADGE_HOSTS = ['img.shields.io', 'badgen.net', 'flat.badgen.net', 'badge.fury.io', 'opengraph.githubassets.com'];
+const DENY_HOSTS = ['vscode.dev', 'insiders.vscode.dev', 'marketplace.visualstudio.com'];
 const IMAGE_EXT = /\.(svg|png|jpg|jpeg|gif|webp|ico|bmp)(\?|$)/i;
 
 const normalizeHost = (h) => h.toLowerCase().replace(/^www\./, '');
@@ -45,7 +49,8 @@ function looseIsEndpoint(u) {
 
 // Strict: only genuine MCP surfaces. Requires /mcp or /sse (or a terminal
 // mcp/sse/rpc/graphql/tools segment); drops generic /api, docs pages, badges,
-// localhost, and example placeholders.
+// localhost, example placeholders, and SaaS/npm landing pages that only *mention*
+// mcp in the slug.
 function strictIsEndpoint(u) {
   try {
     const url = new URL(u);
@@ -54,24 +59,35 @@ function strictIsEndpoint(u) {
     if (CODE_HOSTS.some((x) => h === x || h.endsWith('.' + x))) return false;
     if (INFO_HOSTS.some((x) => h === x || h.endsWith('.' + x))) return false;
     if (BADGE_HOSTS.some((x) => h === x || h.endsWith('.' + x))) return false;
+    if (DENY_HOSTS.some((x) => h === x || h.endsWith('.' + x))) return false;
     if (h.endsWith('.github.io')) return false;
+    // SaaS / package landing pages that are not live endpoints.
+    if (/(^|\.)npm\.im$/.test(h) || /(^|\.)(railway\.app|zeabur\.app|render\.com|vercel\.app|netlify\.app|herokuapp\.com)$/.test(h)) return false;
     if (/example\.(com|org|net)$/.test(h)) return false;
     if (/^(localhost|127\.0\.0\.1|0\.0\.0\.0|::1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)$/.test(h)) return false;
     if (IMAGE_EXT.test(p) || /\.md$/.test(p)) return false;
-    if (/\/(tree|blob|src|raw|releases|wiki|issues|pull|badges|badge|docs)(\/|$)/i.test(p)) return false;
+    if (/\/(tree|blob|src|raw|releases|wiki|issues|pull|badges|badge|docs|guides)(\/|$)/i.test(p)) return false;
     if (/^(mcp|sse)\./.test(h)) return true;
     if (/(\/|^)(mcp|sse|rpc|graphql|tools)(\/|$)/i.test(p)) return true;
-    if (/\/v\d+(\/|$)/.test(p) && /(mcp|sse|rpc|tools)/i.test(p)) return true;
+    if (/\/v\d+\/(mcp|sse|rpc|tools)(\/|$)/i.test(p)) return true;
     return false;
   } catch {
     return false;
   }
 }
 
-// ---------- stdio command extraction ----------
-const STDIO_RE = /`(npx|uvx|uv run|bunx|deno|docker run|pipx|pip install|python -m|npm install -g|npm i -g|pnpm|npm|claude mcp add)[^`]*`/gi;
+// ---------- stdio command extraction (fenced blocks + inline) ----------
+const CODE_FENCE = /```[\s\S]*?```/g;
+const STOP = new Set([
+  'mcp', 'add', 'run', 'server', 'install', 'sse', 'stdio', 'mcp-server',
+  'start', 'stop', 'list', 'get', 'set', 'use', 'new', 'create', 'init',
+  'build', 'test', 'dev', 'serve', 'tools', 'agent', 'agents', 'help',
+  'remove', 'rm', 'config', 'update', 'inspect', 'login', 'logout', 'search'
+]);
+const STDIO_RE = /(npx|uvx|uv run|bunx|deno|docker run|pipx|pip install|python -m|npm install -g|npm i -g|pnpm)\b[^\n]*/i;
+
 function cleanStdio(cmd) {
-  cmd = cmd.trim();
+  cmd = cmd.trim().replace(/\s+/g, ' ');
   if (/^pip install|pipx/i.test(cmd)) {
     const pkg = cmd.replace(/^(pip install|pipx)\s+/i, '').split(/\s/)[0];
     return `uvx ${pkg}`;
@@ -81,37 +97,55 @@ function cleanStdio(cmd) {
     return `npx -y ${pkg}`;
   }
   if (/^claude mcp add/i.test(cmd)) {
-    const inner = cmd.match(/(npx|uvx|uv run|bunx|deno|docker run|pipx|pip install|python -m)[^`]*/i);
-    return inner ? inner[0].trim() : cmd.replace(/^claude mcp add\s+\S+\s*/i, '').trim();
+    const inner = cmd.match(/(npx|uvx|uv run|bunx|deno|docker run|pipx|pip install|python -m)[^\n]*/i);
+    return inner ? inner[0].trim() : null;
   }
   return cmd;
 }
+
+// Extract a launch command from a README. Returns null if none is found or all
+// candidates are scaffolding/placeholder/non-command lines.
 function extractStdio(readme) {
-  const all = [];
+  const candidates = [];
+  const fenceRe = new RegExp(CODE_FENCE);
   let m;
-  STDIO_RE.lastIndex = 0;
-  while ((m = STDIO_RE.exec(readme))) all.push(m[1].trim());
-  if (all.length === 0) return null;
-  const mcp = all.find((c) => /mcp/i.test(c));
-  const cmd = cleanStdio(mcp || all[0]);
-  if (!cmd) return null;
-  if (/create-(react|vite|next|astro)|init\s|@anthropic-ai\/claude-code|claude-code/.test(cmd)) return null;
-  // Require a package-like token; reject bare `claude mcp add` / `docker run`.
-  const STOP = new Set([
-    'mcp', 'add', 'run', 'server', 'install', 'sse', 'stdio', 'mcp-server',
-    'start', 'stop', 'list', 'get', 'set', 'use', 'new', 'create', 'init',
-    'build', 'test', 'dev', 'serve', 'tools', 'agent', 'agents'
-  ]);
-  const meaningful = cmd
-    .split(/\s+/)
-    .filter(
-      (t) =>
-        !t.startsWith('-') &&
-        !/^(npx|uvx|uv|bunx|deno|docker|pnpm|npm|pipx|pip|python|claude)$/i.test(t) &&
-        !STOP.has(t.toLowerCase())
-    );
-  return meaningful.length ? cmd : null;
+  while ((m = fenceRe.exec(readme))) {
+    for (const ln of m[0].split('\n')) {
+      if (/npx|uvx|uv run|bunx|deno|docker run|pipx|pip install|python -m|npm (install|i)/i.test(ln))
+        candidates.push(ln);
+    }
+  }
+  for (const ln of readme.split('\n').map((l) => l.replace(/^[`>]*/, '').trim())) {
+    if (/npx|uvx|uv run|bunx|deno|docker run|pipx|pip install|python -m|npm (install|i)/i.test(ln))
+      candidates.push(ln);
+  }
+  for (let raw of candidates) {
+    raw = raw.replace(/^`+|`+$/g, '').trim();
+    const mm = raw.match(STDIO_RE);
+    if (!mm) continue;
+    let cmd = cleanStdio(mm[0]);
+    if (!cmd) continue;
+    // Drop artifacts + placeholders + non-command installs.
+    if (/[`"│|]/.test(cmd)) continue;
+    if (/example\.(com|org|net)|\byour[-_]|<[^>]+>|#\s*arbitrary|\{\{|\$\{/i.test(cmd)) continue;
+    if (/@smithery\/cli|smithery\s+install|npx\s+@modelcontextprotocol\/inspect/i.test(cmd)) continue;
+    if (/create-(react|vite|next|astro)|@anthropic-ai\/claude-code|claude-code|\.ts$|\.js$|\/path\/to|\.\./i.test(cmd)) continue;
+    if (/^claude mcp add/i.test(cmd)) continue;
+    if (/^docker run/i.test(cmd) && !/mcp|server/i.test(cmd)) continue;
+    if (/^npm (install|i)/i.test(cmd) && !/mcp|server/i.test(cmd)) continue;
+    const meaningful = cmd
+      .split(/\s+/)
+      .filter(
+        (t) =>
+          !t.startsWith('-') &&
+          !/^(npx|uvx|uv|bunx|deno|docker|pnpm|npm|pipx|pip|python|claude)$/i.test(t) &&
+          !STOP.has(t.toLowerCase())
+      );
+    if (meaningful.length) return cmd;
+  }
+  return null;
 }
+
 function extractEndpointLoose(readme) {
   const re = /(https?:\/\/[^\s)<>"'`]+)/gi;
   let m;
@@ -122,47 +156,75 @@ function extractEndpointLoose(readme) {
   return null;
 }
 
-// ---------- cache (loose candidates per repo) ----------
+// ---------- cache (raw README snippet per repo) ----------
 const cache = existsSync(CACHE_FILE) ? JSON.parse(readFileSync(CACHE_FILE, 'utf-8')) : {};
 function saveCache() {
   writeFileSync(CACHE_FILE, JSON.stringify(cache));
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function fetchReadme(repo) {
-  for (const branch of ['main', 'master']) {
+async function fetchOne(url) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const res = await fetch(`https://raw.githubusercontent.com/${repo}/${branch}/README.md`, {
-        headers: { 'User-Agent': 'mcp-catalog-research' }
-      });
-      if (res.status === 200) return (await res.text()).slice(0, 60000);
-      if (res.status === 429) {
-        await sleep(3000);
-        continue;
-      }
+      const res = await fetch(url, { headers: { 'User-Agent': 'mcp-catalog-research' } });
+      if (res.status === 200) return (await res.text()).slice(0, 10000);
+      if (res.status === 429 || res.status >= 500) await sleep(1500 * (attempt + 1));
     } catch {
-      /* ignore */
+      await sleep(500);
     }
   }
   return null;
 }
-
-// Returns the loose candidate for a repo, fetching + caching if missing.
-async function candidateFor(repo) {
-  if (cache[repo]) return cache[repo];
-  const readme = await fetchReadme(repo);
-  const cand = readme
-    ? { stdio: extractStdio(readme), endpoint: extractEndpointLoose(readme) }
-    : { stdio: null, endpoint: null };
-  cache[repo] = cand;
-  return cand;
+async function fetchReadme(repo, branches = ['main', 'master']) {
+  for (const b of branches) {
+    const t = await fetchOne(`https://raw.githubusercontent.com/${repo}/${b}/README.md`);
+    if (t) return t;
+  }
+  return null;
 }
 
-// Applies the CURRENT strict rules to a loose candidate.
-function qualify(cand) {
-  if (cand.stdio) return { command: cand.stdio, transport: 'stdio' };
-  if (cand.endpoint && strictIsEndpoint(cand.endpoint)) {
-    return { command: cand.endpoint, transport: /sse/i.test(cand.endpoint) ? 'sse' : 'http' };
+function parseGithub(url) {
+  const m = url.match(/github\.com\/([^/#?]+)\/([^/#?]+)(?:\/(?:tree|blob)\/([^/#?]+)\/?(.+)?)?/i);
+  if (!m) return null;
+  return {
+    owner: m[1],
+    repo: m[2].replace(/\.git$/, ''),
+    branch: m[3] || null,
+    subdir: m[4] ? m[4].replace(/\/$/, '') : null
+  };
+}
+
+// Returns the raw README snippet for a repo, fetching + caching if missing or
+// if a previous fetch failed (miss flag) — so transient failures get retried.
+async function rawFor(repo, homepage) {
+  // Old cache shape lacked `raw`; treat missing/non-string raw as a miss so the
+  // entry is re-fetched and rebuilt in the new {raw,stdio,endpoint,miss} shape.
+  if (cache[repo] && !cache[repo].miss && typeof cache[repo].raw === 'string') return cache[repo].raw;
+  const g = parseGithub(homepage);
+  const branches = g?.branch ? [g.branch, 'main', 'master'] : ['main', 'master'];
+  const root = await fetchReadme(repo, branches);
+  let raw = root;
+  if (g?.subdir) {
+    const subUrl = `https://raw.githubusercontent.com/${g.owner}/${g.repo}/${branches[0]}/${g.subdir}/README.md`;
+    const sub = await fetchOne(subUrl);
+    if (sub) raw = `${sub}\n${root || ''}`;
+  }
+  if (!raw) {
+    cache[repo] = { raw: '', stdio: null, endpoint: null, miss: true };
+    return '';
+  }
+  cache[repo] = { raw, stdio: null, endpoint: null, miss: false };
+  return raw;
+}
+
+// Applies the CURRENT strict rules to a raw README.
+function qualifyFromRaw(raw) {
+  if (!raw) return null;
+  const stdio = extractStdio(raw);
+  if (stdio) return { command: stdio, transport: 'stdio' };
+  const endpoint = extractEndpointLoose(raw);
+  if (endpoint && strictIsEndpoint(endpoint)) {
+    return { command: endpoint, transport: /sse/i.test(endpoint) ? 'sse' : 'http' };
   }
   return null;
 }
@@ -170,7 +232,7 @@ function qualify(cand) {
 // ---------- build unique-repo work list ----------
 const repoMap = new Map();
 for (const e of entries) {
-  if (e.installable) continue;
+  if (e.installable) continue; // already done; skip to save work
   if (!e.homepage || !/github\.com/i.test(e.homepage)) continue;
   const mm = e.homepage.match(/github\.com\/([^/#?]+)\/([^/#?]+)/i);
   if (!mm) continue;
@@ -182,17 +244,19 @@ let repos = [...repoMap.keys()];
 const LIMIT = Number(process.env.RESEARCH_LIMIT || 0);
 if (LIMIT > 0 && LIMIT < repos.length) repos.length = LIMIT;
 const DRY = process.env.RESEARCH_DRY === '1';
-console.log(`Researching ${repos.length} unique GitHub repos for ${entries.filter((e) => !e.installable && /github/i.test(e.homepage || '')).length} docs-only entries…${DRY ? ' [DRY RUN]' : ''}`);
+console.log(
+  `Researching ${repos.length} unique GitHub repos for ${entries.filter((e) => !e.installable && /github/i.test(e.homepage || '')).length} docs-only entries…${DRY ? ' [DRY RUN]' : ''}`
+);
 
 let done = 0;
 let promoted = 0;
-const CONCURRENCY = 6;
+const CONC = CONCURRENCY;
 
 async function worker() {
   while (repos.length) {
     const repo = repos.shift();
-    const cand = await candidateFor(repo);
-    const final = qualify(cand);
+    const raw = await rawFor(repo, repoMap.get(repo)[0].homepage);
+    const final = qualifyFromRaw(raw);
     done++;
     if (final) {
       if (DRY) console.log(`  PROMOTE ${repo} -> ${final.command} [${final.transport}]`);
@@ -221,7 +285,7 @@ function write() {
   writeFileSync(FILE, out);
 }
 
-const workers = Array.from({ length: CONCURRENCY }, () => worker());
+const workers = Array.from({ length: CONC }, () => worker());
 await Promise.all(workers);
 saveCache();
 write();

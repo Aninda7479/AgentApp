@@ -195,6 +195,28 @@ const seen = new Set();
 let category = '';
 let categoryEmoji = '';
 
+/**
+ * Turns a raw link label (often `owner/repo` or `owner/mcp-server-foo`) into a
+ * clean display name ("Coinopai", "Filesystem") while keeping the id derived
+ * from the raw label so it stays stable across regenerations.
+ */
+function cleanDisplayName(raw) {
+  let n = raw;
+  if (n.includes('/')) n = n.split('/').pop() || n; // drop the owner/ prefix
+  n = n
+    .replace(/^mcp[-_]?server[-_]?/i, '')
+    .replace(/[-_]?mcp[-_]?server$/i, '')
+    .replace(/[-_]?mcp$/i, '')
+    .replace(/[-_]?server$/i, '');
+  if (!n.trim()) n = raw;
+  return n
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ')
+    .trim();
+}
+
 for (const raw of body) {
   const line = raw.trim();
   if (line.startsWith('### ')) {
@@ -210,15 +232,16 @@ for (const raw of body) {
   if (!link || !/^https?:\/\//i.test(link.url)) continue;
   const homepage = link.url;
 
-  const name = link.text || homepage;
-  if (!name || /^!?\[?image\]?$/i.test(name)) continue;
+  const rawName = link.text || homepage;
+  if (!rawName || /^!?\[?image\]?$/i.test(rawName)) continue;
+  const name = cleanDisplayName(rawName);
 
   // description = text after the closing paren of this link
   const afterLink = line.slice(line.indexOf(')') + 1);
   let description = clean(afterLink).replace(/^[\s\-–—:·•|]+/, '');
   if (!description) description = name;
 
-  let id = slug(name);
+  let id = slug(rawName);
   let n = 1;
   while (seen.has(id)) id = `${slug(name)}-${++n}`;
   seen.add(id);
