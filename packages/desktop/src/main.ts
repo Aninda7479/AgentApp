@@ -771,6 +771,27 @@ function setupDevWatcher() {
 }
 
 app.whenReady().then(async () => {
+  // Cleanup outdated partner directories to ensure Lily and Waifu are merged
+  try {
+    const petsDir = path.join(app.getPath('userData'), 'pets');
+    ['waifu', 'pixel', 'byte', 'nova'].forEach((oldId) => {
+      const dir = path.join(petsDir, oldId);
+      if (fs.existsSync(dir)) {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+    // Also reset active partner if it was one of the outdated ones
+    const activeFile = path.join(petsDir, 'active.json');
+    if (fs.existsSync(activeFile)) {
+      const activeData = JSON.parse(fs.readFileSync(activeFile, 'utf-8'));
+      if (activeData && (activeData.id === 'waifu' || activeData.id === 'pixel' || activeData.id === 'byte' || activeData.id === 'nova')) {
+        fs.writeFileSync(activeFile, JSON.stringify({ id: 'lily' }), 'utf-8');
+      }
+    }
+  } catch (e) {
+    console.error('Failed to cleanup outdated pets:', e);
+  }
+
   initApp();
   setupDevWatcher();
   // NOTE: the 3D Partner does NOT auto-start. The user launches it manually from

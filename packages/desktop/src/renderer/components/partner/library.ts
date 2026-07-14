@@ -275,6 +275,26 @@ export function usePartners() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Local storage cleanup for legacy pets
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = window.localStorage.getItem(LS_INSTALLED);
+          if (raw) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) {
+              const filtered = list.filter((p) => p.id !== 'waifu' && p.id !== 'pixel' && p.id !== 'byte' && p.id !== 'nova');
+              if (filtered.length !== list.length) {
+                window.localStorage.setItem(LS_INSTALLED, JSON.stringify(filtered));
+              }
+            }
+          }
+          const active = window.localStorage.getItem(LS_ACTIVE);
+          if (active === 'waifu' || active === 'pixel' || active === 'byte' || active === 'nova') {
+            window.localStorage.setItem(LS_ACTIVE, 'lily');
+          }
+        } catch {}
+      }
+
       const [installed, active] = await Promise.all([
         PartnerLibrary.list(),
         PartnerLibrary.getActiveId()
