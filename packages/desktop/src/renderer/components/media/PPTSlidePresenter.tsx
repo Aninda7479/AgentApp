@@ -292,7 +292,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '16px',
   },
   presentationBadge: {
-    color: '#8b5cf6',
+    color: 'var(--brand-highlight)',
     fontWeight: 700,
     fontSize: '0.9rem',
   },
@@ -316,9 +316,9 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.2s',
   },
   activeBarBtn: {
-    backgroundColor: '#8b5cf6',
-    borderColor: '#a78bfa',
-    color: '#ffffff',
+    backgroundColor: 'var(--brand-highlight)',
+    borderColor: 'var(--brand-highlight-border-subtle)',
+    color: 'var(--brand-highlight-text, #ffffff)',
     fontWeight: 600,
   },
   mainArea: {
@@ -391,7 +391,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#f4f4f5',
   },
   bulletDot: {
-    color: '#8b5cf6',
+    color: 'var(--brand-highlight)',
     fontSize: '1.2rem',
   },
   imageContainer: {
@@ -481,13 +481,13 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.2s',
   },
   activeThumbCard: {
-    borderColor: '#8b5cf6',
+    borderColor: 'var(--brand-highlight)',
     opacity: 1,
-    backgroundColor: '#1e1b4b',
+    backgroundColor: 'var(--brand-highlight-bg-subtle)',
   },
   thumbNum: {
     fontSize: '0.7rem',
-    color: '#8b5cf6',
+    color: 'var(--brand-highlight)',
     fontWeight: 700,
   },
   thumbTitle: {

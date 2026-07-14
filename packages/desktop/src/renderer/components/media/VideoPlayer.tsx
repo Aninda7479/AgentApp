@@ -308,8 +308,8 @@ const styles: Record<string, React.CSSProperties> = {
     textShadow: '0 1px 2px rgba(0,0,0,0.8)',
   },
   badge: {
-    backgroundColor: '#8b5cf6',
-    color: '#ffffff',
+    backgroundColor: 'var(--brand-highlight)',
+    color: 'var(--brand-highlight-text, #ffffff)',
     padding: '2px 6px',
     borderRadius: '4px',
     fontSize: '0.7rem',
@@ -332,9 +332,9 @@ const styles: Record<string, React.CSSProperties> = {
     width: '64px',
     height: '64px',
     borderRadius: '50%',
-    backgroundColor: 'rgba(139, 92, 246, 0.9)',
+    backgroundColor: 'color-mix(in srgb, var(--brand-highlight) 90%, transparent)',
     border: 'none',
-    color: '#ffffff',
+    color: 'var(--brand-highlight-text, #ffffff)',
     fontSize: '1.8rem',
     display: 'flex',
     alignItems: 'center',
@@ -361,7 +361,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   timelineSlider: {
     width: '100%',
-    accentColor: '#8b5cf6',
+    accentColor: 'var(--brand-highlight)',
     cursor: 'pointer',
   },
   controlsRow: {
@@ -399,7 +399,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   volumeSlider: {
     width: '70px',
-    accentColor: '#8b5cf6',
+    accentColor: 'var(--brand-highlight)',
     cursor: 'pointer',
   },
   selectInput: {

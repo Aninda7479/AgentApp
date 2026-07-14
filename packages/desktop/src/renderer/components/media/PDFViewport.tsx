@@ -374,7 +374,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   outlinePageNum: {
     backgroundColor: '#09090b',
-    color: '#8b5cf6',
+    color: 'var(--brand-highlight)',
     padding: '2px 4px',
     borderRadius: '4px',
     fontSize: '0.7rem',
@@ -430,7 +430,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   pdfRule: {
     height: '2px',
-    backgroundColor: '#8b5cf6',
+    backgroundColor: 'var(--brand-highlight)',
     width: '60px',
   },
   pdfParagraph: {
@@ -466,7 +466,7 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
   },
   diagramArrow: {
-    color: '#8b5cf6',
+    color: 'var(--brand-highlight)',
     fontWeight: 700,
   },
   pdfFooter: {

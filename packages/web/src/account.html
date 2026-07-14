@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#08090d" />
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='32' y2='32'><stop stop-color='%238b5cf6'/><stop offset='1' stop-color='%2338bdf8'/></linearGradient></defs><rect width='32' height='32' rx='8' fill='url(%23g)'/><path d='M11 22L16 10l5 12' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/><circle cx='16' cy='22.5' r='1.8' fill='white'/><circle cx='21' cy='10' r='1.8' fill='white'/></svg>" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23a16207'/><path d='M11 22L16 10l5 12' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/><circle cx='16' cy='22.5' r='1.8' fill='white'/><circle cx='21' cy='10' r='1.8' fill='white'/></svg>" />
   <title>Account · SuperAgent</title>
   <style>
     :root {
@@ -13,8 +13,9 @@
       --border: rgba(255, 255, 255, 0.1);
       --text: #e5e7eb;
       --muted: #9ca3af;
-      --accent: #8b5cf6;
-      --accent2: #38bdf8;
+      --accent: #a16207;          /* Sophisticated dark yellow */
+      --accent-hover: #854d0e;
+      --accent-text: #fef9c3;
       --danger: #f87171;
       --ok: #34d399;
     }
@@ -26,10 +27,7 @@
     }
     body {
       display: flex; align-items: center; justify-content: center; padding: 24px;
-      background:
-        radial-gradient(circle at 20% 20%, rgba(124, 58, 237, 0.14), transparent 40%),
-        radial-gradient(circle at 80% 80%, rgba(56, 189, 248, 0.10), transparent 40%),
-        var(--bg);
+      background: var(--bg);
     }
     .card {
       width: 100%; max-width: 420px;
@@ -47,13 +45,13 @@
       border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 14px;
       outline: none; transition: border-color 0.15s, box-shadow 0.15s;
     }
-    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18); }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(161, 98, 7, 0.18); }
     button {
-      width: 100%; padding: 12px; margin-top: 6px; border: none; border-radius: 10px;
-      font-size: 14px; font-weight: 600; cursor: pointer; transition: transform 0.1s, filter 0.15s;
-      background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff;
+      width: 100%; padding: 12px; margin-top: 6px; border: 1px solid rgba(0, 0, 0, 0.15); border-radius: 10px;
+      font-size: 14px; font-weight: 600; cursor: pointer; transition: transform 0.1s, background-color 0.15s;
+      background: var(--accent); color: var(--accent-text);
     }
-    button:hover { filter: brightness(1.08); }
+    button:hover { background: var(--accent-hover); }
     button:active { transform: scale(0.98); }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
     .linkbtn {

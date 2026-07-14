@@ -12,8 +12,9 @@
       --border: rgba(255, 255, 255, 0.1);
       --text: #e5e7eb;
       --muted: #9ca3af;
-      --accent: #8b5cf6;
-      --accent2: #38bdf8;
+      --accent: #a16207;          /* Sophisticated dark yellow */
+      --accent-hover: #854d0e;
+      --accent-text: #fef9c3;
       --danger: #f87171;
       --ok: #34d399;
     }
@@ -25,10 +26,7 @@
     }
     body {
       display: flex; align-items: center; justify-content: center; padding: 24px;
-      background:
-        radial-gradient(circle at 20% 20%, rgba(124, 58, 237, 0.14), transparent 40%),
-        radial-gradient(circle at 80% 80%, rgba(56, 189, 248, 0.10), transparent 40%),
-        var(--bg);
+      background: var(--bg);
     }
     .card {
       width: 100%; max-width: 400px;
@@ -39,8 +37,8 @@
     @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
     .logo {
       width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      margin-bottom: 18px; font-size: 22px; box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
+      background: var(--accent); color: var(--accent-text);
+      margin-bottom: 18px; font-size: 22px;
     }
     h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.02em; }
     p.sub { color: var(--muted); font-size: 13px; margin: 0 0 26px; }
@@ -51,14 +49,14 @@
       border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 14px;
       outline: none; transition: border-color 0.15s, box-shadow 0.15s;
     }
-    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18); }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(161, 98, 7, 0.18); }
     button {
       width: 100%; padding: 12px; margin-top: 6px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff;
-      border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;
-      transition: transform 0.1s, filter 0.15s;
+      background: var(--accent); color: var(--accent-text);
+      border: 1px solid rgba(0, 0, 0, 0.15); border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: transform 0.1s, background-color 0.15s;
     }
-    button:hover { filter: brightness(1.08); }
+    button:hover { background: var(--accent-hover); }
     button:active { transform: scale(0.98); }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
     .msg { display: none; margin-bottom: 16px; padding: 10px 12px; border-radius: 10px; font-size: 13px; }

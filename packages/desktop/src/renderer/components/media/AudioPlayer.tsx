@@ -165,7 +165,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
                 style={{
                   ...styles.waveformBar,
                   height: `${isPlaying ? Math.max(15, height * (0.6 + Math.sin(idx + currentTime) * 0.4)) : height}%`,
-                  backgroundColor: isActive ? '#8b5cf6' : '#3f3f46',
+                  backgroundColor: isActive ? 'var(--brand-highlight)' : '#3f3f46',
                 }}
               />
             );
@@ -328,7 +328,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   timelineSlider: {
     flex: 1,
-    accentColor: '#8b5cf6',
+    accentColor: 'var(--brand-highlight)',
     cursor: 'pointer',
   },
   controlsRow: {
@@ -348,15 +348,15 @@ const styles: Record<string, React.CSSProperties> = {
     width: '44px',
     height: '44px',
     borderRadius: '50%',
-    backgroundColor: '#8b5cf6',
+    backgroundColor: 'var(--brand-highlight)',
     border: 'none',
-    color: '#ffffff',
+    color: 'var(--brand-highlight-text, #ffffff)',
     fontSize: '1.2rem',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     cursor: 'pointer',
-    boxShadow: '0 4px 12px rgba(139, 92, 246, 0.4)',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.25)',
   },
   secondaryBtn: {
     background: 'transparent',
@@ -381,7 +381,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   volumeSlider: {
     width: '80px',
-    accentColor: '#8b5cf6',
+    accentColor: 'var(--brand-highlight)',
     cursor: 'pointer',
   },
   speedGroup: {
@@ -399,7 +399,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   activeSpeedBtn: {
     backgroundColor: '#27272a',
-    borderColor: '#8b5cf6',
+    borderColor: 'var(--brand-highlight)',
     color: '#ffffff',
     fontWeight: 600,
   },

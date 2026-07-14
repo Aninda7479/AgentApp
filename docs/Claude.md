@@ -102,7 +102,7 @@ Claude Desktop and Claude Code are designed as native MCP clients:
 | `/init` ✅ | Analyze project and auto-generate project-level `CLAUDE.md` rules |
 | `/goal` | Set a completion condition for Claude, which then works autonomously toward that end state |
 | `/plan` ✅ | Enter plan mode for planning large architectural/complex changes |
-| `/security-review` | Run automated security analysis on your codebase to identify vulnerabilities (SQL injection, XSS, etc.) |
+| `/security-review` ✅ | Run automated security analysis on your codebase to identify vulnerabilities (SQL injection, XSS, etc.) |
 | `/code-review` / `/review` ✅ | Audit current changes or code diffs for issues |
 | `/cost` / `/stats` ✅ | View cumulative session costs and token statistics |
 | `/config` ✅ | View or modify configuration options (e.g. `/config verbose=true`) |

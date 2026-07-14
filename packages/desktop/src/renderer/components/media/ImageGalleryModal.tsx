@@ -524,7 +524,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.8rem',
   },
   slider: {
-    accentColor: '#8b5cf6',
+    accentColor: 'var(--brand-highlight)',
   },
   sidebarFooter: {
     marginTop: 'auto',
@@ -545,9 +545,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   saveBtn: {
     flex: 1,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: 'var(--brand-highlight)',
     border: 'none',
-    color: '#ffffff',
+    color: 'var(--brand-highlight-text, #ffffff)',
     padding: '8px',
     borderRadius: '6px',
     fontWeight: 600,
@@ -576,7 +576,7 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.2s',
   },
   activeThumbnail: {
-    borderColor: '#8b5cf6',
+    borderColor: 'var(--brand-highlight)',
     opacity: 1,
   },
   thumbImg: {

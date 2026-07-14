@@ -9,6 +9,15 @@
   --color-brand-textMain: var(--brand-text-main);
   --color-brand-textMuted: var(--brand-text-muted);
   
+  --color-violet-400: var(--brand-highlight);
+  --color-violet-500: var(--brand-highlight);
+  --color-violet-600: var(--brand-highlight-hover);
+  --color-indigo-500: var(--brand-highlight);
+  --color-indigo-600: var(--brand-highlight-hover);
+  --color-sky-400: var(--brand-highlight);
+  --color-sky-500: var(--brand-highlight);
+  --color-sky-600: var(--brand-highlight-hover);
+
   --font-sans: 'Inter', -apple-system, sans-serif;
   --font-outfit: 'Outfit', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
@@ -33,7 +42,11 @@
   --brand-hover-strong: rgba(255, 255, 255, 0.1);
   --brand-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
   --brand-shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.22);
-  /* --spacing: 0.25rem; */
+  --brand-highlight: #a16207;       /* Dark yellow */
+  --brand-highlight-hover: #854d0e;
+  --brand-highlight-text: #fef9c3;
+  --brand-highlight-bg-subtle: rgba(161, 98, 7, 0.14);
+  --brand-highlight-border-subtle: rgba(161, 98, 7, 0.35);
 }
 
 :root[data-theme='light'] {
@@ -49,7 +62,11 @@
   --brand-hover-strong: rgba(15, 23, 42, 0.1);
   --brand-shadow: 0 18px 45px rgba(15, 23, 42, 0.16);
   --brand-shadow-soft: 0 8px 22px rgba(15, 23, 42, 0.1);
-  /* --spacing: 0.25rem; */
+  --brand-highlight: #fef08a;       /* Lite yellow */
+  --brand-highlight-hover: #fde047;
+  --brand-highlight-text: #713f12;  /* Dark brown/gold */
+  --brand-highlight-bg-subtle: rgba(254, 240, 138, 0.16);
+  --brand-highlight-border-subtle: rgba(254, 240, 138, 0.45);
 }
 
 html,
@@ -118,8 +135,8 @@ body {
 }
 
 ::selection {
-  background: rgba(139, 92, 246, 0.3);
-  color: #ffffff;
+  background: var(--brand-highlight-bg-subtle);
+  color: var(--brand-text-main);
 }
 
 /* Glassmorphism helpers */
@@ -230,12 +247,12 @@ body {
   font-weight: 600;
   padding: 0.5rem 1rem;
   cursor: pointer;
-  border: none;
-  color: #fff;
-  background: linear-gradient(135deg, #8b5cf6, #6366f1);
-  transition: filter 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+  border: 1px solid var(--brand-highlight-border-subtle);
+  color: var(--brand-highlight-text);
+  background: var(--brand-highlight);
+  transition: filter 0.15s ease, transform 0.1s ease, background-color 0.15s ease;
 }
-.ui-btn-primary:hover { filter: brightness(1.08); box-shadow: 0 6px 18px rgba(124, 58, 237, 0.35); }
+.ui-btn-primary:hover { background: var(--brand-highlight-hover); }
 .ui-btn-primary:active { transform: scale(0.98); }
 .ui-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; filter: none; box-shadow: none; }
 
@@ -327,7 +344,7 @@ body {
   transition: background-color 0.2s ease;
   background: var(--brand-border);
 }
-.ui-toggle[aria-checked='true'] { background: #6366f1; }
+.ui-toggle[aria-checked='true'] { background: var(--brand-highlight); }
 .ui-toggle > span {
   display: block;
   width: 20px;
@@ -436,7 +453,7 @@ body {
   transition: background-color 0.12s ease;
 }
 .ui-popover-item:hover { background: color-mix(in srgb, var(--brand-text-main) 8%, transparent); }
-.ui-popover-item.active { background: color-mix(in srgb, #8b5cf6 16%, transparent); color: #fff; }
+.ui-popover-item.active { background: var(--brand-highlight-bg-subtle); color: var(--brand-highlight-text); border: 1px solid var(--brand-highlight-border-subtle); }
 
 /* ── Mobile bottom navigation bar ──────────────────────────────────────────
    Hidden by default; only shown on small (phone) screens. The reveal is done
@@ -479,17 +496,15 @@ body {
 .ui-bottom-nav-item svg { width: 20px; height: 20px; transition: color 0.15s ease, transform 0.15s ease; }
 .ui-bottom-nav-item:active { transform: scale(0.96); }
 .ui-bottom-nav-item.active {
-  color: #fff;
-  background: color-mix(in srgb, #8b5cf6 18%, transparent);
+  color: var(--brand-highlight-text);
+  background: var(--brand-highlight-bg-subtle);
+  border: 1px solid var(--brand-highlight-border-subtle);
 }
-.ui-bottom-nav-item.active svg { color: #a78bfa; }
+.ui-bottom-nav-item.active svg { color: var(--brand-highlight); }
 
-/* Subtle gradient text used for brand / hero emphasis */
+/* Subtle highlight text used for brand / hero emphasis */
 .text-gradient {
-  background: linear-gradient(135deg, #a78bfa, #6366f1 45%, #38bdf8);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--brand-highlight);
 }
 
 /* Hairline divider that adapts to theme */
