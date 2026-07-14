@@ -498,11 +498,12 @@ ipcMain.handle('partner-remove', (_event, id: string) => {
 
 ipcMain.handle('partner-set-active', (_event, id: string | null) => {
   PartnerStore.setActivePartner(app.getPath('userData'), id);
-  // Push the now-active Partner (with its resolved 3D model / VRM paths) to the pet.
+  // Push the now-active Partner (with its resolved 3D model / VRM/script paths) to the pet.
   const manifest = id ? PartnerStore.getPartner(app.getPath('userData'), id) : null;
   const modelPath = manifest ? resolvePartnerModelPath(manifest) : null;
   const vrmPath = manifest ? resolvePartnerVrmPath(manifest) : null;
-  petWindowManager.setPartner(manifest as any, modelPath, vrmPath);
+  const scriptPath = manifest ? resolvePartnerScriptPath(manifest) : null;
+  petWindowManager.setPartner(manifest as any, modelPath, vrmPath, scriptPath);
   return { success: true };
 });
 
@@ -581,7 +582,8 @@ ipcMain.handle('partner-import-model', async (_event, { id, sourcePath }: { id: 
       petWindowManager.setPartner(
         manifest as any,
         resolvePartnerModelPath(manifest),
-        resolvePartnerVrmPath(manifest)
+        resolvePartnerVrmPath(manifest),
+        resolvePartnerScriptPath(manifest)
       );
     }
 
@@ -618,6 +620,16 @@ function resolvePartnerVrmPath(manifest: any): string | null {
   return fs.existsSync(full) ? full : null;
 }
 
+function resolvePartnerScriptPath(manifest: any): string | null {
+  const script = manifest && typeof manifest.script === 'string' ? manifest.script : null;
+  if (!script) return null;
+  const id = manifest && typeof manifest.id === 'string' ? manifest.id : null;
+  if (!id) return null;
+  const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+  const full = path.join(folder, script);
+  return fs.existsSync(full) ? full : null;
+}
+
 // ─── IPC: 3D desktop Partner overlay window ─────────────────────────────────
 // The pet renderer (separate transparent window) talks back via these channels;
 // the app shell pushes the active Partner + visibility here.
@@ -635,7 +647,8 @@ function resolvePartnerVrmPath(manifest: any): string | null {
 ipcMain.handle('pet-set-partner', (_event, manifest) => {
   const modelPath = manifest ? resolvePartnerModelPath(manifest) : null;
   const vrmPath = manifest ? resolvePartnerVrmPath(manifest) : null;
-  petWindowManager.setPartner(manifest, modelPath, vrmPath);
+  const scriptPath = manifest ? resolvePartnerScriptPath(manifest) : null;
+  petWindowManager.setPartner(manifest, modelPath, vrmPath, scriptPath);
   return { ok: true };
 });
 
@@ -672,7 +685,8 @@ function startPet(): boolean {
       petWindowManager.setPartner(
         manifest as any,
         resolvePartnerModelPath(manifest),
-        resolvePartnerVrmPath(manifest)
+        resolvePartnerVrmPath(manifest),
+        resolvePartnerScriptPath(manifest)
       );
     }
   }

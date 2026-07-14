@@ -1,14 +1,14 @@
-# Waifu — a 3D anime companion
+# Lily — a 3D girl companion
 
-This Partner brings the **anime-waifu desktop pet** to life: a cute girl who sits
+This Partner brings the **Lily desktop pet** to life: a cute girl who sits
 with a laptop and a head pillow, and reacts to the agent (works while it runs,
 celebrates on success, sleeps when idle, talks when she needs something).
 
 ## Out of the box (no model needed)
 
 `partner.json` references `character.vrm`, but **you don't have one yet** — and
-that's fine. Until you drop a real `.vrm` into this folder, the app shows a
-**built-in procedural waifu** (a stylized figure built from 3D primitives) that
+that's fine. Until you drop a real `.vrm` into this folder, the app shows the
+**built-in procedural Lily** (a stylized figure built from 3D primitives) that
 already does everything: typing on the laptop, sleeping with her head on the
 pillow, laying curled up, walking when you right-drag her, poking when you
 left-click a body part, and showing a speech bubble when she "talks."

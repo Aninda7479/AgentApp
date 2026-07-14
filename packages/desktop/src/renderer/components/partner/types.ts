@@ -79,9 +79,11 @@ export interface PartnerManifest {
    * Optional anime character file (VRM, from VRoid Studio). When present the
    * desktop pet loads it as the 3D character with native facial expressions
    * (talking lip-sync, dark circles, etc.). Falls back to the procedural
-   * waifu if the file is missing or fails to load.
+   * Lily if the file is missing or fails to load.
    */
   vrm?: string;
+  /** Optional custom script filename (index.js) inside the Partner folder. */
+  script?: string;
   /** Show the laptop prop (default true). */
   laptop?: boolean;
   /** Show the head pillow prop (default true). */
@@ -200,6 +202,7 @@ export function normalizeManifest(raw: Record<string, unknown>): PartnerManifest
     frames: Array.isArray(raw.frames) ? (raw.frames as string[]) : undefined,
     model: typeof raw.model === 'string' ? raw.model : undefined,
     vrm: typeof raw.vrm === 'string' ? raw.vrm : undefined,
+    script: typeof raw.script === 'string' ? raw.script : undefined,
     laptop: typeof raw.laptop === 'boolean' ? raw.laptop : true,
     pillow: typeof raw.pillow === 'boolean' ? raw.pillow : true,
     dialogues: isObject(raw.dialogues)

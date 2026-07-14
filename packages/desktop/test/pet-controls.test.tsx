@@ -14,9 +14,9 @@ describe('Pet controls UI', () => {
 
   it('shows the active character name when provided', () => {
     const html = renderToString(
-      <PetControls activePet={{ name: 'Waifu', id: 'waifu', schema: 'superagent-partner', kind: 'human', version: '1.0.0', description: 'x', reactions: {} } as any} />
+      <PetControls activePet={{ name: 'Lily', id: 'lily', schema: 'superagent-partner', kind: 'girl', version: '1.0.0', description: 'x', reactions: {} } as any} />
     );
-    expect(html).toContain('Waifu');
+    expect(html).toContain('Lily');
   });
 
   it('renders the redesigned Pets settings page', () => {

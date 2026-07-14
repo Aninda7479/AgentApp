@@ -28,26 +28,23 @@ Create a folder for your Partner and put a `partner.json` inside it:
 ```json
 {
   "schema": "superagent-partner",
-  "id": "nova",
-  "name": "Nova",
-  "kind": "star",
+  "id": "custom-companion",
+  "name": "Custom Companion",
+  "kind": "custom",
   "version": "1.0.0",
-  "description": "A bright star that twinkles while the agent works.",
+  "description": "A custom 3D script-based companion.",
   "author": "@you",
-  "accent": "#fbbf24",
-  "emoji": "⭐",
-  "personality": {
-    "voice": "warm and cheerful",
-    "traits": ["optimistic", "energetic"]
-  },
+  "accent": "#ff8fb3",
+  "emoji": "🧍",
+  "script": "index.js",
   "reactions": {
-    "idle":      { "emoji": "⭐", "line": "Shining and ready.", "animation": "float" },
-    "thinking":  { "emoji": "🌟", "line": "Sparking ideas…", "animation": "think" },
-    "working":   { "emoji": "💫", "line": "Twinkling away!", "animation": "bounce" },
-    "happy":     { "emoji": "✨", "line": "Lovely.", "animation": "bounce" },
-    "celebrate": { "emoji": "🌠", "line": "Magic happened!", "animation": "wiggle" },
-    "sad":       { "emoji": "🌑", "line": "Clouded over.", "animation": "none" },
-    "sleeping":  { "emoji": "🌙", "line": "Resting in orbit.", "animation": "pulse" }
+    "idle":      { "emoji": "🧍", "line": "Ready when you are." },
+    "thinking":  { "emoji": "🤔", "line": "Hmm, let me think…" },
+    "working":   { "emoji": "💻", "line": "On it!" },
+    "happy":     { "emoji": "🙂", "line": "Nice." },
+    "celebrate": { "emoji": "🎉", "line": "Done!" },
+    "sad":       { "emoji": "😢", "line": "That didn't go well." },
+    "sleeping":  { "emoji": "😴", "line": "zzz" }
   }
 }
 ```
@@ -67,6 +64,7 @@ Create a folder for your Partner and put a `partner.json` inside it:
 | `emoji` | — | Default emoji when a mood has none. Defaults to `🐾`. Also rendered as the floating billboard on the 3D pet. |
 | `frames` | — | Optional list of asset filenames for frame-by-frame animation. |
 | `model` | — | Optional glTF (`.glb` / `.gltf`) filename inside the Partner folder; overrides the built-in 3D creature. |
+| `script` | — | Optional custom script filename (e.g., `index.js`) inside the Partner folder containing a class implementing the modular `Character` interface. |
 | `animations` | — | Reserved `{ mood: clipName }` map for 3D model clip animation (currently unused; behavior is driven by root posing). |
 | `personality` | — | `{ voice?, traits?[] }` — free-form metadata for the future. |
 | `reactions` | — | Map of mood → `{ emoji?, line?, animation?, asset? }`. Any mood may be omitted. |
@@ -110,8 +108,7 @@ file. The file is copied into that Partner's folder and recorded in its manifest
 (`vrm` for `.vrm`, otherwise `model`), so your choice is saved and restored.
 A `.glb`/`.gltf` takes precedence over a `.vrm` for the 3D pet.
 
-Built-in Partners (`Pixel`, `Byte`, `Nova`) always ship with the app and can't be
-removed, but you can edit and re-save them as your own.
+By default, SuperAgent ships with a single built-in modular 3D companion named **Lily** (an anime-waifu companion). Custom partners can be imported or created freely.
 
 ## 3. Set active, export, remove
 
@@ -125,15 +122,31 @@ Zip the Partner folder and share it anywhere (a repo, a Discord, a gist). Anyone
 who drops it into the **Import folder** dialog gets your companion. There is no
 registry and no gatekeeping — that's the point.
 
-## 5. Worked example
+## 5. Worked example / Custom Scripts
 
-See
-[`packages/desktop/examples/partners/nova/partner.json`](packages/desktop/examples/partners/nova/partner.json)
-for a complete, ready-to-import Partner. To try it:
+A Partner can use a custom JavaScript class to define its own 3D model, animations, design, and sounds.
+To create a custom scripted partner:
+1. Create a `partner.json` referencing a script path (e.g. `"script": "index.js"`).
+2. Inside `index.js`, export a class implementing the `Character` interface:
 
-```bash
-# open the app → Partner → Import folder → select packages/desktop/examples/partners/nova
+```typescript
+import * as THREE from 'three';
+
+export interface Character {
+  object: THREE.Object3D;
+  setBehavior(b: Behavior, opts?: { part?: string }): void;
+  setExpression(e: ExpressionName): void;
+  setLipSync(on: boolean): void;
+  setDarkCircles(on: boolean): void;
+  setScale(s: number): void;
+  update(dt: number, t: number): void;
+  raycastPart(ndc: THREE.Vector2, camera: THREE.Camera): string | null;
+  dispose(): void;
+  playSound?(freq: number, audioCtx: AudioContext | null): void;
+}
 ```
+
+See [lily/index.ts](file:///d:/Projects/OpenSource/AgentApp/packages/desktop/models/lily/index.ts) for a complete reference implementation of the default companion.
 
 ## 6. The 3D desktop pet
 
@@ -145,7 +158,7 @@ top margin) and rests there at about **¼ of the screen height**. It does **not*
 wander around the screen — it stays put until you drag it or it reacts to the
 agent.
 
-The default character is an **anime-waifu companion** (a cute girl who sits with
+The default character is **Lily** (a cute anime-waifu companion who sits with
 a laptop and a head pillow). She reacts to the agent and to you:
 
 | Behavior | What happens | Trigger |
@@ -170,27 +183,23 @@ a laptop and a head pillow). She reacts to the agent and to you:
 Set `SUPERAGENT_DISABLE_PET=1` to turn the 3D pet off entirely (the web build
 uses the 2D companion instead).
 
-### The character: procedural by default, VRM when you add one
+### The character: modular Lily by default, VRM when you add one
 
-The default pet is a **built-in procedural waifu** assembled from Three.js
-primitives (head, torso, arms, hands, legs, a hinged laptop, a pillow) — no asset
-file required, and it already does every behavior above. It's the immediate,
-fully-working character.
+The default pet is **Lily**, a built-in modular procedural 3D girl loaded dynamically from `packages/desktop/models/lily/index.ts`.
 
 To get a **realistic anime girl**, drop a VRoid-exported **`.vrm`** into the
 Partner folder and reference it via the `vrm` field (see below and
-[`packages/desktop/examples/partners/waifu/`](packages/desktop/examples/partners/waifu)).
+[`packages/desktop/examples/partners/lily/`](packages/desktop/examples/partners/lily)).
 VRM carries native facial **blendshape expressions**, so "talking" lip-sync,
 "dark circles", happy/sad/celebrate all work on the real face. The pet loads it
-via `three-vrm` and **falls back to the procedural waifu** if the `.vrm` is
-missing or fails to load — it will never crash.
+via `three-vrm` and **falls back to Lily** if the `.vrm` is missing or fails to load — it will never crash.
 
 ### Custom 3D models (advanced)
 
 A Partner can reference either:
 
 - **`vrm`** — an anime character (`.vrm` from VRoid Studio). Recommended for the
-  waifu look; gives you the facial expressions.
+  girl look; gives you the facial expressions.
 - **`model`** — a glTF/`.glb`/`.gltf` file. Loaded with Three.js's bundled
   `GLTFLoader` (no extra dependency). The whole model is posed by behavior
   (sit / lean / lie down / wave), and the laptop + pillow props are attached.
@@ -202,10 +211,10 @@ button on the Partner tab (it sets the right field for you).
 ```json
 {
   "schema": "superagent-partner",
-  "id": "waifu",
-  "name": "Waifu",
-  "kind": "human",
-  "description": "A cute anime companion.",
+  "id": "lily",
+  "name": "Lily",
+  "kind": "girl",
+  "description": "A cute companion.",
   "accent": "#ff8fb3",
   "model": "character.glb",
   "laptop": true,
@@ -224,8 +233,8 @@ button on the Partner tab (it sets the right field for you).
 | `dialogues` | `{ mood: line }` lines shown in the pet's speech bubble. |
 
 See
-[`packages/desktop/examples/partners/waifu/`](packages/desktop/examples/partners/waifu)
-for a ready-to-use waifu Partner.
+[`packages/desktop/examples/partners/lily/`](packages/desktop/examples/partners/lily)
+for a ready-to-use Lily Partner.
 
 ## Tips
 

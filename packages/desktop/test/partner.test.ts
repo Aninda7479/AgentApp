@@ -203,12 +203,12 @@ describe('PetSprite + PartnerCreator', () => {
   });
 });
 
-describe('3D waifu Partner fields', () => {
-  const WAIFU = {
+describe('3D Lily Partner fields', () => {
+  const LILY = {
     schema: 'superagent-partner',
-    id: 'waifu',
-    name: 'Waifu',
-    kind: 'human',
+    id: 'lily',
+    name: 'Lily',
+    kind: 'girl',
     version: '1.0.0',
     description: 'A cute anime companion.',
     author: '@tester',
@@ -224,12 +224,12 @@ describe('3D waifu Partner fields', () => {
   } as const;
 
   it('validates a manifest that references a VRM character', () => {
-    const res = validatePartnerManifest(WAIFU);
+    const res = validatePartnerManifest(LILY);
     expect(res.ok).toBe(true);
   });
 
   it('normalizes vrm / laptop / pillow / dialogues into the manifest', () => {
-    const m = normalizeManifest(WAIFU as unknown as Record<string, unknown>);
+    const m = normalizeManifest(LILY as unknown as Record<string, unknown>);
     expect(m.vrm).toBe('character.vrm');
     expect(m.laptop).toBe(true);
     expect(m.pillow).toBe(true);
