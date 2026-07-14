@@ -54,13 +54,6 @@ interface Character {
   update(dt: number, t: number): void;
   raycastPart(ndc: THREE.Vector2, camera: THREE.Camera): string | null;
   dispose(): void;
-  /**
-   * Optional: the character's current UNSCALED feet-to-head height, excluding
-   * arms. Characters that dramatically change silhouette between poses (e.g. the
-   * procedural figure sitting vs. standing to walk) implement this so the app can
-   * keep their on-screen size constant. Omit it to keep a fixed scale.
-   */
-  measureCoreHeight?(): number;
 }
 
 interface PartnerPayload {
@@ -433,20 +426,18 @@ class ProceduralWaifu implements Character {
           screen: d2r(4), laptopFallen: true
         };
       case 'walk':
+        // Moving the pet (right-drag) must NOT change its size. So "walk" keeps
+        // the exact sitting posture/height of idle — it does not stand up — and
+        // the motion is expressed as a subtle bob + sway in update().
         return {
           ...base,
           rot: {
             ...base.rot,
-            pelvis: [0, 0, 0],
-            torso: [d2r(2), 0, 0],
-            head: [d2r(-4), 0, 0],
-            armUL: [0, 0, d2r(42)], armUR: [0, 0, d2r(-42)],
-            armEL: [d2r(60), 0, 0], armER: [d2r(60), 0, 0],
-            legUL: [d2r(2), 0, 0], legUR: [d2r(2), 0, 0],
-            legKL: [d2r(2), 0, 0], legKR: [d2r(2), 0, 0],
-            footL: [0, 0, 0], footR: [0, 0, 0]
+            torso: [d2r(-2), 0, 0],
+            head: [d2r(-3), 0, 0],
+            armEL: [d2r(90), 0, 0], armER: [d2r(90), 0, 0]
           },
-          pos: { pelvis: [0, 0.25, 0], laptop: [0.42, 0.2, 0.1], pillow: [0, 0.02, -0.05] },
+          pos: { pelvis: [0, -0.05, 0], laptop: [0, 0.02, 0.42], pillow: [0, 0.02, -0.05] },
           screen: d2r(100), laptopFallen: false
         };
       case 'celebrate':
@@ -525,27 +516,6 @@ class ProceduralWaifu implements Character {
 
   setScale(s: number): void { this.object.scale.setScalar(s); }
 
-  /**
-   * Feet-to-head height in UNSCALED units for the current pose (arms ignored, so
-   * a celebratory arms-up doesn't shrink the body). Used to keep the apparent
-   * size constant whether the figure is sitting (idle) or standing (walk).
-   */
-  measureCoreHeight(): number {
-    const s = this.object.scale.y || 1;
-    this.object.updateWorldMatrix(true, true);
-    const head = new THREE.Vector3();
-    const footL = new THREE.Vector3();
-    const footR = new THREE.Vector3();
-    this.joints.head.getWorldPosition(head);
-    this.joints.footL.getWorldPosition(footL);
-    this.joints.footR.getWorldPosition(footR);
-    const bottom = Math.min(footL.y, footR.y);
-    // getWorldPosition includes the object scale; divide it back out. Add a
-    // constant for the head/hair cap and foot thickness (also unscaled).
-    const span = (head.y - bottom) / s;
-    return Math.max(0.1, span + 0.35);
-  }
-
   raycastPart(ndc: THREE.Vector2, cam: THREE.Camera): string | null {
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, cam as THREE.PerspectiveCamera);
@@ -596,12 +566,13 @@ class ProceduralWaifu implements Character {
       this.joints.head.rotation.z = lerp(this.joints.head.rotation.z, Math.sin(t * 2) * 0.02, 0.2);
     }
     if (this.behavior === 'walk') {
-      const sw = Math.sin(t * 8);
-      this.joints.legUL.rotation.x = lerp(this.joints.legUL.rotation.x, d2r(25) * sw, 0.4);
-      this.joints.legUR.rotation.x = lerp(this.joints.legUR.rotation.x, d2r(-25) * sw, 0.4);
-      this.joints.pelvis.position.y = lerp(this.joints.pelvis.position.y, this.restPos.pelvis.y + 0.25 + Math.abs(Math.sin(t * 8)) * 0.08, 0.4);
-      this.object.rotation.y = Math.sin(t * 4) * 0.1;
+      // Subtle bob + side sway only — the figure stays seated, so its silhouette
+      // (and on-screen size) is identical to idle. Only the resize grip changes size.
+      const bob = Math.abs(Math.sin(t * 9)) * 0.03;
+      this.joints.pelvis.position.y = lerp(this.joints.pelvis.position.y, this.restPos.pelvis.y - 0.05 + bob, 0.35);
+      this.object.rotation.z = lerp(this.object.rotation.z, Math.sin(t * 6) * 0.025, 0.3);
     } else {
+      this.object.rotation.z = lerp(this.object.rotation.z, 0, 0.2);
       this.object.rotation.y = lerp(this.object.rotation.y, 0, 0.2);
     }
     if (this.behavior === 'celebrate') {
@@ -944,7 +915,8 @@ class GLBCharacter implements Character {
       case 'laying':
         return { rot: [r(82), 0, r(12)], pos: [0.35, -0.2, 0.1] };
       case 'walk':
-        return { rot: [r(2), 0, 0], pos: [0, 0.1, 0] };
+        // Keep the model in place height-wise; moving must not change its size.
+        return { rot: [r(2), 0, 0], pos: [0, 0, 0] };
       case 'celebrate':
         return { rot: [r(-2), 0, 0], pos: [0, 0, 0] };
       case 'hello':
@@ -1043,11 +1015,6 @@ class PetApp {
   private lastX = 0;
   private lastY = 0;
   private clock = new THREE.Clock();
-  // Auto-fit: desiredH is the target on-screen character height; baseScale fits
-  // a standing (1.9u) figure to it; appliedScale is eased toward the per-pose fit.
-  private desiredH = 1.6;
-  private baseScale = 1;
-  private appliedScale = 1;
 
   constructor() {
     scene.add(this.root);
@@ -1140,46 +1107,24 @@ class PetApp {
     );
   }
 
+  /**
+   * Sizes the character to the window. The scale is FIXED — it depends only on
+   * the window dimensions, so the only thing that changes the pet's size is
+   * dragging the resize grip. Poses (idle, walk, celebrate…) never rescale it.
+   */
   private handleResize() {
     const w = window.innerWidth || 220;
     const h = window.innerHeight || 320;
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    // Target: fill ~85% of the viewport height at z=0. baseScale fits a standing
-    // 1.9u figure; refitScale adapts per-pose so the size stays consistent.
+    // Fill ~85% of the viewport height at z=0, referenced to the character's
+    // full resting height so nothing overflows the window.
     const dist = camera.position.z - 0;
     const visibleH = 2 * Math.tan((camera.fov * Math.PI) / 360) * dist;
-    this.desiredH = visibleH * 0.85;
-    this.baseScale = this.desiredH / 1.9;
-    this.refitScale(true);
-  }
-
-  /**
-   * Keeps the character's apparent size constant across poses. Characters that
-   * report a per-pose core height (the procedural figure) are fit so sitting
-   * (idle) and standing (walk) read at the same on-screen size — the fix for the
-   * pet appearing to "grow" when right-dragged. Others keep the standing fit.
-   * `immediate` snaps (on resize / partner swap); otherwise it eases each frame.
-   */
-  private refitScale(immediate = false) {
-    const c = this.character;
-    if (!c) return;
-    let target = this.baseScale;
-    if (typeof c.measureCoreHeight === 'function') {
-      const core = c.measureCoreHeight();
-      if (Number.isFinite(core) && core > 0.1) {
-        // Fit the (arms-excluded) core height to desiredH so EVERY pose reads at
-        // the same on-screen size. Standing to walk makes the core taller, so the
-        // scale must go DOWN to compensate — hence we clamp the core input to a
-        // sane band (curled/flat poses aside) rather than clamping the scale,
-        // which previously pinned standing larger than sitting (the "grow" bug).
-        target = this.desiredH / clamp(core, 1.5, 3.5);
-      }
-    }
-    this.appliedScale = immediate ? target : lerp(this.appliedScale, target, 0.1);
-    c.setScale(this.appliedScale);
-    // Re-seat the contact shadow after a scale change moves the feet.
+    const charH = 2.2;
+    this.character?.setScale((visibleH * 0.85) / charH);
+    // Re-seat the contact shadow to the character's feet.
     this.groundCharacter();
   }
 
@@ -1275,9 +1220,6 @@ class PetApp {
         }
       }
       this.character?.update(dt, t);
-      // Ease the scale toward the current pose's fit so sit↔stand stays a
-      // constant on-screen size instead of visibly growing.
-      this.refitScale(false);
       renderer.render(scene, camera);
     };
     loop();
