@@ -24,3 +24,4 @@ Every entry follows this shape:
 | 08 | Add network timeout + atomic cache to research-mcp.mjs | tooling | No more hangs / corrupt cache |
 | 09 | Graceful cache reads in root scripts | tooling | Actionable errors |
 | 10 | Web server WebSocket crash resilience | web | No more crashes on disconnect |
+| 11 | Graceful missing-input guard in gen-mcp-catalog.mjs | tooling | Actionable error + documents #007 |

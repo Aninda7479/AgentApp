@@ -14,8 +14,16 @@
 //   * Every `https://` bullet link becomes a searchable catalog entry (so the
 //     whole list is reachable); non-installable ones fall back to a "Docs" link.
 
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 
+// NOTE: awesome-mcp.md is a generated input (the awesome-mcp-servers README),
+// intentionally NOT tracked in git (see auto-improve/007). Fetch it first, e.g.
+// `curl -L <awesome-mcp-servers README raw URL> -o awesome-mcp.md`, before
+// regenerating the catalog on a fresh checkout.
+if (!existsSync('awesome-mcp.md')) {
+  console.error('awesome-mcp.md not found. Fetch the awesome-mcp-servers README into awesome-mcp.md first, then re-run.');
+  process.exit(1);
+}
 const md = readFileSync('awesome-mcp.md', 'utf-8');
 const lines = md.split('\n');
 
