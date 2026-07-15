@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Button, Input, Select, Toggle } from './ui';
 import { Terminal, Globe, Sparkles, Plus, RefreshCw, Server, Trash2, Search } from 'lucide-react';
 import { McpInstallModal } from './McpInstallModal';
+import { McpService } from '../logic/mcp';
 
 /** Information about a connected MCP server. */
 export interface MCPServerInfo {
@@ -216,26 +217,14 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
   }, [catalogQuery]);
 
   const installedIds = useMemo(
-    () => new Set(servers.map((s) => s.id.replace(/^mcp-catalog-/, ''))),
+    () => McpService.installedIds(servers),
     [servers]
   );
 
-  const filteredCatalog = useMemo(() => {
-    if (!catalog) return [];
-    const notInstalled = catalog.filter((e) => !installedIds.has(e.id));
-    const q = catalogQuery.trim().toLowerCase();
-    if (!q) {
-      // Default browse view: only directly installable servers, top picks first.
-      return notInstalled.filter((e) => e.installable !== false);
-    }
-    return notInstalled.filter(
-      (e) =>
-        e.name.toLowerCase().includes(q) ||
-        e.description.toLowerCase().includes(q) ||
-        e.tags.some((t) => t.toLowerCase().includes(q)) ||
-        (e.category?.toLowerCase().includes(q) ?? false)
-    );
-  }, [catalog, installedIds, catalogQuery]);
+  const filteredCatalog = useMemo(
+    () => McpService.filterCatalog(catalog ?? [], installedIds, catalogQuery),
+    [catalog, installedIds, catalogQuery]
+  );
 
   const visibleCatalog = filteredCatalog.slice(0, visibleCount);
   const hasMore = filteredCatalog.length > visibleCount;
@@ -243,14 +232,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
 
   const handleAdd = () => {
     if (!newServerName.trim() || !newCommandOrUrl.trim()) return;
-    onAddServer({
-      name: newServerName,
-      transport: newTransport,
-      commandOrUrl: newCommandOrUrl,
-      status: 'connecting',
-      enabled: true,
-      toolsCount: 0
-    });
+    onAddServer(McpService.buildNewServer(newServerName, newTransport, newCommandOrUrl));
     setNewServerName('');
     setNewCommandOrUrl('');
     setShowAddForm(false);

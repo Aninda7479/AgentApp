@@ -24,6 +24,7 @@ import {
 import { BrandLogo } from '../BrandLogo';
 import { ThemeMode } from '../types';
 import { LucideIcon } from 'lucide-react';
+import { WindowService } from '../logic/window';
 
 /** Props for the TitleBar component. */
 interface TitleBarProps {
@@ -59,10 +60,7 @@ interface TitleBarProps {
   onLogout?: () => void;
 }
 
-// The web build injects a mock window.require, so that is NOT a reliable signal.
-// Electron's user agent uniquely contains "Electron".
-const isElectron =
-  typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '');
+const isElectron = WindowService.isElectron();
 
 interface MenuItem {
   label: string;

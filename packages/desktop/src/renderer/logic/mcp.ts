@@ -6,6 +6,16 @@
  */
 import type { AppContext, MCPServerInfo } from './types';
 
+/** Minimal shape of a catalog entry needed for filtering (avoids depending on the component's full type). */
+interface CatalogEntryLike {
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  category?: string;
+  installable?: boolean;
+}
+
 export class McpService {
   /**
    * Adds a new MCP server entry (optimistically "connecting"), then attempts a
@@ -116,5 +126,58 @@ export class McpService {
         ctx.setMcpServers((prev) => prev.map((s) => (s.id === createdId ? { ...s, status: 'error' } : s)));
         ctx.triggerToast(`Failed to connect to ${entry.name}: ${(err as Error).message}`, 'error');
       });
+  }
+
+  /**
+   * Strips the `mcp-catalog-` prefix from each server id to obtain the set of
+   * underlying catalog entry ids that are already installed (used to hide
+   * installed servers from the one-click catalog browser).
+   */
+  static installedIds(servers: MCPServerInfo[]): Set<string> {
+    return new Set(servers.map((s) => s.id.replace(/^mcp-catalog-/, '')));
+  }
+
+  /**
+   * Filters a catalog down to entries that are not yet installed, then
+   * optionally narrows by a free-text query across name, description, tags,
+   * and category. When the query is empty, only directly-installable servers
+   * are shown (top picks first).
+   */
+  static filterCatalog<T extends CatalogEntryLike>(
+    catalog: T[],
+    installedIds: Set<string>,
+    query: string
+  ): T[] {
+    const notInstalled = catalog.filter((e) => !installedIds.has(e.id));
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      return notInstalled.filter((e) => e.installable !== false);
+    }
+    return notInstalled.filter(
+      (e) =>
+        e.name.toLowerCase().includes(q) ||
+        e.description.toLowerCase().includes(q) ||
+        e.tags.some((t) => t.toLowerCase().includes(q)) ||
+        (e.category?.toLowerCase().includes(q) ?? false)
+    );
+  }
+
+  /**
+   * Builds the partial server record submitted when the user adds a new MCP
+   * server from the dashboard's inline form (optimistically "connecting").
+   */
+  static buildNewServer(
+    name: string,
+    transport: 'stdio' | 'sse',
+    commandOrUrl: string
+  ): Partial<MCPServerInfo> {
+    return {
+      name,
+      transport,
+      commandOrUrl,
+      status: 'connecting',
+      enabled: true,
+      toolsCount: 0
+    };
   }
 }

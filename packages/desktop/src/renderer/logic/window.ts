@@ -19,4 +19,13 @@ export class WindowService {
       }
     }
   }
+
+  /**
+   * Detects whether the app is running inside the Electron shell. The web build
+   * injects a mock `window.require`, so that is NOT a reliable signal — the
+   * stable marker is Electron's unique "Electron" user-agent string.
+   */
+  static isElectron(): boolean {
+    return typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '');
+  }
 }

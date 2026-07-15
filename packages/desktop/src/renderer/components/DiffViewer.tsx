@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { DiffService, DiffLine } from '../logic/diff';
 
 /** Props for the DiffViewer component. */
 export interface DiffViewerProps {
@@ -11,83 +12,6 @@ export interface DiffViewerProps {
   /** Called when the user accepts a change, so the parent can mark it reviewed. */
   onReview?: (filename: string) => void;
 }
-
-interface DiffLine {
-  type: 'add' | 'delete' | 'normal';
-  content: string;
-  origLineNum?: number;
-  modLineNum?: number;
-}
-
-const computeDiff = (originalCode: string, modifiedCode: string): { lines: DiffLine[]; additions: number; deletions: number } => {
-  const origLines = originalCode.split('\n');
-  const modLines = modifiedCode.split('\n');
-  const diffLines: DiffLine[] = [];
-  let additions = 0;
-  let deletions = 0;
-
-  let i = 0;
-  let j = 0;
-
-  while (i < origLines.length || j < modLines.length) {
-    if (i < origLines.length && j < modLines.length) {
-      if (origLines[i] === modLines[j]) {
-        diffLines.push({
-          type: 'normal',
-          content: origLines[i],
-          origLineNum: i + 1,
-          modLineNum: j + 1
-        });
-        i++;
-        j++;
-      } else {
-        let matched = false;
-        for (let k = j + 1; k < Math.min(j + 5, modLines.length); k++) {
-          if (origLines[i] === modLines[k]) {
-            while (j < k) {
-              diffLines.push({
-                type: 'add',
-                content: modLines[j],
-                modLineNum: j + 1
-              });
-              additions++;
-              j++;
-            }
-            matched = true;
-            break;
-          }
-        }
-        if (!matched) {
-          diffLines.push({
-            type: 'delete',
-            content: origLines[i],
-            origLineNum: i + 1
-          });
-          deletions++;
-          i++;
-        }
-      }
-    } else if (i < origLines.length) {
-      diffLines.push({
-        type: 'delete',
-        content: origLines[i],
-        origLineNum: i + 1
-      });
-      deletions++;
-      i++;
-    } else if (j < modLines.length) {
-      diffLines.push({
-        type: 'add',
-        content: modLines[j],
-        modLineNum: j + 1
-      });
-      additions++;
-      j++;
-    }
-  }
-
-  return { lines: diffLines, additions, deletions };
-};
 
 /** Side-by-side or unified diff viewer with accept/reject actions. */
 export const DiffViewer: React.FC<DiffViewerProps> = ({
@@ -113,7 +37,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   }, []);
   const effectiveViewMode = isNarrow ? 'unified' : viewMode;
 
-  const { lines, additions, deletions } = computeDiff(originalCode, modifiedCode);
+  const { lines, additions, deletions } = DiffService.computeDiff(originalCode, modifiedCode);
 
   const origSplitLines = originalCode.split('\n');
   const modSplitLines = modifiedCode.split('\n');

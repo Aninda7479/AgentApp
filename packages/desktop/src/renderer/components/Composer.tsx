@@ -18,6 +18,7 @@ import {
   builtinSuggestions,
   buildSuggestions,
 } from './slashCommands';
+import { ComposerService } from '../logic/composer';
 
 /** Options returned by the Composer when a prompt is submitted. */
 export interface ComposerOptions {
@@ -152,13 +153,10 @@ export const Composer: React.FC<ComposerProps> = ({
     [slashCommands, skills, mcpServers]
   );
 
-  const filtered = useMemo(() => {
-    const q = slashQuery.toLowerCase();
-    if (!q) return allSuggestions;
-    return allSuggestions.filter(
-      (s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q)
-    );
-  }, [allSuggestions, slashQuery]);
+  const filtered = useMemo(
+    () => ComposerService.filterSuggestions(allSuggestions, slashQuery),
+    [allSuggestions, slashQuery]
+  );
 
   const menuOpen = slashStart !== null;
   const activeIndex = filtered.length ? Math.min(slashIndex, filtered.length - 1) : 0;
@@ -283,11 +281,7 @@ export const Composer: React.FC<ComposerProps> = ({
 
   const handleSend = () => {
     if (!prompt.trim() || disabled || isGenerating) return;
-    onSend(prompt, {
-      model: selectedModel,
-      mode: approvalMode === 'always' ? 'auto' : approvalMode === 'never' ? 'bypass' : 'plan',
-      attachments: [],
-    });
+    onSend(prompt, ComposerService.buildSendOptions(selectedModel, approvalMode, []));
     setPrompt('');
     basePromptRef.current = '';
   };
@@ -322,11 +316,7 @@ export const Composer: React.FC<ComposerProps> = ({
     }
   };
 
-  const getApprovalLabel = () => {
-    if (approvalMode === 'always') return 'Always approve';
-    if (approvalMode === 'never') return 'Never approve';
-    return 'Ask for approval';
-  };
+  const getApprovalLabel = () => ComposerService.approvalLabel(approvalMode);
 
   return (
     <div

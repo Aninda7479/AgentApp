@@ -12,8 +12,9 @@ import { SettingsStorage } from '../storage/settings-store.js';
  * "enable it" message, so the capability is truly off until the user turns it on.
  *
  * When enabled:
- *  - with a provider API key → calls Tripo3D (text/image → task → poll
- *    → download GLB). This is the "real" generator (Tripo3D comparable).
+ *  - with a provider API key → calls the selected cloud provider — Tripo3D or
+ *    Meshy (text/image → task → poll → download GLB). This is the "real"
+ *    generator (Tripo3D / Meshy comparable).
  *  - without a key → a dependency-free *local* generator builds a valid glTF
  *    (data-URI buffers, no three.js) so the agent can still DEMONSTRATE the
  *    full make → export → (import-as-Partner → pet shows/animates) loop offline.
@@ -134,6 +135,83 @@ async function generateViaTripo(
 }
 
 /**
+ * Meshy OpenAPI: text/image → task → poll → download GLB.
+ * Host + response shape differ from Tripo (task id in `result`/`id`; status enum
+ * `PENDING|IN_PROGRESS|SUCCEEDED|FAILED|CANCELED`; GLB at `model_urls.glb`). The
+ * signed GLB URL is self-authenticating, so it is downloaded WITHOUT the auth
+ * header (avoids leaking the API key to the assets CDN).
+ *
+ * Image-to-3D requires a *hosted* image URL (Meshy has no file-upload endpoint
+ * for it), so a local file path is rejected up front with a clear, actionable
+ * message pointing at Tripo (which accepts local uploads) or at hosting the image.
+ */
+async function generateViaMeshy(
+  prompt: string,
+  imagePath: string | undefined,
+  apiKey: string
+): Promise<{ buffer: Buffer; fileName: string }> {
+  const base = 'https://api.meshy.ai/openapi/v1';
+  const headers = {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json'
+  };
+
+  const isUrl = !!imagePath && /^https?:\/\//i.test(imagePath);
+
+  // 1. Create the generation task.
+  let createBody: Record<string, unknown>;
+  let kind: 'text-to-3d' | 'image-to-3d';
+  if (isUrl) {
+    kind = 'image-to-3d';
+    createBody = { image_url: imagePath };
+  } else if (imagePath) {
+    throw new Error(
+      'Meshy image-to-3D needs a publicly hosted image URL (it has no file upload). ' +
+        `The local file "${imagePath}" cannot be submitted directly. Use the Tripo3D ` +
+        'provider (which accepts local image uploads) instead, or host the image and pass its URL.'
+    );
+  } else {
+    kind = 'text-to-3d';
+    createBody = { prompt, art_style: 'realistic' };
+  }
+
+  const task = await fetch(`${base}/${kind}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(createBody)
+  });
+  if (!task.ok) {
+    throw new Error(`Meshy task create failed (${task.status}): ${await task.text()}`);
+  }
+  const taskJson = (await task.json()) as any;
+  const taskId: string = taskJson.result ?? taskJson.id;
+  if (!taskId) throw new Error('Meshy did not return a task id.');
+
+  // 2. Poll until the model is ready.
+  let modelUrl: string | undefined;
+  for (let i = 0; i < 120; i++) {
+    const st = await fetch(`${base}/${kind}/${taskId}`, { headers });
+    const sj = (await st.json()) as any;
+    if (sj?.status === 'SUCCEEDED') {
+      modelUrl = sj?.model_urls?.glb ?? sj?.model_urls?.glb_url;
+      break;
+    }
+    if (sj?.status === 'FAILED' || sj?.status === 'CANCELED') {
+      const reason = sj?.task_error?.message ?? sj?.status;
+      throw new Error(`Meshy generation ${String(sj?.status).toLowerCase()} (${reason}).`);
+    }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  if (!modelUrl) throw new Error('Meshy generation timed out (no GLB URL).');
+
+  // 3. Download the GLB via the signed URL (no auth header — key must not reach the CDN).
+  const dl = await fetch(modelUrl);
+  if (!dl.ok) throw new Error(`Meshy GLB download failed (${dl.status}).`);
+  const buffer = Buffer.from(await dl.arrayBuffer());
+  return { buffer, fileName: 'character.glb' };
+}
+
+/**
  * Local, dependency-free 3D character generator. Writes a VALID glTF 2.0
  * (a stylized cube "character" placeholder) using embedded data-URI buffers,
  * so the agent can exercise the full make → export → show/animate loop with no
@@ -234,9 +312,9 @@ function generateLocalGltf(name: string): { json: object; fileName: string } {
 /**
  * Reusable generation kernel shared by the `make_3d_character` agent tool AND the
  * dedicated 3D Studio page. Given an explicit `outDir` and (optionally) a provider
- * API key it performs the real cloud generation (Tripo3D today; Meshy is a
- * documented TODO), otherwise it falls back to the dependency-free local GLB/glTF
- * placeholder so the make → export → show/animate loop is verifiable fully offline.
+ * API key it performs the real cloud generation (Tripo3D or Meshy), otherwise it
+ * falls back to the dependency-free local GLB/glTF placeholder so the make →
+ * export → show/animate loop is verifiable fully offline.
  *
  * Returns a structured `ThreeDResult` object (never a thrown error) so callers can
  * branch on `ok` / `disabled` / `needsKey` and surface a clear message.
@@ -259,15 +337,20 @@ export async function generateThreeD(opts: ThreeDGenerateOptions): Promise<Three
 
   try {
     if (opts.apiKey && opts.provider === 'meshy') {
-      // TODO: Meshy OpenAPI (text_to_3d / image_to_3d → poll → download GLB) maps
-      // onto the same shape as Tripo. Wire it here when a Meshy key is selected.
+      // Real cloud generation (Meshy OpenAPI). Same task/poll/download shape as
+      // Tripo, just a different host + task-id field + status enum. Local image
+      // files are rejected inside generateViaMeshy (Meshy needs a hosted URL).
+      const { buffer, fileName } = await generateViaMeshy(prompt, imagePath, opts.apiKey);
+      const outPath = path.join(opts.outDir, fileName);
+      fs.writeFileSync(outPath, buffer);
       return {
-        ok: false,
-        needsKey: true,
+        ok: true,
+        path: outPath,
+        format: 'glb',
+        provider: 'meshy',
         message:
-          'Meshy cloud generation is not wired in this build yet. Use the Tripo3D ' +
-          'provider (set provider=Tripo + API key in Settings → 3D Model Gen), or ' +
-          'clear the API key to use the local procedural placeholder.'
+          `Generated 3D character "${name}" via meshy. Exported to ${outPath}. ` +
+          'Import it as a Partner to show + animate it in the pet.'
       };
     }
 

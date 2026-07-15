@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Stethoscope, CheckCircle2, AlertTriangle, XCircle, RefreshCw } from 'lucide-react';
 import { Button } from './ui';
 import { ModelConfig } from '../settings/SettingsView';
+import { DiagnosticsService, DiagnosticCheck } from '../logic/diagnostics';
 
 export interface DoctorModalProps {
   isOpen: boolean;
@@ -9,12 +10,6 @@ export interface DoctorModalProps {
   byokKeys: Record<string, string>;
   modelsCatalog: ModelConfig[];
   unsandboxedActions: boolean;
-}
-
-interface DiagnosticCheck {
-  name: string;
-  status: 'pass' | 'warn' | 'fail';
-  detail: string;
 }
 
 export const DoctorModal: React.FC<DoctorModalProps> = ({
@@ -30,48 +25,7 @@ export const DoctorModal: React.FC<DoctorModalProps> = ({
   const runDiagnostics = () => {
     setLoading(true);
     setTimeout(() => {
-      const results: DiagnosticCheck[] = [];
-
-      // 1. Runtime Versions
-      const nodeVer = (typeof process !== 'undefined' && process.versions?.node) || 'unknown';
-      const chromeVer = (typeof process !== 'undefined' && process.versions?.chrome) || 'unknown';
-      const electronVer = (typeof process !== 'undefined' && process.versions?.electron) || 'unknown';
-      results.push({
-        name: 'App Runtime Environments',
-        status: 'pass',
-        detail: `Electron v${electronVer} | Node v${nodeVer} | Chrome v${chromeVer}`
-      });
-
-      // 2. Provider Keys Check
-      const count = Object.values(byokKeys).filter(Boolean).length;
-      results.push({
-        name: 'Provider API Keys',
-        status: count > 0 ? 'pass' : 'warn',
-        detail: count > 0 
-          ? `${count} provider key(s) configured`
-          : 'No API keys configured — set one in the BYOK Provider Settings'
-      });
-
-      // 3. Model Catalog Registry
-      const modelsCount = modelsCatalog.length;
-      results.push({
-        name: 'Model Registry',
-        status: modelsCount > 0 ? 'pass' : 'warn',
-        detail: modelsCount > 0
-          ? `${modelsCount} model(s) registered in catalog`
-          : 'No models found in catalog — enable providers under AI Config'
-      });
-
-      // 4. Execution Sandbox
-      results.push({
-        name: 'App Execution Sandbox',
-        status: unsandboxedActions ? 'warn' : 'pass',
-        detail: unsandboxedActions
-          ? 'Full system access enabled (unsandboxed actions)'
-          : 'Sandboxed mode active (secure execution environment)'
-      });
-
-      setChecks(results);
+      setChecks(DiagnosticsService.buildChecks(byokKeys, modelsCatalog.length, unsandboxedActions));
       setLoading(false);
     }, 600);
   };
