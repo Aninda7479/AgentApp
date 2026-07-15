@@ -86,12 +86,31 @@ export interface PartnerManifest {
    * Lily if the file is missing or fails to load.
    */
   vrm?: string;
+  /**
+   * Optional folder-based 3D model. A relative path (from the Partner folder)
+   * to a folder that contains an `index.js` (compiled from `index.ts`) exporting
+   * a `Character` class — e.g. `src/my-model`. The folder's model binary
+   * (.vrm/.glb/.gltf) lives inside it, so all three formats are supported by
+   * the authored class. Imported via "Import 3D Model Folder"; the app compiles
+   * the TypeScript to JS on import. Takes precedence over `vrm`/`model` for the
+   * 3D pet.
+   */
+  modelFolder?: string;
   /** Optional custom script filename (index.js) inside the Partner folder. */
   script?: string;
   /** Show the laptop prop (default true). */
   laptop?: boolean;
   /** Show the head pillow prop (default true). */
   pillow?: boolean;
+  /**
+   * Optional procedural face overlay for GLB/glTF (non-VRM) models that ship
+   * without blendshapes. When set, the 3D pet draws a small anime face on the
+   * model's head so expressions (happy/sad/surprised/angry), lip-sync, and
+   * dark circles still read on a static mesh — e.g. a Tripo-exported GLB.
+   * `true` uses sensible defaults; an object tunes placement/size:
+   *   { headFrac?: number; frontGap?: number; scale?: number }
+   */
+  faceOverlay?: boolean | { headFrac?: number; frontGap?: number; scale?: number };
   /** Optional dialogue lines shown in the speech bubble per mood. */
   dialogues?: Partial<Record<PartnerMood, string>>;
   /** Optional named animation clips for a 3D model, by mood. */
@@ -208,9 +227,11 @@ export function normalizeManifest(raw: Record<string, unknown>): PartnerManifest
     frames: Array.isArray(raw.frames) ? (raw.frames as string[]) : undefined,
     model: typeof raw.model === 'string' ? raw.model : undefined,
     vrm: typeof raw.vrm === 'string' ? raw.vrm : undefined,
+    modelFolder: typeof raw.modelFolder === 'string' ? raw.modelFolder : undefined,
     script: typeof raw.script === 'string' ? raw.script : undefined,
     laptop: typeof raw.laptop === 'boolean' ? raw.laptop : true,
     pillow: typeof raw.pillow === 'boolean' ? raw.pillow : true,
+    faceOverlay: raw.faceOverlay !== undefined ? (raw.faceOverlay as any) : undefined,
     dialogues: isObject(raw.dialogues)
       ? (raw.dialogues as PartnerManifest['dialogues'])
       : undefined,

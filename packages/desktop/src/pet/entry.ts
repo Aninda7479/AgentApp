@@ -67,6 +67,12 @@ interface PartnerPayload {
   modelPath?: string | null;
   vrm?: string;
   vrmPath?: string | null;
+  /** Folder-based model: relative path to a folder whose index.(js|ts) exports a Character class. */
+  modelFolder?: string;
+  /** Resolved absolute path to the model folder's compiled index.js (or index.ts). */
+  modelFolderPath?: string | null;
+  /** Optional procedural face overlay config for non-VRM GLB/glTF models. */
+  faceOverlay?: boolean | { headFrac?: number; frontGap?: number; scale?: number } | null;
   script?: string;
   scriptPath?: string | null;
   laptop?: boolean;
@@ -379,10 +385,33 @@ class GLBCharacter implements Character {
   private fallback: Character | null = null;
   private usingFallback = false;
 
-  constructor(accent: string) {
+  // Optional procedural anime face drawn on top of a static (non-VRM) GLB so the
+  // character can still show expressions, lip-sync, and dark circles. The model
+  // itself has no blendshapes, so we fake the face as a camera-facing billboard
+  // pinned to the model's head.
+  private faceCfg: boolean | { headFrac?: number; frontGap?: number; scale?: number } | undefined;
+  private face: {
+    group: THREE.Group;
+    eyeL: THREE.Group;
+    eyeR: THREE.Group;
+    mouth: THREE.Mesh;
+    darkL: THREE.Mesh;
+    darkR: THREE.Mesh;
+    eyeOpen: number;
+    eyeOpenTarget: number;
+    mouthOpen: number;
+    mouthOpenTarget: number;
+    darkVis: number;
+    darkVisTarget: number;
+    headAnchor: THREE.Vector3;
+  } | null = null;
+  private _sizeY = 1;
+
+  constructor(accent: string, faceOverlay?: boolean | { headFrac?: number; frontGap?: number; scale?: number }) {
     this.laptop = this.makeProp(accent);
     this.pillow = this.makePillow();
     this.object.add(this.laptop, this.pillow);
+    this.faceCfg = faceOverlay;
   }
 
   private makeProp(accent: string): THREE.Group {
@@ -409,6 +438,84 @@ class GLBCharacter implements Character {
     g.add(pm);
     g.visible = false;
     return g;
+  }
+
+  /**
+   * Builds a small procedural anime face (two eyes, a mouth, optional dark
+   * circles) that is pinned to the model's head and billboarded to the camera.
+   * Used when a GLB has no blendshapes of its own, so Lily can still emote,
+   * lip-sync, and show "tired" eyes on a static mesh (e.g. a Tripo export).
+   */
+  private buildFace(size: THREE.Vector3): void {
+    const cfg = this.faceCfg;
+    const headFrac = (typeof cfg === 'object' && cfg?.headFrac) || 0.9;
+    const frontGap = (typeof cfg === 'object' && cfg?.frontGap) || 0.06;
+    const fscale = (typeof cfg === 'object' && cfg?.scale) || 1;
+    const unit = ((size.x + size.y) * 0.5) * 0.12 * fscale;
+
+    const group = new THREE.Group();
+    group.renderOrder = 999;
+
+    const buildEye = (sign: number): THREE.Group => {
+      const eye = new THREE.Group();
+      const sclera = new THREE.Mesh(
+        new THREE.CircleGeometry(unit, 22),
+        new THREE.MeshBasicMaterial({ color: 0xfdfdff, transparent: true })
+      );
+      eye.add(sclera);
+      const pupil = new THREE.Mesh(
+        new THREE.CircleGeometry(unit * 0.55, 18),
+        new THREE.MeshBasicMaterial({ color: 0x141826 })
+      );
+      pupil.position.z = 0.001;
+      eye.add(pupil);
+      const hi = new THREE.Mesh(
+        new THREE.CircleGeometry(unit * 0.22, 12),
+        new THREE.MeshBasicMaterial({ color: 0xffffff })
+      );
+      hi.position.set(-unit * 0.22, unit * 0.26, 0.002);
+      eye.add(hi);
+      eye.position.set(sign * unit * 1.7, 0, 0.002);
+      return eye;
+    };
+    const eyeL = buildEye(-1);
+    const eyeR = buildEye(1);
+    group.add(eyeL, eyeR);
+
+    const dark = (sign: number): THREE.Mesh => {
+      const d = new THREE.Mesh(
+        new THREE.CircleGeometry(unit * 1.1, 18),
+        new THREE.MeshBasicMaterial({ color: 0x7a4f8a, transparent: true, opacity: 0 })
+      );
+      d.position.set(sign * unit * 2.1, -unit * 1.3, 0.001);
+      d.visible = false;
+      return d;
+    };
+    const darkL = dark(-1);
+    const darkR = dark(1);
+    group.add(darkL, darkR);
+
+    const mouth = new THREE.Mesh(
+      new THREE.SphereGeometry(unit * 0.7, 14, 12),
+      new THREE.MeshBasicMaterial({ color: 0xd96b7a })
+    );
+    mouth.scale.set(1.3, 0.7, 0.6);
+    mouth.position.set(0, -unit * 2.0, 0.003);
+    group.add(mouth);
+
+    // Anchor in model-local (pre-scale) coordinates; update() re-projects it to
+    // world space every frame so it tracks the head through every pose.
+    const headAnchor = new THREE.Vector3(0, size.y * headFrac, size.z * 0.5 + size.z * frontGap);
+    group.position.copy(headAnchor);
+    this.object.add(group);
+    this._sizeY = size.y;
+    this.face = {
+      group, eyeL, eyeR, mouth, darkL, darkR,
+      eyeOpen: 1, eyeOpenTarget: 1,
+      mouthOpen: 0, mouthOpenTarget: 0,
+      darkVis: 0, darkVisTarget: 0,
+      headAnchor
+    };
   }
 
   async load(url: string): Promise<void> {
@@ -450,6 +557,10 @@ class GLBCharacter implements Character {
       this.pillow.position.set(0, 0.0, -0.05);
       this.object.add(this.pillow);
       this.pillow.visible = true;
+
+      // Optional cute upgrade: paint a procedural anime face on a faceless mesh
+      // (e.g. a Tripo-exported GLB) so Lily can still emote and talk.
+      if (this.faceCfg) this.buildFace(size);
     } catch (err) {
       console.error('[pet] GLB load failed, using procedural fallback', err);
       this.usingFallback = true;
@@ -496,7 +607,17 @@ class GLBCharacter implements Character {
 
   setExpression(e: ExpressionName): void {
     this.expression = e;
-    if (this.usingFallback && this.fallback) { this.fallback.setExpression(e); }
+    if (this.usingFallback && this.fallback) { this.fallback.setExpression(e); return; }
+    if (this.face) {
+      switch (e) {
+        case 'happy': this.face.eyeOpenTarget = 0.5; this.face.mouthOpenTarget = 0.3; break;
+        case 'surprised': this.face.eyeOpenTarget = 1.35; this.face.mouthOpenTarget = 1; break;
+        case 'sad': this.face.eyeOpenTarget = 0.8; this.face.mouthOpenTarget = 0; break;
+        case 'angry': this.face.eyeOpenTarget = 0.9; this.face.mouthOpenTarget = 0; break;
+        default: this.face.eyeOpenTarget = 1; this.face.mouthOpenTarget = 0; break;
+      }
+      if (this.behavior === 'sleeping' || this.behavior === 'laying') this.face.eyeOpenTarget = 0.08;
+    }
   }
 
   setLipSync(on: boolean): void {
@@ -506,7 +627,8 @@ class GLBCharacter implements Character {
 
   setDarkCircles(on: boolean): void {
     this.darkCircles = on;
-    if (this.usingFallback && this.fallback) { this.fallback.setDarkCircles(on); }
+    if (this.usingFallback && this.fallback) { this.fallback.setDarkCircles(on); return; }
+    if (this.face) this.face.darkVisTarget = on ? 1 : 0;
   }
 
   setScale(s: number): void { this.object.scale.setScalar(s); }
@@ -544,6 +666,38 @@ class GLBCharacter implements Character {
     // Hello wave: a subtle side-to-side sway of the whole upper body.
     if (this.behavior === 'hello') {
       this.model.rotation.z = lerp(this.model.rotation.z, Math.sin(t * 10) * 0.06, 0.5);
+    }
+
+    // ── Procedural face overlay (static GLB with no blendshapes) ──────────────
+    if (this.face) {
+      const f = this.face;
+      const blink =
+        this.behavior !== 'sleeping' && this.behavior !== 'laying' && f.eyeOpenTarget > 0.5 && Math.sin(t * 0.9) > 0.988
+          ? 0.12
+          : 1;
+      f.eyeOpen = lerp(f.eyeOpen, f.eyeOpenTarget * blink, 0.4);
+      f.mouthOpen = lerp(
+        f.mouthOpen,
+        f.mouthOpenTarget + (this.lipSync ? Math.abs(Math.sin(t * 18)) * 0.8 : 0),
+        0.5
+      );
+      f.darkVis = lerp(f.darkVis, f.darkVisTarget, 0.3);
+      f.eyeL.scale.set(1, f.eyeOpen, 1);
+      f.eyeR.scale.set(1, f.eyeOpen, 1);
+      f.mouth.scale.set(1.3, 0.7 + f.mouthOpen * 3, 0.6);
+      (f.darkL.material as THREE.MeshBasicMaterial).opacity = f.darkVis;
+      f.darkL.visible = f.darkVis > 0.02;
+      (f.darkR.material as THREE.MeshBasicMaterial).opacity = f.darkVis;
+      f.darkR.visible = f.darkVis > 0.02;
+      // Re-project to the head each frame so it tracks the pose, and billboard
+      // toward the camera so the eyes/mouth always face you.
+      this.model.updateMatrixWorld(true);
+      this.object.updateMatrixWorld(true);
+      const world = f.headAnchor.clone().applyMatrix4(this.model.matrixWorld);
+      const toCam = camera.position.clone().sub(world).normalize().multiplyScalar(this._sizeY * 0.02);
+      world.add(toCam);
+      this.face.group.position.copy(this.object.worldToLocal(world.clone()));
+      this.face.group.quaternion.copy(camera.quaternion);
     }
   }
 
@@ -750,13 +904,27 @@ class PetApp {
         this.root.add(lily.object);
         this.character = lily;
       }
+    } else if (p.modelFolderPath) {
+      // Folder-based model: the folder's index.(js|ts) exports a Character class
+      // (which may internally load a .vrm/.glb/.gltf from inside the folder).
+      try {
+        const ModelClass = require(p.modelFolderPath).default || require(p.modelFolderPath);
+        const char = new ModelClass(this.accent);
+        this.root.add(char.object);
+        this.character = char;
+      } catch (e) {
+        console.error('Failed to load model folder, falling back to Lily', e);
+        const lily = new Lily(this.accent);
+        this.root.add(lily.object);
+        this.character = lily;
+      }
     } else if (p.vrmPath) {
       const vrm = new VRMCharacter(this.accent);
       this.root.add(vrm.object);
       this.character = vrm;
       await vrm.load(nodeUrl.pathToFileURL(p.vrmPath).href, this.accent);
     } else if (p.modelPath) {
-      const glb = new GLBCharacter(this.accent);
+      const glb = new GLBCharacter(this.accent, p.faceOverlay ?? undefined);
       this.root.add(glb.object);
       this.character = glb;
       await glb.load(nodeUrl.pathToFileURL(p.modelPath).href);

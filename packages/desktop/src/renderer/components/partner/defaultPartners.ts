@@ -19,6 +19,7 @@ export const DEFAULT_PARTNERS: PartnerManifest[] = [
     model: 'lily', // Uses the custom Lily 3D model
     laptop: true,
     pillow: true,
+    faceOverlay: true, // paint a procedural face on a plain GLB (e.g. Tripo export)
     reactions: {
       idle:      { emoji: '🧍', line: 'Ready when you are.' },
       thinking:  { emoji: '🤔', line: 'Hmm, let me think…' },

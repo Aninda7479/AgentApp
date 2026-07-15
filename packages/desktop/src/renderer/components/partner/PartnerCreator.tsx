@@ -28,6 +28,7 @@ interface CreatorForm {
   accent: string;
   emoji: string;
   model: string;
+  modelFolder: string;
   reactions: Record<string, ReactionForm>;
 }
 
@@ -44,6 +45,7 @@ function blankForm(): CreatorForm {
     accent: '#7c83ff',
     emoji: '🐾',
     model: '',
+    modelFolder: '',
     reactions
   };
 }
@@ -68,6 +70,7 @@ function fromManifest(m: PartnerManifest): CreatorForm {
     accent: m.accent ?? '#7c83ff',
     emoji: m.emoji ?? '🐾',
     model: m.model ?? '',
+    modelFolder: m.modelFolder ?? '',
     reactions
   };
 }
@@ -120,6 +123,7 @@ export const PartnerCreator: React.FC<PartnerCreatorProps> = ({ isOpen, onClose,
       accent: form.accent,
       emoji: form.emoji || '🐾',
       model: form.model.trim() || undefined,
+      modelFolder: form.modelFolder.trim() || undefined,
       reactions
     };
   }, [form]);
@@ -213,6 +217,11 @@ export const PartnerCreator: React.FC<PartnerCreatorProps> = ({ isOpen, onClose,
               <input className="ui-input" data-testid="creator-model" value={form.model}
                 placeholder="creature.glb — overrides the built-in 3D creature"
                 onChange={(e) => setField('model', e.target.value)} />
+            </Field>
+            <Field label="3D model folder (optional)">
+              <input className="ui-input" data-testid="creator-model-folder" value={form.modelFolder}
+                placeholder="src/my-model — folder w/ index.ts exporting a Character"
+                onChange={(e) => setField('modelFolder', e.target.value)} />
             </Field>
           </div>
 

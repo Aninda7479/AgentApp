@@ -2216,6 +2216,7 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
               onRemove={(id) => { partners.remove(id); }}
               onExport={(id) => { partners.exportPet(id); }}
               onImportModel={(id, filePath) => partners.importModel(id, filePath)}
+              onImportModelFolder={(id, folderPath) => partners.importModelFolder(id, folderPath)}
             />
           )}
 

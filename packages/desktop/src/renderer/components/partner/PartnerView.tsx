@@ -20,6 +20,8 @@ export interface PartnerViewProps {
   onExport: (id: string) => void;
   /** Imports a 3D model file (.vrm/.glb/.gltf) and attaches it to a Partner. */
   onImportModel?: (id: string, filePath: string) => Promise<string | null> | void;
+  /** Imports a 3D model *folder* (index.ts exporting a Character) and attaches it to a Partner. */
+  onImportModelFolder?: (id: string, folderPath: string) => Promise<string | null> | void;
 }
 
 const BUILTIN_IDS = new Set(DEFAULT_PARTNERS.map((p) => p.id));
@@ -68,6 +70,37 @@ async function windowPickModelFile(): Promise<string | null> {
 }
 
 /**
+ * Picks a 3D model *folder*. Uses the native Electron folder dialog when
+ * available; in the web build it falls back to an `<input webkitdirectory>`
+ * (folder) selection and returns the chosen folder path/object URL, or null.
+ */
+async function windowPickModelFolder(): Promise<string | null> {
+  const req = (window as any).require;
+  if (req) {
+    try {
+      const ipc = req('electron').ipcRenderer;
+      const res = await ipc.invoke('partner-pick-model-folder');
+      if (typeof res === 'string') return res;
+    } catch {
+      /* fall through to web fallback */
+    }
+  }
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    // `webkitdirectory` makes the input select a folder instead of a file.
+    (input as any).webkitdirectory = true;
+    (input as any).directory = true;
+    input.onchange = () => {
+      const f = input.files && input.files[0];
+      resolve(f ? (window as any).URL?.createObjectURL?.(f) ?? null : null);
+    };
+    input.oncancel = () => resolve(null);
+    input.click();
+  });
+}
+
+/**
  * The Partner gallery: browse the installed/open Partners, set the active one,
  * import a folder, create your own, and export or remove.
  */
@@ -80,7 +113,8 @@ export const PartnerView: React.FC<PartnerViewProps> = ({
   onInstallFromJson,
   onRemove,
   onExport,
-  onImportModel
+  onImportModel,
+  onImportModelFolder
 }) => {
   const [creatorOpen, setCreatorOpen] = useState(false);
   const [editing, setEditing] = useState<PartnerManifest | null>(null);
@@ -136,7 +170,7 @@ export const PartnerView: React.FC<PartnerViewProps> = ({
             className="ui-btn"
             data-testid="partner-import-model"
             disabled={!activeId || !onImportModel}
-            title={activeId ? 'Attach a 3D model to the active Partner' : 'Set an active Partner first'}
+            title={activeId ? 'Attach a 3D model file to the active Partner (legacy)' : 'Set an active Partner first'}
             onClick={async () => {
               if (!activeId || !onImportModel) return;
               const filePath = await windowPickModelFile();
@@ -151,6 +185,26 @@ export const PartnerView: React.FC<PartnerViewProps> = ({
             }}
           >
             <Download size={15} /> <span className="hidden sm:inline">Import 3D model</span>
+          </button>
+          <button
+            className="ui-btn ui-btn-primary"
+            data-testid="partner-import-model-folder"
+            disabled={!activeId || !onImportModelFolder}
+            title={activeId ? 'Import a 3D model folder (index.ts exporting a Character) into the active Partner' : 'Set an active Partner first'}
+            onClick={async () => {
+              if (!activeId || !onImportModelFolder) return;
+              const folderPath = await windowPickModelFolder();
+              if (!folderPath) return;
+              const modelFolder = await onImportModelFolder(activeId, folderPath);
+              if (modelFolder) {
+                const name = pets.find((p) => p.id === activeId)?.name ?? 'Partner';
+                flash(`Model folder attached to ${name}.`);
+              } else {
+                flash('Could not attach model folder (see console).');
+              }
+            }}
+          >
+            <FolderOpen size={15} /> <span className="hidden sm:inline">Import 3D Model Folder</span>
           </button>
         </div>
       </div>
@@ -206,13 +260,13 @@ export const PartnerView: React.FC<PartnerViewProps> = ({
 
                     <p className="text-xs leading-relaxed text-brand-textMuted">{pet.description}</p>
 
-                    {(pet.model || pet.vrm) && (
+                    {(pet.model || pet.vrm || pet.modelFolder) && (
                       <div
                         data-testid={`partner-model-${pet.id}`}
                         className="ui-badge bg-[var(--brand-accent)]/12 text-[color:var(--brand-accent)]"
                         title="Imported 3D character model"
                       >
-                        3D · {pet.vrm ? 'VRM' : 'GLB'}: {pet.model || pet.vrm}
+                        3D · {pet.modelFolder ? `Folder: ${pet.modelFolder}` : pet.vrm ? 'VRM' : 'GLB'}: {pet.model || pet.vrm || ''}
                       </div>
                     )}
 

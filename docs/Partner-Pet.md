@@ -63,7 +63,8 @@ Create a folder for your Partner and put a `partner.json` inside it:
 | `accent` | — | Hex color for the 3D glow / 2D ring. Defaults to `#7c83ff`. |
 | `emoji` | — | Default emoji when a mood has none. Defaults to `🐾`. Also rendered as the floating billboard on the 3D pet. |
 | `frames` | — | Optional list of asset filenames for frame-by-frame animation. |
-| `model` | — | Optional glTF (`.glb` / `.gltf`) filename inside the Partner folder; overrides the built-in 3D creature. |
+| `model` | — | Optional glTF (`.glb` / `.gltf`) filename inside the Partner folder; overrides the built-in 3D creature. *(Legacy — prefer `modelFolder`.)* |
+| `modelFolder` | — | Optional relative path (from the Partner folder) to a folder containing an `index.js` (compiled from `index.ts`) exporting a `Character` class — e.g. `src/my-model`. Model binaries (.vrm/.glb/.gltf) live inside it, so all formats are supported by the authored class. Set via **Import 3D Model Folder**. |
 | `script` | — | Optional custom script filename (e.g., `index.js`) inside the Partner folder containing a class implementing the modular `Character` interface. |
 | `animations` | — | Reserved `{ mood: clipName }` map for 3D model clip animation (currently unused; behavior is driven by root posing). |
 | `personality` | — | `{ voice?, traits?[] }` — free-form metadata for the future. |
@@ -96,7 +97,9 @@ To add a Partner companion to your library:
 1. **Folder import.** Open the **Partner** tab → **Import folder**, and select the directory containing your `partner.json` manifest. It is copied into `~/AppData/Roaming/OpenSource/AgentApp/pets/<id>/` (your OS user-data directory), including any models, scripts, or image files.
 2. **Dynamic Script Loading.** If your folder contains a custom script (specified by `"script": "index.js"` in the manifest), the app loads the compiled JS script dynamically, resolving its metadata at runtime.
 
-**Import a 3D model file.** With an active Partner selected, click **Import 3D model** on the Partner tab and choose a `.vrm`, `.glb`, or `.gltf` file. The file is copied into that Partner's folder and recorded in its manifest (`vrm` for `.vrm`, otherwise `model`), so your choice is saved and restored. A `.glb`/`.gltf` takes precedence over a `.vrm` for the 3D pet.
+**Import a 3D model file.** With an active Partner selected, click **Import 3D model** on the Partner tab and choose a `.vrm`, `.glb`, or `.gltf` file. The file is copied into that Partner's folder and recorded in its manifest (`vrm` for `.vrm`, otherwise `model`), so your choice is saved and restored. A `.glb`/`.gltf` takes precedence over a `.vrm` for the 3D pet. *(Legacy path — see "Import 3D Model Folder" below for the recommended, format-flexible approach.)*
+
+**Import 3D Model Folder.** With an active Partner selected, click **Import 3D Model Folder** and choose a folder that contains an `index.ts` (or pre-compiled `index.js`) exporting a `Character` class — the same contract used by the built-in Lily model (see §5). The folder is copied into the Partner's `src/<name>/` directory, its TypeScript is **compiled to JS on import** (esbuild, in place, leaving any model binaries untouched), and the manifest records `modelFolder: "src/<name>"`. Because the authored class can load a `.vrm`, `.glb`, or `.gltf` from inside the folder, **all three formats are supported** through one mechanism. A `modelFolder` takes precedence over `vrm`/`model` for the 3D pet, and the pet falls back to Lily if the class fails to load.
 
 By default, SuperAgent ships with a single built-in modular 3D companion named **Lily** (a cute anime girl). Custom partners can be imported freely.
 
@@ -205,8 +208,13 @@ via `three-vrm` and **falls back to Lily** if the `.vrm` is missing or fails to 
 
 ### Custom 3D models (advanced)
 
-A Partner can reference either:
+A Partner's 3D look can come from any of these, tried in order:
 
+- **`modelFolder`** *(recommended)* — a folder whose `index.ts` exports a `Character`
+  class. Import it with **Import 3D Model Folder**; the app compiles the TS to JS on
+  import and copies the folder into `src/<name>/`. The class loads whatever it wants
+  from inside the folder, so a **`.vrm`, `.glb`, or `.gltf`** all work. Takes
+  precedence over the legacy fields below.
 - **`vrm`** — an anime character (`.vrm` from VRoid Studio). Recommended for the
   girl look; gives you the facial expressions.
 - **`model`** — a glTF/`.glb`/`.gltf` file. Loaded with Three.js's bundled
@@ -215,7 +223,8 @@ A Partner can reference either:
   A `model` takes precedence over a `vrm` for the 3D pet.
 
 You can attach a model file without hand-editing JSON via the **Import 3D model**
-button on the Partner tab (it sets the right field for you).
+button on the Partner tab (it sets the right field for you). For the folder-based
+approach, use **Import 3D Model Folder** instead.
 
 ```json
 {
@@ -236,6 +245,7 @@ button on the Partner tab (it sets the right field for you).
 
 | Field | Notes |
 | --- | --- |
+| `modelFolder` | Relative path (from the Partner folder) to a folder with `index.js` exporting a `Character` class. Set via **Import 3D Model Folder**; supports `.vrm`/`.glb`/`.gltf` via the authored class. |
 | `vrm` | Filename of a VRoid `.vrm` inside the Partner folder. Loaded as the 3D character with native expressions. |
 | `laptop` | Show the laptop prop (default `true`). |
 | `pillow` | Show the head pillow prop (default `true`). |

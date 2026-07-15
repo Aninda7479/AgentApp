@@ -34,6 +34,8 @@ export class PetWindowManager {
   private modelPath: string | null = null;
   private vrmPath: string | null = null;
   private scriptPath: string | null = null;
+  private modelFolderPath: string | null = null;
+  private faceOverlay: boolean | { headFrac?: number; frontGap?: number; scale?: number } | null = null;
   private mood: PetMood = 'idle';
   private pos: PetPos = { x: 0, y: 0 };
   private size: PetSize = { width: 220, height: 320 };
@@ -196,21 +198,24 @@ export class PetWindowManager {
 
   /**
    * Stores and forwards the active Partner manifest (plus the resolved absolute
-   * paths to its 3D model / VRM, if any) to the renderer. The renderer loads a
-   * `.vrm` when present, else falls back to the procedural Lily.
+   * paths to its 3D model / VRM / model folder, if any) to the renderer. The
+   * renderer loads a `modelFolder` (folder-based Character class) when present,
+   * else a `.vrm`, else falls back to the procedural Lily.
    */
-  setPartner(partner: PartnerManifest | null, modelPath: string | null = null, vrmPath: string | null = null, scriptPath: string | null = null): void {
+  setPartner(partner: PartnerManifest | null, modelPath: string | null = null, vrmPath: string | null = null, scriptPath: string | null = null, modelFolderPath: string | null = null, faceOverlay: boolean | { headFrac?: number; frontGap?: number; scale?: number } | null = null): void {
     this.partner = partner || null;
     this.modelPath = modelPath;
     this.vrmPath = vrmPath;
     this.scriptPath = scriptPath;
+    this.modelFolderPath = modelFolderPath;
+    this.faceOverlay = faceOverlay;
     this.win?.webContents.send('pet-partner', this.buildPayload());
   }
 
   /** Merges the manifest with the resolved absolute model paths for the renderer. */
   private buildPayload(): Record<string, unknown> | null {
     if (!this.partner) return null;
-    return { ...this.partner, modelPath: this.modelPath, vrmPath: this.vrmPath, scriptPath: this.scriptPath };
+    return { ...this.partner, modelPath: this.modelPath, vrmPath: this.vrmPath, scriptPath: this.scriptPath, modelFolderPath: this.modelFolderPath, faceOverlay: this.faceOverlay };
   }
 
   /** Stores and forwards the current mood, driving behavior + idle timers. */

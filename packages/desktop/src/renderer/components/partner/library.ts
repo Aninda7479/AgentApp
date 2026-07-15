@@ -218,6 +218,19 @@ export const PartnerLibrary = {
     return null;
   },
 
+  /** Opens a native folder picker for a 3D model folder. Returns the chosen path or null. */
+  async pickModelFolder(): Promise<string | null> {
+    const ipc = getIpc();
+    if (!ipc) return null;
+    try {
+      const res = await ipc.invoke('partner-pick-model-folder');
+      if (res && typeof res === 'string') return res;
+    } catch {
+      /* ignore */
+    }
+    return null;
+  },
+
   /**
    * Attaches a 3D model file to a Partner: copies it into the Partner's folder
    * and records it in the manifest. Persists the user's "which model I imported"
@@ -231,6 +244,24 @@ export const PartnerLibrary = {
       if (res && res.ok) return res.model;
     } catch {
       /* ignore */
+    }
+    return null;
+  },
+
+  /**
+   * Imports a 3D model *folder* into a Partner: copies it into the Partner's
+   * `src/` directory, compiles its TypeScript to JS, and records the folder in
+   * the manifest as `modelFolder`. Returns the stored `modelFolder` path or null.
+   */
+  async importModelFolder(id: string, sourcePath: string): Promise<string | null> {
+    const ipc = getIpc();
+    if (!ipc) return null;
+    try {
+      const res = await ipc.invoke('partner-import-model-folder', { id, sourcePath });
+      if (res && res.ok) return res.modelFolder;
+      if (res && res.error) console.error('[partner] import model folder failed:', res.error);
+    } catch (e) {
+      console.error('[partner] import model folder failed:', e);
     }
     return null;
   },
@@ -362,6 +393,15 @@ export function usePartners() {
     return model;
   }, []);
 
+  const importModelFolder = useCallback(async (id: string, folderPath: string) => {
+    const modelFolder = await PartnerLibrary.importModelFolder(id, folderPath);
+    // Refresh the list so the attached model folder shows on the card.
+    const installed = await PartnerLibrary.list();
+    const merged = mergePets(DEFAULT_PARTNERS, installed);
+    setPets(merged);
+    return modelFolder;
+  }, []);
+
   const startPet = useCallback(async () => {
     const running = await PartnerLibrary.startPet();
     setPetRunning(running);
@@ -382,6 +422,7 @@ export function usePartners() {
     remove,
     exportPet,
     importModel,
+    importModelFolder,
     startPet,
     stopPet,
     ready

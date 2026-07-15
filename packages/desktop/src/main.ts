@@ -542,7 +542,9 @@ ipcMain.handle('partner-set-active', (_event, id: string | null) => {
   const modelPath = manifest ? resolvePartnerModelPath(manifest) : null;
   const vrmPath = manifest ? resolvePartnerVrmPath(manifest) : null;
   const scriptPath = manifest ? resolvePartnerScriptPath(manifest) : null;
-  petWindowManager.setPartner(manifest as any, modelPath, vrmPath, scriptPath);
+  const modelFolderPath = manifest ? resolvePartnerModelFolderPath(manifest) : null;
+  const faceOverlay = manifest ? resolvePartnerFaceOverlay(manifest) : null;
+  petWindowManager.setPartner(manifest as any, modelPath, vrmPath, scriptPath, modelFolderPath, faceOverlay);
   return { success: true };
 });
 
@@ -622,11 +624,130 @@ ipcMain.handle('partner-import-model', async (_event, { id, sourcePath }: { id: 
         manifest as any,
         resolvePartnerModelPath(manifest),
         resolvePartnerVrmPath(manifest),
-        resolvePartnerScriptPath(manifest)
+        resolvePartnerScriptPath(manifest),
+        resolvePartnerModelFolderPath(manifest)
       );
     }
 
     return { ok: true, model: fileName, field };
+  } catch (err: unknown) {
+    return { error: (err as Error).message };
+  }
+});
+
+/**
+ * Opens a native folder picker so the user can choose a 3D model folder (one that
+ * contains an `index.ts`/`index.js` exporting a `Character` class) to attach to a
+ * Partner. Returns the chosen absolute path (or null if cancelled). The copy +
+ * compile + manifest update happens in 'partner-import-model-folder'.
+ */
+ipcMain.handle('partner-pick-model-folder', async () => {
+  try {
+    const win = windowManager.getMainWindow();
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Select a 3D model folder',
+      properties: ['openDirectory']
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  } catch (err: unknown) {
+    return { error: (err as Error).message };
+  }
+});
+
+/**
+ * Imports a 3D model *folder* into a Partner: copies the folder verbatim into the
+ * Partner's `src/<name>/` directory, compiles any TypeScript (`index.ts`) to JS in
+ * place with esbuild (leaving model binaries untouched), records the folder in the
+ * manifest as `modelFolder`, and — if this is the active Partner — re-pushes it to
+ * the running pet. The authored `Character` class may load a .vrm/.glb/.gltf from
+ * inside the folder, so all three formats are supported.
+ */
+ipcMain.handle('partner-import-model-folder', async (_event, { id, sourcePath }: { id: string; sourcePath: string }) => {
+  try {
+    if (!id || !sourcePath) return { error: 'Missing partner id or folder path.' };
+    if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isDirectory()) {
+      return { error: 'Selected path is not a folder.' };
+    }
+
+    const hasTs = fs.existsSync(path.join(sourcePath, 'index.ts'));
+    const hasJs = fs.existsSync(path.join(sourcePath, 'index.js'));
+    if (!hasTs && !hasJs) {
+      return { error: 'Folder must contain an index.ts or index.js exporting a Character class.' };
+    }
+
+    const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+    if (!fs.existsSync(folder)) return { error: 'Partner folder not found.' };
+
+    // Sanitize the folder name (basename of the chosen folder) into a safe slug.
+    const rawName = path.basename(sourcePath);
+    const folderName = rawName.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'model';
+    const dest = path.join(folder, 'src', folderName);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.cpSync(sourcePath, dest, { recursive: true });
+
+    // Compile TypeScript to JS in place (esbuild bundles the folder's own relative
+    // imports and leaves binary assets untouched). Already-compiled folders
+    // (index.js only) skip this step.
+    //
+    // `three` / `three-vrm` must NOT be bundled: the pet scene and the user model
+    // have to share ONE THREE instance (otherwise `scene.add(model.object)` and
+    // `instanceof` checks break). But the compiled module lives in `userData`,
+    // far outside the app tree, so a bare `require('three')` there cannot resolve.
+    // The plugin below externalizes those imports to ABSOLUTE paths into the app's
+    // own node_modules, so they resolve from anywhere AND hit the single cached
+    // instance the pet already loaded.
+    if (hasTs) {
+      const esbuild = require('esbuild');
+      const externalizeThree = {
+        name: 'externalize-three',
+        setup(build: any) {
+          build.onResolve({ filter: /^three(-vrm)?($|\/)/ }, (args: any) => {
+            try {
+              return { path: require.resolve(args.path), external: true };
+            } catch {
+              return { path: args.path, external: true };
+            }
+          });
+        }
+      };
+      await esbuild.build({
+        entryPoints: [path.join(dest, 'index.ts')],
+        bundle: true,
+        format: 'cjs',
+        platform: 'node',
+        target: 'es2022',
+        outfile: path.join(dest, 'index.js'),
+        plugins: [externalizeThree],
+        logLevel: 'silent'
+      });
+    }
+
+    // Read, patch, and rewrite the manifest with the model folder path.
+    const manifestPath = path.join(folder, 'partner.json');
+    const manifest = PartnerStore.getPartner(app.getPath('userData'), id);
+    if (!manifest) return { error: 'Partner manifest not found.' };
+    const modelFolder = `src/${folderName}`;
+    manifest.modelFolder = modelFolder;
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
+
+    const modelFolderPath = path.join(dest, 'index.js');
+    // Drop any cached copy so a re-import picks up the new module.
+    try { delete require.cache[require.resolve(modelFolderPath)]; } catch { /* not cached */ }
+
+    // If this is the active Partner, refresh the running pet immediately.
+    const activeId = PartnerStore.getActivePartner(app.getPath('userData'));
+    if (activeId === id) {
+      petWindowManager.setPartner(
+        manifest as any,
+        resolvePartnerModelPath(manifest),
+        resolvePartnerVrmPath(manifest),
+        resolvePartnerScriptPath(manifest),
+        resolvePartnerModelFolderPath(manifest)
+      );
+    }
+
+    return { ok: true, modelFolder };
   } catch (err: unknown) {
     return { error: (err as Error).message };
   }
@@ -669,6 +790,32 @@ function resolvePartnerScriptPath(manifest: any): string | null {
   return fs.existsSync(full) ? full : null;
 }
 
+/**
+ * Resolves the optional `faceOverlay` flag for a Partner (drives a procedural
+ * face on non-VRM GLB/glTF models so expressions still read).
+ */
+function resolvePartnerFaceOverlay(manifest: any): boolean | { headFrac?: number; frontGap?: number; scale?: number } | null {
+  const fo = manifest && manifest.faceOverlay !== undefined ? manifest.faceOverlay : null;
+  return fo ?? null;
+}
+
+/**
+ * Like the other resolvers but for a folder-based 3D model: returns the absolute
+ * path to the folder's compiled `index.js` (or `index.ts` if not yet compiled), or
+ * null when the Partner has no `modelFolder` field / the folder is missing.
+ */
+function resolvePartnerModelFolderPath(manifest: any): string | null {
+  const modelFolder = manifest && typeof manifest.modelFolder === 'string' ? manifest.modelFolder : null;
+  if (!modelFolder) return null;
+  const id = manifest && typeof manifest.id === 'string' ? manifest.id : null;
+  if (!id) return null;
+  const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+  const jsPath = path.join(folder, modelFolder, 'index.js');
+  if (fs.existsSync(jsPath)) return jsPath;
+  const tsPath = path.join(folder, modelFolder, 'index.ts');
+  return fs.existsSync(tsPath) ? tsPath : null;
+}
+
 // ─── IPC: 3D desktop Partner overlay window ─────────────────────────────────
 // The pet renderer (separate transparent window) talks back via these channels;
 // the app shell pushes the active Partner + visibility here.
@@ -687,7 +834,9 @@ ipcMain.handle('pet-set-partner', (_event, manifest) => {
   const modelPath = manifest ? resolvePartnerModelPath(manifest) : null;
   const vrmPath = manifest ? resolvePartnerVrmPath(manifest) : null;
   const scriptPath = manifest ? resolvePartnerScriptPath(manifest) : null;
-  petWindowManager.setPartner(manifest, modelPath, vrmPath, scriptPath);
+  const modelFolderPath = manifest ? resolvePartnerModelFolderPath(manifest) : null;
+  const faceOverlay = manifest ? resolvePartnerFaceOverlay(manifest) : null;
+  petWindowManager.setPartner(manifest, modelPath, vrmPath, scriptPath, modelFolderPath, faceOverlay);
   return { ok: true };
 });
 
@@ -725,7 +874,8 @@ function startPet(): boolean {
         manifest as any,
         resolvePartnerModelPath(manifest),
         resolvePartnerVrmPath(manifest),
-        resolvePartnerScriptPath(manifest)
+        resolvePartnerScriptPath(manifest),
+        resolvePartnerModelFolderPath(manifest)
       );
     }
   }
