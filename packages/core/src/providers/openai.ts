@@ -39,14 +39,18 @@ export class OpenAIAdapter implements BaseProviderAdapter {
       stream: false
     };
 
+    const controller = new AbortController();
+    const timeoutMs = Number(process.env.SUPERAGENT_HTTP_TIMEOUT_MS ?? 300000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.apiKey}`
       },
-      body: JSON.stringify(payload)
-    });
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    }).finally(() => clearTimeout(timer));
 
     if (!response.ok) {
       const errorText = await response.text();

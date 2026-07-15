@@ -58,14 +58,18 @@ export class GeminiAdapter implements BaseProviderAdapter {
       };
     }
 
+    const controller = new AbortController();
+    const timeoutMs = Number(process.env.SUPERAGENT_HTTP_TIMEOUT_MS ?? 300000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-goog-api-key': this.apiKey
       },
-      body: JSON.stringify(payload)
-    });
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    }).finally(() => clearTimeout(timer));
 
     if (!response.ok) {
       const errorText = await response.text();

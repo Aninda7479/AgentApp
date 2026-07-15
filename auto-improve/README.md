@@ -25,6 +25,7 @@ Every entry follows this shape:
 | 09 | Graceful cache reads in root scripts | tooling | Actionable errors |
 | 10 | Web server WebSocket crash resilience | web | No more crashes on disconnect |
 | 11 | Graceful missing-input guard in gen-mcp-catalog.mjs | tooling | Actionable error + documents #007 |
+| 12 | Add request timeout to provider `complete()` calls | core | No more hangs on dead providers |
 
 ## Verification approach
 
@@ -36,6 +37,8 @@ Every entry follows this shape:
   `web/src/ipc-bridge.ts` was flagged as dead by that report but is actually an
   `esbuild` entry point (`web/scripts/build.js`) loaded by `index.html`, so it
   was deliberately **kept**.
+- npm test
+- npm run build
 
 ## Note on the untracked data dumps (#007)
 

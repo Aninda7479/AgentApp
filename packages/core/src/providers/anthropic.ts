@@ -42,6 +42,9 @@ export class AnthropicAdapter implements BaseProviderAdapter {
       payload.system = systemPrompt;
     }
 
+    const controller = new AbortController();
+    const timeoutMs = Number(process.env.SUPERAGENT_HTTP_TIMEOUT_MS ?? 300000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -49,8 +52,9 @@ export class AnthropicAdapter implements BaseProviderAdapter {
         'x-api-key': this.apiKey,
         'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify(payload)
-    });
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    }).finally(() => clearTimeout(timer));
 
     if (!response.ok) {
       const errorText = await response.text();
