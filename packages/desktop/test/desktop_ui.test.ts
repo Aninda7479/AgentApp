@@ -76,7 +76,6 @@ import { BYOKModal } from '../src/renderer/components/BYOKModal';
 import { MCPDashboard, MCPServerInfo } from '../src/renderer/components/MCPDashboard';
 import { SearchModal } from '../src/renderer/components/SearchModal';
 import { ScheduledView } from '../src/renderer/components/ScheduledView';
-import { PluginsView } from '../src/renderer/components/PluginsView';
 import { SettingsView } from '../src/renderer/settings/SettingsView';
 import { IntegrationsSettings } from '../src/renderer/settings/IntegrationsSettings';
 import { McpInstallModal } from '../src/renderer/components/McpInstallModal';
@@ -136,7 +135,6 @@ describe('Step 083: Responsive Left Sidebar Navigation', () => {
     expect(html).toContain('Settings');
     expect(html).toContain('New chat');
     expect(html).toContain('Scheduled');
-    expect(html).toContain('Plugins');
     expect(html).toContain('width:260px');
   });
 
@@ -207,7 +205,7 @@ describe('Step 084: Streaming Chat Trajectory Canvas', () => {
     expect(html).toContain('Analyzing requirements...');
     expect(html).toContain('fs_write');
     expect(html).toContain('Review');
-    expect(html).toContain('Worked for');
+    expect(html).toContain('Thought for');
   });
 
   it('should summarize noisy tool output in the worked-details list', () => {
@@ -437,18 +435,6 @@ describe('Step 082b: Additional Codex UI Sub-components', () => {
     expect(html).toContain('Create your first scheduled task');
   });
 
-  it('should render PluginsView with Installed and Featured plugins', () => {
-    const html = renderToString(
-      React.createElement(PluginsView, {
-        onInstallPlugin: () => {},
-        onTryPlugin: () => {},
-        onToggleSkill: () => {}
-      })
-    );
-    expect(html).toContain('Plugins');
-    expect(html).toContain('installed');
-    expect(html).toContain('shown');
-  });
 
   it('should render SettingsView with left categories and work mode selection', () => {
     const html = renderToString(

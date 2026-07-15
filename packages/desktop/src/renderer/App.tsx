@@ -9,7 +9,6 @@ import { DoctorModal } from './components/DoctorModal';
 import { MCPDashboard, MCPServerInfo } from './components/MCPDashboard';
 import { SearchModal } from './components/SearchModal';
 import { ScheduledView } from './components/ScheduledView';
-import { PluginsView } from './components/PluginsView';
 import { SettingsView, ProviderConnection, ModelConfig } from './settings/SettingsView';
 import type { InternetAccessLevel } from './settings/types';
 import { CreateProjectModal } from './components/CreateProjectModal';
@@ -337,14 +336,6 @@ export const App: React.FC = () => {
   const handleUseTemplate = (templateName: string, cronExpr: string) => {
     setActiveTab('trajectory');
     handleSendPrompt(`Initialize template "${templateName}" with cron "${cronExpr}"`, { model: defaultComposerModel, mode: 'plan', attachments: [] });
-  };
-  const handleInstallPlugin = (pluginId: string) => {
-    setActiveTab('trajectory');
-    handleSendPrompt(`Install plugin "${pluginId}" into this workspace`, { model: defaultComposerModel, mode: 'plan', attachments: [] });
-  };
-  const handleTryPlugin = (pluginId: string) => {
-    setActiveTab('trajectory');
-    handleSendPrompt(`Test operations using plugin "${pluginId}"`, { model: defaultComposerModel, mode: 'plan', attachments: [] });
   };
 
   // ── Attachments ────────────────────────────────────────────────────────────
@@ -771,9 +762,6 @@ export const App: React.FC = () => {
             <ScheduledView onCreateTask={handleCreateTaskFromChat} onUseTemplate={handleUseTemplate} />
           )}
 
-          {activeTab === 'plugins' && (
-            <PluginsView onInstallPlugin={handleInstallPlugin} onTryPlugin={handleTryPlugin} onToggleSkill={(skillId, enabled) => console.log(`Toggled skill ${skillId}: ${enabled}`)} />
-          )}
 
           {activeTab === 'partner' && (
             <PartnerView

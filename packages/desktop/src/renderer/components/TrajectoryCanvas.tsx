@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ChevronRight, ChevronDown, Copy, ThumbsUp, ThumbsDown, FileText, FolderOpen, Check, Eye, RotateCcw } from 'lucide-react';
 import { TrajectoryService } from '../logic/trajectory';
 
@@ -59,6 +59,7 @@ interface WorkedHeaderProps {
   editedFiles?: Array<{ name: string; added: number; removed: number }>;
   children?: React.ReactNode;
   initialExpanded?: boolean;
+  isWorking?: boolean;
 }
 
 const WorkedHeader: React.FC<WorkedHeaderProps> = ({
@@ -67,9 +68,18 @@ const WorkedHeader: React.FC<WorkedHeaderProps> = ({
   foldersExplored,
   editedFiles = [],
   children,
-  initialExpanded = false
+  initialExpanded = false,
+  isWorking = false
 }) => {
-  const [expanded, setExpanded] = useState(initialExpanded);
+  const [expanded, setExpanded] = useState(isWorking || initialExpanded);
+
+  useEffect(() => {
+    if (isWorking) {
+      setExpanded(true);
+    } else {
+      setExpanded(false);
+    }
+  }, [isWorking]);
 
   return (
     <div className="flex flex-col gap-1 select-none">
@@ -83,12 +93,21 @@ const WorkedHeader: React.FC<WorkedHeaderProps> = ({
         ) : (
           <ChevronRight size={13} className="text-brand-textMuted group-hover:text-brand-textMain transition-colors" />
         )}
-        <span>Worked for {duration}</span>
+        {isWorking ? (
+          <span className="flex items-center gap-1.5 text-sky-400 font-semibold animate-pulse font-sans">
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+            <span>Thinking... ({duration})</span>
+          </span>
+        ) : (
+          <span className="font-sans">
+            {expanded ? `Thought for ${duration}` : `Thought for ${duration}`}
+          </span>
+        )}
       </button>
 
-      {/* Collapsible detail pills */}
+      {/* Collapsible detail pills styled as a chat stream */}
       {expanded && (
-        <div className="ml-5 flex flex-col gap-1.5 animate-fade-in">
+        <div className="ml-2.5 pl-4 border-l border-brand-border/40 flex flex-col gap-4 animate-fade-in mt-2 w-full">
           {/* Files + Folders explored chip */}
           {(filesExplored !== undefined || foldersExplored !== undefined) && (
             <button className="flex items-center gap-1.5 text-brand-textMuted hover:text-brand-textMain text-[11px] transition-colors w-fit group">
@@ -554,13 +573,28 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
   onActionClick,
   initialExpanded = false
 }) => {
-  // Categorize the steps
-  const thoughtSteps = steps.filter(s => s.type === 'thought');
+  // Categorize the steps:
+  // Any assistant step that occurs BEFORE the last tool call/result is considered
+  // an intermediate thought/explanation (i.e. "Thought Message"), which will be collapsed.
+  const lastToolIdx = [...steps].reverse().findIndex(s => s.type === 'tool_call' || s.type === 'tool_result');
+  const lastToolAbsoluteIdx = lastToolIdx === -1 ? -1 : steps.length - 1 - lastToolIdx;
+
+  // Interleaved thinking steps (thoughts, tool calls, and intermediate assistant messages)
+  const thinkingSteps = steps.filter((s, idx) => {
+    if (s.type === 'thought') return true;
+    if (s.type === 'tool_call' || s.type === 'tool_result') return true;
+    if (s.type === 'assistant' && idx < lastToolAbsoluteIdx) return true;
+    return false;
+  });
+
   const toolSteps = steps.filter(s => s.type === 'tool_call' || s.type === 'tool_result');
-  const assistantSteps = steps.filter(s => s.type === 'assistant');
+
+  const assistantSteps = steps.filter((s, idx) => {
+    return s.type === 'assistant' && idx >= lastToolAbsoluteIdx;
+  });
 
   // Compute worked duration & edit stats from metadata
-  const duration = thoughtSteps[0]?.metadata?.workedDuration ||
+  const duration = thinkingSteps[0]?.metadata?.workedDuration ||
     toolSteps[0]?.metadata?.workedDuration ||
     assistantSteps[0]?.metadata?.workedDuration || '0s';
 
@@ -575,8 +609,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
       removed: s.metadata!.removedLines || 0
     }));
 
-  const hasWorkDetails = thoughtSteps.length > 0 || toolSteps.length > 0 ||
-    totalFiles > 0 || editedFiles.length > 0;
+  const hasWorkDetails = thinkingSteps.length > 0 || totalFiles > 0 || editedFiles.length > 0;
 
   // Summed file-change stats for the bottom chip
   const totalAdded = toolSteps.reduce((acc, s) => acc + (s.metadata?.addedLines || 0), 0);
@@ -593,35 +626,58 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
           foldersExplored={totalFolders > 0 ? totalFolders : undefined}
           editedFiles={editedFiles}
           initialExpanded={initialExpanded}
+          isWorking={isStreaming}
         >
-          {/* Thought steps inside the collapsible */}
-          {thoughtSteps.map(step => (
-            <div
-              key={step.id}
-              className="flex items-start gap-2 text-[11px] text-brand-textMuted/80 italic"
-            >
-              <span className="text-brand-textMuted mt-0.5 select-none">◈</span>
-              <span>{step.content}</span>
-            </div>
-          ))}
+          {/* Chronological thinking/tool steps inside the collapsible, styled like a chat thread */}
+          {thinkingSteps.map(step => {
+            if (step.type === 'thought' || step.type === 'assistant') {
+              return (
+                <div
+                  key={step.id}
+                  className="flex flex-col gap-1 items-start max-w-[90%] animate-fade-in mb-1"
+                >
+                  <div className="text-[10px] text-brand-textMuted font-semibold pl-1 select-none font-sans uppercase tracking-wider">
+                    Thought
+                  </div>
+                  <div className="bg-brand-card/65 border border-brand-border/50 rounded-2xl rounded-tl-sm px-4 py-2.5 text-xs text-brand-textMain leading-relaxed shadow-sm font-sans [&_p]:text-[12px] [&_p]:leading-relaxed [&_p]:text-brand-textMain [&_code]:text-[11px] [&_code]:bg-brand-popover [&_code]:border [&_code]:border-brand-border/60 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_p]:!text-[12px] [&_p]:!leading-relaxed [&_p]:!text-brand-textMain [&_code]:!text-[11px] [&_code]:!bg-brand-popover [&_code]:!border [&_code]:!border-brand-border/60 [&_code]:!px-1.5 [&_code]:!py-0.5 [&_code]:!rounded [&_code]:!font-mono">
+                    <MarkdownText content={step.content} />
+                  </div>
+                </div>
+              );
+            }
 
-          {/* Tool call details */}
-          {toolSteps.map(step => (
-            <div
-              key={step.id}
-              data-testid={`step-tool-${step.id}`}
-              className="flex items-center gap-2 text-[11px] text-brand-textMuted"
-            >
-              <span
-                className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                  step.status === 'success' ? 'bg-emerald-500' :
-                  step.status === 'error' ? 'bg-red-500' : 'bg-sky-400'
-                }`}
-              />
-              <span className="text-brand-textMuted/80 font-mono flex-shrink-0">{step.toolName || 'tool'}</span>
-              <span className="text-brand-textMuted/60 truncate flex-1 min-w-0 max-w-[60vw] sm:max-w-[320px]">{TrajectoryService.summarizeToolContent(step)}</span>
-            </div>
-          ))}
+            // Otherwise, it is a tool_call or tool_result
+            const isSuccess = step.status === 'success';
+            const isError = step.status === 'error';
+            return (
+              <div
+                key={step.id}
+                data-testid={`step-tool-${step.id}`}
+                className="flex flex-col gap-1 items-start max-w-[95%] w-full animate-fade-in mb-1 font-sans"
+              >
+                <div className="text-[10px] text-brand-textMuted font-semibold pl-1 select-none uppercase tracking-wider">
+                  Tool Call
+                </div>
+                <div className="bg-brand-popover/45 border border-brand-border/40 rounded-xl px-3.5 py-2.5 flex flex-col gap-1.5 font-mono text-[11px] text-brand-textMuted leading-normal w-full shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        isSuccess ? 'bg-emerald-500' :
+                        isError ? 'bg-red-500' : 'bg-sky-400'
+                      }`}
+                    />
+                    <span className="text-brand-textMain font-semibold font-mono">{step.toolName || 'tool'}</span>
+                    <span className="text-[10px] text-brand-textMuted/60 uppercase tracking-wider select-none font-sans">
+                      {step.status || 'running'}
+                    </span>
+                  </div>
+                  <div className="text-brand-textMuted/80 text-[10.5px] truncate font-mono select-all w-full font-mono">
+                    {TrajectoryService.summarizeToolContent(step)}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </WorkedHeader>
       )}
 
@@ -683,6 +739,14 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
           </div>
         );
       })}
+
+      {/* If completed but no assistant reply was rendered, show the response failed card */}
+      {assistantSteps.length === 0 && !isStreaming && (
+        <div className="text-red-400 bg-red-500/10 border border-red-500/25 px-4 py-2.5 rounded-xl text-xs font-semibold select-none max-w-fit flex items-center gap-2 mt-1 animate-fade-in font-sans">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+          <span>Agent Response Failed</span>
+        </div>
+      )}
 
       {/* File changed summary chip (if tool edits happened) */}
       {changedFilesCount > 0 && !isStreaming && (

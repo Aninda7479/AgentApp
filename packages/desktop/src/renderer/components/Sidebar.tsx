@@ -4,7 +4,6 @@ import {
   Plus,
   Search,
   Clock,
-  Plug,
   Trash2,
   ChevronRight,
   ChevronLeft,
@@ -171,7 +170,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
 
           {renderNavItem('scheduled', 'Scheduled', Clock)}
-          {renderNavItem('plugins', 'Plugins', Plug)}
           {renderNavItem('partner', 'Partner', PawPrint)}
           {showStudio && renderNavItem('studio', '3D Studio', Box)}
         </div>

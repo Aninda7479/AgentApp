@@ -280,13 +280,16 @@ export const Composer: React.FC<ComposerProps> = ({
   }, []);
 
   const handleSend = () => {
-    if (!prompt.trim() || disabled || isGenerating) return;
+    if (!prompt.trim() || disabled || isGenerating || !hasModels) return;
     onSend(prompt, ComposerService.buildSendOptions(selectedModel, approvalMode, []));
     setPrompt('');
     basePromptRef.current = '';
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) {
+      return;
+    }
     if (menuOpen && filtered.length > 0) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
