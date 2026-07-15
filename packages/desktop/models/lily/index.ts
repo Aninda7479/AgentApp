@@ -6,7 +6,8 @@ import {
   Vec3,
   poseFor,
   expressionFor,
-  updateAnimations
+  updateAnimations,
+  LaptopScreenAnimator
 } from './animations';
 import { buildLilyGeometry, applyLilyRest, makeMat } from './model';
 import { playSound } from './audio';
@@ -33,6 +34,7 @@ export interface Character {
 
 export class Lily implements Character {
   object = new THREE.Group();
+  animator = new LaptopScreenAnimator(256, 180);
   
   // Publicly exposed fields accessed by model / animation runners
   joints: Record<string, THREE.Object3D> = {};

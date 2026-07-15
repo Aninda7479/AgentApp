@@ -101,6 +101,26 @@ export interface ComputerUseSettings {
   actionDelay?: number;
 }
 
+/**
+ * 3D model / character generation capability (Tripo3D / Meshy-style
+ * text- or image-to-3D). This is a **power-user** feature, so it is
+ * DISABLED BY DEFAULT and the user must opt in from Settings.
+ *
+ * - `enabled` — master switch for the whole capability (default false).
+ * - `provider` — which backend to call ('tripo' | 'meshy').
+ * - `apiKey` — that provider's API key (kept only in local settings,
+ *   sent nowhere except the provider's API).
+ * - `mode` — where the entry point lives: `chat` exposes a
+ *   `make_3d_character` agent tool used inline in the main agent chat;
+ *   `studio` routes to a dedicated "3D Studio" page instead.
+ */
+export interface ThreeDSettings {
+  enabled?: boolean;
+  provider?: 'tripo' | 'meshy';
+  apiKey?: string;
+  mode?: 'chat' | 'studio';
+}
+
 /** Map of built-in plugin id → whether the user has enabled it. */
 export type PluginsSettings = Record<string, boolean>;
 
@@ -116,6 +136,7 @@ export interface AppSettings {
   computerUse?: ComputerUseSettings;
   internetAccess?: InternetAccessSettings;
   plugins?: PluginsSettings;
+  threeD?: ThreeDSettings;
 }
 
 /** Resolved file system paths for user data and config files. */
@@ -230,7 +251,8 @@ export class SettingsStorage {
         general: settings.general !== undefined ? (settings.general === null ? undefined : { ...current.general, ...settings.general }) : current.general,
         modelGov: settings.modelGov !== undefined ? (settings.modelGov === null ? undefined : { ...current.modelGov, ...settings.modelGov }) : current.modelGov,
         internetAccess: settings.internetAccess !== undefined ? (settings.internetAccess === null ? undefined : { ...current.internetAccess, ...settings.internetAccess }) : current.internetAccess,
-        plugins: settings.plugins !== undefined ? (settings.plugins === null ? undefined : { ...current.plugins, ...settings.plugins }) : current.plugins
+        plugins: settings.plugins !== undefined ? (settings.plugins === null ? undefined : { ...current.plugins, ...settings.plugins }) : current.plugins,
+        threeD: settings.threeD !== undefined ? (settings.threeD === null ? undefined : settings.threeD) : current.threeD
       };
 
       this.cachedSettings = updated;

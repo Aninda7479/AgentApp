@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Archive,
   ArrowLeft,
+  Box,
   Search,
   Bot,
   FolderArchive,
@@ -37,7 +38,8 @@ interface SettingsSidebarProps {
 const CATEGORIES: Record<string, SidebarItem[]> = {
   Personal: [
     { id: 'general', label: 'General', Icon: Settings },
-    { id: 'pets', label: 'Pets', Icon: PawPrint }
+    { id: 'pets', label: 'Pets', Icon: PawPrint },
+    { id: '3d', label: '3D Model Gen', Icon: Box }
   ],
   "AI Config": [
     { id: 'providers', label: 'Providers', Icon: SlidersHorizontal },

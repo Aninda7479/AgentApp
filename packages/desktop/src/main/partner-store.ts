@@ -25,11 +25,11 @@ const DEFAULT_LILY_MANIFEST = {
   author: 'SuperAgent',
   accent: '#ff8fb3',
   emoji: '🧍',
-  // Real 3D mesh (AI-generated girl, optimized to ~9MB glTF). Loaded by the
-  // pet's GLBCharacter (three.js GLTFLoader) with the procedural face overlay so
-  // Lily still emotes. Falls back to the procedural Lily if the file is missing.
-  model: 'models/lily/v1/girl_optimized.glb',
-  faceOverlay: true,
+  // Real 3D mesh (AI-generated girl, optimized to ~893KB glTF via Meshopt/WebP).
+  // Loaded by the pet's GLBCharacter (three.js GLTFLoader) with the procedural
+  // face overlay so Lily still emotes. Falls back to the procedural Lily if missing.
+  model: 'models/lily/v1/girl_web.glb',
+  faceOverlay: { headFrac: 0.86, frontGap: -0.01, scale: 0.42 },
   laptop: true,
   pillow: true,
   reactions: {

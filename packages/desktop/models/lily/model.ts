@@ -343,7 +343,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   lily.laptopScreen.add(screenLid);
 
   const displayGeo = new THREE.PlaneGeometry(0.36, 0.24);
-  const displayMat = new THREE.MeshBasicMaterial({ color: 0x3a557a });
+  const displayMat = new THREE.MeshBasicMaterial({ map: lily.animator.texture });
   const display = new THREE.Mesh(displayGeo, displayMat);
   display.position.set(0, 0.13, 0.009);
   lily.laptopScreen.add(display);

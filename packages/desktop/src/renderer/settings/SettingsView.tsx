@@ -12,6 +12,7 @@ import { UsageTrackerSettings } from './UsageTrackerSettings';
 import { ModelGovSettings } from './ModelGovSettings';
 import { BrowserUseSettings } from './BrowserUseSettings';
 import { ComputerUseSettings } from './ComputerUseSettings';
+import { ThreeDSettings } from './ThreeDSettings';
 import { UpdatesSettings } from './UpdatesSettings';
 
 /** Top-level settings page that renders a sidebar and the active settings category panel. */
@@ -173,6 +174,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         )}
         {activeCategory === 'pets' && (
           <PetsSettings />
+        )}
+        {activeCategory === '3d' && (
+          <ThreeDSettings />
         )}
         {activeCategory === 'providers' && (
           <ProvidersSettings

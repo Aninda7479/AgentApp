@@ -382,12 +382,162 @@ class VRMCharacter implements Character {
   }
 }
 
+// ================================================================ LaptopScreenAnimator
+// A canvas-based 2D text/animation rendering helper to animate laptop screens.
+class LaptopScreenAnimator {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  texture: THREE.CanvasTexture;
+  private lastUpdate = 0;
+  private codeLines: string[] = [];
+  private lastCodeLineTime = 0;
+
+  constructor(width = 256, height = 180) {
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = width;
+    this.canvas.height = height;
+    this.ctx = this.canvas.getContext('2d')!;
+    this.texture = new THREE.CanvasTexture(this.canvas);
+    this.texture.colorSpace = THREE.SRGBColorSpace;
+  }
+
+  update(behavior: Behavior, t: number, dt: number) {
+    const ctx = this.ctx;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+
+    // Throttle canvas draw to ~30 FPS for optimization
+    const now = t;
+    if (now - this.lastUpdate < 0.033) return;
+    this.lastUpdate = now;
+
+    ctx.clearRect(0, 0, w, h);
+
+    if (behavior === 'working' || behavior === 'talking') {
+      // ── Typing / Working Mode: scrolling green/cyan terminal code ──────────
+      ctx.fillStyle = '#0f172a'; // dark background
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw header
+      ctx.fillStyle = '#10b981';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText('> LILY-AGENT // ACTIVE', 10, 18);
+
+      // Draw code lines
+      ctx.fillStyle = '#38bdf8'; // cyan text
+      ctx.font = '9px monospace';
+
+      // Generate snippet code lines
+      if (this.codeLines.length === 0 || now - this.lastCodeLineTime > 0.4) {
+        this.lastCodeLineTime = now;
+        const snippets = [
+          'const lily = new Partner("Lily");',
+          'await lily.calmUser();',
+          'sys.optimize({ memory: "WebP" });',
+          'process.env.STRESS_LEVEL = 0;',
+          'heart.pulse({ frequency: 1.05 });',
+          'brain.relax();',
+          'npm run dev --harmony',
+          'const relax = true;',
+          'import { breathe } from "relax";',
+          'breathe.inhale(); // resonant',
+          'breathe.exhale(); // peaceful'
+        ];
+        this.codeLines.push(snippets[Math.floor(Math.random() * snippets.length)]);
+        if (this.codeLines.length > 11) this.codeLines.shift();
+      }
+
+      for (let i = 0; i < this.codeLines.length; i++) {
+        ctx.fillText(this.codeLines[i], 10, 32 + i * 11);
+      }
+
+      // Blinking cursor
+      if (Math.floor(t * 4) % 2 === 0) {
+        ctx.fillRect(10 + ctx.measureText(this.codeLines[this.codeLines.length - 1] || '').width, 32 + (this.codeLines.length - 1) * 11 - 8, 5, 9);
+      }
+    } else if (behavior === 'sleeping' || behavior === 'laying') {
+      // ── Sleeping Mode: cozy night sky with Zzz... ──────────
+      ctx.fillStyle = '#0b0f19'; // deep night dark blue
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw a soft glowing yellow moon
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.arc(w - 40, 40, 16, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Moon bite (crescent)
+      ctx.fillStyle = '#0b0f19';
+      ctx.beginPath();
+      ctx.arc(w - 46, 36, 16, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Soft stars twinkling
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 6; i++) {
+        const starX = (Math.sin(i * 13 + t) * 0.5 + 0.5) * w;
+        const starY = (Math.cos(i * 7 + t * 0.5) * 0.5 + 0.5) * (h - 40);
+        const opacity = Math.abs(Math.sin(t * 2 + i));
+        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+        ctx.fillRect(starX, starY, 1.5, 1.5);
+      }
+
+      // Floating Zzz
+      ctx.fillStyle = '#93c5fd';
+      ctx.font = 'bold 16px sans-serif';
+      const zShift = (t * 15) % 80;
+      const zScale = 10 + (zShift / 10);
+      ctx.font = `bold ${zScale}px sans-serif`;
+      ctx.fillText('Z', 40 + Math.sin(t) * 10, h - zShift);
+      ctx.fillText('z', 60 + Math.cos(t) * 5, h - 15 - (zShift * 0.7));
+    } else {
+      // ── Idle/Default Mode: Calming Breathing Pace Guide ──────────
+      ctx.fillStyle = '#0f172a'; // clean dark background
+      ctx.fillRect(0, 0, w, h);
+
+      // Resonant breathing cycle: 5.5s
+      const cycle = (t % 5.5) / 5.5;
+      const isInhale = cycle < 0.5;
+      const pulse = Math.sin(cycle * Math.PI * 2 - Math.PI / 2) * 0.5 + 0.5;
+
+      // Draw glowing background ripple
+      const grad = ctx.createRadialGradient(w/2, h/2, 10, w/2, h/2, 30 + pulse * 45);
+      grad.addColorStop(0, 'rgba(251, 143, 179, 0.4)');
+      grad.addColorStop(0.5, 'rgba(124, 131, 255, 0.15)');
+      grad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Draw central circle
+      ctx.strokeStyle = '#ff8fb3';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(w/2, h/2, 20 + pulse * 25, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Inner solid core
+      ctx.fillStyle = 'rgba(255, 143, 179, 0.8)';
+      ctx.beginPath();
+      ctx.arc(w/2, h/2, 12 + pulse * 15, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Text instruction
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(isInhale ? 'Inhale...' : 'Exhale...', w / 2, h / 2 + 5);
+
+      // Subtitle
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '9px sans-serif';
+      ctx.fillText('Breathing Pace Guide', w / 2, h - 18);
+    }
+
+    this.texture.needsUpdate = true;
+  }
+}
+
 // ================================================================ GLBCharacter
-// Loads an arbitrary glTF/GLB model (three's bundled GLTFLoader — no extra
-// dependency). Because rigs vary wildly across models, this character drives
-// behavior by transforming the whole model root (sit / lean / lie down / wave)
-// and parenting the laptop + pillow props to it, rather than trying to pose a
-// specific skeleton. Falls back to Lily if the file fails to load.
 class GLBCharacter implements Character {
   object = new THREE.Group();
   private model: THREE.Object3D | null = null;
@@ -400,6 +550,12 @@ class GLBCharacter implements Character {
   private loaded = false;
   private fallback: Character | null = null;
   private usingFallback = false;
+
+  private animator = new LaptopScreenAnimator(256, 180);
+  private laptopScreen!: THREE.Group;
+  private _screenTarget = d2r(100);
+  private baseScale = new THREE.Vector3(1, 1, 1);
+  private yOffset = 0;
 
   // Optional procedural anime face drawn on top of a static (non-VRM) GLB so the
   // character can still show expressions, lip-sync, and dark circles. The model
@@ -432,15 +588,67 @@ class GLBCharacter implements Character {
 
   private makeProp(accent: string): THREE.Group {
     const g = new THREE.Group();
+
+    // Laptop Base (Sleek MacBook-style slim base)
     const baseMat = new THREE.MeshStandardMaterial({ color: 0xcfd6e6, roughness: 0.5, metalness: 0.3 });
-    const base = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.04, 0.46), baseMat);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.015, 0.46), baseMat);
+    base.position.set(0, 0.0075, 0.1);
+    base.castShadow = true;
+    base.receiveShadow = true;
     g.add(base);
-    const screen = new THREE.Mesh(
-      new THREE.BoxGeometry(0.7, 0.44, 0.03),
-      new THREE.MeshStandardMaterial({ color: 0x222633 })
-    );
-    screen.position.set(0, 0.23, -0.22);
-    g.add(screen);
+
+    // Laptop Screen Lid group
+    this.laptopScreen = new THREE.Group();
+    this.laptopScreen.position.set(0, 0.015, -0.11);
+    this.laptopScreen.rotation.x = d2r(100);
+    g.add(this.laptopScreen);
+
+    const lidMat = new THREE.MeshStandardMaterial({ color: 0x2e2e38, roughness: 0.4, metalness: 0.3 });
+    const lid = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.44, 0.008), lidMat);
+    lid.position.set(0, 0.22, 0);
+    lid.castShadow = true;
+    lid.receiveShadow = true;
+    this.laptopScreen.add(lid);
+
+    const displayGeo = new THREE.PlaneGeometry(0.66, 0.42);
+    const displayMat = new THREE.MeshBasicMaterial({ map: this.animator.texture });
+    const display = new THREE.Mesh(displayGeo, displayMat);
+    display.position.set(0, 0.22, 0.0041);
+    this.laptopScreen.add(display);
+
+    // Procedural Silver Bird Logo on the back of the laptop lid
+    const logoGroup = new THREE.Group();
+    logoGroup.position.set(0, 0.22, -0.0045);
+    logoGroup.rotation.y = Math.PI; // Face the back of the screen towards the user
+    this.laptopScreen.add(logoGroup);
+
+    const logoMat = new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0, // silver metallic chrome
+      metalness: 0.95,
+      roughness: 0.15,
+      envMapIntensity: 1.6
+    });
+
+    // Body (diamond shape using Octahedron)
+    const body = new THREE.Mesh(new THREE.OctahedronGeometry(0.024, 0), logoMat);
+    body.scale.set(0.6, 1.4, 0.4);
+    logoGroup.add(body);
+
+    const wingL = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.065, 3), logoMat);
+    wingL.position.set(-0.024, 0.01, 0);
+    wingL.rotation.set(0, 0, d2r(55));
+    logoGroup.add(wingL);
+
+    const wingR = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.065, 3), logoMat);
+    wingR.position.set(0.024, 0.01, 0);
+    wingR.rotation.set(0, 0, d2r(-55));
+    logoGroup.add(wingR);
+
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.01, 0.028, 3), logoMat);
+    tail.position.set(0, -0.03, 0);
+    tail.rotation.set(0, 0, Math.PI);
+    logoGroup.add(tail);
+
     g.visible = false;
     return g;
   }
@@ -448,9 +656,11 @@ class GLBCharacter implements Character {
   private makePillow(): THREE.Group {
     const g = new THREE.Group();
     const pm = new THREE.Mesh(
-      new THREE.BoxGeometry(0.6, 0.2, 0.42),
-      new THREE.MeshStandardMaterial({ color: 0xf3e6f0, roughness: 0.9 })
+      new THREE.BoxGeometry(0.6, 0.15, 0.42),
+      new THREE.MeshStandardMaterial({ color: 0xffebee, roughness: 0.8 })
     );
+    pm.castShadow = true;
+    pm.receiveShadow = true;
     g.add(pm);
     g.visible = false;
     return g;
@@ -474,36 +684,62 @@ class GLBCharacter implements Character {
 
     const buildEye = (sign: number): THREE.Group => {
       const eye = new THREE.Group();
+      
       const sclera = new THREE.Mesh(
         new THREE.CircleGeometry(unit, 22),
         new THREE.MeshBasicMaterial({ color: 0xfdfdff, transparent: true })
       );
+      sclera.scale.set(0.68, 1.12, 1); // vertical anime-style oval
       eye.add(sclera);
+
       const pupil = new THREE.Mesh(
-        new THREE.CircleGeometry(unit * 0.55, 18),
-        new THREE.MeshBasicMaterial({ color: 0x141826 })
+        new THREE.CircleGeometry(unit * 0.58, 18),
+        new THREE.MeshBasicMaterial({ color: 0x1d3557 }) // soft dark blue iris
       );
+      pupil.scale.set(0.68, 1.12, 1); // vertical anime-style oval
       pupil.position.z = 0.001;
       eye.add(pupil);
+
+      // Primary Highlight (top-left)
       const hi = new THREE.Mesh(
         new THREE.CircleGeometry(unit * 0.22, 12),
         new THREE.MeshBasicMaterial({ color: 0xffffff })
       );
-      hi.position.set(-unit * 0.22, unit * 0.26, 0.002);
+      hi.position.set(-unit * 0.2, unit * 0.26, 0.002);
       eye.add(hi);
-      eye.position.set(sign * unit * 1.7, 0, 0.002);
+
+      // Secondary Highlight (soft sparkle bottom-right)
+      const hi2 = new THREE.Mesh(
+        new THREE.CircleGeometry(unit * 0.09, 12),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 })
+      );
+      hi2.position.set(unit * 0.2, -unit * 0.2, 0.002);
+      eye.add(hi2);
+
+      eye.position.set(sign * unit * 1.6, 0, 0.002);
       return eye;
     };
     const eyeL = buildEye(-1);
     const eyeR = buildEye(1);
     group.add(eyeL, eyeR);
 
+    // Add delicate slate eyebrows
+    for (const sx of [-1, 1]) {
+      const brow = new THREE.Mesh(
+        new THREE.BoxGeometry(unit * 1.3, unit * 0.14, 0.001),
+        new THREE.MeshBasicMaterial({ color: 0x475569 }) // Slate grey
+      );
+      brow.position.set(sx * unit * 1.6, unit * 1.3, 0.002);
+      brow.rotation.z = sx * d2r(5);
+      group.add(brow);
+    }
+
     const dark = (sign: number): THREE.Mesh => {
       const d = new THREE.Mesh(
         new THREE.CircleGeometry(unit * 1.1, 18),
         new THREE.MeshBasicMaterial({ color: 0x7a4f8a, transparent: true, opacity: 0 })
       );
-      d.position.set(sign * unit * 2.1, -unit * 1.3, 0.001);
+      d.position.set(sign * unit * 2.0, -unit * 1.3, 0.001);
       d.visible = false;
       return d;
     };
@@ -540,6 +776,19 @@ class GLBCharacter implements Character {
       const gltfMod: any = await import('three/examples/jsm/loaders/GLTFLoader.js');
       const GLTFLoader = gltfMod.GLTFLoader;
       const loader = new (GLTFLoader as any)();
+
+      // Set MeshoptDecoder for compressed web assets
+      if (url.includes('girl_web.glb') || url.includes('_web.')) {
+        try {
+          const meshoptMod: any = await import('three/examples/jsm/libs/meshopt_decoder.module.js');
+          const MeshoptDecoder = meshoptMod.MeshoptDecoder;
+          await MeshoptDecoder.ready;
+          loader.setMeshoptDecoder(MeshoptDecoder);
+        } catch (meshoptErr) {
+          console.error('[pet] failed to set MeshoptDecoder', meshoptErr);
+        }
+      }
+
       const gltf: any = await loader.loadAsync(url);
       let model = gltf.scene as THREE.Object3D;
       if (!model) throw new Error('empty gltf');
@@ -553,26 +802,51 @@ class GLBCharacter implements Character {
       const targetHeight = 1.7; // ~ the procedural character's height
       const scale = targetHeight / maxDim;
       model.scale.setScalar(scale);
+
+      // Store base scale for breathing scaling animations
+      this.baseScale.set(scale, scale, scale);
+
       const box2 = new THREE.Box3().setFromObject(model);
       const center = new THREE.Vector3();
       box2.getCenter(center);
       model.position.x -= center.x;
       model.position.z -= center.z;
-      model.position.y -= box2.min.y;
+      // Center the model vertically around y = 0 so her head is never clipped by the window
+      this.yOffset = -center.y;
+      model.position.y = this.yOffset;
 
-      // Face the camera.
-      model.rotation.y = Math.PI;
+      // Face the camera. Naturally, the model faces forward (0 rotation).
+      model.rotation.y = 0;
+
+      // Traverse mesh to optimize rendering and details
+      model.traverse((child: any) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          if (child.material) {
+            if (child.material.map) {
+              child.material.map.anisotropy = 8;
+            }
+            child.material.envMapIntensity = 1.15;
+          }
+          if (child.geometry) {
+            child.geometry.computeTangents?.();
+          }
+        }
+      });
+
       this.model = model;
       this.object.add(model);
       this.loaded = true;
 
-      // Parent props to the model root so they move with it.
-      this.laptop.position.set(0, 0.0, 0.42);
+      // Position the mahogany desk and laptop at waist height in front of Lily
+      this.laptop.position.set(0, 0.05, 0.35);
       this.object.add(this.laptop);
       this.laptop.visible = true;
+
       this.pillow.position.set(0, 0.0, -0.05);
       this.object.add(this.pillow);
-      this.pillow.visible = true;
+      this.pillow.visible = false;
 
       // Optional cute upgrade: paint a procedural anime face on a faceless mesh
       // (e.g. a Tripo-exported GLB) so Lily can still emote and talk.
@@ -619,6 +893,7 @@ class GLBCharacter implements Character {
     this.behavior = b;
     if (this.usingFallback && this.fallback) { this.fallback.setBehavior(b, _opts); return; }
     this.target = this.glbPoseFor(b);
+    this._screenTarget = (b === 'sleeping' || b === 'laying') ? d2r(10) : d2r(105);
   }
 
   setExpression(e: ExpressionName): void {
@@ -664,15 +939,51 @@ class GLBCharacter implements Character {
     if (!this.loaded || !this.model) return;
     const k = clamp(dt * 6, 0, 1);
     const { rot, pos } = this.target;
-    this.model.rotation.x = lerp(this.model.rotation.x, rot[0], k);
-    this.model.rotation.y = lerp(this.model.rotation.y, Math.PI + rot[1], k);
-    this.model.rotation.z = lerp(this.model.rotation.z, rot[2], k);
+
+    // Base position & rotation target (remove Math.PI since she naturally faces camera)
+    let targetRotX = rot[0];
+    let targetRotY = rot[1];
+    let targetRotZ = rot[2];
+
+    // Lerp laptop screen open/close target
+    if (this.laptopScreen) {
+      this.laptopScreen.rotation.x = lerp(this.laptopScreen.rotation.x, this._screenTarget, k);
+    }
+
+    // Dynamic laptop & pillow positioning based on state
+    this.laptop.visible = (this.behavior !== 'sleeping' && this.behavior !== 'laying');
+    if (this.behavior === 'sleeping' || this.behavior === 'laying') {
+      this.pillow.position.set(0.3, -0.85, -0.6);
+      this.pillow.visible = true;
+    } else {
+      this.pillow.visible = false;
+    }
+
+    // ── Resonant Deep Breathing ───────────────────────────────────────────────
+    // Resonant deep breathing cycle (5.5 seconds, optimal for user relaxation)
+    const breatheCycle = (t % 5.5) / 5.5;
+    const breathePulse = Math.sin(breatheCycle * Math.PI * 2 - Math.PI / 2) * 0.5 + 0.5;
+
+    // Breathing chest expansion simulation on the whole GLB model Y/Z scale
+    const breatheScaleY = 1 + breathePulse * 0.015;
+    const breatheScaleZ = 1 + breathePulse * 0.012;
+    this.model.scale.set(
+      this.baseScale.x,
+      this.baseScale.y * breatheScaleY,
+      this.baseScale.z * breatheScaleZ
+    );
+
+    // Breathing y-offset
+    const breatheBob = breathePulse * 0.015;
+
+    this.model.rotation.y = lerp(this.model.rotation.y, targetRotY, k);
+    this.model.rotation.z = lerp(this.model.rotation.z, targetRotZ, k);
     this.model.position.x = lerp(this.model.position.x, pos[0], k);
     this.model.position.z = lerp(this.model.position.z, pos[2], k);
 
-    // Gentle breathing / idle bob.
-    const breathe = Math.sin(t * 1.6) * 0.015;
-    this.model.position.y = lerp(this.model.position.y, (this as any)._groundY ?? 0, k) + breathe;
+    // Centered model position + breathe bob (lerped directly to prevent drift accumulation)
+    const targetY = this.yOffset + pos[1] + breatheBob;
+    this.model.position.y = lerp(this.model.position.y, targetY, k);
 
     // Celebrate hop.
     if (this.behavior === 'celebrate') {
@@ -684,17 +995,39 @@ class GLBCharacter implements Character {
       this.model.rotation.z = lerp(this.model.rotation.z, Math.sin(t * 10) * 0.06, 0.5);
     }
 
+    // ── Active Listening Lookup & Face overrides ───────────────────────────────
+    let faceEyeOpenTarget = this.face ? this.face.eyeOpenTarget : 1;
+    let faceMouthOpenTarget = this.face ? this.face.mouthOpenTarget : 0;
+
+    // Active listening lookup cycle: look up every 32 seconds for 4 seconds
+    if ((this.behavior === 'working' || this.behavior === 'idle') && (t % 32 < 4)) {
+      const cycleTime = t % 32;
+      // Tilt whole model slightly back/up to make eye contact
+      targetRotX = lerp(this.model.rotation.x, d2r(-10), k);
+      targetRotY = lerp(this.model.rotation.y, 0, k);
+      targetRotZ = lerp(this.model.rotation.z, 0, k);
+
+      if (cycleTime > 0.5 && cycleTime < 3.5) {
+        faceEyeOpenTarget = 0.6; // warm squint
+        faceMouthOpenTarget = 0.35; // gentle smile
+      }
+    } else {
+      targetRotX = lerp(this.model.rotation.x, rot[0], k);
+    }
+    
+    this.model.rotation.x = targetRotX;
+
     // ── Procedural face overlay (static GLB with no blendshapes) ──────────────
     if (this.face) {
       const f = this.face;
       const blink =
-        this.behavior !== 'sleeping' && this.behavior !== 'laying' && f.eyeOpenTarget > 0.5 && Math.sin(t * 0.9) > 0.988
+        this.behavior !== 'sleeping' && this.behavior !== 'laying' && faceEyeOpenTarget > 0.5 && Math.sin(t * 0.9) > 0.988
           ? 0.12
           : 1;
-      f.eyeOpen = lerp(f.eyeOpen, f.eyeOpenTarget * blink, 0.4);
+      f.eyeOpen = lerp(f.eyeOpen, faceEyeOpenTarget * blink, 0.4);
       f.mouthOpen = lerp(
         f.mouthOpen,
-        f.mouthOpenTarget + (this.lipSync ? Math.abs(Math.sin(t * 18)) * 0.8 : 0),
+        faceMouthOpenTarget + (this.lipSync ? Math.abs(Math.sin(t * 18)) * 0.8 : 0),
         0.5
       );
       f.darkVis = lerp(f.darkVis, f.darkVisTarget, 0.3);
@@ -714,6 +1047,11 @@ class GLBCharacter implements Character {
       world.add(toCam);
       this.face.group.position.copy(this.object.worldToLocal(world.clone()));
       this.face.group.quaternion.copy(camera.quaternion);
+    }
+
+    // ── Laptop Screen Texture Animation ────────────────────────────────────────
+    if (this.animator) {
+      this.animator.update(this.behavior, t, dt);
     }
   }
 
