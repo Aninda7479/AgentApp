@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus, Folder, Trash2, FolderOpen, Terminal, Check } from 'lucide-react';
 import { StoredProject } from '../types';
+import { ProjectService } from '../logic/project';
 
 /** Props for the ConfigureProjectModal component. */
 interface ConfigureProjectModalProps {
@@ -43,30 +44,17 @@ export const ConfigureProjectModal: React.FC<ConfigureProjectModalProps> = ({
   };
 
   const handleAddFolder = async () => {
-    const ipc = typeof window !== 'undefined' && (window as any).require
-      ? (window as any).require('electron').ipcRenderer
-      : null;
+    const selected = await ProjectService.selectProjectFolders();
 
-    if (!ipc) {
-      // Mock folders for non-electron env
+    if (selected === null) {
+      // Not running in Electron — fall back to mock folders
       const mockPath = `d:/Project/MockPath-${folders.length + 1}`;
       setFolders(prev => [...prev, mockPath]);
       return;
     }
 
-    try {
-      const selected: string[] = await ipc.invoke('select-project-folders');
-      if (selected && selected.length > 0) {
-        setFolders(prev => {
-          const next = [...prev];
-          selected.forEach(p => {
-            if (!next.includes(p)) next.push(p);
-          });
-          return next;
-        });
-      }
-    } catch (e) {
-      console.error('Failed to select folders', e);
+    if (selected.length > 0) {
+      setFolders(prev => ProjectService.mergeFolders(prev, selected));
     }
   };
 

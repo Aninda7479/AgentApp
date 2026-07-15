@@ -4,6 +4,7 @@ import { Composer, ComposerOptions } from './Composer';
 import { TrajectoryCanvas, TrajectoryStep } from './TrajectoryCanvas';
 import { MCPServerInfo } from './MCPDashboard';
 import { ModelConfig } from '../settings/SettingsView';
+import { WorkspaceService } from '../logic/workspace';
 
 /** Represents a parallel agent session with its own trajectory. */
 export interface AgentSession {
@@ -361,14 +362,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         onUndoStep={onUndoStep}
         onActionClick={(action, data) => {
           if (action === 'openMedia') {
-            const electron = typeof window !== 'undefined' && (window as any).require
-              ? (window as any).require('electron')
-              : null;
-            if (electron && data?.mediaPath) {
-              electron.shell.openPath(data.mediaPath);
-            } else {
-              onToast(`Open Media Artifact: ${data?.mediaPath || 'No Path'}`);
-            }
+            WorkspaceService.openMedia(data?.mediaPath, () =>
+              onToast(`Open Media Artifact: ${data?.mediaPath || 'No Path'}`)
+            );
           }
         }}
       >

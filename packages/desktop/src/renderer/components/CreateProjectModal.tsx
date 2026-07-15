@@ -167,6 +167,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Plus, Folder, Trash2, FolderOpen, ArrowRight } from 'lucide-react';
 import { StoredProject } from '../types';
+import { ProjectService } from '../logic/project';
 
 interface CreateProjectModalProps {
   isOpen: boolean;
@@ -207,12 +208,10 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   };
 
   const handleAddFolder = async () => {
-    const ipc = typeof window !== 'undefined' && (window as any).require
-      ? (window as any).require('electron').ipcRenderer
-      : null;
+    const selected = await ProjectService.selectProjectFolders();
 
-    if (!ipc) {
-      // Mock folders for non-electron env (e.g. tests)
+    if (selected === null) {
+      // Not running in Electron — fall back to mock folders (e.g. tests)
       const mockPath = `d:/Project/MockProject-${folders.length + 1}`;
       setFolders(prev => [...prev, mockPath]);
       if (!projectName) {
@@ -221,25 +220,14 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       return;
     }
 
-    try {
-      const selected: string[] = await ipc.invoke('select-project-folders');
-      if (selected && selected.length > 0) {
-        setFolders(prev => {
-          const next = [...prev];
-          selected.forEach(p => {
-            if (!next.includes(p)) next.push(p);
-          });
-          if (!projectName && selected[0]) {
-            const normalized = selected[0].replace(/\\/g, '/');
-            const parts = normalized.split('/');
-            const name = parts[parts.length - 1] || 'New Project';
-            setProjectName(name);
-          }
-          return next;
-        });
-      }
-    } catch (e) {
-      console.error('Failed to select folders', e);
+    if (selected.length > 0) {
+      setFolders(prev => {
+        const next = ProjectService.mergeFolders(prev, selected);
+        if (!projectName && selected[0]) {
+          setProjectName(ProjectService.deriveNameFromPath(selected[0]));
+        }
+        return next;
+      });
     }
   };
 
@@ -251,7 +239,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     setTouched(true);
     const trimmedName = projectName.trim();
     if (!trimmedName || folders.length === 0) return;
-    onCreate({ name: trimmedName, folders });
+    onCreate(ProjectService.buildProject(trimmedName, folders));
     setProjectName('');
     setFolders([]);
     setTouched(false);

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { ChevronRight, ChevronDown, Copy, ThumbsUp, ThumbsDown, FileText, FolderOpen, Check, Eye, RotateCcw } from 'lucide-react';
+import { TrajectoryService } from '../logic/trajectory';
 
 /** A single step in the agent execution trajectory. */
 export interface TrajectoryStep {
@@ -23,67 +24,14 @@ export interface TrajectoryStep {
   };
 }
 
-function stripAnsi(value: string): string {
-  return value.replace(/\u001b\[[0-9;]*m/g, '');
-}
-
-function truncatePreview(value: string, maxLength: number = 88): string {
-  const normalized = value.replace(/\s+/g, ' ').trim();
-  if (!normalized) return '';
-  return normalized.length > maxLength
-    ? `${normalized.slice(0, maxLength - 3)}...`
-    : normalized;
-}
-
-function summarizeToolContent(step: TrajectoryStep): string {
-  const toolName = step.toolName || 'tool';
-  const rawContent = stripAnsi(step.content || '');
-  const trimmed = rawContent.trim();
-
-  if (!trimmed) {
-    return toolName;
-  }
-
-  if (toolName === 'read_file') {
-    if (/%PDF-\d\.\d/i.test(trimmed) || /�{2,}/.test(trimmed)) {
-      return 'Opened a binary document preview';
-    }
-
-    const firstLine = truncatePreview(trimmed.split('\n')[0] || trimmed);
-    return firstLine || 'Read file contents';
-  }
-
-  if (toolName === 'run_command') {
-    const lines = trimmed.split('\n').map(line => line.trim()).filter(Boolean);
-    const firstLine = lines[0] || '';
-    const commandFailureMatch = firstLine.match(/^Error:\s*Command failed:\s*(.+)$/i);
-    if (commandFailureMatch) {
-      return `Command failed: ${truncatePreview(commandFailureMatch[1])}`;
-    }
-
-    if (/^Error:/i.test(firstLine)) {
-      return truncatePreview(firstLine);
-    }
-
-    return truncatePreview(firstLine) || 'Executed command';
-  }
-
-  return truncatePreview(trimmed);
-}
-
 // ─── Local Image Preview ──────────────────────────────────────────────────────
 const LocalImagePreview: React.FC<{ filePath: string }> = ({ filePath }) => {
   const [src, setSrc] = useState<string | null>(null);
 
   useEffect(() => {
-    const ipc = typeof window !== 'undefined' && (window as any).require
-      ? (window as any).require('electron').ipcRenderer
-      : null;
-    if (ipc) {
-      ipc.invoke('read-file-base64', filePath).then((base64: string | null) => {
-        if (base64) setSrc(base64);
-      });
-    }
+    TrajectoryService.readLocalImageBase64(filePath).then((base64: string | null) => {
+      if (base64) setSrc(base64);
+    });
   }, [filePath]);
 
   if (!src) {
@@ -671,7 +619,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
                 }`}
               />
               <span className="text-brand-textMuted/80 font-mono flex-shrink-0">{step.toolName || 'tool'}</span>
-              <span className="text-brand-textMuted/60 truncate flex-1 min-w-0 max-w-[60vw] sm:max-w-[320px]">{summarizeToolContent(step)}</span>
+              <span className="text-brand-textMuted/60 truncate flex-1 min-w-0 max-w-[60vw] sm:max-w-[320px]">{TrajectoryService.summarizeToolContent(step)}</span>
             </div>
           ))}
         </WorkedHeader>
