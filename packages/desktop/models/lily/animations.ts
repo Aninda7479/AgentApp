@@ -30,15 +30,36 @@ export class LaptopScreenAnimator {
   private lastCodeLineTime = 0;
 
   constructor(width = 256, height = 180) {
-    this.canvas = document.createElement('canvas');
-    this.canvas.width = width;
-    this.canvas.height = height;
-    this.ctx = this.canvas.getContext('2d')!;
-    this.texture = new THREE.CanvasTexture(this.canvas);
-    this.texture.colorSpace = THREE.SRGBColorSpace;
+    if (typeof document !== 'undefined') {
+      this.canvas = document.createElement('canvas');
+      this.canvas.width = width;
+      this.canvas.height = height;
+      this.ctx = this.canvas.getContext('2d')!;
+      this.texture = new THREE.CanvasTexture(this.canvas);
+      this.texture.colorSpace = THREE.SRGBColorSpace;
+    } else {
+      // Stub canvas, context, and texture for server-side/test execution where document is not defined
+      this.canvas = {
+        width,
+        height,
+        getContext: () => ({
+          fillRect: () => {},
+          clearRect: () => {},
+          fillText: () => {},
+          measureText: () => ({ width: 0 }),
+          createRadialGradient: () => ({ addColorStop: () => {} }),
+          beginPath: () => {},
+          arc: () => {},
+          fill: () => {},
+        } as any),
+      } as any;
+      this.ctx = this.canvas.getContext('2d')!;
+      this.texture = new THREE.Texture(this.canvas as any) as any;
+    }
   }
 
   update(behavior: Behavior, t: number, dt: number) {
+    if (typeof document === 'undefined') return;
     const ctx = this.ctx;
     const w = this.canvas.width;
     const h = this.canvas.height;

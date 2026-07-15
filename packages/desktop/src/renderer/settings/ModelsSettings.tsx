@@ -106,7 +106,7 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm font-medium text-brand-textMain">{model.name}</span>
                             {model.free && (
-                              <span className="ui-chip bg-emerald-500/12 text-emerald-400">🆓 Free</span>
+                              <span className="ui-chip bg-emerald-500/12 text-emerald-400">Free</span>
                             )}
                             {hasIn && (model.inputModalities ?? []).map(m => <ModalityChip key={m} type={m} />)}
                           </div>
@@ -395,7 +395,7 @@ export const ModelsSettings: React.FC<ModelsSettingsProps> = ({
           }`}
           title="Show only free models"
         >
-          🆓 Free{showFreeOnly ? ' ✓' : ''}
+          Free{showFreeOnly ? ' ✓' : ''}
         </button>
       </div>
 
