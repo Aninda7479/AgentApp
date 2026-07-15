@@ -3,6 +3,7 @@ import path from 'path';
 import { SettingsStorage } from '@superagent/core';
 import { getChatDirectory, getChatJsonPath, getConversationRoots, getProjectConfigPath, getProjectDirectory, normalizeStorageKey } from './paths.js';
 import type { ConversationRoots, StoreData, StoredChat, StoredProject } from './types.js';
+import { logError } from '../error-log.js';
 
 type ProjectRecord = StoredProject & { storageKey: string };
 
@@ -58,7 +59,7 @@ function readProjectRecord(projectDir: string, folderName: string): ProjectRecor
       writeJson(configPath, { name: displayName, folders: [], allowedCommands: [] });
     }
   } catch (e) {
-    console.error(`Failed to read project config for ${folderName}:`, e);
+    logError(`Failed to read project config for ${folderName}:`, e);
   }
 
   return {
@@ -79,7 +80,7 @@ function readChatRecord(chatJsonPath: string, projectName: string, projectKey?: 
       projectStorageKey: projectKey
     };
   } catch (e) {
-    console.error(`Failed to read chat JSON at ${chatJsonPath}:`, e);
+    logError(`Failed to read chat JSON at ${chatJsonPath}:`, e);
     return null;
   }
 }
@@ -129,7 +130,7 @@ function readProjectsAndChats(roots: ConversationRoots): { projects: ProjectReco
       }
     }
   } catch (e) {
-    console.error('Failed to read project conversations:', e);
+    logError('Failed to read project conversations:', e);
   }
 
   try {
@@ -150,7 +151,7 @@ function readProjectsAndChats(roots: ConversationRoots): { projects: ProjectReco
       }
     }
   } catch (e) {
-    console.error('Failed to read standalone conversations:', e);
+    logError('Failed to read standalone conversations:', e);
   }
 
   return { projects, chats };
@@ -167,7 +168,7 @@ function findProjectRecord(roots: ConversationRoots, matcher: (project: ProjectR
       }
     }
   } catch (e) {
-    console.error('Failed to resolve project record:', e);
+    logError('Failed to resolve project record:', e);
   }
   return null;
 }
@@ -184,7 +185,7 @@ export function readConversationStore(userDataDir: string): StoreData {
     providers = (settings.providers as StoreData['connectedProviders']) ?? [];
     models = (settings.models as StoreData['modelsCatalog']) ?? [];
   } catch (e) {
-    console.error('Failed to read unified settings:', e);
+    logError('Failed to read unified settings:', e);
   }
 
   const { projects, chats } = readProjectsAndChats(roots);
@@ -214,7 +215,7 @@ export function writeConversationStore(data: StoreData, userDataDir: string): vo
       models: data.modelsCatalog as any
     });
   } catch (e) {
-    console.error('Failed to write unified settings:', e);
+    logError('Failed to write unified settings:', e);
   }
 
   const projectRecords = buildProjectRecords(data.projects ?? []);
@@ -269,7 +270,7 @@ export function writeConversationStore(data: StoreData, userDataDir: string): vo
       }
     }
   } catch (e) {
-    console.error('Error cleaning project directories:', e);
+    logError('Error cleaning project directories:', e);
   }
 
   try {
@@ -281,7 +282,7 @@ export function writeConversationStore(data: StoreData, userDataDir: string): vo
       }
     }
   } catch (e) {
-    console.error('Error cleaning standalone chat directories:', e);
+    logError('Error cleaning standalone chat directories:', e);
   }
 }
 

@@ -1,3 +1,5 @@
+// @UNUSED — dead module: not imported by any entry point or other source file in the
+// SuperAgent monorepo (confirmed via static import-graph analysis). Candidate for removal.
 import React from 'react';
 
 /** Displays a read-only list of keyboard shortcuts and their key bindings. */

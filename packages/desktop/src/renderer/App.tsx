@@ -25,6 +25,7 @@ import { PartnerOverlay } from './components/partner/PartnerOverlay';
 import { StoredChat, StoredProject } from './types';
 import { useThemeMode } from './theme';
 import { getRouteFromLocation, pushRoute, subscribeRouteChange } from './urlSync';
+import { subscribeError, installSafeInvoke } from './lib/errorReporter';
 
 /** Captures the full navigation state so we can restore it on back/forward. */
 interface NavigationSnapshot {
@@ -861,6 +862,36 @@ export const App: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [toastOpen, toastType]);
+
+  // Surface both renderer-side errors (reportError) and main-process errors
+  // (forwarded over the 'app-error' IPC channel) as red toasts in the desktop app.
+  useEffect(() => {
+    installSafeInvoke();
+
+    const unsubscribe = subscribeError((_context, message) => {
+      triggerToast(message, 'error');
+    });
+
+    let ipcRenderer: any = null;
+    try {
+      ipcRenderer = (window as any).require('electron')?.ipcRenderer;
+    } catch {
+      ipcRenderer = null;
+    }
+    const onAppError = (_event: unknown, payload: { context?: string; message?: string }) => {
+      triggerToast(payload?.message || 'Unexpected error', 'error');
+    };
+    if (ipcRenderer && typeof ipcRenderer.on === 'function') {
+      ipcRenderer.on('app-error', onAppError);
+    }
+
+    return () => {
+      unsubscribe();
+      if (ipcRenderer && typeof ipcRenderer.removeListener === 'function') {
+        ipcRenderer.removeListener('app-error', onAppError);
+      }
+    };
+  }, []);
 
   // Handle clicking outside profile popover to close it
   useEffect(() => {

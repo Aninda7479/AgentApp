@@ -1,3 +1,5 @@
+// @UNUSED — dead module: not imported by any entry point or other source file in the
+// SuperAgent monorepo (confirmed via static import-graph analysis). Candidate for removal.
 export * from './App';
 export * from './components/Sidebar';
 export * from './components/TrajectoryCanvas';

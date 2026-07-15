@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import url from 'url';
+import { logError } from './error-log.js';
 
 /**
  * Main-process store for the open Partner/Pet ecosystem.
@@ -118,7 +119,7 @@ function applyDynamicMetadata(manifest: any, folder: string): void {
         }
       }
     } catch (e) {
-      console.error('Failed to load dynamic metadata from script:', scriptPath, e);
+      logError('partner:dynamic-metadata ' + scriptPath, e);
     }
   }
 }

@@ -92,6 +92,22 @@ const electron = (window as any).require('electron');
 const ipc = electron.ipcRenderer;
 const nodeUrl = (window as any).require('url');
 
+// ── Error logging for the pet window ────────────────────────────────────────────
+// The pet window has no own toast UI; errors go to its console and (when possible)
+// are forwarded to the main process, which surfaces them as a desktop toast.
+function logPetError(context: string, err: unknown): void {
+  const message = err instanceof Error ? err.message : String(err);
+  // eslint-disable-next-line no-console
+  console.error('[pet-error]', context, '-', message, err instanceof Error ? '\n' + err.stack : '');
+  try {
+    if (ipc && typeof ipc.send === 'function') {
+      ipc.send('pet-error', { context, message });
+    }
+  } catch {
+    /* ignore IPC failures */
+  }
+}
+
 const canvas = document.getElementById('pet-canvas') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
 renderer.setClearColor(0x000000, 0);
@@ -919,15 +935,29 @@ class PetApp {
         this.character = lily;
       }
     } else if (p.vrmPath) {
-      const vrm = new VRMCharacter(this.accent);
-      this.root.add(vrm.object);
-      this.character = vrm;
-      await vrm.load(nodeUrl.pathToFileURL(p.vrmPath).href, this.accent);
+      try {
+        const vrm = new VRMCharacter(this.accent);
+        this.root.add(vrm.object);
+        this.character = vrm;
+        await vrm.load(nodeUrl.pathToFileURL(p.vrmPath).href, this.accent);
+      } catch (e) {
+        console.error('Failed to load VRM, falling back to Lily', e);
+        const lily = new Lily(this.accent);
+        this.root.add(lily.object);
+        this.character = lily;
+      }
     } else if (p.modelPath) {
-      const glb = new GLBCharacter(this.accent, p.faceOverlay ?? undefined);
-      this.root.add(glb.object);
-      this.character = glb;
-      await glb.load(nodeUrl.pathToFileURL(p.modelPath).href);
+      try {
+        const glb = new GLBCharacter(this.accent, p.faceOverlay ?? undefined);
+        this.root.add(glb.object);
+        this.character = glb;
+        await glb.load(nodeUrl.pathToFileURL(p.modelPath).href);
+      } catch (e) {
+        console.error('Failed to load GLB, falling back to Lily', e);
+        const lily = new Lily(this.accent);
+        this.root.add(lily.object);
+        this.character = lily;
+      }
     } else {
       const lily = new Lily(this.accent);
       this.root.add(lily.object);
@@ -935,10 +965,14 @@ class PetApp {
     }
     // Every mesh in the (possibly async-loaded) character should cast into the
     // contact shadow. Cheap to (re)apply on each partner swap.
-    this.character?.object.traverse((o: any) => { if (o.isMesh) o.castShadow = true; });
-    this.handleResize();
-    this.groundCharacter();
-    this.setBehavior(this.current);
+    try {
+      this.character?.object.traverse((o: any) => { if (o.isMesh) o.castShadow = true; });
+      this.handleResize();
+      this.groundCharacter();
+      this.setBehavior(this.current);
+    } catch (err) {
+      logPetError('pet-applyPartner-finalize', err);
+    }
   }
 
   /** Drops the contact-shadow plane to the character's current feet level. */
@@ -975,17 +1009,21 @@ class PetApp {
   start() {
     const loop = () => {
       requestAnimationFrame(loop);
-      const dt = this.clock.getDelta();
-      const t = this.clock.elapsedTime;
-      if (this.talkTimer > 0) {
-        this.talkTimer -= dt;
-        if (this.talkTimer <= 0) {
-          this.speech.style.opacity = '0';
-          this.setBehavior(this.prevBeforeTalking || 'idle');
+      try {
+        const dt = this.clock.getDelta();
+        const t = this.clock.elapsedTime;
+        if (this.talkTimer > 0) {
+          this.talkTimer -= dt;
+          if (this.talkTimer <= 0) {
+            this.speech.style.opacity = '0';
+            this.setBehavior(this.prevBeforeTalking || 'idle');
+          }
         }
+        this.character?.update(dt, t);
+        renderer.render(scene, camera);
+      } catch (err) {
+        logPetError('pet-loop', err);
       }
-      this.character?.update(dt, t);
-      renderer.render(scene, camera);
     };
     loop();
   }
@@ -994,17 +1032,27 @@ class PetApp {
 // ── Boot ─────────────────────────────────────────────────────────────────────
 const app = new PetApp();
 
-ipc.on('pet-partner', (_e: unknown, p: PartnerPayload) => { void app.applyPartner(p); });
-ipc.on('pet-mood', (_e: unknown, m: Behavior) => {
-  if (m === 'working' || m === 'idle' || m === 'celebrate' || m === 'sad') app.setBehavior(m);
+ipc.on('pet-partner', (_e: unknown, p: PartnerPayload) => {
+  try { void app.applyPartner(p); } catch (err) { logPetError('pet-ipc:pet-partner', err); }
 });
-ipc.on('pet-behavior', (_e: unknown, b: Behavior) => app.setBehavior(b));
+ipc.on('pet-mood', (_e: unknown, m: Behavior) => {
+  try {
+    if (m === 'working' || m === 'idle' || m === 'celebrate' || m === 'sad') app.setBehavior(m);
+  } catch (err) { logPetError('pet-ipc:pet-mood', err); }
+});
+ipc.on('pet-behavior', (_e: unknown, b: Behavior) => {
+  try { app.setBehavior(b); } catch (err) { logPetError('pet-ipc:pet-behavior', err); }
+});
 ipc.on('pet-say', (_e: unknown, payload: { text?: string }) => {
-  if (payload && payload.text) app.say(payload.text);
+  try { if (payload && payload.text) app.say(payload.text); } catch (err) { logPetError('pet-ipc:pet-say', err); }
 });
 ipc.on('pet-context', (_e: unknown, payload: { pct?: number }) => {
-  app.setDarkCircles((payload?.pct ?? 0) >= 0.9);
+  try { app.setDarkCircles((payload?.pct ?? 0) >= 0.9); } catch (err) { logPetError('pet-ipc:pet-context', err); }
 });
 
-app.start();
+try {
+  app.start();
+} catch (err) {
+  logPetError('pet-boot', err);
+}
 ipc.send('pet-ready');

@@ -1,4 +1,4 @@
-import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut } from 'electron';
+import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
 import path from 'path';
 import fs from 'fs';
 
@@ -13,6 +13,7 @@ import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, Playwright
 import { getChatDirectory } from './main/storage/index.js';
 import * as PartnerStore from './main/partner-store';
 import { petWindowManager } from './main/pet-window';
+import { logError, errorMessage, registerErrorToasts, IpcErrorEnvelope } from './main/error-log';
 
 // Tracks context-window usage so the pet can show "dark circles" when the
 // conversation approaches the model's capacity.
@@ -38,6 +39,46 @@ import {
 } from './main/mcp-manager';
 
 
+// ─── Centralized error handling ───────────────────────────────────────────────
+// Every IPC handler is registered through safeHandle/safeOn below. If a handler
+// throws, the error is logged to the console as `[ERROR] ipc:<channel> - <message>`
+// and forwarded to the renderer as a toast (via the 'app-error' channel) instead
+// of rejecting the IPC call and white-screening the UI.
+
+function safeHandle(channel: string, handler: (event: IpcMainInvokeEvent, ...args: any[]) => unknown): void {
+  safeHandle(channel, async (event, ...args) => {
+    try {
+      return await handler(event, ...args);
+    } catch (err: unknown) {
+      logError('ipc:' + channel, err);
+      return { __ipcError: true, error: errorMessage(err), channel } as IpcErrorEnvelope;
+    }
+  });
+}
+
+function safeOn(channel: string, handler: (event: IpcMainEvent, ...args: any[]) => void): void {
+  safeOn(channel, (event, ...args) => {
+    try {
+      handler(event, ...args);
+    } catch (err: unknown) {
+      logError('ipc:' + channel, err);
+    }
+  });
+}
+
+// Forward main-process errors to the renderer so they surface as toasts.
+registerErrorToasts((context, message) => {
+  const win = windowManager.getMainWindow();
+  if (win && !win.isDestroyed()) {
+    try {
+      win.webContents.send('app-error', { context, message });
+    } catch {
+      /* window may already be gone */
+    }
+  }
+});
+
+
 // Track active agent sessions per window: sessionId → engine
 const activeSessions = new Map<string, AgentEngine>();
 
@@ -45,7 +86,7 @@ const activeSessions = new Map<string, AgentEngine>();
  * agent-run: Start a new agent session or continue an existing one.
  * The engine streams events back using webContents.send('agent-event', event).
  */
-ipcMain.handle('agent-run', async (event, {
+safeHandle('agent-run', async (event, {
   sessionId,
   prompt,
   config,
@@ -122,7 +163,7 @@ ipcMain.handle('agent-run', async (event, {
 /**
  * agent-stop: Abort a running agent session.
  */
-ipcMain.handle('agent-stop', (_event, sessionId: string) => {
+safeHandle('agent-stop', (_event, sessionId: string) => {
   const engine = activeSessions.get(sessionId);
   if (engine) {
     engine.abort();
@@ -134,12 +175,12 @@ ipcMain.handle('agent-stop', (_event, sessionId: string) => {
 /**
  * agent-list: List active session IDs.
  */
-ipcMain.handle('agent-list', () => {
+safeHandle('agent-list', () => {
   return { sessions: Array.from(activeSessions.keys()) };
 });
 
 // ─── IPC: Skills discovery (for the Composer slash autocomplete) ──────────────
-ipcMain.handle('skills-list', (_event, { dir }: { dir?: string }) => {
+safeHandle('skills-list', (_event, { dir }: { dir?: string }) => {
   try {
     return listSkills(dir);
   } catch {
@@ -148,7 +189,7 @@ ipcMain.handle('skills-list', (_event, { dir }: { dir?: string }) => {
 });
 
 // ─── IPC: MCP server connections ─────────────────────────────────────────────
-ipcMain.handle('mcp-connect', async (_event, server: {
+safeHandle('mcp-connect', async (_event, server: {
   id: string;
   name: string;
   transport: 'stdio' | 'sse' | 'http';
@@ -162,14 +203,14 @@ ipcMain.handle('mcp-connect', async (_event, server: {
   }
 });
 
-ipcMain.handle('mcp-disconnect', async (_event, id: string) => {
+safeHandle('mcp-disconnect', async (_event, id: string) => {
   await disconnectServer(id);
   return { success: true };
 });
 
-ipcMain.handle('mcp-list', () => listServers());
+safeHandle('mcp-list', () => listServers());
 
-ipcMain.handle('mcp-call', async (_event, { id, tool, args }: {
+safeHandle('mcp-call', async (_event, { id, tool, args }: {
   id: string;
   tool: string;
   args?: Record<string, any>;
@@ -182,9 +223,9 @@ ipcMain.handle('mcp-call', async (_event, { id, tool, args }: {
 });
 
 // ─── IPC: Curated MCP catalog (one-click install) ────────────────────────────
-ipcMain.handle('mcp-catalog', () => MCP_CATALOG);
+safeHandle('mcp-catalog', () => MCP_CATALOG);
 
-ipcMain.handle('mcp-install', async (_event, { id, keys }: {
+safeHandle('mcp-install', async (_event, { id, keys }: {
   id: string;
   keys?: Record<string, string>;
 }) => {
@@ -218,53 +259,53 @@ ipcMain.handle('mcp-install', async (_event, { id, keys }: {
 });
 
 // ─── IPC: Built-in Plugin catalog ────────────────────────────────────────────
-ipcMain.handle('plugins-catalog', () => PLUGIN_CATALOG);
+safeHandle('plugins-catalog', () => PLUGIN_CATALOG);
 
 
 
 // ─── IPC: Persistent Store ───────────────────────────────────────────────────
 
-ipcMain.handle('store-read', (): StoreData => {
+safeHandle('store-read', (): StoreData => {
   return readStore();
 });
 
-ipcMain.handle('store-write', (_event, data: StoreData): void => {
+safeHandle('store-write', (_event, data: StoreData): void => {
   writeStore(data);
 });
 
-ipcMain.handle('settings-read', () => {
+safeHandle('settings-read', () => {
   return SettingsStorage.loadSettings();
 });
 
-ipcMain.handle('settings-write', (_event, settings) => {
+safeHandle('settings-write', (_event, settings) => {
   SettingsStorage.saveSettings(settings);
 });
 
-ipcMain.handle('usage-summary', () => {
+safeHandle('usage-summary', () => {
   return UsageTracker.getSummary();
 });
 
-ipcMain.handle('usage-records', () => {
+safeHandle('usage-records', () => {
   return UsageTracker.loadUsage();
 });
 
-ipcMain.handle('usage-clear', () => {
+safeHandle('usage-clear', () => {
   UsageTracker.clearUsage();
 });
 
-ipcMain.handle('model-gov-read-instructions', () => {
+safeHandle('model-gov-read-instructions', () => {
   return ModelGovStorage.loadInstructions();
 });
 
-ipcMain.handle('model-gov-write-instructions', (_event, content: string) => {
+safeHandle('model-gov-write-instructions', (_event, content: string) => {
   ModelGovStorage.saveInstructions(content);
 });
 
-ipcMain.handle('model-gov-update-instructions', async () => {
+safeHandle('model-gov-update-instructions', async () => {
   return await ModelGovStorage.autoUpdateInstructions();
 });
 
-ipcMain.handle('model-gov-optimize-instructions-by-ai', async () => {
+safeHandle('model-gov-optimize-instructions-by-ai', async () => {
   const settings = SettingsStorage.loadSettings();
   const govEnabledIds = settings.modelGov?.enabledModels || [];
   
@@ -333,7 +374,7 @@ Please optimize these system instructions to:
   return optimizedContent;
 });
 
-ipcMain.handle('browser-navigate', async (_event, { url }) => {
+safeHandle('browser-navigate', async (_event, { url }) => {
   try {
     enforceNetworkAllowed({ kind: 'browser', url: url as string, method: 'GET' });
   } catch (err: unknown) {
@@ -344,7 +385,7 @@ ipcMain.handle('browser-navigate', async (_event, { url }) => {
   return `Successfully navigated to ${res.url} (HTTP status: ${res.status}). Page Title: "${res.title}"`;
 });
 
-ipcMain.handle('browser-screenshot', async (_event, { fullPage }) => {
+safeHandle('browser-screenshot', async (_event, { fullPage }) => {
   const browser = await getMainBrowser();
   const logsDir = path.join(app.getPath('userData'), 'logs');
   fs.mkdirSync(logsDir, { recursive: true });
@@ -353,23 +394,23 @@ ipcMain.handle('browser-screenshot', async (_event, { fullPage }) => {
   return `Screenshot captured and saved to: ${screenshotPath}`;
 });
 
-ipcMain.handle('screenshot_screen', async () => {
+safeHandle('screenshot_screen', async () => {
   const p = await ComputerUse.takeScreenshot();
   return `Screenshot captured successfully and saved to: ${p}`;
 });
 
-ipcMain.handle('browser-close', async () => {
+safeHandle('browser-close', async () => {
   await BrowserLifecycleService.closeSharedInstance();
   return 'Browser successfully shut down.';
 });
 
 // ─── IPC: App version & update checks ────────────────────────────────────────
 
-ipcMain.handle('app-version', () => {
+safeHandle('app-version', () => {
   return app.getVersion();
 });
 
-ipcMain.handle('open-external', async (_event, url: string) => {
+safeHandle('open-external', async (_event, url: string) => {
   try {
     await shell.openExternal(url);
     return { ok: true };
@@ -383,7 +424,7 @@ ipcMain.handle('open-external', async (_event, url: string) => {
  * Returns a status object. In dev (no electron-updater) or when disabled, this
  * degrades gracefully to a friendly message instead of throwing.
  */
-ipcMain.handle('check-for-updates', async (): Promise<{
+safeHandle('check-for-updates', async (): Promise<{
   status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error';
   version?: string;
   message?: string;
@@ -424,7 +465,7 @@ ipcMain.handle('check-for-updates', async (): Promise<{
   }
 });
 
-ipcMain.handle('select-project-folders', async () => {
+safeHandle('select-project-folders', async () => {
   const win = windowManager.getMainWindow();
   const result = await dialog.showOpenDialog(win!, {
     title: 'Select Folder(s)',
@@ -436,7 +477,7 @@ ipcMain.handle('select-project-folders', async () => {
   return result.filePaths;
 });
 
-ipcMain.handle('select-files', async () => {
+safeHandle('select-files', async () => {
   const win = windowManager.getMainWindow();
   const result = await dialog.showOpenDialog(win!, {
     title: 'Select Files',
@@ -451,7 +492,7 @@ ipcMain.handle('select-files', async () => {
   return result.filePaths;
 });
 
-ipcMain.handle('copy-file-to-chat', async (_event, { sourcePath, chatId, projectName }) => {
+safeHandle('copy-file-to-chat', async (_event, { sourcePath, chatId, projectName }) => {
   const targetDir = getChatDirectory(app.getPath('userData'), chatId, projectName || undefined);
 
   fs.mkdirSync(targetDir, { recursive: true });
@@ -465,7 +506,7 @@ ipcMain.handle('copy-file-to-chat', async (_event, { sourcePath, chatId, project
   };
 });
 
-ipcMain.handle('read-file-base64', async (_event, filePath) => {
+safeHandle('read-file-base64', async (_event, filePath) => {
   try {
     const content = fs.readFileSync(filePath);
     const ext = path.extname(filePath).toLowerCase();
@@ -480,7 +521,7 @@ ipcMain.handle('read-file-base64', async (_event, filePath) => {
   }
 });
 
-ipcMain.handle('save-chat-media-buffer', async (_event, { buffer, filename, chatId, projectName }) => {
+safeHandle('save-chat-media-buffer', async (_event, { buffer, filename, chatId, projectName }) => {
   const targetDir = getChatDirectory(app.getPath('userData'), chatId, projectName || undefined);
 
   fs.mkdirSync(targetDir, { recursive: true });
@@ -497,15 +538,15 @@ ipcMain.handle('save-chat-media-buffer', async (_event, { buffer, filename, chat
 // Reads/writes partner.json folders under <userData>/pets. The format is fully
 // open: anyone can author a Partner and import it here.
 
-ipcMain.handle('partner-list', () => {
+safeHandle('partner-list', () => {
   return PartnerStore.listPartners(app.getPath('userData'));
 });
 
-ipcMain.handle('partner-get', (_event, id: string) => {
+safeHandle('partner-get', (_event, id: string) => {
   return PartnerStore.getPartner(app.getPath('userData'), id);
 });
 
-ipcMain.handle('partner-install', async () => {
+safeHandle('partner-install', async () => {
   try {
     const win = windowManager.getMainWindow();
     const result = await dialog.showOpenDialog(win!, {
@@ -522,7 +563,7 @@ ipcMain.handle('partner-install', async () => {
   }
 });
 
-ipcMain.handle('partner-import-json', (_event, json: string) => {
+safeHandle('partner-import-json', (_event, json: string) => {
   try {
     return PartnerStore.importPartnerJson(app.getPath('userData'), json);
   } catch (err: unknown) {
@@ -530,12 +571,12 @@ ipcMain.handle('partner-import-json', (_event, json: string) => {
   }
 });
 
-ipcMain.handle('partner-remove', (_event, id: string) => {
+safeHandle('partner-remove', (_event, id: string) => {
   PartnerStore.removePartner(app.getPath('userData'), id);
   return { success: true };
 });
 
-ipcMain.handle('partner-set-active', (_event, id: string | null) => {
+safeHandle('partner-set-active', (_event, id: string | null) => {
   PartnerStore.setActivePartner(app.getPath('userData'), id);
   // Push the now-active Partner (with its resolved 3D model / VRM/script paths) to the pet.
   const manifest = id ? PartnerStore.getPartner(app.getPath('userData'), id) : null;
@@ -548,11 +589,11 @@ ipcMain.handle('partner-set-active', (_event, id: string | null) => {
   return { success: true };
 });
 
-ipcMain.handle('partner-get-active', () => {
+safeHandle('partner-get-active', () => {
   return PartnerStore.getActivePartner(app.getPath('userData'));
 });
 
-ipcMain.handle('partner-export', (_event, id: string) => {
+safeHandle('partner-export', (_event, id: string) => {
   try {
     const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
     if (fs.existsSync(folder)) {
@@ -570,7 +611,7 @@ ipcMain.handle('partner-export', (_event, id: string) => {
  * (or null if cancelled). The actual copy + manifest update happens in
  * 'partner-import-model'.
  */
-ipcMain.handle('partner-pick-model-file', async () => {
+safeHandle('partner-pick-model-file', async () => {
   try {
     const win = windowManager.getMainWindow();
     const result = await dialog.showOpenDialog(win!, {
@@ -591,7 +632,7 @@ ipcMain.handle('partner-pick-model-file', async () => {
  * active Partner — re-pushes it to the running pet. This persists the user's
  * "which model I imported" choice on disk.
  */
-ipcMain.handle('partner-import-model', async (_event, { id, sourcePath }: { id: string; sourcePath: string }) => {
+safeHandle('partner-import-model', async (_event, { id, sourcePath }: { id: string; sourcePath: string }) => {
   try {
     if (!id || !sourcePath) return { error: 'Missing partner id or model path.' };
     if (!fs.existsSync(sourcePath)) return { error: 'Model file no longer exists.' };
@@ -641,7 +682,7 @@ ipcMain.handle('partner-import-model', async (_event, { id, sourcePath }: { id: 
  * Partner. Returns the chosen absolute path (or null if cancelled). The copy +
  * compile + manifest update happens in 'partner-import-model-folder'.
  */
-ipcMain.handle('partner-pick-model-folder', async () => {
+safeHandle('partner-pick-model-folder', async () => {
   try {
     const win = windowManager.getMainWindow();
     const result = await dialog.showOpenDialog(win!, {
@@ -663,7 +704,7 @@ ipcMain.handle('partner-pick-model-folder', async () => {
  * the running pet. The authored `Character` class may load a .vrm/.glb/.gltf from
  * inside the folder, so all three formats are supported.
  */
-ipcMain.handle('partner-import-model-folder', async (_event, { id, sourcePath }: { id: string; sourcePath: string }) => {
+safeHandle('partner-import-model-folder', async (_event, { id, sourcePath }: { id: string; sourcePath: string }) => {
   try {
     if (!id || !sourcePath) return { error: 'Missing partner id or folder path.' };
     if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isDirectory()) {
@@ -821,7 +862,7 @@ function resolvePartnerModelFolderPath(manifest: any): string | null {
 // the app shell pushes the active Partner + visibility here.
 
 ['pet-ready', 'pet-drag-start', 'pet-drag-delta', 'pet-drag-end', 'pet-resize-delta', 'pet-behavior', 'pet-mood'].forEach((channel) => {
-  ipcMain.on(channel, (_event, payload) => {
+  safeOn(channel, (_event, payload) => {
     if (channel === 'pet-mood') {
       petWindowManager.setMood(payload);
     } else {
@@ -830,7 +871,7 @@ function resolvePartnerModelFolderPath(manifest: any): string | null {
   });
 });
 
-ipcMain.handle('pet-set-partner', (_event, manifest) => {
+safeHandle('pet-set-partner', (_event, manifest) => {
   const modelPath = manifest ? resolvePartnerModelPath(manifest) : null;
   const vrmPath = manifest ? resolvePartnerVrmPath(manifest) : null;
   const scriptPath = manifest ? resolvePartnerScriptPath(manifest) : null;
@@ -840,9 +881,17 @@ ipcMain.handle('pet-set-partner', (_event, manifest) => {
   return { ok: true };
 });
 
-ipcMain.handle('pet-say', (_event, text: string) => {
+safeHandle('pet-say', (_event, text: string) => {
   petWindowManager.say(text);
   return { ok: true };
+});
+
+// The pet window has no own toast UI; it forwards its errors here so they surface
+// as a desktop toast in the main app.
+safeOn('pet-error', (_event, payload: { context?: string; message?: string }) => {
+  if (payload?.message) {
+    logError('pet:' + (payload.context || ''), payload.message);
+  }
 });
 
 // ── Manual start / stop of the single 3D pet (never auto-starts) ─────────────
@@ -892,21 +941,21 @@ function stopPet(): void {
   broadcastPetRunning();
 }
 
-ipcMain.handle('pet-start', () => {
+safeHandle('pet-start', () => {
   startPet();
   return { running: petWindowManager.isRunning() };
 });
 
-ipcMain.handle('pet-stop', () => {
+safeHandle('pet-stop', () => {
   stopPet();
   return { running: petWindowManager.isRunning() };
 });
 
-ipcMain.handle('pet-status', () => {
+safeHandle('pet-status', () => {
   return { running: petWindowManager.isRunning(), enabled: petWindowManager.enabled };
 });
 
-ipcMain.handle('pet-set-visible', (_event, visible: boolean) => {
+safeHandle('pet-set-visible', (_event, visible: boolean) => {
   petWindowManager.setVisible(Boolean(visible));
   return { ok: true };
 });
@@ -915,7 +964,7 @@ ipcMain.handle('pet-set-visible', (_event, visible: boolean) => {
 // Delegates to core's ProviderAutoDetector (shared with the Web server) so both
 // surfaces discover providers identically.
 
-ipcMain.handle('auto-detect-providers', async () => {
+safeHandle('auto-detect-providers', async () => {
   return ProviderAutoDetector.detect();
 });
 
