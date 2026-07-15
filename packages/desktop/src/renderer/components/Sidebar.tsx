@@ -86,10 +86,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [openMenuProject, setOpenMenuProject] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Standalone chats = chats not linked to any known project
-  const standaloneChats = chats.filter(
-    (chat) => !chat.project || !projects.some((p) => p.name === chat.project)
-  );
+  // Sort helper to order chats chronologically (newest first)
+  const parseChatTime = (chat: StoredChat): number => {
+    if (chat.startedAt) {
+      return chat.startedAt;
+    }
+    if (chat.timestamp) {
+      if (chat.timestamp === 'Just now') {
+        return Date.now();
+      }
+      const dateParsed = Date.parse(chat.timestamp);
+      if (!isNaN(dateParsed)) {
+        return dateParsed;
+      }
+      const match = chat.timestamp.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      if (match) {
+        const day = parseInt(match[1], 10);
+        const month = parseInt(match[2], 10) - 1;
+        const year = parseInt(match[3], 10);
+        return new Date(year, month, day).getTime();
+      }
+    }
+    return 0;
+  };
+
+  const sortChatsChronologically = (a: StoredChat, b: StoredChat): number => {
+    return parseChatTime(b) - parseChatTime(a);
+  };
+
+  // Standalone chats = chats not linked to any known project, sorted chronologically
+  const standaloneChats = chats
+    .filter((chat) => !chat.project || !projects.some((p) => p.name === chat.project))
+    .sort(sortChatsChronologically);
 
   const toggleProjectCollapse = (name: string) => {
     setCollapsedProjects(prev => ({ ...prev, [name]: !prev[name] }));
@@ -196,7 +224,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {projects.map((proj) => {
                 const isExpanded = !collapsedProjects[proj.name];
                 const isProjectActive = activeProject === proj.name && activeTab === 'trajectory';
-                const projectChats = chats.filter((c) => c.project === proj.name);
+                const projectChats = chats.filter((c) => c.project === proj.name).sort(sortChatsChronologically);
                 const isMenuOpen = openMenuProject === proj.name;
 
                 return (
