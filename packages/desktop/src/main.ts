@@ -9,7 +9,7 @@ app.setPath('userData', customUserDataPath);
 import { windowManager } from './main/window';
 import { setupAutoUpdater } from './main/updater';
 import { readStore, writeStore, StoreData } from './main/store';
-import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG } from '@superagent/core';
+import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, generateThreeD } from '@superagent/core';
 import { getChatDirectory } from './main/storage/index.js';
 import * as PartnerStore from './main/partner-store';
 import { petWindowManager } from './main/pet-window';
@@ -643,7 +643,9 @@ safeHandle('partner-import-model', async (_event, { id, sourcePath }: { id: stri
     }
 
     const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
-    if (!fs.existsSync(folder)) return { error: 'Partner folder not found.' };
+    // The default `lily` Partner is shipped in-memory and may not have an on-disk
+    // folder yet — create it lazily so a freshly imported model has a home.
+    fs.mkdirSync(folder, { recursive: true });
 
     const fileName = `character.${ext}`;
     fs.copyFileSync(sourcePath, path.join(folder, fileName));
@@ -673,6 +675,55 @@ safeHandle('partner-import-model', async (_event, { id, sourcePath }: { id: stri
     return { ok: true, model: fileName, field };
   } catch (err: unknown) {
     return { error: (err as Error).message };
+  }
+});
+
+/**
+ * Native file picker for a concept image (PNG/JPG) used as the seed for
+ * image-to-3D generation in the 3D Studio. Returns the chosen absolute path.
+ */
+safeHandle('pick-image-file', async () => {
+  try {
+    const win = windowManager.getMainWindow();
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Select a concept image',
+      properties: ['openFile'],
+      filters: [{ name: 'Image', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
+    });
+    if (result.canceled || !result.filePaths.length) return { path: null };
+    return { path: result.filePaths[0] };
+  } catch {
+    return { path: null };
+  }
+});
+
+/**
+ * 3D Studio generation entry point. Reads the user's 3D settings (enabled +
+ * provider + key) and delegates to the shared `generateThreeD` kernel, writing
+ * the produced .glb/.gltf into a dedicated 3D Studio output folder under the
+ * app user-data directory. Returns the structured `ThreeDResult`.
+ */
+safeHandle('three-d-generate', async (_event, args: { name?: string; prompt?: string; imagePath?: string }) => {
+  try {
+    const settings = SettingsStorage.loadSettings();
+    const cfg = settings?.threeD;
+    if (!cfg?.enabled) return { ok: false, disabled: true, message: '3D Model Gen is disabled in Settings.' };
+
+    const apiKey = cfg.apiKey?.trim() || undefined;
+    const provider = cfg.provider === 'meshy' ? 'meshy' : 'tripo';
+
+    const outDir = path.join(app.getPath('userData'), '3d-studio');
+    const res = await generateThreeD({
+      name: args?.name || 'character',
+      prompt: args?.prompt,
+      imagePath: args?.imagePath,
+      provider,
+      apiKey,
+      outDir
+    });
+    return res;
+  } catch (err: unknown) {
+    return { ok: false, message: `3D Studio generation failed: ${(err as Error).message}` };
   }
 });
 

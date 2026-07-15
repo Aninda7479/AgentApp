@@ -1,8 +1,8 @@
 import React from 'react';
-import { MessageSquare, Clock, Plug, Server, Settings, PawPrint, LucideIcon } from 'lucide-react';
+import { MessageSquare, Clock, Plug, Server, Settings, PawPrint, Box, LucideIcon } from 'lucide-react';
 
 /** Destination tabs shown in the mobile bottom navigation bar. */
-export type BottomNavTab = 'trajectory' | 'scheduled' | 'plugins' | 'mcp' | 'settings' | 'partner';
+export type BottomNavTab = 'trajectory' | 'scheduled' | 'plugins' | 'mcp' | 'settings' | 'partner' | 'studio';
 
 interface BottomNavProps {
   activeTab: string;
@@ -10,9 +10,11 @@ interface BottomNavProps {
   /** When viewing Settings the sidebar is hidden, so the bar stays visible. */
   mcpCount?: number;
   unsyncedBadge?: boolean;
+  /** When true, the dedicated 3D Studio tab is shown. */
+  showStudio?: boolean;
 }
 
-const TABS: { id: BottomNavTab; label: string; Icon: LucideIcon }[] = [
+const BASE_TABS: { id: BottomNavTab; label: string; Icon: LucideIcon }[] = [
   { id: 'trajectory', label: 'Agent', Icon: MessageSquare },
   { id: 'scheduled', label: 'Tasks', Icon: Clock },
   { id: 'plugins', label: 'Plugins', Icon: Plug },
@@ -21,11 +23,18 @@ const TABS: { id: BottomNavTab; label: string; Icon: LucideIcon }[] = [
   { id: 'settings', label: 'Settings', Icon: Settings },
 ];
 
+const STUDIO_TAB: { id: BottomNavTab; label: string; Icon: LucideIcon } = {
+  id: 'studio',
+  label: 'Studio',
+  Icon: Box
+};
+
 /**
  * Mobile-only bottom tab bar. Visible beneath the `md` breakpoint, it gives
  * thumb-reach navigation to the five primary surfaces and mirrors the sidebar.
  */
-export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab, mcpCount = 0 }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab, mcpCount = 0, showStudio = false }) => {
+  const TABS = showStudio ? [...BASE_TABS, STUDIO_TAB] : BASE_TABS;
   return (
     <nav
       className="ui-bottom-nav md:hidden safe-bottom"

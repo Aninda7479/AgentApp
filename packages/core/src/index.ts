@@ -15,6 +15,7 @@ export * from './providers/autodetect.js';
 export { AgentEngine as SuperAgentEngine, type AgentEvent, type AgentEngineConfig } from './providers/ai-engine.js';
 export * from './tools/media.js';
 export * from './tools/mcp.js';
+export * from './tools/threed.js';
 export * from './planner/agent.js';
 export * from './automation/browser.js';
 export * from './automation/browser-service.js';

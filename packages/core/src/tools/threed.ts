@@ -231,7 +231,83 @@ function generateLocalGltf(name: string): { json: object; fileName: string } {
   return { json: gltf, fileName: `${safe}.gltf` };
 }
 
-/** Builds the `make_3d_character` tool definition. */
+/**
+ * Reusable generation kernel shared by the `make_3d_character` agent tool AND the
+ * dedicated 3D Studio page. Given an explicit `outDir` and (optionally) a provider
+ * API key it performs the real cloud generation (Tripo3D today; Meshy is a
+ * documented TODO), otherwise it falls back to the dependency-free local GLB/glTF
+ * placeholder so the make → export → show/animate loop is verifiable fully offline.
+ *
+ * Returns a structured `ThreeDResult` object (never a thrown error) so callers can
+ * branch on `ok` / `disabled` / `needsKey` and surface a clear message.
+ */
+export interface ThreeDGenerateOptions {
+  name: string;
+  prompt?: string;
+  imagePath?: string;
+  provider?: 'tripo' | 'meshy';
+  apiKey?: string;
+  outDir: string;
+}
+
+export async function generateThreeD(opts: ThreeDGenerateOptions): Promise<ThreeDResult> {
+  const name = (typeof opts.name === 'string' && opts.name.trim()) || 'character';
+  const prompt = typeof opts.prompt === 'string' ? opts.prompt : '';
+  const imagePath = typeof opts.imagePath === 'string' ? opts.imagePath : undefined;
+
+  fs.mkdirSync(opts.outDir, { recursive: true });
+
+  try {
+    if (opts.apiKey && opts.provider === 'meshy') {
+      // TODO: Meshy OpenAPI (text_to_3d / image_to_3d → poll → download GLB) maps
+      // onto the same shape as Tripo. Wire it here when a Meshy key is selected.
+      return {
+        ok: false,
+        needsKey: true,
+        message:
+          'Meshy cloud generation is not wired in this build yet. Use the Tripo3D ' +
+          'provider (set provider=Tripo + API key in Settings → 3D Model Gen), or ' +
+          'clear the API key to use the local procedural placeholder.'
+      };
+    }
+
+    if (opts.apiKey) {
+      // Real cloud generation (Tripo3D).
+      const { buffer, fileName } = await generateViaTripo(prompt, imagePath, opts.apiKey);
+      const outPath = path.join(opts.outDir, fileName);
+      fs.writeFileSync(outPath, buffer);
+      return {
+        ok: true,
+        path: outPath,
+        format: 'glb',
+        provider: 'tripo',
+        message:
+          `Generated 3D character "${name}" via tripo. Exported to ${outPath}. ` +
+          'Import it as a Partner to show + animate it in the pet.'
+      };
+    }
+
+    // No key → dependency-free local placeholder (verifiable end-to-end offline).
+    const { json, fileName } = generateLocalGltf(name);
+    const outPath = path.join(opts.outDir, fileName);
+    fs.writeFileSync(outPath, JSON.stringify(json, null, 2), 'utf-8');
+    return {
+      ok: true,
+      path: outPath,
+      format: 'gltf',
+      provider: 'local',
+      message:
+        `Generated a local procedural 3D placeholder for "${name}" at ${outPath} ` +
+        '(no provider API key set). For a real AI-generated character, add a Tripo3D ' +
+        'API key in Settings → 3D Model Gen. Import the file as a Partner to show + animate it in the pet.'
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, needsKey: !!opts.apiKey, message: `3D generation failed: ${msg}` };
+  }
+}
+
+/** Builds the `make_3d_character` tool definition (chat-mode entry point). */
 export function createThreeDTool(projectRoot: string): ToolDefinition {
   return {
     name: 'make_3d_character',
@@ -271,39 +347,14 @@ export function createThreeDTool(projectRoot: string): ToolDefinition {
       const key = readKey();
       const dir = outDir(projectRoot);
 
-      try {
-        if (key) {
-          // Real cloud generation (Tripo3D).
-          const { buffer, fileName } = await generateViaTripo(prompt, imagePath, key.apiKey);
-          const outPath = path.join(dir, fileName);
-          fs.writeFileSync(outPath, buffer);
-          return {
-            ok: true,
-            path: outPath,
-            format: 'glb',
-            provider: key.provider,
-            message: `Generated 3D character "${name}" via ${key.provider}. Exported to ${outPath}. Import it as a Partner to show + animate it in the pet.`
-          };
-        }
-
-        // No key → dependency-free local placeholder (verifiable end-to-end offline).
-        const { json, fileName } = generateLocalGltf(name);
-        const outPath = path.join(dir, fileName);
-        fs.writeFileSync(outPath, JSON.stringify(json, null, 2), 'utf-8');
-        return {
-          ok: true,
-          path: outPath,
-          format: 'gltf',
-          provider: 'local',
-          message:
-            `Generated a local procedural 3D placeholder for "${name}" at ${outPath} ` +
-            '(no provider API key set). For a real AI-generated character, add a Tripo3D/Meshy ' +
-            'API key in Settings → 3D Model Gen. Import the file as a Partner to show + animate it in the pet.`
-        };
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return { ok: false, needsKey: !!key, message: `3D generation failed: ${msg}` };
-      }
+      return generateThreeD({
+        name,
+        prompt,
+        imagePath,
+        provider: key?.provider,
+        apiKey: key?.apiKey,
+        outDir: dir
+      });
     }
   };
 }

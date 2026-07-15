@@ -827,7 +827,11 @@ class GLBCharacter implements Character {
             if (child.material.map) {
               child.material.map.anisotropy = 8;
             }
-            child.material.envMapIntensity = 1.15;
+            // Soften PBR properties to make skin/clothing look soft and realistic,
+            // avoiding the wet plastic/liquid metal glare.
+            child.material.metalness = 0.05;
+            child.material.roughness = 0.72;
+            child.material.envMapIntensity = 0.8;
           }
           if (child.geometry) {
             child.geometry.computeTangents?.();

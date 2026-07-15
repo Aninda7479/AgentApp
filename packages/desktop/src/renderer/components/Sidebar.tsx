@@ -16,6 +16,7 @@ import {
   MoreHorizontal,
   MessageSquarePlus,
   PawPrint,
+  Box,
 } from 'lucide-react';
 
 
@@ -48,6 +49,8 @@ export interface SidebarProps {
   mobileOpen?: boolean;
   /** Invoked to request closing the mobile drawer. */
   onMobileClose?: () => void;
+  /** When true, the dedicated 3D Studio nav entry is shown. */
+  showStudio?: boolean;
 }
 
 /** Collapsible sidebar with project tree, chat list, and navigation links. */
@@ -74,7 +77,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectChat,
   activeChatId = null,
   mobileOpen = false,
-  onMobileClose
+  onMobileClose,
+  showStudio = false
 }) => {
   // Each project tracks its own collapsed state (all expanded by default)
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
@@ -169,6 +173,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {renderNavItem('scheduled', 'Scheduled', Clock)}
           {renderNavItem('plugins', 'Plugins', Plug)}
           {renderNavItem('partner', 'Partner', PawPrint)}
+          {showStudio && renderNavItem('studio', '3D Studio', Box)}
         </div>
 
         {/* ── PROJECTS Section ── */}

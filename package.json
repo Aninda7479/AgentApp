@@ -1,6 +1,6 @@
 {
   "name": "superagent-monorepo",
-  "private": true,
+  "private": false,
   "description": "SuperAgent — open-source autonomous AI agent for coding, browser automation, and multimodal media generation (Desktop + Web).",
   "license": "GPL-3.0-or-later",
   "author": "SuperAgent Contributors",

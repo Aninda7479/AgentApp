@@ -43,7 +43,8 @@ export interface ToolDefinition {
   name: string;
   description: string;
   parameters: Record<string, unknown>; // JSON Schema
-  execute: (args: Record<string, unknown>) => Promise<string>;
+  /** May return a string OR a structured object (e.g. the 3D tool's result). */
+  execute: (args: Record<string, any>, config?: any) => Promise<unknown>;
 }
 
 // ─── Built-in Agent Tools ─────────────────────────────────────────────────────
@@ -59,7 +60,8 @@ import {
   enforceNetworkAllowed,
   getInternetAccessLevel,
   describeInternetAccessLevel,
-  InternetAccessLevel
+  InternetAccessLevel,
+  createThreeDTool
 } from '@superagent/core';
 
 const execAsync = promisify(exec);
@@ -243,7 +245,12 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
           return `Error fetching ${url}: ${(err as Error).message}`;
         }
       }
-    }
+    },
+
+    // 3D character / model generation (Tripo3D / Meshy comparable). Gated by
+    // Settings → 3D Model Gen (off by default); returns a structured result
+    // object that the renderer parses to show + animate the produced model.
+    createThreeDTool(projectRoot)
   ];
 }
 
@@ -450,7 +457,7 @@ Key guidelines:
             content: `Calling ${tc.name}(${JSON.stringify(tc.args)})`
           });
 
-          let result: string;
+          let result: unknown;
           if (!tool) {
             result = `Error: Unknown tool "${tc.name}"`;
           } else {
@@ -461,18 +468,24 @@ Key guidelines:
             }
           }
 
+          // A tool may return a structured object (e.g. the 3D tool's result);
+          // serialize it for the model + history, but keep the FULL payload in
+          // `toolResult` so the renderer can parse it (only `content` is trimmed
+          // for the chat display).
+          const resultText = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+
           onEvent({
             type: 'tool_result',
             sessionId: this.sessionId,
             toolName: tc.name,
-            toolResult: result,
-            content: result.slice(0, 200) // truncated for display
+            toolResult: resultText,
+            content: resultText.slice(0, 200) // truncated for display
           });
 
           // Add tool result to history
           this.history.push({
             role: 'tool',
-            content: result,
+            content: resultText,
             toolCallId: tc.id,
             name: tc.name
           });
