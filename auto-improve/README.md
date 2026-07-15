@@ -26,6 +26,7 @@ Every entry follows this shape:
 | 10 | Web server WebSocket crash resilience | web | No more crashes on disconnect |
 | 11 | Graceful missing-input guard in gen-mcp-catalog.mjs | tooling | Actionable error + documents #007 |
 | 12 | Add request timeout to provider `complete()` calls | core | No more hangs on dead providers |
+| 13 | Fix desktop IPC self-recursion (latent startup crash) | desktop | Rebuild-safe startup |
 
 ## Verification approach
 

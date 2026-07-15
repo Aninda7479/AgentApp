@@ -46,7 +46,7 @@ import {
 // of rejecting the IPC call and white-screening the UI.
 
 function safeHandle(channel: string, handler: (event: IpcMainInvokeEvent, ...args: any[]) => unknown): void {
-  safeHandle(channel, async (event, ...args) => {
+  ipcMain.handle(channel, async (event, ...args) => {
     try {
       return await handler(event, ...args);
     } catch (err: unknown) {
@@ -57,7 +57,7 @@ function safeHandle(channel: string, handler: (event: IpcMainInvokeEvent, ...arg
 }
 
 function safeOn(channel: string, handler: (event: IpcMainEvent, ...args: any[]) => void): void {
-  safeOn(channel, (event, ...args) => {
+  ipcMain.on(channel, (event, ...args) => {
     try {
       handler(event, ...args);
     } catch (err: unknown) {
