@@ -45,12 +45,6 @@ export function logError(context: string, err: unknown): void {
   }
 }
 
-/** Non-fatal warning with the same grep-able prefix. */
-export function logWarn(context: string, message: string): void {
-  // eslint-disable-next-line no-console
-  console.warn('[WARN]', context, '-', message);
-}
-
 /** Distinct envelope returned by safeHandle so the renderer can detect a failed IPC. */
 export interface IpcErrorEnvelope {
   __ipcError: true;

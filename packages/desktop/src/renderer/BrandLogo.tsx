@@ -59,7 +59,3 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
 
   return glyph;
 };
-
-/** Inline SVG favicon as a data URI (monochrome, no external file). */
-export const BRAND_FAVICON =
-  "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2316161a'/><path d='M11 22L16 10l5 12' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/><circle cx='16' cy='22.5' r='1.8' fill='white'/><circle cx='21' cy='10' r='1.8' fill='white' opacity='0.55'/></svg>";

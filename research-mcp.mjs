@@ -11,7 +11,7 @@
 // Run: node research-mcp.mjs            (full pass; uses cache)
 //      RESEARCH_LIMIT=20 node research-mcp.mjs   (subset, for testing)
 //      RESEARCH_DRY=1 …                 (no file write)
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, renameSync, existsSync } from 'fs';
 
 const FILE = 'packages/core/src/integrations/catalog-data.ts';
 const CACHE_FILE = 'research-cache.json';
@@ -157,20 +157,42 @@ function extractEndpointLoose(readme) {
 }
 
 // ---------- cache (raw README snippet per repo) ----------
-const cache = existsSync(CACHE_FILE) ? JSON.parse(readFileSync(CACHE_FILE, 'utf-8')) : {};
+let cache = {};
+if (existsSync(CACHE_FILE)) {
+  try {
+    cache = JSON.parse(readFileSync(CACHE_FILE, 'utf-8'));
+  } catch {
+    // A truncated/partial cache (e.g. process killed mid-write) must not abort
+    // the run. Drop it and start fresh — fetches are cheap to redo.
+    console.warn(`WARN: ${CACHE_FILE} corrupt; starting with empty cache.`);
+    cache = {};
+  }
+}
 function saveCache() {
-  writeFileSync(CACHE_FILE, JSON.stringify(cache));
+  // Atomic write: serialize to a temp file then rename, so a crash mid-write
+  // can never leave a half-written (unparseable) cache behind.
+  const tmp = CACHE_FILE + '.tmp';
+  writeFileSync(tmp, JSON.stringify(cache));
+  renameSync(tmp, CACHE_FILE);
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const FETCH_TIMEOUT_MS = Number(process.env.RESEARCH_TIMEOUT_MS || 15000);
 async function fetchOne(url) {
   for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'mcp-catalog-research' } });
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'mcp-catalog-research' },
+        signal: controller.signal
+      });
       if (res.status === 200) return (await res.text()).slice(0, 10000);
       if (res.status === 429 || res.status >= 500) await sleep(1500 * (attempt + 1));
     } catch {
       await sleep(500);
+    } finally {
+      clearTimeout(timer);
     }
   }
   return null;

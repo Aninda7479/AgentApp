@@ -92,19 +92,40 @@ const connectedSockets = new Set<WebSocket>();
 wss.on('connection', (ws) => {
   connectedSockets.add(ws);
   console.log(`[WebSocket] Client connected. Active clients: ${connectedSockets.size}`);
-  
+
   ws.on('close', () => {
     connectedSockets.delete(ws);
     console.log(`[WebSocket] Client disconnected. Active clients: ${connectedSockets.size}`);
+  });
+
+  // A socket error (e.g. ECONNRESET, TLS failure) emits 'error' with no listener
+  // by default, which becomes an uncaught exception and can crash the server.
+  // Swallow it and drop the socket instead.
+  ws.on('error', (err) => {
+    console.error(`[WebSocket] Client error (dropping socket):`, err);
+    connectedSockets.delete(ws);
+    try { ws.close(); } catch { /* already closed */ }
   });
 });
 
 /** Broadcasts a message to all connected WebSocket clients. */
 function broadcast(channel: string, data: any) {
-  const payload = JSON.stringify({ channel, data });
+  let payload: string;
+  try {
+    payload = JSON.stringify({ channel, data });
+  } catch {
+    // Circular/malformed payload — don't let it break the caller's loop.
+    console.error(`[WebSocket] Dropping broadcast on channel "${channel}" (unserializable payload).`);
+    return;
+  }
   connectedSockets.forEach((ws) => {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(payload);
+      try {
+        ws.send(payload);
+      } catch {
+        // Socket died mid-send; clean it up.
+        connectedSockets.delete(ws);
+      }
     }
   });
 }
