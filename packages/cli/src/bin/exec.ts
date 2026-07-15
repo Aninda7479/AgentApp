@@ -144,7 +144,7 @@ export function registerExecCommand(program: Command): void {
     .option('-p, --prompt <prompt>', 'Prompt text to execute')
     .option('-f, --file <file>', 'Input file containing prompt or instructions')
     .option('-m, --model <model>', 'Specify AI model override')
-    .option('--provider <provider>', 'Specify AI provider override', 'openai')
+    .option('--provider <provider>', 'Specify AI provider override')
     .option('-k, --key <key>', 'API Key for execution session')
     .option('-o, --output <output>', 'Save output result to target file')
     .option('--json', 'Output result in JSON format')
