@@ -38,6 +38,29 @@ export class ProvidersService {
   }
 
   /**
+   * Detects whether a model is free to use. Best-effort heuristics:
+   *  - the id or name carries a `free` marker (e.g. OpenRouter's `:free` suffix), or
+   *  - a pricing object is present and both the input and output costs parse to zero.
+   * Some providers (e.g. NVIDIA) don't expose pricing in their model-listing API,
+   * so only the name/id marker applies there.
+   */
+  static detectFree(
+    id: string,
+    name: string,
+    pricing?: { prompt?: string; completion?: string; input?: string; output?: string }
+  ): boolean {
+    const hay = `${id} ${name}`.toLowerCase();
+    if (hay.includes('free')) return true;
+    if (pricing) {
+      const isZero = (s?: string) => s == null || /^\s*\$?\s*0(\.0+)?\s*$/.test(s);
+      const inZero = isZero(pricing.prompt ?? pricing.input);
+      const outZero = isZero(pricing.completion ?? pricing.output);
+      if (inZero && outZero) return true;
+    }
+    return false;
+  }
+
+  /**
    * Toggles a model's enabled/disabled state and persists.
    */
   static toggleModel(ctx: AppContext, modelId: string): void {

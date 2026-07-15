@@ -44,6 +44,7 @@ const REGISTRY: Record<string, ProviderMeta> = {
   mistral:    { id: 'mistral',    name: 'Mistral AI',           family: 'openai', defaultBaseUrl: 'https://api.mistral.ai/v1' },
   grok:       { id: 'grok',       name: 'xAI Grok',             family: 'openai', defaultBaseUrl: 'https://api.x.ai/v1' },
   perplexity: { id: 'perplexity', name: 'Perplexity',           family: 'openai', defaultBaseUrl: 'https://api.perplexity.ai' },
+  nvidia:     { id: 'nvidia',     name: 'NVIDIA',               family: 'openai', defaultBaseUrl: 'https://integrate.api.nvidia.com/v1' },
   vertex:     { id: 'vertex',     name: 'Google Vertex AI',     family: 'openai', defaultBaseUrl: '' },
   custom:     { id: 'custom',     name: 'Custom Endpoint',      family: 'openai', defaultBaseUrl: '' },
 

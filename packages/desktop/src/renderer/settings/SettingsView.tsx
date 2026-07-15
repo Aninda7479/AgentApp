@@ -124,6 +124,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     id: string; name: string;
     contextLimit?: string; outputLimit?: string;
     description?: string; apiType?: string;
+    free?: boolean; pricing?: ModelPricing;
   }, providerId: string): ModelConfig => {
     const capKey = Object.keys(MODEL_CAPS).find(k => raw.id === k || raw.id.startsWith(k));
     const caps = capKey
@@ -139,8 +140,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       outputLimit: raw.outputLimit,
       inputModalities: caps.inputModalities,
       outputModalities: (caps as any).outputModalities ?? ['text'],
-      pricing: (caps as any).pricing,
+      pricing: raw.pricing ?? (caps as any).pricing,
       caching: (caps as any).caching ?? false,
+      free: raw.free,
       type: undefined
     };
   };

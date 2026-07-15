@@ -22,7 +22,7 @@ import { BottomNav } from './components/BottomNav';
 import { usePartners } from './components/partner/library';
 import { PartnerView } from './components/partner/PartnerView';
 import { PartnerOverlay } from './components/partner/PartnerOverlay';
-import { StudioView } from './components/StudioView';
+import { ThreeDStudio } from './3d_studio/ThreeDStudio';
 import { StoredChat, StoredProject } from './types';
 import { useThemeMode } from './theme';
 import { getRouteFromLocation, pushRoute, subscribeRouteChange } from './urlSync';
@@ -685,7 +685,7 @@ export const App: React.FC = () => {
       {/* Main Body container */}
       <div className="flex-1 flex overflow-hidden overflow-x-hidden relative min-w-0">
         {/* Mobile drawer backdrop */}
-        {mobileNavOpen && activeTab !== 'settings' && (
+        {mobileNavOpen && activeTab !== 'settings' && activeTab !== 'studio' && (
           <div
             className="lg:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
             onClick={() => setMobileNavOpen(false)}
@@ -693,7 +693,7 @@ export const App: React.FC = () => {
           />
         )}
         {/* Hide main sidebar when viewing Settings page, matching Image 4 */}
-        {activeTab !== 'settings' && (
+        {activeTab !== 'settings' && activeTab !== 'studio' && (
           <Sidebar
             activeTab={activeTab}
             showStudio={showStudio}
@@ -791,7 +791,7 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'studio' && showStudio && (
-            <StudioView
+            <ThreeDStudio
               partners={partnersRef.current}
               triggerToast={triggerToast}
             />

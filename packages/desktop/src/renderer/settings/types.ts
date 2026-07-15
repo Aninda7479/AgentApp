@@ -40,6 +40,8 @@ export interface ModelConfig {
   outputModalities?: string[]; // ['text','image','audio']
   pricing?: ModelPricing;
   caching?: boolean;
+  /** True when the model is free to use (detected from pricing or provider metadata). */
+  free?: boolean;
   type?: string; // legacy single-string field
 }
 

@@ -23,6 +23,24 @@ export const AppToast: React.FC<AppToastProps> = ({ open, message, type = 'info'
 
   const isError = type === 'error' || message.toLowerCase().includes('error') || message.toLowerCase().includes('failed');
 
+  const isExcluded =
+    message.includes('Menu') ||
+    message.includes('Selector') ||
+    message.includes('Attached') ||
+    message.includes('pasted') ||
+    message.toLowerCase().includes('3d') ||
+    message.toLowerCase().includes('model') ||
+    message.toLowerCase().includes('mesh') ||
+    message.toLowerCase().includes('concept') ||
+    message.toLowerCase().includes('segmentation') ||
+    message.toLowerCase().includes('rigging') ||
+    message.toLowerCase().includes('polygon') ||
+    message.toLowerCase().includes('uv') ||
+    message.toLowerCase().includes('paint') ||
+    message.toLowerCase().includes('preset') ||
+    message.toLowerCase().includes('feedback') ||
+    message.toLowerCase().includes('color');
+
   return (
     <div
       data-testid="toast-under-construction"
@@ -40,7 +58,7 @@ export const AppToast: React.FC<AppToastProps> = ({ open, message, type = 'info'
         )}
         <span className="font-sans font-medium">
           {message}
-          {!isError && !message.includes('Menu') && !message.includes('Selector') && !message.includes('Attached') && !message.includes('pasted') && (
+          {!isError && !isExcluded && (
             <span className="text-brand-textMuted font-normal"> is currently under development.</span>
           )}
         </span>

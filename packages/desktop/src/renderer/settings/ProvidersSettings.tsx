@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ProviderConnection, ModelConfig } from './types';
+import { ProvidersService } from '../logic/providers';
 
 /** Props for the providers settings panel. */
 interface ProvidersSettingsProps {
@@ -44,6 +45,7 @@ const POPULAR_PROVIDERS = [
   { id: 'deepseek', name: 'DeepSeek', org: 'deepseek-ai', desc: 'DeepSeek API endpoints and services', defaultUrl: 'https://api.deepseek.com' },
   { id: 'kimi', name: 'Kimi', org: 'moonshot-ai', desc: 'Moonshot AI developer platform provider', defaultUrl: 'https://api.moonshot.cn/v1' },
   { id: 'openrouter', name: 'OpenRouter', org: 'openrouter-ai', desc: 'Unified open router endpoint broker', defaultUrl: 'https://openrouter.ai/api/v1' },
+  { id: 'nvidia', name: 'NVIDIA', org: 'NVIDIA', desc: 'NVIDIA NIM inference microservices (OpenAI-compatible)', defaultUrl: 'https://integrate.api.nvidia.com/v1' },
   { id: 'deepinfra', name: 'DeepInfra', org: 'deepinfra', desc: 'Low cost serverless inference hosting provider', defaultUrl: 'https://api.deepinfra.com/v1' }
 ];
 
@@ -149,10 +151,33 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
+        rawModels = (data.data ?? []).map((m: any) => {
+          const free = ProvidersService.detectFree(m.id, m.name ?? m.id, m.pricing);
+          let pricing: any;
+          if (!free && m.pricing) {
+            const per1M = (s: string) => {
+              const n = parseFloat(s);
+              return Number.isFinite(n) ? `$${(n * 1_000_000).toFixed(2)}` : String(s);
+            };
+            pricing = { inputPer1M: per1M(m.pricing.prompt), outputPer1M: per1M(m.pricing.completion) };
+          }
+          return {
+            id: m.id, name: m.name ?? m.id,
+            contextLimit: m.context_length ? fmtTokens(m.context_length) : undefined,
+            description: m.description,
+            free, pricing
+          };
+        });
+      } else if (modalProviderId === 'nvidia') {
+        const base = url || 'https://integrate.api.nvidia.com/v1';
+        const res = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const data = await res.json();
         rawModels = (data.data ?? []).map((m: any) => ({
           id: m.id, name: m.name ?? m.id,
           contextLimit: m.context_length ? fmtTokens(m.context_length) : undefined,
-          description: m.description
+          description: m.description,
+          free: ProvidersService.detectFree(m.id, m.name ?? m.id, m.pricing)
         }));
       } else if (modalProviderId === 'ollama-cloud') {
         const base = url.replace(/\/+$/, '');
@@ -182,7 +207,10 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         const res = await fetch(`${base}/models`, { headers });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
-        rawModels = (data.data ?? []).map((m: any) => ({ id: m.id, name: m.id }));
+        rawModels = (data.data ?? []).map((m: any) => ({
+          id: m.id, name: m.id,
+          free: ProvidersService.detectFree(m.id, m.id, m.pricing)
+        }));
       }
 
       if (rawModels.length === 0) throw new Error('Connection succeeded but no models were returned.');
@@ -207,7 +235,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
   };
 
   const handleForceConnect = () => {
-    const knownDefaults: Record<string, { id: string; name: string; ctx?: string }[]> = {
+    const knownDefaults: Record<string, { id: string; name: string; ctx?: string; free?: boolean }[]> = {
       ollama:   [{ id: 'llama3.1:8b', name: 'Llama 3.1 8B' }, { id: 'mistral:7b', name: 'Mistral 7B' }],
       chatgpt:  [{ id: 'gpt-4o', name: 'GPT-4o', ctx: '128k' }, { id: 'gpt-4o-mini', name: 'GPT-4o Mini', ctx: '128k' }, { id: 'o3-mini', name: 'o3-mini', ctx: '200k' }],
       deepseek: [{ id: 'deepseek-chat', name: 'DeepSeek Chat', ctx: '64k' }, { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', ctx: '64k' }],
@@ -215,6 +243,11 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       claude:   [{ id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', ctx: '200k' }, { id: 'claude-haiku-3-5', name: 'Claude Haiku 3.5', ctx: '200k' }],
       kimi:     [{ id: 'moonshot-v1-128k', name: 'Moonshot v1 128k', ctx: '128k' }, { id: 'moonshot-v1-32k', name: 'Moonshot v1 32k', ctx: '32k' }],
       openrouter: [{ id: 'openrouter/auto', name: 'Auto Router' }],
+      nvidia: [
+        { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'Llama 3.1 Nemotron 70B Instruct', ctx: '128k', free: true },
+        { id: 'nvidia/llama-3.3-nemotron-super-49b-v1', name: 'Llama 3.3 Nemotron Super 49B', ctx: '128k', free: true },
+        { id: 'meta/llama-3.1-8b-instruct', name: 'Llama 3.1 8B Instruct', ctx: '128k', free: true }
+      ],
       'ollama-cloud': [
         { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', ctx: '128k' },
         { id: 'gemma4:31b', name: 'Gemma 4 31B', ctx: '128k' },
@@ -230,7 +263,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
     }
 
     const newConfigs: ModelConfig[] = defaults.map(m =>
-      enrichModel({ id: m.id, name: m.name, contextLimit: m.ctx }, modalProviderId)
+      enrichModel({ id: m.id, name: m.name, contextLimit: m.ctx, free: m.free }, modalProviderId)
     );
 
     onConnectProvider({

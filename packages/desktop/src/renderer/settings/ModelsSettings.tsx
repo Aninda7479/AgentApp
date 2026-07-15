@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ProviderConnection, ModelConfig } from './types';
 import { RefreshCw, ChevronDown } from 'lucide-react';
+import { ProvidersService } from '../logic/providers';
 
 const MODALITY_STYLES: Record<string, string> = {
   text:  'bg-[var(--brand-accent-tint)] text-[var(--brand-accent)]',
@@ -31,10 +32,11 @@ interface ModelsListProps {
   connectedProviders: ProviderConnection[];
   modelsCatalog: ModelConfig[];
   modelSearch: string;
+  showFreeOnly?: boolean;
   onToggleModel: (id: string) => void;
 }
 
-const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatalog, modelSearch, onToggleModel }) => {
+const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatalog, modelSearch, showFreeOnly, onToggleModel }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
 
@@ -61,7 +63,8 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
         const models = [...modelsCatalog]
           .filter(m =>
             m.providerId === prov.id &&
-            (!modelSearch || m.name.toLowerCase().includes(modelSearch.toLowerCase()))
+            (!modelSearch || m.name.toLowerCase().includes(modelSearch.toLowerCase())) &&
+            (!showFreeOnly || m.free === true)
           )
           .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
         if (models.length === 0) return null;
@@ -102,6 +105,9 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
                         <div className="flex min-w-0 flex-col gap-1.5">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm font-medium text-brand-textMain">{model.name}</span>
+                            {model.free && (
+                              <span className="ui-chip bg-emerald-500/12 text-emerald-400">🆓 Free</span>
+                            )}
                             {hasIn && (model.inputModalities ?? []).map(m => <ModalityChip key={m} type={m} />)}
                           </div>
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-brand-textMuted">
@@ -193,6 +199,8 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
                                 )}
                               </div>
                             </div>
+                          ) : model.free ? (
+                            <p className="mt-3 text-xs text-emerald-400">🆓 This model is free to use.</p>
                           ) : (
                             <p className="mt-3 text-xs text-brand-textMuted">Pricing not published by this provider.</p>
                           )}
@@ -228,6 +236,7 @@ export const ModelsSettings: React.FC<ModelsSettingsProps> = ({
   enrichModel
 }) => {
   const [modelSearch, setModelSearch] = useState('');
+  const [showFreeOnly, setShowFreeOnly] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshStatus, setRefreshStatus] = useState('');
 
@@ -290,7 +299,34 @@ export const ModelsSettings: React.FC<ModelsSettingsProps> = ({
           const res = await fetch('https://openrouter.ai/api/v1/models', { headers: { Authorization: `Bearer ${key}` } });
           if (res.ok) {
             const d = await res.json();
-            rawModels = (d.data ?? []).map((m: any) => ({ id: m.id, name: m.name ?? m.id, contextLimit: m.context_length ? fmtTokens(m.context_length) : undefined, description: m.description }));
+            rawModels = (d.data ?? []).map((m: any) => {
+              const free = ProvidersService.detectFree(m.id, m.name ?? m.id, m.pricing);
+              let pricing: any;
+              if (!free && m.pricing) {
+                const per1M = (s: string) => {
+                  const n = parseFloat(s);
+                  return Number.isFinite(n) ? `$${(n * 1_000_000).toFixed(2)}` : String(s);
+                };
+                pricing = { inputPer1M: per1M(m.pricing.prompt), outputPer1M: per1M(m.pricing.completion) };
+              }
+              return {
+                id: m.id, name: m.name ?? m.id,
+                contextLimit: m.context_length ? fmtTokens(m.context_length) : undefined,
+                description: m.description, free, pricing
+              };
+            });
+          }
+        } else if (prov.id === 'nvidia') {
+          const base = url || 'https://integrate.api.nvidia.com/v1';
+          const res = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+          if (res.ok) {
+            const d = await res.json();
+            rawModels = (d.data ?? []).map((m: any) => ({
+              id: m.id, name: m.name ?? m.id,
+              contextLimit: m.context_length ? fmtTokens(m.context_length) : undefined,
+              description: m.description,
+              free: ProvidersService.detectFree(m.id, m.name ?? m.id, m.pricing)
+            }));
           }
         } else if (prov.id === 'ollama-cloud') {
           const base = url.replace(/\/+$/, '');
@@ -349,12 +385,25 @@ export const ModelsSettings: React.FC<ModelsSettingsProps> = ({
           onChange={(e) => setModelSearch(e.target.value)}
           className="w-full border-none bg-transparent text-sm text-brand-textMain outline-none placeholder:text-brand-textMuted/50"
         />
+        <button
+          data-testid="model-free-filter"
+          onClick={() => setShowFreeOnly((v) => !v)}
+          className={`ui-chip transition-colors ${
+            showFreeOnly
+              ? 'bg-emerald-500/15 text-emerald-400'
+              : 'bg-brand-popover text-brand-textMuted hover:text-brand-textMain'
+          }`}
+          title="Show only free models"
+        >
+          🆓 Free{showFreeOnly ? ' ✓' : ''}
+        </button>
       </div>
 
       <ModelsList
         connectedProviders={connectedProviders}
         modelsCatalog={modelsCatalog}
         modelSearch={modelSearch}
+        showFreeOnly={showFreeOnly}
         onToggleModel={onToggleModel}
       />
     </div>

@@ -17,7 +17,7 @@ export interface RouteState {
   settingsCategory: string;
 }
 
-const KNOWN_TABS = ['trajectory', 'settings', 'mcp', 'scheduled', 'plugins', 'diff', 'partner'];
+const KNOWN_TABS = ['trajectory', 'settings', 'mcp', 'scheduled', 'plugins', 'diff', 'partner', 'studio'];
 
 // Sentinel id used by the app for a chat that is being composed but not yet
 // saved. It is not a real, shareable chat, so it must map to the home
