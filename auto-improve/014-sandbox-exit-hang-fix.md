@@ -46,9 +46,22 @@ child.on('close', (code) => settle(code));
   use on Windows.
 - Behavior on Unix (`/bin/sh`) is unchanged (both `exit` and `close` fire).
 
+## Cascading impact (consumers of the built `core`)
+`cli` and `desktop` import `@superagent/core` from its **built `dist/`**, so the
+`close`-based hang also broke their command-executing tests. The root
+`npm test` (`core && cli && desktop`) short-circuited at `core`, so `cli`/`desktop`
+never ran originally — both had hidden failures:
+- `cli`: was **7 failed / 159 passed** (all `TerminalShellExecutor`-backed
+  `/exec` tests timing out) → **166/166 after rebuilding `core`**.
+- `desktop`: **90/90 passing** once the rebuilt `core` shipped this fix (and the
+  parallel `v0.0.18` provider-timeout fix) to consumers.
+Rebuilding `@superagent/core` is required for the fix to reach consumers
+(`dist/` is gitignored, so CI regenerates it on build).
+
 ## Verification
 - Reproduced the failure in isolation: `vitest run test/sandbox.test.ts -t "should execute shell command and return output"` → timed out at 5013 ms before the fix.
 - After the fix: same test passes; full `sandbox.test.ts` suite → 13/13 pass.
+- Rebuilt `@superagent/core`; `cli` suite → 166/166, `desktop` suite → 90/90.
 - `tsc --noEmit` on `packages/core` → clean (no type errors).
 - The fix only touches `sandbox/terminal.ts`; it does not affect `core/providers/*`
   (worked on by a parallel process) or any other module.
