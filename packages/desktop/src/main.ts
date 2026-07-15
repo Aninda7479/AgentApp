@@ -805,6 +805,16 @@ function resolvePartnerModelPath(manifest: any): string | null {
   if (!model) return null;
   const id = manifest && typeof manifest.id === 'string' ? manifest.id : null;
   if (!id) return null;
+  // The built-in Lily ships its 3D model inside the app's own `models/` tree
+  // (not under userData), so resolve it from the install location — mirroring
+  // how its old `script` field was resolved. This lets the real `girl_*.glb`
+  // load without first installing Lily into userData.
+  if (id === 'lily' && (model.startsWith('models/') || model.startsWith('dist/'))) {
+    const fromInstall = path.join(__dirname, '..', model);
+    if (fs.existsSync(fromInstall)) return fromInstall;
+    const alt = path.join(__dirname, model);
+    if (fs.existsSync(alt)) return alt;
+  }
   const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
   const full = path.join(folder, model);
   return fs.existsSync(full) ? full : null;

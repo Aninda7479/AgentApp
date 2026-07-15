@@ -61,3 +61,11 @@ graphify-out/
 research-cache.json
 awesome-mcp.md
 list.md
+
+# Lily 3D model source assets (large binaries; copied into dist/ at build time).
+# If absent from a fresh clone, the built-in Lily gracefully falls back to the
+# procedural model, so these are never required to build or run.
+packages/desktop/models/lily/v1/*.glb
+packages/desktop/models/lily/v1/*.obj
+packages/desktop/models/lily/v1/*.png
+packages/desktop/models/lily/v1/*.mtl
