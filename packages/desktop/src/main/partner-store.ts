@@ -29,7 +29,7 @@ const DEFAULT_LILY_MANIFEST = {
   // Loaded by the pet's GLBCharacter (three.js GLTFLoader) with the procedural
   // face overlay so Lily still emotes. Falls back to the procedural Lily if missing.
   model: 'models/lily/v1/girl_web.glb',
-  faceOverlay: { headFrac: 0.86, frontGap: -0.01, scale: 0.42 },
+  faceOverlay: false,
   laptop: true,
   pillow: true,
   reactions: {

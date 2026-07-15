@@ -186,7 +186,14 @@ export function poseFor(b: Behavior): Pose {
       handR: [0, 0, 0],
       armUL: [0, 0, 0],
       armEL: [0, 0, 0],
-      handL: [0, 0, 0]
+      handL: [0, 0, 0],
+      hipL: [0, 0, 0],
+      kneeL: [0, 0, 0],
+      ankleL: [0, 0, 0],
+      hipR: [0, 0, 0],
+      kneeR: [0, 0, 0],
+      ankleR: [0, 0, 0],
+      skirt: [0, 0, 0]
     } as Record<string, Vec3>,
     pos: {
       pelvis: [0, 0, 0],
@@ -207,7 +214,12 @@ export function poseFor(b: Behavior): Pose {
           armUR: [d2r(-12), d2r(-10), d2r(-15)],
           armER: [d2r(75), d2r(-10), d2r(-45)],
           armUL: [d2r(-12), d2r(10), d2r(15)],
-          armEL: [d2r(75), d2r(10), d2r(45)]
+          armEL: [d2r(75), d2r(10), d2r(45)],
+          hipL: [d2r(-90), 0, Z],
+          hipR: [d2r(-90), 0, Z],
+          kneeL: [d2r(85), 0, Z],
+          kneeR: [d2r(85), 0, Z],
+          skirt: [d2r(-10), 0, Z]
         },
         pos: base.pos,
         screen: d2r(105),
@@ -222,7 +234,11 @@ export function poseFor(b: Behavior): Pose {
           armUR: [d2r(15), 0, d2r(-8)],
           armER: [d2r(25), 0, 0],
           armUL: [d2r(10), 0, d2r(10)],
-          armEL: [d2r(20), 0, 0]
+          armEL: [d2r(20), 0, 0],
+          hipL: [d2r(-15), 0, d2r(5)],
+          hipR: [d2r(-10), 0, d2r(-5)],
+          kneeL: [d2r(35), 0, 0],
+          kneeR: [d2r(20), 0, 0]
         },
         pos: {
           pelvis: [0, -0.06, -0.05],
@@ -241,7 +257,11 @@ export function poseFor(b: Behavior): Pose {
           armUR: [d2r(35), 0, d2r(-15)],
           armER: [d2r(45), 0, 0],
           armUL: [d2r(25), 0, d2r(20)],
-          armEL: [d2r(35), 0, 0]
+          armEL: [d2r(35), 0, 0],
+          hipL: [d2r(-20), 0, d2r(10)],
+          hipR: [d2r(-12), 0, d2r(-5)],
+          kneeL: [d2r(45), 0, 0],
+          kneeR: [d2r(30), 0, 0]
         },
         pos: {
           pelvis: [0, -0.22, 0.08],
@@ -253,15 +273,7 @@ export function poseFor(b: Behavior): Pose {
       };
     case 'walk':
       return {
-        rot: {
-          ...base.rot,
-          torso: [d2r(-4), 0, 0],
-          head: [0, 0, 0],
-          armUR: [d2r(4), 0, d2r(-42)],
-          armER: [d2r(88), 0, d2r(-55)],
-          armUL: [d2r(4), 0, d2r(42)],
-          armEL: [d2r(88), 0, d2r(55)]
-        },
+        rot: base.rot,
         pos: {
           pelvis: [0, 0.18, -0.05],
           laptop: [0, 0.28, 0.16],
@@ -279,7 +291,11 @@ export function poseFor(b: Behavior): Pose {
           armUR: [0, 0, d2r(-145)],
           armER: [d2r(15), 0, 0],
           armUL: [0, 0, d2r(145)],
-          armEL: [d2r(15), 0, 0]
+          armEL: [d2r(15), 0, 0],
+          hipL: [d2r(-35), 0, d2r(12)],
+          hipR: [d2r(-25), 0, d2r(-12)],
+          kneeL: [d2r(65), 0, 0],
+          kneeR: [d2r(45), 0, 0]
         },
         pos: {
           ...base.pos,
@@ -298,7 +314,11 @@ export function poseFor(b: Behavior): Pose {
           armUR: [d2r(10), 0, d2r(-15)],
           armER: [d2r(85), 0, d2r(-55)],
           armUL: [d2r(10), 0, d2r(15)],
-          armEL: [d2r(85), 0, d2r(55)]
+          armEL: [d2r(85), 0, d2r(55)],
+          hipL: [d2r(10), d2r(18), 0],
+          hipR: [d2r(10), d2r(-18), 0],
+          kneeL: [d2r(25), 0, 0],
+          kneeR: [d2r(25), 0, 0]
         },
         pos: base.pos,
         screen: d2r(60),
@@ -409,15 +429,36 @@ export function updateAnimations(lily: any, dt: number, t: number): void {
   lily.joints.head.rotation.x = lerp(lily.joints.head.rotation.x, targetHeadRotX - breathePulse * 0.025, k);
 
   if (lily.behavior === 'working') {
+    // Sitting legs bend
+    lily.joints.hipL.rotation.x = lerp(lily.joints.hipL.rotation.x, d2r(-90), 0.25);
+    lily.joints.hipR.rotation.x = lerp(lily.joints.hipR.rotation.x, d2r(-90), 0.25);
+    lily.joints.kneeL.rotation.x = lerp(lily.joints.kneeL.rotation.x, d2r(85), 0.25);
+    lily.joints.kneeR.rotation.x = lerp(lily.joints.kneeR.rotation.x, d2r(85), 0.25);
+    lily.joints.skirt.rotation.x = lerp(lily.joints.skirt.rotation.x, d2r(-10), 0.25);
+
     const jit = Math.sin(t * 14) * 0.06;
     lily.joints.handL.rotation.x = lerp(lily.joints.handL.rotation.x, jit, 0.5);
     lily.joints.handR.rotation.x = lerp(lily.joints.handR.rotation.x, -jit, 0.5);
+    
     // Add micro head movements during typing
     lily.joints.head.rotation.z = lerp(lily.joints.head.rotation.z, Math.sin(t * 2) * 0.02, 0.2);
   }
   
   if (lily.behavior === 'walk') {
-    const bob = Math.abs(Math.sin(t * 9)) * 0.03;
+    const wave = Math.sin(t * 9);
+    // swing legs out-of-phase
+    lily.joints.hipL.rotation.x = lerp(lily.joints.hipL.rotation.x, wave * 0.42, 0.45);
+    lily.joints.hipR.rotation.x = lerp(lily.joints.hipR.rotation.x, -wave * 0.42, 0.45);
+    
+    // bend knees during backswing
+    lily.joints.kneeL.rotation.x = lerp(lily.joints.kneeL.rotation.x, wave < 0 ? -wave * 0.55 : 0.04, 0.45);
+    lily.joints.kneeR.rotation.x = lerp(lily.joints.kneeR.rotation.x, wave > 0 ? wave * 0.55 : 0.04, 0.45);
+
+    // swing skirt left/right and front/back
+    lily.joints.skirt.rotation.z = lerp(lily.joints.skirt.rotation.z, Math.sin(t * 9) * 0.08, 0.4);
+    lily.joints.skirt.rotation.x = lerp(lily.joints.skirt.rotation.x, Math.cos(t * 9) * 0.04, 0.4);
+
+    const bob = Math.abs(Math.sin(t * 9)) * 0.04;
     lily.joints.pelvis.position.y = lerp(lily.joints.pelvis.position.y, lily.restPos.pelvis.y - 0.05 + bob, 0.35);
     lily.object.rotation.z = lerp(lily.object.rotation.z, Math.sin(t * 6) * 0.025, 0.3);
   } else {

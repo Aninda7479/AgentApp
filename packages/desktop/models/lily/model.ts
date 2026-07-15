@@ -284,27 +284,59 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   buildArm(-1, 'armUL', 'armEL', 'handL');
   buildArm(1, 'armUR', 'armER', 'handR');
 
-  // ── Legs (static — translate with the pelvis; they don't articulate, which
-  //    keeps the model from ever "breaking" while it moves) ─────────────────────
+  // ── Skirt Joint Group (for flowing fabric sways) ───────────────────────────
+  const skirtGroup = new THREE.Group();
+  skirtGroup.position.set(0, -0.06, 0);
+  pelvis.add(skirtGroup);
+  lily.joints.skirt = skirtGroup;
+
+  const skirt = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.15, 0.34, 0.32, 30, 1, false),
+    skirtMat
+  );
+  skirt.position.set(0, 0, 0);
+  skirtGroup.add(skirt);
+
+  // ── Articulated Legs (Hip -> Knee -> Ankle/Foot hierarchy) ──────────────────
   for (const sx of [-1, 1]) {
+    const side = sx === -1 ? 'L' : 'R';
+
+    // Hip joint (under pelvis)
+    const hip = new THREE.Group();
+    hip.position.set(sx * 0.08, -0.1, 0);
+    pelvis.add(hip);
+    lily.joints[`hip${side}`] = hip;
+
     const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.2, 6, 16), lily.skinMat);
-    thigh.position.set(sx * 0.08, -0.2, 0);
-    pelvis.add(thigh);
+    thigh.position.y = -0.1;
+    hip.add(thigh);
+
+    // Knee joint (under hip)
+    const knee = new THREE.Group();
+    knee.position.set(0, -0.22, 0);
+    hip.add(knee);
+    lily.joints[`knee${side}`] = knee;
 
     const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.2, 6, 16), lily.skinMat);
-    shin.position.set(sx * 0.08, -0.5, 0);
-    pelvis.add(shin);
+    shin.position.y = -0.1;
+    knee.add(shin);
 
-    // White sock.
+    // White sock
     const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.05, 0.1, 16), underMat);
-    sock.position.set(sx * 0.08, -0.6, 0);
-    pelvis.add(sock);
+    sock.position.y = -0.2;
+    knee.add(sock);
 
-    // Red shoe.
+    // Ankle/Foot joint (under knee)
+    const ankle = new THREE.Group();
+    ankle.position.set(0, -0.26, 0);
+    knee.add(ankle);
+    lily.joints[`ankle${side}`] = ankle;
+
+    // Red shoe
     const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.07, 0.2), shoeMat);
-    shoe.position.set(sx * 0.08, -0.66, 0.05);
+    shoe.position.set(0, 0, 0.05); // slightly forward
     shoe.geometry.translate(0, 0, 0.02);
-    pelvis.add(shoe);
+    ankle.add(shoe);
   }
 
   // ── White underwear (bloomer-style, peeks out just below the skirt hem) ─────
@@ -315,14 +347,6 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   underwear.position.set(0, -0.1, 0.01);
   underwear.scale.set(1, 1, 0.85);
   pelvis.add(underwear);
-
-  // ── Red skirt (flared) ──────────────────────────────────────────────────────
-  const skirt = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.15, 0.34, 0.32, 30, 1, false),
-    skirtMat
-  );
-  skirt.position.y = -0.06;
-  pelvis.add(skirt);
 
   // ── Props: Laptop (base + screen) ───────────────────────────────────────────
   lily.laptop = new THREE.Group();
