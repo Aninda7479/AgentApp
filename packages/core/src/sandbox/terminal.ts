@@ -130,7 +130,20 @@ export class TerminalShellExecutor {
         stderrData += chunk.toString('utf8');
       });
 
-      child.on('close', (code) => {
+      // Resolve as soon as the process *exits*. We deliberately key off `exit`
+      // rather than `close`: `close` only fires once every stdio stream has
+      // closed, and on Windows `powershell.exe` does not reliably close its
+      // stdout/stderr pipes on normal termination — so `close` can hang until
+      // the command timeout kills the process (this is why the executor worked
+      // for killed commands but hung for normally-exiting ones). `exit` fires
+      // reliably when the process terminates, by which point all stdout/stderr
+      // `data` events have already been delivered, so we capture the full
+      // output without waiting on stream closure. `close` is kept as a
+      // redundant safety net; `settled` guards against a double resolve.
+      let settled = false;
+      const settle = (code: number | null) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
         const durationMs = Date.now() - startTime;
         resolve({
@@ -140,9 +153,14 @@ export class TerminalShellExecutor {
           durationMs,
           timedOut
         });
-      });
+      };
+
+      child.on('exit', (code) => settle(code));
+      child.on('close', (code) => settle(code));
 
       child.on('error', (err) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
         const durationMs = Date.now() - startTime;
         resolve({
