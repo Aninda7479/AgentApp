@@ -36,8 +36,8 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ label, description, value, onChan
     <button
       type="button"
       onClick={() => onChange(!value)}
-      className={`relative h-6 w-11 flex-shrink-0 rounded-full p-0.5 transition-colors ${
-        value ? 'bg-[var(--brand-accent)]' : 'bg-brand-border'
+      className={`relative h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors ${
+        value ? 'bg-(--brand-accent)' : 'bg-brand-border'
       }`}
       aria-pressed={value}
     >
@@ -107,7 +107,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   ];
 
   return (
-    <div className="max-w-[680px] text-left">
+    <div className="max-w-170 text-left">
       <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain sm:text-3xl">
         General
       </h1>
@@ -135,7 +135,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
                 >
                   <Icon size={15} />
                   <span>{label}</span>
-                  {selected && <Check size={14} className="text-[var(--brand-accent)]" />}
+                  {selected && <Check size={14} className="text-(--brand-accent)" />}
                 </button>
               );
             })}
@@ -213,7 +213,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
                 <Icon size={18} className="settings-choice-icon" />
                 <div className="flex items-center gap-1.5 settings-choice-title">
                   {label}
-                  {selected && <Check size={14} className="text-[var(--brand-accent)]" />}
+                  {selected && <Check size={14} className="text-(--brand-accent)" />}
                 </div>
                 <div className="settings-choice-desc">{description}</div>
               </button>

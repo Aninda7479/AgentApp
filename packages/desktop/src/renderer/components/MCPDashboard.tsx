@@ -87,7 +87,7 @@ const ServerLogo: React.FC<{ id?: string; icon?: string; size?: number }> = ({ i
     return (
       <div
         style={{ width: size, height: size }}
-        className="flex flex-shrink-0 items-center justify-center rounded-lg bg-brand-bg text-base"
+        className="flex shrink-0 items-center justify-center rounded-lg bg-brand-bg text-base"
       >
         {icon || '🔌'}
       </div>
@@ -100,7 +100,7 @@ const ServerLogo: React.FC<{ id?: string; icon?: string; size?: number }> = ({ i
       alt=""
       onError={() => setError(true)}
       style={{ width: size, height: size }}
-      className="flex-shrink-0 rounded-lg bg-brand-bg object-cover"
+      className="shrink-0 rounded-lg bg-brand-bg object-cover"
     />
   );
 };
@@ -147,7 +147,7 @@ const CatalogCard: React.FC<{
   return (
     <div
       data-testid={`mcp-popular-card-${entry.id}`}
-      className="group flex items-center gap-3 rounded-xl border border-brand-border/60 bg-brand-card p-3 transition-all duration-200 hover:border-[var(--brand-accent-border)]"
+      className="group flex items-center gap-3 rounded-xl border border-brand-border/60 bg-brand-card p-3 transition-all duration-200 hover:border-(--brand-accent-border)"
     >
       <ServerLogo id={entry.id} icon={entry.icon} size={30} />
       <div className="min-w-0 flex-1">
@@ -155,8 +155,8 @@ const CatalogCard: React.FC<{
           <span className="truncate text-[13px] font-semibold text-brand-textMain">{entry.name}</span>
           <span
             title={entry.transport === 'stdio' ? 'Local (stdio)' : 'Remote'}
-            className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
-              entry.transport === 'stdio' ? 'bg-brand-textMuted/40' : 'bg-[var(--brand-accent)]'
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+              entry.transport === 'stdio' ? 'bg-brand-textMuted/40' : 'bg-(--brand-accent)'
             }`}
           />
           {entry.category && (
@@ -173,7 +173,7 @@ const CatalogCard: React.FC<{
           onClick={() => onRequestInstall(entry)}
           variant="secondary"
           size="sm"
-          className="flex-shrink-0"
+          className="shrink-0"
         >
           {needsKeys ? 'Install' : '+ Install'}
         </Button>
@@ -183,7 +183,7 @@ const CatalogCard: React.FC<{
           href={entry.homepage}
           target="_blank"
           rel="noreferrer"
-          className="ui-btn flex-shrink-0 text-xs"
+          className="ui-btn shrink-0 text-xs"
         >
           Docs
         </a>
@@ -247,7 +247,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-brand-textMain">
-            <Server size={15} className="text-[var(--brand-accent)]" />
+            <Server size={15} className="text-(--brand-accent)" />
             <span className="sr-only">Visual MCP Server Dashboard</span>
             Model Context Protocol
           </h2>
@@ -256,7 +256,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
           </p>
         </div>
 
-        <div className="flex flex-shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {onRefreshServers && (
             <button
               data-testid="mcp-refresh-btn"
@@ -283,9 +283,9 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
       {showAddForm && (
         <div
           data-testid="mcp-add-form"
-          className="glass-card mb-6 flex flex-col gap-3 rounded-xl border border-[var(--brand-accent-border)] p-4 animate-fade-in"
+          className="glass-card mb-6 flex flex-col gap-3 rounded-xl border border-(--brand-accent-border) p-4 animate-fade-in"
         >
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--brand-accent)]">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-(--brand-accent)">
             Configure New MCP Server
           </h3>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_2fr] md:items-end">
@@ -333,7 +333,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
       {catalog && catalog.length > 0 && onInstallCatalog && (
         <div data-testid="mcp-popular" className="mb-7">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <Sparkles size={14} className="text-[var(--brand-accent)]" />
+            <Sparkles size={14} className="text-(--brand-accent)" />
             <h3 className="text-xs font-semibold uppercase tracking-wider text-brand-textMain">
               {catalogQuery.trim() ? 'Search Results' : 'Browse MCP Servers'}
             </h3>
@@ -345,7 +345,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
 
           {/* Search bar */}
           <div className="ui-input mb-4 flex items-center gap-2 border-transparent bg-brand-card">
-            <Search size={14} className="flex-shrink-0 text-brand-textMuted" />
+            <Search size={14} className="shrink-0 text-brand-textMuted" />
             <input
               type="text"
               data-testid="mcp-catalog-search"
@@ -358,7 +358,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => setCatalogQuery('')}
-                className="flex-shrink-0 rounded px-1 text-brand-textMuted hover:text-brand-textMain"
+                className="shrink-0 rounded px-1 text-brand-textMuted hover:text-brand-textMain"
                 aria-label="Clear search"
               >
                 ×
@@ -418,10 +418,10 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
               data-testid={`mcp-card-${srv.id}`}
               className={`flex flex-col gap-2.5 rounded-xl border bg-brand-card p-3 transition-all duration-200 ${
                 srv.enabled ? 'border-brand-border/60 opacity-100' : 'border-brand-border/30 opacity-60'
-              } hover:border-[var(--brand-accent-border)]`}
+              } hover:border-(--brand-accent-border)`}
             >
               <div className="flex items-center gap-3">
-                <div className="relative flex-shrink-0">
+                <div className="relative shrink-0">
                   <ServerLogo id={srv.id.replace(/^mcp-catalog-/, '')} size={30} />
                   <span
                     className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-brand-card ${getStatusDotClass(srv.status)}`}
@@ -432,13 +432,13 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
                     <span className="truncate text-[13px] font-semibold text-brand-textMain">{srv.name}</span>
                     <span
                       data-testid={`mcp-status-badge-${srv.id}`}
-                      className={`flex-shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${getStatusBadgeClass(srv.status)}`}
+                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${getStatusBadgeClass(srv.status)}`}
                     >
                       {getStatusLabel(srv.status)}
                     </span>
                   </div>
                   <div className="truncate font-mono text-[10px] leading-4 text-brand-textMuted">
-                    <span className="font-bold text-[var(--brand-accent)]">[{srv.transport.toUpperCase()}]</span>{' '}
+                    <span className="font-bold text-(--brand-accent)">[{srv.transport.toUpperCase()}]</span>{' '}
                     {srv.commandOrUrl}
                   </div>
                 </div>

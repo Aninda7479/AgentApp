@@ -214,7 +214,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   return (
     <div
       data-testid="title-bar"
-      className="h-10 bg-brand-sidebar border-b border-brand-border/40 flex items-center justify-between px-3 select-none drag-window z-[100]"
+      className="h-10 bg-brand-sidebar border-b border-brand-border/40 flex items-center justify-between px-3 select-none drag-window z-100"
       style={isElectron ? ({ WebkitAppRegion: 'drag' } as React.CSSProperties) : undefined}
     >
       {/* Left side: Logo, Nav History, and Application Menu */}
@@ -227,7 +227,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         {onToggleMobileNav && (
           <button
             onClick={onToggleMobileNav}
-            className="lg:hidden w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer flex-shrink-0"
+            className="lg:hidden w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer shrink-0"
             title="Menu"
             aria-label="Toggle navigation menu"
           >
@@ -236,7 +236,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         )}
 
         {/* App Logo */}
-        <div className="flex items-center text-brand-textMain transition-colors flex-shrink-0">
+        <div className="flex items-center text-brand-textMain transition-colors shrink-0">
           <BrandLogo size={22} />
         </div>
 
@@ -296,7 +296,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
       {/* Right side: theme, BYOK status, menu (mobile), and custom Window controls */}
       <div
-        className="flex items-center gap-2 sm:gap-3 no-drag-window flex-shrink-0"
+        className="flex items-center gap-2 sm:gap-3 no-drag-window shrink-0"
         style={isElectron ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
       >
         {/* Theme toggle (all sizes) */}

@@ -321,7 +321,7 @@ export const Composer: React.FC<ComposerProps> = ({
   return (
     <div
       data-testid="composer-container"
-      className="px-4 pt-2 pb-4 max-w-[940px] w-full mx-auto flex flex-col gap-2 box-border relative z-10"
+      className="px-4 pt-2 pb-4 max-w-235 w-full mx-auto flex flex-col gap-2 box-border relative z-10"
     >
       {/* The main input composer card */}
       <div className="glass-panel rounded-xl p-3 flex flex-col shadow-sm relative transition-all duration-300 focus-within:border-brand-border-strong focus-within:ring-2 focus-within:ring-brand-hover-strong">
@@ -331,7 +331,7 @@ export const Composer: React.FC<ComposerProps> = ({
             {attachments.map((file, idx) => (
               <div key={idx} className="flex items-center gap-1.5 bg-brand-card hover:bg-brand-card/85 border border-brand-border px-2.5 py-1 rounded-lg text-xs text-brand-textMain animate-fade-in group transition-colors">
                 <span className="text-brand-textMuted text-[10px]">📎</span>
-                <span className="truncate max-w-[140px] font-medium font-sans">{file.filename}</span>
+                <span className="truncate max-w-35 font-medium font-sans">{file.filename}</span>
                 <button
                   type="button"
                   onClick={() => onRemoveAttachment && onRemoveAttachment(idx)}
@@ -359,7 +359,7 @@ export const Composer: React.FC<ComposerProps> = ({
           placeholder={hasModels ? "Do anything — type / for commands, skills & MCP tools" : "No models are connected yet. Please go to Settings to connect a provider."}
           disabled={disabled}
           rows={1}
-          className="bg-transparent border-none outline-none text-brand-textMain text-sm resize-none w-full min-h-[44px] leading-relaxed placeholder-brand-textMuted/55 font-sans disabled:opacity-50"
+          className="bg-transparent border-none outline-none text-brand-textMain text-sm resize-none w-full min-h-11 leading-relaxed placeholder-brand-textMuted/55 font-sans disabled:opacity-50"
         />
 
         {/* Toolbar row inside box */}
@@ -390,7 +390,7 @@ export const Composer: React.FC<ComposerProps> = ({
               {showApprovalDropdown && (
                 <div
                   data-testid="approval-dropdown-menu"
-                  className="absolute bottom-full left-0 mb-2 glass-panel rounded-lg shadow-lg z-50 w-[190px] overflow-hidden"
+                  className="absolute bottom-full left-0 mb-2 glass-panel rounded-lg shadow-lg z-50 w-47.5 overflow-hidden"
                 >
                   <div
                     data-testid="approval-option-ask"
@@ -440,7 +440,7 @@ export const Composer: React.FC<ComposerProps> = ({
                 }}
                 placeholder={hasModels ? 'Select model...' : 'No models connected'}
                 direction="up"
-                className="w-[180px] sm:w-[220px]"
+                className="w-45 sm:w-55"
               />
             </div>
 
@@ -488,7 +488,7 @@ export const Composer: React.FC<ComposerProps> = ({
         {menuOpen && (
           <div
             data-testid="slash-menu"
-            className="absolute bottom-full left-0 mb-2 ui-popover w-[440px] max-w-[90vw] p-1.5 z-50 max-h-[320px] overflow-y-auto"
+            className="absolute bottom-full left-0 mb-2 ui-popover w-110 max-w-[90vw] p-1.5 z-50 max-h-80 overflow-y-auto"
           >
             <div className="ui-menu-label px-2 py-1">Slash commands &amp; tools</div>
             {filtered.length === 0 && (
@@ -519,7 +519,7 @@ export const Composer: React.FC<ComposerProps> = ({
                   />
                   <span className="font-mono text-xs font-semibold text-brand-textMain truncate">{s.label}</span>
                   {s.usage && (
-                    <span className="ml-auto text-[10px] text-brand-textMuted font-mono truncate max-w-[200px] pl-2">
+                    <span className="ml-auto text-[10px] text-brand-textMuted font-mono truncate max-w-50 pl-2">
                       {s.usage}
                     </span>
                   )}
@@ -552,7 +552,7 @@ export const Composer: React.FC<ComposerProps> = ({
               }`}
             >
               <Folder className="w-3 h-3 text-brand-textMuted" />
-              <span className="max-w-[120px] truncate">{activeProject}</span>
+              <span className="max-w-30 truncate">{activeProject}</span>
               {projects.length > 0 && <ChevronDown className="w-2 h-2 text-brand-textMuted" />}
             </button>
 

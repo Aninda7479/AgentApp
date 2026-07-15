@@ -43,11 +43,11 @@ export const DoctorModal: React.FC<DoctorModalProps> = ({
   const getStatusIcon = (status: 'pass' | 'warn' | 'fail') => {
     switch (status) {
       case 'pass':
-        return <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />;
+        return <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />;
       case 'warn':
-        return <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />;
+        return <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />;
       case 'fail':
-        return <XCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />;
+        return <XCircle className="w-4 h-4 text-rose-400 shrink-0" />;
     }
   };
 
@@ -65,16 +65,16 @@ export const DoctorModal: React.FC<DoctorModalProps> = ({
   return (
     <div
       data-testid="doctor-modal-overlay"
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[1000]"
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-1000"
     >
       <div
         data-testid="doctor-modal-content"
-        className="bg-brand-card border border-brand-border rounded-2xl w-[550px] max-w-[90%] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-brand-textMain text-left animate-in fade-in zoom-in-95 duration-150"
+        className="bg-brand-card border border-brand-border rounded-2xl w-137.5 max-w-[90%] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-brand-textMain text-left animate-in fade-in zoom-in-95 duration-150"
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-5 border-b border-brand-border/60 pb-3">
           <div className="flex items-center gap-2.5">
-            <Stethoscope className="w-5 h-5 text-[var(--brand-highlight)]" />
+            <Stethoscope className="w-5 h-5 text-(--brand-highlight)" />
             <div>
               <h2 className="text-lg font-bold text-white m-0">Doctor Diagnostics</h2>
               <p className="text-xs text-brand-textMuted mt-0.5">
@@ -94,7 +94,7 @@ export const DoctorModal: React.FC<DoctorModalProps> = ({
         {/* Content */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-10 gap-3">
-            <RefreshCw className="w-8 h-8 text-[var(--brand-highlight)] animate-spin" />
+            <RefreshCw className="w-8 h-8 text-(--brand-highlight) animate-spin" />
             <span className="text-xs text-brand-textMuted font-medium">Running system diagnostics...</span>
           </div>
         ) : (

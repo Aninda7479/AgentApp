@@ -128,7 +128,7 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
                           </div>
                         </div>
 
-                        <div className="flex flex-shrink-0 items-center gap-3">
+                        <div className="flex shrink-0 items-center gap-3">
                           <ChevronDown size={14} className={`text-brand-textMuted transition-transform ${isExpanded ? '' : 'rotate-180'}`} />
                           <Toggle enabled={model.enabled} onToggle={() => onToggleModel(model.id)} />
                         </div>
@@ -194,7 +194,7 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
                                 {p.cachedInputPer1M && (
                                   <div className="ui-card bg-brand-card px-3 py-2">
                                     <div className="text-[10px] uppercase tracking-wide text-brand-textMuted">Cached Input</div>
-                                    <div className="text-sm font-semibold text-[var(--brand-accent)]">{p.cachedInputPer1M}</div>
+                                    <div className="text-sm font-semibold text-(--brand-accent)">{p.cachedInputPer1M}</div>
                                   </div>
                                 )}
                               </div>

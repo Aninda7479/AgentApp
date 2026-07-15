@@ -641,7 +641,7 @@ export const App: React.FC = () => {
       data-testid="app-container"
       data-theme={themeMode}
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
-      className="flex flex-col h-[100dvh] w-full max-w-full bg-brand-bg text-brand-textMain overflow-hidden overflow-x-hidden font-sans select-none"
+      className="flex flex-col h-dvh w-full max-w-full bg-brand-bg text-brand-textMain overflow-hidden overflow-x-hidden font-sans select-none"
     >
       <TitleBar
         hasOpenAiKey={Boolean(byokKeys.openai)}
@@ -729,7 +729,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        <div className="flex-1 flex flex-col relative overflow-hidden bg-brand-bg pb-[72px] md:pb-0">
+        <div className="flex-1 flex flex-col relative overflow-hidden bg-brand-bg pb-18 md:pb-0">
           {activeTab === 'trajectory' && (
             <WorkspaceView
               activeProject={activeProject}
