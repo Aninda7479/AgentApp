@@ -454,7 +454,7 @@ export const Composer: React.FC<ComposerProps> = ({
               title={!SpeechRecognitionCtor ? 'Voice input not supported here' : listening ? 'Stop dictation' : 'Dictate with your voice'}
               className={`p-2 rounded-lg border transition-colors cursor-pointer ${
                 listening
-                  ? 'bg-red-500/15 border-red-500/40 text-red-400'
+                  ? 'bg-[color:var(--neon-destructive)]/15 border-[color:var(--neon-destructive)]/40 text-[color:var(--neon-destructive)]'
                   : 'bg-brand-popover/60 hover:bg-brand-popover border-brand-border text-brand-textMuted hover:text-brand-textMain'
               }`}
             >
@@ -466,7 +466,7 @@ export const Composer: React.FC<ComposerProps> = ({
               <button
                 data-testid="btn-stop"
                 onClick={onStop}
-                className="bg-red-600 hover:bg-red-500 hover:shadow-[0_0_12px_rgba(239,68,68,0.45)] text-white rounded-full w-8 h-8 flex items-center justify-center font-bold cursor-pointer transition-all duration-150 active:scale-[0.92]"
+                className="bg-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/85 hover:shadow-[0_0_12px_var(--neon-destructive)] text-white rounded-full w-8 h-8 flex items-center justify-center font-bold cursor-pointer transition-all duration-150 active:scale-[0.92]"
               >
                 <span className="text-[10px] leading-none">⏹</span>
               </button>
@@ -516,8 +516,8 @@ export const Composer: React.FC<ComposerProps> = ({
                       s.category === 'builtin'
                         ? 'bg-brand-textMuted'
                         : s.category === 'skill'
-                        ? 'bg-emerald-400'
-                        : 'bg-sky-400'
+                        ? 'bg-[color:var(--neon-constructive)]'
+                        : 'bg-[color:var(--neon-live)]'
                     }`}
                   />
                   <span className="font-mono text-xs font-semibold text-brand-textMain truncate">{s.label}</span>
@@ -535,8 +535,8 @@ export const Composer: React.FC<ComposerProps> = ({
 
         {/* Dictation indicator */}
         {listening && (
-          <div className="absolute -top-7 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-300 text-[10px] font-semibold animate-fade-in">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+          <div className="absolute -top-7 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1 rounded-full bg-[color:var(--neon-destructive)]/15 border border-[color:var(--neon-destructive)]/30 text-[color:var(--neon-destructive)] text-[10px] font-semibold animate-fade-in">
+            <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-destructive)] animate-pulse" />
             Listening…
           </div>
         )}
@@ -588,8 +588,8 @@ export const Composer: React.FC<ComposerProps> = ({
           title={sandbox ? 'Running sandboxed — toggle for full access' : 'Full system access enabled — click to sandbox'}
           className={`rounded-full px-3 py-1.5 text-[10px] font-semibold flex items-center gap-1 select-none shadow-sm border transition-all duration-150 active:scale-[0.98] cursor-pointer ${
             sandbox
-              ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/15'
-              : 'bg-amber-500/10 border-amber-500/25 text-amber-400 hover:bg-amber-500/15'
+              ? 'bg-[color:var(--neon-constructive)]/10 border-[color:var(--neon-constructive)]/25 text-[color:var(--neon-constructive)] hover:bg-[color:var(--neon-constructive)]/15'
+              : 'bg-[color:var(--neon-attention)]/10 border-[color:var(--neon-attention)]/25 text-[color:var(--neon-attention)] hover:bg-[color:var(--neon-attention)]/15'
           }`}
         >
           {sandbox ? <ShieldCheck className="w-3 h-3" /> : <ShieldAlert className="w-3 h-3" />}
