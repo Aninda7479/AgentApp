@@ -98,7 +98,8 @@ export function registerAgentCommand(router: SlashCommandRouter): void {
       const [sub, ...rest] = ctx.args;
 
       if (!sub || sub === 'list') {
-        return { success: true, command: ctx.command, output: AgentRegistry.format(AgentRegistry.load()), data: AgentRegistry.load() };
+        const doc = AgentRegistry.load();
+        return { success: true, command: ctx.command, output: AgentRegistry.format(doc), data: doc };
       }
       if (sub === 'set' || sub === 'use') {
         const id = rest[0];

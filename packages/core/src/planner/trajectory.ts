@@ -76,7 +76,21 @@ export class TrajectoryLogger {
     try {
       const content = await fs.readFile(filePath, 'utf-8');
       const lines = content.split('\n').filter(line => line.trim().length > 0);
-      return lines.map(line => JSON.parse(line) as TrajectoryLogEntry);
+      // Tolerate a single corrupt line (e.g. from an interrupted write): skip it
+      // instead of throwing and losing the whole session's trajectory.
+      const entries: TrajectoryLogEntry[] = [];
+      let skipped = 0;
+      for (const line of lines) {
+        try {
+          entries.push(JSON.parse(line) as TrajectoryLogEntry);
+        } catch {
+          skipped++;
+        }
+      }
+      if (skipped > 0) {
+        console.warn(`[trajectory] Skipped ${skipped} malformed line(s) in ${filePath}`);
+      }
+      return entries;
     } catch (err: unknown) {
       if ((err as { code?: string }).code === 'ENOENT') {
         return [];

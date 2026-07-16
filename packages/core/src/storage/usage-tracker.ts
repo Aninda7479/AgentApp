@@ -91,6 +91,11 @@ export class UsageTracker {
     return path.join(getConfigDirectory(), 'usage-log.json');
   }
 
+  /** Max records retained on disk. `trackUsage` runs on every agent turn, so
+   * without a cap the log would grow unbounded and the per-call full-file
+   * rewrite would get progressively slower. */
+  private static readonly MAX_RECORDS = 5000;
+
   /** Loads all usage records from the JSON log file. */
   public static loadUsage(): ModelUsageRecord[] {
     const filePath = this.getUsageFilePath();
@@ -140,6 +145,12 @@ export class UsageTracker {
     };
 
     records.push(newRecord);
+
+    // Rolling window: keep only the most recent records so the on-disk log and
+    // the per-call full rewrite stay bounded across long-running sessions.
+    if (records.length > UsageTracker.MAX_RECORDS) {
+      records.splice(0, records.length - UsageTracker.MAX_RECORDS);
+    }
 
     try {
       fs.writeFileSync(this.getUsageFilePath(), JSON.stringify(records, null, 2), 'utf-8');

@@ -42,7 +42,7 @@ export const createMediaTool = (): ToolDefinition => ({
 
 async function generateAIPdf(req: MediaGenerationRequest, config: BYOKConfig) {
   const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([600, 400]);
+  let page = pdfDoc.addPage([600, 400]);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
   const title = req.options?.title || 'AI Generated Document';
@@ -50,8 +50,15 @@ async function generateAIPdf(req: MediaGenerationRequest, config: BYOKConfig) {
   page.drawText(`Prompt: ${req.prompt}`, { x: 50, y: 310, size: 12, font, color: rgb(0.3, 0.3, 0.3) });
 
   const content: string[] = req.options?.content || ['Generated via BYOK AI Model execution pipeline.'];
+  const BOTTOM_MARGIN = 40;
   let yPos = 270;
   for (const line of content) {
+    // Spill onto a fresh page instead of drawing off the bottom edge and
+    // silently losing content when there are many bullet points.
+    if (yPos < BOTTOM_MARGIN) {
+      page = pdfDoc.addPage([600, 400]);
+      yPos = 360;
+    }
     page.drawText(`• ${line}`, { x: 60, y: yPos, size: 14, font, color: rgb(0.2, 0.2, 0.2) });
     yPos -= 25;
   }
@@ -72,6 +79,15 @@ async function generateAIPpt(req: MediaGenerationRequest, config: BYOKConfig) {
   const title = req.options?.title || 'AI Presentation Deck';
   slide.addText(title, { x: 1, y: 1, w: 8, h: 1, fontSize: 32, bold: true, color: '003366' });
   slide.addText(`Prompt: ${req.prompt}`, { x: 1, y: 2, w: 8, h: 1, fontSize: 18, color: '333333' });
+
+  // Render the user-supplied bullet points instead of dropping them.
+  const bullets: string[] = req.options?.content || [];
+  if (bullets.length) {
+    slide.addText(
+      bullets.map((b) => ({ text: b, options: { bullet: true } })),
+      { x: 1, y: 3.2, w: 8, h: 3, fontSize: 16, color: '333333' }
+    );
+  }
 
   return {
     status: 'success',

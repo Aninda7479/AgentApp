@@ -152,11 +152,28 @@ interface AttemptRecord {
 /** Map of IP addresses to their login attempt records. */
 const attempts = new Map<string, AttemptRecord>();
 
-/** Best-effort client IP (respects a single X-Forwarded-For hop). */
+/** Best-effort client IP.
+ *
+ * X-Forwarded-For is fully client-controlled, so honoring its *first* (leftmost)
+ * hop would let an attacker spoof the header to bypass the per-IP brute-force
+ * lockout. We only trust XFF when the connection itself originates from a
+ * reverse proxy (loopback / private range), and even then we use the *last*
+ * (rightmost) hop — the value the trusted proxy appended — not a spoofed one.
+ */
 function clientIp(req: Request): string {
-  const fwd = req.headers['x-forwarded-for'];
-  if (typeof fwd === 'string' && fwd.length) return fwd.split(',')[0].trim();
-  return req.socket.remoteAddress || 'unknown';
+  const raw = req.socket.remoteAddress || 'unknown';
+  const isPrivate = (ip: string) =>
+    ip === '::1' ||
+    ip === '127.0.0.1' ||
+    ip.startsWith('::ffff:127.') ||
+    ip.startsWith('10.') ||
+    ip.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(ip);
+  if (isPrivate(raw)) {
+    const fwd = req.headers['x-forwarded-for'];
+    if (typeof fwd === 'string' && fwd.length) return fwd.split(',').pop()!.trim();
+  }
+  return raw;
 }
 
 /** Checks whether the caller is currently allowed to attempt a login. */

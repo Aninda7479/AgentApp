@@ -981,7 +981,11 @@ Key guidelines:
       .filter(m => m.role !== 'system')
       .map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
+        parts: typeof m.content === 'string'
+          ? [{ text: m.content }]
+          : m.content
+              .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
+              .map(b => ({ text: b.text }))
       }));
 
     const systemInstruction = this.history.find(m => m.role === 'system')?.content;
@@ -1066,7 +1070,7 @@ Key guidelines:
     const url = `${baseUrl}/api/chat`;
 
     const messages = this.history.map(m => ({
-      role: m.role === 'tool' ? 'tool' : m.role,
+      role: m.role,
       content: m.content
     }));
 

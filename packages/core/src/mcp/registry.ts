@@ -12,6 +12,9 @@ export interface MCPRegistryOptions {
 export class MCPToolRegistry {
   private servers: Map<string, MCPClient> = new Map();
   private tools: Map<string, ToolDefinition> = new Map();
+  /** Maps a registered tool name back to the server that owns it, so tools can
+   * be cleaned up correctly even when names are NOT prefixed (see unregisterServer). */
+  private toolOwners: Map<string, string> = new Map();
   private guard?: MCPPermissionGuard;
   private prefixToolName: boolean;
 
@@ -30,9 +33,12 @@ export class MCPToolRegistry {
 
   public unregisterServer(serverName: string): void {
     this.servers.delete(serverName);
-    for (const [toolName] of Array.from(this.tools.entries())) {
-      if (toolName.startsWith(`${serverName}_`)) {
+    // Remove every tool owned by this server. We cannot rely on a name prefix,
+    // because prefixToolName can be false — instead we use the ownership map.
+    for (const [toolName, owner] of Array.from(this.toolOwners.entries())) {
+      if (owner === serverName) {
         this.tools.delete(toolName);
+        this.toolOwners.delete(toolName);
       }
     }
   }
@@ -83,6 +89,7 @@ export class MCPToolRegistry {
         };
 
         this.tools.set(registeredName, toolDef);
+        this.toolOwners.set(registeredName, sName);
         discovered.push(toolDef);
       }
     }
