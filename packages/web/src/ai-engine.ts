@@ -60,6 +60,73 @@ import { resolveProviderFamily, resolveBaseUrl } from '@superagent/core';
 
 const execAsync = promisify(exec);
 
+// ─── grep helper (in-process, no external binary) ─────────────────────────────
+// Searches files recursively using Node's fs + RegExp instead of shelling out to
+// the system `grep`. This (a) closes a command-injection vector that existed
+// when the pattern was interpolated into a shell string, and (b) keeps the tool
+// working on platforms without a `grep` binary (e.g. stock Windows) — the engine
+// is meant to run anywhere the user runs it, not just on *nix.
+function globToRegExp(glob: string): RegExp {
+  const escaped = glob
+    .replace(/[.+^${}()|\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
+  return new RegExp(`^${escaped}$`);
+}
+
+function walkFiles(root: string, visit: (file: string) => void): void {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      walkFiles(full, visit);
+    } else if (entry.isFile()) {
+      visit(full);
+    }
+  }
+}
+
+function grepSearch(dir: string, pattern: string, fileGlob?: string): string {
+  let regex: RegExp;
+  try {
+    regex = new RegExp(pattern);
+  } catch {
+    return `Error: invalid search pattern: ${pattern}`;
+  }
+
+  const globRe = fileGlob ? globToRegExp(fileGlob) : null;
+  const matches: string[] = [];
+
+  try {
+    walkFiles(dir, (file) => {
+      if (matches.length >= 50) return;
+      if (globRe && !globRe.test(path.basename(file))) return;
+      let content: string;
+      try {
+        content = fs.readFileSync(file, 'utf-8');
+      } catch {
+        return; // skip unreadable / binary files
+      }
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        if (regex.test(lines[i])) {
+          matches.push(`${file}:${i + 1}:${lines[i]}`);
+          if (matches.length >= 50) return;
+        }
+      }
+    });
+  } catch (err: unknown) {
+    return `Error searching files: ${(err as Error).message}`;
+  }
+
+  return matches.join('\n') || '(no matches found)';
+}
+
 function makeSafeExec(projectRoot: string) {
   return async (command: string): Promise<string> => {
     try {
@@ -157,11 +224,8 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
       },
       execute: async ({ pattern, directory, fileGlob }) => {
         const dir = directory ? path.join(projectRoot, directory as string) : projectRoot;
-        const globStr = fileGlob ? `--include="${fileGlob}"` : '';
-        const cmd = `grep -rn --color=never ${globStr} "${(pattern as string).replace(/"/g, '\\"')}" "${dir}"`;
-        const result = await safeExec(cmd);
-        const lines = result.split('\n').slice(0, 50);
-        return lines.join('\n') || '(no matches found)';
+        if (!pattern) return '(no matches found)';
+        return grepSearch(dir, pattern as string, fileGlob as string | undefined);
       }
     },
 
