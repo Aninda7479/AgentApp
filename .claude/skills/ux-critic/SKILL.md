@@ -77,3 +77,7 @@ Do not edit application code in this skill, even for something trivial. Keep the
 ## Step 5 — Repeat
 
 If session budget allows, move to the next untested persona/flow and repeat from Step 1.
+
+## Step 6 — Compact the context
+
+After the run ends (final persona/flow tested, or stopping because you're out of budget), run `/compact` to compress the accumulated context before handing control back. The `.claude/auto-improve-log.log` entry is the durable output — the screenshots and quotes in the working context are discardable once the log is written.

@@ -141,6 +141,10 @@ This log is the entire continuity mechanism. A `/auto-improve` run in a brand-ne
 
 If turns/context budget remain and there's no blocking open question, go back to Step 1 with the next queue item. When you're nearing your context limit: stop between cycles (never mid-edit), make sure the log and queue are current, and close with a short human-readable summary of what changed and what got committed this session.
 
+## Step 10 — Compact the context
+
+After the run ends (final cycle done, or stopping because you're out of budget), run `/compact` to compress the accumulated context before handing control back. The `.claude/auto-improve-log.log` is the durable memory — everything else in the working context is discardable once the log and git history are settled.
+
 ## Guardrails
 
 - Never weaken the "user owns their data/keys" architecture to make a feature easier to ship.
