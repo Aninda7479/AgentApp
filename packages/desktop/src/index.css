@@ -60,6 +60,23 @@
   --brand-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
   --brand-shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.38);
 
+  /* ── Global keyboard focus ring ────────────────────────────────────────────
+     A single, high-contrast, consistent focus indicator for EVERY interactive
+     element (buttons, links, the composer textarea, sidebar nav, app bar) so
+     keyboard and screen-reader users always see where focus is. Prior to this,
+     only elements carrying the .ui-focus class had a ring and .ui-input reset
+     outline to none with a near-invisible shadow — so toolbar/sidebar/composer
+     controls had effectively no visible focus (WCAG 2.4.7 / 2.4.11). Placed
+     before component rules so it overrides their `outline: none`. */
+  --focus-ring: 0 0 0 2px var(--brand-bg), 0 0 0 3px var(--brand-accent);
+
+
+*:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
+  box-shadow: var(--focus-ring);
+}
+
   /* ── Primary action: quiet monochrome (near-white pill, dark ink) ── */
   --brand-highlight: #E6E6EA;
   --brand-highlight-hover: #F4F4F6;
@@ -264,8 +281,8 @@ body {
 .ui-input::placeholder { color: color-mix(in srgb, var(--brand-text-muted) 55%, transparent); }
 .ui-input:focus {
   outline: none;
-  border-color: var(--brand-border-strong);
-  box-shadow: 0 0 0 3px var(--brand-hover);
+  border-color: var(--brand-accent-border);
+  box-shadow: 0 0 0 3px var(--brand-accent-tint);
 }
 /* Extreme-weight-contrast typography helpers */
 .ui-eyebrow {
