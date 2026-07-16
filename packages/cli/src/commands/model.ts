@@ -1,4 +1,4 @@
-import { ModelCapability, SettingsStorage } from '@superagent/core';
+import { ModelCapability, SettingsStorage, getProviderMeta } from '@superagent/core';
 import { SessionContext, CLICommandResult } from '../types.js';
 
 /** Static methods for listing and switching AI models and providers. */
@@ -72,9 +72,17 @@ export class ModelSwitcher {
 
   /** Switches the active provider and picks the first matching model. */
   public static switchProvider(context: SessionContext, provider: string): CLICommandResult {
-    const validProviders = ['openai', 'anthropic', 'gemini', 'deepseek', 'custom'];
     const p = provider.toLowerCase();
-    
+    // Validate against the canonical provider registry so any supported
+    // provider (openrouter, nvidia, kimi, ollama, …) is accepted, not just a
+    // hardcoded subset.
+    if (!getProviderMeta(p)) {
+      return {
+        success: false,
+        message: `'${provider}' is not a supported provider. Run /model list to see registered models, or connect it first.`
+      };
+    }
+
     context.activeProvider = p;
     // Auto-select first available model for the new provider
     const models = this.listAvailableModels(context).filter(m => m.provider === p);
