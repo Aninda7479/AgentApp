@@ -18,7 +18,7 @@ export const Button: React.FC<ButtonProps> = ({
     primary: 'bg-brand-highlight border border-brand-highlight-border-subtle text-brand-highlight-text hover:bg-brand-highlight-hover',
     secondary: 'bg-brand-card border border-brand-border text-brand-textMain hover:bg-brand-hover hover:border-brand-textMuted/30',
     ghost: 'bg-transparent border border-transparent text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover',
-    danger: 'bg-red-500/10 border border-red-500/35 text-red-400 hover:bg-red-500 hover:text-white',
+    danger: 'bg-[color:var(--neon-destructive)]/10 border border-[color:var(--neon-destructive)]/35 text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)] hover:text-white',
     link: 'bg-transparent border border-transparent p-0 text-brand-textMuted hover:text-white hover:underline active:scale-100'
   };
 
