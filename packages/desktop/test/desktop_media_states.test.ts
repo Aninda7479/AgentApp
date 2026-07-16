@@ -5,6 +5,7 @@ import {
   ImageGalleryModal,
   AudioPlayer,
   VideoPlayer,
+  PPTSlidePresenter,
   ImageItem,
 } from '../src/index.js';
 
@@ -86,6 +87,22 @@ describe('Media player loading & error states', () => {
       expect(html).toContain('Landscape AI Render');
       expect(html).toContain('<!-- --> / <!-- -->');
       expect(html).not.toContain('data-testid="image-error"');
+    });
+  });
+
+  describe('PPTSlidePresenter (Step 091)', () => {
+    const slides = [
+      { id: 's1', title: 'Intro', imageUrl: 'https://example.com/slide1.png' },
+      { id: 's2', title: 'Details', imageUrl: 'https://example.com/slide2.png' },
+    ];
+
+    it('renders the slide deck with its counter and no error overlay initially', () => {
+      const html = renderToString(
+        React.createElement(PPTSlidePresenter, { slides, initialSlide: 0 })
+      );
+      // React splits `Slide {n} of {m}` with comment markers in SSR.
+      expect(html).toContain('Slide <!-- -->1<!-- --> of <!-- -->2');
+      expect(html).not.toContain('data-testid="ppt-image-error"');
     });
   });
 });

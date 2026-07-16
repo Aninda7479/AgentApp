@@ -57,6 +57,12 @@ export const PPTSlidePresenter: React.FC<PPTSlidePresenterProps> = ({
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showNotes, setShowNotes] = useState<boolean>(false);
   const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(false);
+  const [imgError, setImgError] = useState<boolean>(false);
+
+  // The broken-image state is per-slide: reset it whenever the active slide changes.
+  useEffect(() => {
+    setImgError(false);
+  }, [currentIndex]);
 
   const activeSlides = slides.length > 0 ? slides : DEFAULT_SLIDES;
 
@@ -200,7 +206,22 @@ export const PPTSlidePresenter: React.FC<PPTSlidePresenterProps> = ({
 
               {currentSlide.imageUrl && (
                 <div style={styles.imageContainer}>
-                  <img src={currentSlide.imageUrl} alt={currentSlide.title} style={styles.slideImg} />
+                  <img
+                    src={currentSlide.imageUrl}
+                    alt={currentSlide.title}
+                    style={styles.slideImg}
+                    onLoad={() => setImgError(false)}
+                    onError={() => setImgError(true)}
+                  />
+                  {imgError && (
+                    <div style={styles.imgErrorOverlay} data-testid="ppt-image-error" role="alert">
+                      <div style={styles.imgErrorIcon}>🖼️</div>
+                      <div style={styles.imgErrorTitle}>Slide image failed to load</div>
+                      <div style={styles.imgErrorHint}>
+                        The image source may be unavailable or the URL may be invalid.
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -399,6 +420,38 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '12px',
     overflow: 'hidden',
     border: '1px solid rgba(255,255,255,0.2)',
+    position: 'relative',
+  },
+  imgErrorOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '16px',
+    textAlign: 'center',
+    backgroundColor: 'rgba(9, 9, 11, 0.88)',
+    borderRadius: '12px',
+  },
+  imgErrorIcon: {
+    fontSize: '1.6rem',
+    lineHeight: 1,
+    opacity: 0.7,
+  },
+  imgErrorTitle: {
+    color: '#f4f4f5',
+    fontWeight: 600,
+    fontSize: '0.85rem',
+  },
+  imgErrorHint: {
+    color: '#a1a1aa',
+    fontSize: '0.75rem',
+    maxWidth: '240px',
   },
   slideImg: {
     width: '100%',
