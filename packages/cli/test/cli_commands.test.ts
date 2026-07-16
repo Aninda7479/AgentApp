@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import {
   HistorySearch,
   EditorBridge,
@@ -522,7 +523,10 @@ describe('CLI Wired Slash Command Router (Step 074)', () => {
       setPermission: () => {}
     });
 
-    const res = await router.execute('/review src/commands/btw.ts');
+    // Resolve to an absolute path so the test is independent of vitest's cwd
+    // (which is the repo root, not packages/cli where the relative path lives).
+    const btwPath = fileURLToPath(new URL('../src/commands/btw.ts', import.meta.url));
+    const res = await router.execute(`/review ${btwPath}`);
     expect(res.success).toBe(true);
     expect(res.output).toContain('=== SuperAgent Code Review ===');
   });
