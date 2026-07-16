@@ -184,6 +184,10 @@ function readProjectsAndChats(roots: ConversationRoots): { projects: ProjectReco
 
 /** Iterates project directories and returns the first one matching the predicate. */
 function findProjectRecord(roots: ConversationRoots, matcher: (project: ProjectRecord) => boolean): ProjectRecord | null {
+  // No projects dir yet (e.g. saving a standalone chat before any project
+  // exists) means there is no match — treat the missing dir as "no projects"
+  // rather than logging a spurious ENOENT.
+  if (!fs.existsSync(roots.projectsDir)) return null;
   try {
     for (const folderName of fs.readdirSync(roots.projectsDir)) {
       const projectDir = path.join(roots.projectsDir, folderName);

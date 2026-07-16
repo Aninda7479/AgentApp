@@ -1,0 +1,88 @@
+import { describe, it, expect } from 'vitest';
+import * as path from 'path';
+import {
+  normalizeStorageKey,
+  getConversationRoots,
+  getProjectDirectory,
+  getProjectConfigPath,
+  getChatDirectory,
+  getChatJsonPath
+} from '../src/storage/paths.js';
+
+/**
+ * Covers the filesystem-path helpers that decide where projects and chats
+ * physically live on disk. `normalizeStorageKey` is the safety-critical one:
+ * it must never emit a path segment that can escape its directory or collide
+ * with an OS-reserved name.
+ */
+describe('storage path helpers', () => {
+  const userData = '/tmp/fake-userdata';
+
+  describe('normalizeStorageKey', () => {
+    it('lowercases and replaces spaces with dashes', () => {
+      expect(normalizeStorageKey('My Project')).toBe('my-project');
+    });
+
+    it('collapses unsafe characters into single dashes', () => {
+      expect(normalizeStorageKey('A/B:C?D')).toBe('a-b-c-d');
+    });
+
+    it('trims leading/trailing dashes', () => {
+      expect(normalizeStorageKey('---Weird Name---')).toBe('weird-name');
+    });
+
+    it('collapses repeated dots', () => {
+      expect(normalizeStorageKey('a...b')).toBe('a.b');
+    });
+
+    it('strips trailing dots/spaces', () => {
+      expect(normalizeStorageKey('name. ')).toBe('name');
+    });
+
+    it('falls back to a project- prefix when the result is empty', () => {
+      const key = normalizeStorageKey('///');
+      expect(key.startsWith('project-')).toBe(true);
+    });
+  });
+
+  describe('getConversationRoots', () => {
+    it('nests Projects and Chats under a Conversation dir', () => {
+      const roots = getConversationRoots(userData);
+      expect(roots.baseDir).toBe(path.join(userData, 'Conversation'));
+      expect(roots.projectsDir).toBe(path.join(userData, 'Conversation', 'Projects'));
+      expect(roots.chatsDir).toBe(path.join(userData, 'Conversation', 'Chats'));
+    });
+  });
+
+  describe('project + chat path builders', () => {
+    it('builds a sanitized project directory path', () => {
+      expect(getProjectDirectory(userData, 'My Project')).toBe(
+        path.join(userData, 'Conversation', 'Projects', 'my-project')
+      );
+    });
+
+    it('builds a project config path', () => {
+      expect(getProjectConfigPath(userData, 'my-project')).toBe(
+        path.join(userData, 'Conversation', 'Projects', 'my-project', 'project-config.json')
+      );
+    });
+
+    it('nests a chat under its project when a project key is given', () => {
+      expect(getChatDirectory(userData, 'c1', 'my-project')).toBe(
+        path.join(userData, 'Conversation', 'Projects', 'my-project', 'c1')
+      );
+      expect(getChatJsonPath(userData, 'c1', 'my-project')).toBe(
+        path.join(userData, 'Conversation', 'Projects', 'my-project', 'c1', 'chat.json')
+      );
+    });
+
+    it('places standalone chats in the top-level Chats dir', () => {
+      expect(getChatDirectory(userData, 'c1')).toBe(
+        path.join(userData, 'Conversation', 'Chats', 'c1')
+      );
+      expect(getChatJsonPath(userData, 'c1')).toBe(
+        path.join(userData, 'Conversation', 'Chats', 'c1', 'chat.json')
+      );
+    });
+  });
+});
