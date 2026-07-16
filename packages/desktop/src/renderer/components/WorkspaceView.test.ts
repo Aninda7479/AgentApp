@@ -3,12 +3,11 @@ import { composerModelsFromCatalog } from './WorkspaceView.js';
 import type { ModelConfig } from '../logic/types.js';
 
 /**
- * Regression test for the universal first-run blocker (ux-critic 2026-07-16,
- * CRITICAL): the composer's model list must reflect CONNECTED providers, not
- * the per-model Model-Governance `enabled` toggle. Imported models default to
- * enabled:false in enrichModel, so gating on `enabled` left the composer at
- * "Models: None" with a disabled send button for every first-run user. The
- * helper must offer connected-provider models even when none are `enabled`.
+ * The workspace/composer model dropdown must reflect the per-model `enabled`
+ * toggle from Settings → Models: only ENABLED models are offered, and disabled
+ * models are excluded. Connected-provider models default to enabled:true in
+ * enrichModel, so a fresh connection still populates the dropdown (no first-run
+ * blocker), and the toggle is what hides models the user doesn't want.
  */
 
 const mk = (id: string, name: string, enabled: boolean): ModelConfig => ({
@@ -21,27 +20,42 @@ const mk = (id: string, name: string, enabled: boolean): ModelConfig => ({
 }) as ModelConfig;
 
 describe('composerModelsFromCatalog', () => {
-  it('returns no models when no provider is connected', () => {
+  it('returns no models when nothing is connected', () => {
     expect(composerModelsFromCatalog([])).toEqual([]);
   });
 
-  it('offers the single connected model even when it is disabled (enabled:false)', () => {
-    // This is the exact first-run shape: connect OpenRouter, 1 model imported,
-    // enabled:false — previously the composer showed nothing + disabled send.
-    expect(composerModelsFromCatalog([mk('openrouter-auto', 'Auto Router', false)])).toEqual(['Auto Router']);
+  it('offers the single enabled connected model', () => {
+    expect(composerModelsFromCatalog([mk('openrouter-auto', 'Auto Router', true)])).toEqual(['Auto Router']);
   });
 
-  it('offers "Model Governance" + every connected model when several are imported (all disabled)', () => {
+  it('offers "Model Governance" + every ENABLED model when several are enabled', () => {
     const catalog = [
-      mk('or-a', 'Model A', false),
-      mk('or-b', 'Model B', false),
-      mk('or-c', 'Model C', false)
+      mk('or-a', 'Model A', true),
+      mk('or-b', 'Model B', true),
+      mk('or-c', 'Model C', true)
     ];
     expect(composerModelsFromCatalog(catalog)).toEqual(['Model Governance', 'Model A', 'Model B', 'Model C']);
   });
 
-  it('does not filter out enabled models — both enabled and disabled are offered', () => {
+  it('excludes disabled models — only enabled ones are offered', () => {
     const catalog = [mk('or-a', 'Model A', true), mk('or-b', 'Model B', false)];
+    expect(composerModelsFromCatalog(catalog)).toEqual(['Model A']);
+  });
+
+  it('returns nothing when every connected model is disabled', () => {
+    const catalog = [
+      mk('or-a', 'Model A', false),
+      mk('or-b', 'Model B', false)
+    ];
+    expect(composerModelsFromCatalog(catalog)).toEqual([]);
+  });
+
+  it('shows "Model Governance" once there are 2+ enabled models, dropping disabled ones', () => {
+    const catalog = [
+      mk('or-a', 'Model A', true),
+      mk('or-b', 'Model B', true),
+      mk('or-c', 'Model C', false)
+    ];
     expect(composerModelsFromCatalog(catalog)).toEqual(['Model Governance', 'Model A', 'Model B']);
   });
 });

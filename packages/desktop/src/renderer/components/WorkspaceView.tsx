@@ -201,15 +201,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   slashCommands,
   skills = []
 }) => {
-  // Composer availability is gated on CONNECTED providers, not on the per-model
-  // `enabled` (Model Governance) toggle — that toggle is a separate, opt-in
-  // selection refinement (see ModelGovSettings), not a gate for whether the
-  // composer can send at all. modelsCatalog is the union of all connected
-  // providers' models, so every entry here is from a connected provider. Gating
-  // on `model.enabled` instead left the composer at "Models: None" + a disabled
-  // send button for ANY first-run user (every imported model defaults to
-  // enabled:false in enrichModel), making the product unusable on first run.
-  const enabledModels = modelsCatalog;
+  // Only surface models the user has ENABLED in Settings → Models. Each catalog
+  // entry carries a per-model `enabled` flag (ModelConfig.enabled); connected
+  // providers' models default to enabled:true in enrichModel, so first-run users
+  // still see their connected models — the toggle is the refinement that lets a
+  // user hide models they don't want from the workspace/composer dropdown.
+  const enabledModels = modelsCatalog.filter((m) => m.enabled);
 
   // ── Multi-agent session state ──────────────────────────────────────────────
   const [agentSessions, setAgentSessions] = useState<AgentSession[]>([
@@ -238,10 +235,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   const showMultiAgentBar = agentSessions.length > 1;
 
   // Mirror the composer's gate: an agent session can't actually run until a
-  // provider is connected (modelsCatalog drives the composer's hasModels), so
-  // the entry points that spawn one should be disabled under the same condition
-  // instead of letting a user create a dead, un-sendable agent.
-  const noModels = modelsCatalog.length === 0;
+  // usable (enabled) model exists, so the entry points that spawn one are
+  // disabled when there are no enabled models rather than letting a user create
+  // a dead, un-sendable agent.
+  const noModels = enabledModels.length === 0;
 
   const handleAddAgentSession = () => {
     const newId = `session-${Date.now()}`;
@@ -497,17 +494,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
 /**
  * Builds the composer's model dropdown from the connected-providers model
- * catalog. Unlike the Model Governance `enabled` toggle (a separate, opt-in
- * selection refinement), composer AVAILABILITY is gated on whether a provider
- * is connected at all — i.e. whether modelsCatalog has any entry. Every catalog
- * entry is already from a connected provider, so an empty catalog means "no
- * provider connected" and the composer correctly shows nothing. This must NOT
- * filter on `model.enabled`: imported models default to enabled:false
- * (enrichModel), and gating on that left first-run users at "Models: None" with
- * a permanently disabled send button — a universal first-run blocker.
+ * catalog, showing ONLY models the user has enabled in Settings → Models
+ * (ModelConfig.enabled). Disabled models are excluded so the dropdown reflects
+ * the user's selection there. Connected providers' models default to
+ * enabled:true in enrichModel, so first-run users still see their connected
+ * models — and the per-model toggle is what hides unwanted ones.
  */
 export function composerModelsFromCatalog(modelsCatalog: ModelConfig[]): string[] {
-  if (modelsCatalog.length === 0) return [];
-  if (modelsCatalog.length === 1) return [modelsCatalog[0].name];
-  return ['Model Governance', ...modelsCatalog.map((m) => m.name)];
+  const enabled = modelsCatalog.filter((m) => m.enabled);
+  if (enabled.length === 0) return [];
+  if (enabled.length === 1) return [enabled[0].name];
+  return ['Model Governance', ...enabled.map((m) => m.name)];
 }

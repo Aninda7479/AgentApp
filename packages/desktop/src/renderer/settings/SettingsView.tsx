@@ -376,7 +376,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       id: `${providerId}-${raw.id}`,
       name: raw.name,
       providerId,
-      enabled: false,
+      // Default to enabled so the workspace/composer dropdown reflects connected
+      // models out of the box. The Settings → Models toggle lets the user hide
+      // models they don't want; gating on `enabled` then works as expected.
+      enabled: true,
       description: raw.description,
       contextLimit: ctxLimit ?? raw.contextLimit,
       outputLimit: raw.outputLimit,
