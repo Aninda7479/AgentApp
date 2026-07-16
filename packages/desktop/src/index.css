@@ -372,6 +372,24 @@ body {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+/* State-coded badge variants — route through the neon state tokens (never raw
+   hues), mirroring .ui-state-banner. The muted variant is the off/idle state. */
+.ui-badge.constructive {
+  color: var(--neon-constructive);
+  background: color-mix(in srgb, var(--neon-constructive) 12%, transparent);
+}
+.ui-badge.destructive {
+  color: var(--neon-destructive);
+  background: color-mix(in srgb, var(--neon-destructive) 12%, transparent);
+}
+.ui-badge.attention {
+  color: var(--neon-attention);
+  background: color-mix(in srgb, var(--neon-attention) 12%, transparent);
+}
+.ui-badge.muted {
+  color: var(--brand-text-muted);
+  background: color-mix(in srgb, var(--brand-border) 60%, transparent);
+}
 
 /* State-coded banner surfaces — the ONLY place color may appear is via these
    semantic helpers, which route through the neon state tokens (not raw hues).
