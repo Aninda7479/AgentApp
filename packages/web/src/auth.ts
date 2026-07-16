@@ -332,6 +332,29 @@ export function handleLogout(_req: Request, res: Response): void {
  * POST /api/auth/change-password — updates the password (and optionally the
  * username) after verifying the current password. Requires an active session.
  */
+/**
+ * Validates the change-password request body. Kept pure so it can be unit-tested
+ * without touching the credential store. Rejects missing/non-string fields and an
+ * empty new password *before* any credential write happens — previously an empty
+ * `newPassword` was forwarded straight to `AuthStore.changePassword`.
+ */
+export function validateChangePasswordInput(body: {
+  currentPassword?: unknown;
+  newPassword?: unknown;
+}): { ok: true; currentPassword: string; newPassword: string } | { ok: false; error: string } {
+  const { currentPassword, newPassword } = body;
+  if (typeof currentPassword !== 'string') {
+    return { ok: false, error: 'Current password is required.' };
+  }
+  if (typeof newPassword !== 'string') {
+    return { ok: false, error: 'New password is required.' };
+  }
+  if (newPassword.trim().length === 0) {
+    return { ok: false, error: 'New password cannot be empty.' };
+  }
+  return { ok: true, currentPassword, newPassword };
+}
+
 export function handleChangePassword(req: Request, res: Response): void {
   if (isAuthDisabled()) {
     res.status(400).json({ error: 'Authentication is disabled on this server.' });
@@ -343,12 +366,16 @@ export function handleChangePassword(req: Request, res: Response): void {
     return;
   }
 
-  const { currentPassword, newPassword } = (req.body || {}) as {
-    currentPassword?: string;
-    newPassword?: string;
-  };
+  const input = validateChangePasswordInput((req.body || {}) as {
+    currentPassword?: unknown;
+    newPassword?: unknown;
+  });
+  if (!input.ok) {
+    res.status(400).json({ error: input.error });
+    return;
+  }
 
-  const result = AuthStore.changePassword(currentPassword || '', newPassword || '');
+  const result = AuthStore.changePassword(input.currentPassword, input.newPassword);
   if (!result.ok) {
     res.status(400).json({ error: result.error });
     return;

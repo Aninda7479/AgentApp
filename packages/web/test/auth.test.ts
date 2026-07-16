@@ -6,7 +6,8 @@ import {
   verifySessionToken,
   checkRateLimit,
   recordFailedAttempt,
-  clearAttempts
+  clearAttempts,
+  validateChangePasswordInput
 } from '../src/auth.js';
 
 /**
@@ -111,5 +112,28 @@ describe('auth: brute-force rate limit', () => {
     recordFailedAttempt(fakeReq(ip));
     clearAttempts(fakeReq(ip));
     expect(checkRateLimit(fakeReq(ip)).allowed).toBe(true);
+  });
+});
+
+describe('auth: change-password input validation', () => {
+  it('accepts a well-formed payload', () => {
+    const out = validateChangePasswordInput({ currentPassword: 'old', newPassword: 'new' });
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.currentPassword).toBe('old');
+      expect(out.newPassword).toBe('new');
+    }
+  });
+
+  it('rejects a missing current password', () => {
+    const out = validateChangePasswordInput({ newPassword: 'new' });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.error).toContain('Current password is required');
+  });
+
+  it('rejects an empty new password before any credential write', () => {
+    const out = validateChangePasswordInput({ currentPassword: 'old', newPassword: '   ' });
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.error).toContain('cannot be empty');
   });
 });

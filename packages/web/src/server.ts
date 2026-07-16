@@ -1,4 +1,5 @@
 import express from 'express';
+import type { Request, Response } from 'express';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
@@ -65,15 +66,14 @@ app.post('/api/auth/logout', handleLogout);
 app.get('/api/auth/status', handleStatus);
 app.post('/api/auth/change-password', handleChangePassword);
 
-// Serve the standalone login/setup page (public).
+// Serve the standalone login/setup page (public; must stay before the gate).
 app.get('/login', (_req, res) => {
   res.sendFile(path.join(__dirname, 'login.html'));
 });
 
-// Serve the account (change password) page — protected by the gate below.
-app.get('/account', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'account.html'));
-});
+// NOTE: the account (change-password) page is registered AFTER `app.use(authGate)`
+// below, so it is actually session-protected. It was previously registered here
+// (before the gate) and was therefore reachable without authentication.
 
 if (isAuthDisabled()) {
   console.log('[Security Warning] SUPERAGENT_DISABLE_AUTH=true — running in OPEN mode with NO authentication.');
@@ -299,9 +299,31 @@ Please optimize these system instructions to:
 }
 
 // ─── API Router mapping Electron IPC ─────────────────────────────────────────
-app.post('/api/ipc/:channel', async (req, res) => {
+app.post('/api/ipc/:channel', (req, res) => { void handleIpc(req, res); });
+
+/**
+ * Handles a single IPC channel invocation over HTTP (mirrors the Electron IPC
+ * surface for the web/VPS build). Exported so it can be unit-tested without
+ * booting a listener.
+ */
+export async function handleIpc(req: Request, res: Response): Promise<void> {
   const { channel } = req.params;
-  const args = req.body.args || [];
+  const args = Array.isArray(req.body?.args) ? req.body.args : [];
+  // Channels that require a payload argument. Without it they'd dereference
+  // `args[0].<field>` and throw inside the try, surfacing as a 500 — return a
+  // clear 400 instead (the request is malformed, not the server broken).
+  const ARGS_REQUIRED = new Set<string>([
+    'browser-navigate',
+    'copy-file-to-chat',
+    'read-file-base64',
+    'save-chat-media-buffer',
+    'agent-run',
+    'agent-stop'
+  ]);
+  if (ARGS_REQUIRED.has(channel) && args[0] == null) {
+    res.status(400).json({ error: `Channel "${channel}" requires a payload argument.` });
+    return;
+  }
   try {
     let result: any;
     // Dispatch IPC channel to the corresponding handler
@@ -445,7 +467,7 @@ app.post('/api/ipc/:channel', async (req, res) => {
     console.error(`[IPC Error] Channel ${channel} failed:`, err);
     res.status(500).json({ error: err.message || 'Internal Server Error' });
   }
-});
+}
 
 // ─── Static Web Asset Serving ────────────────────────────────────────────────
 const distPath = __dirname;
@@ -490,7 +512,8 @@ server.on('upgrade', (request, socket, head) => {
   }
 });
 
-server.listen(Number(PORT), HOST, () => {
+if (process.env.NODE_ENV !== 'test') {
+  server.listen(Number(PORT), HOST, () => {
   console.log(`================================================================`);
   console.log(`SuperAgent Web Server ignited at: http://localhost:${PORT}`);
   // Surface the LAN URLs so the server can be opened from phones / other machines.
@@ -499,4 +522,5 @@ server.listen(Number(PORT), HOST, () => {
   }
   console.log(`Resolving configuration and logs at: ${userDataDir}`);
   console.log(`================================================================`);
-});
+  });
+}
