@@ -199,15 +199,27 @@ async function runAgentEngine(
       if (config.model === 'auto' || config.model === 'Model Governance') {
         const settings = SettingsStorage.loadSettings();
         const enabledModels = settings.models?.filter(m => m.enabled) || [];
-        const routed = ModelRouter.routeModelForTask(prompt, enabledModels as any);
-        if (routed) {
-          finalConfig.provider = routed.provider as any;
-          finalConfig.model = routed.model;
-          const byok = settings.providers?.find(p => p.id === routed.provider);
-          if (byok) {
-            finalConfig.apiKey = byok.apiKey;
-            finalConfig.baseUrl = byok.baseUrl;
+        try {
+          const routed = ModelRouter.routeModelForTask(prompt, enabledModels as any);
+          if (routed) {
+            finalConfig.provider = routed.provider as any;
+            finalConfig.model = routed.model;
+            const byok = settings.providers?.find(p => p.id === routed.provider);
+            if (byok) {
+              finalConfig.apiKey = byok.apiKey;
+              finalConfig.baseUrl = byok.baseUrl;
+            }
           }
+        } catch (routeErr: any) {
+          // No model configured/enabled — surface a clear, actionable error
+          // instead of forwarding the literal 'auto' string to the provider.
+          broadcast('agent-event', {
+            type: 'error',
+            sessionId,
+            error: routeErr?.message || String(routeErr)
+          });
+          activeSessions.delete(sessionId);
+          return;
         }
       }
 

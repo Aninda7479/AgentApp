@@ -148,3 +148,14 @@ describe('ModelRouter.routeModelForTask capability exclusion', () => {
     expect(route!.model).toBe('claude-tool');
   });
 });
+
+/**
+ * Empty-model-list guard (mission point #1 — the user owns their config, so a
+ * missing Model Governance selection must fail loud-and-clear, not silently
+ * forward the literal string "auto" to a provider and produce a cryptic error).
+ */
+describe('ModelRouter.routeModelForTask empty list', () => {
+  it('throws an actionable error instead of returning null (leaking "auto")', () => {
+    expect(() => ModelRouter.routeModelForTask('summarize this text', [])).toThrow(/no models/i);
+  });
+});

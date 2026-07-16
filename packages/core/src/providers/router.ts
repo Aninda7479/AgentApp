@@ -104,7 +104,11 @@ export class ModelRouter {
     prompt: string,
     allModels: RouterModel[]
   ): { provider: string; model: string } | null {
-    if (allModels.length === 0) return null;
+    if (allModels.length === 0) {
+      throw new Error(
+        'No models are configured or enabled. Add a provider and enable at least one model in Model Governance, or pick a model manually.'
+      );
+    }
     const prepared = ModelRouter.prepareRouting(prompt, allModels);
     if (prepared.override) return prepared.override;
     const ranked = ModelRouter.rankModels(

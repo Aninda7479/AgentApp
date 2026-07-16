@@ -100,20 +100,35 @@ safeHandle('agent-run', async (event, {
   try {
     // Reuse or create engine
     let engine = activeSessions.get(sessionId);
+    const win = BrowserWindow.fromWebContents(event.sender);
     if (!engine) {
       let finalConfig = { ...config };
       if (config.model === 'auto' || config.model === 'Model Governance') {
         const settings = SettingsStorage.loadSettings();
         const enabledModels = settings.models?.filter(m => m.enabled) || [];
-        const routed = ModelRouter.routeModelForTask(prompt, enabledModels as any);
-        if (routed) {
-          finalConfig.provider = routed.provider as any;
-          finalConfig.model = routed.model;
-          const byok = settings.providers?.find(p => p.id === routed.provider);
-          if (byok) {
-            finalConfig.apiKey = byok.apiKey;
-            finalConfig.baseUrl = byok.baseUrl;
+        try {
+          const routed = ModelRouter.routeModelForTask(prompt, enabledModels as any);
+          if (routed) {
+            finalConfig.provider = routed.provider as any;
+            finalConfig.model = routed.model;
+            const byok = settings.providers?.find(p => p.id === routed.provider);
+            if (byok) {
+              finalConfig.apiKey = byok.apiKey;
+              finalConfig.baseUrl = byok.baseUrl;
+            }
           }
+        } catch (routeErr: unknown) {
+          // No model configured/enabled — emit a clear error event to the
+          // renderer instead of forwarding the literal 'auto' string downstream.
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('agent-event', {
+              type: 'error',
+              sessionId,
+              error: (routeErr as Error).message || String(routeErr)
+            });
+          }
+          activeSessions.delete(sessionId);
+          return { success: false, error: (routeErr as Error).message || String(routeErr) };
         }
       }
       finalConfig.extraTools = connectedTools();
@@ -123,8 +138,6 @@ safeHandle('agent-run', async (event, {
       petContextMax = finalConfig.maxTokens ?? 0;
       petContextTotal = 0;
     }
-
-    const win = BrowserWindow.fromWebContents(event.sender);
 
     // Run agent; emit each event back to renderer
     await engine.run(prompt, (agentEvent: AgentEvent) => {
