@@ -405,6 +405,11 @@ body {
   border-color: color-mix(in srgb, var(--neon-destructive) 22%, transparent);
   background: color-mix(in srgb, var(--neon-destructive) 10%, transparent);
 }
+.ui-state-banner.attention {
+  color: var(--neon-attention);
+  border-color: color-mix(in srgb, var(--neon-attention) 22%, transparent);
+  background: color-mix(in srgb, var(--neon-attention) 10%, transparent);
+}
 
 /* Responsive auto grid for cards */
 .ui-grid-auto {

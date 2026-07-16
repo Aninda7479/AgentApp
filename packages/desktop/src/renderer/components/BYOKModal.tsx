@@ -64,9 +64,9 @@ export const BYOKModal: React.FC<BYOKModalProps> = ({
 
   const getTestStatusStyle = () => {
     if (!testStatus) return '';
-    if (testStatus.includes('✅')) return 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/40';
-    if (testStatus.includes('⚠️')) return 'bg-amber-950/80 text-amber-400 border border-amber-800/40';
-    return 'bg-indigo-950/80 text-indigo-400 border border-indigo-800/40';
+    if (testStatus.includes('✅')) return 'ui-state-banner constructive';
+    if (testStatus.includes('⚠️')) return 'ui-state-banner attention';
+    return 'bg-brand-popover text-brand-textMuted border border-brand-border';
   };
 
   return (
