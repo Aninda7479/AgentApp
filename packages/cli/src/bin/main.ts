@@ -4,7 +4,23 @@ import { render } from 'ink';
 import { createCliProgram } from './commander.js';
 import { registerExecCommand, executeScript } from './exec.js';
 import { App } from '../ui/App.js';
+import { tryAcquireAutoImproveLock } from '../auto-improve-lock.js';
 import type { CliOptions } from './commander.js';
+
+// Self-serialize the autonomous loop: if a /auto-improve run is already
+// mutating the working tree, this process must not start another one and
+// cross-commit its staged files. A normal interactive/one-shot CLI invocation
+// has no AUTO_IMPROVE_RUN set, so it skips the guard entirely.
+if (process.env.AUTO_IMPROVE_RUN) {
+  const lock = tryAcquireAutoImproveLock(process.env.AUTO_IMPROVE_RUN, 'superagent-cli');
+  if (!lock) {
+    console.error(
+      '[auto-improve] Another /auto-improve run holds the lock (.claude/.auto-improve.lock). Aborting to avoid cross-committing.'
+    );
+    process.exit(2);
+  }
+  process.on('exit', () => lock.release());
+}
 
 /**
  * Launches the appropriate mode for the default `chat` command:

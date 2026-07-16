@@ -22,6 +22,31 @@ Every cycle below should visibly serve one of these four.
 
 ## Step 0 — Orient
 
+- **Single-flight guard (run this FIRST, before any edits).** `/auto-improve`
+  can be invoked by a cron *and* manually, and two instances sharing one
+  working tree + git index will cross-commit each other's staged files (this
+  happened repeatedly). Before doing anything, acquire the lock atomically:
+
+  ```sh
+  LOCK=.claude/.auto-improve.lock
+  if [ -f "$LOCK" ]; then
+    age=$(( $(date +%s) - $(date -r "$LOCK" +%s 2>/dev/null || echo 0) ))
+    if [ "$age" -lt 540 ]; then echo "LOCK_HELD by another run"; exit 2; fi
+  fi
+  printf '{"pid":%d,"started":"%s"}\n' "$$" "$(date -u +%FT%TZ)" > "$LOCK"
+  ```
+
+  - If it prints `LOCK_HELD` (or exits 2), **another live run holds the lock —
+    ABORT this invocation** (exit cleanly, do no work). It retries next tick.
+  - If the lock was written, you hold it. **Release it at the very end** of the
+    run: `rm -f "$LOCK"`. (If the process dies, the 9-min freshness check lets
+    the next run steal a stale lock, so it can't deadlock.)
+  - The CLI binary also self-serializes: a loop driven via `superagent` should
+    set `AUTO_IMPROVE_RUN=<sessionId>` so `bin/main.ts` acquires the same lock
+    and aborts on contention. (A reusable `tryAcquireAutoImproveLock()` helper
+    lives in `packages/cli/src/auto-improve-lock.ts` if you prefer a TS guard.)
+  Rationale: at most one `/auto-improve` may mutate the tree at a time. This is
+  the standing fix for the cross-commit hazard; do not skip it.
 - Read `CLAUDE.md` / `README` / any architecture doc if present.
 - `git log --oneline -20` and `git status` — understand recent trajectory and any uncommitted work before touching anything. If the working tree is dirty with unrelated changes, stop and flag it in the log rather than committing over someone else's in-progress work.
 - Read `.claude/auto-improve-log.log` (create it if it doesn't exist yet). This file is the memory that carries across invocations — treat its "next priority queue" and "open questions" as your starting point instead of re-discovering the project from scratch.
