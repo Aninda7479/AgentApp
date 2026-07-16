@@ -69,6 +69,10 @@
 </head>
 <body>
   <form class="card" id="auth-form" autocomplete="on">
+    <!-- Single admin account: username is fixed. Included (hidden) so password
+         managers and the browser's a11y heuristic associate the password field
+         with a username instead of warning about a username-less form. -->
+    <input type="text" id="username" name="username" value="admin" autocomplete="username" hidden />
     <div class="logo" role="img" aria-label="SuperAgent">
       <svg width="26" height="26" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect width="32" height="32" rx="8" fill="#ffffff" opacity="0.16" />
