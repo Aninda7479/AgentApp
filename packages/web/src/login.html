@@ -84,13 +84,13 @@
     <h1>Welcome back</h1>
     <p class="sub">Sign in to your SuperAgent workspace</p>
 
-    <div class="msg error" id="error"></div>
+    <div class="msg error" id="error" role="alert" aria-live="assertive"></div>
 
     <div class="field">
       <label for="password">Password</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus />
+      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus aria-describedby="default-hint" />
     </div>
-    <div class="hint" id="default-hint">
+    <div class="hint" id="default-hint" role="status" aria-live="polite">
       No custom password set yet — the default password is <code>admin</code>.
       Set a new one via <code>superagent password set</code> or the Account page.
     </div>
