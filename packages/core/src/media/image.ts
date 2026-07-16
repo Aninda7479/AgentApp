@@ -1,4 +1,5 @@
 import { BYOKConfig } from '../types/agent.js';
+import { hasRealMediaKey, NO_PROVIDER_MESSAGE } from './config.js';
 
 /** Options for configuring an AI image generation request. */
 export interface ImageGenerationOptions {
@@ -46,7 +47,7 @@ export class ImageGenerator {
       };
     }
 
-    if (config.apiKey && config.apiKey !== 'mock-key' && !config.apiKey.includes('mock')) {
+    if (hasRealMediaKey(config)) {
       try {
         const baseUrl = config.baseUrl || 'https://api.openai.com/v1';
         const response = await fetch(`${baseUrl}/images/generations`, {
@@ -112,25 +113,40 @@ export class ImageGenerator {
       }
     }
 
-    // Default mock response for offline/testing mode
-    const mockImages: GeneratedImageData[] = [];
-    const count = options.n || 1;
-    for (let i = 0; i < count; i += 1) {
-      if (options.responseFormat === 'b64_json') {
-        mockImages.push({ b64_json: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' });
-      } else {
-        mockImages.push({ url: `https://media.superagent.ai/generated/${taskId}_${i}.png` });
+    // No real provider configured. If a mock key was explicitly supplied we
+    // still allow offline fixtures; otherwise report a clear failure instead of
+    // returning fabricated media with status 'success'.
+    if (config.apiKey === 'mock-key' || config.apiKey.includes('mock')) {
+      const mockImages: GeneratedImageData[] = [];
+      const count = options.n || 1;
+      for (let i = 0; i < count; i += 1) {
+        if (options.responseFormat === 'b64_json') {
+          mockImages.push({ b64_json: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' });
+        } else {
+          mockImages.push({ url: `https://media.superagent.ai/generated/${taskId}_${i}.png` });
+        }
       }
+
+      return {
+        id: taskId,
+        status: 'success',
+        images: mockImages,
+        prompt: options.prompt,
+        model,
+        provider,
+        createdAt: Date.now()
+      };
     }
 
     return {
       id: taskId,
-      status: 'success',
-      images: mockImages,
+      status: 'failed',
+      images: [],
       prompt: options.prompt,
       model,
       provider,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      error: NO_PROVIDER_MESSAGE
     };
   }
 }

@@ -1,4 +1,5 @@
 import { BYOKConfig } from '../types/agent.js';
+import { hasRealMediaKey, NO_PROVIDER_MESSAGE } from './config.js';
 import sharp from 'sharp';
 
 export interface ImageInpaintOptions {
@@ -88,7 +89,7 @@ export class ImageInpainter {
       }
     }
 
-    if (config.apiKey && config.apiKey !== 'mock-key' && !config.apiKey.includes('mock')) {
+    if (hasRealMediaKey(config)) {
       try {
         const formData = new FormData();
         const imageBlob = new Blob([new Uint8Array(options.imageBuffer)], { type: 'image/png' });
@@ -160,25 +161,40 @@ export class ImageInpainter {
       }
     }
 
-    // Default mock response
-    const mockImages: InpaintResultImageData[] = [];
-    const count = options.n || 1;
-    for (let i = 0; i < count; i += 1) {
-      if (options.responseFormat === 'b64_json') {
-        mockImages.push({ b64_json: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' });
-      } else {
-        mockImages.push({ url: `https://media.superagent.ai/edited/${taskId}_${i}.png` });
+    // No real provider configured. If a mock key was explicitly supplied we
+    // still allow offline fixtures; otherwise report a clear failure instead of
+    // returning fabricated media with status 'success'.
+    if (config.apiKey === 'mock-key' || config.apiKey.includes('mock')) {
+      const mockImages: InpaintResultImageData[] = [];
+      const count = options.n || 1;
+      for (let i = 0; i < count; i += 1) {
+        if (options.responseFormat === 'b64_json') {
+          mockImages.push({ b64_json: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' });
+        } else {
+          mockImages.push({ url: `https://media.superagent.ai/edited/${taskId}_${i}.png` });
+        }
       }
+
+      return {
+        id: taskId,
+        status: 'success',
+        images: mockImages,
+        prompt: options.prompt,
+        model,
+        provider,
+        createdAt: Date.now()
+      };
     }
 
     return {
       id: taskId,
-      status: 'success',
-      images: mockImages,
+      status: 'failed',
+      images: [],
       prompt: options.prompt,
       model,
       provider,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      error: NO_PROVIDER_MESSAGE
     };
   }
 }

@@ -109,6 +109,38 @@ describe('Phase 3 AI Multimodal & Media Processing Suite (Steps 041-048)', () =>
     });
   });
 
+  describe('No-provider failure (mission: user controls the provider)', () => {
+    // A genuinely unconfigured caller (empty apiKey) must get a clear failure,
+    // NOT fabricated media with status 'success'.
+    const noKey: BYOKConfig = { provider: 'openai', apiKey: '' };
+    const dummyImage = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const dummyAudio = Buffer.from([0x52, 0x49, 0x46, 0x46]);
+
+    it('image generation fails clearly with no api key', async () => {
+      const res = await new ImageGenerator().generateImage({ prompt: 'x' }, noKey);
+      expect(res.status).toBe('failed');
+      expect(res.error).toContain('No provider API key configured');
+    });
+
+    it('tts fails clearly with no api key', async () => {
+      const res = await new SpeechSynthesizer().synthesize({ text: 'hello' }, noKey);
+      expect(res.status).toBe('failed');
+      expect(res.error).toContain('No provider API key configured');
+    });
+
+    it('stt fails clearly with no api key', async () => {
+      const res = await new AudioTranscriber().transcribe({ audioBuffer: dummyAudio }, noKey);
+      expect(res.status).toBe('failed');
+      expect(res.error).toContain('No provider API key configured');
+    });
+
+    it('inpainting fails clearly with no api key', async () => {
+      const res = await new ImageInpainter().inpaintOrEdit({ imageBuffer: dummyImage, prompt: 'x' }, noKey);
+      expect(res.status).toBe('failed');
+      expect(res.error).toContain('No provider API key configured');
+    });
+  });
+
   describe('Step 043: AI Image Editing & Inpainting Adapter', () => {
     it('should prepare mask and handle image inpainting', async () => {
       const inpainter = new ImageInpainter();

@@ -1,4 +1,5 @@
 import { BYOKConfig } from '../types/agent.js';
+import { hasRealMediaKey, NO_PROVIDER_MESSAGE } from './config.js';
 
 export interface SpeechSynthesisOptions {
   text: string;
@@ -39,7 +40,7 @@ export class SpeechSynthesizer {
       };
     }
 
-    if (config.apiKey && config.apiKey !== 'mock-key' && !config.apiKey.includes('mock')) {
+    if (hasRealMediaKey(config)) {
       try {
         const baseUrl = config.baseUrl || 'https://api.openai.com/v1';
         const response = await fetch(`${baseUrl}/audio/speech`, {
@@ -97,17 +98,31 @@ export class SpeechSynthesizer {
       }
     }
 
-    // Default mock audio response for testing
-    const mockAudioBuffer = Buffer.from(`MOCK_AUDIO_SYNTHESIS_DATA_${taskId}`);
+    // No real provider configured. If a mock key was explicitly supplied we
+    // still allow offline fixtures; otherwise report a clear failure instead of
+    // returning fabricated audio with status 'success'.
+    if (config.apiKey === 'mock-key' || config.apiKey.includes('mock')) {
+      const mockAudioBuffer = Buffer.from(`MOCK_AUDIO_SYNTHESIS_DATA_${taskId}`);
+      return {
+        id: taskId,
+        status: 'success',
+        audioBuffer: mockAudioBuffer,
+        format,
+        durationSeconds: Math.max(1, Math.round(options.text.length / 15)),
+        provider,
+        model,
+        createdAt: Date.now()
+      };
+    }
+
     return {
       id: taskId,
-      status: 'success',
-      audioBuffer: mockAudioBuffer,
+      status: 'failed',
       format,
-      durationSeconds: Math.max(1, Math.round(options.text.length / 15)),
       provider,
       model,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      error: NO_PROVIDER_MESSAGE
     };
   }
 }

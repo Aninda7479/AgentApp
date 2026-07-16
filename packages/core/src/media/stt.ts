@@ -1,4 +1,5 @@
 import { BYOKConfig } from '../types/agent.js';
+import { hasRealMediaKey, NO_PROVIDER_MESSAGE } from './config.js';
 
 export interface AudioTranscriptionOptions {
   audioBuffer: Buffer;
@@ -48,7 +49,7 @@ export class AudioTranscriber {
       };
     }
 
-    if (config.apiKey && config.apiKey !== 'mock-key' && !config.apiKey.includes('mock')) {
+    if (hasRealMediaKey(config)) {
       try {
         const formData = new FormData();
         const audioBlob = new Blob([new Uint8Array(options.audioBuffer)], { type: 'audio/mp3' });
@@ -134,21 +135,35 @@ export class AudioTranscriber {
       }
     }
 
-    // Default mock response
-    const mockText = 'This is a simulated transcription from AI Audio Processing & STT model.';
+    // No real provider configured. If a mock key was explicitly supplied we
+    // still allow offline fixtures; otherwise report a clear failure instead of
+    // returning fabricated transcription with status 'success'.
+    if (config.apiKey === 'mock-key' || config.apiKey.includes('mock')) {
+      const mockText = 'This is a simulated transcription from AI Audio Processing & STT model.';
+      return {
+        id: taskId,
+        status: 'success',
+        text: mockText,
+        language: options.language || 'en',
+        durationSeconds: 5.2,
+        segments: [
+          { id: 0, start: 0.0, end: 2.5, text: 'This is a simulated transcription' },
+          { id: 1, start: 2.5, end: 5.2, text: 'from AI Audio Processing & STT model.' }
+        ],
+        model,
+        provider,
+        createdAt: Date.now()
+      };
+    }
+
     return {
       id: taskId,
-      status: 'success',
-      text: mockText,
-      language: options.language || 'en',
-      durationSeconds: 5.2,
-      segments: [
-        { id: 0, start: 0.0, end: 2.5, text: 'This is a simulated transcription' },
-        { id: 1, start: 2.5, end: 5.2, text: 'from AI Audio Processing & STT model.' }
-      ],
+      status: 'failed',
+      text: '',
       model,
       provider,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      error: NO_PROVIDER_MESSAGE
     };
   }
 }
