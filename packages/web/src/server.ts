@@ -86,6 +86,14 @@ if (isAuthDisabled()) {
 // Gate everything else behind a valid session.
 app.use(authGate);
 
+// Serve the account (change-password) page. Registered AFTER the gate so it
+// requires an authenticated session — an unauthenticated request is redirected
+// to /login by the gate above. (This page was previously registered BEFORE the
+// gate and was therefore reachable without authentication.)
+app.get('/account', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'account.html'));
+});
+
 // ─── WebSocket Event Hub ────────────────────────────────────────────────────
 const connectedSockets = new Set<WebSocket>();
 
