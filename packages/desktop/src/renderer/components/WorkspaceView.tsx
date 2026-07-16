@@ -62,38 +62,27 @@ const recommendations = [
     title: 'Develop Dashboard',
     prompt: 'Develop a complete interactive analytics dashboard for my application',
     description: 'Generate React views, metrics charts, and CSS styling',
-    Icon: Sparkles,
-    accent: 'violet'
+    Icon: Sparkles
   },
   {
     title: 'Diagnostic Run',
     prompt: 'Analyze the project source code for dependencies and vulnerabilities',
     description: 'Audit package health, search for bugs, and run checks',
-    Icon: Stethoscope,
-    accent: 'emerald'
+    Icon: Stethoscope
   },
   {
     title: 'Integrate MCP Tools',
     prompt: 'Configure a custom MCP Server extension for this environment',
     description: 'Extend agent capabilities with databases and file APIs',
-    Icon: Plug,
-    accent: 'sky'
+    Icon: Plug
   },
   {
     title: 'Schedule Workflows',
     prompt: 'Set up a new cron task that executes checks on a regular schedule',
     description: 'Automate builds, recurring reports, and routine tasks',
-    Icon: CalendarDays,
-    accent: 'rose'
+    Icon: CalendarDays
   }
 ];
-
-const accentClasses: Record<string, string> = {
-  violet: 'bg-brand-hover text-brand-textMain border-brand-border',
-  emerald: 'bg-brand-hover text-brand-textMain border-brand-border',
-  sky: 'bg-brand-hover text-brand-textMain border-brand-border',
-  rose: 'bg-brand-hover text-brand-textMain border-brand-border'
-};
 
 // ─── Elapsed time display ─────────────────────────────────────────────────────
 const ElapsedTimer: React.FC<{ startedAt: number; running: boolean }> = ({ startedAt, running }) => {
@@ -155,7 +144,7 @@ const AgentTabBar: React.FC<AgentTabBarProps> = ({
         {sessions.length > 1 && (
           <span
             onClick={e => { e.stopPropagation(); onCloseSession(session.id); }}
-            className="ml-1 opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all cursor-pointer"
+            className="ml-1 opacity-0 group-hover:opacity-100 hover:text-[color:var(--neon-destructive)] transition-all cursor-pointer"
           >
             <X size={10} />
           </span>
@@ -336,7 +325,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           {/* MCP + Model info */}
           <div className="hidden sm:flex items-center gap-2 text-[10px] text-brand-textMuted/70">
             <span className="flex items-center gap-1">
-              <span className={`w-1 h-1 rounded-full ${mcpServers.filter(s => s.enabled).length > 0 ? 'bg-emerald-500' : 'bg-brand-textMuted/30'}`} />
+              <span className={`w-1 h-1 rounded-full ${mcpServers.filter(s => s.enabled).length > 0 ? 'bg-[color:var(--neon-live)]' : 'bg-brand-textMuted/30'}`} />
               <span>{mcpServers.filter(s => s.enabled).length} MCP</span>
             </span>
           </div>
@@ -408,13 +397,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
             {/* Recommendation cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-[680px] mb-5">
-              {recommendations.map(({ title, prompt, description, Icon, accent }) => (
+              {recommendations.map(({ title, prompt, description, Icon }) => (
                 <button
                   key={title}
                   onClick={() => onPromptChange(prompt)}
-                  className="glass-card glow-hover p-3.5 rounded-xl cursor-pointer text-left flex gap-3 items-start transition-all"
+                  className="group glass-card glow-hover p-3.5 rounded-xl cursor-pointer text-left flex gap-3 items-start transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-highlight/60"
                 >
-                  <span className={`w-7 h-7 rounded-lg flex items-center justify-center border flex-shrink-0 ${accentClasses[accent]}`}>
+                  <span className="w-7 h-7 rounded-lg flex items-center justify-center border border-brand-border bg-brand-hover text-brand-textMuted group-hover:text-brand-textMain transition-colors flex-shrink-0">
                     <Icon size={13} />
                   </span>
                   <span>
@@ -428,15 +417,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             {/* Status pills */}
             <div className="flex gap-2 items-center flex-wrap text-[10px] text-brand-textMuted border-t border-brand-border/30 pt-4 w-full max-w-[680px] justify-center">
               <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-2.5 py-1 rounded-full shadow-sm">
-                <span className={`w-1 h-1 rounded-full ${enabledModels.length > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-brand-textMuted/30'}`} />
+                <span className={`w-1 h-1 rounded-full ${enabledModels.length > 0 ? 'bg-[color:var(--neon-constructive)] animate-pulse' : 'bg-brand-textMuted/30'}`} />
                 <span>Models: {enabledModels.length > 0 ? enabledModels.length : 'None'}</span>
               </div>
               <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-2.5 py-1 rounded-full shadow-sm">
-                <span className={`w-1 h-1 rounded-full ${mcpServers.filter(s => s.enabled).length > 0 ? 'bg-sky-500 animate-pulse' : 'bg-brand-textMuted/30'}`} />
+                <span className={`w-1 h-1 rounded-full ${mcpServers.filter(s => s.enabled).length > 0 ? 'bg-[color:var(--neon-live)] animate-pulse' : 'bg-brand-textMuted/30'}`} />
                 <span>MCP: {mcpServers.filter(s => s.enabled).length} online</span>
               </div>
               <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-2.5 py-1 rounded-full shadow-sm">
-                <span className={`w-1 h-1 rounded-full ${hasCredentials ? 'bg-teal-500 animate-pulse' : 'bg-amber-500'}`} />
+                <span className={`w-1 h-1 rounded-full ${hasCredentials ? 'bg-[color:var(--neon-live)] animate-pulse' : 'bg-[color:var(--neon-attention)]'}`} />
                 <span>Keys: {hasCredentials ? 'Active' : 'Setup needed'}</span>
               </div>
               <button
