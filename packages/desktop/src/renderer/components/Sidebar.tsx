@@ -322,7 +322,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                     onDeleteProject(proj.name);
                                     setOpenMenuProject(null);
                                   }}
-                                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-red-400/80 hover:text-red-400 hover:bg-red-500/8 transition-colors cursor-pointer"
+                                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-[color:var(--neon-destructive)]/80 hover:text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/10 transition-colors cursor-pointer"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                   <span>Delete project</span>
@@ -363,7 +363,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                   <span className="absolute left-[-10px] top-2 bottom-2 w-[2px] rounded-r-full bg-brand-textMain" />
                                 )}
                                 {isChatRunning && (
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)] shadow-[0_0_6px_var(--neon-live)] animate-pulse flex-shrink-0" />
                                 )}
                                 <span className="truncate flex-1 leading-snug">{chat.title}</span>
                                 <div className="flex items-center gap-1 flex-shrink-0">
@@ -376,7 +376,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                         e.stopPropagation();
                                         onDeleteChat(chat.id);
                                       }}
-                                      className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-red-400 hover:bg-white/5 transition-all cursor-pointer"
+                                      className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/10 transition-all cursor-pointer"
                                       title="Delete Chat"
                                     >
                                       <Trash2 className="w-3 h-3" />
@@ -447,7 +447,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-brand-textMain" />
                       )}
                       {isChatRunning && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)] shadow-[0_0_6px_var(--neon-live)] animate-pulse flex-shrink-0" />
                       )}
                       <span className="truncate flex-1">{chat.title}</span>
                       <div className="flex items-center gap-1 flex-shrink-0">
