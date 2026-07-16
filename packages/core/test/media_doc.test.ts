@@ -126,6 +126,16 @@ describe('PDF & PPT Media Document Suite (Steps 049 - 054)', () => {
   });
 
   describe('Step 053: Programmatic PPT Builder Engine', () => {
+    it('rejects a malformed deck with a clear error (not an opaque TypeError)', async () => {
+      await expect(
+        buildPPTDeck(undefined as unknown as Parameters<typeof buildPPTDeck>[0])
+      ).rejects.toThrow(/PPTDeckOutline object is required/i);
+
+      await expect(
+        buildPPTDeck({ title: 'x' } as unknown as Parameters<typeof buildPPTDeck>[0])
+      ).rejects.toThrow(/Deck must contain at least one slide/i);
+    });
+
     it('should build PPT presentation buffer from deck outline', async () => {
       const deck = generatePPTOutline({ topic: 'Automated PPT Engine Test', slideCount: 5 });
       const pptBuffer = await buildPPTDeck(deck);

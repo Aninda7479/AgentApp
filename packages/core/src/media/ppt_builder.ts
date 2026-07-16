@@ -1,8 +1,17 @@
 import pptxgen from 'pptxgenjs';
-import { PPTDeckOutline, PPTSlideOutline } from './ppt_outline.js';
+import { PPTDeckOutline, PPTSlideOutline, validatePPTOutline } from './ppt_outline.js';
 import { PPTTheme, getThemeByName } from './ppt_stylizer.js';
 
 export async function buildPPTDeck(deck: PPTDeckOutline, customTheme?: PPTTheme): Promise<Buffer> {
+  if (!deck || typeof deck !== 'object' || Array.isArray(deck)) {
+    throw new Error('PPTDeckOutline object is required');
+  }
+
+  const validation = validatePPTOutline(deck);
+  if (!validation.valid) {
+    throw new Error(`Invalid PPT deck outline: ${validation.errors.join('; ')}`);
+  }
+
   const pres = new pptxgen();
   pres.layout = 'LAYOUT_16x9';
   pres.title = deck.title;
