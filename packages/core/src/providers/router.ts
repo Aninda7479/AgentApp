@@ -85,6 +85,21 @@ export class ModelRouter {
     throw new Error(`All provider fallbacks failed:\n${errors.join('\n')}`);
   }
 
+  /**
+   * Strips the canonical `${providerId}-` prefix from a catalog model id to
+   * recover the provider-native model id. Strips repeatedly so a malformed
+   * double-prefixed id (e.g. `nvidia-nvidia/llama-3.1-...`) still resolves to
+   * the correct native id instead of leaking a stray prefix to the API.
+   */
+  private static stripProviderPrefix(providerId: string, id: string): string {
+    const prefix = `${providerId}-`;
+    let out = id;
+    while (out.startsWith(prefix)) {
+      out = out.substring(prefix.length);
+    }
+    return out;
+  }
+
   public static routeModelForTask(
     prompt: string,
     allModels: Array<{ id: string; name: string; providerId: string; enabled: boolean }>
@@ -121,7 +136,7 @@ export class ModelRouter {
     if (overrideId) {
       const found = allModels.find(m => m.id === overrideId || `${m.providerId}-${m.id}` === overrideId);
       if (found) {
-        return { provider: found.providerId, model: found.id.replace(`${found.providerId}-`, '') };
+        return { provider: found.providerId, model: ModelRouter.stripProviderPrefix(found.providerId, found.id) };
       }
     }
 
@@ -158,11 +173,11 @@ export class ModelRouter {
 
     if (candidates.length > 0) {
       const best = candidates[0].model;
-      return { provider: best.providerId, model: best.id.replace(`${best.providerId}-`, '') };
+      return { provider: best.providerId, model: ModelRouter.stripProviderPrefix(best.providerId, best.id) };
     }
 
     // Default Fallback
     const firstEnabled = enabledModels[0];
-    return { provider: firstEnabled.providerId, model: firstEnabled.id.replace(`${firstEnabled.providerId}-`, '') };
+    return { provider: firstEnabled.providerId, model: ModelRouter.stripProviderPrefix(firstEnabled.providerId, firstEnabled.id) };
   }
 }

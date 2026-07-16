@@ -244,9 +244,9 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       kimi:     [{ id: 'moonshot-v1-128k', name: 'Moonshot v1 128k', ctx: '128k' }, { id: 'moonshot-v1-32k', name: 'Moonshot v1 32k', ctx: '32k' }],
       openrouter: [{ id: 'openrouter/auto', name: 'Auto Router' }],
       nvidia: [
-        { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'Llama 3.1 Nemotron 70B Instruct', ctx: '128k', free: true },
-        { id: 'nvidia/llama-3.3-nemotron-super-49b-v1', name: 'Llama 3.3 Nemotron Super 49B', ctx: '128k', free: true },
-        { id: 'meta/llama-3.1-8b-instruct', name: 'Llama 3.1 8B Instruct', ctx: '128k', free: true }
+        { id: 'llama-3.1-nemotron-70b-instruct', name: 'Llama 3.1 Nemotron 70B Instruct', ctx: '128k', free: true },
+        { id: 'llama-3.3-nemotron-super-49b-v1', name: 'Llama 3.3 Nemotron Super 49B', ctx: '128k', free: true },
+        { id: 'llama-3.1-8b-instruct', name: 'Llama 3.1 8B Instruct', ctx: '128k', free: true }
       ],
       'ollama-cloud': [
         { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', ctx: '128k' },
