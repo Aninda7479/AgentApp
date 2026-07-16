@@ -156,18 +156,36 @@
             newPassword: newPassword
           })
         })
-          .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, data: d }; }); })
+          .then(function (res) {
+            // Read the body as text first so a non-JSON error response (e.g. the
+            // server's default 500 HTML page) can't throw while parsing JSON and
+            // get misreported as a network failure in the catch below.
+            return res.text().then(function (text) {
+              var data = null;
+              try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+              return { ok: res.ok, status: res.status, data: data };
+            });
+          })
           .then(function (result) {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Update password';
-             if (result.ok) {
-               show(okBox, 'Password updated successfully.');
-               form.reset();
-             } else {
-              show(errorBox, (result.data && result.data.error) || 'Update failed.');
+            if (result.ok) {
+              show(okBox, 'Password updated successfully.');
+              form.reset();
+              return;
+            }
+            // The server answered, so this is NOT a network error. Distinguish a
+            // server-side fault (5xx) from a normal auth/validation failure.
+            var serverMsg = result.data && result.data.error;
+            if (result.status >= 500) {
+              show(errorBox, 'The server hit an error. Please try again in a moment.');
+            } else {
+              show(errorBox, serverMsg || 'Update failed. Please try again.');
             }
           })
           .catch(function () {
+            // fetch only rejects on a genuine network/connection failure (server
+            // restart, offline) — never on an HTTP error status.
             submitBtn.disabled = false;
             submitBtn.textContent = 'Update password';
             show(errorBox, 'Network error. Please try again.');
