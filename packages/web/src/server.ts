@@ -415,8 +415,27 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
       }
       case 'read-file-base64': {
         const filePath = args[0];
-        const content = fs.readFileSync(filePath);
-        const ext = path.extname(filePath).toLowerCase();
+        if (typeof filePath !== 'string') {
+          res.status(400).json({ error: 'read-file-base64 requires a file path argument.' });
+          return;
+        }
+        // Confine reads to the project root and the user-data dir (chat media +
+        // logs). Reading arbitrary absolute paths would let an authenticated
+        // caller exfiltrate any file on disk — inconsistent with the
+        // project-root scoping the other file tools now enforce (4b0223f /
+        // abbad59 / 64655f9: read_file/list_dir/write_file/grep_search are all
+        // scoped). This channel is authenticated but is still reachable over
+        // HTTP in the web/VPS build and by the agent surface, so it must not be
+        // a free arbitrary-file-read primitive.
+        const resolved = path.resolve(filePath);
+        const allowedRoots = [path.resolve(process.cwd()), path.resolve(userDataDir)];
+        const inside = allowedRoots.some((r) => resolved === r || resolved.startsWith(r + path.sep));
+        if (!inside) {
+          res.status(400).json({ error: 'File is outside the allowed directories.' });
+          return;
+        }
+        const content = fs.readFileSync(resolved);
+        const ext = path.extname(resolved).toLowerCase();
         let mimeType = 'image/png';
         if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
         else if (ext === '.gif') mimeType = 'image/gif';

@@ -66,3 +66,26 @@ describe('web IPC handler — request validation', () => {
     expect(res.body.data).toEqual({ sessions: [] });
   });
 });
+
+describe('web IPC handler — read-file-base64 scoping', () => {
+  it('refuses to read a file outside the project root / user-data dir', async () => {
+    const res = mockRes();
+    await handleIpc(mockReq('read-file-base64', { args: ['/etc/passwd'] }), res);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toContain('outside the allowed directories');
+  });
+
+  it('requires a string path argument', async () => {
+    const res = mockRes();
+    await handleIpc(mockReq('read-file-base64', { args: [123] }), res);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toContain('requires a file path argument');
+  });
+
+  it('reads a file inside the project root', async () => {
+    const res = mockRes();
+    await handleIpc(mockReq('read-file-base64', { args: ['package.json'] }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toMatch(/^data:/);
+  });
+});
