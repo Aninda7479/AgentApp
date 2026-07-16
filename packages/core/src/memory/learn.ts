@@ -29,7 +29,11 @@ export class LearningLoopEngine {
       if ((err as { code?: string }).code === 'ENOENT') {
         this.insights = [];
       } else {
-        throw err;
+        // A present-but-unreadable/corrupt file must not break the feature.
+        // Recover with an empty set rather than throwing (the next save writes
+        // a fresh, valid file).
+        console.warn(`Learned insights file at ${this.filePath} was unreadable; starting fresh.`);
+        this.insights = [];
       }
     }
     this.loaded = true;
