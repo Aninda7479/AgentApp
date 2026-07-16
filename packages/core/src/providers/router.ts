@@ -102,7 +102,7 @@ export class ModelRouter {
 
   public static routeModelForTask(
     prompt: string,
-    allModels: Array<{ id: string; name: string; providerId: string; enabled: boolean }>
+    allModels: Array<{ id: string; name: string; providerId: string; enabled: boolean; supportsVision?: boolean; supportsTools?: boolean }>
   ): { provider: string; model: string } | null {
     if (allModels.length === 0) return null;
 
@@ -151,15 +151,26 @@ export class ModelRouter {
       else if (isVision) taskScore = scores.vision;
       else taskScore = (scores.coding + scores.reasoning) / 2; // general chat capability
 
+      // Capability-awareness: a model that actually supports the modality the
+      // task needs should be preferred (mission point 2 — route to the model
+      // good at the subtask). When the caller supplies per-model capability
+      // flags (e.g. GUI settings.models carry supportsVision/supportsTools),
+      // boost matching models so a non-capable model can't win a vision/tool
+      // task just because it scored slightly higher on the generic axis.
+      let capabilityMultiplier = 1.0;
+      if (isVision && m.supportsVision) capabilityMultiplier = 1.12;
+      else if ((isCoding || isReasoning) && m.supportsTools) capabilityMultiplier = 1.1;
+      const taskScoreAdj = taskScore * capabilityMultiplier;
+
       // Score = Capability * Weight + Cost * Weight
       let finalScore = 0;
       if (optimization === 'quality') {
-        finalScore = taskScore;
+        finalScore = taskScoreAdj;
       } else if (optimization === 'cost') {
-        finalScore = scores.costEfficiency;
+        finalScore = scores.costEfficiency * capabilityMultiplier;
       } else {
         // Balanced: 70% capability + 30% cost-efficiency
-        finalScore = (taskScore * 0.7) + (scores.costEfficiency * 0.3);
+        finalScore = (taskScoreAdj * 0.7) + (scores.costEfficiency * 0.3);
       }
 
       return {
