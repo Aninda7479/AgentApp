@@ -1,11 +1,11 @@
 ---
-name: goal
+name: auto-improve
 description: Autonomous research-and-improve loop for SuperAgent — reads the current codebase, researches current best practices online, ships small verified improvements to the model-orchestration layer, capability adapters (3D/image/video/audio/PDF/Office/code), and the React/Electron GUI, live-tests changes against already-connected free-tier models where possible, and commits to GitHub only when every check passes. Use for open-ended "keep improving the project" requests, not narrow single-task requests.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash, WebSearch, WebFetch, TodoWrite
 argument-hint: [optional focus, e.g. "routing-layer", "video-gen-adapter", "gui-polish", "gui-redesign"]
 ---
 
-# /goal — Autonomous Research → Improve → Test → Commit Loop
+# /auto-improve — Autonomous Research → Improve → Test → Commit Loop
 
 Re-read this whole file every time you're invoked, including after `/clear` or `/compact` — it's the only thing guaranteed to survive a fresh context.
 
@@ -24,7 +24,7 @@ Every cycle below should visibly serve one of these four.
 
 - Read `CLAUDE.md` / `README` / any architecture doc if present.
 - `git log --oneline -20` and `git status` — understand recent trajectory and any uncommitted work before touching anything. If the working tree is dirty with unrelated changes, stop and flag it in the log rather than committing over someone else's in-progress work.
-- Read `.claude/goal-log.md` (create it if it doesn't exist yet). This file is the memory that carries across invocations — treat its "next priority queue" and "open questions" as your starting point instead of re-discovering the project from scratch.
+- Read `.claude/auto-improve-log.log` (create it if it doesn't exist yet). This file is the memory that carries across invocations — treat its "next priority queue" and "open questions" as your starting point instead of re-discovering the project from scratch.
 - Read the provider/model registry (wherever the project tags providers as connected and models as `free`/paid — e.g. a `providers.json`, `models.config.*`, or settings store). You'll need this in Step 6.
 - Map the current structure: CLI package, Electron app, web app, shared orchestration core, capability adapters. Don't re-derive this every cycle — update your mental map, then move.
 
@@ -37,7 +37,7 @@ Use `$ARGUMENTS` if given. Recognized focuses include subsystem names (e.g. `rou
 
 ### Focus mode: `gui-redesign`
 
-When invoked as `/goal gui-redesign` (or the queue explicitly calls for it), scope expands beyond incremental polish:
+When invoked as `/auto-improve gui-redesign` (or the queue explicitly calls for it), scope expands beyond incremental polish:
 
 - Research current design systems and layout patterns from polished AI/SaaS products more deeply than a normal cycle (typography scale, spacing rhythm, color/theme tokens, component library conventions, motion/microinteractions, information hierarchy).
 - You may touch multiple related components/screens in one session, but still land them as a *sequence* of small atomic commits (Step 7), each individually verified — never one giant unreviewable commit.
@@ -95,7 +95,7 @@ You cannot drive the Electron app or web GUI directly — you have no browser/UI
 
 ## Step 8 — Log and hand off
 
-Append a dated entry to `.claude/goal-log.md`:
+Append a dated entry to `.claude/auto-improve-log.log`:
 
 ```
 ## YYYY-MM-DD — <focus area>
@@ -106,11 +106,11 @@ Static verify: <build/lint/test result>
 Live test: <PASS against <model name> / NOT LIVE-TESTED — reason>
 Predicted GUI behavior: <if applicable, and labeled as prediction>
 Committed: <commit hash + pushed, or "not committed — reason">
-Next priority queue: <ordered list for the next /goal run>
+Next priority queue: <ordered list for the next /auto-improve run>
 Open questions: <anything needing a human decision>
 ```
 
-This log is the entire continuity mechanism. A `/goal` run in a brand-new context must be able to pick up exactly where the last one stopped by reading it — write it with that reader in mind.
+This log is the entire continuity mechanism. A `/auto-improve` run in a brand-new context must be able to pick up exactly where the last one stopped by reading it — write it with that reader in mind.
 
 ## Step 9 — Repeat within the session
 
