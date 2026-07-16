@@ -47,6 +47,12 @@ function useSecureCookies(): boolean {
 }
 
 // ─── Session token: base64url(payload).hmac ──────────────────────────────────
+// Payload = { u: username, v: sessionVersion, exp: expiry }. The `v` field binds
+// a token to the password at issue time: changing the password bumps the stored
+// session version (and rotates the signing secret), so every token issued on
+// another device before the change stops verifying and that device is forced to
+// re-authenticate. The device that performed the change is re-issued a fresh
+// token so it stays logged in.
 
 /** Signs arbitrary data with the persistent session secret from core. */
 function sign(data: string): string {
@@ -58,7 +64,11 @@ function sign(data: string): string {
 
 /** Creates a signed session token embedding the username and an expiry. */
 export function createSessionToken(username: string): string {
-  const payload = JSON.stringify({ u: username, exp: Date.now() + sessionTtlMs() });
+  const payload = JSON.stringify({
+    u: username,
+    v: AuthStore.getSessionVersion(),
+    exp: Date.now() + sessionTtlMs()
+  });
   const encoded = Buffer.from(payload, 'utf-8').toString('base64url');
   return `${encoded}.${sign(encoded)}`;
 }
@@ -83,6 +93,10 @@ export function verifySessionToken(token: string | undefined): string | null {
   try {
     const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf-8'));
     if (typeof payload.exp !== 'number' || payload.exp < Date.now()) return null;
+    // Reject tokens minted before the current password version. A password change
+    // bumps the stored version, so every older session (other devices) is invalid.
+    const tokenVersion = typeof payload.v === 'number' ? payload.v : 0;
+    if (tokenVersion !== AuthStore.getSessionVersion()) return null;
     return typeof payload.u === 'string' ? payload.u : null;
   } catch {
     return null;

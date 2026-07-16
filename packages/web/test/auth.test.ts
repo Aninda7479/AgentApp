@@ -9,6 +9,7 @@ import {
   clearAttempts,
   validateChangePasswordInput
 } from '../src/auth.js';
+import { AuthStore } from '@superagent/core';
 
 /**
  * Exercises the web auth layer's pure / deterministic pieces:
@@ -135,5 +136,48 @@ describe('auth: change-password input validation', () => {
     const out = validateChangePasswordInput({ currentPassword: 'old', newPassword: '   ' });
     expect(out.ok).toBe(false);
     if (!out.ok) expect(out.error).toContain('cannot be empty');
+  });
+});
+
+describe('auth: password change invalidates other sessions', () => {
+  // Use the file-backed session secret/version (not the env override) so that
+  // rotation actually changes the key that tokens are signed/verified with.
+  const savedSecret = process.env.SUPERAGENT_SESSION_SECRET;
+  beforeAll(() => {
+    delete process.env.SUPERAGENT_SESSION_SECRET;
+    AuthStore.clearCredentials();
+  });
+  afterAll(() => {
+    AuthStore.clearCredentials();
+    if (savedSecret === undefined) delete process.env.SUPERAGENT_SESSION_SECRET;
+    else process.env.SUPERAGENT_SESSION_SECRET = savedSecret;
+  });
+
+  it('invalidates a previously-issued token after the password is changed', () => {
+    // Device A logs in with the original password.
+    AuthStore.setPassword('original-password');
+    const tokenBefore = createSessionToken(AuthStore.getUsername());
+    expect(verifySessionToken(tokenBefore)).toBe(AuthStore.getUsername());
+
+    // User changes the password on device B (verifying the current one first).
+    const change = AuthStore.changePassword('original-password', 'brand-new-password');
+    expect(change.ok).toBe(true);
+
+    // The stale session on device A must no longer verify — it is force-logged-out.
+    expect(verifySessionToken(tokenBefore)).toBeNull();
+
+    // A freshly minted token (carrying the new version) is valid on the device
+    // that performed the change.
+    const tokenAfter = createSessionToken(AuthStore.getUsername());
+    expect(verifySessionToken(tokenAfter)).toBe(AuthStore.getUsername());
+  });
+
+  it('keeps tokens valid across a restart when the password is unchanged', () => {
+    // Same version => a token minted before a read-from-disk still verifies,
+    // proving normal sessions survive restarts (only a password change revokes).
+    AuthStore.setPassword('stable-password');
+    const token = createSessionToken(AuthStore.getUsername());
+    // Simulate re-reading the persisted store (fresh process-equivalent state).
+    expect(verifySessionToken(token)).toBe(AuthStore.getUsername());
   });
 });

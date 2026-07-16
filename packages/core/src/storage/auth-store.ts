@@ -28,6 +28,13 @@ export interface AuthFile {
   credential?: StoredCredential;
   /** Secret used by surfaces to sign session tokens (persisted so sessions survive restarts). */
   sessionSecret?: string;
+  /**
+   * Monotonic counter bumped on every password change. Session tokens embed this
+   * version so that changing the password invalidates every previously-issued
+   * session (forcing re-login on all other devices), not just the one that
+   * performed the change.
+   */
+  sessionVersion?: number;
   /** Unix epoch (ms) of the last change to this file. */
   updatedAt?: number;
 }
@@ -142,8 +149,22 @@ export class AuthStore {
       keylen: this.KEYLEN,
       updatedAt: Date.now()
     };
+    // Invalidate every existing session: bump the session version (embedded in
+    // each token) and rotate the signing secret. Any session token minted before
+    // this change — on other devices — will no longer verify, forcing a re-login.
+    file.sessionVersion = (file.sessionVersion ?? 0) + 1;
+    file.sessionSecret = crypto.randomBytes(48).toString('hex');
     this.write(file);
     return { ok: true };
+  }
+
+  /**
+   * Returns the current session version, used to invalidate sessions on password
+   * change. Defaults to 0 when unset, so tokens issued before this field existed
+   * keep working until the first password change — at which point they expire.
+   */
+  public static getSessionVersion(): number {
+    return this.read().sessionVersion ?? 0;
   }
 
   /** Constant-time comparison of two equal-length buffers (scrypt hashes). */
