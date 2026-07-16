@@ -35,8 +35,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="h-full w-full flex items-center justify-center bg-brand-bg p-8">
-          <div className="max-w-md border border-red-500/30 bg-red-950/10 rounded-xl p-6 text-center shadow-2xl">
-            <AlertTriangle size={28} className="text-red-400 mx-auto mb-3 animate-pulse" />
+          <div className="max-w-md border border-[color:var(--neon-destructive)]/30 bg-[color:var(--neon-destructive)]/10 rounded-xl p-6 text-center shadow-2xl">
+            <AlertTriangle size={28} className="text-[color:var(--neon-destructive)] mx-auto mb-3 animate-pulse" />
             <h2 className="text-brand-textMain font-sans font-semibold mb-2">Something went wrong</h2>
             <p className="text-brand-textMuted font-sans text-sm mb-4">
               Part of the interface hit an error. The app is still running — check the console for details,

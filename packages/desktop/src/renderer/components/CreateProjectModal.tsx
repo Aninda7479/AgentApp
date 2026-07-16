@@ -132,7 +132,7 @@
 //                     </div>
 //                     <button 
 //                       onClick={() => handleRemoveFolder(idx)}
-//                       className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-500/10 transition-colors"
+//                       className="text-[color:var(--neon-destructive)] hover:text-[color:var(--neon-destructive)] p-1 rounded hover:bg-[color:var(--neon-destructive)]/10 transition-colors"
 //                     >
 //                       <Trash2 size={13} />
 //                     </button>
@@ -315,12 +315,12 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               onChange={(e) => setProjectName(e.target.value)}
               className={`bg-brand-bg border rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 transition-colors placeholder-brand-textMuted/50 ${
                 touched && !projectName.trim()
-                  ? 'border-red-500/60 focus:ring-red-500/30'
+                  ? 'border-[color:var(--neon-destructive)]/60 focus:ring-[color:var(--neon-destructive)]/30'
                   : 'border-brand-border focus:ring-white/20 focus:border-brand-textMuted'
               }`}
             />
             {touched && !projectName.trim() && (
-              <span className="text-xs text-red-400">Give your project a name</span>
+              <span className="text-xs text-[color:var(--neon-destructive)]">Give your project a name</span>
             )}
           </div>
 
@@ -342,7 +342,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 onClick={handleAddFolder}
                 className={`w-full flex flex-col items-center justify-center gap-2 bg-brand-bg hover:bg-white/[0.03] border border-dashed rounded-xl py-6 px-4 text-sm transition-all active:scale-[0.99] ${
                   touched && folders.length === 0
-                    ? 'border-red-500/50 text-red-400'
+                    ? 'border-[color:var(--neon-destructive)]/50 text-[color:var(--neon-destructive)]'
                     : 'border-brand-border text-brand-textMuted hover:text-white hover:border-brand-textMuted'
                 }`}
               >
@@ -371,7 +371,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                         <button
                           onClick={() => handleRemoveFolder(idx)}
                           aria-label={`Remove ${leaf}`}
-                          className="ml-auto flex-shrink-0 text-brand-textMuted hover:text-red-400 p-1 rounded hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                          className="ml-auto flex-shrink-0 text-brand-textMuted hover:text-[color:var(--neon-destructive)] p-1 rounded hover:bg-[color:var(--neon-destructive)]/10 transition-colors opacity-0 group-hover:opacity-100"
                         >
                           <Trash2 size={13} />
                         </button>

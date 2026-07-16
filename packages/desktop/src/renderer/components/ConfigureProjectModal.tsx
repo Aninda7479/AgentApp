@@ -135,7 +135,7 @@ export const ConfigureProjectModal: React.FC<ConfigureProjectModalProps> = ({
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-brand-textMuted uppercase tracking-wider flex items-center gap-1.5">
-                <Folder size={13} className="text-amber-500" /> Authorized Folders
+                <Folder size={13} className="text-[color:var(--neon-attention)]" /> Authorized Folders
               </span>
               <span className="text-[10px] text-brand-textMuted/60 font-mono">
                 {folders.length} Authorized
@@ -167,7 +167,7 @@ export const ConfigureProjectModal: React.FC<ConfigureProjectModalProps> = ({
                         </div>
                         <button
                           onClick={() => handleRemoveFolder(idx)}
-                          className="ml-auto text-brand-textMuted hover:text-red-400 p-0.5 rounded transition-colors opacity-0 group-hover:opacity-100"
+                          className="ml-auto text-brand-textMuted hover:text-[color:var(--neon-destructive)] p-0.5 rounded transition-colors opacity-0 group-hover:opacity-100"
                         >
                           <Trash2 size={12} />
                         </button>
@@ -211,12 +211,12 @@ export const ConfigureProjectModal: React.FC<ConfigureProjectModalProps> = ({
                       className="group flex items-center justify-between gap-3 bg-brand-bg border border-brand-border/40 rounded-lg px-2.5 py-1.5 text-xs"
                     >
                       <div className="flex items-center gap-2 text-brand-textMuted min-w-0">
-                        <Terminal size={12} className="flex-shrink-0 text-emerald-400" />
+                        <Terminal size={12} className="flex-shrink-0 text-[color:var(--neon-constructive)]" />
                         <span className="truncate text-white font-mono text-[11px]">{cmd}</span>
                       </div>
                       <button
                         onClick={() => handleRemoveCommand(idx)}
-                        className="text-brand-textMuted hover:text-red-400 p-0.5 rounded transition-colors opacity-0 group-hover:opacity-100"
+                        className="text-brand-textMuted hover:text-[color:var(--neon-destructive)] p-0.5 rounded transition-colors opacity-0 group-hover:opacity-100"
                       >
                         <Trash2 size={12} />
                       </button>

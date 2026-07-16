@@ -116,7 +116,7 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
           <div className="mb-1 flex items-center gap-2">
             <span className="text-sm font-semibold text-brand-textMain">{plugin.name}</span>
             {enabled && (
-              <span className="ui-badge bg-emerald-500/12 text-emerald-400">
+              <span className="ui-badge bg-[color:var(--neon-constructive)]/12 text-[color:var(--neon-constructive)]">
                 <Check size={10} /> Enabled
               </span>
             )}

@@ -64,9 +64,9 @@ export const BYOKModal: React.FC<BYOKModalProps> = ({
 
   const getTestStatusStyle = () => {
     if (!testStatus) return '';
-    if (testStatus.includes('✅')) return 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/40';
-    if (testStatus.includes('⚠️')) return 'bg-amber-950/80 text-amber-400 border border-amber-800/40';
-    return 'bg-indigo-950/80 text-indigo-400 border border-indigo-800/40';
+    if (testStatus.includes('✅')) return 'bg-[color:var(--neon-constructive)]/15 text-[color:var(--neon-constructive)] border border-[color:var(--neon-constructive)]/30';
+    if (testStatus.includes('⚠️')) return 'bg-[color:var(--neon-attention)]/15 text-[color:var(--neon-attention)] border border-[color:var(--neon-attention)]/30';
+    return 'bg-brand-popover text-brand-textMuted border border-brand-border';
   };
 
   return (
@@ -136,7 +136,7 @@ export const BYOKModal: React.FC<BYOKModalProps> = ({
                   data-testid={`byok-test-btn-${p.id}`}
                   onClick={() => handleTestConnection(p.id)}
                   variant="secondary"
-                  className="h-[38px] px-3 flex-shrink-0 text-xs font-semibold text-blue-400 hover:text-blue-300"
+                  className="h-[38px] px-3 flex-shrink-0 text-xs font-semibold text-[color:var(--neon-live)] hover:text-[color:var(--neon-live)]"
                 >
                   Test
                 </Button>

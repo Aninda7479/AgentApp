@@ -187,7 +187,7 @@ export const McpInstallModal: React.FC<McpInstallModalProps> = ({ isOpen, entry,
                     <code className="rounded bg-brand-bg px-1 py-0.5 font-mono text-[10px] text-brand-textMuted">
                       {envKey.key}
                     </code>
-                    {envKey.required && <span className="text-red-400">*</span>}
+                    {envKey.required && <span className="text-[color:var(--neon-destructive)]">*</span>}
                     {envKey.url && (
                       <a
                         href={envKey.url}

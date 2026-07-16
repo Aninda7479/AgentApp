@@ -460,7 +460,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               e.stopPropagation();
                               onDeleteChat(chat.id);
                             }}
-                            className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-red-400 hover:bg-white/5 transition-all cursor-pointer"
+                            className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-[color:var(--neon-destructive)] hover:bg-white/5 transition-all cursor-pointer"
                             title="Delete Chat"
                           >
                             <Trash2 className="w-3 h-3" />

@@ -392,7 +392,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             <button
               data-testid="win-close"
               onClick={() => onWindowControl('close')}
-              className="w-8 h-8 flex items-center justify-center text-brand-textMuted hover:text-white hover:bg-red-500 rounded transition-colors cursor-pointer"
+              className="w-8 h-8 flex items-center justify-center text-brand-textMuted hover:text-white hover:bg-[color:var(--neon-destructive)] rounded transition-colors cursor-pointer"
               title="Close"
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
