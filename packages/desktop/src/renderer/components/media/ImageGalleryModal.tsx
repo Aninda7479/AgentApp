@@ -70,6 +70,12 @@ export const ImageGalleryModal: React.FC<ImageGalleryModalProps> = ({
   const [filters, setFilters] = useState<ImageFilters>(DEFAULT_FILTERS);
   const [transform, setTransform] = useState<ImageTransform>(DEFAULT_TRANSFORM);
   const [activeTab, setActiveTab] = useState<'view' | 'edit'>('view');
+  const [imgError, setImgError] = useState<boolean>(false);
+
+  // The broken-image state is per-image: reset it whenever the active image changes.
+  useEffect(() => {
+    setImgError(false);
+  }, [currentIndex]);
 
   useEffect(() => {
     if (initialIndex >= 0 && initialIndex < images.length) {
@@ -215,7 +221,18 @@ export const ImageGalleryModal: React.FC<ImageGalleryModalProps> = ({
                   filter: filterStyle,
                   transform: transformStyle,
                 }}
+                onLoad={() => setImgError(false)}
+                onError={() => setImgError(true)}
               />
+              {imgError && (
+                <div style={styles.imgErrorOverlay} data-testid="image-error" role="alert">
+                  <div style={styles.imgErrorIcon}>🖼️</div>
+                  <div style={styles.imgErrorTitle}>Image failed to load</div>
+                  <div style={styles.imgErrorHint}>
+                    {currentImage.title || 'This image'} may be unavailable or the URL may be invalid.
+                  </div>
+                </div>
+              )}
             </div>
             <button
               style={{ ...styles.navBtn, right: 16 }}
@@ -458,6 +475,37 @@ const styles: Record<string, React.CSSProperties> = {
     maxHeight: '70vh',
     objectFit: 'contain',
     transition: 'filter 0.2s ease, transform 0.2s ease',
+  },
+  imgErrorOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    padding: '24px',
+    textAlign: 'center',
+    backgroundColor: 'rgba(9, 9, 11, 0.85)',
+    borderRadius: '8px',
+  },
+  imgErrorIcon: {
+    fontSize: '2rem',
+    lineHeight: 1,
+    opacity: 0.7,
+  },
+  imgErrorTitle: {
+    color: '#f4f4f5',
+    fontWeight: 600,
+    fontSize: '0.95rem',
+  },
+  imgErrorHint: {
+    color: '#a1a1aa',
+    fontSize: '0.8rem',
+    maxWidth: '320px',
   },
   navBtn: {
     position: 'absolute',

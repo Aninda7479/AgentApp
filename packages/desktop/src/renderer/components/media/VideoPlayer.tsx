@@ -34,8 +34,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showControls, setShowControls] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [hasError, setHasError] = useState<boolean>(false);
 
   const hideControlsTimer = useRef<NodeJS.Timeout | null>(null);
+
+  /**
+   * When the media can't be loaded the user must get a clear, actionable
+   * message instead of a silent black box — generated-media URLs are the most
+   * common source of a broken `src` in this app (mission point 4: finish).
+   */
+  const handleMediaError = () => {
+    setIsLoading(false);
+    setHasError(true);
+  };
+
+  const handleMediaReady = () => {
+    setIsLoading(false);
+    setHasError(false);
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -158,6 +175,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       onMouseMove={handleMouseMove}
       data-testid="video-player"
     >
+      <style>{`@keyframes sa-media-spin{to{transform:rotate(360deg)}}.sa-media-spin{animation:sa-media-spin 0.9s linear infinite}`}</style>
       <video
         ref={videoRef}
         src={src}
@@ -166,6 +184,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         loop={loop}
         style={styles.videoElement}
         onClick={togglePlay}
+        onCanPlay={handleMediaReady}
+        onLoadedData={handleMediaReady}
+        onError={handleMediaError}
       />
 
       {/* Title Bar Header */}
@@ -180,13 +201,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         <span style={styles.badge}>1080p HD</span>
       </div>
 
-      {/* Center Play Button Overlay */}
-      {!isPlaying && (
-        <div style={styles.centerOverlay} onClick={togglePlay}>
-          <button style={styles.bigPlayBtn} aria-label="Play video">
-            ▶
-          </button>
+      {/* Error / Loading / Play overlays (only one shows at a time) */}
+      {hasError ? (
+        <div style={styles.errorPanel} data-testid="video-error" role="alert">
+          <div style={styles.errorIcon}>⚠</div>
+          <div style={styles.errorTitle}>Video couldn&apos;t be loaded</div>
+          <div style={styles.errorHint}>
+            The source may be unavailable, blocked by the network, or the URL may be invalid.
+          </div>
         </div>
+      ) : isLoading ? (
+        <div style={styles.loadingOverlay} data-testid="video-loading">
+          <div style={styles.spinner} className="sa-media-spin" aria-hidden="true" />
+          <span style={styles.loadingLabel}>Loading video…</span>
+        </div>
+      ) : (
+        !isPlaying && (
+          <div style={styles.centerOverlay} onClick={togglePlay}>
+            <button style={styles.bigPlayBtn} aria-label="Play video">
+              ▶
+            </button>
+          </div>
+        )
       )}
 
       {/* Bottom Control Bar */}
@@ -327,6 +363,63 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: 'rgba(0,0,0,0.3)',
     cursor: 'pointer',
     zIndex: 5,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    zIndex: 20,
+  },
+  spinner: {
+    width: '42px',
+    height: '42px',
+    borderRadius: '50%',
+    border: '3px solid rgba(255,255,255,0.2)',
+    borderTopColor: 'var(--brand-highlight)',
+    boxSizing: 'border-box',
+  },
+  loadingLabel: {
+    color: '#e4e4e7',
+    fontSize: '0.85rem',
+    letterSpacing: '0.02em',
+  },
+  errorPanel: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '24px',
+    textAlign: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    zIndex: 20,
+  },
+  errorIcon: {
+    fontSize: '2rem',
+    lineHeight: 1,
+  },
+  errorTitle: {
+    color: '#f4f4f5',
+    fontWeight: 600,
+    fontSize: '1rem',
+  },
+  errorHint: {
+    color: '#a1a1aa',
+    fontSize: '0.82rem',
+    maxWidth: '320px',
   },
   bigPlayBtn: {
     width: '64px',

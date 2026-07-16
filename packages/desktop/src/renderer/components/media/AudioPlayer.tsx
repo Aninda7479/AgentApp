@@ -33,6 +33,21 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const [isLooping, setIsLooping] = useState<boolean>(loop);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [hasError, setHasError] = useState<boolean>(false);
+
+  /**
+   * Surface load failures clearly instead of a silent, unplayable player —
+   * generated-audio URLs are the most common broken `src` here (mission point 4).
+   */
+  const handleAudioError = () => {
+    setIsLoading(false);
+    setHasError(true);
+  };
+  const handleAudioReady = () => {
+    setIsLoading(false);
+    setHasError(false);
+  };
 
   useEffect(() => {
     setIsLooping(loop);
@@ -134,9 +149,26 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
   return (
     <div style={styles.container} data-testid="audio-player">
-      <audio ref={audioRef} src={src} autoPlay={autoPlay} loop={isLooping} />
+      <style>{`@keyframes sa-media-spin{to{transform:rotate(360deg)}}.sa-media-spin{animation:sa-media-spin 0.9s linear infinite}`}</style>
+      <audio
+        ref={audioRef}
+        src={src}
+        autoPlay={autoPlay}
+        loop={isLooping}
+        onCanPlay={handleAudioReady}
+        onLoadedData={handleAudioReady}
+        onError={handleAudioError}
+      />
 
       <div style={styles.card}>
+        {hasError && (
+          <div style={styles.errorBanner} data-testid="audio-error" role="alert">
+            <span style={styles.errorBannerIcon}>⚠</span>
+            <span>
+              Audio couldn&apos;t be loaded — the source may be unavailable or the URL invalid.
+            </span>
+          </div>
+        )}
         {/* Track Info Header */}
         <div style={styles.trackInfo}>
           <div style={styles.coverArt}>
@@ -171,6 +203,14 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
             );
           })}
         </div>
+
+        {/* Buffering indicator (hidden once the track is ready) */}
+        {isLoading && !hasError && (
+          <div style={styles.loadingRow} data-testid="audio-loading">
+            <div style={styles.spinner} className="sa-media-spin" aria-hidden="true" />
+            <span style={styles.loadingLabel}>Buffering audio…</span>
+          </div>
+        )}
 
         {/* Timeline Slider */}
         <div style={styles.timelineGroup}>
@@ -309,6 +349,41 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     gap: '4px',
     border: '1px solid #1f1f23',
+  },
+  loadingRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    padding: '4px 0',
+  },
+  spinner: {
+    width: '18px',
+    height: '18px',
+    borderRadius: '50%',
+    border: '2px solid rgba(255,255,255,0.2)',
+    borderTopColor: 'var(--brand-highlight)',
+    boxSizing: 'border-box',
+  },
+  loadingLabel: {
+    color: '#a1a1aa',
+    fontSize: '0.8rem',
+  },
+  errorBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    backgroundColor: 'rgba(239,68,68,0.12)',
+    border: '1px solid rgba(239,68,68,0.4)',
+    color: '#fecaca',
+    borderRadius: '8px',
+    padding: '10px 12px',
+    fontSize: '0.82rem',
+    lineHeight: 1.4,
+  },
+  errorBannerIcon: {
+    fontSize: '1rem',
+    flexShrink: 0,
   },
   waveformBar: {
     flex: 1,
