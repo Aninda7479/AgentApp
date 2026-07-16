@@ -120,6 +120,28 @@ export function resolveWithinAnyRoot(target: string, allowedRoots: string[]): st
   return null;
 }
 
+/**
+ * Returns true when `command` is permitted by the project's command allowlist.
+ * An empty/undefined allowlist permits everything — confinement is opt-in, so
+ * the user must explicitly pre-approve commands in project settings for the
+ * restriction to take effect. Matching is prefix-based on the first token(s):
+ * allowing "git" permits `git` and `git status`, but not `github-clone …`.
+ * Mirrors the same guard in the web and core engines so run_command enforces
+ * the same policy everywhere — mission point #1 (the user controls what the
+ * agent may execute in their project). The allowlist is set via the desktop
+ * ConfigureProjectModal and persisted on the StoredProject.
+ */
+export function isCommandAllowed(command: string, allowedCommands?: string[]): boolean {
+  if (!allowedCommands || allowedCommands.length === 0) return true;
+  const cmd = command.trim();
+  if (cmd.length === 0) return false;
+  const firstToken = cmd.split(/\s+/)[0];
+  return allowedCommands.some((allowed) => {
+    const a = allowed.trim();
+    return a !== '' && (cmd === a || firstToken === a || cmd.startsWith(a + ' '));
+  });
+}
+
 // ─── grep helper (in-process, no external binary) ─────────────────────────────
 // Searches files recursively using Node's fs + RegExp instead of shelling out to
 // the system `grep`. This (a) closes a command-injection vector that existed
@@ -187,7 +209,7 @@ function grepSearch(dir: string, pattern: string, fileGlob?: string): string {
   return matches.join('\n') || '(no matches found)';
 }
 
-export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDefinition[] {
+export function createBuiltinTools(projectRoot: string = process.cwd(), allowedCommands?: string[]): ToolDefinition[] {
   const safeExec = makeSafeExec(projectRoot);
 
   return [
@@ -289,6 +311,9 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ command }) => {
+        if (!isCommandAllowed(command as string, allowedCommands)) {
+          return `Error: command is not in the project's allowed commands: ${command}. Add it to the project's allowed commands in settings to permit it.`;
+        }
         return safeExec(command as string);
       }
     },
@@ -399,6 +424,11 @@ export interface AgentEngineConfig {
   internetAccess?: InternetAccessLevel;
   /** Additional tools (e.g. discovered MCP tools) merged into the agent's toolset. */
   extraTools?: ToolDefinition[];
+  /** Pre-approved shell commands for this project. When non-empty, run_command
+   *  only executes commands whose first token(s) match an entry (prefix-based).
+   *  Opt-in: an empty/undefined list permits all commands. Set via the desktop
+   *  ConfigureProjectModal and persisted on the StoredProject. */
+  allowedCommands?: string[];
 }
 
 // ─── Agent Engine ─────────────────────────────────────────────────────────────
@@ -420,7 +450,7 @@ export class AgentEngine {
     const effectiveRoot = config.projectRoot
       || (config.attachments?.[0] ? path.dirname(config.attachments[0]) : process.cwd());
 
-    this.tools = [...createBuiltinTools(effectiveRoot), ...(config.extraTools ?? [])];
+    this.tools = [...createBuiltinTools(effectiveRoot, config.allowedCommands), ...(config.extraTools ?? [])];
     this.history = [];
 
     // ── Build system prompt ────────────────────────────────────────────────

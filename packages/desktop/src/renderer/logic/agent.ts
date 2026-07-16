@@ -256,6 +256,7 @@ export class AgentService {
         baseUrl: activeProvider.baseUrl || undefined,
         model: resolvedModel,
         projectRoot: resolvedProjectRoot,
+        allowedCommands: activeProjectConfig?.allowedCommands,
         attachments: allAttachmentPaths.length > 0 ? allAttachmentPaths : undefined,
         internetAccess: ctx.getInternetAccessLevel()
       };

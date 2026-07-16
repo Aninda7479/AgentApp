@@ -84,7 +84,27 @@ function makeSafeExec(projectRoot: string) {
   };
 }
 
-export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDefinition[] {
+/**
+ * Returns true when `command` is permitted by the project's command allowlist.
+ * An empty/undefined allowlist permits everything — confinement is opt-in, so
+ * the user must explicitly pre-approve commands in project settings for the
+ * restriction to take effect. Matching is prefix-based on the first token(s):
+ * allowing "git" permits `git` and `git status`, but not `github-clone …`.
+ * Mirrors the same guard in the desktop and web engines so run_command
+ * enforces the same policy everywhere (mission point #1).
+ */
+export function isCommandAllowed(command: string, allowedCommands?: string[]): boolean {
+  if (!allowedCommands || allowedCommands.length === 0) return true;
+  const cmd = command.trim();
+  if (cmd.length === 0) return false;
+  const firstToken = cmd.split(/\s+/)[0];
+  return allowedCommands.some((allowed) => {
+    const a = allowed.trim();
+    return a !== '' && (cmd === a || firstToken === a || cmd.startsWith(a + ' '));
+  });
+}
+
+export function createBuiltinTools(projectRoot: string = process.cwd(), allowedCommands?: string[]): ToolDefinition[] {
   const safeExec = makeSafeExec(projectRoot);
 
   return [
@@ -184,6 +204,9 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ command }) => {
+        if (!isCommandAllowed(command as string, allowedCommands)) {
+          return `Error: command is not in the project's allowed commands: ${command}. Add it to the project's allowed commands in settings to permit it.`;
+        }
         return safeExec(command as string);
       }
     },
@@ -548,6 +571,10 @@ export interface AgentEngineConfig {
   projectRoot?: string;
   maxTokens?: number;
   temperature?: number;
+  /** Pre-approved shell commands for this project. When non-empty, run_command
+   *  only executes commands whose first token(s) match an entry (prefix-based).
+   *  Opt-in: an empty/undefined list permits all commands. */
+  allowedCommands?: string[];
 }
 
 // ─── Agent Engine ─────────────────────────────────────────────────────────────
@@ -562,7 +589,7 @@ export class AgentEngine {
   constructor(config: AgentEngineConfig, sessionId?: string) {
     this.config = config;
     this.sessionId = sessionId || `session-${Date.now()}`;
-    this.tools = createBuiltinTools(config.projectRoot);
+    this.tools = createBuiltinTools(config.projectRoot, config.allowedCommands);
     this.history = [];
 
     // System prompt matching OpenCode's AGENTS.md pattern

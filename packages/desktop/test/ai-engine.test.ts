@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createBuiltinTools, resolveWithinAnyRoot } from '../src/main/ai-engine';
+import { createBuiltinTools, resolveWithinAnyRoot, isCommandAllowed } from '../src/main/ai-engine';
 
 let root: string;
 const get = (name: string) => createBuiltinTools(root).find((t) => t.name === name)!;
@@ -121,5 +121,61 @@ describe('resolveWithinAnyRoot (read-file-base64 scope check)', () => {
   it('is case-insensitive so it holds on Windows paths', () => {
     const mixed = path.join(userData.toUpperCase(), 'Chat', 'PIC.PNG');
     expect(resolveWithinAnyRoot(mixed, roots)).toBe(path.resolve(mixed));
+  });
+});
+
+describe('isCommandAllowed (run_command allowlist)', () => {
+  // The desktop ConfigureProjectModal lets a user pre-approve commands; this
+  // guard enforces that allowlist in run_command. Empty list = opt-in off.
+  it('permits everything when the allowlist is empty/undefined', () => {
+    expect(isCommandAllowed('rm -rf /', [])).toBe(true);
+    expect(isCommandAllowed('git status', undefined)).toBe(true);
+  });
+
+  it('rejects a non-matching command when an allowlist is set', () => {
+    expect(isCommandAllowed('rm -rf /', ['git', 'npm run build'])).toBe(false);
+  });
+
+  it('permits an exact single-token match', () => {
+    expect(isCommandAllowed('git', ['git'])).toBe(true);
+  });
+
+  it('permits a command whose first token matches the allowed prefix', () => {
+    expect(isCommandAllowed('git status --short', ['git'])).toBe(true);
+    expect(isCommandAllowed('npm run build', ['npm'])).toBe(true);
+  });
+
+  it('permits a multi-word allowed entry as an exact or prefixed command', () => {
+    expect(isCommandAllowed('git status', ['git status'])).toBe(true);
+    expect(isCommandAllowed('git status --short', ['git status'])).toBe(true);
+  });
+
+  it('does NOT let a longer command piggyback on a token-prefix', () => {
+    // "git" must not permit "github-clone evil.com"
+    expect(isCommandAllowed('github-clone evil.com', ['git'])).toBe(false);
+  });
+
+  it('trims whitespace before matching', () => {
+    expect(isCommandAllowed('  git status  ', ['git'])).toBe(true);
+  });
+});
+
+describe('run_command tool honors the project allowlist', () => {
+  it('refuses a command outside the allowlist without executing it', async () => {
+    const tool = createBuiltinTools(root, ['echo']).find((t) => t.name === 'run_command')!;
+    const res = await tool.execute({ command: 'rm -rf /' });
+    expect(res).toContain('not in the project');
+  });
+
+  it('runs a command inside the allowlist', async () => {
+    const tool = createBuiltinTools(root, ['echo']).find((t) => t.name === 'run_command')!;
+    const res = await tool.execute({ command: 'echo allowed' });
+    expect(res).toContain('allowed');
+  });
+
+  it('runs any command when no allowlist is set (opt-in off)', async () => {
+    const tool = createBuiltinTools(root).find((t) => t.name === 'run_command')!;
+    const res = await tool.execute({ command: 'echo free' });
+    expect(res).toContain('free');
   });
 });
