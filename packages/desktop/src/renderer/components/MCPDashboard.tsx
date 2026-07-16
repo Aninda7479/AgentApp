@@ -107,9 +107,9 @@ const ServerLogo: React.FC<{ id?: string; icon?: string; size?: number }> = ({ i
 
 const getStatusDotClass = (status: MCPServerInfo['status']) => {
   switch (status) {
-    case 'connected': return 'bg-emerald-400';
-    case 'connecting': return 'bg-amber-400 animate-pulse';
-    case 'error': return 'bg-red-400';
+    case 'connected': return 'bg-[color:var(--neon-constructive)]';
+    case 'connecting': return 'bg-[color:var(--neon-attention)] animate-pulse';
+    case 'error': return 'bg-[color:var(--neon-destructive)]';
     default: return 'bg-brand-textMuted/50';
   }
 };
@@ -117,11 +117,11 @@ const getStatusDotClass = (status: MCPServerInfo['status']) => {
 const getStatusBadgeClass = (status: MCPServerInfo['status']) => {
   switch (status) {
     case 'connected':
-      return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+      return 'bg-[color:var(--neon-constructive)]/10 text-[color:var(--neon-constructive)] border border-[color:var(--neon-constructive)]/20';
     case 'connecting':
-      return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
+      return 'bg-[color:var(--neon-attention)]/10 text-[color:var(--neon-attention)] border border-[color:var(--neon-attention)]/20';
     case 'error':
-      return 'bg-red-500/10 text-red-400 border border-red-500/20';
+      return 'bg-[color:var(--neon-destructive)]/10 text-[color:var(--neon-destructive)] border border-[color:var(--neon-destructive)]/20';
     default:
       return 'bg-brand-bg text-brand-textMuted border border-brand-border/40';
   }
@@ -460,7 +460,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
                     data-testid={`mcp-delete-${srv.id}`}
                     onClick={() => onRemoveServer(srv.id)}
                     title="Remove server"
-                    className="rounded-md p-1 text-brand-textMuted transition-colors hover:bg-red-500/10 hover:text-red-400"
+                    className="rounded-md p-1 text-brand-textMuted transition-colors hover:bg-[color:var(--neon-destructive)]/10 hover:text-[color:var(--neon-destructive)]"
                   >
                     <Trash2 size={13} />
                   </button>
