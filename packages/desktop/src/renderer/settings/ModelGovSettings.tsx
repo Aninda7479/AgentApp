@@ -166,7 +166,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-brand-border/60 pb-4">
         <div>
-          <h2 className="text-base font-bold text-brand-textMain">Model Governance (Fugu Orchestration)</h2>
+          <h1 className="text-base font-bold text-brand-textMain">Model Governance (Fugu Orchestration)</h1>
           <p className="text-xs text-brand-textMuted mt-1">
             Dynamic routing mechanism inspired by Sakana AI's Fugu conducting agent. Auto-switches between enabled models depending on the complexity, cost, and context of each query.
           </p>
@@ -214,10 +214,10 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       {/* swarm tuning controls */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
-          <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+          <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
             <Sliders size={14} className="text-[var(--brand-accent)]" />
             <span>Optimization Goal</span>
-          </h3>
+          </h2>
           <div className="space-y-1">
             <label className="text-[10px] text-brand-textMuted uppercase font-bold tracking-wider">Select routing objective</label>
             <Select
@@ -233,10 +233,10 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
         </div>
 
         <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
-          <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+          <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
             <Award size={14} className="text-[var(--brand-accent)]" />
             <span>Routing Strategy</span>
-          </h3>
+          </h2>
           <div className="space-y-1">
             <label className="text-[10px] text-brand-textMuted uppercase font-bold tracking-wider">Decentralization level</label>
             <Select
@@ -254,10 +254,10 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       {/* category overrides */}
       <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
         <div>
-          <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+          <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
             <Settings size={14} className="text-[var(--brand-accent)]" />
             <span>Category Overrides</span>
-          </h3>
+          </h2>
           <p className="text-[11px] text-brand-textMuted mt-1">
             Set static model assignments for specific task domains, overriding dynamic routing options.
           </p>
@@ -305,10 +305,10 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       {/* Model Selector list */}
       <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-3">
         <div>
-          <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+          <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
             <CheckSquare size={14} className="text-[var(--brand-accent)]" />
             <span>Governance Swarm Pool</span>
-          </h3>
+          </h2>
           <p className="text-[11px] text-brand-textMuted mt-1">
             Choose which enabled models are available for Fugu to route prompts to. Output quality and pricing rates will determine selection.
           </p>
@@ -351,10 +351,10 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       {/* Instructions Editor */}
       <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-3">
         <div>
-          <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+          <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
             <FileText size={14} className="text-[var(--brand-accent)]" />
             <span>Fugu System Instructions (model-gov-instructions.md) [Dynamic]</span>
-          </h3>
+          </h2>
           <p className="text-[11px] text-brand-textMuted mt-1">
             Markdown system guidelines used to direct task assignments. Automatically re-compiles when you save settings changes.
           </p>

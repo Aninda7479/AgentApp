@@ -84,7 +84,7 @@ export const UsageTrackerSettings: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-brand-border/60 pb-4">
         <div>
-          <h2 className="text-base font-bold text-brand-textMain">AI Usage & Cost Tracker</h2>
+          <h1 className="text-base font-bold text-brand-textMain">AI Usage & Cost Tracker</h1>
           <p className="text-xs text-brand-textMuted mt-1">
             Real-time token logging and billing metrics across all connected AI models.
           </p>
@@ -146,7 +146,7 @@ export const UsageTrackerSettings: React.FC = () => {
       {summary.length > 0 ? (
         <div className="glass-card rounded-xl border border-brand-border/60 overflow-hidden">
           <div className="px-4 py-3 border-b border-brand-border/60 bg-brand-hover">
-            <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider">Model breakdown</h3>
+            <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider">Model breakdown</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
@@ -188,7 +188,7 @@ export const UsageTrackerSettings: React.FC = () => {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Clock size={13} className="text-brand-textMuted" />
-            <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider">Transaction logs</h3>
+            <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider">Transaction logs</h2>
           </div>
           <div className="max-h-[300px] overflow-y-auto border border-brand-border/60 rounded-xl divide-y divide-brand-border/40 bg-brand-card/40 custom-scrollbar">
             {records.map((r, idx) => (

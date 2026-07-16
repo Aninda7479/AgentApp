@@ -158,7 +158,7 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-brand-border/60 pb-4">
         <div>
-          <h2 className="text-base font-bold text-brand-textMain">Browser Use</h2>
+          <h1 className="text-base font-bold text-brand-textMain">Browser Use</h1>
           <p className="text-xs text-brand-textMuted mt-1">
             Configure how the Playwright environment runs. Connect to your active Chrome browser to run agent commands on your behalf using your logged-in sessions.
           </p>
@@ -186,10 +186,10 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
         {/* Left: configuration settings */}
         <div className="space-y-4">
           <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
-            <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+            <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
               <Network size={14} className="text-[var(--brand-accent)]" />
               <span>Browser Connection Profile</span>
-            </h3>
+            </h2>
 
             {/* Mode selection buttons */}
             <div className="grid grid-cols-3 gap-2">
@@ -349,10 +349,10 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
         {/* Right: Live testing sandbox */}
         <div className="space-y-4">
           <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
-            <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+            <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
               <Globe size={14} className="text-[var(--brand-accent)]" />
               <span>Browser Live Playground</span>
-            </h3>
+            </h2>
             <p className="text-[11px] text-brand-textMuted">
               Verify connection profiles in real-time. (If using CDP, ensure Chrome debugger is running first).
             </p>

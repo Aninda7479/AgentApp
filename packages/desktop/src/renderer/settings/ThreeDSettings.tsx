@@ -78,7 +78,7 @@ export const ThreeDSettings: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-brand-border/60 pb-4">
         <div>
-          <h2 className="text-base font-bold text-brand-textMain">3D Model Generation</h2>
+          <h1 className="text-base font-bold text-brand-textMain">3D Model Generation</h1>
           <p className="text-xs text-brand-textMuted mt-1">
             Let the agent make, export, and animate 3D characters — Tripo3D / Meshy style.
             Off by default; turn it on to enable.
@@ -104,10 +104,10 @@ export const ThreeDSettings: React.FC = () => {
       )}
 
       <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
-        <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+        <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
           <Box size={14} className="text-[var(--brand-accent)]" />
           <span>Capability</span>
-        </h3>
+        </h2>
 
         {/* Master enable toggle (default OFF) */}
         <div className="flex items-center justify-between py-1 border-b border-brand-border/30 pb-3">

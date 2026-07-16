@@ -102,7 +102,7 @@ export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-brand-border/60 pb-4">
         <div>
-          <h2 className="text-base font-bold text-brand-textMain">Computer Use</h2>
+          <h1 className="text-base font-bold text-brand-textMain">Computer Use</h1>
           <p className="text-xs text-brand-textMuted mt-1">
             Configure desktop control permissions, safety settings, and delay options for Windows OS cursor and keystroke automation.
           </p>
@@ -130,10 +130,10 @@ export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
         {/* Left: configuration settings */}
         <div className="space-y-4">
           <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
-            <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+            <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
               <MousePointer2 size={14} className="text-[var(--brand-accent)]" />
               <span>Permission Safety Controls</span>
-            </h3>
+            </h2>
 
             {/* Mouse Toggle */}
             <div className="flex items-center justify-between py-1 border-b border-brand-border/30 pb-3">
@@ -187,10 +187,10 @@ export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
         {/* Right: Live testing sandbox */}
         <div className="space-y-4">
           <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
-            <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+            <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
               <Camera size={14} className="text-[var(--brand-accent)]" />
               <span>Desktop Capture Preview</span>
-            </h3>
+            </h2>
             <p className="text-[11px] text-brand-textMuted">
               Test GDI+ screen capture mechanisms to ensure coordinates are matching.
             </p>
