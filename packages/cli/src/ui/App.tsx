@@ -172,7 +172,20 @@ export const App: React.FC<AppProps> = ({
     }
   };
 
-  const handleSendMessage = (text: string): void => {
+  const runLoopXFlow = async (prompt: string, count: number): Promise<void> => {
+    for (let i = 0; i < count; i++) {
+      appendMessage({
+        id: `sys-loop-x-${Date.now()}-${i}`,
+        role: 'system',
+        content: `[Loop-X] Starting iteration ${i + 1} of ${count}...`,
+        timestamp: Date.now()
+      });
+      await executePromptOrCommand(prompt);
+      await executePromptOrCommand('/compact');
+    }
+  };
+
+  const executePromptOrCommand = async (text: string): Promise<void> => {
     const trimmed = text.trim();
 
     if (trimmed === '/exit') {
@@ -208,33 +221,46 @@ export const App: React.FC<AppProps> = ({
       appendMessage(userMsg);
       setIsStreaming(true);
 
-      setTimeout(() => {
-        router
-          .execute(trimmed)
-          .then((res) => {
-            const out = res.success
-              ? res.output ?? ''
-              : `Error: ${res.error ?? 'command failed'}`;
-            transcriptManager.addRecord('system', out);
-            appendMessage({
-              id: `msg-${Date.now() + 1}`,
-              role: 'system',
-              content: out,
-              timestamp: Date.now(),
-            });
-          })
-          .finally(() => {
-            setIsStreaming(false);
-            processNextQueuedTurn();
-          });
-      }, 100);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      try {
+        const res = await router.execute(trimmed);
+        const out = res.success
+          ? res.output ?? ''
+          : `Error: ${res.error ?? 'command failed'}`;
+        transcriptManager.addRecord('system', out);
+        appendMessage({
+          id: `msg-${Date.now() + 1}`,
+          role: 'system',
+          content: out,
+          timestamp: Date.now(),
+        });
+
+        if (res.success && res.data && (res.data as any).isLoopX) {
+          const { count, prompt } = res.data as any;
+          setTimeout(() => {
+            void runLoopXFlow(prompt, count);
+          }, 0);
+        }
+      } catch (err: any) {
+        const out = `Error: ${err?.message || 'command failed'}`;
+        appendMessage({
+          id: `msg-${Date.now() + 1}`,
+          role: 'system',
+          content: out,
+          timestamp: Date.now(),
+        });
+      } finally {
+        setIsStreaming(false);
+        processNextQueuedTurn();
+      }
       return;
     }
 
     // Regular prompt: detect image paths in the text (drag-and-drop inserts the
     // path as text), then merge any images queued via `/attach`.
     setIsStreaming(true);
-    void (async () => {
+    try {
       const { cleanText, attachments: detected } = await prepareAttachments(text);
       const queued = pendingAttachmentsRef.current.splice(0);
       const attachments = [...queued, ...detected];
@@ -262,6 +288,8 @@ export const App: React.FC<AppProps> = ({
         });
       }
 
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
       const assistantMsg: ChatMessage = {
         id: `msg-${Date.now() + 2}`,
         role: 'assistant',
@@ -273,9 +301,14 @@ export const App: React.FC<AppProps> = ({
       };
       transcriptManager.addRecord('assistant', assistantMsg.content);
       appendMessage(assistantMsg);
+    } finally {
       setIsStreaming(false);
       processNextQueuedTurn();
-    })();
+    }
+  };
+
+  const handleSendMessage = (text: string): void => {
+    executePromptOrCommand(text).catch(() => {});
   };
 
   const handleQueueTurn = (text: string): void => {

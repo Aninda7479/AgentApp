@@ -41,4 +41,18 @@ describe('loop command (/loop)', () => {
     expect(resStart.output).toContain('loop-123');
     expect(startLoop).toHaveBeenCalledWith('check status', '5m');
   });
+
+  it('handles loop-x command execution and parsing', async () => {
+    const router = new SlashCommandRouter();
+    registerLoopCommand(router, {});
+
+    const res = await router.execute('/loop-x 5 check git status');
+    expect(res.success).toBe(true);
+    expect(res.output).toContain('Starting Loop-X with 5 runs...');
+    expect(res.data).toEqual({ count: 5, prompt: 'check git status', isLoopX: true });
+
+    const resError = await router.execute('/loop-x invalid prompt');
+    expect(resError.success).toBe(false);
+    expect(resError.error).toContain('Please specify a valid number of runs');
+  });
 });

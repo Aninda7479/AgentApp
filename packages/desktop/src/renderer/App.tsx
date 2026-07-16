@@ -284,6 +284,19 @@ export const App: React.FC = () => {
     setActiveLoopsList([]);
   }, []);
 
+  const slashDepsRef = useRef<SlashDeps | null>(null);
+
+  const runLoopX = useCallback(async (prompt: string, count: number): Promise<void> => {
+    const activeModel = stateRef.current.lastUsedModel || 'default';
+    for (let i = 0; i < count; i++) {
+      triggerToast(`[Loop-X] Starting iteration ${i + 1} of ${count}`);
+      await sendPromptRef.current(prompt, { model: activeModel, mode: 'chat', attachments: [] });
+      if (slashDepsRef.current) {
+        await SlashRouter.dispatch(ctx, SlashRouter.parse('/compact'), { model: activeModel, mode: 'chat', attachments: [] }, slashDepsRef.current);
+      }
+    }
+  }, [ctx, triggerToast]);
+
   useEffect(() => {
     return () => {
       if (loopManagerRef.current) {
@@ -294,20 +307,25 @@ export const App: React.FC = () => {
 
   // ── Slash-command dispatch wiring ──────────────────────────────────────────
   const slashDeps = useMemo<SlashDeps>(
-    () => ({
-      skills,
-      sendPrompt: (raw, opts) => sendPromptRef.current(raw, opts),
-      openConfigureProject: () => setIsConfigureProjectOpen(true),
-      openDoctor: () => setIsDoctorOpen(true),
-      openSearch: () => setSearchModalOpen(true),
-      openShortcuts: () => setIsShortcutsOpen(true),
-      openCreateProject: () => setIsCreateProjectOpen(true),
-      startLoop,
-      stopLoop,
-      listLoops,
-      clearLoops
-    }),
-    [skills, startLoop, stopLoop, listLoops, clearLoops]
+    () => {
+      const deps: SlashDeps = {
+        skills,
+        sendPrompt: (raw, opts) => sendPromptRef.current(raw, opts),
+        openConfigureProject: () => setIsConfigureProjectOpen(true),
+        openDoctor: () => setIsDoctorOpen(true),
+        openSearch: () => setSearchModalOpen(true),
+        openShortcuts: () => setIsShortcutsOpen(true),
+        openCreateProject: () => setIsCreateProjectOpen(true),
+        startLoop,
+        stopLoop,
+        listLoops,
+        clearLoops,
+        runLoopX
+      };
+      slashDepsRef.current = deps;
+      return deps;
+    },
+    [skills, startLoop, stopLoop, listLoops, clearLoops, runLoopX]
   );
   const slashDispatch = useCallback(
     (raw: string, options: ComposerOptions) => SlashRouter.dispatch(ctx, SlashRouter.parse(raw), options, slashDeps),

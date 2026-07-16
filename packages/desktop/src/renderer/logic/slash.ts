@@ -31,6 +31,7 @@ export interface SlashDeps {
   stopLoop?: (id: string) => boolean;
   listLoops?: () => any[];
   clearLoops?: () => void;
+  runLoopX?: (prompt: string, count: number) => void;
 }
 
 export class SlashRouter {
@@ -218,6 +219,21 @@ export class SlashRouter {
           if (!ctx.getActiveChatId()) ctx.setActiveChatId('draft-chat');
         } catch (err) {
           ctx.triggerToast(`Failed to start loop: ${(err as Error).message}`, 'error');
+        }
+        return true;
+      }
+      case 'loop-x': {
+        const count = parseInt(args[0], 10);
+        const prompt = args.slice(1).join(' ');
+        if (isNaN(count) || count <= 0 || !prompt) {
+          ctx.triggerToast('Usage: /loop-x [number of runs] [prompt]', 'error');
+          return true;
+        }
+
+        if (deps.runLoopX) {
+          deps.runLoopX(prompt, count);
+        } else {
+          ctx.triggerToast('Loop-X feature is not supported in this environment', 'error');
         }
         return true;
       }

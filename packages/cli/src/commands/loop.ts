@@ -86,4 +86,39 @@ export function registerLoopCommand(router: SlashCommandRouter, deps: LoopComman
       usage: '/loop [interval] [prompt] | /loop list | /loop stop <id> | /loop clear'
     }
   );
+
+  router.register(
+    'loop-x',
+    async (ctx: SlashCommandContext): Promise<SlashCommandResult> => {
+      const args = ctx.args;
+      const count = parseInt(args[0], 10);
+      if (isNaN(count) || count <= 0) {
+        return {
+          success: false,
+          command: ctx.command,
+          error: 'Please specify a valid number of runs: /loop-x [number of runs] [prompt]'
+        };
+      }
+
+      const prompt = ctx.rawArgs.substring(args[0].length).trim();
+      if (!prompt) {
+        return {
+          success: false,
+          command: ctx.command,
+          error: 'Please specify the prompt to run: /loop-x [number of runs] [prompt]'
+        };
+      }
+
+      return {
+        success: true,
+        command: ctx.command,
+        output: `Starting Loop-X with ${count} runs...`,
+        data: { count, prompt, isLoopX: true }
+      };
+    },
+    {
+      description: 'Run a prompt iteratively for a fixed number of runs and compact context between runs',
+      usage: '/loop-x [number of runs] [prompt]'
+    }
+  );
 }

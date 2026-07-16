@@ -61,6 +61,7 @@ export const BUILTIN_COMMANDS: BuiltinCommandDef[] = [
   { name: 'compact', description: 'Compact and summarize the conversation context', action: 'compact' },
   { name: 'diff', description: 'Show a diff of recent file changes', action: 'diff' },
   { name: 'loop', description: 'Start, stop, or list recurring agent prompts/maintenance tasks', action: 'loop', usage: '/loop [interval] [prompt] | /loop list | /loop stop <id> | /loop clear' },
+  { name: 'loop-x', description: 'Run a prompt iteratively for a fixed number of runs and compact context between runs', action: 'loop-x', usage: '/loop-x [number of runs] [prompt]' },
   { name: 'help', description: 'Show this list of available slash commands', action: 'help' },
 ];
 
