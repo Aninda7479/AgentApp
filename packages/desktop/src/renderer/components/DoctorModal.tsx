@@ -43,22 +43,22 @@ export const DoctorModal: React.FC<DoctorModalProps> = ({
   const getStatusIcon = (status: 'pass' | 'warn' | 'fail') => {
     switch (status) {
       case 'pass':
-        return <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />;
+        return <CheckCircle2 className="w-4 h-4 text-[color:var(--neon-constructive)] shrink-0" />;
       case 'warn':
-        return <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />;
+        return <AlertTriangle className="w-4 h-4 text-[color:var(--neon-attention)] shrink-0" />;
       case 'fail':
-        return <XCircle className="w-4 h-4 text-rose-400 shrink-0" />;
+        return <XCircle className="w-4 h-4 text-[color:var(--neon-destructive)] shrink-0" />;
     }
   };
 
   const getStatusStyle = (status: 'pass' | 'warn' | 'fail') => {
     switch (status) {
       case 'pass':
-        return 'border-emerald-500/20 bg-emerald-500/5';
+        return 'border-[color:var(--neon-constructive)]/20 bg-[color:var(--neon-constructive)]/5';
       case 'warn':
-        return 'border-amber-500/20 bg-amber-500/5';
+        return 'border-[color:var(--neon-attention)]/20 bg-[color:var(--neon-attention)]/5';
       case 'fail':
-        return 'border-rose-500/20 bg-rose-500/5';
+        return 'border-[color:var(--neon-destructive)]/20 bg-[color:var(--neon-destructive)]/5';
     }
   };
 
@@ -116,9 +116,9 @@ export const DoctorModal: React.FC<DoctorModalProps> = ({
 
             {/* Overall status */}
             <div className={`mt-5 p-3 rounded-lg border text-center text-xs font-semibold ${
-              isHealthy 
-                ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/35'
-                : 'bg-amber-950/40 text-amber-400 border-amber-800/35'
+              isHealthy
+                ? 'bg-[color:var(--neon-constructive)]/10 text-[color:var(--neon-constructive)] border-[color:var(--neon-constructive)]/25'
+                : 'bg-[color:var(--neon-attention)]/10 text-[color:var(--neon-attention)] border-[color:var(--neon-attention)]/25'
             }`}>
               {isHealthy 
                 ? '🩺 Diagnostics complete — Setup is healthy!'
