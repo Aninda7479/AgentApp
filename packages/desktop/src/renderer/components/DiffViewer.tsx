@@ -48,8 +48,8 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
       <div className="min-h-12.5 py-2 bg-brand-sidebar border-b border-brand-border flex items-center justify-between gap-2 flex-wrap px-3 sm:px-5 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <span className="font-semibold text-sm truncate max-w-[45vw] sm:max-w-none">📄 {filename}</span>
-          <span className="text-xs text-emerald-400 font-bold">+{additions}</span>
-          <span className="text-xs text-red-400 font-bold">-{deletions}</span>
+          <span className="text-xs text-[color:var(--neon-constructive)] font-bold">+{additions}</span>
+          <span className="text-xs text-[color:var(--neon-destructive)] font-bold">-{deletions}</span>
         </div>
         <div className="flex items-center gap-2.5">
           <button
@@ -65,7 +65,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
             <button
               data-testid="btn-reject-diff"
               onClick={onReject}
-              className="bg-red-900/60 border border-red-800/40 text-red-400 rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-red-800/60 transition-colors active:scale-[0.97]"
+              className="bg-[color:var(--neon-destructive)]/15 border border-[color:var(--neon-destructive)]/30 text-[color:var(--neon-destructive)] rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-[color:var(--neon-destructive)]/25 transition-colors active:scale-[0.97]"
             >
               Reject ✕
             </button>
@@ -78,7 +78,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
                 onReview?.(filename);
                 onAccept();
               }}
-              className="bg-emerald-900/60 border border-emerald-800/40 text-emerald-400 rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-emerald-800/60 transition-colors active:scale-[0.97]"
+              className="bg-[color:var(--neon-constructive)]/15 border border-[color:var(--neon-constructive)]/30 text-[color:var(--neon-constructive)] rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-[color:var(--neon-constructive)]/25 transition-colors active:scale-[0.97]"
             >
               Accept All ✓
             </button>
@@ -115,8 +115,8 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
                     </div>
                   );
                 }
-                const bg = item.type === 'delete' ? 'bg-red-950/30' : 'transparent';
-                const color = item.type === 'delete' ? 'text-red-300' : 'text-brand-textMain';
+                const bg = item.type === 'delete' ? 'bg-[color:var(--neon-destructive)]/10' : 'transparent';
+                const color = item.type === 'delete' ? 'text-[color:var(--neon-destructive)]' : 'text-brand-textMain';
                 return (
                   <div key={idx} className={`flex ${bg}`} style={{ height: '22px' }}>
                     <span className="w-10 text-right pr-2 text-[#52525b] select-none text-xs leading-5.5">{item.origLineNum || ''}</span>
@@ -140,8 +140,8 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
                     </div>
                   );
                 }
-                const bg = item.type === 'add' ? 'bg-emerald-950/30' : 'transparent';
-                const color = item.type === 'add' ? 'text-emerald-300' : 'text-brand-textMain';
+                const bg = item.type === 'add' ? 'bg-[color:var(--neon-constructive)]/10' : 'transparent';
+                const color = item.type === 'add' ? 'text-[color:var(--neon-constructive)]' : 'text-brand-textMain';
                 return (
                   <div key={idx} className={`flex ${bg}`} style={{ height: '22px' }}>
                     <span className="w-10 text-right pr-2 text-[#52525b] select-none text-xs leading-5.5">{item.modLineNum || ''}</span>
@@ -157,15 +157,15 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
             {lines.map((item, idx) => {
               const bg =
                 item.type === 'add'
-                  ? 'bg-emerald-950/30'
+                  ? 'bg-[color:var(--neon-constructive)]/10'
                   : item.type === 'delete'
-                  ? 'bg-red-950/30'
+                  ? 'bg-[color:var(--neon-destructive)]/10'
                   : '';
               const color =
                 item.type === 'add'
-                  ? 'text-emerald-300'
+                  ? 'text-[color:var(--neon-constructive)]'
                   : item.type === 'delete'
-                  ? 'text-red-300'
+                  ? 'text-[color:var(--neon-destructive)]'
                   : 'text-brand-textMain';
               const prefix = item.type === 'add' ? '+' : item.type === 'delete' ? '-' : ' ';
 

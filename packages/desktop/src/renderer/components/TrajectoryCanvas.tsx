@@ -94,8 +94,8 @@ const WorkedHeader: React.FC<WorkedHeaderProps> = ({
           <ChevronRight size={13} className="text-brand-textMuted group-hover:text-brand-textMain transition-colors" />
         )}
         {isWorking ? (
-          <span className="flex items-center gap-1.5 text-sky-400 font-semibold animate-pulse font-sans">
-            <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+          <span className="flex items-center gap-1.5 text-[color:var(--neon-live)] font-semibold animate-pulse font-sans">
+            <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)]" />
             <span>Thinking... ({duration})</span>
           </span>
         ) : (
@@ -133,10 +133,10 @@ const WorkedHeader: React.FC<WorkedHeaderProps> = ({
               <span className="text-brand-textMuted font-medium">M→</span>
               <span className="text-brand-textMain font-medium font-mono">{ef.name}</span>
               {ef.added > 0 && (
-                <span className="text-emerald-500 font-semibold">+{ef.added}</span>
+                <span className="text-[color:var(--neon-constructive)] font-semibold">+{ef.added}</span>
               )}
               {ef.removed > 0 && (
-                <span className="text-red-500 font-semibold ml-0.5">-{ef.removed}</span>
+                <span className="text-[color:var(--neon-destructive)] font-semibold ml-0.5">-{ef.removed}</span>
               )}
             </div>
           ))}
@@ -160,8 +160,8 @@ const FileChangedChip: React.FC<FileChangedChipProps> = ({ count, added, removed
   <div className="flex items-center justify-between gap-3 mt-2">
     <button className="flex items-center gap-2 text-[11px] text-brand-textMuted hover:text-brand-textMain transition-colors group">
       <span>{count} file{count !== 1 ? 's' : ''} changed</span>
-      {added > 0 && <span className="text-emerald-500 font-semibold">+{added}</span>}
-      {removed > 0 && <span className="text-red-500 font-semibold">-{removed}</span>}
+      {added > 0 && <span className="text-[color:var(--neon-constructive)] font-semibold">+{added}</span>}
+      {removed > 0 && <span className="text-[color:var(--neon-destructive)] font-semibold">-{removed}</span>}
       <ChevronRight size={11} className="text-brand-textMuted/60 group-hover:text-brand-textMain transition-colors" />
     </button>
 
@@ -193,7 +193,7 @@ const PromptCopyButton: React.FC<{ content: string }> = ({ content }) => {
       title="Copy prompt"
       className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-all cursor-pointer text-[10px]"
     >
-      {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+      {copied ? <Check size={11} className="text-[color:var(--neon-constructive)]" /> : <Copy size={11} />}
       <span>{copied ? 'Copied' : 'Copy'}</span>
     </button>
   );
@@ -223,19 +223,19 @@ const MessageActions: React.FC<MessageActionsProps> = ({ content, onThumbsUp, on
         title="Copy"
         className="p-1.5 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-all cursor-pointer"
       >
-        {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+        {copied ? <Check size={13} className="text-[color:var(--neon-constructive)]" /> : <Copy size={13} />}
       </button>
       <button
         onClick={onThumbsUp}
         title="Good response"
-        className="p-1.5 rounded-md text-brand-textMuted hover:text-emerald-400 hover:bg-emerald-500/5 transition-all cursor-pointer"
+        className="p-1.5 rounded-md text-brand-textMuted hover:text-[color:var(--neon-constructive)] hover:bg-[color:var(--neon-constructive)]/5 transition-all cursor-pointer"
       >
         <ThumbsUp size={13} />
       </button>
       <button
         onClick={onThumbsDown}
         title="Bad response"
-        className="p-1.5 rounded-md text-brand-textMuted hover:text-red-400 hover:bg-red-500/5 transition-all cursor-pointer"
+        className="p-1.5 rounded-md text-brand-textMuted hover:text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/5 transition-all cursor-pointer"
       >
         <ThumbsDown size={13} />
       </button>
@@ -508,7 +508,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                     <button
                       onClick={() => onUndoStep(turn.userSteps[0].id)}
                       title="Undo this prompt and response"
-                      className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-red-400 hover:bg-red-500/5 transition-all cursor-pointer text-[10px]"
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/5 transition-all cursor-pointer text-[10px]"
                     >
                       <RotateCcw size={11} />
                       <span>Undo</span>
@@ -662,8 +662,8 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
                   <div className="flex items-center gap-2">
                     <span
                       className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                        isSuccess ? 'bg-emerald-500' :
-                        isError ? 'bg-red-500' : 'bg-sky-400'
+                        isSuccess ? 'bg-[color:var(--neon-constructive)]' :
+                        isError ? 'bg-[color:var(--neon-destructive)]' : 'bg-[color:var(--neon-live)]'
                       }`}
                     />
                     <span className="text-brand-textMain font-semibold font-mono">{step.toolName || 'tool'}</span>
@@ -729,7 +729,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
                       step.metadata!.modifiedCode || ''
                     )
                   }
-                  className="flex items-center gap-1.5 text-[11px] text-brand-textMuted hover:text-sky-400 transition-colors"
+                  className="flex items-center gap-1.5 text-[11px] text-brand-textMuted hover:text-[color:var(--neon-live)] transition-colors"
                 >
                   <Eye size={11} />
                   <span>View diff — {step.metadata.filename}</span>
@@ -742,8 +742,8 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
 
       {/* If completed but no assistant reply was rendered, show the response failed card */}
       {assistantSteps.length === 0 && !isStreaming && (
-        <div className="text-red-400 bg-red-500/10 border border-red-500/25 px-4 py-2.5 rounded-xl text-xs font-semibold select-none max-w-fit flex items-center gap-2 mt-1 animate-fade-in font-sans">
-          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+        <div className="text-[color:var(--neon-destructive)] bg-[color:var(--neon-destructive)]/10 border border-[color:var(--neon-destructive)]/25 px-4 py-2.5 rounded-xl text-xs font-semibold select-none max-w-fit flex items-center gap-2 mt-1 animate-fade-in font-sans">
+          <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-destructive)] animate-pulse" />
           <span>Agent Response Failed</span>
         </div>
       )}
