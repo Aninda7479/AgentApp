@@ -17,6 +17,14 @@ import {
 
 describe('PDF & PPT Media Document Suite (Steps 049 - 054)', () => {
   describe('Step 049: AI LLM PDF Layout Designer', () => {
+    it('rejects a malformed spec with a clear error (not an opaque TypeError)', async () => {
+      await expect(compilePDF(undefined as unknown as Parameters<typeof compilePDF>[0]))
+        .rejects.toThrow(/PDFLayoutSpec object is required/i);
+      await expect(
+        compilePDF({ title: 'x', pageSize: 'A4', orientation: 'portrait' } as unknown as Parameters<typeof compilePDF>[0])
+      ).rejects.toThrow(/spec\.sections must be a non-empty array/i);
+    });
+
     it('should create default PDF layout design', () => {
       const spec = createPDFLayoutDesign({ title: 'Quarterly Report' });
       expect(spec.title).toBe('Quarterly Report');

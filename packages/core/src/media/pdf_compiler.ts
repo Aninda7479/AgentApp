@@ -28,6 +28,24 @@ function getPageDimensions(size: PDFPageSize, orientation: PDFPageOrientation): 
 }
 
 export async function compilePDF(spec: PDFLayoutSpec): Promise<Uint8Array> {
+  // Fail clearly (not with an opaque TypeError deep in pdf-lib) when the
+  // caller hands us a malformed spec. The media adapters all surface
+  // clear errors for bad input; this capability must too. Optional-but-
+  // defaultable fields (margins, palette) are defaulted so a partial spec
+  // from callers that don't go through createPDFLayoutDesign still works.
+  if (!spec || typeof spec !== 'object') {
+    throw new Error('compilePDF: a PDFLayoutSpec object is required.');
+  }
+  if (!spec.sections || !Array.isArray(spec.sections)) {
+    throw new Error('compilePDF: spec.sections must be a non-empty array.');
+  }
+  if (!spec.margins || typeof spec.margins !== 'object') {
+    spec.margins = { top: 50, bottom: 50, left: 50, right: 50 };
+  }
+  if (!spec.palette || typeof spec.palette !== 'object') {
+    spec.palette = { primary: '#222222', secondary: '#666666', text: '#111111', background: '#ffffff', accent: '#3b82f6' };
+  }
+
   const pdfDoc = await PDFDocument.create();
   pdfDoc.setTitle(spec.title);
   if (spec.author) pdfDoc.setAuthor(spec.author);
