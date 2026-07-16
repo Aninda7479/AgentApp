@@ -46,13 +46,13 @@ export const AppToast: React.FC<AppToastProps> = ({ open, message, type = 'info'
       data-testid="toast-under-construction"
       className={`fixed bottom-6 right-6 border rounded-xl py-3 px-4 text-brand-textMain shadow-2xl z-[3000] flex items-center gap-3 text-xs animate-fade-in glass-panel ${
         isError
-          ? 'border-red-500/30 bg-red-950/10 shadow-red-950/5'
+          ? 'border-[color:var(--neon-destructive)]/30 bg-[color:var(--neon-destructive)]/10 shadow-[color:var(--neon-destructive)]/5'
           : 'border-brand-border bg-brand-popover'
       }`}
     >
       <div className="flex items-center gap-2">
         {isError ? (
-          <AlertTriangle size={14} className="text-red-400 flex-shrink-0 animate-pulse" />
+          <AlertTriangle size={14} className="text-[color:var(--neon-destructive)] flex-shrink-0 animate-pulse" />
         ) : (
           <Info size={14} className="text-violet-400 flex-shrink-0" />
         )}
@@ -71,14 +71,14 @@ export const AppToast: React.FC<AppToastProps> = ({ open, message, type = 'info'
           title="Copy message"
           className="p-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-all cursor-pointer"
         >
-          {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+          {copied ? <Check size={12} className="text-[color:var(--neon-constructive)]" /> : <Copy size={12} />}
         </button>
 
         {/* Dismiss button */}
         <button
           onClick={onClose}
           title="Dismiss"
-          className="p-1 rounded-md text-brand-textMuted hover:text-red-400 hover:bg-white/5 transition-all cursor-pointer"
+          className="p-1 rounded-md text-brand-textMuted hover:text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/10 transition-all cursor-pointer"
         >
           <X size={12} />
         </button>
