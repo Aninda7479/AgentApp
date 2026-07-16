@@ -727,6 +727,80 @@ safeHandle('three-d-generate', async (_event, args: { name?: string; prompt?: st
   }
 });
 
+safeHandle('three-d-list-models', async () => {
+  try {
+    const outDir = path.join(app.getPath('userData'), '3d-studio');
+    if (!fs.existsSync(outDir)) {
+      return [];
+    }
+    const files = fs.readdirSync(outDir);
+    const list = files
+      .filter(f => f.endsWith('.glb') || f.endsWith('.gltf'))
+      .map(f => {
+        const fullPath = path.join(outDir, f);
+        const stats = fs.statSync(fullPath);
+        const parsed = path.parse(f);
+        return {
+          name: parsed.name,
+          path: fullPath,
+          format: parsed.ext.replace('.', ''),
+          size: stats.size,
+          modified: stats.mtimeMs
+        };
+      });
+    return list;
+  } catch (err: any) {
+    return [];
+  }
+});
+
+safeHandle('three-d-delete-model', async (_event, args: { filePath: string }) => {
+  try {
+    const outDir = path.join(app.getPath('userData'), '3d-studio');
+    const targetPath = args.filePath;
+    // Basic validation to prevent arbitrary file deletion outside 3d-studio
+    if (!targetPath.startsWith(outDir)) {
+      return { ok: false, message: 'Invalid target path.' };
+    }
+    if (fs.existsSync(targetPath)) {
+      fs.unlinkSync(targetPath);
+      return { ok: true };
+    }
+    return { ok: false, message: 'File not found.' };
+  } catch (err: any) {
+    return { ok: false, message: err.message };
+  }
+});
+
+safeHandle('three-d-import-external-model', async () => {
+  try {
+    const win = windowManager.getMainWindow();
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Import 3D Model',
+      properties: ['openFile'],
+      filters: [{ name: '3D Model', extensions: ['glb', 'gltf'] }]
+    });
+    if (result.canceled || !result.filePaths.length) return { ok: false, path: null };
+    
+    const sourcePath = result.filePaths[0];
+    const outDir = path.join(app.getPath('userData'), '3d-studio');
+    fs.mkdirSync(outDir, { recursive: true });
+    
+    const parsed = path.parse(sourcePath);
+    const destPath = path.join(outDir, parsed.base);
+    
+    fs.copyFileSync(sourcePath, destPath);
+    
+    return {
+      ok: true,
+      path: destPath,
+      name: parsed.name
+    };
+  } catch (err: any) {
+    return { ok: false, message: err.message };
+  }
+});
+
 /**
  * Opens a native folder picker so the user can choose a 3D model folder (one that
  * contains an `index.ts`/`index.js` exporting a `Character` class) to attach to a
