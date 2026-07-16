@@ -155,8 +155,11 @@ const AgentTabBar: React.FC<AgentTabBarProps> = ({
     {/* Add new agent session */}
     <button
       onClick={onAddSession}
-      title="Run another agent in parallel"
-      className="flex items-center gap-1 px-2 py-1.5 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-all select-none flex-shrink-0"
+      disabled={noModels}
+      title={noModels ? 'Connect a model in Settings to use agents' : 'Run another agent in parallel'}
+      className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-brand-textMuted transition-all select-none flex-shrink-0 ${
+        noModels ? 'opacity-40 cursor-not-allowed' : 'hover:text-brand-textMain hover:bg-brand-hover cursor-pointer'
+      }`}
     >
       <Plus size={12} />
       <span className="text-[11px]">New agent</span>
@@ -233,6 +236,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
   const activeSession = agentSessions.find(s => s.id === activeSessionId) || agentSessions[0];
   const showMultiAgentBar = agentSessions.length > 1;
+
+  // Mirror the composer's gate: an agent session can't actually run until a
+  // provider is connected (modelsCatalog drives the composer's hasModels), so
+  // the entry points that spawn one should be disabled under the same condition
+  // instead of letting a user create a dead, un-sendable agent.
+  const noModels = modelsCatalog.length === 0;
 
   const handleAddAgentSession = () => {
     const newId = `session-${Date.now()}`;
@@ -438,7 +447,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
               </div>
               <button
                 onClick={handleAddAgentSession}
-                className="flex items-center gap-1.5 bg-brand-hover border border-brand-border hover:border-brand-border-strong px-2.5 py-1 rounded-full text-brand-textMain transition-all cursor-pointer"
+                disabled={noModels}
+                title={noModels ? 'Connect a model in Settings to use agents' : 'Run another agent in parallel'}
+                className={`flex items-center gap-1.5 border px-2.5 py-1 rounded-full text-brand-textMain transition-all ${
+                  noModels
+                    ? 'opacity-40 cursor-not-allowed border-brand-border bg-brand-hover'
+                    : 'bg-brand-hover border-brand-border hover:border-brand-border-strong cursor-pointer'
+                }`}
               >
                 <Bot size={10} />
                 <span>Run parallel agent</span>
