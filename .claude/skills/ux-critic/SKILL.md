@@ -1,6 +1,6 @@
 ---
 name: ux-critic
-description: Synthetic-user UX and frontend audit for SuperAgent — drives the live web GUI with Playwright MCP, walks through the app as different user personas, and logs concrete, screenshot-referenced findings into the same queue /goal reads. Observation only, never edits code. Use on a schedule to compensate for having no real users yet.
+description: Synthetic-user UX and frontend audit for SuperAgent — drives the live web GUI with Playwright MCP, walks through the app as different user personas, and logs concrete, screenshot-referenced findings into the same queue /auto-improve reads. Observation only, never edits code. Use on a schedule to compensate for having no real users yet.
 allowed-tools: Read, Grep, Glob, Bash, Write, WebSearch, Playwright MCP tools
 argument-hint: [optional persona or flow, e.g. "first-time-setup", "mobile", "accessibility", "video-gen-flow"]
 ---
@@ -9,7 +9,7 @@ argument-hint: [optional persona or flow, e.g. "first-time-setup", "mobile", "ac
 
 ## Why this exists
 
-No real users yet means no one is naturally hitting confusing flows, unclear copy, broken mobile layouts, or inconsistent visuals and telling you about it. This skill substitutes for that missing signal by actually driving the running app the way a first-time user would, and writing down what it finds — specifically, with screenshots — so `/goal` has real UX work to pull from instead of running dry once its code-completeness scan is exhausted.
+No real users yet means no one is naturally hitting confusing flows, unclear copy, broken mobile layouts, or inconsistent visuals and telling you about it. This skill substitutes for that missing signal by actually driving the running app the way a first-time user would, and writing down what it finds — specifically, with screenshots — so `/auto-improve` has real UX work to pull from instead of running dry once its code-completeness scan is exhausted.
 
 Be honest about what this is and isn't: a simulated walkthrough is not the same as feedback from real people with real devices, real patience, and real reasons for being there. Treat it as a way to catch the obvious, structural, embarrassing problems before anyone else sees them — not a substitute for eventually getting a handful of real people to actually try the app.
 
@@ -23,7 +23,7 @@ This covers the **web GUI** cleanly — point it at whatever `npm run dev` / you
 
 ## Step 0 — Orient
 
-- Read `.claude/goal-log.md`. Look for prior entries tagged `[ux-critic]` so you don't re-test the same flow back to back — rotate through personas/flows across runs.
+- Read `.claude/auto-improve-log.log`. Look for prior entries tagged `[ux-critic]` so you don't re-test the same flow back to back — rotate through personas/flows across runs.
 - Confirm the dev server is running; if not, start it with the project's actual dev command (read `package.json` — don't guess it).
 - Confirm Playwright MCP tools are available. If not, stop and say so in the log rather than fabricating a walkthrough.
 
@@ -58,7 +58,7 @@ Rank findings by how likely they are to actually block or confuse a real user, n
 
 ## Step 4 — Log into the shared queue (no code edits)
 
-Append an entry to `.claude/goal-log.md`, same format `/goal` already reads, tagged so it's identifiable:
+Append an entry to `.claude/auto-improve-log.log`, same format `/auto-improve` already reads, tagged so it's identifiable:
 
 ```
 ## YYYY-MM-DD — [ux-critic] <persona/flow>
@@ -66,11 +66,11 @@ Researched: <flow tested, screenshot paths, console/network issues found>
 Changed: none — observation only
 Why: GUI quality / compensates for no real user feedback
 Verified: n/a — this cycle only observes
-Next priority queue: <ranked, specific, actionable UX fixes for /goal to pick up>
+Next priority queue: <ranked, specific, actionable UX fixes for /auto-improve to pick up>
 Open questions: <anything needing a human call, e.g. desktop-shell testing gap>
 ```
 
-Do not edit application code in this skill, even for something trivial. Keep the roles separate: this skill's only job is to see and report; `/goal`'s job is to fix and verify. That separation is what stops the same agent from grading its own homework.
+Do not edit application code in this skill, even for something trivial. Keep the roles separate: this skill's only job is to see and report; `/auto-improve`'s job is to fix and verify. That separation is what stops the same agent from grading its own homework.
 
 ## Step 5 — Repeat
 
