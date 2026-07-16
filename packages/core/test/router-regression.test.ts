@@ -98,3 +98,53 @@ describe('ModelRouter.routeModelForTask capability-awareness', () => {
     expect(route!.model).toBe('claude-tool');
   });
 });
+
+/**
+ * Capability *exclusion* (hard gate), not just the 1.1x/1.12x boost: a
+ * non-capable model must never win a vision/tool task when a capable one is in
+ * the pool, even if it scores higher on the generic axis. These guard the fix
+ * that turned the boost into an actual candidate filter.
+ */
+describe('ModelRouter.routeModelForTask capability exclusion', () => {
+  const visionModel = {
+    id: 'openai-gpt-4-vision', name: 'GPT-4 Vision', providerId: 'openai', enabled: true,
+    supportsVision: true, supportsTools: true
+  };
+  const plainModel = {
+    id: 'deepseek-chat', name: 'DeepSeek Chat', providerId: 'deepseek', enabled: true,
+    supportsVision: false, supportsTools: true
+  };
+
+  beforeEach(() => {
+    // Make plainModel dominate on the generic axis so the boost alone would NOT
+    // save us — only the hard filter can route the vision task correctly.
+    vi.spyOn(ModelGovStorage, 'getModelScores').mockImplementation((id: string) => {
+      if (id.includes('gpt-4-vision')) return { coding: 50, reasoning: 50, vision: 50, costEfficiency: 50 };
+      return { coding: 96, reasoning: 96, vision: 96, costEfficiency: 96 };
+    });
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('never routes a vision task to a non-vision model when a capable one is available', () => {
+    const route = ModelRouter.routeModelForTask('describe this image', [plainModel, visionModel]);
+    expect(route!.model).toBe('gpt-4-vision');
+  });
+
+  it('falls back to the full pool for a vision task when no vision model is present', () => {
+    const onlyPlain = { id: 'deepseek-chat', name: 'DeepSeek Chat', providerId: 'deepseek', enabled: true, supportsVision: false, supportsTools: true };
+    const route = ModelRouter.routeModelForTask('describe this image', [onlyPlain]);
+    // No vision-capable model in the pool → must not crash or return null; it
+    // falls back to the only available model (provider prefix is stripped).
+    expect(route).not.toBeNull();
+    expect(route!.provider).toBe('deepseek');
+    expect(route!.model).toBe('chat');
+  });
+
+  it('never routes a coding task to a tool-less model when a tool-capable one is available', () => {
+    const toolLess = { id: 'openai-reasoner', name: 'Reasoner', providerId: 'openai', enabled: true, supportsVision: false, supportsTools: false };
+    const toolModel = { id: 'anthropic-claude-tool', name: 'Claude Coder', providerId: 'anthropic', enabled: true, supportsVision: false, supportsTools: true };
+    const route = ModelRouter.routeModelForTask('write a python function', [toolLess, toolModel]);
+    expect(route!.model).toBe('claude-tool');
+  });
+});

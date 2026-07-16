@@ -1,4 +1,5 @@
 import { BYOKConfig } from '../types/agent.js';
+import { hasRealMediaKey, NO_PROVIDER_MESSAGE } from './config.js';
 
 export interface VideoGenerationOptions {
   prompt: string;
@@ -52,7 +53,7 @@ export class VideoGenerator {
       return failedJob;
     }
 
-    if (config.apiKey && config.apiKey !== 'mock-key' && !config.apiKey.includes('mock')) {
+    if (hasRealMediaKey(config)) {
       try {
         const baseUrl = config.baseUrl || 'https://api.openai.com/v1';
         const response = await fetch(`${baseUrl}/video/generations`, {
@@ -125,29 +126,48 @@ export class VideoGenerator {
       }
     }
 
-    // Offline / mock mode
-    const mockJob: VideoGenerationJob = {
+    // Explicit mock key → offline fixture (preserves existing mock behavior).
+    if (config.apiKey === 'mock-key' || config.apiKey.includes('mock')) {
+      const mockJob: VideoGenerationJob = {
+        jobId,
+        status: 'completed',
+        progress: 100,
+        videoUrl: `https://media.superagent.ai/video/${jobId}.mp4`,
+        previewImageUrl: `https://media.superagent.ai/video/${jobId}_thumb.jpg`,
+        prompt: options.prompt,
+        model,
+        provider,
+        durationSeconds,
+        aspectRatio,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      this.jobs.set(jobId, mockJob);
+      return mockJob;
+    }
+
+    // No provider connected. Report a clear failure rather than returning a
+    // fabricated `completed` job with a fake video URL — that would mislead the
+    // user into thinking a generation actually happened (matches image/tts/stt).
+    return {
       jobId,
-      status: 'completed',
-      progress: 100,
-      videoUrl: `https://media.superagent.ai/video/${jobId}.mp4`,
-      previewImageUrl: `https://media.superagent.ai/video/${jobId}_thumb.jpg`,
+      status: 'failed',
+      progress: 0,
       prompt: options.prompt,
       model,
       provider,
       durationSeconds,
       aspectRatio,
       createdAt: Date.now(),
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      error: NO_PROVIDER_MESSAGE
     };
-    this.jobs.set(jobId, mockJob);
-    return mockJob;
   }
 
   async getJobStatus(jobId: string, config: BYOKConfig): Promise<VideoGenerationJob> {
     const existing = this.jobs.get(jobId);
 
-    if (config.apiKey && config.apiKey !== 'mock-key' && !config.apiKey.includes('mock')) {
+    if (hasRealMediaKey(config)) {
       try {
         const baseUrl = config.baseUrl || 'https://api.openai.com/v1';
         const response = await fetch(`${baseUrl}/video/generations/${jobId}`, {

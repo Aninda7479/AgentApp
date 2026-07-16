@@ -244,7 +244,7 @@ export const PartnerView: React.FC<PartnerViewProps> = ({
                         <div className="flex items-center gap-2">
                           <span className="truncate text-sm font-semibold text-brand-textMain">{pet.name}</span>
                           {isActive && (
-                            <span className="ui-badge bg-[color:var(--neon-live)]/12 text-[color:var(--neon-live)]">
+                            <span className="ui-badge constructive">
                               <Check size={10} /> Active
                             </span>
                           )}

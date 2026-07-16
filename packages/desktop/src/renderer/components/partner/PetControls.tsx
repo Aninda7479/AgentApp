@@ -63,7 +63,7 @@ export const PetControls: React.FC<PetControlsProps> = ({ activePet }) => {
             <h2 className="font-outfit text-base font-semibold text-brand-textMain">Desktop Pet</h2>
             <span
               data-testid="pet-status"
-              className={`ui-badge ${running ? 'bg-[color:var(--neon-live)]/12 text-[color:var(--neon-live)]' : 'bg-brand-border/60 text-brand-textMuted'}`}
+              className={`ui-badge ${running ? 'constructive' : 'muted'}`}
             >
               {running ? '● Running' : '○ Stopped'}
             </span>

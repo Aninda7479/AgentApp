@@ -75,8 +75,11 @@ export class ModelSwitcher {
     const p = provider.toLowerCase();
     // Validate against the canonical provider registry so any supported
     // provider (openrouter, nvidia, kimi, ollama, …) is accepted, not just a
-    // hardcoded subset.
-    if (!getProviderMeta(p)) {
+    // hardcoded subset. Custom BYO endpoints are registered with dynamic ids
+    // like `custom-1719500000` (see provider-meta.ts); accept those too so a
+    // connected custom provider is switchable — never hard-lock to a fixed list.
+    const isCustomProvider = p.startsWith('custom');
+    if (!getProviderMeta(p) && !isCustomProvider) {
       return {
         success: false,
         message: `'${provider}' is not a supported provider. Run /model list to see registered models, or connect it first.`

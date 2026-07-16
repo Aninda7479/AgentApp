@@ -143,7 +143,21 @@ export class ModelRouter {
     // 3. Dynamic Selection sorting based on task capabilities and optimization goals
     const optimization = settings.modelGov?.optimizationGoal || 'balanced';
 
-    const candidates = enabledModels.map(m => {
+    // Capability-gated candidate pool (mission point 2): when the task needs a
+    // modality that some models in the pool actually support, restrict selection
+    // to those models so a non-capable model can never win a vision/tool task.
+    // A non-vision model cannot read an image and a tool-less model cannot call
+    // tools, so routing either of them to such a task is a guaranteed API failure,
+    // not just a quality miss. When the pool contains no capable model we fall
+    // back to the full pool so routing still returns *something* instead of null.
+    let candidatePool = enabledModels;
+    const capableModels = enabledModels.filter(m =>
+      (isVision && m.supportsVision) ||
+      ((isCoding || isReasoning) && m.supportsTools)
+    );
+    if (capableModels.length > 0) candidatePool = capableModels;
+
+    const candidates = candidatePool.map(m => {
       const scores = ModelGovStorage.getModelScores(m.id);
       let taskScore = 0;
       if (isCoding) taskScore = scores.coding;
