@@ -49,3 +49,35 @@ describe('grep_search builtin tool', () => {
     expect(tsOnly).toBe('(no matches found)');
   });
 });
+
+describe('builtin file tools respect project-root scoping', () => {
+  const get = (name: string) => createBuiltinTools(root).find((t) => t.name === name)!;
+
+  it('read_file refuses paths outside the project root', async () => {
+    const res = await get('read_file').execute({ path: '../escape.txt' });
+    expect(res).toContain('outside the project root');
+  });
+
+  it('list_dir refuses paths outside the project root', async () => {
+    const res = await get('list_dir').execute({ path: '..' });
+    expect(res).toContain('outside the project root');
+  });
+
+  it('grep_search refuses a directory outside the project root', async () => {
+    const res = await get('grep_search').execute({ pattern: 'x', directory: '../' });
+    expect(res).toContain('outside the project root');
+  });
+
+  it('write_file refuses paths outside the project root and writes nothing', async () => {
+    const escapeTarget = path.join(root, '..', 'escaped_write.txt');
+    expect(fs.existsSync(escapeTarget)).toBe(false);
+    const res = await get('write_file').execute({ path: '../escaped_write.txt', content: 'pwned' });
+    expect(res).toContain('outside the project root');
+    expect(fs.existsSync(escapeTarget)).toBe(false);
+  });
+
+  it('still allows legitimate in-root access', async () => {
+    const res = await get('read_file').execute({ path: 'readme.md' });
+    expect(res).toContain('TODO: write docs');
+  });
+});

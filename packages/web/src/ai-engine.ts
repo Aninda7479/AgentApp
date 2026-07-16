@@ -127,6 +127,21 @@ function grepSearch(dir: string, pattern: string, fileGlob?: string): string {
   return matches.join('\n') || '(no matches found)';
 }
 
+// ─── path scoping ──────────────────────────────────────────────────────────────
+// Resolves a tool-supplied path against the project root and refuses anything
+// that escapes it (e.g. "../../etc/passwd"). The built-in file tools must never
+// read/write/list outside the user's project — mission point 1: the agent
+// cannot freely browse the whole filesystem. Returns the resolved absolute path,
+// or null if it escapes the root.
+function resolveWithinRoot(projectRoot: string, target: string): string | null {
+  const root = path.resolve(projectRoot);
+  const resolved = path.resolve(projectRoot, target);
+  const normRoot = root.toLowerCase();
+  const normResolved = resolved.toLowerCase();
+  const inside = normResolved === normRoot || normResolved.startsWith(normRoot + path.sep);
+  return inside ? resolved : null;
+}
+
 function makeSafeExec(projectRoot: string) {
   return async (command: string): Promise<string> => {
     try {
@@ -160,10 +175,9 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ path: filePath }) => {
+        const resolved = resolveWithinRoot(projectRoot, filePath as string);
+        if (!resolved) return `Error: path is outside the project root: ${filePath}`;
         try {
-          const resolved = path.isAbsolute(filePath as string)
-            ? filePath as string
-            : path.join(projectRoot, filePath as string);
           const content = fs.readFileSync(resolved, 'utf-8');
           const lines = content.split('\n');
           if (lines.length > 500) {
@@ -188,10 +202,9 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ path: dirPath }) => {
+        const resolved = resolveWithinRoot(projectRoot, dirPath as string);
+        if (!resolved) return `Error: path is outside the project root: ${dirPath}`;
         try {
-          const resolved = path.isAbsolute(dirPath as string)
-            ? dirPath as string
-            : path.join(projectRoot, dirPath as string);
           const entries = fs.readdirSync(resolved, { withFileTypes: true });
           const lines = entries.slice(0, 200).map(e => {
             if (e.isDirectory()) return `[DIR]  ${e.name}/`;
@@ -223,8 +236,15 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ pattern, directory, fileGlob }) => {
-        const dir = directory ? path.join(projectRoot, directory as string) : projectRoot;
         if (!pattern) return '(no matches found)';
+        let dir: string;
+        if (directory) {
+          const resolved = resolveWithinRoot(projectRoot, directory as string);
+          if (!resolved) return `Error: path is outside the project root: ${directory}`;
+          dir = resolved;
+        } else {
+          dir = projectRoot;
+        }
         return grepSearch(dir, pattern as string, fileGlob as string | undefined);
       }
     },
@@ -258,10 +278,9 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ path: filePath, content }) => {
+        const resolved = resolveWithinRoot(projectRoot, filePath as string);
+        if (!resolved) return `Error: path is outside the project root: ${filePath}`;
         try {
-          const resolved = path.isAbsolute(filePath as string)
-            ? filePath as string
-            : path.join(projectRoot, filePath as string);
           fs.mkdirSync(path.dirname(resolved), { recursive: true });
           fs.writeFileSync(resolved, content as string, 'utf-8');
           const lines = (content as string).split('\n').length;
