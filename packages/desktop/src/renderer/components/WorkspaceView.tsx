@@ -198,7 +198,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   slashCommands,
   skills = []
 }) => {
-  const enabledModels = modelsCatalog.filter(model => model.enabled);
+  // Composer availability is gated on CONNECTED providers, not on the per-model
+  // `enabled` (Model Governance) toggle — that toggle is a separate, opt-in
+  // selection refinement (see ModelGovSettings), not a gate for whether the
+  // composer can send at all. modelsCatalog is the union of all connected
+  // providers' models, so every entry here is from a connected provider. Gating
+  // on `model.enabled` instead left the composer at "Models: None" + a disabled
+  // send button for ANY first-run user (every imported model defaults to
+  // enabled:false in enrichModel), making the product unusable on first run.
+  const enabledModels = modelsCatalog;
 
   // ── Multi-agent session state ──────────────────────────────────────────────
   const [agentSessions, setAgentSessions] = useState<AgentSession[]>([
@@ -451,7 +459,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         }}
         activeProject={activeProject}
         onAttachClick={onAttachClick}
-        availableModels={enabledModels.length > 1 ? ['Model Governance', ...enabledModels.map(model => model.name)] : enabledModels.map(model => model.name)}
+        availableModels={composerModelsFromCatalog(modelsCatalog)}
         defaultModel={activeChatModel && enabledModels.some(m => m.name === activeChatModel) ? activeChatModel : (enabledModels.length > 1 ? 'Model Governance' : (enabledModels[0]?.name || ''))}
         promptValue={composerPrompt}
         onPromptChange={onPromptChange}
@@ -471,3 +479,20 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     </>
   );
 };
+
+/**
+ * Builds the composer's model dropdown from the connected-providers model
+ * catalog. Unlike the Model Governance `enabled` toggle (a separate, opt-in
+ * selection refinement), composer AVAILABILITY is gated on whether a provider
+ * is connected at all — i.e. whether modelsCatalog has any entry. Every catalog
+ * entry is already from a connected provider, so an empty catalog means "no
+ * provider connected" and the composer correctly shows nothing. This must NOT
+ * filter on `model.enabled`: imported models default to enabled:false
+ * (enrichModel), and gating on that left first-run users at "Models: None" with
+ * a permanently disabled send button — a universal first-run blocker.
+ */
+export function composerModelsFromCatalog(modelsCatalog: ModelConfig[]): string[] {
+  if (modelsCatalog.length === 0) return [];
+  if (modelsCatalog.length === 1) return [modelsCatalog[0].name];
+  return ['Model Governance', ...modelsCatalog.map((m) => m.name)];
+}
