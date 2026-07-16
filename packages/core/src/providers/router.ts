@@ -102,107 +102,146 @@ export class ModelRouter {
 
   public static routeModelForTask(
     prompt: string,
-    allModels: Array<{ id: string; name: string; providerId: string; enabled: boolean; supportsVision?: boolean; supportsTools?: boolean }>
+    allModels: RouterModel[]
   ): { provider: string; model: string } | null {
     if (allModels.length === 0) return null;
+    const prepared = ModelRouter.prepareRouting(prompt, allModels);
+    if (prepared.override) return prepared.override;
+    const ranked = ModelRouter.rankModels(
+      prepared.flags,
+      ModelRouter.resolveCandidatePool(prepared.flags, prepared.enabledModels)
+    );
+    if (ranked.length > 0) {
+      const best = ranked[0].model;
+      return { provider: best.providerId, model: ModelRouter.stripProviderPrefix(best.providerId, best.id) };
+    }
+    const firstEnabled = prepared.enabledModels[0];
+    return { provider: firstEnabled.providerId, model: ModelRouter.stripProviderPrefix(firstEnabled.providerId, firstEnabled.id) };
+  }
 
-    // Load custom Model Gov pool
+  /**
+   * Returns the top-`count` capable models for a task, in ranked order. This is
+   * the selection half of best-of-N / parallel-multi-model orchestration
+   * (mission point 2): the GUI passes these N candidates to the engine, which
+   * runs each and merges their outputs. It shares the EXACT pool / override /
+   * capability-gating / scoring logic with routeModelForTask so single-model and
+   * multi-model routing never diverge.
+   */
+  public static selectCandidateModels(
+    prompt: string,
+    allModels: RouterModel[],
+    count: number = 2
+  ): Array<{ provider: string; model: string }> {
+    if (allModels.length === 0) return [];
+    const prepared = ModelRouter.prepareRouting(prompt, allModels);
+    if (prepared.override) return [prepared.override];
+    const ranked = ModelRouter.rankModels(
+      prepared.flags,
+      ModelRouter.resolveCandidatePool(prepared.flags, prepared.enabledModels)
+    );
+    const n = Math.max(1, Math.min(count, ranked.length));
+    return ranked.slice(0, n).map((c) => ({
+      provider: c.model.providerId,
+      model: ModelRouter.stripProviderPrefix(c.model.providerId, c.model.id)
+    }));
+  }
+
+  /** Classifies a (lowercased) prompt into the task categories the router scores. */
+  private static classifyTask(lowerPrompt: string): { isCoding: boolean; isReasoning: boolean; isVision: boolean } {
+    const isCoding = /\b(code|write|refactor|debug|compile|build|test|regex|script|function|class|json|html|css|javascript|typescript|python|c\+\+|java)\b/.test(lowerPrompt);
+    const isReasoning = /\b(analyze|solve|logic|math|proof|algorithm|complexity|optimize|reason|think|deduce|plan)\b/.test(lowerPrompt);
+    const isVision = /\b(image|picture|photo|video|frame|canvas|screenshot|png|jpg|jpeg|svg|draw)\b/.test(lowerPrompt);
+    return { isCoding, isReasoning, isVision };
+  }
+
+  /**
+   * Resolves the enabled model pool (the user's Model Gov selection, or all
+   * models when none are enabled) and applies the capability gate: when the task
+   * needs a modality some models actually support, restrict to those so a
+   * non-capable model can never win a vision/tool task. Falls back to the full
+   * pool when no capable model is present so routing still returns something.
+   */
+  private static resolveCandidatePool(
+    flags: { isCoding: boolean; isReasoning: boolean; isVision: boolean },
+    enabledModels: RouterModel[]
+  ): RouterModel[] {
+    const capable = enabledModels.filter((m) =>
+      (flags.isVision && m.supportsVision) ||
+      ((flags.isCoding || flags.isReasoning) && m.supportsTools)
+    );
+    return capable.length > 0 ? capable : enabledModels;
+  }
+
+  /** Scores and sorts models for a task by capability, task-fit, and the user's
+   *  optimization goal (quality / cost / balanced). Descending by finalScore. */
+  private static rankModels(
+    flags: { isCoding: boolean; isReasoning: boolean; isVision: boolean },
+    pool: RouterModel[]
+  ): Array<{ model: RouterModel; finalScore: number }> {
+    const optimization = SettingsStorage.loadSettings().modelGov?.optimizationGoal || 'balanced';
+    const candidates = pool.map((m) => {
+      const scores = ModelGovStorage.getModelScores(m.id);
+      let taskScore = 0;
+      if (flags.isCoding) taskScore = scores.coding;
+      else if (flags.isReasoning) taskScore = scores.reasoning;
+      else if (flags.isVision) taskScore = scores.vision;
+      else taskScore = (scores.coding + scores.reasoning) / 2; // general chat capability
+
+      let capabilityMultiplier = 1.0;
+      if (flags.isVision && m.supportsVision) capabilityMultiplier = 1.12;
+      else if ((flags.isCoding || flags.isReasoning) && m.supportsTools) capabilityMultiplier = 1.1;
+      const taskScoreAdj = taskScore * capabilityMultiplier;
+
+      let finalScore = 0;
+      if (optimization === 'quality') finalScore = taskScoreAdj;
+      else if (optimization === 'cost') finalScore = scores.costEfficiency * capabilityMultiplier;
+      else finalScore = (taskScoreAdj * 0.7) + (scores.costEfficiency * 0.3); // balanced
+
+      return { model: m, finalScore };
+    });
+    candidates.sort((a, b) => b.finalScore - a.finalScore);
+    return candidates;
+  }
+
+  /** Shared pool + override resolution used by both routeModelForTask and
+   *  selectCandidateModels so single-model and multi-model routing agree. */
+  private static prepareRouting(
+    prompt: string,
+    allModels: RouterModel[]
+  ): { enabledModels: RouterModel[]; flags: { isCoding: boolean; isReasoning: boolean; isVision: boolean }; override: { provider: string; model: string } | null } {
     const settings = SettingsStorage.loadSettings();
     const govEnabledIds = settings.modelGov?.enabledModels || [];
     const govOverrides = settings.modelGov?.categoryOverrides || {};
-    
-    // Filter models by the dynamic pool selected by the user in settings
-    const pool = allModels.filter(m => 
-      govEnabledIds.includes(m.id) || 
+
+    const pool = allModels.filter((m) =>
+      govEnabledIds.includes(m.id) ||
       govEnabledIds.includes(`${m.providerId}-${m.id}`)
     );
     const enabledModels = pool.length > 0 ? pool : allModels;
 
-    const lowerPrompt = prompt.toLowerCase();
-    const inst = ModelGovStorage.loadInstructions().toLowerCase();
+    const flags = ModelRouter.classifyTask(prompt.toLowerCase());
 
-    // 1. Analyze Task Category
-    const isCoding = /\b(code|write|refactor|debug|compile|build|test|regex|script|function|class|json|html|css|javascript|typescript|python|c\+\+|java)\b/.test(lowerPrompt);
-    const isReasoning = /\b(analyze|solve|logic|math|proof|algorithm|complexity|optimize|reason|think|deduce|plan)\b/.test(lowerPrompt);
-    const isVision = /\b(image|picture|photo|video|frame|canvas|screenshot|png|jpg|jpeg|svg|draw)\b/.test(lowerPrompt);
-
-    // 2. Check for Category Override configs
     let overrideId = '';
-    if (isCoding && govOverrides.coding) overrideId = govOverrides.coding;
-    else if (isReasoning && govOverrides.reasoning) overrideId = govOverrides.reasoning;
-    else if (isVision && govOverrides.vision) overrideId = govOverrides.vision;
-    else if (!isCoding && !isReasoning && !isVision && govOverrides.conversations) overrideId = govOverrides.conversations;
+    if (flags.isCoding && govOverrides.coding) overrideId = govOverrides.coding;
+    else if (flags.isReasoning && govOverrides.reasoning) overrideId = govOverrides.reasoning;
+    else if (flags.isVision && govOverrides.vision) overrideId = govOverrides.vision;
+    else if (!flags.isCoding && !flags.isReasoning && !flags.isVision && govOverrides.conversations) overrideId = govOverrides.conversations;
 
+    let override: { provider: string; model: string } | null = null;
     if (overrideId) {
-      const found = allModels.find(m => m.id === overrideId || `${m.providerId}-${m.id}` === overrideId);
-      if (found) {
-        return { provider: found.providerId, model: ModelRouter.stripProviderPrefix(found.providerId, found.id) };
-      }
+      const found = allModels.find((m) => m.id === overrideId || `${m.providerId}-${m.id}` === overrideId);
+      if (found) override = { provider: found.providerId, model: ModelRouter.stripProviderPrefix(found.providerId, found.id) };
     }
-
-    // 3. Dynamic Selection sorting based on task capabilities and optimization goals
-    const optimization = settings.modelGov?.optimizationGoal || 'balanced';
-
-    // Capability-gated candidate pool (mission point 2): when the task needs a
-    // modality that some models in the pool actually support, restrict selection
-    // to those models so a non-capable model can never win a vision/tool task.
-    // A non-vision model cannot read an image and a tool-less model cannot call
-    // tools, so routing either of them to such a task is a guaranteed API failure,
-    // not just a quality miss. When the pool contains no capable model we fall
-    // back to the full pool so routing still returns *something* instead of null.
-    let candidatePool = enabledModels;
-    const capableModels = enabledModels.filter(m =>
-      (isVision && m.supportsVision) ||
-      ((isCoding || isReasoning) && m.supportsTools)
-    );
-    if (capableModels.length > 0) candidatePool = capableModels;
-
-    const candidates = candidatePool.map(m => {
-      const scores = ModelGovStorage.getModelScores(m.id);
-      let taskScore = 0;
-      if (isCoding) taskScore = scores.coding;
-      else if (isReasoning) taskScore = scores.reasoning;
-      else if (isVision) taskScore = scores.vision;
-      else taskScore = (scores.coding + scores.reasoning) / 2; // general chat capability
-
-      // Capability-awareness: a model that actually supports the modality the
-      // task needs should be preferred (mission point 2 — route to the model
-      // good at the subtask). When the caller supplies per-model capability
-      // flags (e.g. GUI settings.models carry supportsVision/supportsTools),
-      // boost matching models so a non-capable model can't win a vision/tool
-      // task just because it scored slightly higher on the generic axis.
-      let capabilityMultiplier = 1.0;
-      if (isVision && m.supportsVision) capabilityMultiplier = 1.12;
-      else if ((isCoding || isReasoning) && m.supportsTools) capabilityMultiplier = 1.1;
-      const taskScoreAdj = taskScore * capabilityMultiplier;
-
-      // Score = Capability * Weight + Cost * Weight
-      let finalScore = 0;
-      if (optimization === 'quality') {
-        finalScore = taskScoreAdj;
-      } else if (optimization === 'cost') {
-        finalScore = scores.costEfficiency * capabilityMultiplier;
-      } else {
-        // Balanced: 70% capability + 30% cost-efficiency
-        finalScore = (taskScoreAdj * 0.7) + (scores.costEfficiency * 0.3);
-      }
-
-      return {
-        model: m,
-        finalScore
-      };
-    });
-
-    // Sort descending
-    candidates.sort((a, b) => b.finalScore - a.finalScore);
-
-    if (candidates.length > 0) {
-      const best = candidates[0].model;
-      return { provider: best.providerId, model: ModelRouter.stripProviderPrefix(best.providerId, best.id) };
-    }
-
-    // Default Fallback
-    const firstEnabled = enabledModels[0];
-    return { provider: firstEnabled.providerId, model: ModelRouter.stripProviderPrefix(firstEnabled.providerId, firstEnabled.id) };
+    return { enabledModels, flags, override };
   }
 }
+
+/** Catalog model shape the router accepts (the GUI passes its settings.models). */
+export type RouterModel = {
+  id: string;
+  name: string;
+  providerId: string;
+  enabled: boolean;
+  supportsVision?: boolean;
+  supportsTools?: boolean;
+};

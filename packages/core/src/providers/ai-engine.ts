@@ -21,7 +21,8 @@ export type AgentEventType =
   | 'thought'        // agent reasoning step
   | 'done'           // generation complete
   | 'error'          // error occurred
-  | 'abort';         // user stopped
+  | 'abort'          // user stopped
+  | 'bestofn';       // best-of-N merge result (parallel multi-model orchestration)
 
 export interface AgentEvent {
   type: AgentEventType;
@@ -36,6 +37,11 @@ export interface AgentEvent {
     completionTokens: number;
     totalTokens: number;
   };
+  /** best-of-N merge metadata, set on 'bestofn' events. */
+  candidates?: Array<{ provider: string; model: string }>;
+  strategy?: BestOfNStrategy;
+  mergedCount?: number;
+  toolFallback?: boolean;
 }
 
 // ─── Tool Definitions ─────────────────────────────────────────────────────────
@@ -59,6 +65,7 @@ import { ComputerUse } from '../automation/computer-use.js';
 import { PlaywrightBrowserEngine } from '../automation/browser.js';
 import { BrowserLifecycleService } from '../automation/browser-service.js';
 import { resolveProviderFamily, resolveBaseUrl } from './provider-meta.js';
+import { BestOfNStrategy, mergeBestOfN } from './best-of-n.js';
 import { ContentBlock, ImageAttachment } from '../types/agent.js';
 import { toOpenAIMessages, toAnthropicMessages } from './multimodal.js';
 
@@ -577,12 +584,40 @@ export interface AgentEngineConfig {
   allowedCommands?: string[];
 }
 
+/** A single parallel candidate for best-of-N orchestration. Extends the base
+ *  config so a candidate can override provider/model/apiKey/baseUrl independently. */
+export interface BestOfNCandidate {
+  provider: string;
+  model: string;
+  apiKey?: string;
+  baseUrl?: string;
+}
+
+/**
+ * Config for {@link AgentEngine.runBestOfN} — runs several task-matched models
+ * in parallel and merges their outputs (mission point 2: route a task to
+ * whichever models are actually good at it, then combine). A strict superset of
+ * AgentEngineConfig: when `candidates` is omitted, runBestOfN degrades to a
+ * normal single-model run so callers never have to branch.
+ */
+export interface BestOfNConfig extends AgentEngineConfig {
+  /** The N models to run in parallel. Falls back to `[config]` when empty. */
+  candidates?: BestOfNCandidate[];
+  /** Merge strategy (see mergeBestOfN). Defaults to 'consensus'. */
+  strategy?: BestOfNStrategy;
+  /** When true (default) final text is merged; only meaningful when no
+   *  candidate needs tools. Set false to get per-candidate text unmerged. */
+  merge?: boolean;
+  /** Optional session id used for emitted events (defaults to a generated id). */
+  sessionId?: string;
+}
+
 // ─── Agent Engine ─────────────────────────────────────────────────────────────
 
 export class AgentEngine {
   private config: AgentEngineConfig;
   private tools: ToolDefinition[];
-  private history: ChatMessage[];
+  protected history: ChatMessage[];
   private abortController: AbortController | null = null;
   public readonly sessionId: string;
 
@@ -735,6 +770,170 @@ Key guidelines:
         });
       }
     }
+  }
+
+  /**
+   * Run a SINGLE generation turn (no tool-call loop) against the current
+   * history and return its text + any tool calls. Pure/stateless with respect
+   * to `this.history` so it can be reused by {@link runBestOfN} across N
+   * parallel candidates without mutating shared state between them.
+   */
+  public async runTurn(
+    onEvent: (event: AgentEvent) => void,
+    signal?: AbortSignal
+  ): Promise<{ fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> }> {
+    return this.streamFromProvider(onEvent, signal ?? this.abortController?.signal ?? new AbortController().signal);
+  }
+
+  /**
+   * Best-of-N parallel orchestration (mission point 2): run several
+   * task-matched models at once and combine their outputs.
+   *
+   * - When `candidates` is omitted/empty it degrades to a single normal
+   *   {@link run} on the base config — callers never need to branch.
+   * - Candidates run in parallel via Promise.all. If ANY candidate decides to
+   *   call a tool (agentic work), we fall back to a normal single-model
+   *   run on the first candidate so tool execution stays correct — best-of-N
+   *   merging only applies to plain generation turns.
+   * - Final text from the surviving candidates is merged with {@link mergeBestOfN}
+   *   (consensus / longest / first). Empty/errored candidates are dropped, so a
+   *   single healthy model still yields a result. If every candidate errors, the
+   *   best-of-N attempt is reported as one 'error' event (not N errors).
+   */
+  public static async runBestOfN(
+    userPrompt: string,
+    onEvent: (event: AgentEvent) => void,
+    config: BestOfNConfig,
+    attachments?: ImageAttachment[]
+  ): Promise<void> {
+    const base: BestOfNCandidate = {
+      provider: config.provider,
+      model: config.model,
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl
+    };
+    const candidates = (config.candidates && config.candidates.length > 0)
+      ? config.candidates
+      : [base];
+    const strategy = config.strategy ?? 'consensus';
+    const doMerge = config.merge ?? true;
+    const sessionId = config.sessionId ?? `session-${Date.now()}`;
+
+    // Degrade to a normal single-model run when there's only one candidate and
+    // the caller requested no merge — keeps the historical run() path identical.
+    if (candidates.length === 1 && !doMerge) {
+      const engine = new AgentEngine(config, sessionId);
+      await engine.run(userPrompt, onEvent, attachments);
+      return;
+    }
+
+    const engine = new AgentEngine(config, sessionId);
+    const sharedHistory = engine.buildHistory(userPrompt, attachments);
+
+    const abort = new AbortController();
+    const perCandidate = candidates.map((c) => {
+      const candConfig: AgentEngineConfig = {
+        ...config,
+        provider: c.provider,
+        model: c.model,
+        apiKey: c.apiKey ?? config.apiKey,
+        baseUrl: c.baseUrl ?? config.baseUrl
+      };
+      const candEngine = new AgentEngine(candConfig, `${sessionId}-cand`);
+      // Independent history copy per candidate; tool results are not fed back
+      // during the parallel phase (tool-needing candidates fall back below).
+      candEngine.history = sharedHistory.map((m) => ({ ...m }));
+      return candEngine.runTurn(onEvent, abort.signal);
+    });
+
+    const results = await Promise.all(
+      perCandidate.map((p) => p.then((r) => ({ ok: true as const, r }), (e: unknown) => ({ ok: false as const, e })))
+    );
+
+    const texts: string[] = [];
+    const toolFallback = results.some((res) => res.ok && res.r.toolCalls.length > 0);
+    const metaCandidates = candidates.map((c) => ({ provider: c.provider, model: c.model }));
+
+    for (const res of results) {
+      if (res.ok) texts.push(res.r.fullContent);
+    }
+
+    // A candidate needed tools → best-of-N merging isn't meaningful; run the
+    // first candidate as a full agentic loop instead (correctness over merge).
+    if (toolFallback) {
+      onEvent({
+        type: 'bestofn',
+        sessionId: sessionId,
+        candidates: metaCandidates,
+        strategy,
+        mergedCount: 0,
+        toolFallback: true
+      });
+      const leadConfig: AgentEngineConfig = {
+        ...config,
+        provider: candidates[0].provider,
+        model: candidates[0].model,
+        apiKey: candidates[0].apiKey ?? config.apiKey,
+        baseUrl: candidates[0].baseUrl ?? config.baseUrl
+      };
+      const lead = new AgentEngine(leadConfig, sessionId);
+      if (attachments && attachments.length > 0) {
+        const content: ContentBlock[] = [{ type: 'text', text: userPrompt }];
+        for (const att of attachments) content.push({ type: 'image_url', image_url: { url: att.dataUrl } });
+        lead.addUserMessage(content);
+      } else {
+        lead.addUserMessage(userPrompt);
+      }
+      await lead.run(userPrompt, onEvent, attachments);
+      return;
+    }
+
+    if (texts.length === 0) {
+      const firstErr = (results.find((r) => !r.ok) as { e: unknown } | undefined)?.e;
+      onEvent({
+        type: 'error',
+        sessionId: sessionId,
+        error: firstErr ? (firstErr as Error).message || String(firstErr) : 'All best-of-N candidates failed.'
+      });
+      return;
+    }
+
+    const merged = doMerge ? mergeBestOfN(texts, strategy) : texts.join('\n\n');
+    onEvent({
+      type: 'bestofn',
+      sessionId: sessionId,
+      content: merged,
+      candidates: metaCandidates,
+      strategy,
+      mergedCount: texts.length
+    });
+    onEvent({ type: 'done', sessionId: sessionId });
+  }
+
+  /** Build the initial history (system + this turn's user message, plain or
+   *  multimodal) shared by every best-of-N candidate. Returns a fresh array so
+   *  each candidate engine owns an independent copy (no shared-state mutation). */
+  private buildHistory(userPrompt: string, attachments?: ImageAttachment[]): ChatMessage[] {
+    const sysPrompt = this.config.systemPrompt || `You are SuperAgent, a powerful autonomous AI coding assistant.
+
+You have access to tools to read files, list directories, search codebases, run shell commands, and write files.
+Use tools progressively — don't dump the whole codebase; fetch what you need when you need it.
+
+Key guidelines:
+- Think step by step before acting
+- Read relevant files before making edits
+- Verify changes compile/work after editing
+- Be concise but thorough in explanations
+- When you edit files, mention which files changed and the diff summary`;
+    const history: ChatMessage[] = [{ role: 'system', content: sysPrompt }];
+    if (attachments && attachments.length > 0) {
+      const content: ContentBlock[] = [{ type: 'text', text: userPrompt }];
+      for (const att of attachments) content.push({ type: 'image_url', image_url: { url: att.dataUrl } });
+      history.push({ role: 'user', content });
+    } else {
+      history.push({ role: 'user', content: userPrompt });
+    }
+    return history;
   }
 
   /** Stream a single turn from the configured provider */
