@@ -17,12 +17,16 @@ import {
   ComputerUse,
   getUserDataDirectory,
   AuthStore,
-  ProviderAutoDetector
+  ProviderAutoDetector,
+  MCP_CATALOG,
+  PLUGIN_CATALOG,
+  SkillStore
 } from '@superagent/core';
 
 import { AgentEngine, AgentEngineConfig, AgentEvent } from './ai-engine.js';
 import { readConversationStore, writeConversationStore } from './storage/conversation-store.js';
 import { getChatDirectory } from './storage/paths.js';
+import * as PartnerStore from './partner-store.js';
 import {
   authGate,
   handleLogin,
@@ -45,6 +49,15 @@ const wss = new WebSocketServer({ noServer: true });
 app.use(express.json({ limit: '50mb' }));
 
 const userDataDir = getUserDataDirectory();
+
+// Web build version, read from the package manifest at startup.
+const WEB_VERSION = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8')).version;
+  } catch {
+    return '0.0.0';
+  }
+})();
 
 // ─── VPS Authentication ─────────────────────────────────────────────────────
 // Session-based login system. Credentials live in the shared core AuthStore so
@@ -332,6 +345,38 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: `Channel "${channel}" requires a payload argument.` });
     return;
   }
+  // Channels that exist only in the Electron desktop build (native file pickers,
+  // 3D model generation, MCP subprocess management, auto-updater, and the 3D pet
+  // window). The web build ships the *same* desktop renderer, so it still invokes
+  // them — respond with a clear, non-error payload instead of a 404 so the UI
+  // degrades gracefully and the browser console stays clean.
+  const WEB_UNSUPPORTED = new Set<string>([
+    'check-for-updates',
+    'browser-close',
+    'pick-image-file',
+    'partner-install',
+    'partner-pick-model-file',
+    'partner-pick-model-folder',
+    'partner-import-model',
+    'partner-import-model-folder',
+    'pet-start',
+    'pet-stop',
+    'pet-set-visible',
+    'pet-say',
+    'three-d-generate',
+    'three-d-delete-model',
+    'three-d-import-external-model',
+    'three-d-list-models',
+    'mcp-connect',
+    'mcp-disconnect',
+    'mcp-list',
+    'mcp-call',
+    'mcp-install'
+  ]);
+  if (WEB_UNSUPPORTED.has(channel)) {
+    res.json({ data: { ok: false, unsupported: true, error: 'This feature is not available in the web build.' } });
+    return;
+  }
   try {
     let result: any;
     // Dispatch IPC channel to the corresponding handler
@@ -485,6 +530,81 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
       case 'agent-list':
         result = { sessions: Array.from(activeSessions.keys()) };
         break;
+
+      // ─── App version & catalogs (read-only, shared with desktop) ─────────────
+      case 'app-version':
+        result = WEB_VERSION;
+        break;
+      case 'mcp-catalog':
+        result = MCP_CATALOG;
+        break;
+      case 'plugins-catalog':
+        result = PLUGIN_CATALOG;
+        break;
+
+      // ─── Skills discovery (Composer slash autocomplete) ─────────────────────
+      case 'skills-list': {
+        const dir = typeof args[0] === 'object' && args[0] ? (args[0] as any).dir : undefined;
+        const dirs: string[] = [];
+        if (typeof dir === 'string' && fs.existsSync(dir)) dirs.push(dir);
+        const userSkills = path.join(userDataDir, 'skills');
+        if (fs.existsSync(userSkills)) dirs.push(userSkills);
+        const store = new SkillStore();
+        for (const d of dirs) {
+          try {
+            await store.discoverSkills(d);
+          } catch {
+            /* unreadable directory — skip */
+          }
+        }
+        result = store.listSkills().map((s) => ({
+          id: s.id,
+          name: s.metadata.name,
+          description: s.metadata.description,
+          instructions: s.instructions
+        }));
+        break;
+      }
+
+      // ─── Partner store (web-persistent; shared renderer expects these) ───────
+      case 'partner-list':
+        result = PartnerStore.listPartners(userDataDir);
+        break;
+      case 'partner-get':
+        result = PartnerStore.getPartner(userDataDir, args[0]);
+        break;
+      case 'partner-get-active':
+        result = PartnerStore.getActivePartner(userDataDir);
+        break;
+      case 'partner-set-active':
+        PartnerStore.setActivePartner(userDataDir, args[0] ?? null);
+        result = { success: true };
+        break;
+      case 'partner-remove':
+        PartnerStore.removePartner(userDataDir, args[0]);
+        result = { success: true };
+        break;
+      case 'partner-import-json':
+        result = PartnerStore.importPartnerJson(userDataDir, args[0]);
+        break;
+      case 'partner-export':
+        // Desktop reveals the folder in the OS file manager; the web build just
+        // returns the on-disk path so the caller can surface it.
+        result = { success: true, folder: PartnerStore.partnerFolderPath(userDataDir, args[0]) };
+        break;
+
+      // ─── Pet (3D desktop companion) — no-op on the web build ─────────────────
+      case 'pet-status':
+        // No 3D pet window in the web build; report it as disabled so the UI
+        // hides the pet controls instead of offering a start that can't work.
+        result = { running: false, enabled: false };
+        break;
+      case 'pet-set-partner':
+        // The renderer pushes the active Partner manifest here to drive the pet.
+        // Harmless on web (no pet) — acknowledge so the call succeeds.
+        result = { ok: true };
+        break;
+
       default:
         res.status(404).json({ error: `IPC channel "${channel}" not implemented` });
         return;

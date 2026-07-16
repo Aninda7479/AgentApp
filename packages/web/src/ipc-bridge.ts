@@ -55,6 +55,13 @@ if (typeof window !== 'undefined') {
 /** Mock Electron ipcRenderer that routes IPC calls over HTTP fetch and WebSocket. */
 const mockIpcRenderer = {
   invoke: async (channel: string, ...args: any[]): Promise<any> => {
+    // `open-external` opens a URL in the OS shell on desktop. In the browser
+    // there is no shell, so open it in a new tab directly instead of hitting the
+    // (nonexistent) server endpoint.
+    if (channel === 'open-external' && typeof args[0] === 'string') {
+      window.open(args[0], '_blank');
+      return { ok: true };
+    }
     try {
       const response = await fetch(`/api/ipc/${channel}`, {
         method: 'POST',

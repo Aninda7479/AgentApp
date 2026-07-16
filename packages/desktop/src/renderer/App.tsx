@@ -922,12 +922,10 @@ export const App: React.FC = () => {
       {/* Mobile bottom navigation (phones only) */}
       <BottomNav
         activeTab={activeTab}
-        showStudio={showStudio}
         onSelectTab={(tab) => {
           setActiveTab(tab);
           setMobileNavOpen(false);
         }}
-        mcpCount={mcpServers.filter((s) => s.enabled).length}
       />
 
       {/* search dialog overlay */}
