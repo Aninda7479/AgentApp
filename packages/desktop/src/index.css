@@ -883,3 +883,55 @@ body {
 :root[data-theme='light'] .shadow-md {
   box-shadow: var(--brand-shadow-soft);
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   3D Studio Upgraded styles
+   ════════════════════════════════════════════════════════════════════════ */
+.studio-glass {
+  background: color-mix(in srgb, var(--brand-bg) 85%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--brand-border-strong);
+}
+
+.studio-glow-btn {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 0 rgba(56, 189, 248, 0);
+}
+.studio-glow-btn:hover {
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+}
+
+.studio-timeline-connector {
+  position: absolute;
+  left: 20px;
+  top: 24px;
+  bottom: -20px;
+  width: 2px;
+  background: var(--brand-border);
+  z-index: 0;
+}
+.studio-timeline-connector.completed {
+  background: var(--neon-constructive);
+}
+
+.studio-tab-pill {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Custom Scrollbar for Studio panels */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--brand-border-strong);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--brand-text-muted);
+}
+
