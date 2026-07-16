@@ -312,7 +312,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
                 </div>
                 <button
                   onClick={() => onDisconnectProvider(p.id)}
-                  className="ui-btn-ghost text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                  className="ui-btn-ghost text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/10"
                 >
                   Disconnect
                 </button>
@@ -407,7 +407,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
             </div>
 
             {errorDetails && (
-              <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-300">
+              <div className="ui-state-banner destructive mt-4 px-3 py-2 text-xs leading-relaxed">
                 <strong>Connection Error:</strong> {errorDetails}
               </div>
             )}

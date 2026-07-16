@@ -100,7 +100,7 @@ export const UsageTrackerSettings: React.FC = () => {
           {records.length > 0 && (
             <button
               onClick={handleClear}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/25 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold cursor-pointer transition-all active:scale-[0.98]"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[color:var(--neon-destructive)]/25 bg-[color:var(--neon-destructive)]/10 hover:bg-[color:var(--neon-destructive)]/20 text-[color:var(--neon-destructive)] text-xs font-semibold cursor-pointer transition-all active:scale-[0.98]"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Clear History</span>

@@ -42,11 +42,11 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
   const statusBanner = () => {
     if (!updateStatus) return null;
     const map = {
-      checking: { Icon: RefreshCw, cls: 'border-sky-500/40 bg-sky-500/10 text-sky-300', spin: true },
-      available: { Icon: AlertTriangle, cls: 'border-amber-500/40 bg-amber-500/10 text-amber-300', spin: false },
-      'not-available': { Icon: CheckCircle2, cls: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300', spin: false },
+      checking: { Icon: RefreshCw, cls: 'border-[color:var(--neon-live)]/40 bg-[color:var(--neon-live)]/10 text-[color:var(--neon-live)]', spin: true },
+      available: { Icon: AlertTriangle, cls: 'border-[color:var(--neon-attention)]/40 bg-[color:var(--neon-attention)]/10 text-[color:var(--neon-attention)]', spin: false },
+      'not-available': { Icon: CheckCircle2, cls: 'border-[color:var(--neon-constructive)]/40 bg-[color:var(--neon-constructive)]/10 text-[color:var(--neon-constructive)]', spin: false },
       unsupported: { Icon: Info, cls: 'border-brand-border bg-brand-bg text-brand-textMuted', spin: false },
-      error: { Icon: AlertTriangle, cls: 'border-red-500/40 bg-red-500/10 text-red-300', spin: false }
+      error: { Icon: AlertTriangle, cls: 'border-[color:var(--neon-destructive)]/40 bg-[color:var(--neon-destructive)]/10 text-[color:var(--neon-destructive)]', spin: false }
     } as const;
     const cfg = map[updateStatus.status];
     const { Icon } = cfg;
