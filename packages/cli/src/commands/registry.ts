@@ -13,6 +13,7 @@ import { registerConfigCommand } from './config.js';
 import { registerCostCommand } from './cost.js';
 import { registerMemoryCommand } from './memory.js';
 import { registerGoalCommand } from './goal.js';
+import { registerLoopCommand } from './loop.js';
 import { registerSideCommand } from './side.js';
 import { registerAgentCommand } from './agent.js';
 import { registerHelpCommand } from './help.js';
@@ -68,6 +69,10 @@ export interface SlashCommandDeps {
    * is created if omitted.
    */
   pendingAttachments?: ImageAttachment[];
+  startLoop?: (prompt?: string, interval?: string) => string;
+  stopLoop?: (id: string) => boolean;
+  listLoops?: () => any[];
+  clearLoops?: () => void;
 }
 
 /**
@@ -94,6 +99,12 @@ export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRou
   registerCostCommand(router, session);
   registerMemoryCommand(router, session);
   registerGoalCommand(router);
+  registerLoopCommand(router, {
+    startLoop: deps.startLoop,
+    stopLoop: deps.stopLoop,
+    listLoops: deps.listLoops,
+    clearLoops: deps.clearLoops
+  });
   registerSideCommand(router);
   registerAgentCommand(router);
   registerHelpCommand(router);

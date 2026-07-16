@@ -60,6 +60,7 @@ export const BUILTIN_COMMANDS: BuiltinCommandDef[] = [
   { name: 'mcp', description: 'List or manage connected MCP servers and tools', action: 'mcp', usage: '/mcp [<server> [<tool> [args]]]' },
   { name: 'compact', description: 'Compact and summarize the conversation context', action: 'compact' },
   { name: 'diff', description: 'Show a diff of recent file changes', action: 'diff' },
+  { name: 'loop', description: 'Start, stop, or list recurring agent prompts/maintenance tasks', action: 'loop', usage: '/loop [interval] [prompt] | /loop list | /loop stop <id> | /loop clear' },
   { name: 'help', description: 'Show this list of available slash commands', action: 'help' },
 ];
 

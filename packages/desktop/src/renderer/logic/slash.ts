@@ -27,6 +27,10 @@ export interface SlashDeps {
   openShortcuts: () => void;
   /** Opens the create-project modal. */
   openCreateProject: () => void;
+  startLoop?: (prompt?: string, interval?: string) => string;
+  stopLoop?: (id: string) => boolean;
+  listLoops?: () => any[];
+  clearLoops?: () => void;
 }
 
 export class SlashRouter {
@@ -147,6 +151,76 @@ export class SlashRouter {
       case 'compact':
         ctx.triggerToast('Context compaction runs automatically during long sessions');
         return true;
+      case 'loop': {
+        if (!deps.startLoop || !deps.stopLoop || !deps.listLoops || !deps.clearLoops) {
+          ctx.triggerToast('Loop feature is not supported in this environment', 'error');
+          return true;
+        }
+        
+        if (args[0] === 'list' || args[0] === 'status') {
+          const tasks = deps.listLoops();
+          if (tasks.length === 0) {
+            ctx.triggerToast('No active loop tasks running');
+            return true;
+          }
+          const lines = ['=== Active Loop Tasks ==='];
+          for (const t of tasks) {
+            lines.push(`ID: ${t.id} | Interval: ${t.interval} | Prompt: "${t.prompt}" | Next Run: ${t.nextRunAt}`);
+          }
+          const step = StepFactory.helpStep([{ name: 'Active Loop Tasks', description: lines.join('\n') }]);
+          ctx.setTrajectorySteps((prev) => [...prev, step]);
+          if (!ctx.getActiveChatId()) ctx.setActiveChatId('draft-chat');
+          return true;
+        }
+
+        if (args[0] === 'stop' || args[0] === 'cancel') {
+          const id = args[1];
+          if (!id) {
+            ctx.triggerToast('Please specify the loop task ID to stop: /loop stop <id>', 'error');
+            return true;
+          }
+          const stopped = deps.stopLoop(id);
+          if (stopped) {
+            ctx.triggerToast(`Stopped loop task: ${id}`);
+          } else {
+            ctx.triggerToast(`Loop task ID not found: ${id}`, 'error');
+          }
+          return true;
+        }
+
+        if (args[0] === 'clear') {
+          deps.clearLoops();
+          ctx.triggerToast('All active loop tasks stopped');
+          return true;
+        }
+
+        let interval: string | undefined = undefined;
+        let prompt: string | undefined = undefined;
+
+        if (args[0] && /^\d+[smhd]$/i.test(args[0])) {
+          interval = args[0];
+          prompt = parsed.rawArgs.substring(interval.length).trim() || undefined;
+        } else {
+          prompt = parsed.rawArgs.trim() || undefined;
+        }
+
+        try {
+          const taskId = deps.startLoop(prompt, interval);
+          const tasks = deps.listLoops();
+          const t = tasks.find(x => x.id === taskId);
+          ctx.triggerToast(`Loop started. ID: ${taskId}`);
+          
+          const step = StepFactory.helpStep([{
+            name: 'Loop Started',
+            description: `Task ID: ${taskId}\nInterval: ${t?.interval || interval || '10m'}\nPrompt: "${t?.prompt || prompt || 'Default maintenance'}"\nNext Run: ${t?.nextRunAt}`
+          }]);
+          ctx.setTrajectorySteps((prev) => [...prev, step]);
+          if (!ctx.getActiveChatId()) ctx.setActiveChatId('draft-chat');
+        } catch (err) {
+          ctx.triggerToast(`Failed to start loop: ${(err as Error).message}`, 'error');
+        }
+        return true;
+      }
       case 'learn':
       case 'permissions':
       case 'btw':

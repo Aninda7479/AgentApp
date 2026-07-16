@@ -121,8 +121,8 @@ export const UsageTrackerSettings: React.FC = () => {
           </div>
         </div>
 
-        <div className="glass-card p-4 rounded-xl border border-sky-500/10 flex gap-4 items-center">
-          <div className="w-10 h-10 rounded-lg bg-sky-500/10 text-sky-400 flex items-center justify-center">
+        <div className="glass-card p-4 rounded-xl border border-[color:var(--neon-live)]/10 flex gap-4 items-center">
+          <div className="w-10 h-10 rounded-lg bg-[color:var(--neon-live)]/10 text-[color:var(--neon-live)] flex items-center justify-center">
             <BarChart2 className="w-5 h-5" />
           </div>
           <div>
@@ -131,8 +131,8 @@ export const UsageTrackerSettings: React.FC = () => {
           </div>
         </div>
 
-        <div className="glass-card p-4 rounded-xl border border-emerald-500/10 flex gap-4 items-center">
-          <div className="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+        <div className="glass-card p-4 rounded-xl border border-[color:var(--neon-constructive)]/10 flex gap-4 items-center">
+          <div className="w-10 h-10 rounded-lg bg-[color:var(--neon-constructive)]/10 text-[color:var(--neon-constructive)] flex items-center justify-center">
             <Cpu className="w-5 h-5" />
           </div>
           <div>

@@ -23,6 +23,7 @@ export * from './commands/config.js';
 export * from './commands/cost.js';
 export * from './commands/memory.js';
 export * from './commands/goal.js';
+export * from './commands/loop.js';
 export * from './commands/side.js';
 export * from './commands/agent.js';
 export * from './commands/help.js';

@@ -23,6 +23,7 @@ import { PartnerView } from './components/partner/PartnerView';
 import { PartnerOverlay } from './components/partner/PartnerOverlay';
 import { ThreeDStudio } from './3d_studio/ThreeDStudio';
 import { StoredChat, StoredProject } from './types';
+import { SessionLoopManager, LoopTask } from './logic/loop';
 import { useThemeMode } from './theme';
 import { getRouteFromLocation, pushRoute, subscribeRouteChange } from './urlSync';
 
@@ -243,6 +244,54 @@ export const App: React.FC = () => {
   const isWebMode = !isElectron;
   const slashCommands = useMemo(() => builtinSuggestions(), []);
 
+  const loopManagerRef = useRef<SessionLoopManager | null>(null);
+  const [, setActiveLoopsList] = useState<LoopTask[]>([]);
+
+  const getWorkspacePath = (): string | undefined => {
+    const activeName = stateRef.current.activeProject;
+    const project = stateRef.current.projects.find(p => p.name === activeName);
+    return project?.folders?.[0];
+  };
+
+  const startLoop = useCallback((prompt?: string, interval?: string): string => {
+    if (!loopManagerRef.current) {
+      loopManagerRef.current = new SessionLoopManager((task) => {
+        const activeModel = stateRef.current.lastUsedModel || 'default';
+        void sendPromptRef.current(task.prompt, { model: activeModel, mode: 'chat', attachments: [] });
+      }, getWorkspacePath);
+    }
+    const task = loopManagerRef.current.start(interval, prompt);
+    setActiveLoopsList(loopManagerRef.current.getTasks());
+    return task.id;
+  }, []);
+
+  const stopLoop = useCallback((id: string): boolean => {
+    if (!loopManagerRef.current) return false;
+    const ok = loopManagerRef.current.stop(id);
+    setActiveLoopsList(loopManagerRef.current.getTasks());
+    return ok;
+  }, []);
+
+  const listLoops = useCallback(() => {
+    if (!loopManagerRef.current) return [];
+    return loopManagerRef.current.getTasks();
+  }, []);
+
+  const clearLoops = useCallback(() => {
+    if (loopManagerRef.current) {
+      loopManagerRef.current.clear();
+    }
+    setActiveLoopsList([]);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (loopManagerRef.current) {
+        loopManagerRef.current.clear();
+      }
+    };
+  }, []);
+
   // ── Slash-command dispatch wiring ──────────────────────────────────────────
   const slashDeps = useMemo<SlashDeps>(
     () => ({
@@ -252,10 +301,13 @@ export const App: React.FC = () => {
       openDoctor: () => setIsDoctorOpen(true),
       openSearch: () => setSearchModalOpen(true),
       openShortcuts: () => setIsShortcutsOpen(true),
-      openCreateProject: () => setIsCreateProjectOpen(true)
+      openCreateProject: () => setIsCreateProjectOpen(true),
+      startLoop,
+      stopLoop,
+      listLoops,
+      clearLoops
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [skills]
+    [skills, startLoop, stopLoop, listLoops, clearLoops]
   );
   const slashDispatch = useCallback(
     (raw: string, options: ComposerOptions) => SlashRouter.dispatch(ctx, SlashRouter.parse(raw), options, slashDeps),

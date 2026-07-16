@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Box, Text, useApp } from 'ink';
 import { MarkdownStream } from './MarkdownStream.js';
 import { Composer } from './Composer.js';
@@ -10,7 +10,7 @@ import { buildSlashCommandRouter, formatSlashCommandHelp } from '../commands/reg
 import { DiffReviewer } from '../commands/diff.js';
 import { TaskManager } from '../commands/tasks.js';
 import { ContextMessage } from '../commands/compact.js';
-import { ImageAttachment } from '@superagent/core';
+import { ImageAttachment, SessionLoopManager, LoopTask } from '@superagent/core';
 import { prepareAttachments, formatBytes } from '../attachments.js';
 
 /** Root props for the SuperAgent TUI application. */
@@ -50,7 +50,12 @@ export const App: React.FC<AppProps> = ({
       timestamp: Date.now(),
     },
   ]);
-  const [isStreaming, setIsStreaming] = useState<boolean>(false);
+  const [isStreaming, setIsStreamingState] = useState<boolean>(false);
+  const isStreamingRef = useRef<boolean>(false);
+  const setIsStreaming = (next: boolean): void => {
+    isStreamingRef.current = next;
+    setIsStreamingState(next);
+  };
   const [queueManager] = useState(() => new TurnQueueManager());
   const [transcriptManager] = useState(() => new TranscriptManager());
   const [queuedTurnsCount, setQueuedTurnsCount] = useState<number>(0);
@@ -88,6 +93,51 @@ export const App: React.FC<AppProps> = ({
     );
   };
 
+  const loopManagerRef = useRef<SessionLoopManager | null>(null);
+  const [, setActiveLoopsList] = useState<LoopTask[]>([]);
+
+  const startLoop = (prompt?: string, interval?: string): string => {
+    if (!loopManagerRef.current) {
+      loopManagerRef.current = new SessionLoopManager((task) => {
+        if (isStreamingRef.current) {
+          handleQueueTurn(task.prompt);
+        } else {
+          handleSendMessage(task.prompt);
+        }
+      }, () => process.cwd());
+    }
+    const task = loopManagerRef.current.start(interval, prompt);
+    setActiveLoopsList(loopManagerRef.current.getTasks());
+    return task.id;
+  };
+
+  const stopLoop = (id: string): boolean => {
+    if (!loopManagerRef.current) return false;
+    const ok = loopManagerRef.current.stop(id);
+    setActiveLoopsList(loopManagerRef.current.getTasks());
+    return ok;
+  };
+
+  const listLoops = (): LoopTask[] => {
+    if (!loopManagerRef.current) return [];
+    return loopManagerRef.current.getTasks();
+  };
+
+  const clearLoops = (): void => {
+    if (loopManagerRef.current) {
+      loopManagerRef.current.clear();
+    }
+    setActiveLoopsList([]);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (loopManagerRef.current) {
+        loopManagerRef.current.clear();
+      }
+    };
+  }, []);
+
   const [router] = useState(() =>
     buildSlashCommandRouter({
       session: createSessionContext(provider, model),
@@ -103,6 +153,10 @@ export const App: React.FC<AppProps> = ({
         permissionRef.current = level;
         setPermission(level);
       },
+      startLoop,
+      stopLoop,
+      listLoops,
+      clearLoops
     })
   );
 

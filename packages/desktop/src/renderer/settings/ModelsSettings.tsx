@@ -3,11 +3,13 @@ import { ProviderConnection, ModelConfig } from './types';
 import { RefreshCw, ChevronDown } from 'lucide-react';
 import { ProvidersService } from '../logic/providers';
 
+// Modality chips are capability categories, not state — keep them monochrome
+// so the only color in the app is reserved for STATE (Monolith rule).
 const MODALITY_STYLES: Record<string, string> = {
-  text:  'bg-[var(--brand-accent-tint)] text-[var(--brand-accent)]',
-  image: 'bg-emerald-500/12 text-emerald-400',
-  audio: 'bg-sky-500/12 text-sky-400',
-  video: 'bg-rose-500/12 text-rose-400'
+  text:  'bg-brand-popover text-brand-textMuted',
+  image: 'bg-brand-popover text-brand-textMuted',
+  audio: 'bg-brand-popover text-brand-textMuted',
+  video: 'bg-brand-popover text-brand-textMuted'
 };
 
 const ModalityChip: React.FC<{ type: string; label?: string }> = ({ type, label }) => (
@@ -106,7 +108,7 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm font-medium text-brand-textMain">{model.name}</span>
                             {model.free && (
-                              <span className="ui-chip bg-emerald-500/12 text-emerald-400">Free</span>
+                              <span className="ui-chip bg-[color:var(--neon-constructive)]/12 text-[color:var(--neon-constructive)]">Free</span>
                             )}
                             {hasIn && (model.inputModalities ?? []).map(m => <ModalityChip key={m} type={m} />)}
                           </div>
@@ -115,15 +117,15 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
                               <span>ctx: <span className="text-brand-textMain">{model.contextLimit}</span></span>
                             )}
                             {p?.inputPer1M ? (
-                              <span>in: <span className="text-emerald-400">{p.inputPer1M}/1M</span></span>
+                              <span>in: <span className="text-brand-textMain">{p.inputPer1M}/1M</span></span>
                             ) : model.contextLimit == null && !hasIn && (
                               <span>pricing: N/A</span>
                             )}
                             {p?.outputPer1M && (
-                              <span>out: <span className="text-rose-400">{p.outputPer1M}/1M</span></span>
+                              <span>out: <span className="text-brand-textMain">{p.outputPer1M}/1M</span></span>
                             )}
                             {model.caching && (
-                              <span className="rounded bg-emerald-500/12 px-1.5 py-0.5 text-emerald-400">⚡ caching</span>
+                              <span className="rounded bg-[color:var(--neon-constructive)]/12 px-1.5 py-0.5 text-[color:var(--neon-constructive)]">⚡ caching</span>
                             )}
                           </div>
                         </div>
@@ -169,7 +171,7 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
                             )}
                             <div>
                               <div className="ui-label mb-1.5">Caching</div>
-                              <span className={`text-sm font-medium ${model.caching ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              <span className={`text-sm font-medium ${model.caching ? 'text-[color:var(--neon-constructive)]' : 'text-brand-textMuted'}`}>
                                 {model.caching ? '✓ Supported' : '✗ Not supported'}
                               </span>
                             </div>
@@ -182,13 +184,13 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
                                 {p.inputPer1M && (
                                   <div className="ui-card bg-brand-card px-3 py-2">
                                     <div className="text-[10px] uppercase tracking-wide text-brand-textMuted">Input</div>
-                                    <div className="text-sm font-semibold text-emerald-400">{p.inputPer1M}</div>
+                                    <div className="text-sm font-semibold text-brand-textMain">{p.inputPer1M}</div>
                                   </div>
                                 )}
                                 {p.outputPer1M && (
                                   <div className="ui-card bg-brand-card px-3 py-2">
                                     <div className="text-[10px] uppercase tracking-wide text-brand-textMuted">Output</div>
-                                    <div className="text-sm font-semibold text-rose-400">{p.outputPer1M}</div>
+                                    <div className="text-sm font-semibold text-brand-textMain">{p.outputPer1M}</div>
                                   </div>
                                 )}
                                 {p.cachedInputPer1M && (
@@ -200,7 +202,7 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
                               </div>
                             </div>
                           ) : model.free ? (
-                            <p className="mt-3 text-xs text-emerald-400">🆓 This model is free to use.</p>
+                            <p className="mt-3 text-xs text-[color:var(--neon-constructive)]">🆓 This model is free to use.</p>
                           ) : (
                             <p className="mt-3 text-xs text-brand-textMuted">Pricing not published by this provider.</p>
                           )}
@@ -390,7 +392,7 @@ export const ModelsSettings: React.FC<ModelsSettingsProps> = ({
           onClick={() => setShowFreeOnly((v) => !v)}
           className={`ui-chip transition-colors ${
             showFreeOnly
-              ? 'bg-emerald-500/15 text-emerald-400'
+              ? 'bg-[color:var(--neon-constructive)]/15 text-[color:var(--neon-constructive)]'
               : 'bg-brand-popover text-brand-textMuted hover:text-brand-textMain'
           }`}
           title="Show only free models"
