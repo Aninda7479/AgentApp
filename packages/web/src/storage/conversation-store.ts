@@ -11,12 +11,31 @@ function ensureDirectory(dir: string): void {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-/** Reads and parses a JSON file, returning null if missing or empty. */
+/** Reads and parses a JSON file, returning null if missing, empty, or corrupt. */
 function readJson<T>(filePath: string): T | null {
   if (!fs.existsSync(filePath)) return null;
   const raw = fs.readFileSync(filePath, 'utf-8').trim();
   if (!raw) return null;
-  return JSON.parse(raw) as T;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    // Corrupt/truncated file — fall back to the last good backup if present so
+    // user conversation data is not silently lost.
+    const bakPath = `${filePath}.bak`;
+    if (fs.existsSync(bakPath)) {
+      try {
+        const bakRaw = fs.readFileSync(bakPath, 'utf-8').trim();
+        if (bakRaw) {
+          console.warn(`Recovered ${filePath} from backup (primary file was corrupt).`);
+          return JSON.parse(bakRaw) as T;
+        }
+      } catch {
+        /* ignore backup parse failure */
+      }
+    }
+    console.error(`Failed to parse JSON at ${filePath}; content dropped.`);
+    return null;
+  }
 }
 
 /** Atomically writes JSON to disk using a temp file + backup strategy. */
@@ -24,10 +43,9 @@ function writeJson(filePath: string, data: unknown): void {
   ensureDirectory(path.dirname(filePath));
   const tmpPath = `${filePath}.tmp`;
   fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+  // Keep the previous version as a .bak before replacing it.
   if (fs.existsSync(filePath)) {
     fs.copyFileSync(filePath, `${filePath}.bak`);
-  }
-  if (fs.existsSync(filePath)) {
     fs.rmSync(filePath, { force: true });
   }
   fs.copyFileSync(tmpPath, filePath);
