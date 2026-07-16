@@ -56,7 +56,28 @@ export class ModelSwitcher {
       };
     }
 
-    // Fallback for custom model IDs not in the registry
+    // Not in the registry. Suggest a close match when the user likely
+    // mistyped a known model, then set the raw target as a custom identifier
+    // (preserving the legitimate BYO/custom-model flow from fcd8e09). The
+    // message is explicit that the id was NOT found, so a typo is never
+    // silently reported as a successful switch.
+    const lower = targetModel.toLowerCase();
+    const candidates = this.listAvailableModels(context).filter(
+      m =>
+        m.id.toLowerCase().includes(lower) ||
+        m.name.toLowerCase().includes(lower) ||
+        lower.includes(m.id.toLowerCase()) ||
+        lower.includes(m.name.toLowerCase())
+    );
+    const suggestions = candidates
+      .filter((m, i, a) => a.indexOf(m) === i)
+      .slice(0, 3)
+      .map(m => m.name);
+    const hint = suggestions.length ? ` Did you mean: ${suggestions.join(', ')}?` : '';
+    const message =
+      `Model '${targetModel}' not found in registry — set as custom identifier.${hint} ` +
+      `Verify its provider with /model provider <provider> (current: ${context.activeProvider}).`;
+
     context.activeModel = targetModel;
     SettingsStorage.saveSettings({
       lastUsedModel: {
@@ -65,7 +86,7 @@ export class ModelSwitcher {
     });
     return {
       success: true,
-      message: `Active model set to custom identifier '${targetModel}'. Provider remains '${context.activeProvider}'.`,
+      message,
       data: { model: targetModel, provider: context.activeProvider }
     };
   }

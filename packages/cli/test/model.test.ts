@@ -64,3 +64,27 @@ describe('handleModelCommand provider routing', () => {
     expect(ctx.activeProvider).toBe('custom-1719500000');
   });
 });
+
+describe('ModelSwitcher.switchModel custom-identifier fallback', () => {
+  it('flags a mistyped model as not-found and suggests the close registry match', () => {
+    const ctx = makeContext();
+    // 'gpt-4o-min' is a truncation typo of the registry model 'GPT-4o Mini'.
+    const res = ModelSwitcher.switchModel(ctx, 'gpt-4o-min');
+
+    // A custom identifier is still valid, so success stays true — but the
+    // message must no longer pretend the switch was a clean registry match.
+    expect(res.success).toBe(true);
+    expect(res.message).toMatch(/not found in registry/i);
+    expect(res.message).toMatch(/did you mean/i);
+    expect(ctx.activeModel).toBe('gpt-4o-min');
+  });
+
+  it('sets a genuine custom identifier without a false suggestion', () => {
+    const ctx = makeContext();
+    const res = ModelSwitcher.switchModel(ctx, 'my-comfyui-lora-model');
+
+    expect(res.message).toMatch(/not found in registry/i);
+    expect(res.message).not.toMatch(/did you mean/i);
+    expect(ctx.activeModel).toBe('my-comfyui-lora-model');
+  });
+});
