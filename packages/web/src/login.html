@@ -133,17 +133,35 @@
           credentials: 'same-origin',
           body: JSON.stringify({ password: password })
         })
-          .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+          .then(function (res) {
+            // Read the body as text first so a non-JSON error response (e.g. the
+            // server's default 500 HTML page) can't throw while parsing JSON and
+            // get misreported as a network failure in the catch below.
+            return res.text().then(function (text) {
+              var data = null;
+              try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+              return { ok: res.ok, status: res.status, data: data };
+            });
+          })
           .then(function (result) {
             if (result.ok) {
               window.location.replace('/');
-            } else {
-              showError((result.data && result.data.error) || 'Request failed.');
-              submitBtn.disabled = false;
-              submitBtn.textContent = 'Sign in';
+              return;
             }
+            // The server answered, so this is NOT a network error. Distinguish a
+            // server-side fault (5xx) from a normal auth failure (e.g. 401).
+            var serverMsg = result.data && result.data.error;
+            if (result.status >= 500) {
+              showError('The server hit an error. Please try again in a moment.');
+            } else {
+              showError(serverMsg || 'Sign in failed. Please try again.');
+            }
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Sign in';
           })
           .catch(function () {
+            // fetch only rejects on a genuine network/connection failure (server
+            // restart, offline) — never on an HTTP error status.
             showError('Network error. Please try again.');
             submitBtn.disabled = false;
             submitBtn.textContent = 'Sign in';
