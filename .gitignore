@@ -68,4 +68,9 @@ list.md
 # procedural model, so these are never required to build or run.
 
 
+# Playwright MCP single-use artifacts (screenshots, page snapshots, console logs) — kept out of git
+.playwright
 .playwright-mcp
+
+# Local MCP server config (contains a machine-specific Chromium executable path)
+.mcp.json

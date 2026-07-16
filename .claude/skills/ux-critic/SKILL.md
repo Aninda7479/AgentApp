@@ -42,6 +42,8 @@ Use `$ARGUMENTS` if given. Otherwise rotate to the next untested combination fro
 
 Using Playwright MCP: navigate to the local dev URL and actually perform the flow's steps as that persona would — click, fill, submit — screenshotting at each meaningful state, not just the end state. Capture:
 
+- **Screenshots MUST be written into `.playwright/`** (the MCP server's `--output-dir`), never the project root. Always pass an explicit `path` under that folder, e.g. `path: ".playwright/ux-<persona>-<n>.png"`. The server also drops page snapshots (`page-*.yml`) and console logs (`console-*.log`) there automatically. Do not let artifacts leak to the repo root — keep `.playwright/` as the single home for all single-use Playwright output.
+
 - Console errors and failed network requests during the flow.
 - Any point where you, as the persona, would hesitate, misread, or not know what to do next.
 - Loading/empty/error states — trigger them on purpose, don't just check the happy path.
