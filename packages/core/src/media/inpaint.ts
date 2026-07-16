@@ -1,5 +1,5 @@
 import { BYOKConfig } from '../types/agent.js';
-import { hasRealMediaKey, NO_PROVIDER_MESSAGE } from './config.js';
+import { hasRealMediaKey, isMockKey, NO_PROVIDER_MESSAGE } from './config.js';
 import sharp from 'sharp';
 
 export interface ImageInpaintOptions {
@@ -164,7 +164,7 @@ export class ImageInpainter {
     // No real provider configured. If a mock key was explicitly supplied we
     // still allow offline fixtures; otherwise report a clear failure instead of
     // returning fabricated media with status 'success'.
-    if (config.apiKey === 'mock-key' || config.apiKey.includes('mock')) {
+    if (isMockKey(config)) {
       const mockImages: InpaintResultImageData[] = [];
       const count = options.n || 1;
       for (let i = 0; i < count; i += 1) {

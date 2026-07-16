@@ -1,5 +1,5 @@
 import { BYOKConfig } from '../types/agent.js';
-import { hasRealMediaKey, NO_PROVIDER_MESSAGE } from './config.js';
+import { hasRealMediaKey, isMockKey, NO_PROVIDER_MESSAGE } from './config.js';
 
 export interface VideoGenerationOptions {
   prompt: string;
@@ -127,7 +127,7 @@ export class VideoGenerator {
     }
 
     // Explicit mock key → offline fixture (preserves existing mock behavior).
-    if (config.apiKey === 'mock-key' || config.apiKey.includes('mock')) {
+    if (isMockKey(config)) {
       const mockJob: VideoGenerationJob = {
         jobId,
         status: 'completed',
