@@ -98,6 +98,28 @@ function resolveWithinRoot(projectRoot: string, target: string): string | null {
   return inside ? resolved : null;
 }
 
+/**
+ * Resolves `target` against an allowlist of directories and returns the
+ * absolute path if it stays inside one of them, or `null` if it escapes.
+ * Case-insensitive so it behaves on Windows (which folds case on paths).
+ * Mirrors the web `read-file-base64` scope check (e38c276) and the desktop
+ * builtin-tool guard (`resolveWithinRoot`) so every file-read channel enforces
+ * the same project-root boundary — mission point #1: the agent must never
+ * freely browse the filesystem. Used by the desktop `read-file-base64` IPC
+ * handler, which passes `[userDataDir, ...projectFolders]`.
+ */
+export function resolveWithinAnyRoot(target: string, allowedRoots: string[]): string | null {
+  const resolved = path.resolve(target);
+  const normTarget = resolved.toLowerCase();
+  for (const root of allowedRoots) {
+    const normRoot = path.resolve(root).toLowerCase();
+    if (normTarget === normRoot || normTarget.startsWith(normRoot + path.sep)) {
+      return resolved;
+    }
+  }
+  return null;
+}
+
 // ─── grep helper (in-process, no external binary) ─────────────────────────────
 // Searches files recursively using Node's fs + RegExp instead of shelling out to
 // the system `grep`. This (a) closes a command-injection vector that existed

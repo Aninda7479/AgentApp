@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createBuiltinTools } from '../src/main/ai-engine';
+import { createBuiltinTools, resolveWithinAnyRoot } from '../src/main/ai-engine';
 
 let root: string;
 const get = (name: string) => createBuiltinTools(root).find((t) => t.name === name)!;
@@ -77,5 +77,49 @@ describe('builtin file tools respect project-root scoping (desktop)', () => {
   it('still allows legitimate in-root access', async () => {
     const res = await get('read_file').execute({ path: 'readme.md' });
     expect(res).toContain('TODO: write docs');
+  });
+});
+
+describe('resolveWithinAnyRoot (read-file-base64 scope check)', () => {
+  // Mirrors the web read-file-base64 scope check (e38c276) for the desktop
+  // side: the channel may only read from the user-data dir or a configured
+  // project folder — never arbitrary files on disk.
+  const userData = path.join(os.tmpdir(), 'sa-userdata');
+  const project = path.join(os.tmpdir(), 'sa-project');
+  const roots = [userData, project];
+
+  it('allows a file inside the user-data root', () => {
+    const inside = path.join(userData, 'chat', 'pic.png');
+    expect(resolveWithinAnyRoot(inside, roots)).toBe(path.resolve(inside));
+  });
+
+  it('allows a file inside a configured project folder', () => {
+    const inside = path.join(project, 'src', 'app.ts');
+    expect(resolveWithinAnyRoot(inside, roots)).toBe(path.resolve(inside));
+  });
+
+  it('rejects a path escaping every allowed root via ../', () => {
+    const escaped = path.join(userData, '..', '..', 'etc', 'passwd');
+    expect(resolveWithinAnyRoot(escaped, roots)).toBeNull();
+  });
+
+  it('rejects an absolute path outside all allowed roots', () => {
+    expect(resolveWithinAnyRoot('/etc/passwd', roots)).toBeNull();
+    expect(resolveWithinAnyRoot('C:\\Windows\\system32\\secrets.txt', roots)).toBeNull();
+  });
+
+  it('rejects a root-sibling that only shares a name prefix', () => {
+    const sibling = userData + '-evil';
+    fs.mkdirSync(sibling, { recursive: true });
+    try {
+      expect(resolveWithinAnyRoot(path.join(sibling, 'x.png'), roots)).toBeNull();
+    } finally {
+      fs.rmSync(sibling, { recursive: true, force: true });
+    }
+  });
+
+  it('is case-insensitive so it holds on Windows paths', () => {
+    const mixed = path.join(userData.toUpperCase(), 'Chat', 'PIC.PNG');
+    expect(resolveWithinAnyRoot(mixed, roots)).toBe(path.resolve(mixed));
   });
 });

@@ -28,7 +28,7 @@ async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
 // Architecture matches OpenCode/Codex: streaming SSE events forwarded to renderer
 // via Electron IPC (replaces HTTP SSE in desktop context)
 
-import { AgentEngine, AgentEngineConfig, AgentEvent } from './main/ai-engine';
+import { AgentEngine, AgentEngineConfig, AgentEvent, resolveWithinAnyRoot } from './main/ai-engine';
 import { listSkills } from './main/skills';
 import {
   connectServer,
@@ -507,9 +507,27 @@ safeHandle('copy-file-to-chat', async (_event, { sourcePath, chatId, projectName
 });
 
 safeHandle('read-file-base64', async (_event, filePath) => {
+  if (typeof filePath !== 'string' || filePath.length === 0) {
+    console.error('Failed to read file as base64: a non-empty file path string is required.');
+    return null;
+  }
+  // Confine reads to the user-data dir (chat media, screenshots, logs) and the
+  // user's configured project folders. Reading an arbitrary absolute path would
+  // let the agent surface exfiltrate any file on disk — inconsistent with the
+  // project-root scoping the other file tools now enforce (4b0223f / abbad59 /
+  // 64655f9: read_file/list_dir/write_file/grep_search are all scoped). This
+  // mirrors the web fix in e38c276 and reuses the desktop engine's allowlist
+  // check (resolveWithinAnyRoot / resolveWithinRoot in ai-engine.ts).
+  const userDataDir = app.getPath('userData');
+  const projectFolders = (readStore().projects ?? []).flatMap((p) => p.folders ?? []);
+  const resolved = resolveWithinAnyRoot(filePath, [userDataDir, ...projectFolders]);
+  if (!resolved) {
+    console.error(`Refused read-file-base64: ${filePath} is outside the allowed directories.`);
+    return null;
+  }
   try {
-    const content = fs.readFileSync(filePath);
-    const ext = path.extname(filePath).toLowerCase();
+    const content = fs.readFileSync(resolved);
+    const ext = path.extname(resolved).toLowerCase();
     let mimeType = 'image/png';
     if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
     else if (ext === '.gif') mimeType = 'image/gif';
