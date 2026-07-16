@@ -373,6 +373,21 @@ body {
   text-transform: uppercase;
 }
 
+/* State-coded banner surfaces — the ONLY place color may appear is via these
+   semantic helpers, which route through the neon state tokens (not raw hues).
+   Mirrors .ui-menu-item.danger. Layout (padding/radius/gap) stays in JSX. */
+.ui-state-banner { border-width: 1px; border-style: solid; }
+.ui-state-banner.constructive {
+  color: var(--neon-constructive);
+  border-color: color-mix(in srgb, var(--neon-constructive) 22%, transparent);
+  background: color-mix(in srgb, var(--neon-constructive) 10%, transparent);
+}
+.ui-state-banner.destructive {
+  color: var(--neon-destructive);
+  border-color: color-mix(in srgb, var(--neon-destructive) 22%, transparent);
+  background: color-mix(in srgb, var(--neon-destructive) 10%, transparent);
+}
+
 /* Responsive auto grid for cards */
 .ui-grid-auto {
   display: grid;

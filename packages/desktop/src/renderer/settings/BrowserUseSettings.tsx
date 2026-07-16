@@ -174,8 +174,8 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
       </div>
 
       {message && (
-        <div className={`p-3 rounded-lg flex items-start gap-2.5 text-xs ${
-          message.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'
+        <div className={`ui-state-banner p-3 rounded-lg flex items-start gap-2.5 text-xs ${
+          message.type === 'success' ? 'constructive' : 'destructive'
         }`}>
           <AlertCircle size={15} className="mt-0.5" />
           <span>{message.text}</span>
