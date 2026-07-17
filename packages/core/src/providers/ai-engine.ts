@@ -44,6 +44,46 @@ export interface AgentEvent {
   toolFallback?: boolean;
 }
 
+// ─── Orchestration helpers ────────────────────────────────────────────────────
+
+/**
+ * Builds a RouterModel[] pool for the orchestration router from the user's
+ * configured models (SettingsStorage). Vision/tool capability isn't stored as a
+ * boolean on ModelSettings, so it is derived from ModelGovStorage scores — the
+ * same source model-gov.ts uses — keeping the pool consistent with the rest of
+ * the governance layer.
+ */
+export function buildRouterPool(models: ModelSettings[]): RouterModel[] {
+  return models.map((m) => {
+    const scores = ModelGovStorage.getModelScores(m.id);
+    return {
+      id: m.id,
+      name: m.name,
+      providerId: m.providerId,
+      enabled: m.enabled,
+      supportsVision: scores.vision >= 75,
+      supportsTools: scores.coding >= 70 || scores.reasoning >= 75,
+      inputModalities: m.inputModalities as RouterModel['inputModalities'],
+      accessStatus: 'available'
+    };
+  });
+}
+
+/**
+ * Builds a CompletionRequest from a prompt + attachments, encoding each image
+ * attachment as an image_url content block so the modality bridge can detect a
+ * vision input and plan accordingly.
+ */
+export function buildBridgeRequest(prompt: string, attachments?: ImageAttachment[]): CompletionRequest {
+  const content: ContentBlock[] = [{ type: 'text', text: prompt }];
+  if (attachments) {
+    for (const att of attachments) {
+      content.push({ type: 'image_url', image_url: { url: att.dataUrl } });
+    }
+  }
+  return { messages: [{ role: 'user', content }] };
+}
+
 // ─── Tool Definitions ─────────────────────────────────────────────────────────
 
 export interface ToolDefinition {
@@ -66,7 +106,12 @@ import { PlaywrightBrowserEngine } from '../automation/browser.js';
 import { BrowserLifecycleService } from '../automation/browser-service.js';
 import { resolveProviderFamily, resolveBaseUrl } from './provider-meta.js';
 import { BestOfNStrategy, mergeBestOfN } from './best-of-n.js';
-import { ContentBlock, ImageAttachment } from '../types/agent.js';
+import { ContentBlock, ImageAttachment, type CompletionRequest, type AIProvider } from '../types/agent.js';
+import { ModelRouter } from './router.js';
+import type { RouterModel } from './router.js';
+import { BYOKProviderManager } from './byok.js';
+import { SettingsStorage, type ModelSettings } from '../storage/settings-store.js';
+import { ModelGovStorage } from '../storage/model-gov.js';
 import { toOpenAIMessages, toAnthropicMessages } from './multimodal.js';
 
 const execAsync = promisify(exec);
@@ -908,6 +953,48 @@ Key guidelines:
       mergedCount: texts.length
     });
     onEvent({ type: 'done', sessionId: sessionId });
+  }
+
+  /**
+   * Orchestrated, bridge-aware completion (mission point #1: a model's input
+   * limits shouldn't block a task). Builds a request from the prompt +
+   * attachments and routes it through ModelRouter.completeWithBridge, which
+   * inserts a vision/transcription model ahead of a target that can't read the
+   * input modality, then answers on the augmented text-only request. The handoff
+   * is surfaced as a 'thought' event so it is visible, not silent.
+   *
+   * This is ADDITIVE: the streaming AgentEngine.run() path is unchanged, so
+   * callers that want orchestration (e.g. a multimodal turn) invoke this instead.
+   * The caller supplies the BYOKProviderManager (no hidden secure-storage
+   * coupling); the pool defaults to the user's configured models.
+   */
+  public static async runOrchestrated(
+    userPrompt: string,
+    onEvent: (event: AgentEvent) => void,
+    opts: {
+      config: AgentEngineConfig;
+      attachments?: ImageAttachment[];
+      pool?: RouterModel[];
+      byokManager: BYOKProviderManager;
+      sessionId?: string;
+    }
+  ): Promise<void> {
+    const sessionId = opts.sessionId ?? `session-${Date.now()}`;
+    const pool = opts.pool ?? buildRouterPool(SettingsStorage.loadSettings().models ?? []);
+    const request = buildBridgeRequest(userPrompt, opts.attachments);
+    const router = new ModelRouter({ preferredProvider: opts.config.provider as AIProvider });
+
+    const res = await router.completeWithBridge(request, opts.byokManager, pool, {
+      overrideProvider: opts.config.provider as AIProvider,
+      onBridge: (plan) => {
+        if (plan.needsBridge) {
+          onEvent({ type: 'thought', sessionId, content: `[Orchestrator] ${plan.reason}` });
+        }
+      }
+    });
+
+    onEvent({ type: 'token', sessionId, content: res.content });
+    onEvent({ type: 'done', sessionId });
   }
 
   /** Build the initial history (system + this turn's user message, plain or
