@@ -9,32 +9,37 @@ export class ProvidersService {
   /**
    * Connects a new provider: replaces any existing entry with the same id, merges
    * its models (replacing that provider's previous models), and persists.
+   *
+   * Computation is done from the current context state (via the ctx getters)
+   * and the resulting arrays are applied with flat, top-level state setters.
+   * The previous implementation nested `setModelsCatalog` *inside* the
+   * `setConnectedProviders` updater — a side effect inside a reducer, which can
+   * be dropped or double-run (React StrictMode) and is the likely cause of the
+   * catalog sometimes not populating after a connect (composer stays disabled).
    */
   static connect(ctx: AppContext, provider: ProviderConnection, newModels: ModelConfig[]): void {
-    ctx.setConnectedProviders((prev) => {
-      const next = [...prev.filter((p) => p.id !== provider.id), provider];
-      ctx.setModelsCatalog((prevM) => {
-        const nextM = [...prevM.filter((m) => m.providerId !== provider.id), ...newModels];
-        ctx.persistStore(next, nextM);
-        return nextM;
-      });
-      return next;
-    });
+    const nextProviders = [
+      ...ctx.getConnectedProviders().filter((p) => p.id !== provider.id),
+      provider
+    ];
+    const nextModels = [
+      ...ctx.getModelsCatalog().filter((m) => m.providerId !== provider.id),
+      ...newModels
+    ];
+    ctx.setConnectedProviders(nextProviders);
+    ctx.setModelsCatalog(nextModels);
+    ctx.persistStore(nextProviders, nextModels);
   }
 
   /**
    * Disconnects a provider and removes all of its models, then persists.
    */
   static disconnect(ctx: AppContext, providerId: string): void {
-    ctx.setConnectedProviders((prev) => {
-      const next = prev.filter((p) => p.id !== providerId);
-      ctx.setModelsCatalog((prevM) => {
-        const nextM = prevM.filter((m) => m.providerId !== providerId);
-        ctx.persistStore(next, nextM);
-        return nextM;
-      });
-      return next;
-    });
+    const nextProviders = ctx.getConnectedProviders().filter((p) => p.id !== providerId);
+    const nextModels = ctx.getModelsCatalog().filter((m) => m.providerId !== providerId);
+    ctx.setConnectedProviders(nextProviders);
+    ctx.setModelsCatalog(nextModels);
+    ctx.persistStore(nextProviders, nextModels);
   }
 
   /**
@@ -61,17 +66,15 @@ export class ProvidersService {
   }
 
   /**
-   * Toggles a model's enabled/disabled state and persists.
+   * Toggles a model's enabled/disabled state and persists. Flat updates only
+   * (no nested setState).
    */
   static toggleModel(ctx: AppContext, modelId: string): void {
-    ctx.setModelsCatalog((prev) => {
-      const next = prev.map((m) => (m.id === modelId ? { ...m, enabled: !m.enabled } : m));
-      ctx.setConnectedProviders((p) => {
-        ctx.persistStore(p, next);
-        return p;
-      });
-      return next;
-    });
+    const next = ctx
+      .getModelsCatalog()
+      .map((m) => (m.id === modelId ? { ...m, enabled: !m.enabled } : m));
+    ctx.setModelsCatalog(next);
+    ctx.persistStore(ctx.getConnectedProviders(), next);
   }
 
   /**
@@ -123,15 +126,11 @@ export class ProvidersService {
     }
 
     if (newProviders.length) {
-      ctx.setConnectedProviders((prev) => {
-        const next = [...prev, ...newProviders];
-        ctx.setModelsCatalog((prevM) => {
-          const nextM = [...prevM, ...newModels];
-          ctx.persistStore(next, nextM, finalProjects, finalChats);
-          return nextM;
-        });
-        return next;
-      });
+      const nextProviders = [...ctx.getConnectedProviders(), ...newProviders];
+      const nextModels = [...ctx.getModelsCatalog(), ...newModels];
+      ctx.setConnectedProviders(nextProviders);
+      ctx.setModelsCatalog(nextModels);
+      ctx.persistStore(nextProviders, nextModels, finalProjects, finalChats);
     }
   }
 }
