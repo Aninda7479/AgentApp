@@ -53,7 +53,7 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
               ? <FilePen className="w-5 h-5 text-[color:var(--neon-constructive)] shrink-0" />
               : <Terminal className="w-5 h-5 text-[color:var(--neon-constructive)] shrink-0" />}
           <div>
-            <h2 className="text-lg font-bold text-white m-0">
+            <h2 className="text-lg font-bold text-brand-textMain m-0">
               {isFile ? 'Agent wants to modify a file' : 'Agent wants to run a command'}
             </h2>
             <p className="text-xs text-brand-textMuted mt-0.5">

@@ -32,7 +32,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
           <div className="flex items-center gap-2.5">
             <Keyboard className="w-5 h-5 text-[var(--brand-highlight)]" />
             <div>
-              <h2 className="text-lg font-bold text-white m-0">Keyboard Shortcuts</h2>
+              <h2 className="text-lg font-bold text-brand-textMain m-0">Keyboard Shortcuts</h2>
               <p className="text-xs text-brand-textMuted mt-0.5">
                 Quickly execute application actions using hotkeys
               </p>
@@ -55,7 +55,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
               className="flex items-center justify-between gap-3 px-4 py-3 bg-brand-bg/40 border border-brand-border/40 rounded-xl"
             >
               <span className="text-xs font-medium text-brand-textMain">{item.label}</span>
-              <kbd className="px-2.5 py-1 bg-brand-card border border-brand-border rounded font-mono text-[10px] text-white shadow-sm">
+              <kbd className="px-2.5 py-1 bg-brand-card border border-brand-border rounded font-mono text-[10px] text-brand-textMain shadow-sm">
                 {item.value}
               </kbd>
             </div>

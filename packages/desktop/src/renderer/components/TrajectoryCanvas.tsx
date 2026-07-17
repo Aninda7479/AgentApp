@@ -191,7 +191,7 @@ const PromptCopyButton: React.FC<{ content: string }> = ({ content }) => {
     <button
       onClick={handleCopy}
       title="Copy prompt"
-      className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-all cursor-pointer text-[10px]"
+      className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-[var(--brand-hover)] transition-all cursor-pointer text-[10px]"
     >
       {copied ? <Check size={11} className="text-[color:var(--neon-constructive)]" /> : <Copy size={11} />}
       <span>{copied ? 'Copied' : 'Copy'}</span>
@@ -221,7 +221,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({ content, onThumbsUp, on
       <button
         onClick={handleCopy}
         title="Copy"
-        className="p-1.5 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-all cursor-pointer"
+        className="p-1.5 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-[var(--brand-hover)] transition-all cursor-pointer"
       >
         {copied ? <Check size={13} className="text-[color:var(--neon-constructive)]" /> : <Copy size={13} />}
       </button>
@@ -497,7 +497,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                         </div>
                         <button
                           onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
-                          className="bg-white/5 border border-brand-border hover:bg-white/10 text-brand-textMain px-3 py-1 rounded-lg cursor-pointer text-xs font-semibold transition-all"
+                          className="bg-[var(--brand-hover)] border border-brand-border hover:bg-[var(--brand-hover-strong)] text-brand-textMain px-3 py-1 rounded-lg cursor-pointer text-xs font-semibold transition-all"
                         >
                           Open
                         </button>

@@ -183,12 +183,12 @@ export const Select: React.FC<SelectProps> = ({
         aria-activedescendant={isOpen ? optionId(activeIndex) : undefined}
         aria-label={label ?? placeholder}
         onClick={() => (isOpen ? setIsOpen(false) : openMenu())}
-        className="flex items-center justify-between bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-white cursor-pointer select-none outline-none hover:border-brand-border-strong focus-visible:border-brand-border-strong focus-visible:ring-2 focus-visible:ring-brand-border-strong/40 transition-all"
+        className="flex items-center justify-between bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-brand-textMain cursor-pointer select-none outline-none hover:border-brand-border-strong focus-visible:border-brand-border-strong focus-visible:ring-2 focus-visible:ring-brand-border-strong/40 transition-all"
         tabIndex={0}
         onKeyDown={handleKeyDown}
         onBlur={() => setIsOpen(false)}
       >
-        <span className={`flex items-center gap-2 ${selectedOption ? 'text-white' : 'text-brand-textMuted/50'}`}>
+        <span className={`flex items-center gap-2 ${selectedOption ? 'text-brand-textMain' : 'text-brand-textMuted/50'}`}>
           {selectedOption?.icon && <span className="flex-shrink-0">{selectedOption.icon}</span>}
           <span>{selectedOption ? selectedOption.label : placeholder}</span>
         </span>

@@ -362,7 +362,7 @@ export const Composer: React.FC<ComposerProps> = ({
                 <button
                   type="button"
                   onClick={() => onRemoveAttachment && onRemoveAttachment(idx)}
-                  className="text-brand-textMuted hover:text-brand-textMain font-bold ml-1 rounded hover:bg-white/5 w-4 h-4 flex items-center justify-center transition-colors cursor-pointer"
+                  className="text-brand-textMuted hover:text-brand-textMain font-bold ml-1 rounded hover:bg-[var(--brand-hover)] w-4 h-4 flex items-center justify-center transition-colors cursor-pointer"
                 >
                   &times;
                 </button>

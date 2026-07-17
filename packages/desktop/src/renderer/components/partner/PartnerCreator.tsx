@@ -173,7 +173,7 @@ export const PartnerCreator: React.FC<PartnerCreatorProps> = ({ isOpen, onClose,
           </div>
           <button
             onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-brand-textMuted hover:bg-white/10 hover:text-brand-textMain"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-brand-textMuted hover:bg-[var(--brand-hover-strong)] hover:text-brand-textMain"
           >
             <X size={16} />
           </button>

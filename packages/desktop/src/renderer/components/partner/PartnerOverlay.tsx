@@ -157,7 +157,7 @@ export const PartnerOverlay: React.FC<PartnerOverlayProps> = ({
           data-testid="partner-hide"
           onClick={onToggle}
           title="Hide Partner"
-          className="ml-1 flex h-6 w-6 items-center justify-center rounded-md text-brand-textMuted hover:bg-white/10 hover:text-brand-textMain transition-colors"
+          className="ml-1 flex h-6 w-6 items-center justify-center rounded-md text-brand-textMuted hover:bg-[var(--brand-hover-strong)] hover:text-brand-textMain transition-colors"
         >
           <X size={14} />
         </button>

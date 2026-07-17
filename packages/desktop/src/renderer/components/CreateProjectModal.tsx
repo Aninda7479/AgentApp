@@ -279,11 +279,11 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-brand-border">
-          <div className="w-9 h-9 rounded-lg bg-white/5 border border-brand-border flex items-center justify-center flex-shrink-0 text-white font-outfit font-semibold text-sm">
+          <div className="w-9 h-9 rounded-lg bg-[var(--brand-hover)] border border-brand-border flex items-center justify-center flex-shrink-0 text-brand-textMain font-outfit font-semibold text-sm">
             {initial || <Folder size={16} className="text-brand-textMuted" />}
           </div>
           <div className="flex flex-col min-w-0">
-            <h3 className="font-semibold text-base text-white font-outfit leading-tight">
+            <h3 className="font-semibold text-base text-brand-textMain font-outfit leading-tight">
               Create project
             </h3>
             <p className="text-xs text-brand-textMuted leading-tight">
@@ -293,7 +293,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           <button
             onClick={handleDismiss}
             aria-label="Close"
-            className="ml-auto text-brand-textMuted hover:text-white hover:bg-white/5 rounded-lg p-1.5 transition-colors duration-150"
+            className="ml-auto text-brand-textMuted hover:text-brand-textMain hover:bg-[var(--brand-hover)] rounded-lg p-1.5 transition-colors duration-150"
           >
             <X size={16} />
           </button>
@@ -313,10 +313,10 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               placeholder="e.g. My Website"
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
-              className={`bg-brand-bg border rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 transition-colors placeholder-brand-textMuted/50 ${
+              className={`bg-brand-bg border rounded-lg px-3 py-2.5 text-sm text-brand-textMain focus:outline-none focus:ring-2 transition-colors placeholder-brand-textMuted/50 ${
                 touched && !projectName.trim()
                   ? 'border-[color:var(--neon-destructive)]/60 focus:ring-[color:var(--neon-destructive)]/30'
-                  : 'border-brand-border focus:ring-white/20 focus:border-brand-textMuted'
+                  : 'border-brand-border focus:ring-brand-border-strong focus:border-brand-textMuted'
               }`}
             />
             {touched && !projectName.trim() && (
@@ -340,10 +340,10 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             {folders.length === 0 ? (
               <button
                 onClick={handleAddFolder}
-                className={`w-full flex flex-col items-center justify-center gap-2 bg-brand-bg hover:bg-white/[0.03] border border-dashed rounded-xl py-6 px-4 text-sm transition-all active:scale-[0.99] ${
+                className={`w-full flex flex-col items-center justify-center gap-2 bg-brand-bg hover:bg-[var(--brand-hover)] border border-dashed rounded-xl py-6 px-4 text-sm transition-all active:scale-[0.99] ${
                   touched && folders.length === 0
                     ? 'border-[color:var(--neon-destructive)]/50 text-[color:var(--neon-destructive)]'
-                    : 'border-brand-border text-brand-textMuted hover:text-white hover:border-brand-textMuted'
+                    : 'border-brand-border text-brand-textMuted hover:text-brand-textMain hover:border-brand-textMuted'
                 }`}
               >
                 <FolderOpen size={20} />
@@ -361,7 +361,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       >
                         <Folder size={14} className="flex-shrink-0 text-brand-textMuted" />
                         <div className="flex flex-col min-w-0 leading-tight">
-                          <span className="truncate text-white font-mono">{leaf}</span>
+                          <span className="truncate text-brand-textMain font-mono">{leaf}</span>
                           {parent && (
                             <span className="truncate text-brand-textMuted/70 font-mono text-[10px]">
                               {parent}
@@ -381,7 +381,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                 </div>
                 <button
                   onClick={handleAddFolder}
-                  className="w-full flex items-center justify-center gap-1.5 bg-transparent hover:bg-white/[0.03] border border-brand-border/60 hover:border-brand-border py-2 px-3 rounded-lg text-xs text-brand-textMuted hover:text-white transition-all active:scale-[0.99] font-medium"
+                  className="w-full flex items-center justify-center gap-1.5 bg-transparent hover:bg-[var(--brand-hover)] border border-brand-border/60 hover:border-brand-border py-2 px-3 rounded-lg text-xs text-brand-textMuted hover:text-brand-textMain transition-all active:scale-[0.99] font-medium"
                 >
                   <Plus size={13} />
                   <span>Add another folder</span>
@@ -395,13 +395,13 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-brand-border bg-black/10">
           <button
             onClick={handleDismiss}
-            className="px-3.5 py-2 text-sm text-brand-textMuted hover:text-white transition-colors duration-150"
+            className="px-3.5 py-2 text-sm text-brand-textMuted hover:text-brand-textMain transition-colors duration-150"
           >
             Cancel
           </button>
           <button
             onClick={handleCreate}
-            className="group flex items-center gap-1.5 px-4 py-2 text-sm bg-white hover:bg-gray-100 text-brand-bg rounded-lg font-medium transition-all active:scale-[0.98]"
+            className="group flex items-center gap-1.5 px-4 py-2 text-sm bg-[var(--brand-highlight)] hover:bg-[var(--brand-highlight-hover)] text-[color:var(--brand-highlight-text)] rounded-lg font-medium transition-all active:scale-[0.98]"
           >
             <span>Create project</span>
             <ArrowRight size={14} className="transition-transform duration-150 group-hover:translate-x-0.5" />

@@ -184,7 +184,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
               onClick={() => handleTriggerItem(item)}
               onMouseEnter={() => setSelectedIndex(globalIndex)}
               className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-colors mb-0.5 ${
-                isSelected ? 'bg-white/5 text-white' : 'text-brand-textMuted hover:bg-white/5 hover:text-white'
+                isSelected ? 'bg-[var(--brand-hover)] text-brand-textMain' : 'text-brand-textMuted hover:bg-[var(--brand-hover)] hover:text-brand-textMain'
               }`}
             >
               <div className="flex items-center gap-2.5 flex-1 min-w-0">
@@ -229,12 +229,12 @@ export const SearchModal: React.FC<SearchModalProps> = ({
               setSelectedIndex(0);
             }}
             onKeyDown={handleKeyDown}
-            className="flex-1 bg-transparent border-none outline-none text-white text-sm placeholder-brand-textMuted/50"
+            className="flex-1 bg-transparent border-none outline-none text-brand-textMain text-sm placeholder-brand-textMuted/50"
           />
           {query && (
             <button
               onClick={() => { setQuery(''); inputRef.current?.focus(); }}
-              className="text-brand-textMuted hover:text-white text-xs px-1.5 cursor-pointer"
+              className="text-brand-textMuted hover:text-brand-textMain text-xs px-1.5 cursor-pointer"
               aria-label="Clear search"
             >
               ✕

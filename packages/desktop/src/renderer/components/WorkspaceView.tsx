@@ -141,7 +141,7 @@ const AgentTabBar: React.FC<AgentTabBarProps> = ({
         className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all select-none group flex-shrink-0 ${
           session.id === activeSessionId
             ? 'bg-brand-card border border-brand-border text-brand-textMain'
-            : 'text-brand-textMuted hover:text-brand-textMain hover:bg-white/5'
+            : 'text-brand-textMuted hover:text-brand-textMain hover:bg-[var(--brand-hover)]'
         }`}
       >
         <Bot size={11} className={session.isGenerating ? 'text-[var(--neon-live)] animate-pulse' : 'text-brand-textMuted'} />
