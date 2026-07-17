@@ -42,6 +42,12 @@ export interface AgentEvent {
   strategy?: BestOfNStrategy;
   mergedCount?: number;
   toolFallback?: boolean;
+  /** Agreement ratio 0..1 across candidates (1 = unanimous). A bias-resistance
+   *  signal: high agreement means the answer is robust to any single model's
+   *  biases; low agreement means the models diverged. */
+  agreement?: number;
+  /** Number of distinct (normalized) answers among the candidates. */
+  clusters?: number;
 }
 
 // ─── Orchestration helpers ────────────────────────────────────────────────────
@@ -117,7 +123,7 @@ import { PlaywrightBrowserEngine } from '../automation/browser.js';
 import { BrowserLifecycleService } from '../automation/browser-service.js';
 import { resolveProviderFamily, resolveBaseUrl } from './provider-meta.js';
 import { capabilityRegistry } from './models.js';
-import { BestOfNStrategy, mergeBestOfN } from './best-of-n.js';
+import { BestOfNStrategy, synthesizeEnsemble } from './best-of-n.js';
 import { ContentBlock, ImageAttachment, type CompletionRequest, type AIProvider } from '../types/agent.js';
 import { ModelRouter } from './router.js';
 import type { RouterModel } from './router.js';
@@ -955,14 +961,17 @@ Key guidelines:
       return;
     }
 
-    const merged = doMerge ? mergeBestOfN(texts, strategy) : texts.join('\n\n');
+    const merged = doMerge ? synthesizeEnsemble(texts, strategy) : null;
+    const mergedText = doMerge ? merged!.text : texts.join('\n\n');
     onEvent({
       type: 'bestofn',
       sessionId: sessionId,
-      content: merged,
+      content: mergedText,
       candidates: metaCandidates,
       strategy,
-      mergedCount: texts.length
+      mergedCount: texts.length,
+      agreement: doMerge ? merged!.agreement : undefined,
+      clusters: doMerge ? merged!.clusters : undefined
     });
     onEvent({ type: 'done', sessionId: sessionId });
   }

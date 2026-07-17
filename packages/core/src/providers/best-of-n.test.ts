@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mergeBestOfN, type BestOfNStrategy } from './best-of-n.js';
+import { mergeBestOfN, synthesizeEnsemble, type BestOfNStrategy } from './best-of-n.js';
 
 /**
  * Unit tests for the deterministic best-of-N merge half of parallel
@@ -66,9 +66,62 @@ describe('mergeBestOfN', () => {
 // Sanity check that the strategy union is the documented set.
 describe('BestOfNStrategy', () => {
   it('accepts exactly the documented strategies', () => {
-    const strategies: BestOfNStrategy[] = ['consensus', 'longest', 'first'];
+    const strategies: BestOfNStrategy[] = ['consensus', 'longest', 'first', 'synthesize'];
     for (const s of strategies) {
-      expect(mergeBestOfN(['a', 'b'], s).length).toBeGreaterThan(0);
+      expect(synthesizeEnsemble(['a', 'b'], s).text.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('synthesizeEnsemble (bias-resistance merge)', () => {
+  it('reports unanimous agreement with the collapsed text', () => {
+    const r = synthesizeEnsemble(['  same answer  ', 'same answer', 'Same   Answer']);
+    expect(r.agreement).toBe(1);
+    expect(r.text).toBe('same answer');
+    expect(r.clusters).toBe(1);
+    expect(r.total).toBe(3);
+    expect(r.winnerVotes).toBe(3);
+  });
+
+  it('reports partial agreement and keeps the majority text under consensus', () => {
+    const r = synthesizeEnsemble(['answer A', 'answer A', 'answer B']);
+    expect(r.agreement).toBeCloseTo(2 / 3);
+    expect(r.text).toBe('answer A');
+    expect(r.clusters).toBe(2);
+    expect(r.winnerVotes).toBe(2);
+  });
+
+  it('consensus collapses to the most-voted / longest answer (backward-compatible)', () => {
+    const r = synthesizeEnsemble(['Paris', 'Paris is the capital of France.'], 'consensus');
+    expect(r.agreement).toBeCloseTo(0.5);
+    expect(r.clusters).toBe(2);
+    expect(r.text).toBe('Paris is the capital of France.');
+  });
+
+  it("synthesize surfaces divergent perspectives as a multi-view (bias-resistance)", () => {
+    const r = synthesizeEnsemble(['view one', 'view two', 'view three'], 'synthesize');
+    expect(r.agreement).toBeCloseTo(1 / 3);
+    expect(r.clusters).toBe(3);
+    expect(r.text).toContain('Perspective 1:');
+    expect(r.text).toContain('Perspective 2:');
+    expect(r.text).toContain('Perspective 3:');
+  });
+
+  it('still honors first / longest strategies while returning metadata', () => {
+    const first = synthesizeEnsemble(['short', 'a much longer and more complete answer', 'mid'], 'first');
+    expect(first.text).toBe('short');
+    const longest = synthesizeEnsemble(['short', 'a much longer and more complete answer', 'mid'], 'longest');
+    expect(longest.text).toBe('a much longer and more complete answer');
+    expect(longest.agreement).toBeCloseTo(1 / 3);
+    expect(longest.winnerVotes).toBe(1);
+  });
+
+  it('handles empty and single candidates without throwing', () => {
+    expect(synthesizeEnsemble([]).text).toBe('');
+    expect(synthesizeEnsemble([null, '', '   ']).text).toBe('');
+    const single = synthesizeEnsemble(['only']);
+    expect(single.text).toBe('only');
+    expect(single.agreement).toBe(1);
+    expect(single.clusters).toBe(1);
   });
 });
