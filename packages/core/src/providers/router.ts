@@ -10,6 +10,16 @@ import { createProviderAdapter } from './models.js';
 import { SettingsStorage } from '../storage/settings-store.js';
 import { ModelGovStorage } from '../storage/model-gov.js';
 import { providerHealth } from './provider-health.js';
+import {
+  detectInputModalities,
+  planModalityBridge,
+  bridgeInstruction,
+  withBridgeInstruction,
+  augmentRequestForBridge,
+  lastUserText,
+  findRouterModel,
+  type ModalityBridgePlan
+} from './modality-bridge.js';
 
 /** Options for the model router. */
 export interface RouterOptions {
@@ -96,6 +106,73 @@ export class ModelRouter {
     }
 
     throw new Error(`All provider fallbacks failed:\n${errors.join('\n')}`);
+  }
+
+  /**
+   * Completes a request with automatic modality bridging (mission point #1:
+   * don't let one model's input limitations block a task). If the request
+   * carries an input modality (e.g. an image) the *target* model can't read, a
+   * capable bridge model (vision/transcription) is inserted AHEAD of it to
+   * transduce the input into text; the target then runs on the augmented,
+   * text-only request. The handoff is reported via `onBridge` (and a console
+   * note) so it is visible, never silent.
+   *
+   * When no bridge is needed — target already supports the modality, or no
+   * capable bridge model exists in the pool — this degrades to
+   * {@link completeWithFallback} on the raw request, so callers never branch.
+   *
+   * @param request    the completion request (may contain image_url blocks).
+   * @param byokManager provider configs for the live adapters.
+   * @param pool       the RouterModel catalog used for capability gating/planning.
+   * @param options    overrideProvider forces the target; onBridge surfaces the plan.
+   */
+  public async completeWithBridge(
+    request: CompletionRequest,
+    byokManager: BYOKProviderManager,
+    pool: RouterModel[],
+    options?: { overrideProvider?: AIProvider; onBridge?: (plan: ModalityBridgePlan) => void }
+  ): Promise<CompletionResponse> {
+    const required = detectInputModalities(request);
+    if (required.length === 0 || pool.length === 0) {
+      return this.completeWithFallback(request, byokManager, options?.overrideProvider);
+    }
+
+    // Resolve the target model the final answer will come from.
+    const fallback = { provider: pool[0].providerId, model: pool[0].id };
+    let selection: { provider: string; model: string };
+    if (options?.overrideProvider) {
+      const forced = pool.find((m) => m.providerId === options.overrideProvider);
+      selection = forced
+        ? { provider: forced.providerId, model: forced.id }
+        : (ModelRouter.routeModelForTask(lastUserText(request), pool) ?? fallback);
+    } else {
+      selection = ModelRouter.routeModelForTask(lastUserText(request), pool) ?? fallback;
+    }
+    const targetModel = findRouterModel(pool, selection.provider, selection.model) ?? pool[0];
+
+    const plan = planModalityBridge({ requiredModalities: required, targetModel, pool });
+    if (options?.onBridge) options.onBridge(plan);
+    if (!plan.needsBridge || !plan.bridgeModel) {
+      return this.completeWithFallback(request, byokManager, options?.overrideProvider);
+    }
+
+    // 1) Bridge call — the vision/transcription model reads the raw attachment.
+    const bridgeConfig = byokManager.getKey(plan.bridgeModel.providerId);
+    if (!bridgeConfig) {
+      return this.completeWithFallback(request, byokManager, options?.overrideProvider);
+    }
+    const bridgeReq = withBridgeInstruction(request, bridgeInstruction(plan.bridgeType!));
+    const bridgeAdapter = createProviderAdapter(bridgeConfig);
+    const bridgeResp = await bridgeAdapter.complete(bridgeReq);
+    const bridgeText = bridgeResp.content ?? '';
+
+    // 2) Target call — augmented, text-only request (attachments stripped).
+    const targetReq = augmentRequestForBridge(
+      request,
+      bridgeText,
+      plan.bridgeType === 'transcription' ? 'Transcript' : 'Image description'
+    );
+    return this.completeWithFallback(targetReq, byokManager, options?.overrideProvider);
   }
 
   /**
@@ -291,6 +368,8 @@ export type RouterModel = {
   enabled: boolean;
   supportsVision?: boolean;
   supportsTools?: boolean;
+  /** Input modalities this model can ingest (extends the supportsVision boolean). */
+  inputModalities?: ('text' | 'image' | 'video' | 'audio' | '3d')[];
   /** Live availability; see AccessStatus. Defaults to `available` when absent. */
   accessStatus?: 'available' | 'locked' | 'rate_limited' | 'deprecated';
 };
