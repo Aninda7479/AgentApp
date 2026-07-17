@@ -6,6 +6,7 @@ import {
   ModelCapability,
   AIProvider
 } from '../types/agent.js';
+import { applyReasoningEffort } from './reasoning-effort.js';
 
 /** Provider adapter for OpenAI-compatible Chat Completions API. */
 export class OpenAIAdapter implements BaseProviderAdapter {
@@ -38,6 +39,8 @@ export class OpenAIAdapter implements BaseProviderAdapter {
       max_tokens: request.maxTokens,
       stream: false
     };
+
+    applyReasoningEffort(payload, this.provider, request.reasoningEffort, request.maxTokens);
 
     const controller = new AbortController();
     const timeoutMs = Number(process.env.SUPERAGENT_HTTP_TIMEOUT_MS ?? 300000);
@@ -102,6 +105,8 @@ export class OpenAIAdapter implements BaseProviderAdapter {
       temperature: request.temperature ?? 0.7,
       stream: true
     };
+
+    applyReasoningEffort(payload, this.provider, request.reasoningEffort, request.maxTokens);
 
     const response = await fetch(url, {
       method: 'POST',

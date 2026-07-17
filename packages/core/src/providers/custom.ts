@@ -7,6 +7,7 @@ import {
   AIProvider
 } from '../types/agent.js';
 import { resolveBaseUrl, getProviderMeta } from './provider-meta.js';
+import { applyReasoningEffort } from './reasoning-effort.js';
 
 /** Generic provider adapter for OpenAI-compatible third-party / self-hosted endpoints. */
 export class CustomAdapter implements BaseProviderAdapter {
@@ -42,6 +43,8 @@ export class CustomAdapter implements BaseProviderAdapter {
       temperature: request.temperature ?? 0.7,
       max_tokens: request.maxTokens
     };
+
+    applyReasoningEffort(payload, this.provider, request.reasoningEffort, request.maxTokens);
 
     const controller = new AbortController();
     const timeoutMs = Number(process.env.SUPERAGENT_HTTP_TIMEOUT_MS ?? 300000);
@@ -110,6 +113,8 @@ export class CustomAdapter implements BaseProviderAdapter {
       temperature: request.temperature ?? 0.7,
       stream: true
     };
+
+    applyReasoningEffort(payload, this.provider, request.reasoningEffort, request.maxTokens);
 
     const response = await fetch(url, {
       method: 'POST',

@@ -3,7 +3,8 @@ import {
   CompletionResponse,
   BYOKConfig,
   AIProvider,
-  BaseProviderAdapter
+  BaseProviderAdapter,
+  ReasoningEffort
 } from '../types/agent.js';
 import { BYOKProviderManager } from './byok.js';
 import { createProviderAdapter } from './models.js';
@@ -25,16 +26,21 @@ import {
 export interface RouterOptions {
   preferredProvider?: AIProvider;
   fallbackOrder?: AIProvider[];
+  /** Default reasoning effort applied to every request unless the caller sets
+   *  its own `request.reasoningEffort` (caller preference wins). */
+  reasoningEffort?: ReasoningEffort;
 }
 
 /** Routes completion requests to the best available provider with fallback and task-based model selection. */
 export class ModelRouter {
   private preferredProvider?: AIProvider;
   private fallbackOrder: AIProvider[];
+  private reasoningEffort?: ReasoningEffort;
 
   constructor(options?: RouterOptions) {
     this.preferredProvider = options?.preferredProvider;
     this.fallbackOrder = options?.fallbackOrder || ['openai', 'anthropic', 'gemini', 'deepseek', 'custom'];
+    this.reasoningEffort = options?.reasoningEffort;
   }
 
   public selectDefaultModel(byokManager: BYOKProviderManager): BYOKConfig {
@@ -48,8 +54,13 @@ export class ModelRouter {
   public async completeWithFallback(
     request: CompletionRequest,
     byokManager: BYOKProviderManager,
-    overrideProvider?: AIProvider
+    overrideProvider?: AIProvider,
+    reasoningEffort?: ReasoningEffort
   ): Promise<CompletionResponse> {
+    const effort = reasoningEffort ?? this.reasoningEffort;
+    const req: CompletionRequest =
+      effort && !request.reasoningEffort ? { ...request, reasoningEffort: effort } : request;
+
     const allConfigs = byokManager.getAllConfigs();
     if (allConfigs.length === 0) {
       throw new Error('No provider configuration available for model router');
@@ -95,7 +106,7 @@ export class ModelRouter {
     for (const config of ordered) {
       try {
         const adapter: BaseProviderAdapter = createProviderAdapter(config);
-        const response = await adapter.complete(request);
+        const response = await adapter.complete(req);
         providerHealth.recordSuccess(config.provider);
         return response;
       } catch (err: unknown) {
@@ -130,11 +141,13 @@ export class ModelRouter {
     request: CompletionRequest,
     byokManager: BYOKProviderManager,
     pool: RouterModel[],
-    options?: { overrideProvider?: AIProvider; onBridge?: (plan: ModalityBridgePlan) => void }
+    options?: { overrideProvider?: AIProvider; onBridge?: (plan: ModalityBridgePlan) => void },
+    reasoningEffort?: ReasoningEffort
   ): Promise<CompletionResponse> {
+    const effort = reasoningEffort ?? this.reasoningEffort;
     const required = detectInputModalities(request);
     if (required.length === 0 || pool.length === 0) {
-      return this.completeWithFallback(request, byokManager, options?.overrideProvider);
+      return this.completeWithFallback(request, byokManager, options?.overrideProvider, effort);
     }
 
     // Resolve the target model the final answer will come from.
@@ -153,15 +166,16 @@ export class ModelRouter {
     const plan = planModalityBridge({ requiredModalities: required, targetModel, pool });
     if (options?.onBridge) options.onBridge(plan);
     if (!plan.needsBridge || !plan.bridgeModel) {
-      return this.completeWithFallback(request, byokManager, options?.overrideProvider);
+      return this.completeWithFallback(request, byokManager, options?.overrideProvider, effort);
     }
 
     // 1) Bridge call — the vision/transcription model reads the raw attachment.
     const bridgeConfig = byokManager.getKey(plan.bridgeModel.providerId);
     if (!bridgeConfig) {
-      return this.completeWithFallback(request, byokManager, options?.overrideProvider);
+      return this.completeWithFallback(request, byokManager, options?.overrideProvider, effort);
     }
     const bridgeReq = withBridgeInstruction(request, bridgeInstruction(plan.bridgeType!));
+    if (effort && !bridgeReq.reasoningEffort) bridgeReq.reasoningEffort = effort;
     const bridgeAdapter = createProviderAdapter(bridgeConfig);
     const bridgeResp = await bridgeAdapter.complete(bridgeReq);
     const bridgeText = bridgeResp.content ?? '';
@@ -172,7 +186,8 @@ export class ModelRouter {
       bridgeText,
       plan.bridgeType === 'transcription' ? 'Transcript' : 'Image description'
     );
-    return this.completeWithFallback(targetReq, byokManager, options?.overrideProvider);
+    if (effort && !targetReq.reasoningEffort) targetReq.reasoningEffort = effort;
+    return this.completeWithFallback(targetReq, byokManager, options?.overrideProvider, effort);
   }
 
   /**

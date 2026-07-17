@@ -1,3 +1,12 @@
+/**
+ * Canonical reasoning-effort tier, normalized across every provider.
+ * Each provider exposes "thinking" differently (an OpenAI `reasoning_effort`
+ * token, an Anthropic `thinking.budget_tokens`, a Gemini `thinkingBudget`, …);
+ * this is the single internal scale the orchestrator reasons about, and the
+ * `reasoning-effort.ts` module maps it onto the per-provider request shape.
+ */
+export type ReasoningEffort = 'low' | 'medium' | 'high';
+
 /** Supported AI provider identifiers. */
 export type AIProvider =
   | 'openai'
@@ -106,6 +115,9 @@ export interface CompletionRequest {
   maxTokens?: number;
   tools?: ToolDefinition[];
   stream?: boolean;
+  /** Desired reasoning effort; the router/adapter map it onto the provider's
+   *  native "thinking" control. Ignored when the target model can't reason. */
+  reasoningEffort?: ReasoningEffort;
 }
 
 /** Response from an LLM completion request. */
