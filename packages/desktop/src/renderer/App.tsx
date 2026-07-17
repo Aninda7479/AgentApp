@@ -436,8 +436,25 @@ export const App: React.FC = () => {
 
   // ── Attachments ────────────────────────────────────────────────────────────
   const handleAttachFiles = async () => {
-    const filePaths: string[] = (await ipc?.invoke('select-files')) as string[];
-    AttachmentService.fromFiles(ctx, filePaths);
+    if (ipc) {
+      const filePaths: string[] = (await ipc.invoke('select-files')) as string[];
+      AttachmentService.fromFiles(ctx, filePaths);
+      return;
+    }
+    // Web/VPS build has no native file dialog (Electron's select-files IPC is
+    // absent). Fall back to a hidden <input type="file"> and route the chosen
+    // File objects through fromPaste, which reads them into buffers — the same
+    // path clipboard paste uses in the web build. Without this, the Attach
+    // button is a silent no-op in the browser (ux-critic HIGH finding).
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.onchange = () => {
+      if (input.files && input.files.length > 0) {
+        void AttachmentService.fromPaste(ctx, input.files);
+      }
+    };
+    input.click();
   };
   const handleAttachPastedFiles = (files: FileList) => AttachmentService.fromPaste(ctx, files);
   const handleRemoveAttachment = (index: number) => AttachmentService.remove(ctx, index);
