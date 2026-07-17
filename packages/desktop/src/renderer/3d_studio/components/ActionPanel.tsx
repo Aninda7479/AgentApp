@@ -147,7 +147,7 @@ export const ActionPanel: React.FC<ActionPanelProps> = ({
                 onClick={onPickImage}
                 className="w-full h-28 border border-dashed border-[var(--brand-border)] hover:border-sky-500/40 bg-slate-950/30 rounded-xl flex flex-col items-center justify-center gap-2 transition-all text-slate-400 hover:text-slate-200 cursor-pointer"
               >
-                <Upload size={20} className="text-sky-400 animate-bounce" />
+                <Upload size={20} className="text-sky-400 animate-float" />
                 <span className="text-[9px] font-bold">Upload Concept Image</span>
                 <span className="text-[7px] text-slate-500 px-4 text-center leading-normal">
                   PNG, JPG, WEBP formats. Max size 10MB. Requires clear resolution for best multi-view synthesis.

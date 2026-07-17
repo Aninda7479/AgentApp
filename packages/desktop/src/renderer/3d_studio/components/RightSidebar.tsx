@@ -148,8 +148,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
             </div>
             
             {savedModels.length === 0 ? (
-              <div className="text-[9px] text-slate-500 text-center py-6 border border-dashed border-slate-800 rounded-lg">
-                No models generated yet.
+              <div className="text-center py-6 border border-dashed border-slate-800 rounded-lg">
+                <div className="text-[9px] text-slate-500">Your library is empty.</div>
+                <div className="text-[8px] text-slate-600 mt-1 px-3 leading-normal">Generate a character and it will appear here.</div>
               </div>
             ) : (
               <div className="flex flex-col gap-2">
