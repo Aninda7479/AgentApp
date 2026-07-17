@@ -129,7 +129,7 @@ export const PartnerOverlay: React.FC<PartnerOverlayProps> = ({
     <div
       data-testid="partner-overlay"
       data-mood={mood}
-      className="fixed bottom-24 right-5 z-40 flex flex-col items-end gap-2 select-none"
+      className="pointer-events-none fixed bottom-24 right-5 z-40 flex flex-col items-end gap-2 select-none"
       style={{ transform: `translate(${offset.dx}px, ${offset.dy}px)` }}
     >
       {reaction.line && (
@@ -141,7 +141,7 @@ export const PartnerOverlay: React.FC<PartnerOverlayProps> = ({
         </div>
       )}
       <div
-        className="glass-panel flex items-center gap-3 rounded-2xl px-3 py-2 shadow-lg cursor-grab active:cursor-grabbing"
+        className="pointer-events-auto glass-panel flex items-center gap-3 rounded-2xl px-3 py-2 shadow-lg cursor-grab active:cursor-grabbing"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
