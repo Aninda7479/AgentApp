@@ -37,7 +37,11 @@ Page queue (breadth-first, from art-director-state.md):
 2. Main app shell ambient background + empty/loading copy (App.tsx) — DONE
  3. Login / account auth pages (standalone HTML) — DONE (account.html restyle 8b9a915)
  4. TitleBar / header (desktop renderer) — DONE this cycle
- 5. Sidebar conversation list (desktop renderer) — NEXT
+ 5. Sidebar conversation list (desktop renderer) — DONE this cycle
+
+Page queue status: ALL 5 breadth-first pages DONE. Next cycle: optional second-pass
+deepening, or extend the bg-white/X -> --brand-hover* token fix to other components
+(WorkspaceView, Composer, modals, TrajectoryCanvas, etc.) for full light-theme consistency.
 
 Playwright MCP: NOT available this session (no mcp__playwright__* tools) — same as prior
 art-director runs; proceed code-only and flag for a visual pass once MCP is attached.
