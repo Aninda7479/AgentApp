@@ -338,12 +338,14 @@ export const App: React.FC = () => {
         stopLoop,
         listLoops,
         clearLoops,
-        runLoopX
+        runLoopX,
+        seedComposer: (text: string) => setComposerPrompt(text),
+        is3dEnabled: showStudio
       };
       slashDepsRef.current = deps;
       return deps;
     },
-    [skills, startLoop, stopLoop, listLoops, clearLoops, runLoopX]
+    [skills, startLoop, stopLoop, listLoops, clearLoops, runLoopX, showStudio]
   );
   const slashDispatch = useCallback(
     (raw: string, options: ComposerOptions) => SlashRouter.dispatch(ctx, SlashRouter.parse(raw), options, slashDeps),

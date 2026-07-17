@@ -32,6 +32,10 @@ export interface SlashDeps {
   listLoops?: () => any[];
   clearLoops?: () => void;
   runLoopX?: (prompt: string, count: number) => void;
+  /** Pre-fills the composer with a (usually sample-prompt) seed for capability commands. */
+  seedComposer?: (text: string) => void;
+  /** Whether the dedicated 3D Studio surface is enabled (gates the `/3d` routing). */
+  is3dEnabled?: boolean;
 }
 
 export class SlashRouter {
@@ -247,6 +251,32 @@ export class SlashRouter {
       case 'security':
         ctx.triggerToast(`"/${cmd}" is handled by the agent — ask as a normal request (desktop UI support coming soon)`);
         return true;
+      case 'image':
+      case 'video':
+      case 'audio':
+      case 'pdf': {
+        // Prompt-seed commands: pre-fill the composer with an editable sample
+        // prompt (including any args the user typed) so they can finish and send
+        // intentionally. No auto-send — keeps the user in control of the call.
+        const verb =
+          cmd === 'image' ? 'Generate an image of'
+          : cmd === 'video' ? 'Generate a video of'
+          : cmd === 'audio' ? 'Generate audio of'
+          : 'Create a PDF about';
+        const seed = `${verb}${parsed.rawArgs ? ` ${parsed.rawArgs}` : ' '}`;
+        deps.seedComposer?.(seed);
+        return true;
+      }
+      case '3d': {
+        if (deps.is3dEnabled) {
+          ctx.setActiveTab('studio');
+          ctx.triggerToast('Opened the 3D Studio — describe a model to generate');
+        } else {
+          deps.seedComposer?.(`Generate a 3D model of${parsed.rawArgs ? ` ${parsed.rawArgs}` : ' '}`);
+          ctx.triggerToast('Tip: enable 3D Model Gen in Settings to open the dedicated Studio');
+        }
+        return true;
+      }
       default:
         ctx.triggerToast(`Unknown command: /${cmd}`, 'error');
         return true;
