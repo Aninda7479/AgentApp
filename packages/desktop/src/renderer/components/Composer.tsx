@@ -374,6 +374,7 @@ export const Composer: React.FC<ComposerProps> = ({
         <textarea
           ref={textareaRef}
           data-testid="composer-input"
+          aria-label="Message"
           value={prompt}
           onChange={(e) => {
             setPrompt(e.target.value);
