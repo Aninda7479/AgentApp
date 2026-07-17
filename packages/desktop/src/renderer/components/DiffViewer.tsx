@@ -56,7 +56,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
             data-testid="toggle-view-mode"
             onClick={() => setViewMode(viewMode === 'split' ? 'unified' : 'split')}
             disabled={isNarrow}
-            className="hidden sm:block bg-white/5 border border-brand-border text-brand-textMuted hover:text-white rounded-lg px-3 py-1 text-xs cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="hidden sm:block bg-[var(--brand-hover)] border border-brand-border text-brand-textMuted hover:text-brand-textMain rounded-lg px-3 py-1 text-xs cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Mode: {effectiveViewMode === 'split' ? 'Side-by-Side' : 'Unified'}
           </button>
@@ -88,7 +88,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
             <button
               data-testid="btn-close-diff"
               onClick={onClose}
-              className="bg-transparent border-none text-brand-textMuted hover:text-white text-base cursor-pointer ml-1.5 p-1 transition-colors"
+              className="bg-transparent border-none text-brand-textMuted hover:text-brand-textMain text-base cursor-pointer ml-1.5 p-1 transition-colors"
             >
               ✕
             </button>

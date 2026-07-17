@@ -39,9 +39,14 @@ Page queue (breadth-first, from art-director-state.md):
  4. TitleBar / header (desktop renderer) — DONE this cycle
  5. Sidebar conversation list (desktop renderer) — DONE this cycle
 
-Page queue status: ALL 5 breadth-first pages DONE. Next cycle: optional second-pass
-deepening, or extend the bg-white/X -> --brand-hover* token fix to other components
-(WorkspaceView, Composer, modals, TrajectoryCanvas, etc.) for full light-theme consistency.
+Page queue status: ALL 5 breadth-first pages DONE. Light-theme token pass (bg-white/N ->
+--brand-hover* across 16 renderer components) DONE this cycle (commit dc12919).
+
+Next cycle options:
+- Remaining light-mode gap: DiffViewer.tsx bg-white/5 (line 59) + hover:text-white (line 91).
+- 3d_studio keeps an intentional sky/slate palette — leave as-is.
+- If Playwright MCP becomes available, do a visual pass over all redesigned pages
+  (none screenshot-verified yet — all art-director work so far is code-verified only).
 
 Playwright MCP: NOT available this session (no mcp__playwright__* tools) — same as prior
 art-director runs; proceed code-only and flag for a visual pass once MCP is attached.
