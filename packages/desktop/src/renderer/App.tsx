@@ -815,6 +815,15 @@ export const App: React.FC = () => {
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
       className="flex flex-col h-dvh w-full max-w-full bg-brand-bg text-brand-textMain overflow-hidden overflow-x-hidden font-sans select-none"
     >
+      {/* Skip link: first focusable element so keyboard/SR users can bypass the
+          title bar + sidebar and jump straight to the primary content. Hidden
+          until focused (standard sr-only pattern), then shown as a floating chip. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-[10000] focus:rounded-lg focus:bg-brand-popover focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-brand-textMain focus:ring-2 focus:ring-brand-border-strong focus:outline-none"
+      >
+        Skip to main content
+      </a>
       <TitleBar
         hasOpenAiKey={Boolean(byokKeys.openai)}
         onOpenProviders={() => {
@@ -901,7 +910,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        <div className="flex-1 flex flex-col relative isolate overflow-hidden bg-brand-bg pb-18 md:pb-0">
+        <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col relative isolate overflow-hidden bg-brand-bg pb-18 md:pb-0 focus:outline-none">
           {/* Ambient "layered atmosphere" backdrop — a soft accent glow and three
               calm depth bands, painted behind all content (Atmosphere mode, low
               opacity). Decorative only; never sits behind text contrast. */}
@@ -1045,7 +1054,7 @@ export const App: React.FC = () => {
           {activeTab === 'mcp' && (
             <MCPDashboard servers={mcpServers} onAddServer={handleAddMcpServer} onRemoveServer={handleRemoveMcpServer} onToggleServer={handleToggleMcpServer} />
           )}
-        </div>
+        </main>
       </div>
 
       {/* Mobile bottom navigation (phones only) */}
