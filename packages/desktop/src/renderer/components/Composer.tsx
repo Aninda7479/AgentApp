@@ -11,6 +11,7 @@ import {
   Check,
   ShieldCheck,
   ShieldAlert,
+  Info,
 } from 'lucide-react';
 import {
   SlashSuggestion,
@@ -232,6 +233,11 @@ export const Composer: React.FC<ComposerProps> = ({
   };
 
   const hasModels = availableModels && availableModels.length > 0;
+  // "Model Governance" is the auto-router meta-entry, not a concrete sendable
+  // model. Surface a hint when it's selected so the user understands they can
+  // pick a specific model to send directly (addresses the silent composer
+  // dead-end the ux-critic flagged — no guidance when the router is selected).
+  const selectedIsRouter = selectedModel === 'Model Governance';
 
   useEffect(() => {
     if (hasModels) {
@@ -371,6 +377,18 @@ export const Composer: React.FC<ComposerProps> = ({
           rows={1}
           className="bg-transparent border-none outline-none text-brand-textMain text-sm resize-none w-full min-h-11 leading-relaxed placeholder-brand-textMuted/55 font-sans disabled:opacity-50"
         />
+
+        {selectedIsRouter && (
+          <div
+            data-testid="composer-router-hint"
+            className="mb-3 flex items-start gap-1.5 text-[11px] leading-snug text-brand-textMuted"
+          >
+            <Info className="mt-0.5 w-3 h-3 shrink-0" />
+            <span>
+              “Model Governance” auto-routes your request across models. Pick a specific model above to send directly to it.
+            </span>
+          </div>
+        )}
 
         {/* Toolbar row inside box */}
         <div className="flex items-center justify-between gap-2 flex-wrap border-t border-brand-border/60 pt-4 mt-4">
