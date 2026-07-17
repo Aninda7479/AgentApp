@@ -170,13 +170,13 @@ export class AgentService {
 
     if (chatId === 'draft-chat') {
       isNew = true;
-      const chatTitle = prompt.length > 25 ? prompt.slice(0, 25).trim() + '...' : prompt.trim();
-      const sanitized = FormatService.sanitizeFolderName(chatTitle);
-      let uniqueChatId = sanitized;
-      let counter = 1;
-      while (ctx.getChats().some((c) => c.id === uniqueChatId)) {
-        uniqueChatId = `${sanitized}-${counter}`;
-        counter++;
+      // Assign a random, collision-resistant storage ID (`XXXX-XXXX-XXXX-XXXX`)
+      // as the chat folder name so duplicate titles never collide on disk.
+      let uniqueChatId = FormatService.generateStorageId();
+      let guard = 0;
+      while (ctx.getChats().some((c) => c.id === uniqueChatId) && guard < 10) {
+        uniqueChatId = FormatService.generateStorageId();
+        guard++;
       }
       chatId = uniqueChatId;
       projectScope = ctx.getDraftProject() || '';

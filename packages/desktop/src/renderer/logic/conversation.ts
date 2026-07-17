@@ -9,6 +9,7 @@
 import type { AppContext, StoredChat, StoredProject } from './types';
 import { StepFactory } from './steps';
 import { StoreService } from './store';
+import { FormatService } from './format';
 
 export class ConversationService {
   /** Computes the default composer model (last-used, else first enabled). */
@@ -21,18 +22,23 @@ export class ConversationService {
    * and navigates to the trajectory view.
    */
   static createProject(ctx: AppContext, newProj: StoredProject): void {
+    // Ensure the project has a random storage ID so its folder never collides
+    // with another project's folder on disk.
+    const project: StoredProject = newProj.storageKey
+      ? newProj
+      : { ...newProj, storageKey: FormatService.generateStorageId() };
     ctx.setProjects((prev) => {
-      const next = [...prev, newProj];
-      const newChatId = `chat-${Date.now()}`;
+      const next = [...prev, project];
+      const newChatId = FormatService.generateStorageId();
       const newChat: StoredChat = {
         id: newChatId,
-        title: `New chat in ${newProj.name}`,
-        project: newProj.name,
+        title: `New chat in ${project.name}`,
+        project: project.name,
         model: ConversationService.defaultModel(ctx),
         timestamp: 'Just now',
         steps: [
           StepFactory.assistantStep(
-            `New conversation initialized. Project context: \`${newProj.name}\`. How can I help you today?`
+            `New conversation initialized. Project context: \`${project.name}\`. How can I help you today?`
           )
         ]
       };
@@ -43,7 +49,7 @@ export class ConversationService {
         return nextChats;
       });
 
-      ctx.setActiveProject(newProj.name);
+      ctx.setActiveProject(project.name);
       ctx.setActiveChatId(newChatId);
       ctx.setTrajectorySteps(newChat.steps);
       return next;

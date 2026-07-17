@@ -121,6 +121,6 @@ describe('conversation-store CRUD', () => {
     const reloaded = readConversationStore(dir);
     expect(reloaded.chats.length).toBe(1);
     expect(reloaded.chats[0].id).toBe('c1');
-    expect(fs.existsSync(path.join(dir, 'conversation', 'Chats', 'c2'))).toBe(false);
+    expect(fs.existsSync(path.join(dir, 'conversation', 'chats', 'c2'))).toBe(false);
   });
 });

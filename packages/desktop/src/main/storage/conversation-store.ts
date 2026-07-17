@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { SettingsStorage } from '@superagent/core';
-import { getChatDirectory, getChatJsonPath, getConversationRoots, getProjectConfigPath, getProjectDirectory, normalizeStorageKey } from './paths.js';
+import { getChatDirectory, getChatJsonPath, getConversationRoots, getProjectConfigPath, getProjectDirectory, normalizeStorageKey, isValidStorageId } from './paths.js';
 import type { ConversationRoots, StoreData, StoredChat, StoredProject } from './types.js';
 import { logError } from '../error-log.js';
 
@@ -86,7 +86,11 @@ function readChatRecord(chatJsonPath: string, projectName: string, projectKey?: 
 }
 
 function resolveProjectKey(project: StoredProject, usedKeys: Set<string>): ProjectRecord {
-  const storageKey = uniqueStorageKey(normalizeStorageKey(project.storageKey || project.name), usedKeys);
+  const baseKey =
+    project.storageKey && isValidStorageId(project.storageKey)
+      ? project.storageKey
+      : normalizeStorageKey(project.storageKey || project.name);
+  const storageKey = uniqueStorageKey(baseKey, usedKeys);
   return {
     ...project,
     name: project.name.trim(),

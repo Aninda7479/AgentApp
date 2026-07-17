@@ -23,14 +23,25 @@ export function getConversationRoots(userDataDir: string): ConversationRoots {
   return {
     userDataDir,
     baseDir,
-    projectsDir: path.join(baseDir, 'Projects'),
-    chatsDir: path.join(baseDir, 'Chats')
+    projectsDir: path.join(baseDir, 'projects'),
+    chatsDir: path.join(baseDir, 'chats')
   };
+}
+
+/**
+ * Returns true when `key` is already a generated storage ID of the form
+ * `XXXX-XXXX-XXXX-XXXX` (charset `1-9A-Z`, dashes only). Such keys are stored
+ * verbatim — `normalizeStorageKey` must NOT be applied to them, since it would
+ * lowercase the uppercase glyphs and break the on-disk naming convention.
+ */
+export function isValidStorageId(key: string): boolean {
+  return /^[1-9A-Z-]+$/.test(key);
 }
 
 /** Returns the filesystem path for a project's storage directory. */
 export function getProjectDirectory(userDataDir: string, projectKey: string): string {
-  return path.join(getConversationRoots(userDataDir).projectsDir, normalizeStorageKey(projectKey));
+  const safeKey = isValidStorageId(projectKey) ? projectKey : normalizeStorageKey(projectKey);
+  return path.join(getConversationRoots(userDataDir).projectsDir, safeKey);
 }
 
 /** Returns the path to a project's config JSON file. */
