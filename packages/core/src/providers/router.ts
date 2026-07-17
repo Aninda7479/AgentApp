@@ -8,6 +8,7 @@ import {
   SpeedTier,
   IntelligenceTier
 } from '../types/agent.js';
+import { classifyTask } from './task-classifier.js';
 import { BYOKProviderManager } from './byok.js';
 import { createProviderAdapter } from './models.js';
 import { SettingsStorage } from '../storage/settings-store.js';
@@ -224,14 +225,15 @@ export class ModelRouter {
 
   public static routeModelForTask(
     prompt: string,
-    allModels: RouterModel[]
+    allModels: RouterModel[],
+    request?: CompletionRequest
   ): { provider: string; model: string } | null {
     if (allModels.length === 0) {
       throw new Error(
         'No models are configured or enabled. Add a provider and enable at least one model in Model Governance, or pick a model manually.'
       );
     }
-    const prepared = ModelRouter.prepareRouting(prompt, allModels);
+    const prepared = ModelRouter.prepareRouting(prompt, allModels, request);
     if (prepared.override) return prepared.override;
     const ranked = ModelRouter.rankModels(
       prepared.flags,
@@ -256,10 +258,11 @@ export class ModelRouter {
   public static selectCandidateModels(
     prompt: string,
     allModels: RouterModel[],
-    count: number = 2
+    count: number = 2,
+    request?: CompletionRequest
   ): Array<{ provider: string; model: string }> {
     if (allModels.length === 0) return [];
-    const prepared = ModelRouter.prepareRouting(prompt, allModels);
+    const prepared = ModelRouter.prepareRouting(prompt, allModels, request);
     if (prepared.override) return [prepared.override];
     const ranked = ModelRouter.rankModels(
       prepared.flags,
@@ -270,14 +273,6 @@ export class ModelRouter {
       provider: c.model.providerId,
       model: ModelRouter.stripProviderPrefix(c.model.providerId, c.model.id)
     }));
-  }
-
-  /** Classifies a (lowercased) prompt into the task categories the router scores. */
-  private static classifyTask(lowerPrompt: string): { isCoding: boolean; isReasoning: boolean; isVision: boolean } {
-    const isCoding = /\b(code|write|refactor|debug|compile|build|test|regex|script|function|class|json|html|css|javascript|typescript|python|c\+\+|java)\b/.test(lowerPrompt);
-    const isReasoning = /\b(analyze|solve|logic|math|proof|algorithm|complexity|optimize|reason|think|deduce|plan)\b/.test(lowerPrompt);
-    const isVision = /\b(image|picture|photo|video|frame|canvas|screenshot|png|jpg|jpeg|svg|draw)\b/.test(lowerPrompt);
-    return { isCoding, isReasoning, isVision };
   }
 
   /**
@@ -383,10 +378,14 @@ export class ModelRouter {
   }
 
   /** Shared pool + override resolution used by both routeModelForTask and
-   *  selectCandidateModels so single-model and multi-model routing agree. */
+   *  selectCandidateModels so single-model and multi-model routing agree.
+   *  When `request` is supplied, classification is modality-aware (real
+   *  attachments set the vision/audio flags), improving single-pass routing for
+   *  multimodal turns without disturbing the bridge path. */
   private static prepareRouting(
     prompt: string,
-    allModels: RouterModel[]
+    allModels: RouterModel[],
+    request?: CompletionRequest
   ): { enabledModels: RouterModel[]; flags: { isCoding: boolean; isReasoning: boolean; isVision: boolean }; override: { provider: string; model: string } | null } {
     const settings = SettingsStorage.loadSettings();
     const govEnabledIds = settings.modelGov?.enabledModels || [];
@@ -398,7 +397,12 @@ export class ModelRouter {
     );
     const enabledModels = pool.length > 0 ? pool : allModels;
 
-    const flags = ModelRouter.classifyTask(prompt.toLowerCase());
+    const classification = classifyTask(request ?? { messages: [{ role: 'user', content: prompt }] });
+    const flags = {
+      isCoding: classification.isCoding,
+      isReasoning: classification.isReasoning,
+      isVision: classification.isVision
+    };
 
     let overrideId = '';
     if (flags.isCoding && govOverrides.coding) overrideId = govOverrides.coding;

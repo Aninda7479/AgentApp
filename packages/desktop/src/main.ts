@@ -9,7 +9,7 @@ app.setPath('userData', getUserDataDirectory());
 import { windowManager } from './main/window';
 import { setupAutoUpdater } from './main/updater';
 import { readStore, writeStore, StoreData } from './main/store';
-import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, buildRouterPool, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS } from '@superagent/core';
+import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS } from '@superagent/core';
 import { getChatDirectory } from './main/storage/index.js';
 import * as PartnerStore from './main/partner-store';
 import { petWindowManager } from './main/pet-window';
@@ -164,7 +164,7 @@ safeHandle('agent-run', async (event, {
         // feeding it the raw list can resolve to a model with no provider.
         const enabledModels = buildRouterPool(settings.models ?? []).filter((m) => m.enabled);
         try {
-          const routed = ModelRouter.routeModelForTask(prompt, enabledModels);
+          const routed = ModelRouter.routeModelForTask(prompt, enabledModels, buildRequest(prompt, currentAttachments));
           if (routed && routed.model) {
             finalConfig.provider = routed.provider as any;
             finalConfig.model = routed.model;

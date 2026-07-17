@@ -12,6 +12,7 @@ import {
   SettingsStorage,
   UsageTracker,
   ModelRouter,
+  buildRequest,
   ModelGovStorage,
   buildRouterPool,
   PlaywrightBrowserEngine,
@@ -207,7 +208,7 @@ async function runAgentEngine(
         // RouterModel fields that raw settings.models don't always carry.
         const enabledModels = buildRouterPool(settings.models ?? []).filter((m) => m.enabled);
         try {
-          const routed = ModelRouter.routeModelForTask(prompt, enabledModels);
+          const routed = ModelRouter.routeModelForTask(prompt, enabledModels, buildRequest(prompt, currentAttachments));
           if (routed && routed.model) {
             finalConfig.provider = routed.provider as any;
             finalConfig.model = routed.model;
