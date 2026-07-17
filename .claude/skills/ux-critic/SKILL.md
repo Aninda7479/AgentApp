@@ -21,9 +21,23 @@ claude mcp add playwright npx @playwright/mcp@latest
 ```
 This covers the **web GUI** cleanly — point it at whatever `npm run dev` / your VPS serves. The **Electron desktop GUI** is a gap this skill can't close the same way: Playwright MCP drives browsers, not Electron's native shell. If the desktop app's React UI can also be served over plain HTTP in dev, point Playwright at that instead; if not, log it as an open question in Step 4 rather than pretending the desktop shell was tested.
 
+## Context-window discipline (read first — this skill is the #1 cause of context blow-ups)
+
+This skill drives a live browser and the Playwright MCP server returns **full accessibility snapshots, console logs, and page dumps as text into your context**. One careless `browser_snapshot` on a heavy page can be 50K–200K tokens; string several together across a session and you blow the ~250K ceiling and crash the API call. Discipline is mandatory:
+
+- **Never let a Playwright payload land raw in context.** Every snapshot, screenshot, and log call MUST pass a `filename` so the MCP server writes it to `.playwright/` and returns only a tiny path string instead of the full payload:
+  - `browser_snapshot` → always set `filename: ".playwright/ux-<persona>-<n>.yaml"`. Do **not** read that file back into context unless you specifically need a detail from it.
+  - `browser_take_screenshot` → always set `filename` (already required). Screenshots are binary on disk; they never enter context.
+  - `browser_console_messages` → always set `filename` when capturing a flow's console output.
+- **Locate elements with `browser_find` (text/regex), not full snapshots.** `browser_find` returns only the matching nodes plus a few lines of context — orders of magnitude smaller than a full `browser_snapshot`. Use it to find the button/field you need, then act on the returned `target` reference.
+- **Read snapshots back from disk in slices, never whole.** When you must inspect a saved snapshot, use the Read tool with `offset`/`limit` to pull only the relevant region (e.g. the form, the header), not the entire file.
+- **Keep findings on disk, not in your head.** Append each issue to `.claude/auto-improve-log.log` (on disk) the moment you find it. Don't accumulate a mental list of 20 findings in working context.
+- **Compact between personas.** After finishing one persona/flow and writing its log entry, run `/compact` before starting the next. This is the single most effective guard against the ceiling — do it every time, not just at the end.
+- **Hard rule:** if you have done more than ~15 heavy tool calls since the last `/compact`, or a single tool result looks large, run `/compact` immediately rather than continuing. The harness summarizes near the limit, but a runaway snapshot can overshoot it before summarization kicks in.
+
 ## Step 0 — Orient
 
-- Read `.claude/auto-improve-log.log`. Look for prior entries tagged `[ux-critic]` so you don't re-test the same flow back to back — rotate through personas/flows across runs.
+- Read `.claude/auto-improve-log.log` — **but read only the tail, not the whole file** (`tail -n 150 .claude/auto-improve-log.log`, or Read with `offset` near the end). This log grows across runs, so loading it wholesale is a slow context leak. Look for prior entries tagged `[ux-critic]` so you don't re-test the same flow back to back — rotate through personas/flows across runs.
 - Confirm the dev server is running; if not, start it with the project's actual dev command (read `package.json` — don't guess it).
 - Confirm Playwright MCP tools are available. If not, stop and say so in the log rather than fabricating a walkthrough.
 
@@ -42,7 +56,7 @@ Use `$ARGUMENTS` if given. Otherwise rotate to the next untested combination fro
 
 Using Playwright MCP: navigate to the local dev URL and actually perform the flow's steps as that persona would — click, fill, submit — screenshotting at each meaningful state, not just the end state. Capture:
 
-- **Screenshots MUST be written into `.playwright/`** (the MCP server's `--output-dir`), never the project root. Always pass an explicit `path` under that folder, e.g. `path: ".playwright/ux-<persona>-<n>.png"`. The server also drops page snapshots (`page-*.yml`) and console logs (`console-*.log`) there automatically. Do not let artifacts leak to the repo root — keep `.playwright/` as the single home for all single-use Playwright output.
+- **Every artifact goes to `.playwright/`, nothing into context.** Screenshots MUST pass an explicit `filename` under `.playwright/` (e.g. `.playwright/ux-<persona>-<n>.png`) — the binary stays on disk and never enters context. Critically, **`browser_snapshot` and `browser_console_messages` MUST also pass `filename`** so the MCP server writes the (potentially huge) accessibility tree / console dump to disk and returns only a path. Do not let raw snapshots or logs leak into the working context — see the "Context-window discipline" section above. When you must inspect a saved snapshot, Read it with `offset`/`limit` to pull only the region you need.
 
 - Console errors and failed network requests during the flow.
 - Any point where you, as the persona, would hesitate, misread, or not know what to do next.
@@ -80,4 +94,4 @@ If session budget allows, move to the next untested persona/flow and repeat from
 
 ## Step 6 — Compact the context
 
-After the run ends (final persona/flow tested, or stopping because you're out of budget), run `/compact` to compress the accumulated context before handing control back. The `.claude/auto-improve-log.log` entry is the durable output — the screenshots and quotes in the working context are discardable once the log is written.
+**Compact after every persona, not just at the end.** The single biggest cause of context-window crashes in this skill is a long session that never compacts between flows. After finishing a persona/flow and appending its log entry: stop, save any remaining findings to disk, then run `/compact` before rotating to the next persona. When the run ends (final persona tested, or stopping because you're out of budget), run `/compact` once more. The `.claude/auto-improve-log.log` entry is the durable output — the screenshots and quotes in the working context are discardable once the log is written. Never carry a full session's worth of snapshots forward into the next persona.

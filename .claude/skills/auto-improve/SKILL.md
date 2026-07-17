@@ -20,6 +20,17 @@ SuperAgent is a provider-agnostic AI agent platform — CLI, Electron desktop GU
 
 Every cycle below should visibly serve one of these four.
 
+## Context-window discipline (read first — long autonomous loops blow the context window)
+
+`/auto-improve` runs many cycles in one session, each doing research, reads, builds, and live calls. Unchecked, the accumulated context (large file reads, full build/test logs, web-fetch dumps) overshoots the ~250K ceiling and crashes the API call. Guard it:
+
+- **Treat ~250K tokens as the hard ceiling.** The harness auto-summarizes near the limit, but a single un-redirected build log or a giant file read can overshoot it first. Be proactive.
+- **Run `/compact` between cycles.** After each cycle's commit + log entry (Steps 7–8), run `/compact` before returning to Step 1 for the next focus. Don't wait for the end-of-session Step 10 — compact every cycle. This is the most reliable guard.
+- **Redirect heavy command output to disk.** Build/lint/test/typecheck output can be enormous. Run it redirected, e.g. `npm run build > /tmp/aibuild.log 2>&1`, then Read only the tail / error lines (`offset`/`limit`) instead of letting the whole log sit in context. Same for any large file: Read with `offset`/`limit`, never the whole file unless you must.
+- **Keep memory on disk.** The `.claude/auto-improve-log.log` is your durable memory — append findings there as you go; don't hold a long mental list in working context.
+- **Web research in slices.** Don't paste whole fetched pages into context. Read the takeaway, record the source + one-line takeaway in the log, and discard the raw page.
+- **Hard rule:** if you have done more than ~15 heavy tool calls (reads, builds, fetches) since the last `/compact`, or any single result looks large, run `/compact` immediately rather than continuing.
+
 ## Step 0 — Orient
 
 - **Single-flight guard (run this FIRST, before any edits).** `/auto-improve`
@@ -49,7 +60,7 @@ Every cycle below should visibly serve one of these four.
   the standing fix for the cross-commit hazard; do not skip it.
 - Read `CLAUDE.md` / `README` / any architecture doc if present.
 - `git log --oneline -20` and `git status` — understand recent trajectory and any uncommitted work before touching anything. If the working tree is dirty with unrelated changes, stop and flag it in the log rather than committing over someone else's in-progress work.
-- Read `.claude/auto-improve-log.log` (create it if it doesn't exist yet). This file is the memory that carries across invocations — treat its "next priority queue" and "open questions" as your starting point instead of re-discovering the project from scratch.
+- Read `.claude/auto-improve-log.log` (create it if it doesn't exist yet) — **but read only the tail, not the whole file**. This log grows every cycle, so loading it wholesale is a slow context leak. Use `tail -n 150 .claude/auto-improve-log.log` (or Read with `offset` near the end) and treat its "next priority queue" and "open questions" as your starting point. If the file exceeds ~400 lines, archive older entries to `.claude/auto-improve-log.log.archive` to keep each read cheap.
 - Read the provider/model registry (wherever the project tags providers as connected and models as `free`/paid — e.g. a `providers.json`, `models.config.*`, or settings store). You'll need this in Step 6.
 - Map the current structure: CLI package, Electron app, web app, shared orchestration core, capability adapters. Don't re-derive this every cycle — update your mental map, then move.
 
@@ -97,14 +108,14 @@ Write a short numbered plan for this cycle via TodoWrite — typically 1–6 con
 
 ## Step 5 — Verify (static)
 
-- Discover and run the project's real build/lint/typecheck/test commands (from `package.json`, `pyproject.toml`, etc.) — don't guess at them. Fix failures before moving on. If they don't pass, do not proceed to Step 6 or 7 — loop back to Step 4 or, if genuinely stuck, log the failure as an open question and leave the change uncommitted.
+- Discover and run the project's real build/lint/typecheck/test commands (from `package.json`, `pyproject.toml`, etc.) — don't guess at them. **Redirect the output to a file** (e.g. `npm run build > /tmp/aibuild.log 2>&1`) and Read back only the relevant region — the tail, or lines around an error — rather than letting a full build log sit in context. Fix failures before moving on. If they don't pass, do not proceed to Step 6 or 7 — loop back to Step 4 or, if genuinely stuck, log the failure as an open question and leave the change uncommitted.
 
 ## Step 6 — Verify (live, functional) — run the real code path, not just the GUI's idea of it
 
 You cannot drive the Electron app or web GUI directly — you have no browser/UI automation. What you *can* do, and must do for any change touching orchestration or a capability adapter, is call the same script/module/function the GUI would call, directly, from the CLI (`node`, `python`, or however the project invokes it), and observe the real result.
 
 - **Only use already-connected providers whose models are tagged `free`** in the registry read in Step 0. Never call a paid model or an unconfigured provider on your own initiative — that spends the user's money without permission. If no suitable free-tagged model is connected for this test, skip the live call and say so explicitly (don't fabricate a pass).
-- For a multimodal/vision change specifically: generate or reuse a small local test image (create a trivial synthetic PNG in code, or use an existing fixture in the repo — don't fetch an external image over the network for this), then invoke the adapter/orchestration function that would normally receive it from the GUI, using a free-tagged vision-capable connected model. Confirm the full round trip — request built correctly, model call succeeds, response parsed correctly — and capture the real output, latency, and any error.
+- For a multimodal/vision change specifically: generate or reuse a small local test image (create a trivial synthetic PNG in code, or use an existing fixture in the repo — don't fetch an external image over the network for this), then invoke the adapter/orchestration function that would normally receive it from the GUI, using a free-tagged vision-capable connected model. Confirm the full round trip — request built correctly, model call succeeds, response parsed correctly — and capture the real output, latency, and any error. **Redirect the live run's stdout/stderr to a file** (e.g. `node test.js > /tmp/aitest.log 2>&1`) and Read back only the result lines: model/vision output can be large, and image bytes must never be pasted into context.
 - For capabilities with no free tier currently connected (e.g. video/3D/audio may not have one), do a structured dry run instead: validate the function signature, the request payload shape, and error-handling paths without a live call, and clearly label this in the log as "not live-tested — no free model connected" rather than as a pass.
 - Where you did get a live result, also trace (by reading the GUI code, not by running it) how that result would flow into the interface — which loading/error/success state it triggers, how it's rendered — and note that as a **prediction**, explicitly labeled as such, distinct from the confirmed backend result.
 - A cycle that changes orchestration/adapter code but skips this step is incomplete — go back and do it before moving on.
@@ -139,11 +150,11 @@ This log is the entire continuity mechanism. A `/auto-improve` run in a brand-ne
 
 ## Step 9 — Repeat within the session
 
-If turns/context budget remain and there's no blocking open question, go back to Step 1 with the next queue item. When you're nearing your context limit: stop between cycles (never mid-edit), make sure the log and queue are current, and close with a short human-readable summary of what changed and what got committed this session.
+If turns/context budget remain and there's no blocking open question, go back to Step 1 with the next queue item. **After each cycle (post Steps 7–8), run `/compact` to shed the previous cycle's context before starting the next** — this is what keeps a multi-cycle session under the ~250K ceiling. When you're nearing your context limit: stop between cycles (never mid-edit), run `/compact`, make sure the log and queue are current, and close with a short human-readable summary of what changed and what got committed this session.
 
 ## Step 10 — Compact the context
 
-After the run ends (final cycle done, or stopping because you're out of budget), run `/compact` to compress the accumulated context before handing control back. The `.claude/auto-improve-log.log` is the durable memory — everything else in the working context is discardable once the log and git history are settled.
+`/compact` is now run **after every cycle** (see Step 9), so by the end of the run the context is already light. Run it once more after the final cycle / when stopping because you're out of budget, to compress whatever remains before handing control back. The `.claude/auto-improve-log.log` is the durable memory — everything else in the working context is discardable once the log and git history are settled.
 
 ## Guardrails
 
