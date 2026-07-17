@@ -124,7 +124,7 @@ import { BrowserLifecycleService } from '../automation/browser-service.js';
 import { resolveProviderFamily, resolveBaseUrl } from './provider-meta.js';
 import { capabilityRegistry } from './models.js';
 import { BestOfNStrategy, synthesizeEnsemble } from './best-of-n.js';
-import { ContentBlock, ImageAttachment, type CompletionRequest, type AIProvider } from '../types/agent.js';
+import { ContentBlock, ImageAttachment, type CompletionRequest, type AIProvider, type ReasoningEffort } from '../types/agent.js';
 import { ModelRouter } from './router.js';
 import type { RouterModel } from './router.js';
 import { BYOKProviderManager } from './byok.js';

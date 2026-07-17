@@ -54,7 +54,19 @@ This is a mood to synthesize into something original, not a specific image to co
 - Read `.claude/art-direction.md` in full (create it from the seed above if missing).
 - `tail -n 150 .claude/auto-improve-log.log` for the current queue, including anything `/ux-critic` flagged as aesthetic rather than functional.
 - Acquire `.claude/.auto-improve.lock` before editing code; if held, log the skip and stop.
+- **Check for `.claude/art-director-env.md` before exploring anything.** This is cached, maintained (not appended) environment knowledge — where the GUI actually lives, how to serve it, how to reach it without disturbing the user's live instance. If it exists, trust it and skip straight to confirming the server responds. Only do full discovery (reading package structure, finding entry points, figuring out auth) if the file is missing or a quick check shows it's wrong (e.g. the port it names doesn't respond) — then update the file so the *next* run doesn't repeat the work. A 10-minute-interval loop that re-derives the same architecture facts every tick is wasting nearly all of its budget on rediscovery instead of design work.
+
+  Cache at minimum:
+  ```
+  # art-director environment notes
+  GUI location: <e.g. Electron renderer at packages/desktop; browser-servable build via packages/web>
+  Dev server: <command + port>
+  Auth bypass for visual testing: <e.g. SUPERAGENT_DISABLE_AUTH=true on a SEPARATE port — never the user's live instance>
+  Pre-serve steps: <e.g. sync CSS to web/dist before serving>
+  Last verified: <date>
+  ```
 - Confirm the dev server responds and Playwright MCP tools are listed — a cheap check (e.g. `curl` the dev URL, list available MCP tools). **Do not take a screenshot or snapshot just to "confirm" availability** — that's a heavy call spent on nothing.
+- If you do need to bypass auth to reach the real app for testing, always do it on a separate port/instance, never the user's running one — that judgment call was made correctly in the last observed run; keep it as a hard rule, not a one-off decision.
 
 **→ COMPACT** (write page-queue state to TodoWrite first)
 
