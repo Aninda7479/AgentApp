@@ -86,18 +86,19 @@ export class ModelRouter {
   }
 
   /**
-   * Strips the canonical `${providerId}-` prefix from a catalog model id to
-   * recover the provider-native model id. Strips repeatedly so a malformed
-   * double-prefixed id (e.g. `nvidia-nvidia/llama-3.1-...`) still resolves to
-   * the correct native id instead of leaking a stray prefix to the API.
+   * Recovers the provider-native model id from a catalog model id.
+   *
+   * The desktop UI builds catalog ids as exactly one `${providerId}-${nativeId}`
+   * prefix (see `enrichModel`), so we strip that single prefix and return the
+   * native id the provider API expects. Stripping exactly ONE prefix matters:
+   * several real providers' native ids themselves begin with the providerId
+   * (e.g. Claude `claude-sonnet-4-5`, DeepSeek `deepseek-chat`). A repeat-strip
+   * loop would corrupt those into `sonnet-4-5` / `chat`, so we stop after the
+   * one canonical prefix.
    */
   private static stripProviderPrefix(providerId: string, id: string): string {
     const prefix = `${providerId}-`;
-    let out = id;
-    while (out.startsWith(prefix)) {
-      out = out.substring(prefix.length);
-    }
-    return out;
+    return id.startsWith(prefix) ? id.substring(prefix.length) : id;
   }
 
   public static routeModelForTask(

@@ -111,7 +111,7 @@ describe('ModelRouter.routeModelForTask capability exclusion', () => {
     supportsVision: true, supportsTools: true
   };
   const plainModel = {
-    id: 'deepseek-chat', name: 'DeepSeek Chat', providerId: 'deepseek', enabled: true,
+    id: 'deepseek-deepseek-chat', name: 'DeepSeek Chat', providerId: 'deepseek', enabled: true,
     supportsVision: false, supportsTools: true
   };
 
@@ -132,13 +132,13 @@ describe('ModelRouter.routeModelForTask capability exclusion', () => {
   });
 
   it('falls back to the full pool for a vision task when no vision model is present', () => {
-    const onlyPlain = { id: 'deepseek-chat', name: 'DeepSeek Chat', providerId: 'deepseek', enabled: true, supportsVision: false, supportsTools: true };
+    const onlyPlain = { id: 'deepseek-deepseek-chat', name: 'DeepSeek Chat', providerId: 'deepseek', enabled: true, supportsVision: false, supportsTools: true };
     const route = ModelRouter.routeModelForTask('describe this image', [onlyPlain]);
     // No vision-capable model in the pool → must not crash or return null; it
     // falls back to the only available model (provider prefix is stripped).
     expect(route).not.toBeNull();
     expect(route!.provider).toBe('deepseek');
-    expect(route!.model).toBe('chat');
+    expect(route!.model).toBe('deepseek-chat');
   });
 
   it('never routes a coding task to a tool-less model when a tool-capable one is available', () => {

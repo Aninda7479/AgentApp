@@ -157,12 +157,23 @@ describe('ModelRouter.selectCandidateModels (best-of-N pool)', () => {
 });
 
 describe('ModelRouter.stripProviderPrefix', () => {
-  it('strips a single provider prefix', () => {
+  it('strips exactly the single canonical provider prefix', () => {
     expect((ModelRouter as any).stripProviderPrefix('openai', 'openai-gpt-4o')).toBe('gpt-4o');
   });
 
-  it('strips repeated (malformed double) prefixes', () => {
-    expect((ModelRouter as any).stripProviderPrefix('openai', 'openai-openai-gpt-4o')).toBe('gpt-4o');
+  it('strips one prefix even when the input carries a malformed double prefix', () => {
+    // The catalog contract is exactly one `${providerId}-` prefix; a doubled
+    // id is malformed upstream. We strip once and leave the remaining
+    // canonical `${providerId}-${nativeId}` intact rather than consuming it.
+    expect((ModelRouter as any).stripProviderPrefix('openai', 'openai-openai-gpt-4o')).toBe('openai-gpt-4o');
+  });
+
+  it('preserves a native id that begins with the providerId (Claude/DeepSeek)', () => {
+    // Regression: a repeat-strip loop previously corrupted these into
+    // `sonnet-4-5` / `chat`. The catalog id is `${providerId}-${nativeId}`,
+    // so a single strip must yield the native id the API expects.
+    expect((ModelRouter as any).stripProviderPrefix('claude', 'claude-claude-sonnet-4-5')).toBe('claude-sonnet-4-5');
+    expect((ModelRouter as any).stripProviderPrefix('deepseek', 'deepseek-deepseek-chat')).toBe('deepseek-chat');
   });
 
   it('leaves an unprefixed id untouched', () => {

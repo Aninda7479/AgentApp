@@ -2,7 +2,7 @@
  * Best-of-N result merging for parallel multi-model orchestration (mission
  * point 2 — run several task-matched models and combine their outputs).
  *
- * Research basis (see /auto-improve log entry for this cycle):
+ * Research basis:
  *  - Best-of-N sampling: generate N candidates, then select the best via a
  *    verifier / consensus. For free-form text, Universal Self-Consistency
  *    (Chen et al.) lets an LLM aggregator pick the most consistent candidate;
