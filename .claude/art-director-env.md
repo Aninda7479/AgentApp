@@ -2,6 +2,7 @@
 
 GUI location:
 - React app (Electron desktop): packages/desktop/src/renderer/ (App.tsx, BrandLogo.tsx, AppToast.tsx)
+- Settings surface (Electron desktop): packages/desktop/src/renderer/settings/ (SettingsView + per-category panels). NOTE: Settings is NOT imported by packages/web — there is no browser-servable build of it, and SettingsView requires Electron-IPC-provided props (connectedProviders, modelsCatalog, themeMode, etc.), so Playwright MCP CANNOT screenshot it. Verify Settings changes via `tsc --noEmit` (packages/desktop) + `node scripts/check-tokens.mjs` + code review, NOT screenshots.
 - Web server + standalone auth pages: packages/web/src/server.ts (Express) and
   packages/web/src/login.html, packages/web/src/account.html
 

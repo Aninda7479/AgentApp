@@ -35,3 +35,51 @@ Open (out of lane, flagged): pre-existing tsc error in src/main/ai-engine.ts
 (SandboxRunner not exported from @superagent/core) — for /ux-critic or /auto-improve.
 
 Lock: released at end of cycle (acquired as pid 20360).
+
+=== 2026-07-17 cycle: 3D Studio (invoked via /art-director 3D Studio) ===
+Last step: Step 7 done — art-direction pass on 3D Studio committed (5e58951) + pushed
+to agent-development, logged [art-director].
+
+3D Studio art-direction: preserved the deliberate sky/slate palette (established
+decision — NOT repainted into atmosphere). Within that world, changed copy voice/tone
++ motion only (3 files): upload icon animate-bounce -> animate-float; library empty
+state now guiding ("Your library is empty. / Generate a character and it will appear
+here."); web-mode toasts de-placeholder-ed; credits pill "27 credits remaining".
+Verified: tsc --noEmit exit 0, no errors in changed files. Code-based self-critique
+held attempt one; Step 4 cap not hit.
+
+Critique iterations this run: 1 (mechanical single pass; like-for-like copy/motion
+tweaks in the sky/slate world). Visual self-critique NOT possible — 3D Studio is
+Electron-only and white-screens on the web build (functional crash, for /ux-critic).
+
+Env note: 3d_studio token-lint exempt; still carries raw `hover:text-white` /
+`bg-slate-*` — candidate only if the sky/slate decision is revisited.
+
+Open (out of lane, flagged): 3D Studio savedModels crash on web build
+(`setSavedModels(list || [])` where list is the WEB_UNSUPPORTED envelope object) ->
+`Array.isArray` guard needed. For /ux-critic or /auto-improve.
+
+Lock: released (acquired as art-director 3D Studio cycle).
+
+=== 2026-07-17 cycle: About SuperAgent page + Top ToolBar About button + /settings/updates redesign ===
+Last step: Step 7 done — committed (c7ea236, rebased onto 2 upstream UI-fix commits) + pushed
+to agent-development, logged [art-director].
+
+Delivered (user request): (1) NEW AboutSettings.tsx (atmosphere hero via BrandLogo + animate-float
+over --brand-atmo-* bands, considered brand voice, GPL-3.0 footer); (2) About listed in Settings
+sidebar under the Updates group (CATEGORIES.About += {id:'about'}); (3) visible Top ToolBar About
+button (HelpCircle, next to theme toggle) -> onAbout, and handleAbout now opens settings 'about'
+was a toast; (4) /settings/updates redesigned with the same atmosphere hero + refined copy.
+Verified: tsc --noEmit exit 0 (no errors in changed files); check-tokens.mjs clean (98 files).
+lucide `Github` not exported -> used FolderGit2. Code-based self-critique held attempt one.
+
+Critique iterations this run: 1 (mechanical single pass). Visual self-critique NOT possible —
+Settings is Electron-only, no browser-servable build.
+
+Note: "About" group label currently reads "About" with two children (Updates, About). If the
+group should instead be named "Updates" with About nested under it, rename the label (flagged in
+log Next-priority #2). Out of lane: none.
+
+Lock: released (acquired as art-director About+Updates cycle).
+
+
