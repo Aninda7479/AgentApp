@@ -25,7 +25,8 @@ import {
   PLUGIN_CATALOG,
   MARKETPLACE_PLUGINS,
   SKILL_CATALOG,
-  SkillStore
+  SkillStore,
+  providerHealth
 } from '@superagent/core';
 
 import { AgentEngine, AgentEngineConfig, AgentEvent } from './ai-engine.js';
@@ -635,6 +636,12 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
       }
       case 'auto-detect-providers':
         result = await autoDetectProviders();
+        break;
+      case 'provider-health-diagnostics':
+        // Mirrors the desktop `provider-health-diagnostics` IPC handler so the
+        // shared renderer's Model Gov settings panel can show live provider
+        // resilience (available / locked / throttled) on the web/VPS build too.
+        result = providerHealth.getDiagnostics();
         break;
       case 'agent-run': {
         const { sessionId, prompt, config, currentAttachments } = args[0];

@@ -83,3 +83,24 @@ log Next-priority #2). Out of lane: none.
 Lock: released (acquired as art-director About+Updates cycle).
 
 
+
+=== 2026-07-17 cycle: Build /settings/usage dashboard ===
+Last step: committed (1a60098, rebased onto origin f418c82/3fa8d4d) + pushed to
+agent-development, logged [art-director]. Lock released.
+
+Delivered (user request): complete /settings/usage dashboard in premium monochrome system:
+- Timeframe selector (This Month / Last Month / Last 3 Months / Custom + date inputs).
+- Headline metrics: Expense (period), Tokens (in/out), Requests, Uptime (session ticker).
+- Expense overview cards: This Month / Last Month / Last 3 Months / Custom.
+- Price table: per-model input/output $/1M (Free/Local when both 0).
+- Token use per model: input vs output split bars (brand-accent vs brand-text-muted/50).
+- Token generation speed: aggregate tok/s from call duration (shows "—" until first timed run).
+- Model breakdown table + transaction logs (newest-first, per-row tok/s when available).
+Plumbing added: durationMs on records + getPricing() in usage-tracker; durationMs passed in
+ai-engine streamFromProvider; new `usage-pricing` IPC in desktop main.ts.
+Verified: tsc --noEmit exit 0; check-tokens.mjs clean (98 files). Electron-only → no visual pass.
+Critique iterations this run: 1 (mechanical single pass; code-verified only).
+
+Note (Next priority #1): visual pass over /settings/usage + Settings pending Playwright MCP reaching
+the Electron renderer. Token Generation Speed populates only after a real generation logs durationMs.
+Lock: released.
