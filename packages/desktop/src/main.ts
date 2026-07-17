@@ -429,6 +429,10 @@ safeHandle('usage-clear', () => {
   UsageTracker.clearUsage();
 });
 
+safeHandle('usage-pricing', () => {
+  return UsageTracker.getPricing();
+});
+
 safeHandle('model-gov-read-instructions', () => {
   return ModelGovStorage.loadInstructions();
 });

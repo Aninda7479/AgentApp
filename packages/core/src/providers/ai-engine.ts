@@ -1082,6 +1082,7 @@ Key guidelines:
 
     let res: { fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> };
 
+    const startMs = Date.now();
     if (family === 'anthropic') {
       res = await this.streamAnthropic(onEvent, signal);
     } else if (family === 'gemini') {
@@ -1093,6 +1094,7 @@ Key guidelines:
       // speaks the OpenAI-compatible Chat Completions protocol.
       res = await this.streamOpenAI(onEvent, signal);
     }
+    const durationMs = Date.now() - startMs;
 
     // Compute estimated token usage: 1 token ~ 4 characters
     const inputChars = this.history.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
@@ -1104,7 +1106,10 @@ Key guidelines:
       this.config.provider,
       this.config.model,
       promptTokens,
-      completionTokens
+      completionTokens,
+      undefined,
+      undefined,
+      durationMs
     );
 
     // Emit usage stats back to renderer
