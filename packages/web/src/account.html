@@ -72,7 +72,7 @@
     }
     .card {
       position: relative; z-index: 1;
-      width: 100%; max-width: 420px;
+      width: 100%; max-width: 400px;
       background: var(--panel); border: 1px solid var(--border); border-radius: 20px;
       padding: 38px 32px; backdrop-filter: blur(18px) saturate(120%);
       -webkit-backdrop-filter: blur(18px) saturate(120%);
@@ -85,10 +85,10 @@
       background: transparent; margin-bottom: 20px;
       box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
     }
-    .sub { color: var(--muted); font-size: 13.5px; margin: 2px 0 0; line-height: 1.5; }
-    .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+    .sub { color: var(--muted); font-size: 13.5px; margin: 0 0 6px; line-height: 1.5; }
+    .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+    .head .logo { margin-bottom: 0; }
     h1 { font-size: 23px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.02em; }
-    .who { color: var(--muted); font-size: 12px; margin-top: 3px; }
     label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
     .field { margin-bottom: 16px; }
     input {
@@ -116,7 +116,7 @@
     .msg.error { background: rgba(248, 113, 113, 0.12); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--danger); }
     .msg.ok { background: rgba(52, 211, 153, 0.12); border: 1px solid rgba(52, 211, 153, 0.3); color: var(--ok); }
     .row { display: flex; gap: 10px; margin-top: 8px; }
-    .row button { margin-top: 0; }
+    .row button { margin-top: 0; flex: 1; }
     hr { border: none; border-top: 1px solid var(--border); margin: 4px 0 20px; }
   </style>
 </head>
@@ -132,45 +132,42 @@
   </div>
 
   <form class="card" id="account-form">
-    <div class="logo" role="img" aria-label="SuperAgent">
-      <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="as-sky" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#9ec7bd" />
-            <stop offset="48%" stop-color="#dce6cf" />
-            <stop offset="100%" stop-color="#f3cda4" />
-          </linearGradient>
-          <radialGradient id="as-glow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#fff4dd" stop-opacity="0.85" />
-            <stop offset="100%" stop-color="#fff4dd" stop-opacity="0" />
-          </radialGradient>
-          <clipPath id="as-clip"><rect x="2" y="2" width="28" height="28" rx="8" /></clipPath>
-        </defs>
-        <rect x="2" y="2" width="28" height="28" rx="8" fill="url(#as-sky)" />
-        <g clip-path="url(#as-clip)">
-          <circle cx="16" cy="12.5" r="8.5" fill="url(#as-glow)" />
-          <circle cx="16" cy="12.5" r="4.4" fill="#fff2d8" />
-          <path d="M19.4 9.2 q1 -1 2 0 q1 -1 2 0" stroke="#fff" stroke-opacity="0.7" stroke-width="0.9" stroke-linecap="round" fill="none" />
-          <path d="M23.6 11 q0.8 -0.8 1.6 0 q0.8 -0.8 1.6 0" stroke="#fff" stroke-opacity="0.55" stroke-width="0.8" stroke-linecap="round" fill="none" />
-          <path d="M2 21 C8 17 13 20 18 18 C23 16 27 19 30 18 L30 30 L2 30 Z" fill="#93b6ab" />
-          <path d="M2 24 C7 21 12 24 17 22 C22 20 27 23 30 22 L30 30 L2 30 Z" fill="#5f8a7e" />
-          <path d="M2 27 C6 25 11 27 16 26 C21 25 26 27 30 26 L30 30 L2 30 Z" fill="#2f5147" />
-        </g>
-        <rect x="2" y="2" width="28" height="28" rx="8" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1" />
-      </svg>
-    </div>
-    <div class="top">
-      <div>
-        <h1>Account settings</h1>
-        <div class="who" id="who">Signed in</div>
-        <p class="sub">Manage your sign-in and password.</p>
+    <header class="head">
+      <div class="logo" role="img" aria-label="SuperAgent">
+        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="as-sky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#9ec7bd" />
+              <stop offset="48%" stop-color="#dce6cf" />
+              <stop offset="100%" stop-color="#f3cda4" />
+            </linearGradient>
+            <radialGradient id="as-glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#fff4dd" stop-opacity="0.85" />
+              <stop offset="100%" stop-color="#fff4dd" stop-opacity="0" />
+            </radialGradient>
+            <clipPath id="as-clip"><rect x="2" y="2" width="28" height="28" rx="8" /></clipPath>
+          </defs>
+          <rect x="2" y="2" width="28" height="28" rx="8" fill="url(#as-sky)" />
+          <g clip-path="url(#as-clip)">
+            <circle cx="16" cy="12.5" r="8.5" fill="url(#as-glow)" />
+            <circle cx="16" cy="12.5" r="4.4" fill="#fff2d8" />
+            <path d="M19.4 9.2 q1 -1 2 0 q1 -1 2 0" stroke="#fff" stroke-opacity="0.7" stroke-width="0.9" stroke-linecap="round" fill="none" />
+            <path d="M23.6 11 q0.8 -0.8 1.6 0 q0.8 -0.8 1.6 0" stroke="#fff" stroke-opacity="0.55" stroke-width="0.8" stroke-linecap="round" fill="none" />
+            <path d="M2 21 C8 17 13 20 18 18 C23 16 27 19 30 18 L30 30 L2 30 Z" fill="#93b6ab" />
+            <path d="M2 24 C7 21 12 24 17 22 C22 20 27 23 30 22 L30 30 L2 30 Z" fill="#5f8a7e" />
+            <path d="M2 27 C6 25 11 27 16 26 C21 25 26 27 30 26 L30 30 L2 30 Z" fill="#2f5147" />
+          </g>
+          <rect x="2" y="2" width="28" height="28" rx="8" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1" />
+        </svg>
       </div>
       <button type="button" class="linkbtn" id="back">← Back to app</button>
-    </div>
+    </header>
+    <h1>Account settings</h1>
+    <p class="sub">You're signed in. Keep your sign-in details current.</p>
     <hr />
 
-    <div class="msg error" id="error"></div>
-    <div class="msg ok" id="success"></div>
+    <div class="msg error" id="error" role="alert" aria-live="assertive"></div>
+    <div class="msg ok" id="success" aria-live="polite"></div>
 
     <div class="field">
       <label for="currentPassword">Current password</label>
@@ -187,7 +184,7 @@
 
     <button type="submit" id="submit">Update password</button>
     <div class="row">
-      <button type="button" class="linkbtn" id="logout" style="flex:1;">Log out</button>
+      <button type="button" class="linkbtn" id="logout">Log out</button>
     </div>
   </form>
 
@@ -212,7 +209,7 @@
         .then(function (s) {
           if (!s || (s.authRequired && !s.authenticated)) { window.location.replace('/login'); return; }
           if (!s.authRequired) {
-            show(errorBox, 'Authentication is disabled on this server.');
+            show(errorBox, "This server doesn't require a password.");
             submitBtn.disabled = true;
           }
         })
@@ -232,7 +229,7 @@
         e.preventDefault();
         var newPassword = document.getElementById('newPassword').value;
         var confirm = document.getElementById('confirm').value;
-        if (newPassword !== confirm) { show(errorBox, 'New passwords do not match.'); return; }
+        if (newPassword !== confirm) { show(errorBox, "Those new passwords don't match."); return; }
 
         submitBtn.disabled = true;
         submitBtn.textContent = 'Updating…';
@@ -260,7 +257,7 @@
             submitBtn.disabled = false;
             submitBtn.textContent = 'Update password';
             if (result.ok) {
-              show(okBox, 'Password updated successfully.');
+              show(okBox, 'Your password has been updated.');
               form.reset();
               return;
             }
@@ -270,7 +267,7 @@
             if (result.status >= 500) {
               show(errorBox, 'The server hit an error. Please try again in a moment.');
             } else {
-              show(errorBox, serverMsg || 'Update failed. Please try again.');
+              show(errorBox, serverMsg || "We couldn't update your password. Please try again.");
             }
           })
           .catch(function () {
@@ -278,7 +275,7 @@
             // restart, offline) — never on an HTTP error status.
             submitBtn.disabled = false;
             submitBtn.textContent = 'Update password';
-            show(errorBox, 'Network error. Please try again.');
+            show(errorBox, "We couldn't reach the server. Please try again.");
           });
       });
     })();
