@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { SkillDefinition } from '@superagent/core';
+import { SkillDefinition, getProjectSkillsDirectory } from '@superagent/core';
 import { SessionContext, CLICommandResult } from '../types.js';
 
 /** Manages skill codification and learning insight persistence. */
@@ -51,7 +51,7 @@ export class SkillCodifier {
   ): Promise<CLICommandResult> {
     // Generate a filesystem-safe skill ID from the name
     const skillId = name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
-    const skillDir = path.join(workspaceDir, '.agent', 'skills', skillId);
+    const skillDir = path.join(getProjectSkillsDirectory(workspaceDir), skillId);
     await fs.mkdir(skillDir, { recursive: true });
 
     const skillContent = `---

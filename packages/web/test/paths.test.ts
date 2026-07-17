@@ -46,42 +46,42 @@ describe('storage path helpers', () => {
   });
 
   describe('getConversationRoots', () => {
-    it('nests Projects and Chats under a Conversation dir', () => {
+    it('nests Projects and Chats under a conversation dir', () => {
       const roots = getConversationRoots(userData);
-      expect(roots.baseDir).toBe(path.join(userData, 'Conversation'));
-      expect(roots.projectsDir).toBe(path.join(userData, 'Conversation', 'Projects'));
-      expect(roots.chatsDir).toBe(path.join(userData, 'Conversation', 'Chats'));
+      expect(roots.baseDir).toBe(path.join(userData, 'conversation'));
+      expect(roots.projectsDir).toBe(path.join(userData, 'conversation', 'Projects'));
+      expect(roots.chatsDir).toBe(path.join(userData, 'conversation', 'Chats'));
     });
   });
 
   describe('project + chat path builders', () => {
     it('builds a sanitized project directory path', () => {
       expect(getProjectDirectory(userData, 'My Project')).toBe(
-        path.join(userData, 'Conversation', 'Projects', 'my-project')
+        path.join(userData, 'conversation', 'Projects', 'my-project')
       );
     });
 
     it('builds a project config path', () => {
       expect(getProjectConfigPath(userData, 'my-project')).toBe(
-        path.join(userData, 'Conversation', 'Projects', 'my-project', 'project-config.json')
+        path.join(userData, 'conversation', 'Projects', 'my-project', 'project-config.json')
       );
     });
 
     it('nests a chat under its project when a project key is given', () => {
       expect(getChatDirectory(userData, 'c1', 'my-project')).toBe(
-        path.join(userData, 'Conversation', 'Projects', 'my-project', 'c1')
+        path.join(userData, 'conversation', 'Projects', 'my-project', 'c1')
       );
       expect(getChatJsonPath(userData, 'c1', 'my-project')).toBe(
-        path.join(userData, 'Conversation', 'Projects', 'my-project', 'c1', 'chat.json')
+        path.join(userData, 'conversation', 'Projects', 'my-project', 'c1', 'chat.json')
       );
     });
 
     it('places standalone chats in the top-level Chats dir', () => {
       expect(getChatDirectory(userData, 'c1')).toBe(
-        path.join(userData, 'Conversation', 'Chats', 'c1')
+        path.join(userData, 'conversation', 'Chats', 'c1')
       );
       expect(getChatJsonPath(userData, 'c1')).toBe(
-        path.join(userData, 'Conversation', 'Chats', 'c1', 'chat.json')
+        path.join(userData, 'conversation', 'Chats', 'c1', 'chat.json')
       );
     });
   });

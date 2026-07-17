@@ -1,10 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+import { STORAGE_DIRS } from '@superagent/core';
 
 /**
  * Web-build Partner store. Mirrors the desktop `partner-store` (packages/desktop
  * src/main/partner-store.ts) but is fully self-contained — it only touches the
- * filesystem under `<userData>/pets/` and has no Electron/desktop dependencies.
+ * filesystem under `~/.superagent/partners` and has no Electron/desktop dependencies.
  *
  * The desktop build ships the 3D Lily assets next to its compiled binary; the
  * web build has no 3D pet, so only the Partner manifest *metadata* (name, emoji,
@@ -42,7 +43,7 @@ const DEFAULT_LILY_MANIFEST: Record<string, unknown> = {
 };
 
 function petsDir(userData: string): string {
-  return path.join(userData, 'pets');
+  return path.join(userData, STORAGE_DIRS.partners);
 }
 
 function ensureDir(dir: string): void {

@@ -516,7 +516,7 @@ safeHandle('browser-navigate', async (_event, { url }) => {
 
 safeHandle('browser-screenshot', async (_event, { fullPage }) => {
   const browser = await getMainBrowser();
-  const logsDir = path.join(app.getPath('userData'), 'logs');
+  const logsDir = path.join(app.getPath('userData'), STORAGE_DIRS.logs);
   fs.mkdirSync(logsDir, { recursive: true });
   const screenshotPath = path.join(logsDir, `browser-screenshot-${Date.now()}.png`);
   await browser.takeScreenshot({ path: screenshotPath, fullPage: !!fullPage });
@@ -859,7 +859,7 @@ safeHandle('three-d-generate', async (_event, args: { name?: string; prompt?: st
     const apiKey = cfg.apiKey?.trim() || undefined;
     const provider = cfg.provider === 'meshy' ? 'meshy' : 'tripo';
 
-    const outDir = path.join(app.getPath('userData'), '3d-studio');
+    const outDir = path.join(app.getPath('userData'), STORAGE_DIRS.threeD);
     const res = await generateThreeD({
       name: args?.name || 'character',
       prompt: args?.prompt,
@@ -876,7 +876,7 @@ safeHandle('three-d-generate', async (_event, args: { name?: string; prompt?: st
 
 safeHandle('three-d-list-models', async () => {
   try {
-    const outDir = path.join(app.getPath('userData'), '3d-studio');
+    const outDir = path.join(app.getPath('userData'), STORAGE_DIRS.threeD);
     if (!fs.existsSync(outDir)) {
       return [];
     }
@@ -903,7 +903,7 @@ safeHandle('three-d-list-models', async () => {
 
 safeHandle('three-d-delete-model', async (_event, args: { filePath: string }) => {
   try {
-    const outDir = path.join(app.getPath('userData'), '3d-studio');
+    const outDir = path.join(app.getPath('userData'), STORAGE_DIRS.threeD);
     const targetPath = args.filePath;
     // Basic validation to prevent arbitrary file deletion outside 3d-studio
     if (!targetPath.startsWith(outDir)) {
@@ -930,7 +930,7 @@ safeHandle('three-d-import-external-model', async () => {
     if (result.canceled || !result.filePaths.length) return { ok: false, path: null };
     
     const sourcePath = result.filePaths[0];
-    const outDir = path.join(app.getPath('userData'), '3d-studio');
+    const outDir = path.join(app.getPath('userData'), STORAGE_DIRS.threeD);
     fs.mkdirSync(outDir, { recursive: true });
     
     const parsed = path.parse(sourcePath);

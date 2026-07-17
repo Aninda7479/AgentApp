@@ -1,12 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 import url from 'url';
+import { STORAGE_DIRS } from '@superagent/core';
 import { logError } from './error-log.js';
 
 /**
  * Main-process store for the open Partner/Pet ecosystem.
  *
- * Each Partner lives in its own folder under `<userData>/pets/<id>/` containing
+ * Each Partner lives in its own folder under `~/.superagent/partners/<id>/` containing
  * a `partner.json` manifest (plus optional asset files). This module is the
  * authoritative source for import / export / remove / active selection; the
  * renderer talks to it over IPC. It intentionally avoids importing any renderer
@@ -50,7 +51,7 @@ export interface StoredPartner {
 }
 
 function petsDir(userData: string): string {
-  return path.join(userData, 'pets');
+  return path.join(userData, STORAGE_DIRS.partners);
 }
 
 function ensureDir(dir: string): void {

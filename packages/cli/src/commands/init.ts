@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { getProjectDataDirectory } from '@superagent/core';
 import { CLICommandResult } from '../types.js';
 
 /** Metadata extracted from inspecting a project directory. */
@@ -83,7 +84,7 @@ export class ProjectContextGenerator {
   }
 
   /**
-   * Creates .agent/context.json and AGENTS.md in the target directory.
+   * Creates .superagent/context.json and AGENTS.md in the target directory.
    * @param targetDir - Directory to inspect and initialize
    * @param force - If true, overwrites existing context files
    */
@@ -92,7 +93,7 @@ export class ProjectContextGenerator {
     force: boolean = false
   ): Promise<CLICommandResult> {
     const absDir = path.resolve(targetDir);
-    const agentDir = path.join(absDir, '.agent');
+    const agentDir = getProjectDataDirectory(absDir);
     await fs.mkdir(agentDir, { recursive: true });
 
     const metadata = await this.inspectDirectory(absDir);

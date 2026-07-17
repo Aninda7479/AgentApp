@@ -73,7 +73,7 @@ single admin password is the only proof of identity, so you only ever enter the
 password (in the browser) to sign in.
 
 Credentials are managed by the shared core `AuthStore` and persisted to
-`<userData>/Config/auth.json` (scrypt-hashed, 0600). The **same** store is used
+`<userData>/config/auth.json` (scrypt-hashed, 0600). The **same** store is used
 by the Web server *and* the CLI, so you can set or rotate the password from
 either side.
 

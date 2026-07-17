@@ -1,4 +1,5 @@
 import path from 'path';
+import { STORAGE_DIRS } from '@superagent/core';
 import type { ConversationRoots } from './types.js';
 
 /** Sanitizes a project name into a safe, filesystem-friendly storage key. */
@@ -18,7 +19,7 @@ export function normalizeStorageKey(name: string): string {
 
 /** Returns the root directory paths for conversation storage under a user data dir. */
 export function getConversationRoots(userDataDir: string): ConversationRoots {
-  const baseDir = path.join(userDataDir, 'Conversation');
+  const baseDir = path.join(userDataDir, STORAGE_DIRS.conversation);
   return {
     userDataDir,
     baseDir,

@@ -3,6 +3,7 @@ import {
   Archive,
   ArrowLeft,
   Box,
+  Boxes,
   Search,
   Bot,
   FolderArchive,
@@ -11,6 +12,7 @@ import {
   Plug,
   Settings,
   SlidersHorizontal,
+  Sparkles,
   SquareTerminal,
   MonitorSmartphone,
   MousePointer2,
@@ -48,7 +50,9 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
     { id: 'usage', label: 'AI Usage', Icon: SquareTerminal }
   ],
   Integrations: [
-    { id: 'mcp', label: 'MCP', Icon: Plug },
+    { id: 'skills', label: 'Skills', Icon: Sparkles },
+    { id: 'connectors', label: 'Connectors', Icon: Plug },
+    { id: 'plugins', label: 'Plugins', Icon: Boxes },
     { id: 'browser-use', label: 'Browser Use', Icon: MonitorSmartphone },
     { id: 'computer-use', label: 'Computer Use', Icon: MousePointer2 }
   ],

@@ -474,54 +474,49 @@ describe('Step 082b: Additional Codex UI Sub-components', () => {
   });
 });
 
-describe('Step 094: Integrations (Skills / Plugins / MCP) Panel', () => {
+describe('Step 094: Integrations (Skills / Connectors / Plugins) Panel', () => {
   const pluginCatalog = [
-    { id: 'browser-use', name: 'Browser Use', description: 'Drive a browser.', icon: '🌐', category: 'automation', tags: ['web'], defaultEnabled: true },
-    { id: 'computer-use', name: 'Computer Use', description: 'Control the desktop.', icon: '🖥️', category: 'automation', tags: ['desktop'], defaultEnabled: true },
-    { id: 'document', name: 'Document', description: 'Author documents.', icon: '📄', category: 'document', tags: ['office'], defaultEnabled: true },
-    { id: 'pdf', name: 'PDF', description: 'Generate PDFs.', icon: '📕', category: 'document', tags: ['pdf'], defaultEnabled: true },
-    { id: 'spreadsheets', name: 'Spreadsheets', description: 'Edit spreadsheets.', icon: '📊', category: 'document', tags: ['data'], defaultEnabled: true },
-    { id: 'presentations', name: 'Presentations', description: 'Build slides.', icon: '📽️', category: 'media', tags: ['slides'], defaultEnabled: true },
-    { id: 'visualize', name: 'Visualize', description: 'Render charts.', icon: '📈', category: 'media', tags: ['data'], defaultEnabled: false }
+    { id: 'browser-use', name: 'Browser Use', description: 'Drive a browser.', icon: '🌐', category: 'automation', tags: ['web'], defaultEnabled: true, status: 'active', source: 'builtin' },
+    { id: 'computer-use', name: 'Computer Use', description: 'Control the desktop.', icon: '🖥️', category: 'automation', tags: ['desktop'], defaultEnabled: true, status: 'active', source: 'builtin' },
+    { id: 'document', name: 'Document', description: 'Author documents.', icon: '📄', category: 'document', tags: ['office'], defaultEnabled: true, status: 'active', source: 'builtin' },
+    { id: 'pdf', name: 'PDF', description: 'Generate PDFs.', icon: '📕', category: 'document', tags: ['pdf'], defaultEnabled: true, status: 'active', source: 'builtin' },
+    { id: 'spreadsheets', name: 'Spreadsheets', description: 'Edit spreadsheets.', icon: '📊', category: 'document', tags: ['data'], defaultEnabled: true, status: 'active', source: 'builtin' },
+    { id: 'presentations', name: 'Presentations', description: 'Build slides.', icon: '📽️', category: 'media', tags: ['slides'], defaultEnabled: true, status: 'active', source: 'builtin' },
+    { id: 'visualize', name: 'Visualize', description: 'Render charts.', icon: '📈', category: 'media', tags: ['data'], defaultEnabled: false, status: 'active', source: 'builtin' },
+    { id: 'pdf-viewer', name: 'PDF Viewer', description: 'Annotate PDFs.', icon: '📄', category: 'document', tags: ['pdf'], defaultEnabled: false, status: 'under-development', source: 'marketplace' },
+    { id: 'small-business', name: 'Small Business', description: 'Business workflows.', icon: '🏪', category: 'automation', tags: ['business'], defaultEnabled: false, status: 'under-development', source: 'marketplace' }
   ];
   const skills = [
-    { id: 'graphify', name: 'Graphify', description: 'Index a codebase.' },
-    { id: 'docs', name: 'Docs', description: 'Reference docs.' }
+    { id: 'graphify', name: 'Graphify', description: 'Index a codebase.', instructions: 'do the thing', status: 'active', source: 'discovered' },
+    { id: 'docs', name: 'Docs', description: 'No description provided', instructions: '', status: 'incomplete', source: 'discovered' }
   ];
 
-  const render = (tab = 'mcp') =>
+  const render = (view: 'skills' | 'connectors' | 'plugins') =>
     renderToString(
       React.createElement(IntegrationsSettings, {
+        view,
         mcpDashboard: React.createElement('div', { id: 'mcp-stub' }, 'MCP Stub'),
         skills,
         onToggleSkill: () => {},
         pluginCatalog,
         pluginEnabled: { 'browser-use': true, 'visualize': false },
-        onTogglePlugin: () => {},
-        ...(tab === 'mcp' ? {} : {})
+        onTogglePlugin: () => {}
       })
     );
 
-  it('should render the Integrations panel with three tabs', () => {
-    const html = render();
-    expect(html).toContain('Integrations');
-    expect(html).toContain('integration-tab-skills');
-    expect(html).toContain('integration-tab-plugins');
-    expect(html).toContain('integration-tab-mcp');
+  it('should render the Skills panel with a status badge per skill', () => {
+    const html = render('skills');
+    expect(html).toContain('Skills');
+    expect(html).toContain('integration-view-skills');
+    // discovered/incomplete skill is flagged
+    expect(html).toContain('integration-skill-graphify');
+    expect(html).toContain('integration-skill-docs');
+    expect(html).toContain('status-badge-incomplete');
   });
 
-  it('should list all seven built-in plugins by default', () => {
-    const html = renderToString(
-      React.createElement(IntegrationsSettings, {
-        mcpDashboard: React.createElement('div', { id: 'mcp-stub' }, 'MCP Stub'),
-        skills,
-        onToggleSkill: () => {},
-        pluginCatalog,
-        pluginEnabled: { 'browser-use': true, 'visualize': false },
-        onTogglePlugin: () => {},
-        defaultTab: 'plugins'
-      })
-    );
+  it('should list built-in plugins plus under-development marketplace plugins', () => {
+    const html = render('plugins');
+    expect(html).toContain('integration-view-plugins');
     expect(html).toContain('integration-plugin-browser-use');
     expect(html).toContain('integration-plugin-computer-use');
     expect(html).toContain('integration-plugin-document');
@@ -529,10 +524,15 @@ describe('Step 094: Integrations (Skills / Plugins / MCP) Panel', () => {
     expect(html).toContain('integration-plugin-spreadsheets');
     expect(html).toContain('integration-plugin-presentations');
     expect(html).toContain('integration-plugin-visualize');
+    // marketplace items rendered inactive + under development
+    expect(html).toContain('integration-plugin-pdf-viewer');
+    expect(html).toContain('integration-plugin-small-business');
+    expect(html).toContain('status-badge-under-development');
   });
 
-  it('should render the MCP dashboard inside the MCP tab', () => {
-    const html = render('mcp');
+  it('should render the MCP dashboard inside the Connectors panel', () => {
+    const html = render('connectors');
+    expect(html).toContain('Connectors');
     expect(html).toContain('integration-mcp');
     expect(html).toContain('MCP Stub');
   });

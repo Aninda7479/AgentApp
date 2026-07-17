@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { getConfigDirectory, SettingsStorage } from './settings-store.js';
+import { getConfigDirectory } from './locations.js';
+import { SettingsStorage } from './settings-store.js';
 
 /** A single recorded usage entry for a model call. */
 export interface ModelUsageRecord {

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import { getUserDataDirectory, getConfigDirectory, STORAGE_DIRS } from './locations.js';
 
 /** Theme preference settings for desktop and CLI surfaces. */
 export interface ThemeSettings {
@@ -147,28 +147,9 @@ export interface SettingsPaths {
   backupFilePath: string;
 }
 
-/** Returns the OS-specific user data directory for the application. */
-export function getUserDataDirectory(): string {
-  if (process.env.VITEST) {
-    const workerId = process.env.VITEST_WORKER_ID || '1';
-    return path.join(process.cwd(), 'tmp', `test_tmp_settings_dir_${workerId}`);
-  }
-
-  const home = os.homedir();
-  if (process.platform === 'win32') {
-    return path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'OpenSource', 'AgentApp');
-  }
-
-  if (process.platform === 'darwin') {
-    return path.join(home, 'Library', 'Application Support', 'OpenSource', 'AgentApp');
-  }
-
-  return path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), 'OpenSource', 'AgentApp');
-}
-
 /** Resolves all relevant file paths from a base directory. */
 export function getSettingsPaths(baseDirectory = getUserDataDirectory()): SettingsPaths {
-  const configDirectory = path.join(baseDirectory, 'Config');
+  const configDirectory = path.join(baseDirectory, STORAGE_DIRS.config);
   const settingsFilePath = path.join(configDirectory, 'settings.json');
   return {
     userDataDirectory: baseDirectory,
@@ -176,15 +157,6 @@ export function getSettingsPaths(baseDirectory = getUserDataDirectory()): Settin
     settingsFilePath,
     backupFilePath: `${settingsFilePath}.bak`
   };
-}
-
-/** Ensures the config directory exists and returns its path. */
-export function getConfigDirectory(): string {
-  const { configDirectory } = getSettingsPaths();
-  if (!fs.existsSync(configDirectory)) {
-    fs.mkdirSync(configDirectory, { recursive: true });
-  }
-  return configDirectory;
 }
 
 /** Returns the path to the main settings JSON file. */

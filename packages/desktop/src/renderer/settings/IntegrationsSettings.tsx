@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
-import { Plug, Boxes, Sparkles, Check, Search } from 'lucide-react';
+import { Sparkles, Check, Search, Wrench, AlertTriangle } from 'lucide-react';
 
-/** A discovered skill surfaced in the Skills tab. */
+/** Readiness status shared by skills and plugins. */
+export type IntegrationStatus = 'active' | 'under-development' | 'incomplete';
+
+/** A discovered/catalog skill surfaced in the Skills panel. */
 export interface IntegrationsSkill {
   id: string;
   name: string;
   description: string;
   enabled?: boolean;
+  status?: IntegrationStatus;
+  source?: 'discovered' | 'catalog';
 }
 
-/** A built-in plugin from the Core catalog (structural mirror). */
+/** A built-in or marketplace plugin from the Core catalog. */
 export interface IntegrationsPlugin {
   id: string;
   name: string;
@@ -18,21 +23,24 @@ export interface IntegrationsPlugin {
   category: 'automation' | 'document' | 'media';
   tags: string[];
   defaultEnabled: boolean;
+  status?: IntegrationStatus;
+  source?: 'builtin' | 'marketplace';
 }
 
-/** Props for the Integrations settings panel (Skills / Plugins / MCP). */
+/** Which single panel this instance renders. */
+export type IntegrationsView = 'skills' | 'connectors' | 'plugins';
+
+/** Props for the Integrations settings panel. */
 interface IntegrationsSettingsProps {
+  /** Which panel to render: Skills, Connectors (MCP), or Plugins. */
+  view: IntegrationsView;
   mcpDashboard: React.ReactNode;
   skills: IntegrationsSkill[];
   onToggleSkill: (id: string, enabled: boolean) => void;
   pluginCatalog: IntegrationsPlugin[];
   pluginEnabled: Record<string, boolean>;
   onTogglePlugin: (id: string, enabled: boolean) => void;
-  /** Initial tab to show (defaults to `mcp`). */
-  defaultTab?: TabId;
 }
-
-type TabId = 'skills' | 'plugins' | 'mcp';
 
 const CATEGORY_LABELS: Record<IntegrationsPlugin['category'], string> = {
   automation: 'Automation',
@@ -40,24 +48,50 @@ const CATEGORY_LABELS: Record<IntegrationsPlugin['category'], string> = {
   media: 'Media & Visualization'
 };
 
-/** Renders the Integrations panel split into Skills, Plugins, and MCP tabs. */
+/** Copy shown at the top of each panel. */
+const VIEW_META: Record<IntegrationsView, { title: string; subtitle: string }> = {
+  skills: {
+    title: 'Skills',
+    subtitle: 'Reusable, model-invoked skills discovered from your project and the curated catalog.'
+  },
+  connectors: {
+    title: 'Connectors',
+    subtitle: 'Connect external MCP servers to give SuperAgent new tools and data sources.'
+  },
+  plugins: {
+    title: 'Plugins',
+    subtitle: 'Toggle SuperAgent\'s built-in capabilities and browse marketplace plugins.'
+  }
+};
+
+/** Small status pill: "Under Development" / "Incomplete". `active` renders nothing. */
+const StatusBadge: React.FC<{ status?: IntegrationStatus }> = ({ status }) => {
+  if (!status || status === 'active') return null;
+  if (status === 'incomplete') {
+    return (
+      <span className="ui-badge destructive" data-testid="status-badge-incomplete">
+        <AlertTriangle size={10} /> Incomplete
+      </span>
+    );
+  }
+  return (
+    <span className="ui-badge muted" data-testid="status-badge-under-development">
+      <Wrench size={10} /> Under Development
+    </span>
+  );
+};
+
+/** Renders one of the Integrations panels (Skills, Connectors, or Plugins). */
 export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
+  view,
   mcpDashboard,
   skills,
   onToggleSkill,
   pluginCatalog,
   pluginEnabled,
-  onTogglePlugin,
-  defaultTab = 'mcp'
+  onTogglePlugin
 }) => {
-  const [tab, setTab] = useState<TabId>(defaultTab);
   const [pluginQuery, setPluginQuery] = useState('');
-
-  const tabs: { id: TabId; label: string; Icon: typeof Plug }[] = [
-    { id: 'skills', label: 'Skills', Icon: Sparkles },
-    { id: 'plugins', label: 'Plugins', Icon: Boxes },
-    { id: 'mcp', label: 'MCP', Icon: Plug }
-  ];
 
   const filteredPlugins = pluginCatalog.filter((p) => {
     const q = pluginQuery.trim().toLowerCase();
@@ -75,22 +109,29 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
   }, {});
 
   const SkillCard: React.FC<{ skill: IntegrationsSkill }> = ({ skill }) => {
-    const [enabled, setEnabled] = useState(skill.enabled ?? true);
+    const isUnderDevelopment = skill.status === 'under-development';
+    const [enabled, setEnabled] = useState(!isUnderDevelopment && (skill.enabled ?? true));
+    const interactive = !isUnderDevelopment;
     return (
       <button
         type="button"
+        disabled={!interactive}
         data-testid={`integration-skill-${skill.id}`}
         onClick={() => {
+          if (!interactive) return;
           const next = !enabled;
           setEnabled(next);
           onToggleSkill(skill.id, next);
         }}
         className={`ui-card flex items-center justify-between gap-4 p-4 text-left transition-all duration-200 ${
           enabled ? 'border-[var(--brand-accent-border)]' : ''
-        }`}
+        } ${isUnderDevelopment ? 'opacity-60 cursor-not-allowed' : ''}`}
       >
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-brand-textMain">{skill.name}</div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-brand-textMain">{skill.name}</span>
+            <StatusBadge status={skill.status} />
+          </div>
           <div className="text-xs text-brand-textMuted mt-0.5 line-clamp-2">{skill.description}</div>
         </div>
         <span
@@ -106,9 +147,13 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
   };
 
   const PluginCard: React.FC<{ plugin: IntegrationsPlugin }> = ({ plugin }) => {
-    const enabled = pluginEnabled[plugin.id] ?? plugin.defaultEnabled;
+    const isUnderDevelopment = plugin.status === 'under-development';
+    const enabled = isUnderDevelopment ? false : (pluginEnabled[plugin.id] ?? plugin.defaultEnabled);
     return (
-      <div data-testid={`integration-plugin-${plugin.id}`} className="ui-card flex items-center gap-4 p-4">
+      <div
+        data-testid={`integration-plugin-${plugin.id}`}
+        className={`ui-card flex items-center gap-4 p-4 ${isUnderDevelopment ? 'opacity-60' : ''}`}
+      >
         <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-brand-bg text-2xl">
           {plugin.icon}
         </div>
@@ -120,14 +165,21 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
                 <Check size={10} /> Enabled
               </span>
             )}
+            <StatusBadge status={plugin.status} />
           </div>
           <p className="text-xs text-brand-textMuted line-clamp-2">{plugin.description}</p>
         </div>
         <button
           type="button"
+          disabled={isUnderDevelopment}
           data-testid={`integration-plugin-toggle-${plugin.id}`}
-          onClick={() => onTogglePlugin(plugin.id, !enabled)}
+          onClick={() => {
+            if (isUnderDevelopment) return;
+            onTogglePlugin(plugin.id, !enabled);
+          }}
           className={`px-3 py-1 rounded-lg border text-xs transition-all flex-shrink-0 ${
+            isUnderDevelopment ? 'cursor-not-allowed' : ''
+          } ${
             enabled
               ? 'border-[var(--brand-accent-border)] bg-[var(--brand-accent-tint)] text-[var(--brand-accent)]'
               : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-brand-hover'
@@ -139,41 +191,25 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
     );
   };
 
+  const meta = VIEW_META[view];
+
   return (
     <div className="mx-auto w-full max-w-3xl text-left">
       <div className="mb-6">
         <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain sm:text-3xl">
-          Integrations
+          {meta.title}
         </h1>
-        <p className="mb-5 mt-2 text-sm leading-relaxed text-brand-textMuted sm:text-base">
-          Connect skills, built-in plugins, and external MCP servers to extend what SuperAgent can do.
+        <p className="mb-2 mt-2 text-sm leading-relaxed text-brand-textMuted sm:text-base">
+          {meta.subtitle}
         </p>
-
-        {/* Tabs */}
-        <div className="flex gap-1 rounded-lg border border-brand-border bg-brand-bg p-1">
-          {tabs.map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              data-testid={`integration-tab-${id}`}
-              onClick={() => setTab(id)}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                tab === id
-                  ? 'bg-brand-popover text-brand-textMain shadow-sm ring-1 ring-brand-border'
-                  : 'text-brand-textMuted hover:text-brand-textMain'
-              }`}
-            >
-              <Icon size={15} />
-              <span>{label}</span>
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Skills tab */}
-      {tab === 'skills' && (
-        <div className="flex flex-col">
-          <div className="ui-label mb-3">{skills.filter((s) => s.enabled !== false).length} enabled</div>
+      {/* Skills panel */}
+      {view === 'skills' && (
+        <div className="flex flex-col" data-testid="integration-view-skills">
+          <div className="ui-label mb-3">
+            {skills.filter((s) => s.status !== 'under-development' && s.enabled !== false).length} enabled
+          </div>
           {skills.length === 0 ? (
             <div className="ui-card px-6 py-10 text-center text-sm text-brand-textMuted">
               No skills discovered yet. Skills are read from your project's <code className="rounded bg-brand-bg px-1">skills/</code> folder.
@@ -188,9 +224,9 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
         </div>
       )}
 
-      {/* Plugins tab */}
-      {tab === 'plugins' && (
-        <div className="flex flex-col gap-6">
+      {/* Plugins panel */}
+      {view === 'plugins' && (
+        <div className="flex flex-col gap-6" data-testid="integration-view-plugins">
           <div className="ui-input flex items-center gap-2 border-transparent bg-brand-card">
             <Search size={14} className="flex-shrink-0 text-brand-textMuted" />
             <input
@@ -222,8 +258,8 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
         </div>
       )}
 
-      {/* MCP tab */}
-      {tab === 'mcp' && <div data-testid="integration-mcp">{mcpDashboard}</div>}
+      {/* Connectors panel (MCP) */}
+      {view === 'connectors' && <div data-testid="integration-mcp">{mcpDashboard}</div>}
     </div>
   );
 };

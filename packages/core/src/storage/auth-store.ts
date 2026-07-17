@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { getConfigDirectory } from './settings-store.js';
+import { getConfigDirectory } from './locations.js';
 
 /**
  * A single stored credential (one admin account).

@@ -170,6 +170,8 @@ export const App: React.FC = () => {
   // BYOK + discovered skills
   const [byokKeys] = useState<Record<string, string>>({ openai: '', anthropic: '', gemini: '' });
   const [skills, setSkills] = useState<(SkillInfo & { instructions?: string })[]>([]);
+  // Curated "under development" skills (Settings → Skills only; never the slash surface).
+  const [skillCatalog, setSkillCatalog] = useState<any[]>([]);
 
   // Resolve ipcRenderer safely
   const ipc = typeof window !== 'undefined' && (window as any).require
@@ -597,13 +599,50 @@ export const App: React.FC = () => {
     const proj = projects.find((p) => p.name === activeProject);
     const root = proj?.folders?.[0];
     ipc
-      .invoke('skills-list', { dir: root ? `${root}/skills` : undefined })
+      .invoke('skills-list', { dir: root ? `${root}/.superagent/skills` : undefined })
       .then((res: any) => {
         const list = Array.isArray(res) ? res : (res?.skills ?? []);
         setSkills(Array.isArray(list) ? list : []);
       })
       .catch(() => setSkills([]));
   }, [ipc, projects, activeProject]);
+
+  // ── Curated skill catalog (Settings → Skills; separate from the slash surface) ──
+  useEffect(() => {
+    if (!ipc) return;
+    ipc
+      .invoke('skills-catalog')
+      .then((list: any) => setSkillCatalog(Array.isArray(list) ? list : []))
+      .catch(() => setSkillCatalog([]));
+  }, [ipc]);
+
+  // Merge discovered + catalog skills for Settings → Skills. Discovered skills are
+  // validated: a missing name/description marks them "Incomplete"; otherwise "Active".
+  const settingsSkills = useMemo(() => {
+    const discovered = skills.map((s: any) => {
+      const complete =
+        s.name && s.name !== 'Unnamed Skill' &&
+        s.description && s.description !== 'No description provided' &&
+        !!s.instructions?.trim();
+      return {
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        enabled: true,
+        status: (complete ? 'active' : 'incomplete') as 'active' | 'incomplete',
+        source: 'discovered' as const
+      };
+    });
+    const catalog = skillCatalog.map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      enabled: false,
+      status: (s.status ?? 'under-development') as 'active' | 'under-development' | 'incomplete',
+      source: 'catalog' as const
+    }));
+    return [...discovered, ...catalog];
+  }, [skills, skillCatalog]);
 
   // Navigation history bookkeeping.
   useEffect(() => {
@@ -965,7 +1004,7 @@ export const App: React.FC = () => {
               onConnectProvider={handleConnectProvider}
               onDisconnectProvider={handleDisconnectProvider}
               onToggleModel={handleToggleModel}
-              skills={skills}
+              skills={settingsSkills}
               onToggleSkill={(skillId, enabled) => console.log(`Toggled skill ${skillId}: ${enabled}`)}
               pluginCatalog={pluginCatalog}
               pluginEnabled={pluginEnabled}

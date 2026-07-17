@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AuthStore } from '../src/storage/auth-store.js';
-import { getConfigDirectory } from '../src/storage/settings-store.js';
+import { getConfigDirectory } from '../src/storage/locations.js';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { getConfigDirectory, SettingsStorage } from './settings-store.js';
+import { getConfigDirectory } from './locations.js';
+import { SettingsStorage } from './settings-store.js';
 
 /** Capability scores (0-100) for a model across different dimensions. */
 export interface ModelScore {

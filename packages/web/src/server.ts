@@ -17,6 +17,7 @@ import {
   PlaywrightBrowserEngine,
   ComputerUse,
   getUserDataDirectory,
+  STORAGE_DIRS,
   AuthStore,
   ProviderAutoDetector,
   MCP_CATALOG,
@@ -550,7 +551,7 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
       }
       case 'browser-screenshot': {
         const browser = await getMainBrowser();
-        const logsDir = path.join(userDataDir, 'logs');
+        const logsDir = path.join(userDataDir, STORAGE_DIRS.logs);
         fs.mkdirSync(logsDir, { recursive: true });
         const screenshotPath = path.join(logsDir, `browser-screenshot-${Date.now()}.png`);
         await browser.takeScreenshot({ path: screenshotPath, fullPage: !!args[0]?.fullPage });
@@ -676,7 +677,7 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         const dir = typeof args[0] === 'object' && args[0] ? (args[0] as any).dir : undefined;
         const dirs: string[] = [];
         if (typeof dir === 'string' && fs.existsSync(dir)) dirs.push(dir);
-        const userSkills = path.join(userDataDir, 'skills');
+        const userSkills = path.join(userDataDir, STORAGE_DIRS.skills);
         if (fs.existsSync(userSkills)) dirs.push(userSkills);
         const store = new SkillStore();
         for (const d of dirs) {

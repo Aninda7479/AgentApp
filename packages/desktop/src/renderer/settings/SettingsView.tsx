@@ -463,8 +463,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           />
         )}
         {activeCategory === 'usage' && <UsageTrackerSettings />}
-        {activeCategory === 'mcp' && (
+        {(activeCategory === 'skills' ||
+          activeCategory === 'connectors' ||
+          activeCategory === 'plugins') && (
           <IntegrationsSettings
+            view={activeCategory}
             mcpDashboard={mcpDashboard}
             skills={skills}
             onToggleSkill={onToggleSkill}
