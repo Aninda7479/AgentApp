@@ -102,7 +102,7 @@ export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-brand-border/60 pb-4">
         <div>
-          <h1 className="text-base font-bold text-brand-textMain">Computer Use</h1>
+          <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain">Computer Use</h1>
           <p className="text-xs text-brand-textMuted mt-1">
             Configure desktop control permissions, safety settings, and delay options for Windows OS cursor and keystroke automation.
           </p>

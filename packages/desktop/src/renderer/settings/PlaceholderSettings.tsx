@@ -38,7 +38,7 @@ export const PlaceholderSettings: React.FC<PlaceholderSettingsProps> = ({
 
       <div className="settings-section">
         <div className="mb-3 flex items-center gap-2">
-          <span className="settings-pill" style={isLive ? undefined : { background: 'var(--neon-attention)', color: '#0a0a0c', borderColor: 'transparent' }}>
+          <span className="settings-pill" style={isLive ? undefined : { background: 'var(--neon-attention)', color: 'var(--brand-text-main)', borderColor: 'transparent' }}>
             {isLive ? 'Available' : 'Under Construction'}
           </span>
           {liveLabel && <span className="text-xs text-brand-textMuted">{liveLabel}</span>}
@@ -46,8 +46,8 @@ export const PlaceholderSettings: React.FC<PlaceholderSettingsProps> = ({
 
         <p className="text-sm leading-6 text-brand-textMuted">
           {isLive
-            ? 'This capability is already available in the app. Use the linked screen name in the sidebar to manage it.'
-            : 'The navigation entry is in place, but the underlying workflow has not been built yet.'}
+            ? 'This is live and ready to use. Open the linked section in the sidebar to manage it.'
+            : 'This entry is reserved in your settings — the workflow behind it is still taking shape, and will arrive in a future update.'}
         </p>
       </div>
     </div>

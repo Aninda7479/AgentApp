@@ -55,7 +55,7 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ label, description, value, onChan
       aria-pressed={value}
     >
       <span
-        className={`block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+        className={`block h-5 w-5 rounded-full bg-brand-card shadow-sm transition-transform ${
           value ? 'translate-x-5' : 'translate-x-0'
         }`}
       />

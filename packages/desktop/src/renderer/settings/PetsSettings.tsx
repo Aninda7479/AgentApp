@@ -58,7 +58,7 @@ export const PetsSettings: React.FC = () => {
   return (
     <div data-testid="pets-settings" className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       <div>
-        <h1 className="font-outfit text-lg font-semibold text-brand-textMain">Companion (Desktop Pet)</h1>
+        <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain">Companion (Desktop Pet)</h1>
         <p className="mt-1 text-sm text-brand-textMuted">
           A 3D character that greets you, then rests in the top-right corner and
           reacts to your agent. It never starts on its own — launch it below.

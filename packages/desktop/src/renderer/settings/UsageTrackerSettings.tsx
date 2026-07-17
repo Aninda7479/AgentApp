@@ -84,7 +84,7 @@ export const UsageTrackerSettings: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-brand-border/60 pb-4">
         <div>
-          <h1 className="text-base font-bold text-brand-textMain">AI Usage & Cost Tracker</h1>
+          <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain">AI Usage &amp; Cost Tracker</h1>
           <p className="text-xs text-brand-textMuted mt-1">
             Real-time token logging and billing metrics across all connected AI models.
           </p>
