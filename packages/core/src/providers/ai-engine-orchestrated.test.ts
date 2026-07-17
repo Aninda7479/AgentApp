@@ -120,4 +120,28 @@ describe('AgentEngine.runOrchestrated', () => {
     expect((calls.openai || []).length).toBe(1); // target (openai) called directly
     expect((calls.deepseek || [])).toHaveLength(0);
   });
+
+  it('propagates config.reasoningEffort to both the bridge and target requests', async () => {
+    const events: any[] = [];
+    await AgentEngine.runOrchestrated(
+      'think carefully about this image',
+      (e) => events.push(e),
+      { config: { ...config, reasoningEffort: 'high' }, attachments: [imgAttachment], pool: [visionModel, textModel], byokManager: mgrWith(cfg('openai'), cfg('deepseek')) }
+    );
+
+    expect(events.find((e) => e.type === 'done')).toBeDefined();
+    expect(calls.openai[0].reasoningEffort).toBe('high'); // bridge (vision) request
+    expect(calls.deepseek[0].reasoningEffort).toBe('high'); // target (text) request
+  });
+
+  it('omits reasoningEffort when not configured', async () => {
+    const events: any[] = [];
+    await AgentEngine.runOrchestrated(
+      'just answer this',
+      (e) => events.push(e),
+      { config, pool: [visionModel, textModel], byokManager: mgrWith(cfg('openai'), cfg('deepseek')) }
+    );
+
+    expect(calls.deepseek[0].reasoningEffort).toBeUndefined();
+  });
 });

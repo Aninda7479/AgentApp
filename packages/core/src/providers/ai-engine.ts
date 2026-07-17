@@ -641,6 +641,8 @@ export interface AgentEngineConfig {
   projectRoot?: string;
   maxTokens?: number;
   temperature?: number;
+  /** Per-request reasoning-effort tier, honored by orchestrated (bridge) turns. */
+  reasoningEffort?: ReasoningEffort;
   /** Pre-approved shell commands for this project. When non-empty, run_command
    *  only executes commands whose first token(s) match an entry (prefix-based).
    *  Opt-in: an empty/undefined list permits all commands. */
@@ -1005,14 +1007,20 @@ Key guidelines:
     const request = buildBridgeRequest(userPrompt, opts.attachments);
     const router = new ModelRouter({ preferredProvider: opts.config.provider as AIProvider });
 
-    const res = await router.completeWithBridge(request, opts.byokManager, pool, {
-      overrideProvider: opts.config.provider as AIProvider,
-      onBridge: (plan) => {
-        if (plan.needsBridge) {
-          onEvent({ type: 'thought', sessionId, content: `[Orchestrator] ${plan.reason}` });
+    const res = await router.completeWithBridge(
+      request,
+      opts.byokManager,
+      pool,
+      {
+        overrideProvider: opts.config.provider as AIProvider,
+        onBridge: (plan) => {
+          if (plan.needsBridge) {
+            onEvent({ type: 'thought', sessionId, content: `[Orchestrator] ${plan.reason}` });
+          }
         }
-      }
-    });
+      },
+      opts.config.reasoningEffort
+    );
 
     onEvent({ type: 'token', sessionId, content: res.content });
     onEvent({ type: 'done', sessionId });
