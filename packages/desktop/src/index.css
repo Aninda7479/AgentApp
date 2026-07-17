@@ -50,6 +50,14 @@
   --brand-border: rgba(255, 255, 255, 0.07);
   --brand-border-strong: rgba(255, 255, 255, 0.13);
 
+  /* ── App-shell ambient "layered atmosphere" backdrop (Atmosphere mode) ──
+     Faint, theme-adaptive depth bands + a soft accent glow, painted behind
+     all content so the canvas reads considered without harming text contrast. */
+  --brand-atmo-glow: rgba(165, 180, 252, 0.10);  /* brand-accent violet, low */
+  --brand-atmo-1: rgba(255, 255, 255, 0.035);
+  --brand-atmo-2: rgba(255, 255, 255, 0.055);
+  --brand-atmo-3: rgba(255, 255, 255, 0.085);
+
   /* ── Typography ── */
   --brand-text-main: #ECEDEF;
   --brand-text-muted: #86868F;
@@ -111,6 +119,12 @@
 
   --brand-border: rgba(0, 0, 0, 0.08);
   --brand-border-strong: rgba(0, 0, 0, 0.15);
+
+  /* ── App-shell ambient "layered atmosphere" backdrop (Atmosphere mode) ── */
+  --brand-atmo-glow: rgba(79, 70, 229, 0.07);
+  --brand-atmo-1: rgba(0, 0, 0, 0.025);
+  --brand-atmo-2: rgba(0, 0, 0, 0.04);
+  --brand-atmo-3: rgba(0, 0, 0, 0.06);
 
   --brand-text-main: #16161a;
   --brand-text-muted: #65656d;

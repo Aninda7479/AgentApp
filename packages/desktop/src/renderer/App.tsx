@@ -843,7 +843,21 @@ export const App: React.FC = () => {
           />
         )}
 
-        <div className="flex-1 flex flex-col relative overflow-hidden bg-brand-bg pb-18 md:pb-0">
+        <div className="flex-1 flex flex-col relative isolate overflow-hidden bg-brand-bg pb-18 md:pb-0">
+          {/* Ambient "layered atmosphere" backdrop — a soft accent glow and three
+              calm depth bands, painted behind all content (Atmosphere mode, low
+              opacity). Decorative only; never sits behind text contrast. */}
+          <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
+            <div
+              className="absolute inset-0"
+              style={{ background: 'radial-gradient(120% 85% at 86% -8%, var(--brand-atmo-glow), transparent 52%)' }}
+            />
+            <svg className="absolute inset-x-0 bottom-0 h-[38%] w-full" viewBox="0 0 1440 320" preserveAspectRatio="none" fill="none">
+              <path d="M0 206 C240 168 480 232 720 198 C960 164 1200 222 1440 188 L1440 320 L0 320 Z" fill="var(--brand-atmo-1)" />
+              <path d="M0 244 C220 210 440 272 720 238 C1000 206 1240 262 1440 234 L1440 320 L0 320 Z" fill="var(--brand-atmo-2)" />
+              <path d="M0 280 C260 254 520 300 760 280 C1020 258 1240 298 1440 278 L1440 320 L0 320 Z" fill="var(--brand-atmo-3)" />
+            </svg>
+          </div>
           {activeTab === 'trajectory' && (
             <WorkspaceView
               activeProject={activeProject}

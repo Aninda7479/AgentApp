@@ -5,6 +5,7 @@ import { TrajectoryCanvas, TrajectoryStep } from './TrajectoryCanvas';
 import { MCPServerInfo } from './MCPDashboard';
 import { ModelConfig } from '../settings/SettingsView';
 import { WorkspaceService } from '../logic/workspace';
+import { BrandLogo } from '../BrandLogo';
 
 /** Represents a parallel agent session with its own trajectory. */
 export interface AgentSession {
@@ -389,6 +390,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             {/* Glow blob */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[360px] h-[360px] bg-brand-textMuted/5 rounded-full blur-[90px] pointer-events-none" />
 
+            {/* Brand emblem — the single focal motif of the empty state */}
+            <div className="relative mb-5 flex justify-center">
+              <div className="opacity-95 drop-shadow-[0_8px_24px_rgba(0,0,0,0.22)]">
+                <BrandLogo size={46} variant="glyph" />
+              </div>
+            </div>
+
             {/* Title */}
             <div
               data-testid="workspace-title-question"
@@ -407,7 +415,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
               )}
             </div>
             <p className="text-brand-textMuted text-[11px] text-center mb-5">
-              Select a workflow below or write a custom request to start an agent session.
+              Pick a starting point below — or just describe what you have in mind.
             </p>
 
             {/* Status bar */}
@@ -534,7 +542,7 @@ export function composerEmptyStateMessage(modelsCatalog: ModelConfig[]): string 
   const hasEnabled = modelsCatalog.some((m) => m.enabled);
   if (hasEnabled) return null;
   if (hasAnyModel) {
-    return 'A provider is connected, but no model is enabled. Enable one in Settings → Models.';
+    return 'You’re connected — enable a model in Settings → Models to begin.';
   }
-  return 'No provider connected yet. Add one in Settings → Providers to start chatting.';
+  return 'Connect a provider in Settings → Providers, and we’re ready to chat.';
 }
