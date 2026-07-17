@@ -72,7 +72,9 @@ export const App: React.FC = () => {
   const [workMode, setWorkMode] = useState<'coding' | 'everyday'>('coding');
   const [defaultPermissions, setDefaultPermissions] = useState<boolean>(true);
   const [autoReview, setAutoReview] = useState<boolean>(true);
-  const [fullAccess, setFullAccess] = useState<boolean>(true);
+  // Sandboxed by default: a fresh install must start confined to the project
+  // folder, not with full system access. The user opts INTO full access.
+  const [fullAccess, setFullAccess] = useState<boolean>(false);
   const [settingsHydrated, setSettingsHydrated] = useState<boolean>(false);
   const [internetAccessLevel, setInternetAccessLevel] = useState<InternetAccessLevel>('all');
   const [appVersion, setAppVersion] = useState<string>('');
