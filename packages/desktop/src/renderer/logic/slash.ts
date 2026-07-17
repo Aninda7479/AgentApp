@@ -10,6 +10,7 @@ import type { SkillInfo } from '../components/slashCommands';
 import { BUILTIN_COMMANDS } from '../components/slashCommands';
 import { StepFactory } from './steps';
 import { SettingsService } from './settings';
+import { hasCapableProvider, type MediaCapability } from './capabilities';
 
 /** Extra capabilities the router needs that aren't part of the core `AppContext`. */
 export interface SlashDeps {
@@ -255,6 +256,19 @@ export class SlashRouter {
       case 'video':
       case 'audio':
       case 'pdf': {
+        // Capability commands need a provider that can actually run them. If
+        // none is connected, fail loudly with an actionable path instead of
+        // seeding the composer and letting the call silently drop at send time.
+        const cap = cmd as MediaCapability;
+        if (!hasCapableProvider(ctx, cap)) {
+          ctx.triggerToast(
+            `No ${cap}-capable provider connected. Add one in Settings → Providers to use /${cmd}.`,
+            'error'
+          );
+          ctx.setActiveTab('settings');
+          ctx.setSettingsCategory('providers');
+          return true;
+        }
         // Prompt-seed commands: pre-fill the composer with an editable sample
         // prompt (including any args the user typed) so they can finish and send
         // intentionally. No auto-send — keeps the user in control of the call.
@@ -268,6 +282,17 @@ export class SlashRouter {
         return true;
       }
       case '3d': {
+        // 3D needs the Studio feature enabled AND a usable provider. Without
+        // both, point the user at the right settings instead of a silent no-op.
+        if (!hasCapableProvider(ctx, '3d', { is3dEnabled: deps.is3dEnabled })) {
+          ctx.triggerToast(
+            '3D generation isn’t available yet. Enable 3D Model Gen in Settings and connect a 3D-capable provider.',
+            'error'
+          );
+          ctx.setActiveTab('settings');
+          ctx.setSettingsCategory('3d');
+          return true;
+        }
         if (deps.is3dEnabled) {
           ctx.setActiveTab('studio');
           ctx.triggerToast('Opened the 3D Studio — describe a model to generate');
