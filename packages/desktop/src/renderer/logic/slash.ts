@@ -39,6 +39,18 @@ export interface SlashDeps {
   is3dEnabled?: boolean;
 }
 
+/**
+ * Result of dispatching a slash command. `consumed` is true when the input was
+ * handled as a command (so the caller should not also send it as a normal prompt).
+ * `keepComposer` is true for "prompt-seed" commands (e.g. /image) that pre-fill the
+ * composer with an editable prompt — the caller must NOT clear the composer in that
+ * case, or the seed (the user's only feedback) is wiped on the spot.
+ */
+export interface SlashResult {
+  consumed: boolean;
+  keepComposer?: boolean;
+}
+
 export class SlashRouter {
   /** Splits a raw "/cmd ..." string into its command, args, and joined raw args. */
   static parse(raw: string): { cmd: string; args: string[]; rawArgs: string } {
@@ -54,7 +66,7 @@ export class SlashRouter {
    * Dispatches a parsed slash command. `options` is the composer's current
    * options (used for `/status`, `/model set`, skill forwarding, etc.).
    */
-  static async dispatch(ctx: AppContext, parsed: { cmd: string; args: string[]; rawArgs: string }, options: ComposerOptions, deps: SlashDeps): Promise<boolean> {
+  static async dispatch(ctx: AppContext, parsed: { cmd: string; args: string[]; rawArgs: string }, options: ComposerOptions, deps: SlashDeps): Promise<SlashResult> {
     const { cmd, args } = parsed;
 
     // Skills are addressed by id, e.g. "/graphify".
@@ -62,36 +74,36 @@ export class SlashRouter {
     if (skill) {
       const composed = `Skill: ${skill.name}\n${skill.description}\n\nUser request: ${parsed.rawArgs}`;
       await deps.sendPrompt(composed, options);
-      return true;
+      return { consumed: true };
     }
 
     switch (cmd) {
       case 'init':
         deps.openConfigureProject();
-        return true;
+        return { consumed: true };
       case 'doctor':
         deps.openDoctor();
-        return true;
+        return { consumed: true };
       case 'clear':
         ctx.setActiveChatId('draft-chat');
         ctx.setTrajectorySteps([]);
         ctx.triggerToast('Conversation cleared');
-        return true;
+        return { consumed: true };
       case 'mcp': {
         if (args.length === 0) {
           ctx.setActiveTab('mcp');
-          return true;
+          return { consumed: true };
         }
         const [serverName, toolName, ...rest] = args;
         const server = ctx.getMcpServers().find((s) => s.name.toLowerCase() === serverName.toLowerCase());
         if (!server) {
           ctx.triggerToast(`Unknown MCP server: ${serverName}`, 'error');
-          return true;
+          return { consumed: true };
         }
         if (!toolName) {
           ctx.setActiveTab('mcp');
           ctx.triggerToast(`Server "${server.name}" exposes ${server.toolsCount} tool(s)`);
-          return true;
+          return { consumed: true };
         }
         const argStr = rest.join(' ');
         let parsedArgs: Record<string, any> = {};
@@ -100,7 +112,7 @@ export class SlashRouter {
             parsedArgs = JSON.parse(argStr);
           } catch {
             ctx.triggerToast('MCP tool args must be valid JSON', 'error');
-            return true;
+            return { consumed: true };
           }
         }
         try {
@@ -112,7 +124,7 @@ export class SlashRouter {
         } catch (err: unknown) {
           ctx.triggerToast(`MCP call failed: ${(err as Error).message}`, 'error');
         }
-        return true;
+        return { consumed: true };
       }
       case 'model': {
         const enabled = ctx.getModelsCatalog().filter((m) => m.enabled).map((m) => m.name);
@@ -127,47 +139,47 @@ export class SlashRouter {
         } else {
           ctx.triggerToast(`Models: ${enabled.slice(0, 8).join(', ')}${enabled.length > 8 ? '…' : ''}`);
         }
-        return true;
+        return { consumed: true };
       }
       case 'status': {
         const prov = ctx.getConnectedProviders().find((p) => p.apiKey)?.name || 'none';
         ctx.triggerToast(`Provider: ${prov} | Model: ${options.model} | MCP: ${ctx.getMcpServers().filter((s) => s.enabled).length}`);
-        return true;
+        return { consumed: true };
       }
       case 'theme': {
         const t = args[0];
         if (t === 'light' || t === 'dark') ctx.setThemeMode(t as any);
         else ctx.setThemeMode(ctx.getThemeMode() === 'light' ? 'dark' : 'light');
-        return true;
+        return { consumed: true };
       }
       case 'help': {
         const helpText = BUILTIN_COMMANDS.map((c) => `/${c.name} — ${c.description}`).join('\n');
         const step = StepFactory.helpStep(BUILTIN_COMMANDS.map((c) => ({ name: c.name, description: c.description })));
         ctx.setTrajectorySteps((prev) => [...prev, step]);
         if (!ctx.getActiveChatId()) ctx.setActiveChatId('draft-chat');
-        return true;
+        return { consumed: true };
       }
       case 'review':
       case 'diff':
         ctx.setActiveTab('diff');
-        return true;
+        return { consumed: true };
       case 'config':
         ctx.setActiveTab('settings');
-        return true;
+        return { consumed: true };
       case 'compact':
         ctx.triggerToast('Context compaction runs automatically during long sessions');
-        return true;
+        return { consumed: true };
       case 'loop': {
         if (!deps.startLoop || !deps.stopLoop || !deps.listLoops || !deps.clearLoops) {
           ctx.triggerToast('Loop feature is not supported in this environment', 'error');
-          return true;
+          return { consumed: true };
         }
         
         if (args[0] === 'list' || args[0] === 'status') {
           const tasks = deps.listLoops();
           if (tasks.length === 0) {
             ctx.triggerToast('No active loop tasks running');
-            return true;
+            return { consumed: true };
           }
           const lines = ['=== Active Loop Tasks ==='];
           for (const t of tasks) {
@@ -176,14 +188,14 @@ export class SlashRouter {
           const step = StepFactory.helpStep([{ name: 'Active Loop Tasks', description: lines.join('\n') }]);
           ctx.setTrajectorySteps((prev) => [...prev, step]);
           if (!ctx.getActiveChatId()) ctx.setActiveChatId('draft-chat');
-          return true;
+          return { consumed: true };
         }
 
         if (args[0] === 'stop' || args[0] === 'cancel') {
           const id = args[1];
           if (!id) {
             ctx.triggerToast('Please specify the loop task ID to stop: /loop stop <id>', 'error');
-            return true;
+            return { consumed: true };
           }
           const stopped = deps.stopLoop(id);
           if (stopped) {
@@ -191,13 +203,13 @@ export class SlashRouter {
           } else {
             ctx.triggerToast(`Loop task ID not found: ${id}`, 'error');
           }
-          return true;
+          return { consumed: true };
         }
 
         if (args[0] === 'clear') {
           deps.clearLoops();
           ctx.triggerToast('All active loop tasks stopped');
-          return true;
+          return { consumed: true };
         }
 
         let interval: string | undefined = undefined;
@@ -225,14 +237,14 @@ export class SlashRouter {
         } catch (err) {
           ctx.triggerToast(`Failed to start loop: ${(err as Error).message}`, 'error');
         }
-        return true;
+        return { consumed: true };
       }
       case 'loop-x': {
         const count = parseInt(args[0], 10);
         const prompt = args.slice(1).join(' ');
         if (isNaN(count) || count <= 0 || !prompt) {
           ctx.triggerToast('Usage: /loop-x [number of runs] [prompt]', 'error');
-          return true;
+          return { consumed: true };
         }
 
         if (deps.runLoopX) {
@@ -240,7 +252,7 @@ export class SlashRouter {
         } else {
           ctx.triggerToast('Loop-X feature is not supported in this environment', 'error');
         }
-        return true;
+        return { consumed: true };
       }
       case 'learn':
       case 'permissions':
@@ -251,7 +263,7 @@ export class SlashRouter {
       case 'cost':
       case 'security':
         ctx.triggerToast(`"/${cmd}" is handled by the agent — ask as a normal request (desktop UI support coming soon)`);
-        return true;
+        return { consumed: true };
       case 'image':
       case 'video':
       case 'audio':
@@ -267,7 +279,7 @@ export class SlashRouter {
           );
           ctx.setActiveTab('settings');
           ctx.setSettingsCategory('providers');
-          return true;
+          return { consumed: true };
         }
         // Prompt-seed commands: pre-fill the composer with an editable sample
         // prompt (including any args the user typed) so they can finish and send
@@ -279,7 +291,7 @@ export class SlashRouter {
           : 'Create a PDF about';
         const seed = `${verb}${parsed.rawArgs ? ` ${parsed.rawArgs}` : ' '}`;
         deps.seedComposer?.(seed);
-        return true;
+        return { consumed: true, keepComposer: true };
       }
       case '3d': {
         // 3D needs the Studio feature enabled AND a usable provider. Without
@@ -291,20 +303,20 @@ export class SlashRouter {
           );
           ctx.setActiveTab('settings');
           ctx.setSettingsCategory('3d');
-          return true;
+          return { consumed: true };
         }
         if (deps.is3dEnabled) {
           ctx.setActiveTab('studio');
           ctx.triggerToast('Opened the 3D Studio — describe a model to generate');
-        } else {
-          deps.seedComposer?.(`Generate a 3D model of${parsed.rawArgs ? ` ${parsed.rawArgs}` : ' '}`);
-          ctx.triggerToast('Tip: enable 3D Model Gen in Settings to open the dedicated Studio');
+          return { consumed: true };
         }
-        return true;
+        deps.seedComposer?.(`Generate a 3D model of${parsed.rawArgs ? ` ${parsed.rawArgs}` : ' '}`);
+        ctx.triggerToast('Tip: enable 3D Model Gen in Settings to open the dedicated Studio');
+        return { consumed: true, keepComposer: true };
       }
       default:
         ctx.triggerToast(`Unknown command: /${cmd}`, 'error');
-        return true;
+        return { consumed: true };
     }
   }
 }

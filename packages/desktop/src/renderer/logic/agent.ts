@@ -14,6 +14,7 @@ import { StoreService } from './store';
 import { SettingsService } from './settings';
 import { AttachmentService } from './attachments';
 import { AgentSimulator } from './simulation';
+import type { SlashResult } from './slash';
 
 /** Mutable ref bundle the `agent-event` streaming listener reads/writes. */
 export interface StreamingRefs {
@@ -149,13 +150,15 @@ export class AgentService {
     prompt: string,
     options: ComposerOptions,
     streaming: StreamingRefs,
-    onSlashCommand: (raw: string, options: ComposerOptions) => Promise<boolean>
+    onSlashCommand: (raw: string, options: ComposerOptions) => Promise<SlashResult>
   ): Promise<void> {
     const trimmed = prompt.trim();
     if (trimmed.startsWith('/')) {
-      const consumed = await onSlashCommand(trimmed, options);
-      if (consumed) {
-        ctx.setComposerPrompt('');
+      const res = await onSlashCommand(trimmed, options);
+      if (res.consumed) {
+        // Seed commands (/image, /3d, …) pre-fill the composer for the user to
+        // review and send intentionally — don't wipe that seed.
+        if (!res.keepComposer) ctx.setComposerPrompt('');
         return;
       }
     }

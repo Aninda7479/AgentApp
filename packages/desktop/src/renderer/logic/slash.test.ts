@@ -113,9 +113,9 @@ describe('SlashRouter capability commands — provider gate', () => {
   it('/image with no capable provider warns + navigates to Providers, does NOT seed', async () => {
     const { ctx, state, toast } = makeCtx([mkProvider('openai')], [mkModel('openai-gpt4', 'openai', true)]);
     const seed = vi.fn();
-    const consumed = await run(ctx, '/image', mkDeps({ seedComposer: seed }));
+    const res = await run(ctx, '/image', mkDeps({ seedComposer: seed }));
 
-    expect(consumed).toBe(true);
+    expect(res.consumed).toBe(true);
     expect(seed).not.toHaveBeenCalled();
     expect(toast).toHaveBeenCalledWith(expect.stringContaining('No image-capable provider'), 'error');
     expect(state.activeTab).toBe('settings');
@@ -128,8 +128,10 @@ describe('SlashRouter capability commands — provider gate', () => {
       [mkModel('openai-dall-e-3', 'openai', true, { outputModalities: ['image'] })]
     );
     const seed = vi.fn();
-    await run(ctx, '/image a cat', mkDeps({ seedComposer: seed }));
+    const res = await run(ctx, '/image a cat', mkDeps({ seedComposer: seed }));
 
+    expect(res.consumed).toBe(true);
+    expect(res.keepComposer).toBe(true);
     expect(seed).toHaveBeenCalledWith('Generate an image of a cat');
     expect(toast).not.toHaveBeenCalled();
     expect(state.activeTab).toBe('');
@@ -150,8 +152,8 @@ describe('SlashRouter capability commands — provider gate', () => {
   it('/pdf with no provider warns + navigates; with a provider seeds', async () => {
     const none = makeCtx([], []);
     const seedNone = vi.fn();
-    const consumed = await run(none.ctx, '/pdf', mkDeps({ seedComposer: seedNone }));
-    expect(consumed).toBe(true);
+    const res = await run(none.ctx, '/pdf', mkDeps({ seedComposer: seedNone }));
+    expect(res.consumed).toBe(true);
     expect(seedNone).not.toHaveBeenCalled();
     expect(none.toast).toHaveBeenCalledWith(expect.stringContaining('No pdf-capable provider'), 'error');
     expect(none.state.activeTab).toBe('settings');
