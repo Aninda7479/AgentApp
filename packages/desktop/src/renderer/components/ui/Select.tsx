@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 
@@ -28,13 +28,20 @@ export const Select: React.FC<SelectProps> = ({
   direction = 'down'
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   // The popup is rendered through a React Portal into document.body, so it lives
   // outside containerRef. We keep a direct ref to it so the outside-click handler
   // can recognise clicks inside the popup as "inside" rather than "outside".
   const popupRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, height: 0 });
-  
+
+  // Stable, per-instance ids so multiple <Select> on one screen (e.g. the model
+  // governance settings has six) each expose a unique, linkable listbox.
+  const baseId = useId();
+  const listboxId = `${baseId}-listbox`;
+  const optionId = (i: number) => `${baseId}-opt-${i}`;
+
   const selectedOption = options.find((opt) => opt.value === value);
 
   const updateCoords = () => {
@@ -46,6 +53,20 @@ export const Select: React.FC<SelectProps> = ({
         width: rect.width,
         height: rect.height
       });
+    }
+  };
+
+  const openMenu = () => {
+    const idx = options.findIndex((opt) => opt.value === value);
+    setActiveIndex(idx >= 0 ? idx : 0);
+    setIsOpen(true);
+  };
+
+  const selectActive = () => {
+    const opt = options[activeIndex];
+    if (opt) {
+      onChange(opt.value);
+      setIsOpen(false);
     }
   };
 
@@ -82,6 +103,65 @@ export const Select: React.FC<SelectProps> = ({
     };
   }, [isOpen]);
 
+  // Keep the active option scrolled into view inside the popup (keyboard nav).
+  useEffect(() => {
+    if (!isOpen) return;
+    const el = document.getElementById(optionId(activeIndex));
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [isOpen, activeIndex, baseId]);
+
+  const moveActive = (delta: number) => {
+    if (options.length === 0) return;
+    setActiveIndex((prev) => {
+      const next = prev + delta;
+      if (next < 0) return options.length - 1;
+      if (next >= options.length) return 0;
+      return next;
+    });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    switch (e.key) {
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        if (!isOpen) openMenu();
+        else selectActive();
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        if (!isOpen) openMenu();
+        else moveActive(1);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        if (!isOpen) openMenu();
+        else moveActive(-1);
+        break;
+      case 'Home':
+        if (isOpen) {
+          e.preventDefault();
+          setActiveIndex(0);
+        }
+        break;
+      case 'End':
+        if (isOpen) {
+          e.preventDefault();
+          setActiveIndex(options.length - 1);
+        }
+        break;
+      case 'Escape':
+        if (isOpen) {
+          e.preventDefault();
+          setIsOpen(false);
+        }
+        break;
+      case 'Tab':
+        if (isOpen) setIsOpen(false);
+        break;
+    }
+  };
+
   return (
     <div className={`flex flex-col gap-1.5 relative w-full text-left ${className}`} ref={containerRef}>
       {label && (
@@ -89,18 +169,22 @@ export const Select: React.FC<SelectProps> = ({
           {label}
         </span>
       )}
-      
-      {/* Trigger Button */}
+
+      {/* Trigger Button — ARIA 1.3 combobox; focus stays on the combobox and the
+          listbox is driven via aria-activedescendant (keyboard nav never moves
+          DOM focus out of the trigger, so the menu can't trap keyboard users). */}
       <div
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-white cursor-pointer select-none outline-none hover:border-brand-border-strong focus:border-brand-border-strong transition-all"
+        role="combobox"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={listboxId}
+        aria-activedescendant={isOpen ? optionId(activeIndex) : undefined}
+        aria-label={label ?? placeholder}
+        onClick={() => (isOpen ? setIsOpen(false) : openMenu())}
+        className="flex items-center justify-between bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-white cursor-pointer select-none outline-none hover:border-brand-border-strong focus-visible:border-brand-border-strong focus-visible:ring-2 focus-visible:ring-brand-border-strong/40 transition-all"
         tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            setIsOpen(!isOpen);
-          }
-        }}
+        onKeyDown={handleKeyDown}
+        onBlur={() => setIsOpen(false)}
       >
         <span className={`flex items-center gap-2 ${selectedOption ? 'text-white' : 'text-brand-textMuted/50'}`}>
           {selectedOption?.icon && <span className="flex-shrink-0">{selectedOption.icon}</span>}
@@ -113,6 +197,8 @@ export const Select: React.FC<SelectProps> = ({
       {isOpen && createPortal(
         <div
           ref={popupRef}
+          id={listboxId}
+          role="listbox"
           style={{
             position: 'fixed',
             left: `${coords.left}px`,
@@ -130,23 +216,31 @@ export const Select: React.FC<SelectProps> = ({
           {options.length === 0 ? (
             <div className="text-xs text-brand-textMuted p-2 text-center">No options available</div>
           ) : (
-            options.map((opt) => (
-              <div
-                key={opt.value}
-                onClick={() => {
-                  onChange(opt.value);
-                  setIsOpen(false);
-                }}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                  opt.value === value
-                    ? 'bg-brand-hover-strong text-brand-textMain border border-brand-border-strong'
-                    : 'text-brand-textMain hover:bg-brand-hover'
-                }`}
-              >
-                {opt.icon && <span className="flex-shrink-0">{opt.icon}</span>}
-                <span>{opt.label}</span>
-              </div>
-            ))
+            options.map((opt, i) => {
+              const isSelected = opt.value === value;
+              const isActive = i === activeIndex;
+              return (
+                <div
+                  key={opt.value}
+                  id={optionId(i)}
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    onChange(opt.value);
+                    setIsOpen(false);
+                  }}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                    isSelected
+                      ? 'bg-brand-hover-strong text-brand-textMain border border-brand-border-strong'
+                      : 'text-brand-textMain hover:bg-brand-hover'
+                  } ${isActive ? 'ring-1 ring-brand-border-strong' : ''}`}
+                >
+                  {opt.icon && <span className="flex-shrink-0">{opt.icon}</span>}
+                  <span>{opt.label}</span>
+                </div>
+              );
+            })
           )}
         </div>,
         document.body
