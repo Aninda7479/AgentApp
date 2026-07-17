@@ -3,7 +3,10 @@ import {
   CompletionResponse,
   BYOKConfig,
   AIProvider,
-  BaseProviderAdapter
+  BaseProviderAdapter,
+  ReasoningEffort,
+  SpeedTier,
+  IntelligenceTier
 } from '../types/agent.js';
 import { BYOKProviderManager } from './byok.js';
 import { createProviderAdapter } from './models.js';
@@ -25,16 +28,21 @@ import {
 export interface RouterOptions {
   preferredProvider?: AIProvider;
   fallbackOrder?: AIProvider[];
+  /** Default reasoning effort applied to every request unless the caller sets
+   *  its own `request.reasoningEffort` (caller preference wins). */
+  reasoningEffort?: ReasoningEffort;
 }
 
 /** Routes completion requests to the best available provider with fallback and task-based model selection. */
 export class ModelRouter {
   private preferredProvider?: AIProvider;
   private fallbackOrder: AIProvider[];
+  private reasoningEffort?: ReasoningEffort;
 
   constructor(options?: RouterOptions) {
     this.preferredProvider = options?.preferredProvider;
     this.fallbackOrder = options?.fallbackOrder || ['openai', 'anthropic', 'gemini', 'deepseek', 'custom'];
+    this.reasoningEffort = options?.reasoningEffort;
   }
 
   public selectDefaultModel(byokManager: BYOKProviderManager): BYOKConfig {
@@ -48,8 +56,13 @@ export class ModelRouter {
   public async completeWithFallback(
     request: CompletionRequest,
     byokManager: BYOKProviderManager,
-    overrideProvider?: AIProvider
+    overrideProvider?: AIProvider,
+    reasoningEffort?: ReasoningEffort
   ): Promise<CompletionResponse> {
+    const effort = reasoningEffort ?? this.reasoningEffort;
+    const req: CompletionRequest =
+      effort && !request.reasoningEffort ? { ...request, reasoningEffort: effort } : request;
+
     const allConfigs = byokManager.getAllConfigs();
     if (allConfigs.length === 0) {
       throw new Error('No provider configuration available for model router');
@@ -95,7 +108,7 @@ export class ModelRouter {
     for (const config of ordered) {
       try {
         const adapter: BaseProviderAdapter = createProviderAdapter(config);
-        const response = await adapter.complete(request);
+        const response = await adapter.complete(req);
         providerHealth.recordSuccess(config.provider);
         return response;
       } catch (err: unknown) {
@@ -130,11 +143,13 @@ export class ModelRouter {
     request: CompletionRequest,
     byokManager: BYOKProviderManager,
     pool: RouterModel[],
-    options?: { overrideProvider?: AIProvider; onBridge?: (plan: ModalityBridgePlan) => void }
+    options?: { overrideProvider?: AIProvider; onBridge?: (plan: ModalityBridgePlan) => void },
+    reasoningEffort?: ReasoningEffort
   ): Promise<CompletionResponse> {
+    const effort = reasoningEffort ?? this.reasoningEffort;
     const required = detectInputModalities(request);
     if (required.length === 0 || pool.length === 0) {
-      return this.completeWithFallback(request, byokManager, options?.overrideProvider);
+      return this.completeWithFallback(request, byokManager, options?.overrideProvider, effort);
     }
 
     // Resolve the target model the final answer will come from.
@@ -153,15 +168,16 @@ export class ModelRouter {
     const plan = planModalityBridge({ requiredModalities: required, targetModel, pool });
     if (options?.onBridge) options.onBridge(plan);
     if (!plan.needsBridge || !plan.bridgeModel) {
-      return this.completeWithFallback(request, byokManager, options?.overrideProvider);
+      return this.completeWithFallback(request, byokManager, options?.overrideProvider, effort);
     }
 
     // 1) Bridge call — the vision/transcription model reads the raw attachment.
     const bridgeConfig = byokManager.getKey(plan.bridgeModel.providerId);
     if (!bridgeConfig) {
-      return this.completeWithFallback(request, byokManager, options?.overrideProvider);
+      return this.completeWithFallback(request, byokManager, options?.overrideProvider, effort);
     }
     const bridgeReq = withBridgeInstruction(request, bridgeInstruction(plan.bridgeType!));
+    if (effort && !bridgeReq.reasoningEffort) bridgeReq.reasoningEffort = effort;
     const bridgeAdapter = createProviderAdapter(bridgeConfig);
     const bridgeResp = await bridgeAdapter.complete(bridgeReq);
     const bridgeText = bridgeResp.content ?? '';
@@ -172,7 +188,8 @@ export class ModelRouter {
       bridgeText,
       plan.bridgeType === 'transcription' ? 'Transcript' : 'Image description'
     );
-    return this.completeWithFallback(targetReq, byokManager, options?.overrideProvider);
+    if (effort && !targetReq.reasoningEffort) targetReq.reasoningEffort = effort;
+    return this.completeWithFallback(targetReq, byokManager, options?.overrideProvider, effort);
   }
 
   /**
@@ -296,6 +313,30 @@ export class ModelRouter {
     return capable.length > 0 ? capable : pool;
   }
 
+  /**
+   * Coarse tier → 0–100 score maps used to fold the extended registry signals
+   * (speedTier / intelligenceTier) into `rankModels`. A model lacking a tier is
+   * scored at the neutral midpoint (see `rankModels`) so it is neither rewarded
+   * nor penalised relative to pre-tier routing.
+   */
+  private static readonly INTELLIGENCE_SCORE: Record<IntelligenceTier, number> = {
+    low: 30,
+    mid: 60,
+    high: 85,
+    frontier: 100
+  };
+  private static readonly SPEED_SCORE: Record<SpeedTier, number> = {
+    fast: 100,
+    balanced: 70,
+    slow: 40
+  };
+
+  /** Maps a USD-per-1k-tokens figure to a 0–100 cost score (free = 100, lower is better). */
+  private static costFromDollars(costPer1k: number): number {
+    if (costPer1k <= 0) return 100;
+    return 100 / (1 + costPer1k);
+  }
+
   /** Scores and sorts models for a task by capability, task-fit, and the user's
    *  optimization goal (quality / cost / balanced). Descending by finalScore. */
   private static rankModels(
@@ -316,10 +357,23 @@ export class ModelRouter {
       else if ((flags.isCoding || flags.isReasoning) && m.supportsTools) capabilityMultiplier = 1.1;
       const taskScoreAdj = taskScore * capabilityMultiplier;
 
+      // Extended registry signals beyond the governance scores. Absent values
+      // fall back to a neutral midpoint so models without tier metadata rank
+      // exactly as before this change (backward-compatible).
+      const intel = m.intelligenceTier ? ModelRouter.INTELLIGENCE_SCORE[m.intelligenceTier] : 60;
+      const speed = m.speedTier ? ModelRouter.SPEED_SCORE[m.speedTier] : 70;
+      const cost = m.costPer1kTokens != null ? ModelRouter.costFromDollars(m.costPer1kTokens) : scores.costEfficiency;
+
       let finalScore = 0;
-      if (optimization === 'quality') finalScore = taskScoreAdj;
-      else if (optimization === 'cost') finalScore = scores.costEfficiency * capabilityMultiplier;
-      else finalScore = (taskScoreAdj * 0.7) + (scores.costEfficiency * 0.3); // balanced
+      if (optimization === 'quality') {
+        // Task fit dominates; the intelligence tier breaks ties among equally-fit models.
+        finalScore = taskScoreAdj * 0.65 + intel * 0.35;
+      } else if (optimization === 'cost') {
+        finalScore = cost * capabilityMultiplier;
+      } else {
+        // Balanced: blend task fit, intelligence, latency (speed), and cost.
+        finalScore = taskScoreAdj * 0.5 + intel * 0.2 + speed * 0.15 + cost * 0.15;
+      } // balanced
 
       return { model: m, finalScore };
     });
@@ -372,4 +426,13 @@ export type RouterModel = {
   inputModalities?: ('text' | 'image' | 'video' | 'audio' | '3d')[];
   /** Live availability; see AccessStatus. Defaults to `available` when absent. */
   accessStatus?: 'available' | 'locked' | 'rate_limited' | 'deprecated';
+  // ── Extended registry signals used by rankModels scoring (all optional;
+  //    absent values fall back to a neutral midpoint so models without tier
+  //    metadata rank exactly as before — backward-compatible) ────────────────
+  /** Coarse latency tier. */
+  speedTier?: SpeedTier;
+  /** Coarse capability tier. */
+  intelligenceTier?: IntelligenceTier;
+  /** Approximate blended cost in USD per 1k tokens (input+output), if known. */
+  costPer1kTokens?: number;
 };

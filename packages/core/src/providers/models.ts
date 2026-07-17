@@ -270,3 +270,11 @@ export class ModelCapabilityRegistry {
     return availableModels;
   }
 }
+
+/**
+ * Shared, lazily-populated capability registry. `registerDefaults()` runs in
+ * the constructor, and `getAvailableModels` augments it with live-discovered
+ * models. Imported by the orchestration layer (e.g. `ai-engine.buildRouterPool`)
+ * to enrich the routing pool with tier/cost signals without re-instantiating.
+ */
+export const capabilityRegistry = new ModelCapabilityRegistry();

@@ -7,6 +7,7 @@ import {
   AIProvider
 } from '../types/agent.js';
 import { toAnthropicMessages } from './multimodal.js';
+import { applyReasoningEffort } from './reasoning-effort.js';
 
 /** Provider adapter for the Anthropic Messages API (Claude). */
 export class AnthropicAdapter implements BaseProviderAdapter {
@@ -41,6 +42,8 @@ export class AnthropicAdapter implements BaseProviderAdapter {
     if (systemPrompt) {
       payload.system = systemPrompt;
     }
+
+    applyReasoningEffort(payload, this.provider, request.reasoningEffort, request.maxTokens || 4096);
 
     const controller = new AbortController();
     const timeoutMs = Number(process.env.SUPERAGENT_HTTP_TIMEOUT_MS ?? 300000);
@@ -106,6 +109,8 @@ export class AnthropicAdapter implements BaseProviderAdapter {
     if (systemPrompt) {
       payload.system = systemPrompt;
     }
+
+    applyReasoningEffort(payload, this.provider, request.reasoningEffort, request.maxTokens || 4096);
 
     const response = await fetch(url, {
       method: 'POST',

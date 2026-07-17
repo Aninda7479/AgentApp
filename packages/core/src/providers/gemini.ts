@@ -7,6 +7,7 @@ import {
   AIProvider
 } from '../types/agent.js';
 import { contentToText } from './multimodal.js';
+import { applyReasoningEffort } from './reasoning-effort.js';
 
 /** Provider adapter for the Google Gemini Generative Language API. */
 export class GeminiAdapter implements BaseProviderAdapter {
@@ -57,6 +58,8 @@ export class GeminiAdapter implements BaseProviderAdapter {
         parts: [{ text: systemText }]
       };
     }
+
+    applyReasoningEffort(payload, this.provider, request.reasoningEffort, request.maxTokens);
 
     const controller = new AbortController();
     const timeoutMs = Number(process.env.SUPERAGENT_HTTP_TIMEOUT_MS ?? 300000);
@@ -140,6 +143,8 @@ export class GeminiAdapter implements BaseProviderAdapter {
         parts: [{ text: systemText }]
       };
     }
+
+    applyReasoningEffort(payload, this.provider, request.reasoningEffort, request.maxTokens);
 
     const response = await fetch(url, {
       method: 'POST',
