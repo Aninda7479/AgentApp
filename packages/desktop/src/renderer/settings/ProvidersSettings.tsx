@@ -53,6 +53,36 @@ const POPULAR_PROVIDERS = [
   { id: 'deepinfra', name: 'DeepInfra', org: 'deepinfra', desc: 'Low cost serverless inference hosting provider', defaultUrl: 'https://api.deepinfra.com/v1' }
 ];
 
+/**
+ * Browser-safe fetch for the "Test & Connect" flow. The desktop Electron shell
+ * may call provider APIs (api.anthropic.com, api.openai.com, ...) directly — its
+ * renderer fetch is privileged and CORS-exempt. The web/VPS build runs the *same*
+ * renderer in a browser, where those calls are blocked by CORS (providers don't
+ * send Access-Control-Allow-Origin for browser requests). In the web shell we
+ * forward the request through the server-side proxy (/api/provider-proxy), which
+ * performs the upstream call server-side and returns a Response-shaped object.
+ */
+const IS_ELECTRON_SHELL =
+  typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '');
+
+async function browserSafeFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  if (IS_ELECTRON_SHELL) return window.fetch(url, init);
+  const res = await window.fetch('/api/provider-proxy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ method: init.method ?? 'GET', url, headers: init.headers ?? {} }),
+  });
+  const payload = await res.json().catch(() => ({} as any));
+  if (payload.error) throw new Error(payload.error);
+  return {
+    ok: payload.ok ?? false,
+    status: payload.status ?? 502,
+    statusText: payload.statusText ?? 'Bad Gateway',
+    json: async () => payload.data,
+  } as unknown as Response;
+}
+
 /** Manages provider connections: list connected providers, connect new ones via modal, and test endpoints. */
 export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
   connectedProviders,
@@ -114,7 +144,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       };
 
       if (modalProviderId === 'ollama') {
-        const res = await fetch(`${url || 'http://localhost:11434'}/api/tags`);
+        const res = await browserSafeFetch(`${url || 'http://localhost:11434'}/api/tags`);
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.models ?? []).map((m: any) => ({
@@ -123,19 +153,19 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         }));
       } else if (modalProviderId === 'chatgpt') {
         const base = url || 'https://api.openai.com/v1';
-        const res = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+        const res = await browserSafeFetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.data ?? []).map((m: any) => ({ id: m.id, name: m.id }));
       } else if (modalProviderId === 'deepseek') {
         const base = url || 'https://api.deepseek.com';
-        const res = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+        const res = await browserSafeFetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.data ?? []).map((m: any) => ({ id: m.id, name: m.id }));
       } else if (modalProviderId === 'deepinfra') {
         const base = url || 'https://api.deepinfra.com/v1';
-        const res = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+        const res = await browserSafeFetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         const list = Array.isArray(data) ? data : (data.data ?? []);
@@ -145,7 +175,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
           apiType: m.type ?? m.model_type ?? undefined
         }));
       } else if (modalProviderId === 'google') {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+        const res = await browserSafeFetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.models ?? []).map((m: any) => ({
@@ -157,7 +187,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         }));
       } else if (modalProviderId === 'claude') {
         const base = url || 'https://api.anthropic.com/v1';
-        const res = await fetch(`${base}/models`, {
+        const res = await browserSafeFetch(`${base}/models`, {
           headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' }
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -165,12 +195,12 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         rawModels = (data.data ?? []).map((m: any) => ({ id: m.id, name: m.display_name ?? m.id }));
       } else if (modalProviderId === 'kimi') {
         const base = url || 'https://api.moonshot.cn/v1';
-        const res = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+        const res = await browserSafeFetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.data ?? []).map((m: any) => ({ id: m.id, name: m.id }));
       } else if (modalProviderId === 'openrouter') {
-        const res = await fetch('https://openrouter.ai/api/v1/models', {
+        const res = await browserSafeFetch('https://openrouter.ai/api/v1/models', {
           headers: { Authorization: `Bearer ${key}` }
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -194,7 +224,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         });
       } else if (modalProviderId === 'nvidia') {
         const base = url || 'https://integrate.api.nvidia.com/v1';
-        const res = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+        const res = await browserSafeFetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.data ?? []).map((m: any) => ({
@@ -208,7 +238,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         const authHeaders: Record<string, string> = {};
         if (key) authHeaders['Authorization'] = `Bearer ${key}`;
 
-        const res = await fetch(`${base}/api/tags`, { headers: authHeaders });
+        const res = await browserSafeFetch(`${base}/api/tags`, { headers: authHeaders });
         if (!res.ok) throw new Error(`Ollama Cloud API error [${res.status}]: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.models ?? []).map((m: any) => ({
@@ -228,7 +258,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         const base = url || 'https://api.openai.com/v1';
         const headers: Record<string, string> = {};
         if (key) headers['Authorization'] = `Bearer ${key}`;
-        const res = await fetch(`${base}/models`, { headers });
+        const res = await browserSafeFetch(`${base}/models`, { headers });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.data ?? []).map((m: any) => ({

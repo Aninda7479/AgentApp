@@ -334,6 +334,88 @@ Please optimize these system instructions to:
 // ─── API Router mapping Electron IPC ─────────────────────────────────────────
 app.post('/api/ipc/:channel', (req, res) => { void handleIpc(req, res); });
 
+// Provider connectivity proxy — forwards provider API calls server-side so the
+// web/VPS build (which reuses the *same* desktop renderer) can "Test & Connect"
+// without being blocked by CORS. The desktop Electron shell does NOT use this
+// (its renderer fetch is privileged and CORS-exempt). Registered behind authGate
+// so only authenticated sessions can reach it; restricted to http(s) urls.
+app.post('/api/provider-proxy', (req, res) => { void handleProviderProxy(req, res); });
+
+/**
+ * Forwards a provider API call server-side so the web/VPS build can test a
+ * provider connection without being blocked by CORS (the browser cannot call
+ * api.anthropic.com / api.openai.com / etc. directly). Returns a normalized
+ * envelope `{ ok, status, statusText, data }` that the renderer adapts into a
+ * Response-shaped object. Only ever exercised from the web shell; the desktop
+ * Electron shell keeps its privileged, CORS-exempt direct fetch.
+ *
+ * Exported so it can be unit-tested without booting a listener.
+ */
+export async function handleProviderProxy(req: Request, res: Response): Promise<void> {
+  const { method = 'GET', url, headers } = (req.body ?? {}) as {
+    method?: string;
+    url?: unknown;
+    headers?: Record<string, string>;
+  };
+  if (typeof url !== 'string' || !url) {
+    res.status(400).json({ error: 'provider-proxy requires a string "url".' });
+    return;
+  }
+  let target: URL;
+  try {
+    target = new URL(url);
+  } catch {
+    res.status(400).json({ error: 'provider-proxy "url" is not a valid URL.' });
+    return;
+  }
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+    res.status(400).json({ error: 'provider-proxy only allows http(s) urls.' });
+    return;
+  }
+  if (isPrivateHost(target.hostname)) {
+    // Prevent the proxy from being used as an SSRF relay to cloud-metadata
+    // endpoints (e.g. 169.254.169.254), the highest-risk target. We deliberately
+    // do NOT block LAN/loopback ranges here so self-hosted providers (Ollama on
+    // localhost, a LAN IP) reachable from the web shell still work. A stricter
+    // admin allowlist is an open question — see the auto-improve log.
+    res.status(400).json({ error: 'provider-proxy cannot target link-local (cloud-metadata) hosts.' });
+    return;
+  }
+  try {
+    const upstream = await fetch(target.toString(), {
+      method: (method || 'GET').toUpperCase(),
+      headers: (headers && typeof headers === 'object' ? headers : {}) as Record<string, string>,
+    } as any);
+    const text = await upstream.text();
+    let data: any = text;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      /* keep raw text when the body is not JSON */
+    }
+    res.json({ ok: upstream.ok, status: upstream.status, statusText: upstream.statusText, data });
+  } catch (e: any) {
+    res.status(502).json({ error: e?.message || 'Upstream request failed.', ok: false, status: 502 });
+  }
+}
+
+/**
+ * True for link-local (cloud-metadata) hosts — the highest-risk SSRF target
+ * (e.g. 169.254.169.254 on AWS/GCP/Azure). IPv4 literals only; hostnames are not
+ * resolved. We do NOT block LAN/loopback ranges so self-hosted providers still
+ * work; a stricter admin allowlist can be layered later if needed.
+ */
+function isPrivateHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    if (a === 169 && b === 254) return true; // link-local (cloud metadata)
+  }
+  return false;
+}
+
 /**
  * Handles a single IPC channel invocation over HTTP (mirrors the Electron IPC
  * surface for the web/VPS build). Exported so it can be unit-tested without
