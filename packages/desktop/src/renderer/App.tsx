@@ -884,6 +884,11 @@ export const App: React.FC = () => {
               if (tab === 'settings') {
                 setActiveTab('settings');
                 setSettingsCategory('general');
+              } else if (tab === 'studio-settings') {
+                // Ghost "3D Studio" entry when 3D is disabled: open its settings
+                // so the user can enable the capability rather than hiding it.
+                setActiveTab('settings');
+                setSettingsCategory('3d');
               } else {
                 setActiveTab(tab);
               }

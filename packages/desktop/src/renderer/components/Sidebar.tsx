@@ -134,15 +134,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  const renderNavItem = (id: string, label: string, IconComponent: React.ComponentType<any>) => {
+  const renderNavItem = (
+    id: string,
+    label: string,
+    IconComponent: React.ComponentType<any>,
+    opts?: { locked?: boolean }
+  ) => {
     const isActive = activeTab === id;
+    const locked = opts?.locked ?? false;
     return (
       <button
         data-testid={`nav-item-${id}`}
         onClick={() => onSelectTab(id)}
+        title={locked ? `${label} is off — open Settings to enable it` : undefined}
         className={`relative w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-lg transition-all duration-200 text-sm font-medium mb-1.5 select-none cursor-pointer ${isActive
             ? 'text-brand-textMain bg-[color:var(--brand-hover)] border border-brand-border/40 shadow-sm'
-            : 'text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)]'
+            : locked
+              ? 'text-brand-textMuted/50 bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)]'
+              : 'text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)]'
           }`}
       >
         {isActive && (
@@ -150,6 +159,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
         <IconComponent className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${isActive ? 'scale-110 text-brand-textMain' : ''}`} />
         {!collapsed && <span>{label}</span>}
+        {locked && !collapsed && (
+          <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-brand-textMuted/40">
+            Off
+          </span>
+        )}
       </button>
     );
   };
@@ -199,7 +213,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {renderNavItem('scheduled', 'Scheduled', Clock)}
           {renderNavItem('partner', 'Partner', PawPrint)}
-          {showStudio && renderNavItem('studio', '3D Studio', Box)}
+          {/* 3D Studio stays discoverable even when disabled: a "ghost" entry
+              (muted + "Off") routes to the 3D settings so first-time users can
+              enable it, instead of the entry vanishing entirely. */}
+          {renderNavItem(showStudio ? 'studio' : 'studio-settings', '3D Studio', Box, {
+            locked: !showStudio,
+          })}
         </div>
 
         {/* ── PROJECTS Section ── */}
