@@ -45,6 +45,12 @@ export interface ComposerProps {
   isGenerating?: boolean;
   onStop?: () => void;
   availableModels?: string[];
+  /**
+   * State-aware message shown when no model is available (null when usable).
+   * Lets the placeholder tell the user the *correct* next step (connect a
+   * provider vs. enable a model) instead of a single generic string.
+   */
+  emptyStateMessage?: string | null;
   defaultModel?: string;
   /** Called whenever the user changes the selected model in the dropdown. */
   onModelChange?: (model: string) => void;
@@ -89,6 +95,7 @@ export const Composer: React.FC<ComposerProps> = ({
   isGenerating = false,
   onStop,
   availableModels = ['5.5 Medium', 'o3-mini', 'gpt-4o', 'claude-3-5-sonnet'],
+  emptyStateMessage,
   defaultModel = '5.5 Medium',
   activeProject = '',
   onAttachClick,
@@ -359,7 +366,7 @@ export const Composer: React.FC<ComposerProps> = ({
           onClick={syncSlash}
           onSelect={syncSlash}
           onPaste={handlePaste}
-          placeholder={hasModels ? "Do anything — type / for commands, skills & MCP tools" : "No models are connected yet. Please go to Settings to connect a provider."}
+          placeholder={hasModels ? "Do anything — type / for commands, skills & MCP tools" : (emptyStateMessage || "No models are connected yet. Please go to Settings to connect a provider.")}
           disabled={disabled}
           rows={1}
           className="bg-transparent border-none outline-none text-brand-textMain text-sm resize-none w-full min-h-11 leading-relaxed placeholder-brand-textMuted/55 font-sans disabled:opacity-50"
@@ -443,7 +450,7 @@ export const Composer: React.FC<ComposerProps> = ({
                   setSelectedModel(model);
                   onModelChange?.(model);
                 }}
-                placeholder={hasModels ? 'Select model...' : 'No models connected'}
+                placeholder={hasModels ? 'Select model...' : (emptyStateMessage || 'No models connected')}
                 direction="up"
                 className="w-45 sm:w-55"
               />

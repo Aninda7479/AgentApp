@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { composerModelsFromCatalog } from './WorkspaceView.js';
+import { composerModelsFromCatalog, composerEmptyStateMessage } from './WorkspaceView.js';
 import type { ModelConfig } from '../logic/types.js';
 
 /**
@@ -57,5 +57,25 @@ describe('composerModelsFromCatalog', () => {
       mk('or-c', 'Model C', false)
     ];
     expect(composerModelsFromCatalog(catalog)).toEqual(['Model Governance', 'Model A', 'Model B']);
+  });
+});
+
+describe('composerEmptyStateMessage', () => {
+  it('returns null when at least one model is enabled (composer usable)', () => {
+    expect(composerEmptyStateMessage([mk('or-a', 'Model A', true)])).toBeNull();
+  });
+
+  it('tells the user to connect a provider when the catalog is empty', () => {
+    expect(composerEmptyStateMessage([])).toMatch(/connect/i);
+  });
+
+  it('tells the user to enable a model (not connect) when a provider is connected but all models are disabled', () => {
+    const msg = composerEmptyStateMessage([mk('or-a', 'Model A', false), mk('or-b', 'Model B', false)]);
+    expect(msg).not.toBeNull();
+    // Points at enabling, and explicitly acknowledges a provider is already connected.
+    expect(msg).toMatch(/enable/i);
+    expect(msg).toMatch(/connected/i);
+    // It must NOT be the "connect a provider" remediation (that's the empty-catalog case).
+    expect(msg).not.toMatch(/add one/i);
   });
 });

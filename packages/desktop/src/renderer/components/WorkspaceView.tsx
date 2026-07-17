@@ -476,6 +476,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         activeProject={activeProject}
         onAttachClick={onAttachClick}
         availableModels={composerModelsFromCatalog(modelsCatalog)}
+        emptyStateMessage={composerEmptyStateMessage(modelsCatalog)}
         defaultModel={activeChatModel && enabledModels.some(m => m.name === activeChatModel) ? activeChatModel : (enabledModels.length > 1 ? 'Model Governance' : (enabledModels[0]?.name || ''))}
         promptValue={composerPrompt}
         onPromptChange={onPromptChange}
@@ -509,4 +510,23 @@ export function composerModelsFromCatalog(modelsCatalog: ModelConfig[]): string[
   if (enabled.length === 0) return [];
   if (enabled.length === 1) return [enabled[0].name];
   return ['Model Governance', ...enabled.map((m) => m.name)];
+}
+
+/**
+ * Chooses the composer's empty-state message based on *why* no model is
+ * available, so the remediation the user is told matches reality:
+ *  - catalog empty → no provider connected → send them to connect one.
+ *  - catalog non-empty but nothing enabled → a provider IS connected, the
+ *    models are just toggled off → send them to enable one (not "connect",
+ *    which was the old, misleading copy when providers were already connected).
+ * Returns null when at least one model is enabled (composer is usable).
+ */
+export function composerEmptyStateMessage(modelsCatalog: ModelConfig[]): string | null {
+  const hasAnyModel = modelsCatalog.length > 0;
+  const hasEnabled = modelsCatalog.some((m) => m.enabled);
+  if (hasEnabled) return null;
+  if (hasAnyModel) {
+    return 'A provider is connected, but no model is enabled. Enable one in Settings → Models.';
+  }
+  return 'No provider connected yet. Add one in Settings → Providers to start chatting.';
 }
