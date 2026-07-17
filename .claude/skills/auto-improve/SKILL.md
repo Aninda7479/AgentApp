@@ -20,18 +20,26 @@ SuperAgent is a provider-agnostic AI agent platform — CLI, Electron desktop GU
 
 Every cycle below should visibly serve one of these four.
 
-## Context-window discipline (read first — long autonomous loops blow the context window)
+## Context & memory contract (read first — mechanical, not judged)
 
-`/auto-improve` runs many cycles in one session, each doing research, reads, builds, and live calls. Unchecked, the accumulated context (large file reads, full build/test logs, web-fetch dumps) overshoots the ~250K ceiling and crashes the API call. Guard it:
+`/auto-improve` runs many cycles in one session — research, reads, builds, live calls. Unchecked, that accumulated context (large file reads, full build/test logs, web-fetch dumps, the growing shared log) overshoots the ~250K ceiling and crashes the API call mid-edit. **Compact mechanically at every checkpoint marked `→ COMPACT` below — do it every time, unconditionally, like a step in the recipe rather than a judgment of whether context "feels heavy."** Older versions asked you to *decide* when to compact ("if you sense pressure," "if >15 calls"). That judgment is the failure mode: you can't reliably introspect your own token usage, so a soft trigger silently doesn't fire and the run crashes before reaching a checkpoint. Stop judging — execute the checkpoint every time.
 
-- **Treat ~250K tokens as the hard ceiling.** The harness auto-summarizes near the limit, but a single un-redirected build log or a giant file read can overshoot it first. Be proactive.
-- **Run `/compact` between cycles.** After each cycle's commit + log entry (Steps 7–8), run `/compact` before returning to Step 1 for the next focus. Don't wait for the end-of-session Step 10 — compact every cycle. This is the most reliable guard.
-- **Redirect heavy command output to disk.** Build/lint/test/typecheck output can be enormous. Run it redirected, e.g. `npm run build > /tmp/aibuild.log 2>&1`, then Read only the tail / error lines (`offset`/`limit`) instead of letting the whole log sit in context. Same for any large file: Read with `offset`/`limit`, never the whole file unless you must.
-- **Keep memory on disk.** The `.claude/auto-improve-log.log` is your durable memory — append findings there as you go; don't hold a long mental list in working context.
-- **Web research in slices.** Don't paste whole fetched pages into context. Read the takeaway, record the source + one-line takeaway in the log, and discard the raw page.
-- **Hard rule:** if you have done more than ~15 heavy tool calls (reads, builds, fetches) since the last `/compact`, or any single result looks large, run `/compact` immediately rather than continuing.
+If you're ever unsure whether to compact: compact anyway. A compact you didn't strictly need costs a little redundant re-reading. A compact you skipped costs the entire run. The trade is never close.
 
-## Step 0 — Orient
+**All four skills share one memory file — this is how they stay synchronized.** Every skill appends to the same append-only `.claude/auto-improve-log.log`, each tagged so it's identifiable: `[auto-improve]`, `[orchestrator-dev]`, `[ux-critic]`, `[art-director]`. Reading its tail each cycle is how one run picks up where another left off. Keep your own durable memory there — not in working context.
+- **`.claude/auto-improve-log.log` — the shared queue. Read it with `tail -n 150` only, never whole.** It grows every cycle; loading it wholesale is a slow context leak. Use its "next priority queue" and "open questions" as your starting point. If it exceeds ~400 lines, archive older entries to `.claude/auto-improve-log.log.archive` (keep only the recent ~150 in the live file) so each read stays cheap.
+- `app-structure.log` is `/orchestrator-dev`'s maintained state map — small, read whole, never appended-to as history.
+- Everything else (research takeaways, test outcomes, file lists) goes into your log entry as you go; don't hold a long mental list in working context.
+
+**What to do before every compact, always:** save the current focus + step number + commit hash to TodoWrite (or a one-line scratch note). That resume state is the only thing you need after the compact — don't try to preserve anything else mentally.
+
+**Where the tokens actually come from — avoid regardless of checkpoints:**
+- **Redirect heavy command output to disk.** Build/lint/test/typecheck output can be enormous. Run redirected (`npm run build > /tmp/aibuild.log 2>&1`) and Read back only the tail / error region with `offset`/`limit`. Never let a full build log sit in context. Same for any large file: `Read` with `offset`/`limit`, never the whole file unless you must.
+- **Source files are as dangerous as build logs.** Don't `Read` a whole component/adapter/CSS file to "see what's there" — `Grep` for the section first, then targeted `Read` with `offset`/`limit`. Re-reading a file you already read this cycle is a sign to trust your TodoWrite note instead of re-reading.
+- **Web research in slices.** Never paste whole fetched pages in. Read the takeaway, record the source + one-line takeaway in the log, discard the raw page.
+- **Hard backstop (not the primary mechanism):** if you've done >~15 heavy tool calls since the last `/compact`, or any single result looks large, `/compact` immediately rather than continuing. This exists only to catch a runaway before auto-summarization; the per-step `→ COMPACT` checkpoints are what actually prevent the crash.
+
+## Step0 — Orient
 
 - **Single-flight guard (run this FIRST, before any edits).** `/auto-improve`
   can be invoked by a cron *and* manually, and two instances sharing one
@@ -60,11 +68,11 @@ Every cycle below should visibly serve one of these four.
   the standing fix for the cross-commit hazard; do not skip it.
 - Read `CLAUDE.md` / `README` / any architecture doc if present.
 - `git log --oneline -20` and `git status` — understand recent trajectory and any uncommitted work before touching anything. If the working tree is dirty with unrelated changes, stop and flag it in the log rather than committing over someone else's in-progress work.
-- Read `.claude/auto-improve-log.log` (create it if it doesn't exist yet) — **but read only the tail, not the whole file**. This log grows every cycle, so loading it wholesale is a slow context leak. Use `tail -n 150 .claude/auto-improve-log.log` (or Read with `offset` near the end) and treat its "next priority queue" and "open questions" as your starting point. If the file exceeds ~400 lines, archive older entries to `.claude/auto-improve-log.log.archive` to keep each read cheap.
+- Read `.claude/auto-improve-log.log` (create it if it doesn't exist yet) **with `tail -n 150` only, never whole** — see the Context & memory contract above. Treat its "next priority queue" and "open questions" as your starting point.
 - Read the provider/model registry (wherever the project tags providers as connected and models as `free`/paid — e.g. a `providers.json`, `models.config.*`, or settings store). You'll need this in Step 6.
 - Map the current structure: CLI package, Electron app, web app, shared orchestration core, capability adapters. Don't re-derive this every cycle — update your mental map, then move.
 
-## Step 1 — Pick one focus
+## Step1 — Pick one focus
 
 Use `$ARGUMENTS` if given. Recognized focuses include subsystem names (e.g. `routing-layer`, `image-gen-adapter`), `gui-polish` (default small-increment GUI work), and `gui-redesign` (see below). If `$ARGUMENTS` is empty, take the top item off the log's "next priority queue," or, if that's empty, find the single highest-leverage gap yourself.
 
@@ -80,7 +88,7 @@ When invoked as `/auto-improve gui-redesign` (or the queue explicitly calls for 
 - Explicitly check and note in the log: dark/light theme parity, accessibility (WCAG contrast, keyboard nav, focus states), and visual consistency between the Electron desktop GUI and the web GUI (shared components should stay shared, not fork).
 - Still bound by the mission: a redesign that makes the app prettier but harder to use, slower, or less consistent across desktop/web is a regression, not progress.
 
-## Step 2 — Research (mandatory, real, cited — never from memory alone)
+## Step2 — Research (mandatory, real, cited — never from memory alone)
 
 Treat anything about external APIs, SDKs, pricing, or UI conventions as possibly stale, even things you're confident about — this space moves fast. Actually search and fetch; don't simulate research.
 
@@ -95,22 +103,24 @@ Rules:
 - Cross-check at least two independent sources before committing to an approach; if they disagree, record the disagreement instead of silently picking one.
 - Log every source actually used, with a one-line takeaway, in this cycle's log entry. Never invent a source, an API shape, or a library capability you haven't verified.
 
-## Step 3 — Plan
+**→ COMPACT** (write focus + step + commit state to TodoWrite first)
+
+## Step3 — Plan
 
 Write a short numbered plan for this cycle via TodoWrite — typically 1–6 concrete edits. For each item, name which of the four mission points it serves.
 
-## Step 4 — Implement
+## Step4 — Implement
 
 - Match the existing code's conventions; don't introduce a second pattern for a problem the codebase already solves once.
 - New capability adapters go behind the existing adapter interface — never hard-code a single vendor as a requirement.
 - Prefer additive, backward-compatible changes. If something is breaking, say so explicitly in the log and the commit message.
 - No unjustified new dependencies — if you add one, note in the log why the researched alternative won.
 
-## Step 5 — Verify (static)
+## Step5 — Verify (static)
 
 - Discover and run the project's real build/lint/typecheck/test commands (from `package.json`, `pyproject.toml`, etc.) — don't guess at them. **Redirect the output to a file** (e.g. `npm run build > /tmp/aibuild.log 2>&1`) and Read back only the relevant region — the tail, or lines around an error — rather than letting a full build log sit in context. Fix failures before moving on. If they don't pass, do not proceed to Step 6 or 7 — loop back to Step 4 or, if genuinely stuck, log the failure as an open question and leave the change uncommitted.
 
-## Step 6 — Verify (live, functional) — run the real code path, not just the GUI's idea of it
+## Step6 — Verify (live, functional) — run the real code path, not just the GUI's idea of it
 
 You cannot drive the Electron app or web GUI directly — you have no browser/UI automation. What you *can* do, and must do for any change touching orchestration or a capability adapter, is call the same script/module/function the GUI would call, directly, from the CLI (`node`, `python`, or however the project invokes it), and observe the real result.
 
@@ -120,7 +130,9 @@ You cannot drive the Electron app or web GUI directly — you have no browser/UI
 - Where you did get a live result, also trace (by reading the GUI code, not by running it) how that result would flow into the interface — which loading/error/success state it triggers, how it's rendered — and note that as a **prediction**, explicitly labeled as such, distinct from the confirmed backend result.
 - A cycle that changes orchestration/adapter code but skips this step is incomplete — go back and do it before moving on.
 
-## Step 7 — Commit (only when every step above actually passed)
+**→ COMPACT**
+
+## Step7 — Commit (only when every step above actually passed)
 
 - Only commit if: Step 5 (build/lint/tests) passed, and Step 6 either passed live or was explicitly and honestly logged as "not live-tested" for a documented reason (no free model available) — never commit something that failed a check you were able to run.
 - Before staging, check the diff for anything that shouldn't ship: API keys, `.env` contents, tokens, personal paths, debug artifacts. Respect `.gitignore`; if something sensitive is about to be staged, stop and flag it in the log instead of committing.
@@ -129,7 +141,7 @@ You cannot drive the Electron app or web GUI directly — you have no browser/UI
 - Commit, then push to the current branch's remote. If there's no remote configured or the push fails (auth, etc.), log that clearly and leave the commit local rather than stalling the cycle.
 - Never force-push.
 
-## Step 8 — Log and hand off
+## Step8 — Log and hand off
 
 Append a dated entry to `.claude/auto-improve-log.log`:
 
@@ -148,13 +160,15 @@ Open questions: <anything needing a human decision>
 
 This log is the entire continuity mechanism. A `/auto-improve` run in a brand-new context must be able to pick up exactly where the last one stopped by reading it — write it with that reader in mind.
 
-## Step 9 — Repeat within the session
+**→ COMPACT** (post Steps 7–8: committed + logged)
 
-If turns/context budget remain and there's no blocking open question, go back to Step 1 with the next queue item. **After each cycle (post Steps 7–8), run `/compact` to shed the previous cycle's context before starting the next** — this is what keeps a multi-cycle session under the ~250K ceiling. When you're nearing your context limit: stop between cycles (never mid-edit), run `/compact`, make sure the log and queue are current, and close with a short human-readable summary of what changed and what got committed this session.
+## Step9 — Repeat within the session
 
-## Step 10 — Compact the context
+If turns/context budget remain and there's no blocking open question, go back to Step 1 with the next queue item. **After each cycle (post Steps 7–8 `→ COMPACT` above), the context is already light. When you're nearing your context limit: stop between cycles (never mid-edit), run `/compact`, make sure the log and queue are current, and close with a short human-readable summary of what changed and what got committed this session.**
 
-`/compact` is now run **after every cycle** (see Step 9), so by the end of the run the context is already light. Run it once more after the final cycle / when stopping because you're out of budget, to compress whatever remains before handing control back. The `.claude/auto-improve-log.log` is the durable memory — everything else in the working context is discardable once the log and git history are settled.
+## Step10 — Compact the context
+
+`/compact` runs **after every cycle** (see the `→ COMPACT` checkpoints), so by the end of the run the context is already light. Run it once more after the final cycle / when stopping because you're out of budget, to compress whatever remains before handing control back. The `.claude/auto-improve-log.log` is the durable memory — everything else in the working context is discardable once the log and git history are settled.
 
 ## Guardrails
 
