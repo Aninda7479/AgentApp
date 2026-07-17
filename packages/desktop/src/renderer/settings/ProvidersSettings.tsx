@@ -449,8 +449,9 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
 
             <div className="flex flex-col gap-3.5">
               <div className="flex flex-col gap-1 text-left">
-                <label className="ui-label">Connection Name</label>
+                <label className="ui-label" htmlFor="connect-name">Connection Name</label>
                 <input
+                  id="connect-name"
                   type="text"
                   value={connectionName}
                   onChange={(e) => setConnectionName(e.target.value)}
@@ -458,8 +459,9 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
                 />
               </div>
               <div className="flex flex-col gap-1 text-left">
-                <label className="ui-label">API Key / Token</label>
+                <label className="ui-label" htmlFor="connect-key">API Key / Token</label>
                 <input
+                  id="connect-key"
                   type="password"
                   placeholder="Enter credential token"
                   value={apiKey}
@@ -468,8 +470,9 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
                 />
               </div>
               <div className="flex flex-col gap-1 text-left">
-                <label className="ui-label">Base Endpoint URL</label>
+                <label className="ui-label" htmlFor="connect-url">Base Endpoint URL</label>
                 <input
+                  id="connect-url"
                   type="text"
                   placeholder="Defaults to standard URL if empty"
                   value={baseUrl}
