@@ -1,5 +1,12 @@
 import { BrowserWindow, BrowserWindowConstructorOptions, app, ipcMain, shell } from 'electron';
 import path from 'path';
+import fs from 'fs';
+
+/** Resolves the packaged brand icon (build/icon.png), or undefined if absent. */
+function appIconPath(): string | undefined {
+  const p = path.join(app.getAppPath(), 'assets', 'icon.png');
+  return fs.existsSync(p) ? p : undefined;
+}
 
 /** Options for creating a managed BrowserWindow, with optional name and main-window flag. */
 export interface ManagedWindowOptions extends BrowserWindowConstructorOptions {
@@ -62,6 +69,7 @@ export class WindowManager {
       backgroundColor: '#09090b',
       frame: false,
       titleBarStyle: 'hidden',
+      icon: appIconPath(),
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false
