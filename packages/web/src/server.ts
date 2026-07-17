@@ -13,6 +13,7 @@ import {
   UsageTracker,
   ModelRouter,
   ModelGovStorage,
+  buildRouterPool,
   PlaywrightBrowserEngine,
   ComputerUse,
   getUserDataDirectory,
@@ -20,6 +21,8 @@ import {
   ProviderAutoDetector,
   MCP_CATALOG,
   PLUGIN_CATALOG,
+  MARKETPLACE_PLUGINS,
+  SKILL_CATALOG,
   SkillStore
 } from '@superagent/core';
 
@@ -198,28 +201,49 @@ async function runAgentEngine(
       // Auto-route model if set to 'auto' or 'Model Governance'
       if (config.model === 'auto' || config.model === 'Model Governance') {
         const settings = SettingsStorage.loadSettings();
-        const enabledModels = settings.models?.filter(m => m.enabled) || [];
+        // Build a proper RouterModel[] pool (providerId + capability/access
+        // signals) from the user's configured models. routeModelForTask reads
+        // RouterModel fields that raw settings.models don't always carry.
+        const enabledModels = buildRouterPool(settings.models ?? []).filter((m) => m.enabled);
         try {
-          const routed = ModelRouter.routeModelForTask(prompt, enabledModels as any);
-          if (routed) {
+          const routed = ModelRouter.routeModelForTask(prompt, enabledModels);
+          if (routed && routed.model) {
             finalConfig.provider = routed.provider as any;
             finalConfig.model = routed.model;
             const byok = settings.providers?.find(p => p.id === routed.provider);
             if (byok) {
               finalConfig.apiKey = byok.apiKey;
               finalConfig.baseUrl = byok.baseUrl;
+            } else if (!finalConfig.apiKey) {
+              console.warn(`[web] Orchestrator routed to '${routed.provider}' but no API key is configured for it; the reply may fail.`);
             }
+          } else {
+            throw new Error('Orchestrator could not select a model for this task.');
           }
         } catch (routeErr: any) {
-          // No model configured/enabled — surface a clear, actionable error
-          // instead of forwarding the literal 'auto' string to the provider.
-          broadcast('agent-event', {
-            type: 'error',
-            sessionId,
-            error: routeErr?.message || String(routeErr)
-          });
-          activeSessions.delete(sessionId);
-          return;
+          // Never go silently empty: fall back to the first enabled model so the
+          // user still gets a real reply instead of a blank turn.
+          const fallback = enabledModels[0];
+          if (fallback) {
+            console.warn(`[web] Orchestrator routing failed (${routeErr?.message}); falling back to ${fallback.providerId}/${fallback.id}.`);
+            finalConfig.provider = fallback.providerId as any;
+            finalConfig.model = ModelRouter.stripProviderPrefix(fallback.providerId, fallback.id);
+            const byok = settings.providers?.find(p => p.id === fallback.providerId);
+            if (byok) {
+              finalConfig.apiKey = byok.apiKey;
+              finalConfig.baseUrl = byok.baseUrl;
+            }
+          } else {
+            // No model configured/enabled — surface a clear, actionable error
+            // instead of forwarding the literal 'auto' string to the provider.
+            broadcast('agent-event', {
+              type: 'error',
+              sessionId,
+              error: routeErr?.message || String(routeErr)
+            });
+            activeSessions.delete(sessionId);
+            return;
+          }
         }
       }
 
@@ -238,7 +262,13 @@ async function runAgentEngine(
       activeSessions.set(sessionId, engine);
     }
 
+    let replyLogged = false;
     await engine.run(prompt, (agentEvent: AgentEvent) => {
+      // Log the first reply token on the web connection (device-tagged).
+      if (agentEvent.type === 'token' && !replyLogged) {
+        replyLogged = true;
+        console.log(`[web] message RECEIVED — connection device: ${os.hostname()} | session: ${sessionId}`);
+      }
       broadcast('agent-event', agentEvent);
     }, currentAttachments);
 
@@ -606,6 +636,8 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         break;
       case 'agent-run': {
         const { sessionId, prompt, config, currentAttachments } = args[0];
+        // Log the incoming user message on the web connection (device-tagged).
+        console.log(`[web] message SENT — connection device: ${os.hostname()} | session: ${sessionId} | model: ${config?.model}`);
         // Start engine asynchronously in background
         runAgentEngine(sessionId, prompt, config, currentAttachments);
         result = { status: 'started', sessionId };
@@ -633,7 +665,10 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         result = MCP_CATALOG;
         break;
       case 'plugins-catalog':
-        result = PLUGIN_CATALOG;
+        result = [...PLUGIN_CATALOG, ...MARKETPLACE_PLUGINS];
+        break;
+      case 'skills-catalog':
+        result = SKILL_CATALOG;
         break;
 
       // ─── Skills discovery (Composer slash autocomplete) ─────────────────────

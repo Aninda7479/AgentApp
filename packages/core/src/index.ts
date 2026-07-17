@@ -13,7 +13,7 @@ export * from './providers/provider-meta.js';
 export * from './providers/router.js';
 export * from './providers/best-of-n.js';
 export * from './providers/autodetect.js';
-export { AgentEngine as SuperAgentEngine, type AgentEvent, type AgentEngineConfig } from './providers/ai-engine.js';
+export { AgentEngine as SuperAgentEngine, buildRouterPool, type AgentEvent, type AgentEngineConfig } from './providers/ai-engine.js';
 export * from './tools/media.js';
 export * from './tools/mcp.js';
 export * from './tools/threed.js';
@@ -47,6 +47,7 @@ export * from './mcp/ide.js';
 
 export * from './integrations/catalog.js';
 export * from './integrations/plugins.js';
+export * from './integrations/skills-catalog.js';
 
 export * from './media/router.js';
 export * from './media/image.js';

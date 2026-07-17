@@ -203,7 +203,8 @@ export class ModelRouter {
    * loop would corrupt those into `sonnet-4-5` / `chat`, so we stop after the
    * one canonical prefix.
    */
-  private static stripProviderPrefix(providerId: string, id: string): string {
+  /** Strips the `<providerId>-` prefix from a model id (e.g. `openai-gpt-4o` → `gpt-4o`). */
+  static stripProviderPrefix(providerId: string, id: string): string {
     const prefix = `${providerId}-`;
     return id.startsWith(prefix) ? id.substring(prefix.length) : id;
   }

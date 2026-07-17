@@ -1,15 +1,15 @@
 import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 
-// Set custom userData path to organize files in Roaming\OpenSource\AgentApp
-const customUserDataPath = path.join(app.getPath('appData'), 'OpenSource', 'AgentApp');
-app.setPath('userData', customUserDataPath);
+// Set a custom userData path so all app data lives in <home>/.superagent.
+app.setPath('userData', getUserDataDirectory());
 
 import { windowManager } from './main/window';
 import { setupAutoUpdater } from './main/updater';
 import { readStore, writeStore, StoreData } from './main/store';
-import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, generateThreeD, ConfirmationHandler } from '@superagent/core';
+import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, buildRouterPool, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS } from '@superagent/core';
 import { getChatDirectory } from './main/storage/index.js';
 import * as PartnerStore from './main/partner-store';
 import { petWindowManager } from './main/pet-window';
@@ -19,6 +19,9 @@ import { logError, errorMessage, registerErrorToasts, IpcErrorEnvelope } from '.
 // conversation approaches the model's capacity.
 let petContextMax = 0;
 let petContextTotal = 0;
+
+// Machine identity used in connection logging (see the agent-run handler below).
+const DEVICE_NAME = os.hostname();
 
 async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
   return await BrowserLifecycleService.getSharedInstance();
@@ -144,6 +147,9 @@ safeHandle('agent-run', async (event, {
   currentAttachments?: string[];
 }) => {
   try {
+    // Log the outgoing user message on the desktop connection (device-tagged).
+    console.log(`[desktop] message SENT — connection device: ${DEVICE_NAME} | session: ${sessionId} | model: ${config.model}`);
+
     // Reuse or create engine
     let engine = activeSessions.get(sessionId);
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -152,30 +158,52 @@ safeHandle('agent-run', async (event, {
       let finalConfig = { ...config };
       if (config.model === 'auto' || config.model === 'Model Governance') {
         const settings = SettingsStorage.loadSettings();
-        const enabledModels = settings.models?.filter(m => m.enabled) || [];
+        // Build a proper RouterModel[] pool (providerId + capability/access
+        // signals) from the user's configured models. routeModelForTask reads
+        // RouterModel fields that raw settings.models don't always carry, so
+        // feeding it the raw list can resolve to a model with no provider.
+        const enabledModels = buildRouterPool(settings.models ?? []).filter((m) => m.enabled);
         try {
-          const routed = ModelRouter.routeModelForTask(prompt, enabledModels as any);
-          if (routed) {
+          const routed = ModelRouter.routeModelForTask(prompt, enabledModels);
+          if (routed && routed.model) {
             finalConfig.provider = routed.provider as any;
             finalConfig.model = routed.model;
-            const byok = settings.providers?.find(p => p.id === routed.provider);
+            const byok = settings.providers?.find((p) => p.id === routed.provider);
+            if (byok) {
+              finalConfig.apiKey = byok.apiKey;
+              finalConfig.baseUrl = byok.baseUrl;
+            } else if (!finalConfig.apiKey) {
+              console.warn(`[desktop] Orchestrator routed to '${routed.provider}' but no API key is configured for it; the reply may fail.`);
+            }
+          } else {
+            throw new Error('Orchestrator could not select a model for this task.');
+          }
+        } catch (routeErr: unknown) {
+          // Never go silently empty: fall back to the first enabled model so the
+          // user still gets a real reply instead of a blank turn.
+          const fallback = enabledModels[0];
+          if (fallback) {
+            console.warn(`[desktop] Orchestrator routing failed (${(routeErr as Error).message}); falling back to ${fallback.providerId}/${fallback.id}.`);
+            finalConfig.provider = fallback.providerId as any;
+            finalConfig.model = ModelRouter.stripProviderPrefix(fallback.providerId, fallback.id);
+            const byok = settings.providers?.find((p) => p.id === fallback.providerId);
             if (byok) {
               finalConfig.apiKey = byok.apiKey;
               finalConfig.baseUrl = byok.baseUrl;
             }
+          } else {
+            // No model configured/enabled — emit a clear error event to the
+            // renderer instead of forwarding the literal 'auto' string downstream.
+            if (win && !win.isDestroyed()) {
+              win.webContents.send('agent-event', {
+                type: 'error',
+                sessionId,
+                error: (routeErr as Error).message || String(routeErr)
+              });
+            }
+            activeSessions.delete(sessionId);
+            return { success: false, error: (routeErr as Error).message || String(routeErr) };
           }
-        } catch (routeErr: unknown) {
-          // No model configured/enabled — emit a clear error event to the
-          // renderer instead of forwarding the literal 'auto' string downstream.
-          if (win && !win.isDestroyed()) {
-            win.webContents.send('agent-event', {
-              type: 'error',
-              sessionId,
-              error: (routeErr as Error).message || String(routeErr)
-            });
-          }
-          activeSessions.delete(sessionId);
-          return { success: false, error: (routeErr as Error).message || String(routeErr) };
         }
       }
       finalConfig.extraTools = connectedTools();
@@ -188,7 +216,13 @@ safeHandle('agent-run', async (event, {
     }
 
     // Run agent; emit each event back to renderer
+    let replyLogged = false;
     await engine.run(prompt, (agentEvent: AgentEvent) => {
+      // Log the first reply token on the desktop connection (device-tagged).
+      if (agentEvent.type === 'token' && !replyLogged) {
+        replyLogged = true;
+        console.log(`[desktop] message RECEIVED — connection device: ${DEVICE_NAME} | session: ${sessionId}`);
+      }
       if (win && !win.isDestroyed()) {
         win.webContents.send('agent-event', agentEvent);
         // Relay to the free-roaming 3D Partner so it reacts in real time.
@@ -347,8 +381,14 @@ safeHandle('mcp-install', async (_event, { id, keys }: {
   }
 });
 
-// ─── IPC: Built-in Plugin catalog ────────────────────────────────────────────
-safeHandle('plugins-catalog', () => PLUGIN_CATALOG);
+// ─── IPC: Built-in + marketplace Plugin catalog ──────────────────────────────
+// Built-ins first (enabled by default), then marketplace items (under
+// development). Kept as separate Core arrays so PLUGIN_CATALOG's unique-
+// capability invariant stays intact; merged only here for the UI.
+safeHandle('plugins-catalog', () => [...PLUGIN_CATALOG, ...MARKETPLACE_PLUGINS]);
+
+// ─── IPC: Curated Skill catalog (Settings → Skills; NOT the slash surface) ────
+safeHandle('skills-catalog', () => SKILL_CATALOG);
 
 
 
@@ -1253,7 +1293,7 @@ function setupDevWatcher() {
 app.whenReady().then(async () => {
   // Cleanup outdated partner directories to ensure Lily and Waifu are merged
   try {
-    const petsDir = path.join(app.getPath('userData'), 'pets');
+    const petsDir = path.join(app.getPath('userData'), STORAGE_DIRS.partners);
     ['waifu', 'pixel', 'byte', 'nova'].forEach((oldId) => {
       const dir = path.join(petsDir, oldId);
       if (fs.existsSync(dir)) {

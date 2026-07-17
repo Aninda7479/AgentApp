@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   Info,
+  Workflow,
 } from 'lucide-react';
 import {
   SlashSuggestion,
@@ -20,6 +21,16 @@ import {
   buildSuggestions,
 } from './slashCommands';
 import { ComposerService } from '../logic/composer';
+
+/**
+ * The auto-routing sentinel. The internal value stays `'Model Governance'` so the
+ * orchestrator's routing branch (main process) keeps resolving it; in the Workspace
+ * composer it is displayed as `AUTO_ROUTE_LABEL` with a distinct icon. This rename
+ * is display-only and scoped to the Workspace — the Settings panel is untouched.
+ */
+const AUTO_ROUTE_MODEL = 'Model Governance';
+const AUTO_ROUTE_LABEL = 'Orchestrator';
+
 
 /** Options returned by the Composer when a prompt is submitted. */
 export interface ComposerOptions {
@@ -462,7 +473,11 @@ export const Composer: React.FC<ComposerProps> = ({
             {/* Model Badge */}
             <div className="relative">
               <Select
-                options={availableModels.map((model) => ({ value: model, label: model, icon: <Cpu className="w-3.5 h-3.5" /> }))}
+                options={availableModels.map((model) =>
+                  model === AUTO_ROUTE_MODEL
+                    ? { value: model, label: AUTO_ROUTE_LABEL, icon: <Workflow className="w-3.5 h-3.5" /> }
+                    : { value: model, label: model, icon: <Cpu className="w-3.5 h-3.5" /> }
+                )}
                 value={selectedModel}
                 onChange={(model) => {
                   setSelectedModel(model);
