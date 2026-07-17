@@ -9,7 +9,8 @@ import {
   EnvironmentSanitizer,
   FileSystemInspector,
   AtomicFileWriter,
-  UnifiedDiffGenerator
+  UnifiedDiffGenerator,
+  SandboxRunner
 } from '../src/sandbox/index.js';
 
 describe('Sandbox Engine Suite (Steps 009 - 015)', () => {
@@ -204,6 +205,88 @@ describe('Sandbox Engine Suite (Steps 009 - 015)', () => {
       expect(diff).toContain('-const b = 2');
       expect(diff).toContain('+const b = 20');
       expect(diff).toContain('+const d = 4');
+    });
+  });
+
+  // Step 016: SandboxRunner approval-gate integration
+  // This is the path that surfaces the renderer permission dialog: a risky
+  // command must invoke the injected `requestApproval` handler (which the desktop
+  // host bridges to `agent-permission-request` -> <PermissionDialog>) and honor
+  // its decision. Lower-level pieces are covered above; this proves they wire
+  // together end-to-end without needing a browser.
+  describe('Step 016: SandboxRunner approval-gate integration', () => {
+    it('invokes requestApproval for a risky command and a denial blocks execution', async () => {
+      let requested: any = null;
+      const runner = new SandboxRunner({
+        projectRoot: tempDir,
+        permissionMode: 'auto-approve-edits',
+        requestApproval: async (req) => { requested = req; return false; }
+      });
+      const marker = path.join(tempDir, 'do-not-delete.txt');
+      await fs.promises.writeFile(marker, 'keep me', 'utf8');
+
+      const res = await runner.runCommand('rm do-not-delete.txt');
+
+      expect(requested).not.toBeNull();
+      expect(requested.action).toBe('execute_command');
+      expect(requested.command).toBe('rm do-not-delete.txt');
+      expect(res.stderr).toMatch(/rejected by user permission/i);
+      expect(res.exitCode).not.toBe(0);
+      // Denial must prevent the command from running (file preserved).
+      expect(fs.existsSync(marker)).toBe(true);
+    });
+
+    it('executes a risky command when requestApproval grants approval', async () => {
+      let requested: any = null;
+      const runner = new SandboxRunner({
+        projectRoot: tempDir,
+        permissionMode: 'auto-approve-edits',
+        requestApproval: async (req) => { requested = req; return true; }
+      });
+      const marker = path.join(tempDir, 'delete-me.txt');
+      await fs.promises.writeFile(marker, 'gone', 'utf8');
+
+      const res = await runner.runCommand('rm delete-me.txt');
+
+      expect(requested).not.toBeNull();
+      expect(requested.action).toBe('execute_command');
+      // Approved risky command must actually run (file removed), not be rejected.
+      expect(res.stderr).not.toMatch(/rejected by user permission/i);
+      expect(fs.existsSync(marker)).toBe(false);
+    });
+
+    it('full-autonomy mode skips requestApproval and runs risky commands', async () => {
+      let called = false;
+      const runner = new SandboxRunner({
+        projectRoot: tempDir,
+        permissionMode: 'full-autonomy',
+        requestApproval: async () => { called = true; return true; }
+      });
+      const marker = path.join(tempDir, 'delete-anyway.txt');
+      await fs.promises.writeFile(marker, 'gone', 'utf8');
+
+      const res = await runner.runCommand('rm delete-anyway.txt');
+
+      expect(called).toBe(false);
+      expect(res.stderr).not.toMatch(/rejected by user permission/i);
+      expect(fs.existsSync(marker)).toBe(false);
+    });
+
+    it('read-only mode prompts for non-readonly commands and honors approval', async () => {
+      let requested: any = null;
+      const runner = new SandboxRunner({
+        projectRoot: tempDir,
+        permissionMode: 'read-only',
+        requestApproval: async (req) => { requested = req; return true; }
+      });
+      const marker = path.join(tempDir, 'ro-delete.txt');
+      await fs.promises.writeFile(marker, 'gone', 'utf8');
+
+      const res = await runner.runCommand('rm ro-delete.txt');
+
+      expect(requested).not.toBeNull();
+      expect(res.stderr).not.toMatch(/rejected by user permission/i);
+      expect(fs.existsSync(marker)).toBe(false);
     });
   });
 });
