@@ -162,16 +162,20 @@ export class ModelRouter {
    * Resolves the enabled model pool (the user's Model Gov selection, or all
    * models when none are enabled) and applies the capability gate: when the task
    * needs a modality some models actually support, restrict to those so a
-   * non-capable model can never win a vision/tool task. Falls back to the full
-   * pool when no capable model is present so routing still returns something.
+   * non-capable model can never win a vision/tool task. Each active modality the
+   * task requires must be satisfied — a mixed "vision + coding" task needs a
+   * model that is BOTH vision-capable AND tool-capable, so a tool-only model
+   * cannot be selected to do vision work. Falls back to the full pool when no
+   * capable model is present so routing still returns something.
    */
   private static resolveCandidatePool(
     flags: { isCoding: boolean; isReasoning: boolean; isVision: boolean },
     enabledModels: RouterModel[]
   ): RouterModel[] {
-    const capable = enabledModels.filter((m) =>
-      (flags.isVision && m.supportsVision) ||
-      ((flags.isCoding || flags.isReasoning) && m.supportsTools)
+    const needsVision = flags.isVision;
+    const needsTools = flags.isCoding || flags.isReasoning;
+    const capable = enabledModels.filter(
+      (m) => (!needsVision || m.supportsVision === true) && (!needsTools || m.supportsTools === true)
     );
     return capable.length > 0 ? capable : enabledModels;
   }
