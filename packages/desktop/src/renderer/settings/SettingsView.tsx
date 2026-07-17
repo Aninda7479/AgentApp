@@ -14,6 +14,7 @@ import { BrowserUseSettings } from './BrowserUseSettings';
 import { ComputerUseSettings } from './ComputerUseSettings';
 import { ThreeDSettings } from './ThreeDSettings';
 import { UpdatesSettings } from './UpdatesSettings';
+import { browserSafeFetch } from '../web-fetch.js';
 
 /** Top-level settings page that renders a sidebar and the active settings category panel. */
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -145,7 +146,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         const collectedNames: string[] = [];
         for (let pageNum = 1; pageNum <= 4; pageNum++) {
           const url = `https://build.nvidia.com/models?filters=nimType%3Anim_type_preview&page=${pageNum}`;
-          const res = await fetch(url);
+          const res = await browserSafeFetch(url);
           if (!res.ok) continue;
           const html = await res.text();
           
