@@ -81,6 +81,10 @@ export interface AppContext {
   getActiveProject(): string;
   getDraftProject(): string;
   getInternetAccessLevel(): InternetAccessLevel;
+  /** Whether the agent runs unsandboxed (full system access). */
+  getFullAccess(): boolean;
+  /** Whether shell commands require explicit user approval. */
+  getDefaultPermissions(): boolean;
   getThemeMode(): ThemeMode;
   getComposerAttachments(): ComposerAttachment[];
   getTrajectorySteps(): TrajectoryStep[];

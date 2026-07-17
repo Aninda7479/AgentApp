@@ -257,6 +257,14 @@ export class AgentService {
         model: resolvedModel,
         projectRoot: resolvedProjectRoot,
         allowedCommands: activeProjectConfig?.allowedCommands,
+        // ── Sandbox wiring ── the desktop engine routes every command
+        // and file write through a SandboxRunner driven by these. The
+        // UI toggles (Unsandboxed Terminal Actions / Confirm shell
+        // commands) are read here so the agent actually honors them.
+        unsandboxedActions: ctx.getFullAccess(),
+        permissionMode: (ctx.getFullAccess()
+          ? 'full-autonomy'
+          : (ctx.getDefaultPermissions() ? 'read-only' : 'auto-approve-edits')),
         attachments: allAttachmentPaths.length > 0 ? allAttachmentPaths : undefined,
         internetAccess: ctx.getInternetAccessLevel()
       };

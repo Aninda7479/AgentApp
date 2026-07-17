@@ -9,7 +9,7 @@ app.setPath('userData', customUserDataPath);
 import { windowManager } from './main/window';
 import { setupAutoUpdater } from './main/updater';
 import { readStore, writeStore, StoreData } from './main/store';
-import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, generateThreeD } from '@superagent/core';
+import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, generateThreeD, ConfirmationHandler } from '@superagent/core';
 import { getChatDirectory } from './main/storage/index.js';
 import * as PartnerStore from './main/partner-store';
 import { petWindowManager } from './main/pet-window';
@@ -83,6 +83,52 @@ registerErrorToasts((context, message) => {
 const activeSessions = new Map<string, AgentEngine>();
 
 /**
+ * Agent permission-approval bridge. When the sandbox needs the user to
+ * confirm a command/file write, the engine's `requestApproval` callback
+ * (wired to `buildRequestApproval`) sends `agent-permission-request` to
+ * the renderer and resolves when the renderer replies `agent-permission-response`.
+ * We keep the pending resolvers here so the response handler (a separate
+ * IPC registration) can reach them.
+ */
+const sessionWindows = new Map<string, BrowserWindow | null>();
+interface PendingPermission {
+  resolve: (approved: boolean) => void;
+  sessionId: string;
+  command?: string;
+}
+const pendingPermissions = new Map<string, PendingPermission>();
+let permissionCounter = 0;
+
+/**
+ * Builds the `requestApproval` callback for a session. It surfaces a
+ * permission prompt in the renderer and resolves true/false when the user
+ * responds. If the window is gone or no response arrives within the timeout,
+ * it resolves false (deny) so the agent never hangs.
+ */
+function buildRequestApproval(sessionId: string, win: BrowserWindow | null): ConfirmationHandler {
+  return (request) => new Promise<boolean>((resolve) => {
+    const id = `perm-${sessionId}-${++permissionCounter}`;
+    pendingPermissions.set(id, { resolve, sessionId, command: request.command });
+    const target = win && !win.isDestroyed() ? win : windowManager.getMainWindow();
+    if (!target || target.isDestroyed()) {
+      pendingPermissions.delete(id);
+      resolve(false);
+      return;
+    }
+    target.webContents.send('agent-permission-request', { id, sessionId, request });
+    // Safety fallback: auto-deny after 10 minutes so a forgotten
+    // prompt can't wedge a long-running agent session.
+    setTimeout(() => {
+      const pending = pendingPermissions.get(id);
+      if (pending) {
+        pendingPermissions.delete(id);
+        pending.resolve(false);
+      }
+    }, 10 * 60 * 1000);
+  });
+}
+
+/**
  * agent-run: Start a new agent session or continue an existing one.
  * The engine streams events back using webContents.send('agent-event', event).
  */
@@ -101,6 +147,7 @@ safeHandle('agent-run', async (event, {
     // Reuse or create engine
     let engine = activeSessions.get(sessionId);
     const win = BrowserWindow.fromWebContents(event.sender);
+    sessionWindows.set(sessionId, win);
     if (!engine) {
       let finalConfig = { ...config };
       if (config.model === 'auto' || config.model === 'Model Governance') {
@@ -132,6 +179,7 @@ safeHandle('agent-run', async (event, {
         }
       }
       finalConfig.extraTools = connectedTools();
+      finalConfig.requestApproval = buildRequestApproval(sessionId, win);
       engine = new AgentEngine(finalConfig, sessionId);
       activeSessions.set(sessionId, engine);
       // Reset context-usage tracking for this run.
@@ -190,6 +238,34 @@ safeHandle('agent-stop', (_event, sessionId: string) => {
  */
 safeHandle('agent-list', () => {
   return { sessions: Array.from(activeSessions.keys()) };
+});
+
+/**
+ * agent-permission-response: the renderer's answer to an
+ * `agent-permission-request`. Resolves the pending approval promise
+ * (approve/deny) and, when the user chose "Always allow", adds
+ * the command to the session's sandbox allowlist so it won't re-prompt.
+ */
+safeHandle('agent-permission-response', (_event, {
+  id,
+  approved,
+  remember,
+  command
+}: {
+  id: string;
+  approved: boolean;
+  remember?: boolean;
+  command?: string;
+}) => {
+  const pending = pendingPermissions.get(id);
+  if (!pending) return { ok: false };
+  pendingPermissions.delete(id);
+  pending.resolve(Boolean(approved));
+  if (remember && pending.command) {
+    const engine = activeSessions.get(pending.sessionId);
+    engine?.getSandbox()?.addSessionAllow(pending.command);
+  }
+  return { ok: true };
 });
 
 // ─── IPC: Skills discovery (for the Composer slash autocomplete) ──────────────

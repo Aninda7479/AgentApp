@@ -6,6 +6,7 @@ import { DiffViewer } from './components/DiffViewer';
 import { BYOKModal } from './components/BYOKModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { DoctorModal } from './components/DoctorModal';
+import { PermissionDialog } from './components/PermissionDialog';
 import { MCPDashboard, MCPServerInfo } from './components/MCPDashboard';
 import { SearchModal } from './components/SearchModal';
 import { ScheduledView } from './components/ScheduledView';
@@ -93,6 +94,11 @@ export const App: React.FC = () => {
   const [searchModalOpen, setSearchModalOpen] = useState<boolean>(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
   const [isDoctorOpen, setIsDoctorOpen] = useState<boolean>(false);
+  const [pendingPermission, setPendingPermission] = useState<{
+    id: string;
+    sessionId: string;
+    request: { action: string; command?: string; filePath?: string; details?: Record<string, unknown> };
+  } | null>(null);
   const [profilePopoverOpen, setProfilePopoverOpen] = useState<boolean>(false);
   const [settingsCategory, setSettingsCategory] = useState<string>(initialRoute.settingsCategory);
   const [activeProject, setActiveProject] = useState<string>('');
@@ -173,13 +179,15 @@ export const App: React.FC = () => {
   const stateRef = useRef({
     projects, chats, connectedProviders, modelsCatalog, mcpServers,
     activeChatId, activeProject, draftProject, internetAccessLevel, themeMode,
-    composerAttachments, trajectorySteps, lastUsedModel
+    composerAttachments, trajectorySteps, lastUsedModel,
+    fullAccess, defaultPermissions
   });
   useEffect(() => {
     stateRef.current = {
       projects, chats, connectedProviders, modelsCatalog, mcpServers,
       activeChatId, activeProject, draftProject, internetAccessLevel, themeMode,
-      composerAttachments, trajectorySteps, lastUsedModel
+      composerAttachments, trajectorySteps, lastUsedModel,
+      fullAccess, defaultPermissions
     };
   });
 
@@ -226,6 +234,8 @@ export const App: React.FC = () => {
       getActiveProject: () => stateRef.current.activeProject,
       getDraftProject: () => stateRef.current.draftProject,
       getInternetAccessLevel: () => stateRef.current.internetAccessLevel,
+      getFullAccess: () => stateRef.current.fullAccess,
+      getDefaultPermissions: () => stateRef.current.defaultPermissions,
       getThemeMode: () => stateRef.current.themeMode,
       getComposerAttachments: () => stateRef.current.composerAttachments,
       getTrajectorySteps: () => stateRef.current.trajectorySteps,
@@ -705,6 +715,30 @@ export const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ipc, ctx, streaming, partnersRef]);
 
+  // ── Sandbox permission prompts (user-in-the-loop) ───────────────────────
+  useEffect(() => {
+    if (!ipc) return;
+    const handlePermissionRequest = (_e: unknown, payload: {
+      id: string;
+      sessionId: string;
+      request: { action: string; command?: string; filePath?: string; details?: Record<string, unknown> };
+    }) => {
+      setPendingPermission({ id: payload.id, sessionId: payload.sessionId, request: payload.request });
+    };
+    ipc.on('agent-permission-request', handlePermissionRequest);
+    return () => ipc.removeListener('agent-permission-request', handlePermissionRequest);
+  }, [ipc]);
+
+  const resolvePermission = (approved: boolean, remember: boolean) => {
+    if (!pendingPermission) return;
+    ipc?.invoke('agent-permission-response', {
+      id: pendingPermission.id,
+      approved,
+      remember
+    }).catch(() => {});
+    setPendingPermission(null);
+  };
+
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <div
@@ -834,6 +868,8 @@ export const App: React.FC = () => {
               onMicUnavailable={() => triggerToast('Voice input is not supported in this browser')}
               slashCommands={slashCommands}
               skills={skills}
+              lastError={activeChat?.lastError}
+              onRetryLast={handleRetryLast}
             />
           )}
 
@@ -966,6 +1002,13 @@ export const App: React.FC = () => {
 
       {/* Doctor Diagnostics Modal */}
       <DoctorModal isOpen={isDoctorOpen} onClose={() => setIsDoctorOpen(false)} byokKeys={byokKeys} modelsCatalog={modelsCatalog} unsandboxedActions={fullAccess} />
+
+      {/* Sandbox permission prompt — user-in-the-loop approval */}
+      <PermissionDialog
+        isOpen={pendingPermission !== null}
+        request={pendingPermission?.request ?? null}
+        onResolve={resolvePermission}
+      />
 
       <AppToast open={toastOpen} message={toastMessage} type={toastType} onClose={() => setToastOpen(false)} />
 

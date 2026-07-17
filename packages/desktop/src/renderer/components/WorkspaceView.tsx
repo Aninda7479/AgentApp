@@ -55,6 +55,10 @@ interface WorkspaceViewProps {
   slashCommands?: import('./slashCommands').SlashSuggestion[];
   /** Discovered skills for the composer autocomplete. */
   skills?: import('./slashCommands').SkillInfo[];
+  /** Last error recorded on the active chat, surfaced in the failed-response card. */
+  lastError?: string;
+  /** Re-sends the last user prompt when the response failed. */
+  onRetryLast?: () => void;
 }
 
 const recommendations = [
@@ -202,7 +206,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   onUnsandboxedActionsChange,
   onMicUnavailable,
   slashCommands,
-  skills = []
+  skills = [],
+  lastError,
+  onRetryLast
 }) => {
   // Only surface models the user has ENABLED in Settings → Models. Each catalog
   // entry carries a per-model `enabled` flag (ModelConfig.enabled); connected
@@ -367,6 +373,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         isStreaming={activeSessionId === 'session-main' ? isGenerating : (activeSession?.isGenerating || false)}
         onViewDiff={onViewDiff}
         onUndoStep={onUndoStep}
+        lastError={lastError}
+        onRetryLast={onRetryLast}
         onActionClick={(action, data) => {
           if (action === 'openMedia') {
             WorkspaceService.openMedia(data?.mediaPath, () =>

@@ -52,8 +52,6 @@ export interface ToolDefinition {
 
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import {
   resolveProviderFamily,
   resolveBaseUrl,
@@ -61,26 +59,11 @@ import {
   getInternetAccessLevel,
   describeInternetAccessLevel,
   InternetAccessLevel,
-  createThreeDTool
+  createThreeDTool,
+  SandboxRunner,
+  PermissionMode,
+  ConfirmationHandler
 } from '@superagent/core';
-
-const execAsync = promisify(exec);
-
-function makeSafeExec(projectRoot: string) {
-  return async (command: string): Promise<string> => {
-    try {
-      const { stdout, stderr } = await execAsync(command, {
-        cwd: projectRoot,
-        timeout: 30000,
-        maxBuffer: 1024 * 1024 * 4 // 4MB
-      });
-      return stdout || stderr || '(no output)';
-    } catch (err: unknown) {
-      const e = err as { message?: string; stdout?: string; stderr?: string };
-      return `Error: ${e.message || String(err)}\n${e.stderr || ''}`.trim();
-    }
-  };
-}
 
 // ─── path scoping ──────────────────────────────────────────────────────────────
 // Resolves a tool-supplied path against the project root and refuses anything
@@ -209,9 +192,14 @@ function grepSearch(dir: string, pattern: string, fileGlob?: string): string {
   return matches.join('\n') || '(no matches found)';
 }
 
-export function createBuiltinTools(projectRoot: string = process.cwd(), allowedCommands?: string[]): ToolDefinition[] {
-  const safeExec = makeSafeExec(projectRoot);
-
+/**
+ * Builds the agent's built-in tool set. All command execution and file
+ * mutation routes through the supplied `SandboxRunner`, which enforces the
+ * safety contract (hard blocks, allowlist, path scoping, approval gating,
+ * secret redaction, atomic writes). `projectRoot` is the default directory for
+ * unscoped searches when no directory is supplied.
+ */
+export function createBuiltinTools(runner: SandboxRunner, projectRoot?: string): ToolDefinition[] {
   return [
     {
       name: 'read_file',
@@ -225,18 +213,14 @@ export function createBuiltinTools(projectRoot: string = process.cwd(), allowedC
         additionalProperties: false
       },
       execute: async ({ path: filePath }) => {
-        const resolved = resolveWithinRoot(projectRoot, filePath as string);
-        if (!resolved) return `Error: path is outside the project root: ${filePath}`;
-        try {
-          const content = fs.readFileSync(resolved, 'utf-8');
-          const lines = content.split('\n');
-          if (lines.length > 500) {
-            return lines.slice(0, 500).join('\n') + `\n\n... (truncated, ${lines.length - 500} more lines)`;
-          }
-          return content;
-        } catch (err: unknown) {
-          return `Error reading file: ${(err as Error).message}`;
+        const res = await runner.readFile(filePath as string);
+        if (!res) return `Error: path is outside the project root: ${filePath}`;
+        if (res.isBinary) return '[Binary File]';
+        const lines = res.content.split('\n');
+        if (lines.length > 500) {
+          return lines.slice(0, 500).join('\n') + `\n\n... (truncated, ${lines.length - 500} more lines)`;
         }
+        return res.content;
       }
     },
 
@@ -252,7 +236,7 @@ export function createBuiltinTools(projectRoot: string = process.cwd(), allowedC
         additionalProperties: false
       },
       execute: async ({ path: dirPath }) => {
-        const resolved = resolveWithinRoot(projectRoot, dirPath as string);
+        const resolved = runner.resolvePath(dirPath as string);
         if (!resolved) return `Error: path is outside the project root: ${dirPath}`;
         try {
           const entries = fs.readdirSync(resolved, { withFileTypes: true });
@@ -289,11 +273,11 @@ export function createBuiltinTools(projectRoot: string = process.cwd(), allowedC
         if (!pattern) return '(no matches found)';
         let dir: string;
         if (directory) {
-          const resolved = resolveWithinRoot(projectRoot, directory as string);
+          const resolved = runner.resolvePath(directory as string);
           if (!resolved) return `Error: path is outside the project root: ${directory}`;
           dir = resolved;
         } else {
-          dir = projectRoot;
+          dir = projectRoot ?? process.cwd();
         }
         return grepSearch(dir, pattern as string, fileGlob as string | undefined);
       }
@@ -311,10 +295,8 @@ export function createBuiltinTools(projectRoot: string = process.cwd(), allowedC
         additionalProperties: false
       },
       execute: async ({ command }) => {
-        if (!isCommandAllowed(command as string, allowedCommands)) {
-          return `Error: command is not in the project's allowed commands: ${command}. Add it to the project's allowed commands in settings to permit it.`;
-        }
-        return safeExec(command as string);
+        const res = await runner.runCommand(command as string);
+        return res.stdout || res.stderr || '(no output)';
       }
     },
 
@@ -331,16 +313,10 @@ export function createBuiltinTools(projectRoot: string = process.cwd(), allowedC
         additionalProperties: false
       },
       execute: async ({ path: filePath, content }) => {
-        const resolved = resolveWithinRoot(projectRoot, filePath as string);
-        if (!resolved) return `Error: path is outside the project root: ${filePath}`;
-        try {
-          fs.mkdirSync(path.dirname(resolved), { recursive: true });
-          fs.writeFileSync(resolved, content as string, 'utf-8');
-          const lines = (content as string).split('\n').length;
-          return `Successfully wrote ${lines} lines to ${filePath}`;
-        } catch (err: unknown) {
-          return `Error writing file: ${(err as Error).message}`;
-        }
+        const res = await runner.writeFile(filePath as string, content as string);
+        if (!res.written) return `Error writing file: ${res.error ?? 'write failed'}`;
+        const lines = (content as string).split('\n').length;
+        return `Successfully wrote ${lines} lines to ${filePath}`;
       }
     },
 
@@ -429,6 +405,18 @@ export interface AgentEngineConfig {
    *  Opt-in: an empty/undefined list permits all commands. Set via the desktop
    *  ConfigureProjectModal and persisted on the StoredProject. */
   allowedCommands?: string[];
+  /** Sandbox permission mode controlling approval gating. Defaults to
+   *  'auto-approve-edits' when omitted. Mapped from the UI's
+   *  unsandboxedActions / confirmShellCommands toggles. */
+  permissionMode?: PermissionMode;
+  /** Full system access: disables project-root path scoping for files.
+   *  Mirrors the UI "Unsandboxed Terminal Actions" toggle. Even when true,
+   *  hard-blocked destructive commands are never executed. */
+  unsandboxed?: boolean;
+  /** User-in-the-loop approval callback (injected by the desktop host so a
+   *  permission prompt can be surfaced in the renderer). When omitted, risky
+   *  commands are denied by default (safe). */
+  requestApproval?: ConfirmationHandler;
 }
 
 // ─── Agent Engine ─────────────────────────────────────────────────────────────
@@ -438,6 +426,8 @@ export class AgentEngine {
   private tools: ToolDefinition[];
   private history: ChatMessage[];
   private abortController: AbortController | null = null;
+  /** The single safe-execution layer all tool file/command ops route through. */
+  private sandbox: SandboxRunner;
   public readonly sessionId: string;
 
   constructor(config: AgentEngineConfig, sessionId?: string) {
@@ -450,7 +440,19 @@ export class AgentEngine {
     const effectiveRoot = config.projectRoot
       || (config.attachments?.[0] ? path.dirname(config.attachments[0]) : process.cwd());
 
-    this.tools = [...createBuiltinTools(effectiveRoot, config.allowedCommands), ...(config.extraTools ?? [])];
+    // ── Sandbox: single safe-execution layer ──────────────────────────
+    // Every command run and file mutation the agent performs routes through
+    // this runner, which enforces the safety contract (hard blocks, allowlist,
+    // path scoping, approval gating, secret redaction, atomic writes).
+    this.sandbox = new SandboxRunner({
+      projectRoot: effectiveRoot,
+      allowedCommands: config.allowedCommands,
+      permissionMode: config.permissionMode ?? 'auto-approve-edits',
+      unsandboxed: config.unsandboxed ?? false,
+      requestApproval: config.requestApproval
+    });
+
+    this.tools = [...createBuiltinTools(this.sandbox, effectiveRoot), ...(config.extraTools ?? [])];
     this.history = [];
 
     // ── Build system prompt ────────────────────────────────────────────────
@@ -535,6 +537,13 @@ Key guidelines:
   /** Stop the current generation */
   public abort(): void {
     this.abortController?.abort();
+  }
+
+  /** Expose the sandbox runner so the host can inject live approval
+   *  decisions (e.g. a "Always allow" choice adds the command to the
+   *  session allowlist). Returns null only if construction failed. */
+  public getSandbox(): SandboxRunner {
+    return this.sandbox;
   }
 
   /** Get tool definitions in OpenAI JSON Schema format */

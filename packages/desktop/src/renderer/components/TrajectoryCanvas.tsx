@@ -370,6 +370,10 @@ export interface TrajectoryCanvasProps {
   onViewDiff?: (file: string, original: string, modified: string) => void;
   onActionClick?: (action: string, data: any) => void;
   onUndoStep?: (stepId: string) => void;
+  /** Last error recorded on the active chat, surfaced in the failed-response card. */
+  lastError?: string;
+  /** Re-sends the last user prompt (when the response failed). */
+  onRetryLast?: () => void;
   children?: React.ReactNode;
   initialExpanded?: boolean;
 }
@@ -381,6 +385,8 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
   onViewDiff,
   onActionClick,
   onUndoStep,
+  lastError,
+  onRetryLast,
   children,
   initialExpanded = false
 }) => {
@@ -742,9 +748,25 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
 
       {/* If completed but no assistant reply was rendered, show the response failed card */}
       {assistantSteps.length === 0 && !isStreaming && (
-        <div className="text-[color:var(--neon-destructive)] bg-[color:var(--neon-destructive)]/10 border border-[color:var(--neon-destructive)]/25 px-4 py-2.5 rounded-xl text-xs font-semibold select-none max-w-fit flex items-center gap-2 mt-1 animate-fade-in font-sans">
-          <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-destructive)] animate-pulse" />
-          <span>Agent Response Failed</span>
+        <div className="text-[color:var(--neon-destructive)] bg-[color:var(--neon-destructive)]/10 border border-[color:var(--neon-destructive)]/25 px-4 py-3 rounded-xl text-xs select-none max-w-fit flex flex-col gap-2 mt-1 animate-fade-in font-sans">
+          <div className="flex items-center gap-2 font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-destructive)] animate-pulse" />
+            <span>Agent Response Failed</span>
+          </div>
+          {lastError ? (
+            <div className="text-[color:var(--neon-destructive)]/90 leading-relaxed">{lastError}</div>
+          ) : (
+            <div className="text-brand-textMuted">The agent didn't return a response. Check the provider connection and try again.</div>
+          )}
+          {onRetryLast && (
+            <button
+              onClick={onRetryLast}
+              className="self-start flex items-center gap-1.5 mt-1 px-3 py-1.5 rounded-lg border border-[color:var(--neon-destructive)]/40 text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/15 transition-colors cursor-pointer text-xs font-semibold"
+            >
+              <RotateCcw size={12} />
+              <span>Retry</span>
+            </button>
+          )}
         </div>
       )}
 
