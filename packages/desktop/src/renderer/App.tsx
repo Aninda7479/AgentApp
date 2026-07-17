@@ -355,6 +355,16 @@ export const App: React.FC = () => {
   );
   sendPromptRef.current = handleSendPrompt;
 
+  // Re-send the last user message of the active chat (Retry on a failed run).
+  const handleRetryLast = useCallback(async () => {
+    const chat = ctx.getChats().find((c) => c.id === ctx.getActiveChatId());
+    const lastUserStep = [...(chat?.steps ?? [])].reverse().find((s) => s.type === 'user');
+    if (!lastUserStep) return;
+    const prompt = lastUserStep.content;
+    const model = chat?.model || lastUsedModel;
+    await handleSendPrompt(prompt, { model: model || undefined, attachments: [] });
+  }, [ctx, handleSendPrompt, lastUsedModel]);
+
   // ── Settings toggles (mirror state + persist) ──────────────────────────────
   const handleWorkModeChange = (mode: 'coding' | 'everyday') => {
     setWorkMode(mode);

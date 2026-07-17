@@ -463,6 +463,8 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
             isStreaming={isStreaming && turns.length === 0}
             onViewDiff={onViewDiff}
             onActionClick={onActionClick}
+            lastError={lastError}
+            onRetryLast={onRetryLast}
             initialExpanded={initialExpanded}
           />
         )}
@@ -533,6 +535,8 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 isStreaming={isStreaming && turnIdx === turns.length - 1}
                 onViewDiff={onViewDiff}
                 onActionClick={onActionClick}
+                lastError={lastError}
+                onRetryLast={onRetryLast}
                 initialExpanded={initialExpanded}
               />
             )}
@@ -567,6 +571,10 @@ interface AgentResponseBlockProps {
   isStreaming: boolean;
   onViewDiff?: (file: string, original: string, modified: string) => void;
   onActionClick?: (action: string, data: any) => void;
+  /** Last error recorded on the active chat, surfaced in the failed-response card. */
+  lastError?: string;
+  /** Re-sends the last user prompt (when the response failed). */
+  onRetryLast?: () => void;
   initialExpanded?: boolean;
 }
 
@@ -577,6 +585,8 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
   isStreaming,
   onViewDiff,
   onActionClick,
+  lastError,
+  onRetryLast,
   initialExpanded = false
 }) => {
   // Categorize the steps:

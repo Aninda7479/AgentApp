@@ -346,7 +346,8 @@ export function createBuiltinTools(runner: SandboxRunner, projectRoot?: string):
             signal: AbortSignal.timeout(15000)
           });
           const text = await response.text();
-          const truncated = text.length > 8000 ? text.slice(0, 8000) + `\n\n... (truncated, ${text.length - 8000} more chars)` : text;
+          const body = String(text);
+          const truncated = body.length > 8000 ? body.slice(0, 8000) + `\n\n... (truncated, ${body.length - 8000} more chars)` : body;
           return `HTTP ${response.status} ${response.statusText}\n\n${truncated}`;
         } catch (err: unknown) {
           return `Error fetching ${url}: ${(err as Error).message}`;
@@ -357,7 +358,7 @@ export function createBuiltinTools(runner: SandboxRunner, projectRoot?: string):
     // 3D character / model generation (Tripo3D / Meshy comparable). Gated by
     // Settings → 3D Model Gen (off by default); returns a structured result
     // object that the renderer parses to show + animate the produced model.
-    createThreeDTool(projectRoot)
+    createThreeDTool(projectRoot ?? '')
   ];
 }
 
