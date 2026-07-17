@@ -4,7 +4,9 @@ import {
   BYOKConfig,
   AIProvider,
   BaseProviderAdapter,
-  ReasoningEffort
+  ReasoningEffort,
+  SpeedTier,
+  IntelligenceTier
 } from '../types/agent.js';
 import { BYOKProviderManager } from './byok.js';
 import { createProviderAdapter } from './models.js';
@@ -311,6 +313,30 @@ export class ModelRouter {
     return capable.length > 0 ? capable : pool;
   }
 
+  /**
+   * Coarse tier → 0–100 score maps used to fold the extended registry signals
+   * (speedTier / intelligenceTier) into `rankModels`. A model lacking a tier is
+   * scored at the neutral midpoint (see `rankModels`) so it is neither rewarded
+   * nor penalised relative to pre-tier routing.
+   */
+  private static readonly INTELLIGENCE_SCORE: Record<IntelligenceTier, number> = {
+    low: 30,
+    mid: 60,
+    high: 85,
+    frontier: 100
+  };
+  private static readonly SPEED_SCORE: Record<SpeedTier, number> = {
+    fast: 100,
+    balanced: 70,
+    slow: 40
+  };
+
+  /** Maps a USD-per-1k-tokens figure to a 0–100 cost score (free = 100, lower is better). */
+  private static costFromDollars(costPer1k: number): number {
+    if (costPer1k <= 0) return 100;
+    return 100 / (1 + costPer1k);
+  }
+
   /** Scores and sorts models for a task by capability, task-fit, and the user's
    *  optimization goal (quality / cost / balanced). Descending by finalScore. */
   private static rankModels(
@@ -331,10 +357,23 @@ export class ModelRouter {
       else if ((flags.isCoding || flags.isReasoning) && m.supportsTools) capabilityMultiplier = 1.1;
       const taskScoreAdj = taskScore * capabilityMultiplier;
 
+      // Extended registry signals beyond the governance scores. Absent values
+      // fall back to a neutral midpoint so models without tier metadata rank
+      // exactly as before this change (backward-compatible).
+      const intel = m.intelligenceTier ? ModelRouter.INTELLIGENCE_SCORE[m.intelligenceTier] : 60;
+      const speed = m.speedTier ? ModelRouter.SPEED_SCORE[m.speedTier] : 70;
+      const cost = m.costPer1kTokens != null ? ModelRouter.costFromDollars(m.costPer1kTokens) : scores.costEfficiency;
+
       let finalScore = 0;
-      if (optimization === 'quality') finalScore = taskScoreAdj;
-      else if (optimization === 'cost') finalScore = scores.costEfficiency * capabilityMultiplier;
-      else finalScore = (taskScoreAdj * 0.7) + (scores.costEfficiency * 0.3); // balanced
+      if (optimization === 'quality') {
+        // Task fit dominates; the intelligence tier breaks ties among equally-fit models.
+        finalScore = taskScoreAdj * 0.65 + intel * 0.35;
+      } else if (optimization === 'cost') {
+        finalScore = cost * capabilityMultiplier;
+      } else {
+        // Balanced: blend task fit, intelligence, latency (speed), and cost.
+        finalScore = taskScoreAdj * 0.5 + intel * 0.2 + speed * 0.15 + cost * 0.15;
+      } // balanced
 
       return { model: m, finalScore };
     });
@@ -387,4 +426,13 @@ export type RouterModel = {
   inputModalities?: ('text' | 'image' | 'video' | 'audio' | '3d')[];
   /** Live availability; see AccessStatus. Defaults to `available` when absent. */
   accessStatus?: 'available' | 'locked' | 'rate_limited' | 'deprecated';
+  // ── Extended registry signals used by rankModels scoring (all optional;
+  //    absent values fall back to a neutral midpoint so models without tier
+  //    metadata rank exactly as before — backward-compatible) ────────────────
+  /** Coarse latency tier. */
+  speedTier?: SpeedTier;
+  /** Coarse capability tier. */
+  intelligenceTier?: IntelligenceTier;
+  /** Approximate blended cost in USD per 1k tokens (input+output), if known. */
+  costPer1kTokens?: number;
 };

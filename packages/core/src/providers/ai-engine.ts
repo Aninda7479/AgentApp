@@ -56,6 +56,14 @@ export interface AgentEvent {
 export function buildRouterPool(models: ModelSettings[]): RouterModel[] {
   return models.map((m) => {
     const scores = ModelGovStorage.getModelScores(m.id);
+    // Best-effort enrichment with the extended registry signals (speed/intelligence
+    // tier, dollar cost). The catalog id may carry a `${providerId}-` prefix the
+    // registry doesn't, so try the stripped native id as a fallback. Missing
+    // metadata leaves the fields undefined and the router falls back to its
+    // neutral midpoint — never a hard error.
+    const cap =
+      capabilityRegistry.getCapability(m.id) ??
+      capabilityRegistry.getCapability(m.id.includes('-') ? m.id.slice(m.id.indexOf('-') + 1) : m.id);
     return {
       id: m.id,
       name: m.name,
@@ -64,7 +72,10 @@ export function buildRouterPool(models: ModelSettings[]): RouterModel[] {
       supportsVision: scores.vision >= 75,
       supportsTools: scores.coding >= 70 || scores.reasoning >= 75,
       inputModalities: m.inputModalities as RouterModel['inputModalities'],
-      accessStatus: 'available'
+      accessStatus: 'available',
+      speedTier: cap?.speedTier,
+      intelligenceTier: cap?.intelligenceTier,
+      costPer1kTokens: cap?.costPer1kTokens
     };
   });
 }
@@ -105,6 +116,7 @@ import { ComputerUse } from '../automation/computer-use.js';
 import { PlaywrightBrowserEngine } from '../automation/browser.js';
 import { BrowserLifecycleService } from '../automation/browser-service.js';
 import { resolveProviderFamily, resolveBaseUrl } from './provider-meta.js';
+import { capabilityRegistry } from './models.js';
 import { BestOfNStrategy, mergeBestOfN } from './best-of-n.js';
 import { ContentBlock, ImageAttachment, type CompletionRequest, type AIProvider } from '../types/agent.js';
 import { ModelRouter } from './router.js';
