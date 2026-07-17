@@ -1,6 +1,6 @@
 ---
 name: art-director
-description: Autonomous visual and copy redesign for SuperAgent — establishes and maintains a consistent original art direction (palette, motifs, iconography, motion, voice), then redesigns pages against it using hand-authored SVG/CSS assets and rewritten copy, self-critiquing via Playwright screenshots until each page holds up. Purely aesthetic — ux-critic owns bugs and functional UX, this owns look, feel, and voice.
+description: Autonomous visual and copy redesign for SuperAgent — establishes and maintains a consistent original art direction (palette, motifs, iconography, motion, voice), then redesigns pages against it using hand-authored SVG/CSS assets and rewritten copy, self-critiquing via Playwright screenshots until each page holds up. Purely aesthetic — ux-critic owns bugs and functional UX, this owns look, feel, and voice. Compacts on fixed, mandatory checkpoints — not on self-assessed context pressure — to prevent mid-run crashes.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash, WebSearch, WebFetch, TodoWrite, Playwright MCP tools
 argument-hint: [optional page/component, e.g. "landing-page", "onboarding-flow", "icon-set"]
 ---
@@ -13,7 +13,22 @@ argument-hint: [optional page/component, e.g. "landing-page", "onboarding-flow",
 - `/art-director` (this skill) owns whether the app looks and feels considered — palette, illustration, iconography, motion, layout rhythm, and whether the words sound like a real brand instead of placeholder text.
 - If you spot a functional bug while redesigning, log it under `[art-director]` as an open question for `/ux-critic`/`/auto-improve` rather than fixing it yourself. Stay in your lane, same as the other skills do.
 
-**Context budget (read this before any step):** this skill self-polices a hard **250K-token ceiling** — the leading cause of mid-run crashes. Read the **Context-window discipline** section below and honor its `/compact` triggers on *every* step, not just at the end. When in doubt whether something belongs in context, it belongs on disk.
+## Context rule (read this before any step — this is the fix for the crashing)
+
+**Compact at every checkpoint marked `→ COMPACT` below. Do it every time, unconditionally — do not decide whether it's needed.** Every prior version of this skill asked you to *judge* when context was getting heavy ("if you sense pressure," "if you've done >15 calls"). That judgment call is exactly what's been failing — you don't have reliable introspection into your own token usage, so a soft trigger silently doesn't fire and the run crashes mid-work before ever reaching a checkpoint. The fix is to stop judging and just execute the checkpoint every time, mechanically, like a step in the recipe rather than a decision.
+
+If you're ever unsure whether to compact: compact anyway. A compact you didn't strictly need costs a little redundant re-reading. A compact you skipped costs the entire run. That trade is never close.
+
+**What to do before every compact, always:** write the current page name, current step number, and critique-iteration count to TodoWrite (or a one-line scratch note if TodoWrite isn't available). That's the only state you need to resume correctly afterward — don't try to mentally preserve anything else across the compact.
+
+**Where the tokens actually come from, so you know what to avoid regardless of the checkpoints:**
+- Every `browser_snapshot`, `browser_take_screenshot`, and `browser_console_messages` call MUST pass an explicit `filename` under `.playwright/` so the server writes to disk and returns only a path. A result that arrives as raw text is a mistake — re-run it with `filename`.
+- Locate elements with `browser_find` (text/regex), not full `browser_snapshot` calls — orders of magnitude smaller.
+- **Source files are just as dangerous as MCP payloads and are easy to forget about.** Don't `Read` a whole component/CSS file to "see what's there" — `Grep` for the section you need first, then `Read` with `offset`/`limit`. A page can pull in a dozen component files; reading each one whole, more than once across a critique loop, is a realistic way to blow the budget without a single Playwright call involved.
+- Don't re-read a file you already read this page-cycle. If you need to check something in it again, that's a sign to trust the TodoWrite note you left instead.
+- Pipe build/lint/test output to a file; read only the failing region (or a one-line "passed") — never a full log.
+- `.claude/art-direction.md`: read in full once at orient, then only the section you're touching after that.
+- `.claude/auto-improve-log.log`: always `tail -n 150`, never whole.
 
 ## Your art direction (maintained in `.claude/art-direction.md`, not appended)
 
@@ -34,30 +49,14 @@ This is a mood to synthesize into something original, not a specific image to co
 - **Richer raster imagery: only via SuperAgent's own image-gen adapter, once connected, and only a free/local model** — same rule `/orchestrator-dev` and `/auto-improve` follow, never a paid provider on your own initiative. Until a free/local image model is connected, stay in hand-authored SVG territory — it's also the stronger fit for this style anyway.
 - **Icon sets** — if the project already has one (Lucide, Phosphor, Heroicons, etc.), restyle/extend it to match rather than introducing a second icon system.
 
-## Context-window discipline — HARD BUDGET: keep working context ≤ 250K tokens
-
-This skill drives a live browser via the Playwright MCP server `/ux-critic` already set up. MCP returns full accessibility snapshots, console dumps, and page trees as text. One raw `browser_snapshot` on a heavy page is 50K–200K tokens; string several together and you overshoot the ~250K ceiling and crash the API call mid-work. The harness summarizes near the limit, but a single runaway result can overshoot it before summarization kicks in — so this skill self-polices:
-
-- **HARD BUDGET.** Treat 250K as a hard ceiling and stay well under it. Before every tool call that could return a large payload, ask: "does this need to be in context, or can it live on disk?" When in doubt, put it on disk.
-- **Never let a Playwright payload land raw.** Every `browser_snapshot`, `browser_take_screenshot`, and `browser_console_messages` call MUST pass an explicit `filename` under `.playwright/` so the server writes it to disk and returns only a tiny path string. A snapshot that arrives as text (no `filename`) is a failure — re-run it with a `filename`.
-- **Locate with `browser_find` (text/regex), not full snapshots.** `browser_find` returns only matching nodes plus a few lines of context — orders of magnitude smaller than a full `browser_snapshot`. Find the element, then act on the returned `target`. Only fetch a full snapshot when you genuinely need the whole tree, and always with a `filename`.
-- **Read everything else in slices.** When you must inspect a saved snapshot, a source file, or the log, use the Read tool with `offset`/`limit` to pull only the region you need. Never Read a whole snapshot or a whole large component into context.
-- **Keep the design system and findings on disk, not in your head.** `.claude/art-direction.md` is the source of truth — read it in full once at orient, then only the section you touch. `.claude/auto-improve-log.log` is read with `tail -n 150`, never whole. Append each change the moment you make it so you don't carry a mental list forward.
-- **Use TodoWrite for the page queue.** Track "pages done / pages remaining" in the todo list (on disk), not as a growing block of context.
-- **Compact on a hard cadence — every time, not just at the end:**
-  - After finishing each page/component (Step 8) — `/compact` before rotating to the next.
-  - **If you have done > ~15 heavy tool calls since the last `/compact`, `/compact` immediately.** Heavy = any MCP call, any Read of a large file, any build/lint/test run.
-  - **If any single tool result looks large** (a raw artifact slipped in, a 1000+ line read, a full test log), `/compact` immediately rather than continuing.
-  - **If you sense creeping context pressure mid-page, stop and `/compact` immediately — don't wait for a hard count to trip.** Signs: re-reading files you just opened, results feeling heavy, or simply approaching the 250K ceiling. This is the *active* guard that prevents a mid-work stop. Always stop at a clean step boundary (never mid-edit or mid-commit), run `/compact`, then resume from Step 3/4. A compact keeps the run alive; an overshoot stops it.
-  - At the end of the run, `/compact` once more.
-- **Never carry a page's screenshots/snapshots forward into the next page.** The log entry and the on-disk files are the durable output; the in-context artifacts are discardable once those are written.
-
 ## Step 0 — Orient
 
 - Read `.claude/art-direction.md` in full (create it from the seed above if missing).
-- `tail -n 150 .claude/auto-improve-log.log` for the current queue, including anything `/ux-critic` flagged as aesthetic rather than functional — those are yours to pick up.
+- `tail -n 150 .claude/auto-improve-log.log` for the current queue, including anything `/ux-critic` flagged as aesthetic rather than functional.
 - Acquire `.claude/.auto-improve.lock` before editing code; if held, log the skip and stop.
-- Confirm the dev server and Playwright MCP are available; if not, stop and say so rather than guessing at a result.
+- Confirm the dev server responds and Playwright MCP tools are listed — a cheap check (e.g. `curl` the dev URL, list available MCP tools). **Do not take a screenshot or snapshot just to "confirm" availability** — that's a heavy call spent on nothing.
+
+**→ COMPACT** (write page-queue state to TodoWrite first)
 
 ## Step 1 — Pick a page or component
 
@@ -65,31 +64,36 @@ Use `$ARGUMENTS` if given, otherwise take the next untouched page/component, or 
 
 ## Step 2 — Look, then decide
 
-- Screenshot the current state (to disk, per the discipline above) before changing anything — this is your before/after evidence.
+- Screenshot the current state (`filename` under `.playwright/`, per the rule above) before changing anything — this is your before/after evidence.
 - Periodically (not every cycle) research current design trends the way `/auto-improve` does for its GUI work, and consider whether `.claude/art-direction.md` should evolve. Any change to it gets a deliberate edit with a logged one-line rationale.
+
+**→ COMPACT**
 
 ## Step 3 — Redesign
 
-- Rework layout, palette application, illustration/icon placement, and motion against `.claude/art-direction.md`.
+- Rework layout, palette application, illustration/icon placement, and motion against `.claude/art-direction.md`. Use `Grep` + targeted `Read` on component/CSS files, per the context rule — not whole-file reads for orientation.
 - Rewrite this page's copy — headlines, button labels, empty/error state wording, onboarding text — for voice and tone, not for functional clarity. If copy is actually confusing rather than just flat, note it for `/ux-critic` instead of only prettifying it.
 - Keep changes scoped to this page/component per cycle — don't let "redesign" become "rewrite the whole app in one sitting."
 
-## Step 4 — Self-critique until it holds up
+**→ COMPACT**
 
-Screenshot the result (desktop and mobile viewport) and check it against a concrete list, not a vibe:
+## Step 4 — Self-critique, capped at 2 passes
+
+Screenshot the result (`filename`, desktop and mobile viewport) and check it against a concrete list, not a vibe:
 - Does it read as the same app as every other redesigned page (palette, motif, type rhythm all consistent)?
 - Is there one clear focal point, or is it busy?
 - Does motion feel calm and intentional, or gratuitous?
 - Does the copy sound like it belongs to a considered brand, or like placeholder text?
 
-If it doesn't hold up, go back to Step 3. Don't move on while telling yourself it's "good enough" without being able to say specifically why it passes.
+**Hard cap: at most one refinement pass (two total attempts).** If it doesn't hold up after attempt one, go back to Step 3 once, fix specifically what failed the checklist, and re-check. If it still doesn't fully hold up after attempt two, **stop anyway** — commit what you have, and log the specific remaining gap under "Next priority queue" for the following cycle. An open-ended "iterate until satisfied" loop is what caused the crashes; a page that's 90% there and logged honestly beats a run that dies chasing the last 10%.
 
-## Step 5 — Verify nothing broke (keep output on disk)
+**→ COMPACT after every pass, including between attempt one and attempt two — not just once the loop ends.**
 
-Run build/lint/tests. A redesign that breaks the build or introduces a layout bug is a regression regardless of how it looks — fix or revert before continuing.
-- Capture **only failures** into context. Pipe output to a file (e.g. `.playwright/build-<page>.log`) and Read only the failing region with `offset`/`limit`, or read its tail. Never paste a full build/lint/test log into context.
-- If the run is green, a one-line "passed" note is enough — no full output needed.
-- This is a heavy call — it counts toward the 15-call `/compact` trigger in Context-window discipline.
+## Step 5 — Verify nothing broke
+
+Run build/lint/tests, output piped to a file. Read only the failing region, or a one-line "passed." A redesign that breaks the build or introduces a layout bug is a regression regardless of how it looks — fix or revert before continuing.
+
+**→ COMPACT**
 
 ## Step 6 — Commit
 
@@ -97,15 +101,15 @@ Same gate as the other skills: only commit if Step 5 passed. Check the diff for 
 
 ## Step 7 — Log
 
-Append to `.claude/auto-improve-log.log`, tagged `[art-director]`, same shared format (Researched/Changed/Why/Verified/Next priority queue/Open questions). Note any functional issues spotted for `/ux-critic` under Open questions rather than fixing them yourself.
+Append to `.claude/auto-improve-log.log`, tagged `[art-director]`, same shared format (Researched/Changed/Why/Verified/Next priority queue/Open questions). Note any functional issues spotted for `/ux-critic` under Open questions rather than fixing them yourself. Note explicitly if Step 4 hit its cap and the page is only partially finished.
 
-## Step 8 — Compact, then repeat
+**→ COMPACT** (Steps 6 and 7 together, before moving on)
 
-**Run `/compact` now** — before rotating to the next page/component and again at the end of the run. This is mandatory, not optional: the single biggest cause of context-window crashes in this skill is a long session that never compacts between pages. The log entry and the on-disk screenshots are the durable output; everything in working context from this page is discardable once they're written. Never carry a full page's worth of snapshots forward.
+## Step 8 — Repeat or stop
 
-If you feel context pressure *mid-page* — not just between pages — stop at a clean step boundary (never mid-edit or mid-commit), run `/compact`, then resume from Step 3/4. A compact keeps the run alive; an overshoot stops it. If session budget allows, repeat from Step 1 for the next untouched page/component.
+If session budget allows, repeat from Step 1 for the next untouched page/component. **A page split across two `/loop` ticks is fine — a crashed session is not.** If a page turns out to be unusually large (many components) and you're not confident finishing it cleanly, it's fine to log it as partially done and stop there rather than push through.
 
-**When the run ends** — final page done, or stopping because you're out of budget — run `/compact` one final time to compress whatever remains before handing control back. `.claude/art-direction.md` and the `[art-director]` log entry are the durable memory; the screenshots/snapshots on disk are the durable evidence. Everything else in working context is discardable once those are settled.
+**When the run ends for any reason** — queue exhausted, or stopping for budget — run one final compact before handing control back, even though you've already been compacting throughout. This is the last-resort backstop, not the primary mechanism; the per-step checkpoints above are what should actually be preventing the crash.
 
 ## Guardrails
 
@@ -114,3 +118,4 @@ If you feel context pressure *mid-page* — not just between pages — stop at a
 - Never fix functional bugs here — log them for `/ux-critic`/`/auto-improve` instead.
 - Never call a paid image-gen provider on your own initiative.
 - Respect the shared lock, same as `/orchestrator-dev` and `/auto-improve`.
+- Never let "keep redesigning until it's good" override the Step 4 cap or the compact checkpoints. Consistency of execution matters more than any single page being perfect.
