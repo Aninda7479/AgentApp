@@ -53,6 +53,11 @@ const POPULAR_PROVIDERS = [
   { id: 'deepinfra', name: 'DeepInfra', org: 'deepinfra', desc: 'Low cost serverless inference hosting provider', defaultUrl: 'https://api.deepinfra.com/v1' }
 ];
 
+// Providers that can function without an API key (local / self-hosted). Every
+// other popular/known provider needs a credential, so "Add Without Testing"
+// must not create a provider that can never actually send a request.
+const KEYLESS_PROVIDER_IDS = new Set(['ollama', 'custom']);
+
 /**
  * Browser-safe fetch for provider connectivity tests. Shared with the other
  * settings screens via ../web-fetch so the web/VPS build routes every provider
@@ -293,6 +298,14 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       return;
     }
 
+    // Don't create a provider that can never send a request: key-required
+    // providers must have a credential before being added without a test.
+    if (!KEYLESS_PROVIDER_IDS.has(modalProviderId) && !apiKey.trim()) {
+      setErrorDetails('This provider needs an API key before it can be added. Enter your key, or use "Test & Connect" to verify the connection first.');
+      notify('Enter an API key before adding this provider without a test — a provider added with no key can’t send any requests.');
+      return;
+    }
+
     const newConfigs: ModelConfig[] = defaults.map(m =>
       enrichModel({ id: m.id, name: m.name, contextLimit: m.ctx, free: m.free }, modalProviderId)
     );
@@ -453,11 +466,17 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
               </div>
             )}
 
+            {!KEYLESS_PROVIDER_IDS.has(modalProviderId) && !apiKey.trim() && (
+              <p className="mt-3 text-[11px] leading-snug text-brand-textMuted">
+                Enter an API key above to add {connectionName || modalProviderId} without testing — a provider with no key can’t send requests.
+              </p>
+            )}
             <div className="mt-5 flex items-center justify-between gap-3">
               <button
                 onClick={handleForceConnect}
+                disabled={!KEYLESS_PROVIDER_IDS.has(modalProviderId) && !apiKey.trim()}
                 title="Add this provider's known models without testing the connection"
-                className="ui-btn-ghost text-xs underline-offset-2 hover:underline"
+                className="ui-btn-ghost text-xs underline-offset-2 hover:underline disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
               >
                 Add Without Testing
               </button>
