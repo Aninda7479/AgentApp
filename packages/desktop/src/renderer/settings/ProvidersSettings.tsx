@@ -326,8 +326,27 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
     (p) => !connectedProviders.some((cp) => cp.id === p.id)
   );
 
-  const typeLabel = (type: string) =>
-    type === 'env' ? 'Environment' : type === 'key' ? 'API Key' : 'Custom';
+  // Resolve a friendly display name for a connected provider: when the user
+  // leaves the connection-name blank it defaults to the raw id (e.g. "claude"),
+  // so show the catalog's human label ("Claude") instead. A user-set custom
+  // name is always preserved.
+  const displayName = (p: { id: string; name: string }) =>
+    p.name && p.name !== p.id
+      ? p.name
+      : POPULAR_PROVIDERS.find((x) => x.id === p.id)?.name ?? p.name;
+
+  // Convey credential status, not just provider category. Previously a cloud
+  // provider connected without a key read as "Custom", so users couldn't tell
+  // which providers actually held credentials. API Key / Env var = has
+  // credentials; Local = self-hosted (no key needed); No key = missing creds.
+  const credStatus = (
+    p: { id: string; type: string }
+  ): { label: string; tone: 'constructive' | 'muted' | 'attention' } => {
+    if (p.type === 'key') return { label: 'API Key', tone: 'constructive' };
+    if (p.type === 'env') return { label: 'Env var', tone: 'constructive' };
+    if (KEYLESS_PROVIDER_IDS.has(p.id)) return { label: 'Local', tone: 'muted' };
+    return { label: 'No key', tone: 'attention' };
+  };
 
   return (
     <div className="mx-auto w-full max-w-3xl text-left">
@@ -361,8 +380,8 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
               <div key={p.id} className="ui-card flex items-center justify-between gap-3 p-3.5 sm:p-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <ProviderLogo providerId={p.id} />
-                  <span className="truncate text-sm font-semibold text-brand-textMain">{p.name}</span>
-                  <span className="ui-badge bg-brand-popover text-brand-textMuted">{typeLabel(p.type)}</span>
+                  <span className="truncate text-sm font-semibold text-brand-textMain">{displayName(p)}</span>
+                  <span className={`ui-badge ${credStatus(p).tone}`}>{credStatus(p).label}</span>
                 </div>
                 <button
                   onClick={() => onDisconnectProvider(p.id)}
