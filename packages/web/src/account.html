@@ -3,17 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#08090d" />
+  <meta name="theme-color" content="#0a0f1f" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='s' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%239ec7bd'/><stop offset='.48' stop-color='%23dce6cf'/><stop offset='1' stop-color='%23f3cda4'/></linearGradient></defs><rect width='32' height='32' rx='8' fill='url(%23s)'/><circle cx='16' cy='12.5' r='4.4' fill='%23fff2d8'/><path d='M0 21 C8 17 13 20 18 18 C23 16 27 19 32 18 L32 32 L0 32 Z' fill='%2393b6ab'/><path d='M0 24 C7 21 12 24 17 22 C22 20 27 23 32 22 L32 32 L0 32 Z' fill='%235f8a7e'/><path d='M0 27 C6 25 11 27 16 26 C21 25 26 27 32 26 L32 32 L0 32 Z' fill='%232f5147'/></svg>" />
   <title>Account · SuperAgent</title>
   <style>
     :root {
-      --bg: #08090d;
-      --panel: rgba(255, 255, 255, 0.04);
-      --border: rgba(255, 255, 255, 0.1);
-      --text: #e5e7eb;
-      --muted: #9ca3af;
-      --accent: #d9a066;          /* Warm "dawn" sand — matches the login page */
+      --bg: #0a0f1f;
+      --panel: rgba(12, 17, 28, 0.55);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #eef1f6;
+      --muted: #9aa6b8;
+      /* Warm "dawn" accent — calm sand, echoes the moon glow */
+      --accent: #d9a066;
       --accent-hover: #e7b27d;
       --accent-text: #1a1410;
       --danger: #f87171;
@@ -73,7 +74,7 @@
       position: relative; z-index: 1;
       width: 100%; max-width: 420px;
       background: var(--panel); border: 1px solid var(--border); border-radius: 20px;
-      padding: 34px 32px; backdrop-filter: blur(18px) saturate(120%);
+      padding: 38px 32px; backdrop-filter: blur(18px) saturate(120%);
       -webkit-backdrop-filter: blur(18px) saturate(120%);
       box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
       animation: rise 0.5s ease both;
@@ -81,36 +82,37 @@
     @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
     .logo {
       width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
-      background: transparent; margin-bottom: 18px;
+      background: transparent; margin-bottom: 20px;
       box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
     }
     .sub { color: var(--muted); font-size: 13.5px; margin: 2px 0 0; line-height: 1.5; }
     .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
-    h1 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.02em; }
+    h1 { font-size: 23px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.02em; }
     .who { color: var(--muted); font-size: 12px; margin-top: 3px; }
     label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
     .field { margin-bottom: 16px; }
     input {
-      width: 100%; padding: 11px 13px; background: rgba(0, 0, 0, 0.25);
-      border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 14px;
+      width: 100%; padding: 12px 14px; background: rgba(0, 0, 0, 0.28);
+      border: 1px solid var(--border); border-radius: 11px; color: var(--text); font-size: 14px;
       outline: none; transition: border-color 0.15s, box-shadow 0.15s;
     }
-    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(161, 98, 7, 0.18); }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(217, 160, 102, 0.20); }
     button {
-      width: 100%; padding: 12px; margin-top: 6px; border: 1px solid rgba(0, 0, 0, 0.15); border-radius: 10px;
-      font-size: 14px; font-weight: 600; cursor: pointer; transition: transform 0.1s, background-color 0.15s;
-      background: var(--accent); color: var(--accent-text);
+      width: 100%; padding: 12px; margin-top: 8px;
+      background: linear-gradient(145deg, var(--accent) 0%, #c98e54 100%); color: var(--accent-text);
+      border: 1px solid rgba(0, 0, 0, 0.15); border-radius: 11px; font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: transform 0.1s, filter 0.15s;
     }
-    button:hover { background: var(--accent-hover); }
-    button:active { transform: scale(0.98); }
+    button:hover { filter: brightness(1.05); }
+    button:active { transform: scale(0.985); }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
     .linkbtn {
       background: none; color: var(--muted); font-size: 12px; width: auto; padding: 6px 10px;
       border: 1px solid var(--border); border-radius: 8px; margin: 0;
     }
     .linkbtn:hover { color: var(--text); filter: none; }
-    .msg { display: none; margin-bottom: 16px; padding: 10px 12px; border-radius: 10px; font-size: 13px; }
-    .msg.show { display: block; }
+    .msg { display: none; margin-bottom: 16px; padding: 10px 12px; border-radius: 11px; font-size: 13px; }
+    .msg.show { display: block; animation: rise 0.2s ease both; }
     .msg.error { background: rgba(248, 113, 113, 0.12); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--danger); }
     .msg.ok { background: rgba(52, 211, 153, 0.12); border: 1px solid rgba(52, 211, 153, 0.3); color: var(--ok); }
     .row { display: flex; gap: 10px; margin-top: 8px; }
