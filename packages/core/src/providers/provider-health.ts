@@ -61,6 +61,20 @@ interface ProviderHealthState {
   consecutiveFailures: number;
 }
 
+/**
+ * Richer per-provider health view for diagnostics/UI. `snapshot()` (below)
+ * returns just the `AccessStatus` string for callers that only need a gate
+ * signal; this carries the *why* so a GUI can tell the user "throttled for
+ * 42s" vs "banned (auth failed — re-enter key)" instead of a flat label.
+ */
+export interface HealthDiagnosis {
+  status: AccessStatus;
+  /** Ms remaining on a rate_limit cooldown; 0 when not cooling down. */
+  cooldownRemainingMs: number;
+  /** How many failures in a row the provider has racked up. */
+  consecutiveFailures: number;
+}
+
 export class ProviderHealthTracker {
   private states: Map<string, ProviderHealthState> = new Map();
   private now: () => number;
@@ -127,6 +141,25 @@ export class ProviderHealthTracker {
     const out: Record<string, AccessStatus> = {};
     for (const [provider, s] of this.states) {
       out[provider] = this.getStatus(provider);
+    }
+    return out;
+  }
+
+  /**
+   * Richer, UI-ready view of every tracked provider (or a single one). Returns
+   * the status plus the *why* — how long a throttle has left, and how many
+   * failures have stacked up — so a GUI can surface "banned" / "throttled for
+   * 42s" with actionable detail instead of a flat label.
+   */
+  public getDiagnostics(provider?: string): Record<string, HealthDiagnosis> {
+    const out: Record<string, HealthDiagnosis> = {};
+    const entries = provider
+      ? (() => { const s = this.states.get(provider); return s ? [[provider, s]] as const : []; })()
+      : [...this.states.entries()];
+    for (const [p, s] of entries) {
+      const status = this.getStatus(p);
+      const cooldownRemainingMs = s.cooldownUntil > 0 ? Math.max(0, s.cooldownUntil - this.now()) : 0;
+      out[p] = { status, cooldownRemainingMs, consecutiveFailures: s.consecutiveFailures };
     }
     return out;
   }

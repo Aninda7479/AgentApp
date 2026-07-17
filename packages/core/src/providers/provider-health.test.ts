@@ -92,3 +92,64 @@ describe('applyHealthToModels', () => {
     expect(out[0].accessStatus).toBe('deprecated');
   });
 });
+
+describe('getDiagnostics', () => {
+  let now = 1000;
+  let tracker: ProviderHealthTracker;
+  beforeEach(() => { now = 1000; tracker = new ProviderHealthTracker(() => now); });
+
+  it('reports a rate_limit cooldown countdown that ticks down to zero', () => {
+    tracker.recordFailure('openai', new Error('OpenAI API error [429]: slow'));
+    const d = tracker.getDiagnostics('openai').openai;
+    expect(d.status).toBe('rate_limited');
+    expect(d.consecutiveFailures).toBe(1);
+    expect(d.cooldownRemainingMs).toBe(60_000);
+    now += 20_000;
+    expect(tracker.getDiagnostics('openai').openai.cooldownRemainingMs).toBe(40_000);
+    now += 40_000;
+    const cleared = tracker.getDiagnostics('openai').openai;
+    expect(cleared.status).toBe('available');
+    expect(cleared.cooldownRemainingMs).toBe(0);
+    expect(cleared.consecutiveFailures).toBe(0);
+  });
+
+  it('keeps locked sticky with its failure count even after the cooldown window', () => {
+    tracker.recordFailure('openai', new Error('OpenAI API error [401]: bad key'));
+    now += 120_000; // far past any cooldown window
+    const d = tracker.getDiagnostics('openai').openai;
+    expect(d.status).toBe('locked'); // never auto-recovers
+    expect(d.consecutiveFailures).toBe(1);
+    expect(d.cooldownRemainingMs).toBe(0);
+  });
+
+  it('accumulates consecutive failures across repeated failures', () => {
+    tracker.recordFailure('openai', new Error('OpenAI API error [500]: boom'));
+    tracker.recordFailure('openai', new Error('OpenAI API error [500]: boom'));
+    tracker.recordFailure('openai', new Error('OpenAI API error [500]: boom'));
+    const d = tracker.getDiagnostics('openai').openai;
+    expect(d.status).toBe('rate_limited');
+    expect(d.consecutiveFailures).toBe(3);
+  });
+
+  it('resets the failure counter on success', () => {
+    tracker.recordFailure('openai', new Error('OpenAI API error [429]: slow'));
+    tracker.recordSuccess('openai');
+    const d = tracker.getDiagnostics('openai').openai;
+    expect(d.status).toBe('available');
+    expect(d.consecutiveFailures).toBe(0);
+    expect(d.cooldownRemainingMs).toBe(0);
+  });
+
+  it('returns a diagnosis map for every tracked provider when called without an argument', () => {
+    tracker.recordFailure('openai', new Error('OpenAI API error [429]: slow'));
+    tracker.recordFailure('anthropic', new Error('Anthropic API error [401]: bad key'));
+    const all = tracker.getDiagnostics();
+    expect(Object.keys(all).sort()).toEqual(['anthropic', 'openai']);
+    expect(all.anthropic.status).toBe('locked');
+    expect(all.openai.status).toBe('rate_limited');
+  });
+
+  it('returns an empty map for an untracked provider', () => {
+    expect(tracker.getDiagnostics('ghost')).toEqual({});
+  });
+});
