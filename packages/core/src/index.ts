@@ -11,6 +11,7 @@ export * from './providers/custom.js';
 export * from './providers/models.js';
 export * from './providers/provider-meta.js';
 export * from './providers/router.js';
+export * from './providers/provider-health.js';
 export * from './providers/task-classifier.js';
 export * from './providers/best-of-n.js';
 export * from './providers/autodetect.js';

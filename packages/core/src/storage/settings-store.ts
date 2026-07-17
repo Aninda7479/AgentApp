@@ -78,6 +78,9 @@ export interface ModelGovSettings {
   autoUpdateInstructions?: boolean;
   optimizationGoal?: 'quality' | 'cost' | 'balanced';
   routingStrategy?: 'orchestrator' | 'router';
+  /** Default reasoning effort applied to Orchestrator-routed turns. 'off' means
+   *  leave the per-turn/cascade logic untouched (caller preference still wins). */
+  reasoningEffort?: 'off' | 'low' | 'medium' | 'high';
   categoryOverrides?: Record<string, string>;
 }
 

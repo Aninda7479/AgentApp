@@ -62,7 +62,8 @@ import {
   createThreeDTool,
   SandboxRunner,
   PermissionMode,
-  ConfirmationHandler
+  ConfirmationHandler,
+  ReasoningEffort
 } from '@superagent/core';
 
 // ─── path scoping ──────────────────────────────────────────────────────────────
@@ -418,6 +419,10 @@ export interface AgentEngineConfig {
    *  permission prompt can be surfaced in the renderer). When omitted, risky
    *  commands are denied by default (safe). */
   requestApproval?: ConfirmationHandler;
+  /** Default reasoning effort for this run; forwarded to the orchestrator's
+   *  router/adapter "thinking" controls. Caller preference wins over the
+   *  saved Orchestrator default. */
+  reasoningEffort?: ReasoningEffort;
 }
 
 // ─── Agent Engine ─────────────────────────────────────────────────────────────

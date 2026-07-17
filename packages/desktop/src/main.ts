@@ -2,7 +2,7 @@ import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, type IpcMai
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS } from '@superagent/core';
+import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth } from '@superagent/core';
 
 // Set a custom userData path so all app data lives in <home>/.superagent.
 app.setPath('userData', getUserDataDirectory());
@@ -158,6 +158,13 @@ safeHandle('agent-run', async (event, {
       let finalConfig = { ...config };
       if (config.model === 'auto' || config.model === 'Model Governance') {
         const settings = SettingsStorage.loadSettings();
+        // Apply the Orchestrator's default reasoning effort only when the
+        // composer/turn didn't set one (caller preference wins). 'off' means
+        // leave the per-turn/cascade logic untouched.
+        const govEffort = settings.modelGov?.reasoningEffort;
+        if (!finalConfig.reasoningEffort && govEffort && govEffort !== 'off') {
+          finalConfig.reasoningEffort = govEffort;
+        }
         // Build a proper RouterModel[] pool (providerId + capability/access
         // signals) from the user's configured models. routeModelForTask reads
         // RouterModel fields that raw settings.models don't always carry, so
@@ -437,12 +444,11 @@ safeHandle('model-gov-update-instructions', async () => {
 safeHandle('model-gov-optimize-instructions-by-ai', async () => {
   const settings = SettingsStorage.loadSettings();
   const govEnabledIds = settings.modelGov?.enabledModels || [];
-  
-  const activeModels = (settings.models || []).filter(m => 
-    govEnabledIds.includes(m.id) || 
+
+  const activeModels = (settings.models || []).filter(m =>
+    govEnabledIds.includes(m.id) ||
     govEnabledIds.includes(`${m.providerId}-${m.id}`)
   );
-
   const currentInstructions = ModelGovStorage.loadInstructions();
 
   const providers = settings.providers || [];
@@ -501,6 +507,13 @@ Please optimize these system instructions to:
 
   ModelGovStorage.saveInstructions(optimizedContent);
   return optimizedContent;
+});
+
+// Surfaces the orchestrator's live provider-health view (the "can't be banned
+// out from under you" resilience signal) so the Settings UI can show which
+// providers are available / locked / throttled and why — rather than a flat label.
+safeHandle('provider-health-diagnostics', () => {
+  return providerHealth.getDiagnostics();
 });
 
 safeHandle('browser-navigate', async (_event, { url }) => {
