@@ -7,6 +7,7 @@ import {
   Search,
   Bot,
   FolderArchive,
+  Info,
   LucideIcon,
   PawPrint,
   Plug,
@@ -61,7 +62,8 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
     { id: 'archived-projects', label: 'Archived Projects', Icon: FolderArchive }
   ],
   About: [
-    { id: 'updates', label: 'Updates', Icon: RefreshCw }
+    { id: 'updates', label: 'Updates', Icon: RefreshCw },
+    { id: 'about', label: 'About', Icon: Info }
   ]
 };
 

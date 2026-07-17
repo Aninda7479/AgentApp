@@ -14,6 +14,7 @@ import { BrowserUseSettings } from './BrowserUseSettings';
 import { ComputerUseSettings } from './ComputerUseSettings';
 import { ThreeDSettings } from './ThreeDSettings';
 import { UpdatesSettings } from './UpdatesSettings';
+import { AboutSettings } from './AboutSettings';
 import { browserSafeFetch } from '../web-fetch.js';
 
 /** Top-level settings page that renders a sidebar and the active settings category panel. */
@@ -525,6 +526,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onCheckForUpdates={onCheckForUpdates ?? (() => {})}
             checking={updateStatus?.status === 'checking'}
           />
+        )}
+        {activeCategory === 'about' && (
+          <AboutSettings appVersion={appVersion} />
         )}
       </div>
     </div>

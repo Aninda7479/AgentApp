@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { RefreshCw, CheckCircle2, AlertTriangle, Info, ExternalLink } from 'lucide-react';
+import { BrandLogo } from '../BrandLogo';
 
 /** Status returned by the main-process update check. */
 export interface UpdateStatus {
@@ -60,11 +61,31 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
 
   return (
     <div className="max-w-[680px] text-left">
-      <h1 className="mb-2 text-2xl font-semibold text-brand-textMain">Updates</h1>
-      <p className="mb-7 text-sm leading-6 text-brand-textMuted">
-        SuperAgent can update itself from GitHub Releases. In packaged builds, updates download automatically and
-        install on quit.
-      </p>
+      {/* Atmosphere hero — the brand mark over calm, layered depth bands. One focal point. */}
+      <div className="relative mb-7 overflow-hidden rounded-2xl border border-brand-border bg-brand-card">
+        <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+          <div
+            className="absolute inset-0"
+            style={{ background: 'radial-gradient(120% 90% at 82% -10%, var(--brand-atmo-glow), transparent 55%)' }}
+          />
+          <svg className="absolute inset-x-0 bottom-0 h-24 w-full" viewBox="0 0 680 96" preserveAspectRatio="none" fill="none">
+            <path d="M0 54 C140 36 280 70 420 50 C560 30 620 64 680 46 L680 96 L0 96 Z" fill="var(--brand-atmo-1)" />
+            <path d="M0 72 C160 56 300 86 460 68 C580 54 640 82 680 68 L680 96 L0 96 Z" fill="var(--brand-atmo-2)" />
+          </svg>
+        </div>
+        <div className="relative flex items-center gap-4 px-6 py-6">
+          <div className="animate-float shrink-0">
+            <BrandLogo size={48} />
+          </div>
+          <div>
+            <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain">Updates</h1>
+            <p className="mt-1 text-sm leading-6 text-brand-textMuted">
+              SuperAgent updates itself from GitHub Releases. In packaged builds, new versions download
+              automatically and install when you quit.
+            </p>
+          </div>
+        </div>
+      </div>
 
       <section className="mb-8">
         <h3 className="mb-3 text-base font-semibold text-brand-textMain">Current Version</h3>

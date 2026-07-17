@@ -309,6 +309,16 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           {themeMode === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
         </button>
 
+        {/* About — opens the About settings page (same destination as Help ▸ About). */}
+        <button
+          onClick={onAbout}
+          className="atmo-btn w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
+          title="About SuperAgent"
+          aria-label="About SuperAgent"
+        >
+          <HelpCircle className="w-4 h-4" />
+        </button>
+
         {/* Web-only: Account + Log out sit next to the theme toggle. */}
         {isWebMode && (
           <div className="hidden sm:flex items-center gap-1">

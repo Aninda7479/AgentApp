@@ -413,7 +413,10 @@ export const App: React.FC = () => {
   const handleWindowControl = (action: 'minimize' | 'maximize' | 'close') => WindowService.control(action);
   const handleStopActiveRun = () => AgentService.stopRun(ctx, ctx.getActiveChatId());
   const handleQuit = () => WindowService.control('close');
-  const handleAbout = () => triggerToast('SuperAgent — open-source autonomous AI agent');
+  const handleAbout = () => {
+    setActiveTab('settings');
+    setSettingsCategory('about');
+  };
 
   // ── Project / chat CRUD (delegates to ConversationService) ─────────────────
   const handleCreateProject = (newProj: StoredProject) => ConversationService.createProject(ctx, newProj);
