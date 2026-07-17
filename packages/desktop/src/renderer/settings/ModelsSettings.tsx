@@ -98,44 +98,52 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
 
                   return (
                     <div key={model.id} className={idx === models.length - 1 ? '' : 'border-b border-brand-border'}>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedId(isExpanded ? null : model.id)}
-                        className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors ${
-                          isExpanded ? 'bg-brand-popover' : 'hover:bg-brand-popover/50'
-                        }`}
-                      >
-                        <div className="flex min-w-0 flex-col gap-1.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-medium text-brand-textMain">{model.name}</span>
-                            {model.free && (
-                              <span className="ui-chip bg-[color:var(--neon-constructive)]/12 text-[color:var(--neon-constructive)]">Free</span>
-                            )}
-                            {hasIn && (model.inputModalities ?? []).map(m => <ModalityChip key={m} type={m} />)}
+                      {/* Row is a flex container so the enable/disable Toggle is a SIBLING of the
+                          expand button (not nested inside it) — <button> inside <button> is invalid
+                          DOM and triggers React's validateDOMNesting warning + can drop clicks. */}
+                      <div className="flex items-center">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedId(isExpanded ? null : model.id)}
+                          className={`flex w-full flex-1 items-center justify-between gap-3 px-4 py-3 text-left transition-colors ${
+                            isExpanded ? 'bg-brand-popover' : 'hover:bg-brand-popover/50'
+                          }`}
+                        >
+                          <div className="flex min-w-0 flex-col gap-1.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-medium text-brand-textMain">{model.name}</span>
+                              {model.free && (
+                                <span className="ui-chip bg-[color:var(--neon-constructive)]/12 text-[color:var(--neon-constructive)]">Free</span>
+                              )}
+                              {hasIn && (model.inputModalities ?? []).map(m => <ModalityChip key={m} type={m} />)}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-brand-textMuted">
+                              {model.contextLimit && (
+                                <span>ctx: <span className="text-brand-textMain">{model.contextLimit}</span></span>
+                              )}
+                              {p?.inputPer1M ? (
+                                <span>in: <span className="text-brand-textMain">{p.inputPer1M}/1M</span></span>
+                              ) : model.contextLimit == null && !hasIn && (
+                                <span>pricing: N/A</span>
+                              )}
+                              {p?.outputPer1M && (
+                                <span>out: <span className="text-brand-textMain">{p.outputPer1M}/1M</span></span>
+                              )}
+                              {model.caching && (
+                                <span className="rounded bg-[color:var(--neon-constructive)]/12 px-1.5 py-0.5 text-[color:var(--neon-constructive)]">⚡ caching</span>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-brand-textMuted">
-                            {model.contextLimit && (
-                              <span>ctx: <span className="text-brand-textMain">{model.contextLimit}</span></span>
-                            )}
-                            {p?.inputPer1M ? (
-                              <span>in: <span className="text-brand-textMain">{p.inputPer1M}/1M</span></span>
-                            ) : model.contextLimit == null && !hasIn && (
-                              <span>pricing: N/A</span>
-                            )}
-                            {p?.outputPer1M && (
-                              <span>out: <span className="text-brand-textMain">{p.outputPer1M}/1M</span></span>
-                            )}
-                            {model.caching && (
-                              <span className="rounded bg-[color:var(--neon-constructive)]/12 px-1.5 py-0.5 text-[color:var(--neon-constructive)]">⚡ caching</span>
-                            )}
-                          </div>
-                        </div>
 
-                        <div className="flex shrink-0 items-center gap-3">
-                          <ChevronDown size={14} className={`text-brand-textMuted transition-transform ${isExpanded ? '' : 'rotate-180'}`} />
+                          <div className="flex shrink-0 items-center gap-3">
+                            <ChevronDown size={14} className={`text-brand-textMuted transition-transform ${isExpanded ? '' : 'rotate-180'}`} />
+                          </div>
+                        </button>
+
+                        <div className="flex shrink-0 items-center pr-4">
                           <Toggle enabled={model.enabled} onToggle={() => onToggleModel(model.id)} />
                         </div>
-                      </button>
+                      </div>
 
                       {isExpanded && (
                         <div className="border-t border-brand-border bg-brand-bg/40 px-4 py-4">
