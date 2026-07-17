@@ -13,6 +13,8 @@ argument-hint: [optional page/component, e.g. "landing-page", "onboarding-flow",
 - `/art-director` (this skill) owns whether the app looks and feels considered — palette, illustration, iconography, motion, layout rhythm, and whether the words sound like a real brand instead of placeholder text.
 - If you spot a functional bug while redesigning, log it under `[art-director]` as an open question for `/ux-critic`/`/auto-improve` rather than fixing it yourself. Stay in your lane, same as the other skills do.
 
+**Context budget (read this before any step):** this skill self-polices a hard **250K-token ceiling** — the leading cause of mid-run crashes. Read the **Context-window discipline** section below and honor its `/compact` triggers on *every* step, not just at the end. When in doubt whether something belongs in context, it belongs on disk.
+
 ## Your art direction (maintained in `.claude/art-direction.md`, not appended)
 
 On first run, if `.claude/art-direction.md` doesn't exist, create it from the seed below — then treat that file, not this seed, as the source of truth from then on. It can evolve (Step 2), but changing it is a deliberate, logged decision with a one-line rationale, never incidental drift. A design system that's different every cycle is worse than one that's merely good and consistent.
@@ -32,12 +34,22 @@ This is a mood to synthesize into something original, not a specific image to co
 - **Richer raster imagery: only via SuperAgent's own image-gen adapter, once connected, and only a free/local model** — same rule `/orchestrator-dev` and `/auto-improve` follow, never a paid provider on your own initiative. Until a free/local image model is connected, stay in hand-authored SVG territory — it's also the stronger fit for this style anyway.
 - **Icon sets** — if the project already has one (Lucide, Phosphor, Heroicons, etc.), restyle/extend it to match rather than introducing a second icon system.
 
-## Context-window discipline (same rule as `/ux-critic` — same MCP server)
+## Context-window discipline — HARD BUDGET: keep working context ≤ 250K tokens
 
-This skill uses the Playwright MCP server `/ux-critic` already set up, to see its own redesigns. The same risk applies: raw accessibility snapshots and console dumps are large.
-- Every `browser_snapshot` / `browser_take_screenshot` / `browser_console_messages` call sets an explicit `filename` under `.playwright/` — never let one land raw in context.
-- Read a saved snapshot back only in slices (`offset`/`limit`), only when you need a specific detail.
-- Compact after finishing each page/component — same cadence `/ux-critic` uses per persona.
+This skill drives a live browser via the Playwright MCP server `/ux-critic` already set up. MCP returns full accessibility snapshots, console dumps, and page trees as text. One raw `browser_snapshot` on a heavy page is 50K–200K tokens; string several together and you overshoot the ~250K ceiling and crash the API call mid-work. The harness summarizes near the limit, but a single runaway result can overshoot it before summarization kicks in — so this skill self-polices:
+
+- **HARD BUDGET.** Treat 250K as a hard ceiling and stay well under it. Before every tool call that could return a large payload, ask: "does this need to be in context, or can it live on disk?" When in doubt, put it on disk.
+- **Never let a Playwright payload land raw.** Every `browser_snapshot`, `browser_take_screenshot`, and `browser_console_messages` call MUST pass an explicit `filename` under `.playwright/` so the server writes it to disk and returns only a tiny path string. A snapshot that arrives as text (no `filename`) is a failure — re-run it with a `filename`.
+- **Locate with `browser_find` (text/regex), not full snapshots.** `browser_find` returns only matching nodes plus a few lines of context — orders of magnitude smaller than a full `browser_snapshot`. Find the element, then act on the returned `target`. Only fetch a full snapshot when you genuinely need the whole tree, and always with a `filename`.
+- **Read everything else in slices.** When you must inspect a saved snapshot, a source file, or the log, use the Read tool with `offset`/`limit` to pull only the region you need. Never Read a whole snapshot or a whole large component into context.
+- **Keep the design system and findings on disk, not in your head.** `.claude/art-direction.md` is the source of truth — read it in full once at orient, then only the section you touch. `.claude/auto-improve-log.log` is read with `tail -n 150`, never whole. Append each change the moment you make it so you don't carry a mental list forward.
+- **Use TodoWrite for the page queue.** Track "pages done / pages remaining" in the todo list (on disk), not as a growing block of context.
+- **Compact on a hard cadence — every time, not just at the end:**
+  - After finishing each page/component (Step 8) — `/compact` before rotating to the next.
+  - **If you have done > ~15 heavy tool calls since the last `/compact`, `/compact` immediately.** Heavy = any MCP call, any Read of a large file, any build/lint/test run.
+  - **If any single tool result looks large** (a raw artifact slipped in, a 1000+ line read, a full test log), `/compact` immediately rather than continuing.
+  - At the end of the run, `/compact` once more.
+- **Never carry a page's screenshots/snapshots forward into the next page.** The log entry and the on-disk files are the durable output; the in-context artifacts are discardable once those are written.
 
 ## Step 0 — Orient
 
@@ -71,9 +83,12 @@ Screenshot the result (desktop and mobile viewport) and check it against a concr
 
 If it doesn't hold up, go back to Step 3. Don't move on while telling yourself it's "good enough" without being able to say specifically why it passes.
 
-## Step 5 — Verify nothing broke
+## Step 5 — Verify nothing broke (keep output on disk)
 
 Run build/lint/tests. A redesign that breaks the build or introduces a layout bug is a regression regardless of how it looks — fix or revert before continuing.
+- Capture **only failures** into context. Pipe output to a file (e.g. `.playwright/build-<page>.log`) and Read only the failing region with `offset`/`limit`, or read its tail. Never paste a full build/lint/test log into context.
+- If the run is green, a one-line "passed" note is enough — no full output needed.
+- This is a heavy call — it counts toward the 15-call `/compact` trigger in Context-window discipline.
 
 ## Step 6 — Commit
 
@@ -85,7 +100,7 @@ Append to `.claude/auto-improve-log.log`, tagged `[art-director]`, same shared f
 
 ## Step 8 — Compact, then repeat
 
-Compact, then move to the next page/component if session budget allows.
+**Run `/compact` now** — before rotating to the next page/component and again at the end of the run. This is mandatory, not optional: the single biggest cause of context-window crashes in this skill is a long session that never compacts between pages. The log entry and the on-disk screenshots are the durable output; everything in working context from this page is discardable once they're written. Never carry a full page's worth of snapshots forward. If session budget allows, repeat from Step 1 for the next untouched page/component.
 
 ## Guardrails
 
