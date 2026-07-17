@@ -9,6 +9,7 @@ import { BYOKProviderManager } from './byok.js';
 import { createProviderAdapter } from './models.js';
 import { SettingsStorage } from '../storage/settings-store.js';
 import { ModelGovStorage } from '../storage/model-gov.js';
+import { providerHealth } from './provider-health.js';
 
 /** Options for the model router. */
 export interface RouterOptions {
@@ -69,16 +70,28 @@ export class ModelRouter {
       }
     }
 
+    // Health-aware ordering (mission: resilience to a provider going down). Try
+    // healthy providers first; demote rate-limited ones and, last, locked/
+    // deprecated ones. We never *drop* a config purely on health — a fully
+    // degraded set still falls through and fails fast with a clear error rather
+    // than being silently skipped. The stable reorder preserves the user's
+    // preferred order within each health tier.
+    const ranked = sortedConfigs.map((c, i) => ({ c, i, r: ModelRouter.healthRank(c.provider) }));
+    ranked.sort((a, b) => (a.r - b.r) || (a.i - b.i));
+    const ordered = ranked.map((x) => x.c);
+
     const errors: string[] = [];
 
-    for (const config of sortedConfigs) {
+    for (const config of ordered) {
       try {
         const adapter: BaseProviderAdapter = createProviderAdapter(config);
         const response = await adapter.complete(request);
+        providerHealth.recordSuccess(config.provider);
         return response;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         errors.push(`[${config.provider}]: ${message}`);
+        providerHealth.recordFailure(config.provider, err);
       }
     }
 
@@ -99,6 +112,19 @@ export class ModelRouter {
   private static stripProviderPrefix(providerId: string, id: string): string {
     const prefix = `${providerId}-`;
     return id.startsWith(prefix) ? id.substring(prefix.length) : id;
+  }
+
+  /**
+   * Health tier used to order fallback attempts: healthy first (0), rate-limited
+   * next (1, cooldown-based), locked/deprecated last (2 — retrying is pointless
+   * but we keep them as a last resort so a degraded set still fails clearly
+   * rather than being silently dropped). Consults the shared ProviderHealthTracker.
+   */
+  private static healthRank(provider: string): number {
+    const status = providerHealth.getStatus(provider);
+    if (status === 'available') return 0;
+    if (status === 'rate_limited') return 1;
+    return 2; // locked | deprecated
   }
 
   public static routeModelForTask(
