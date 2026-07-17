@@ -108,6 +108,71 @@ describe('ModelRouter.resolveCandidatePool (capability gate)', () => {
   });
 });
 
+describe('ModelRouter.resolveCandidatePool (availability filter)', () => {
+  // Availability pre-filter: a model whose accessStatus is locked / rate_limited
+  // / deprecated must never be selected, even if it is capability-fit. This is
+  // the core "can't be banned out from under you" guarantee.
+  const RATE_LIMITED_VISION: RouterModel = {
+    id: 'gpt-4o', name: 'GPT-4o', providerId: 'openai', enabled: true,
+    supportsVision: true, supportsTools: false, accessStatus: 'rate_limited'
+  };
+  const AVAILABLE_VISION: RouterModel = {
+    id: 'gemini-3', name: 'Gemini 3', providerId: 'google', enabled: true,
+    supportsVision: true, supportsTools: true, accessStatus: 'available'
+  };
+  const LOCKED_TOOLS: RouterModel = {
+    id: 'claude-sonnet', name: 'Claude Sonnet', providerId: 'anthropic', enabled: true,
+    supportsVision: false, supportsTools: true, accessStatus: 'locked'
+  };
+  const DEPRECATED_TOOLS: RouterModel = {
+    id: 'deepseek-chat', name: 'DeepSeek Chat', providerId: 'deepseek', enabled: true,
+    supportsVision: false, supportsTools: true, accessStatus: 'deprecated'
+  };
+
+  it('drops rate_limited models from the candidate pool', () => {
+    const result = (ModelRouter as any).resolveCandidatePool(
+      { isCoding: false, isReasoning: false, isVision: true },
+      [RATE_LIMITED_VISION, AVAILABLE_VISION]
+    );
+    const ids = result.map((m: RouterModel) => m.id);
+    expect(ids).toContain('gemini-3');
+    expect(ids).not.toContain('gpt-4o'); // rate_limited -> skipped
+  });
+
+  it('a coding task never selects a locked or deprecated tool model', () => {
+    const result = (ModelRouter as any).resolveCandidatePool(
+      { isCoding: true, isReasoning: false, isVision: false },
+      [LOCKED_TOOLS, DEPRECATED_TOOLS, AVAILABLE_VISION]
+    );
+    const ids = result.map((m: RouterModel) => m.id);
+    expect(ids).toContain('gemini-3'); // vision + tools, available
+    expect(ids).not.toContain('claude-sonnet'); // locked
+    expect(ids).not.toContain('deepseek-chat'); // deprecated
+  });
+
+  it('keeps an absent accessStatus as available (backward-compatible)', () => {
+    const legacy: RouterModel = {
+      id: 'gpt-4o', name: 'GPT-4o', providerId: 'openai', enabled: true,
+      supportsVision: true, supportsTools: false
+    };
+    const result = (ModelRouter as any).resolveCandidatePool(
+      { isCoding: false, isReasoning: false, isVision: true },
+      [legacy]
+    );
+    expect(result.map((m: RouterModel) => m.id)).toEqual(['gpt-4o']);
+  });
+
+  it('never empties the pool: if every model is unavailable it falls back to the full pool', () => {
+    const result = (ModelRouter as any).resolveCandidatePool(
+      { isCoding: false, isReasoning: false, isVision: false },
+      [LOCKED_TOOLS, DEPRECATED_TOOLS]
+    );
+    const ids = result.map((m: RouterModel) => m.id);
+    expect(ids).toContain('claude-sonnet');
+    expect(ids).toContain('deepseek-chat');
+  });
+});
+
 describe('ModelRouter.routeModelForTask', () => {
   it('throws when no models are configured', () => {
     expect(() => ModelRouter.routeModelForTask('hello', [])).toThrow();

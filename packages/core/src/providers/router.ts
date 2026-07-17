@@ -166,19 +166,31 @@ export class ModelRouter {
    * non-capable model can never win a vision/tool task. Each active modality the
    * task requires must be satisfied — a mixed "vision + coding" task needs a
    * model that is BOTH vision-capable AND tool-capable, so a tool-only model
-   * cannot be selected to do vision work. Falls back to the full pool when no
-   * capable model is present so routing still returns something.
+   * cannot be selected to do vision work.
+   *
+   * Availability pre-filter (mission: resilience to a provider going down): any
+   * model whose `accessStatus` is `locked` / `rate_limited` / `deprecated` is
+   * dropped before the capability gate, so a banned or throttled model is never
+   * selected. The field defaults to `available` (when absent) so callers that
+   * don't set it keep working. The pool is never emptied by this filter — if it
+   * would remove everything, the full enabled pool is used instead, so routing
+   * always returns a candidate rather than throwing.
    */
   private static resolveCandidatePool(
     flags: { isCoding: boolean; isReasoning: boolean; isVision: boolean },
     enabledModels: RouterModel[]
   ): RouterModel[] {
+    const isAvailable = (m: RouterModel) =>
+      m.accessStatus === undefined || m.accessStatus === 'available';
+    const live = enabledModels.filter(isAvailable);
+    const pool = live.length > 0 ? live : enabledModels;
+
     const needsVision = flags.isVision;
     const needsTools = flags.isCoding || flags.isReasoning;
-    const capable = enabledModels.filter(
+    const capable = pool.filter(
       (m) => (!needsVision || m.supportsVision === true) && (!needsTools || m.supportsTools === true)
     );
-    return capable.length > 0 ? capable : enabledModels;
+    return capable.length > 0 ? capable : pool;
   }
 
   /** Scores and sorts models for a task by capability, task-fit, and the user's
@@ -253,4 +265,6 @@ export type RouterModel = {
   enabled: boolean;
   supportsVision?: boolean;
   supportsTools?: boolean;
+  /** Live availability; see AccessStatus. Defaults to `available` when absent. */
+  accessStatus?: 'available' | 'locked' | 'rate_limited' | 'deprecated';
 };

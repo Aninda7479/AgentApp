@@ -122,6 +122,23 @@ export interface CompletionResponse {
   };
 }
 
+/** Input/output modality a model can consume or produce. */
+export type Modality = 'text' | 'image' | 'video' | 'audio' | '3d';
+
+/**
+ * Live availability of a model for routing. The router skips anything other
+ * than `available` so a locked/rate-limited/deprecated model is never selected
+ * (mission point: resilience to a provider going down). Defaults to `available`
+ * so callers that don't set it keep working.
+ */
+export type AccessStatus = 'available' | 'locked' | 'rate_limited' | 'deprecated';
+
+/** Coarse latency tier used by cost/latency-dominant routing. */
+export type SpeedTier = 'fast' | 'balanced' | 'slow';
+
+/** Coarse capability tier used by quality-dominant routing. */
+export type IntelligenceTier = 'low' | 'mid' | 'high' | 'frontier';
+
 /** Capabilities and limits of a specific AI model. */
 export interface ModelCapability {
   id: string;
@@ -132,6 +149,28 @@ export interface ModelCapability {
   supportsVision: boolean;
   supportsTools: boolean;
   supportsReasoning: boolean;
+  // ── Extended capability registry (all optional; additive over the legacy
+  //    supports* booleans so existing callers/tests keep working) ──────────
+  /** Modalities the model accepts as input. */
+  inputModalities?: Modality[];
+  /** Modalities the model can emit. */
+  outputModalities?: Modality[];
+  /** Domain specialties the model is strong at (coding, translation, 3d, …). */
+  specialties?: string[];
+  /** Coarse latency tier. */
+  speedTier?: SpeedTier;
+  /** Coarse capability tier. */
+  intelligenceTier?: IntelligenceTier;
+  /** Live availability for routing (see AccessStatus). */
+  accessStatus?: AccessStatus;
+  /** True when served by a local process (Ollama) — zero-cost, zero external risk. */
+  isLocal?: boolean;
+  /** Reasoning-effort levels this model's provider exposes, if any. */
+  reasoningEffortLevels?: string[];
+  /** Approximate blended cost in USD per 1k tokens (input+output), if known. */
+  costPer1kTokens?: number;
+  /** Provider moderation strictness (one more registry field for informed routing). */
+  moderationLevel?: 'none' | 'low' | 'standard' | 'strict';
 }
 
 /** Interface that every LLM provider adapter must implement. */
