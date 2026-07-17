@@ -129,7 +129,7 @@ export const PartnerOverlay: React.FC<PartnerOverlayProps> = ({
     <div
       data-testid="partner-overlay"
       data-mood={mood}
-      className="pointer-events-none fixed bottom-24 right-5 z-40 flex flex-col items-end gap-2 select-none"
+      className="pointer-events-none fixed top-1/2 right-5 z-40 flex flex-col items-end gap-2 select-none"
       style={{ transform: `translate(${offset.dx}px, ${offset.dy}px)` }}
     >
       {reaction.line && (
