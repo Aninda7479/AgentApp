@@ -6,6 +6,8 @@ export interface SelectOption {
   value: string;
   label: string;
   icon?: React.ReactNode;
+  /** Optional secondary line rendered under the label (e.g. a hint for a meta-entry). */
+  description?: React.ReactNode;
 }
 
 export interface SelectProps {
@@ -236,8 +238,13 @@ export const Select: React.FC<SelectProps> = ({
                       : 'text-brand-textMain hover:bg-brand-hover'
                   } ${isActive ? 'ring-1 ring-brand-border-strong' : ''}`}
                 >
-                  {opt.icon && <span className="flex-shrink-0">{opt.icon}</span>}
-                  <span>{opt.label}</span>
+                  {opt.icon && <span className="flex-shrink-0 self-start mt-0.5">{opt.icon}</span>}
+                  <span className="flex flex-col min-w-0 text-left">
+                    <span className="truncate">{opt.label}</span>
+                    {opt.description != null && (
+                      <span className="text-[11px] font-normal text-brand-textMuted truncate">{opt.description}</span>
+                    )}
+                  </span>
                 </div>
               );
             })

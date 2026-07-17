@@ -476,7 +476,7 @@ export const Composer: React.FC<ComposerProps> = ({
               <Select
                 options={availableModels.map((model) =>
                   model === AUTO_ROUTE_MODEL
-                    ? { value: model, label: AUTO_ROUTE_LABEL, icon: <Workflow className="w-3.5 h-3.5" /> }
+                    ? { value: model, label: AUTO_ROUTE_LABEL, icon: <Workflow className="w-3.5 h-3.5" />, description: 'Auto-routes each request to the best model for the job — or pick a specific model to send directly.' }
                     : { value: model, label: model, icon: <Cpu className="w-3.5 h-3.5" /> }
                 )}
                 value={selectedModel}
