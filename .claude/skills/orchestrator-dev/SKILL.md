@@ -13,13 +13,19 @@ The whole point of SuperAgent is not depending on one smartest model for everyth
 
 ## Context-window discipline (read first)
 
-The equivalent of a Playwright snapshot here is a full provider model-catalog response — OpenRouter, Ollama, and Nvidia listings can run to hundreds of models with verbose metadata, and a raw dump of any of them can be tens of thousands of tokens.
+**Self-police a hard ~250K-token ceiling — the leading cause of mid-run crashes.** You hit that ceiling and the harness stops you mid-edit, exactly what this rewrite fixes. The fix is to run `/compact` on a *trigger*, every cycle, not just at the end. Everything in your working context below is discardable the moment its durable on-disk output is written.
 
+### What must live on disk, never in context
 - **Every provider catalog/listing call writes the full raw response to disk**, never straight into context: `.orchestrator/catalogs/<provider>-<date>.json`. Then extract only what you need (id, modalities, pricing, context length, tags) with `jq`/`grep` into a small working summary. Don't `cat` a full catalog file.
 - **Every live test run writes its transcript to disk**: `.orchestrator/test-runs/<focus>-<n>.log`. Summarize the outcome in a couple of lines in your own working context; don't paste a full model response back into context unless you're actively debugging that specific output.
 - **Read `.claude/auto-improve-log.log` by tail, not whole** (`tail -n 150`) — same rule as `/ux-critic`, same file, same reason.
 - **`app-structure.log` is different: keep it small enough to read whole.** It's maintained state, not a growing log — if it's crept past a page or two, that's a signal to prune/consolidate it this cycle, not to start paginating through it.
-- **Compact after each focus area**, same as `/ux-critic` compacts after each persona. Don't carry a full round of catalog exploration and test transcripts forward into the next focus.
+
+### `/compact` triggers — run them, don't wait for the end
+- **After finishing each focus area** (post Steps 7–9), run `/compact` before rotating to the next focus. Don't carry a full round of catalog exploration and test transcripts forward — this is the single most effective guard against the ceiling.
+- **Hard rule: if you have done > ~15 heavy tool calls since the last `/compact`, run `/compact` immediately.** Heavy = any catalog fetch, any Read of a large file, any build/lint/test run, any provider API call.
+- **If any single tool result looks large** (a raw catalog slipped in, a 1000+ line read, a full test log), run `/compact` immediately rather than continuing. A runaway snapshot can overshoot the ceiling before auto-summarization kicks in.
+- **At the end of the run, `/compact` once more** — after the final focus or when you stop because you're out of budget.
 
 ## Step 0 — Orient
 
@@ -101,7 +107,13 @@ Open questions: <anything needing a human decision>
 
 ## Step 10 — Compact, then repeat
 
-Compact context after finishing this focus area. If session budget remains and the lock is free, move to the next focus and repeat from Step 1.
+**Run `/compact` now.** After finishing this focus area (post Steps 7–9: committed, logged, `app-structure.log` updated), run `/compact` to shed this focus's context before the next one. This is mandatory, not optional — the same rule `/auto-improve` and `/ux-critic` enforce every cycle. The durable output is the commits, the `.claude/auto-improve-log.log` entry, and `app-structure.log`; everything else in working context (catalog summaries, test transcripts, the catalog files themselves) is discardable once those are written. Never carry a full focus's worth of exploration forward.
+
+If session budget remains and the lock is free, move to the next focus and repeat from Step 1.
+
+**If you sense context pressure mid-work** — re-reading files you just read, results feeling heavy, or approaching the ceiling — stop *between* steps (never mid-edit or mid-commit), run `/compact`, make sure `app-structure.log` and the queue are current, then resume. A compact keeps the run alive; an overshoot stops it. Do not push past the ceiling.
+
+**When the run ends** (final focus done, or stopping because you're out of budget), run `/compact` once more to compress whatever remains before handing control back.
 
 ## Guardrails
 

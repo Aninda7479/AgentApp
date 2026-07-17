@@ -48,6 +48,7 @@ This skill drives a live browser via the Playwright MCP server `/ux-critic` alre
   - After finishing each page/component (Step 8) — `/compact` before rotating to the next.
   - **If you have done > ~15 heavy tool calls since the last `/compact`, `/compact` immediately.** Heavy = any MCP call, any Read of a large file, any build/lint/test run.
   - **If any single tool result looks large** (a raw artifact slipped in, a 1000+ line read, a full test log), `/compact` immediately rather than continuing.
+  - **If you sense creeping context pressure mid-page, stop and `/compact` immediately — don't wait for a hard count to trip.** Signs: re-reading files you just opened, results feeling heavy, or simply approaching the 250K ceiling. This is the *active* guard that prevents a mid-work stop. Always stop at a clean step boundary (never mid-edit or mid-commit), run `/compact`, then resume from Step 3/4. A compact keeps the run alive; an overshoot stops it.
   - At the end of the run, `/compact` once more.
 - **Never carry a page's screenshots/snapshots forward into the next page.** The log entry and the on-disk files are the durable output; the in-context artifacts are discardable once those are written.
 
@@ -100,7 +101,11 @@ Append to `.claude/auto-improve-log.log`, tagged `[art-director]`, same shared f
 
 ## Step 8 — Compact, then repeat
 
-**Run `/compact` now** — before rotating to the next page/component and again at the end of the run. This is mandatory, not optional: the single biggest cause of context-window crashes in this skill is a long session that never compacts between pages. The log entry and the on-disk screenshots are the durable output; everything in working context from this page is discardable once they're written. Never carry a full page's worth of snapshots forward. If session budget allows, repeat from Step 1 for the next untouched page/component.
+**Run `/compact` now** — before rotating to the next page/component and again at the end of the run. This is mandatory, not optional: the single biggest cause of context-window crashes in this skill is a long session that never compacts between pages. The log entry and the on-disk screenshots are the durable output; everything in working context from this page is discardable once they're written. Never carry a full page's worth of snapshots forward.
+
+If you feel context pressure *mid-page* — not just between pages — stop at a clean step boundary (never mid-edit or mid-commit), run `/compact`, then resume from Step 3/4. A compact keeps the run alive; an overshoot stops it. If session budget allows, repeat from Step 1 for the next untouched page/component.
+
+**When the run ends** — final page done, or stopping because you're out of budget — run `/compact` one final time to compress whatever remains before handing control back. `.claude/art-direction.md` and the `[art-director]` log entry are the durable memory; the screenshots/snapshots on disk are the durable evidence. Everything else in working context is discardable once those are settled.
 
 ## Guardrails
 
