@@ -141,8 +141,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         data-testid={`nav-item-${id}`}
         onClick={() => onSelectTab(id)}
         className={`relative w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-lg transition-all duration-200 text-sm font-medium mb-1.5 select-none cursor-pointer ${isActive
-            ? 'text-brand-textMain bg-white/5 border border-brand-border/40 shadow-sm'
-            : 'text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-white/5'
+            ? 'text-brand-textMain bg-[color:var(--brand-hover)] border border-brand-border/40 shadow-sm'
+            : 'text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)]'
           }`}
       >
         {isActive && (
@@ -166,7 +166,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {onMobileClose && (
         <button
           onClick={onMobileClose}
-          className="lg:hidden absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-white/10 transition-colors z-10"
+          className="lg:hidden absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover-strong)] transition-colors z-10"
           title="Close menu"
           aria-label="Close menu"
         >
@@ -191,7 +191,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             data-testid="nav-search"
             onClick={onOpenSearch}
-            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-lg text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-white/5 transition-all duration-200 text-sm font-medium mb-1.5 select-none cursor-pointer`}
+            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-lg text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all duration-200 text-sm font-medium mb-1.5 select-none cursor-pointer`}
           >
             <Search className="w-4 h-4 flex-shrink-0" />
             {!collapsed && <span>Search</span>}
@@ -212,7 +212,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </span>
               <button
                 onClick={onCreateProjectClick}
-                className="text-brand-textMuted/60 hover:text-brand-textMain p-1 rounded-md hover:bg-white/5 transition-all duration-150 cursor-pointer"
+                className="text-brand-textMuted/60 hover:text-brand-textMain p-1 rounded-md hover:bg-[color:var(--brand-hover)] transition-all duration-150 cursor-pointer"
                 title="New Project"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -234,14 +234,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       data-testid={`project-item-${proj.name}`}
                       className={`group relative flex items-center gap-1 px-2 py-1.5 rounded-lg text-sm transition-all duration-150 cursor-pointer select-none ${
                         isProjectActive && !activeChatId
-                          ? 'text-brand-textMain bg-white/6'
-                          : 'text-brand-textMuted hover:text-brand-textMain hover:bg-white/4'
+                          ? 'text-brand-textMain bg-[color:var(--brand-hover)]'
+                          : 'text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover)]'
                       }`}
                     >
                       {/* Collapse toggle chevron */}
                       <button
                         onClick={() => toggleProjectCollapse(proj.name)}
-                        className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-white/8 transition-colors text-brand-textMuted/60 hover:text-brand-textMain"
+                        className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-[color:var(--brand-hover-strong)] transition-colors text-brand-textMuted/60 hover:text-brand-textMain"
                       >
                         {isExpanded
                           ? <ChevronDown className="w-3 h-3" />
@@ -269,7 +269,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             e.stopPropagation();
                             if (onNewChatInProject) onNewChatInProject(proj.name);
                           }}
-                          className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors"
+                          className="w-6 h-6 flex items-center justify-center rounded hover:bg-[color:var(--brand-hover-strong)] text-brand-textMuted hover:text-brand-textMain transition-colors"
                           title={`New chat in ${proj.name}`}
                         >
                           <SquarePen className="w-3.5 h-3.5" />
@@ -282,7 +282,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               e.stopPropagation();
                               setOpenMenuProject(isMenuOpen ? null : proj.name);
                             }}
-                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors"
+                            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[color:var(--brand-hover-strong)] text-brand-textMuted hover:text-brand-textMain transition-colors"
                             title="More options"
                           >
                             <MoreHorizontal className="w-3.5 h-3.5" />
@@ -299,7 +299,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                   if (onNewChatInProject) onNewChatInProject(proj.name);
                                   setOpenMenuProject(null);
                                 }}
-                                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-colors cursor-pointer"
                               >
                                 <MessageSquarePlus className="w-3.5 h-3.5" />
                                 <span>New chat</span>
@@ -310,7 +310,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                   if (onConfigureProject) onConfigureProject(proj);
                                   setOpenMenuProject(null);
                                 }}
-                                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-colors cursor-pointer"
                               >
                                 <Settings className="w-3.5 h-3.5" />
                                 <span>Project Settings</span>
@@ -355,8 +355,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 }}
                                 className={`group relative flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-[12px] transition-all duration-150 cursor-pointer select-none ${
                                   isChatSelected
-                                    ? 'text-brand-textMain bg-white/6 font-semibold'
-                                    : 'text-brand-textMuted/80 hover:text-brand-textMain hover:bg-white/4'
+                                    ? 'text-brand-textMain bg-[color:var(--brand-hover)] font-semibold'
+                                    : 'text-brand-textMuted/80 hover:text-brand-textMain hover:bg-[color:var(--brand-hover)]'
                                 }`}
                               >
                                 {isChatSelected && (
@@ -396,7 +396,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {projects.length === 0 && (
                 <button
                   onClick={onCreateProjectClick}
-                  className="flex items-center gap-2 px-3 py-2.5 text-xs text-brand-textMuted/60 hover:text-brand-textMain hover:bg-white/5 rounded-lg transition-all cursor-pointer w-full border border-dashed border-brand-border/30 hover:border-brand-border-strong mt-1"
+                  className="flex items-center gap-2 px-3 py-2.5 text-xs text-brand-textMuted/60 hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] rounded-lg transition-all cursor-pointer w-full border border-dashed border-brand-border/30 hover:border-brand-border-strong mt-1"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Create your first project</span>
@@ -435,8 +435,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       data-testid={`chat-item-${chat.title.replace(/\s+/g, '-')}`}
                       className={`group relative flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-[13px] transition-all duration-150 cursor-pointer select-none ${
                         isSelected
-                          ? 'text-brand-textMain bg-white/6 font-semibold'
-                          : 'text-brand-textMuted/80 hover:text-brand-textMain hover:bg-white/4'
+                          ? 'text-brand-textMain bg-[color:var(--brand-hover)] font-semibold'
+                          : 'text-brand-textMuted/80 hover:text-brand-textMain hover:bg-[color:var(--brand-hover)]'
                       }`}
                       onClick={() => {
                         if (onSelectChat) onSelectChat(chat.id);
@@ -460,7 +460,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               e.stopPropagation();
                               onDeleteChat(chat.id);
                             }}
-                            className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-[color:var(--neon-destructive)] hover:bg-white/5 transition-all cursor-pointer"
+                            className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-[color:var(--neon-destructive)] hover:bg-[color:var(--brand-hover)] transition-all cursor-pointer"
                             title="Delete Chat"
                           >
                             <Trash2 className="w-3 h-3" />
@@ -491,8 +491,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             if (onProfileClick) onProfileClick();
           }}
           className={`relative flex-1 flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-lg transition-all duration-200 text-sm font-medium cursor-pointer ${activeTab === 'settings'
-              ? 'text-brand-textMain bg-white/5 border border-brand-border/40 shadow-sm'
-              : 'text-brand-textMuted hover:text-brand-textMain hover:bg-white/5'
+              ? 'text-brand-textMain bg-[color:var(--brand-hover)] border border-brand-border/40 shadow-sm'
+              : 'text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover)]'
             }`}
         >
           {activeTab === 'settings' && (
@@ -504,7 +504,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
-            className={`flex items-center justify-center p-2.5 rounded-lg text-brand-textMuted bg-white/5 border border-brand-border/20 hover:text-brand-textMain hover:bg-white/10 hover:border-brand-border/45 transition-all duration-200 cursor-pointer ${collapsed ? 'w-full' : 'w-10 h-10'}`}
+            className={`flex items-center justify-center p-2.5 rounded-lg text-brand-textMuted bg-[color:var(--brand-hover)] border border-brand-border/20 hover:text-brand-textMain hover:bg-[color:var(--brand-hover-strong)] hover:border-brand-border/45 transition-all duration-200 cursor-pointer ${collapsed ? 'w-full' : 'w-10 h-10'}`}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {collapsed ? <ChevronRight className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
