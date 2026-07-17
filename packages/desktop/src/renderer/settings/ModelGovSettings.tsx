@@ -3,7 +3,7 @@ import { ModelConfig } from './types';
 import { Scale, Save, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award, Sparkles, Coins, Cpu, Layers, Zap, Bot } from 'lucide-react';
 import { Button, Select } from '../components/ui';
 
-/** Props for the Model Governance settings panel. */
+/** Props for the Orchestrator settings panel. */
 interface ModelGovSettingsProps {
   modelsCatalog: ModelConfig[];
   onSaveSettings: (patch: {
@@ -66,7 +66,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       });
       setInstructions(inst || '');
     } catch (e) {
-      console.error('Failed to load Model Gov configurations:', e);
+      console.error('Failed to load Orchestrator configurations:', e);
     } finally {
       setLoading(false);
     }
@@ -90,7 +90,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
 
       // Write instructions markdown file
       await ipc.invoke('model-gov-write-instructions', instructions);
-      setMessage({ text: 'Model Governance settings and system instructions saved successfully!', type: 'success' });
+      setMessage({ text: 'Orchestrator settings and system instructions saved successfully!', type: 'success' });
       
       // Re-load instructions in case they were dynamically recompiled in background
       const inst = await ipc.invoke('model-gov-read-instructions') as string;
@@ -125,7 +125,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
     try {
       const newInst = await ipc.invoke('model-gov-optimize-instructions-by-ai') as string;
       setInstructions(newInst);
-      setMessage({ text: 'Model Governance system instructions optimized by AI successfully!', type: 'success' });
+      setMessage({ text: 'Orchestrator system instructions optimized by AI successfully!', type: 'success' });
     } catch (e: any) {
       setMessage({ text: `AI Optimization failed: ${e.message}`, type: 'error' });
     } finally {
@@ -134,10 +134,13 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
   };
 
   const toggleModelSelection = (modelId: string) => {
-    setEnabledModels(prev => 
+    setEnabledModels(prev =>
       prev.includes(modelId) ? prev.filter(id => id !== modelId) : [...prev, modelId]
     );
   };
+
+  const selectAllModels = () => setEnabledModels(modelsCatalog.map(m => m.id));
+  const clearAllModels = () => setEnabledModels([]);
 
   const handleOverrideChange = (category: string, value: string) => {
     setCategoryOverrides(prev => ({
@@ -156,7 +159,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
     return (
       <div className="flex flex-col items-center justify-center py-20 text-brand-textMuted text-xs">
         <RefreshCw className="w-5 h-5 animate-spin text-[var(--brand-accent)] mb-2" />
-        <span>Loading Model Governance system config...</span>
+        <span>Loading Orchestrator system config...</span>
       </div>
     );
   }
@@ -166,9 +169,9 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-brand-border/60 pb-4">
         <div>
-          <h1 className="text-base font-bold text-brand-textMain">Model Governance (Fugu Orchestration)</h1>
+          <h1 className="text-base font-bold text-brand-textMain">Orchestrator</h1>
           <p className="text-xs text-brand-textMuted mt-1">
-            Dynamic routing mechanism inspired by Sakana AI's Fugu conducting agent. Auto-switches between enabled models depending on the complexity, cost, and context of each query.
+            Model orchestration layer that auto-routes each query across your enabled models based on complexity, cost, and capability — so no single provider can become a point of failure.
           </p>
         </div>
         <div className="flex gap-2">
@@ -304,14 +307,23 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
 
       {/* Model Selector list */}
       <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-3">
-        <div>
-          <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
-            <CheckSquare size={14} className="text-[var(--brand-accent)]" />
-            <span>Governance Swarm Pool</span>
-          </h2>
-          <p className="text-[11px] text-brand-textMuted mt-1">
-            Choose which enabled models are available for Fugu to route prompts to. Output quality and pricing rates will determine selection.
-          </p>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+              <CheckSquare size={14} className="text-[var(--brand-accent)]" />
+              <span>Orchestrator Model Pool</span>
+              <span className="ui-badge muted">{enabledModels.length}/{modelsCatalog.length}</span>
+            </h2>
+            <p className="text-[11px] text-brand-textMuted mt-1">
+              Choose which enabled models the Orchestrator can route prompts across. Output quality and pricing rates determine selection.
+            </p>
+          </div>
+          {modelsCatalog.length > 0 && (
+            <div className="flex gap-1.5">
+              <Button onClick={selectAllModels} variant="ghost" size="sm">Select all</Button>
+              <Button onClick={clearAllModels} variant="ghost" size="sm">Clear</Button>
+            </div>
+          )}
         </div>
 
         {modelsCatalog.length > 0 ? (
@@ -353,7 +365,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
         <div>
           <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
             <FileText size={14} className="text-[var(--brand-accent)]" />
-            <span>Fugu System Instructions (model-gov-instructions.md) [Dynamic]</span>
+            <span>Orchestrator System Instructions (model-gov-instructions.md) [Dynamic]</span>
           </h2>
           <p className="text-[11px] text-brand-textMuted mt-1">
             Markdown system guidelines used to direct task assignments. Automatically re-compiles when you save settings changes.

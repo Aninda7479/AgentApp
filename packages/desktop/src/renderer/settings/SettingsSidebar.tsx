@@ -16,7 +16,7 @@ import {
   SquareTerminal,
   MonitorSmartphone,
   MousePointer2,
-  Scale,
+  Network,
   RefreshCw
 } from 'lucide-react';
 
@@ -46,7 +46,7 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
   "AI Config": [
     { id: 'providers', label: 'Providers', Icon: SlidersHorizontal },
     { id: 'models', label: 'Models', Icon: Bot },
-    { id: 'model-gov', label: 'Model Gov', Icon: Scale },
+    { id: 'model-gov', label: 'Orchestrator', Icon: Network },
     { id: 'usage', label: 'AI Usage', Icon: SquareTerminal }
   ],
   Integrations: [
