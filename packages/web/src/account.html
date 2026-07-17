@@ -13,9 +13,9 @@
       --border: rgba(255, 255, 255, 0.1);
       --text: #e5e7eb;
       --muted: #9ca3af;
-      --accent: #a16207;          /* Sophisticated dark yellow */
-      --accent-hover: #854d0e;
-      --accent-text: #fef9c3;
+      --accent: #d9a066;          /* Warm "dawn" sand — matches the login page */
+      --accent-hover: #e7b27d;
+      --accent-text: #1a1410;
       --danger: #f87171;
       --ok: #34d399;
     }
@@ -27,14 +27,64 @@
     }
     body {
       display: flex; align-items: center; justify-content: center; padding: 24px;
-      background: var(--bg);
+      background: var(--bg); overflow: hidden;
+    }
+
+    /* ── Layered atmosphere (dusk) — fixed, behind the card ───────────────── */
+    .atmosphere {
+      position: fixed; inset: 0; z-index: 0; overflow: hidden;
+      background:
+        radial-gradient(120% 80% at 78% 12%, rgba(217, 160, 102, 0.10), transparent 55%),
+        linear-gradient(180deg, #0a0f1f 0%, #102233 38%, #16323a 68%, #14302a 100%);
+    }
+    .moon {
+      position: absolute; top: 12%; right: 16%;
+      width: 132px; height: 132px; border-radius: 50%;
+      background: radial-gradient(circle at 38% 36%, #fdf6e3 0%, #f3e7c9 46%, #e7d3a6 72%, #d9bf8e 100%);
+      box-shadow: 0 0 70px 28px rgba(243, 231, 201, 0.18), inset -10px -12px 26px rgba(120, 96, 60, 0.25);
+      animation: moonBreath 11s ease-in-out infinite;
+    }
+    .stars { position: absolute; inset: 0; opacity: 0.7; }
+    .stars i {
+      position: absolute; width: 2px; height: 2px; border-radius: 50%;
+      background: #eef1f6; box-shadow: 0 0 6px rgba(238, 241, 246, 0.8);
+      animation: twinkle 6s ease-in-out infinite;
+    }
+    .stars i:nth-child(1) { top: 14%; left: 18%; animation-delay: 0s; }
+    .stars i:nth-child(2) { top: 22%; left: 42%; animation-delay: 1.4s; }
+    .stars i:nth-child(3) { top: 9%;  left: 62%; animation-delay: 2.6s; }
+    .stars i:nth-child(4) { top: 30%; left: 78%; animation-delay: 0.8s; }
+    .stars i:nth-child(5) { top: 18%; left: 88%; animation-delay: 3.4s; }
+    .stars i:nth-child(6) { top: 36%; left: 30%; animation-delay: 2.0s; }
+
+    .hills { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 46%; display: block; }
+    .hill-back  { fill: #1f4a47; opacity: 0.45; animation: driftA 120s ease-in-out infinite alternate; transform-origin: bottom; }
+    .hill-mid   { fill: #1a3d38; opacity: 0.65; animation: driftB 150s ease-in-out infinite alternate; transform-origin: bottom; }
+    .hill-front { fill: #143028; opacity: 0.96; animation: driftA 180s ease-in-out infinite alternate; transform-origin: bottom; }
+
+    @keyframes moonBreath { 0%,100% { transform: scale(1); opacity: 0.92; } 50% { transform: scale(1.04); opacity: 1; } }
+    @keyframes twinkle { 0%,100% { opacity: 0.25; } 50% { opacity: 0.8; } }
+    @keyframes driftA { from { transform: translateX(0); } to { transform: translateX(-34px); } }
+    @keyframes driftB { from { transform: translateX(0); } to { transform: translateX(26px); } }
+    @media (prefers-reduced-motion: reduce) {
+      .moon, .stars i, .hill-back, .hill-mid, .hill-front { animation: none; }
     }
     .card {
+      position: relative; z-index: 1;
       width: 100%; max-width: 420px;
-      background: var(--panel); border: 1px solid var(--border); border-radius: 18px;
-      padding: 32px 30px; backdrop-filter: blur(14px);
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      background: var(--panel); border: 1px solid var(--border); border-radius: 20px;
+      padding: 34px 32px; backdrop-filter: blur(18px) saturate(120%);
+      -webkit-backdrop-filter: blur(18px) saturate(120%);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+      animation: rise 0.5s ease both;
     }
+    @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+    .logo {
+      width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+      background: transparent; margin-bottom: 18px;
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+    }
+    .sub { color: var(--muted); font-size: 13.5px; margin: 2px 0 0; line-height: 1.5; }
     .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
     h1 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.02em; }
     .who { color: var(--muted); font-size: 12px; margin-top: 3px; }
@@ -69,11 +119,49 @@
   </style>
 </head>
 <body>
+  <div class="atmosphere" aria-hidden="true">
+    <div class="moon"></div>
+    <div class="stars"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <svg class="hills" viewBox="0 0 1440 320" preserveAspectRatio="none" aria-hidden="true">
+      <path class="hill-back"  d="M0,196 C240,150 480,224 720,188 C960,152 1200,216 1440,176 L1440,320 L0,320 Z" />
+      <path class="hill-mid"   d="M0,238 C200,202 400,266 720,230 C1000,198 1240,256 1440,228 L1440,320 L0,320 Z" />
+      <path class="hill-front" d="M0,280 C260,252 520,300 760,276 C1020,250 1240,294 1440,272 L1440,320 L0,320 Z" />
+    </svg>
+  </div>
+
   <form class="card" id="account-form">
+    <div class="logo" role="img" aria-label="SuperAgent">
+      <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="as-sky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#9ec7bd" />
+            <stop offset="48%" stop-color="#dce6cf" />
+            <stop offset="100%" stop-color="#f3cda4" />
+          </linearGradient>
+          <radialGradient id="as-glow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#fff4dd" stop-opacity="0.85" />
+            <stop offset="100%" stop-color="#fff4dd" stop-opacity="0" />
+          </radialGradient>
+          <clipPath id="as-clip"><rect x="2" y="2" width="28" height="28" rx="8" /></clipPath>
+        </defs>
+        <rect x="2" y="2" width="28" height="28" rx="8" fill="url(#as-sky)" />
+        <g clip-path="url(#as-clip)">
+          <circle cx="16" cy="12.5" r="8.5" fill="url(#as-glow)" />
+          <circle cx="16" cy="12.5" r="4.4" fill="#fff2d8" />
+          <path d="M19.4 9.2 q1 -1 2 0 q1 -1 2 0" stroke="#fff" stroke-opacity="0.7" stroke-width="0.9" stroke-linecap="round" fill="none" />
+          <path d="M23.6 11 q0.8 -0.8 1.6 0 q0.8 -0.8 1.6 0" stroke="#fff" stroke-opacity="0.55" stroke-width="0.8" stroke-linecap="round" fill="none" />
+          <path d="M2 21 C8 17 13 20 18 18 C23 16 27 19 30 18 L30 30 L2 30 Z" fill="#93b6ab" />
+          <path d="M2 24 C7 21 12 24 17 22 C22 20 27 23 30 22 L30 30 L2 30 Z" fill="#5f8a7e" />
+          <path d="M2 27 C6 25 11 27 16 26 C21 25 26 27 30 26 L30 30 L2 30 Z" fill="#2f5147" />
+        </g>
+        <rect x="2" y="2" width="28" height="28" rx="8" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1" />
+      </svg>
+    </div>
     <div class="top">
       <div>
         <h1>Account settings</h1>
         <div class="who" id="who">Signed in</div>
+        <p class="sub">Manage your sign-in and password.</p>
       </div>
       <button type="button" class="linkbtn" id="back">← Back to app</button>
     </div>
