@@ -305,9 +305,14 @@ export const Composer: React.FC<ComposerProps> = ({
 
   const handleSend = () => {
     if (!prompt.trim() || disabled || isGenerating || !hasModels) return;
-    onSend(prompt, ComposerService.buildSendOptions(selectedModel, approvalMode, []));
+    const toSend = prompt;
+    // Clear BEFORE dispatching: prompt-seed commands (/image, /pdf, /3d, …) set
+    // the composer synchronously inside onSend, so clearing afterwards would wipe
+    // the seed the user is meant to review. Clearing first lets the seed win, and
+    // still clears instantly for normal sends.
     setPrompt('');
     basePromptRef.current = '';
+    onSend(toSend, ComposerService.buildSendOptions(selectedModel, approvalMode, []));
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
