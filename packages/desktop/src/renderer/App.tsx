@@ -129,6 +129,10 @@ export const App: React.FC = () => {
   // Providers & Models
   const [connectedProviders, setConnectedProviders] = useState<ProviderConnection[]>([]);
   const [modelsCatalog, setModelsCatalog] = useState<ModelConfig[]>([]);
+  // True until the persisted store has been read at startup. While bootstrapping,
+  // the catalog/providers are merely not-yet-loaded (not genuinely empty), so
+  // panels must show a loading state rather than a false "nothing connected".
+  const [bootstrapping, setBootstrapping] = useState<boolean>(true);
 
   // Trajectory steps (the canvas)
   const [trajectorySteps, setTrajectorySteps] = useState<TrajectoryStep[]>([
@@ -471,12 +475,17 @@ export const App: React.FC = () => {
 
   // Startup: load persisted data, then auto-detect new providers.
   useEffect(() => {
-    if (!ipc) return; // No Electron IPC — start empty for test environments
+    if (!ipc) {
+      // No Electron IPC (web/test) — nothing to hydrate; settle immediately.
+      setBootstrapping(false);
+      return;
+    }
     (async () => {
       const loaded = await StoreService.bootstrap(ctx);
       await SettingsService.readInto(ctx);
       setSettingsHydrated(true);
       await ProvidersService.autoDetect(ctx, loaded.loadedProviders, loaded.loadedModels, loaded.finalProjects, loaded.finalChats);
+      setBootstrapping(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -893,6 +902,7 @@ export const App: React.FC = () => {
               internetAccessLevel={internetAccessLevel}
               onInternetAccessLevelChange={handleInternetAccessLevelChange}
               onToast={triggerToast}
+              bootstrapping={bootstrapping}
               appVersion={appVersion}
               onCheckForUpdates={handleCheckForUpdates}
               updateStatus={updateStatus}

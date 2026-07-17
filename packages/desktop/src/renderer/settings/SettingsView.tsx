@@ -44,6 +44,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   internetAccessLevel,
   onInternetAccessLevelChange,
   onToast,
+  bootstrapping,
   appVersion,
   onCheckForUpdates,
   updateStatus
@@ -433,6 +434,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onDisconnectProvider={onDisconnectProvider}
             enrichModel={enrichModel}
             onToast={onToast}
+            bootstrapping={bootstrapping}
           />
         )}
         {activeCategory === 'models' && (

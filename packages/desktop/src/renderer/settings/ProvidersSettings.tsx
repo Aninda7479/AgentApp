@@ -10,6 +10,8 @@ interface ProvidersSettingsProps {
   enrichModel: (raw: any, providerId: string) => ModelConfig;
   /** In-app toast for non-blocking success/info notices (falls back to alert). */
   onToast?: (message: string) => void;
+  /** True while the persisted store is still loading — show a skeleton, not empty. */
+  bootstrapping?: boolean;
 }
 
 const ProviderLogo: React.FC<{ providerId: string; org?: string; size?: number }> = ({ providerId, org, size = 24 }) => {
@@ -57,7 +59,8 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
   onConnectProvider,
   onDisconnectProvider,
   enrichModel,
-  onToast
+  onToast,
+  bootstrapping = false
 }) => {
   const notify = (message: string) => {
     if (onToast) onToast(message);
@@ -318,7 +321,17 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       {/* Connected Providers List */}
       <section className="mb-8">
         <h3 className="ui-label mb-3">Connected providers</h3>
-        {connectedProviders.length === 0 ? (
+        {bootstrapping ? (
+          <div className="flex flex-col gap-2" aria-busy="true" aria-label="Loading connections">
+            {[0, 1].map((i) => (
+              <div key={i} className="ui-card flex items-center gap-3 p-3.5 sm:p-4">
+                <div className="h-6 w-6 flex-shrink-0 animate-pulse rounded-md bg-brand-hover" />
+                <div className="h-3.5 w-40 animate-pulse rounded bg-brand-hover" />
+                <div className="ml-auto h-3.5 w-16 animate-pulse rounded bg-brand-hover" />
+              </div>
+            ))}
+          </div>
+        ) : connectedProviders.length === 0 ? (
           <div className="ui-card px-6 py-10 text-center text-sm text-brand-textMuted">
             No active API connections. Connect one of the popular providers below.
           </div>

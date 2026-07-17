@@ -75,6 +75,8 @@ export interface SettingsViewProps {
   onInternetAccessLevelChange: (level: InternetAccessLevel) => void;
   /** In-app toast for non-blocking notices from child panels (e.g. Providers). */
   onToast?: (message: string) => void;
+  /** True while the persisted store is still loading at startup. */
+  bootstrapping?: boolean;
   appVersion?: string;
   onCheckForUpdates?: () => void;
   updateStatus?: UpdateStatus | null;
