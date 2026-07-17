@@ -116,6 +116,8 @@ interface AgentTabBarProps {
   onSelectSession: (id: string) => void;
   onAddSession: () => void;
   onCloseSession: (id: string) => void;
+  /** Disabled until at least one enabled model is connected. */
+  disabled: boolean;
 }
 
 const AgentTabBar: React.FC<AgentTabBarProps> = ({
@@ -123,7 +125,8 @@ const AgentTabBar: React.FC<AgentTabBarProps> = ({
   activeSessionId,
   onSelectSession,
   onAddSession,
-  onCloseSession
+  onCloseSession,
+  disabled
 }) => (
   <div className="flex items-center gap-1 px-4 py-1.5 border-b border-brand-border/60 bg-brand-sidebar overflow-x-auto scrollbar-thin">
     {sessions.map(session => (
@@ -155,10 +158,10 @@ const AgentTabBar: React.FC<AgentTabBarProps> = ({
     {/* Add new agent session */}
     <button
       onClick={onAddSession}
-      disabled={noModels}
-      title={noModels ? 'Connect a model in Settings to use agents' : 'Run another agent in parallel'}
+      disabled={disabled}
+      title={disabled ? 'Connect a model in Settings to use agents' : 'Run another agent in parallel'}
       className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-brand-textMuted transition-all select-none flex-shrink-0 ${
-        noModels ? 'opacity-40 cursor-not-allowed' : 'hover:text-brand-textMain hover:bg-brand-hover cursor-pointer'
+        disabled ? 'opacity-40 cursor-not-allowed' : 'hover:text-brand-textMain hover:bg-brand-hover cursor-pointer'
       }`}
     >
       <Plus size={12} />
@@ -354,6 +357,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           onSelectSession={setActiveSessionId}
           onAddSession={handleAddAgentSession}
           onCloseSession={handleCloseSession}
+          disabled={noModels}
         />
       )}
 

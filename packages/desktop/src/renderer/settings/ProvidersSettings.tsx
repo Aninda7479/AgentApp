@@ -8,6 +8,8 @@ interface ProvidersSettingsProps {
   onConnectProvider: (provider: ProviderConnection, models: ModelConfig[]) => void;
   onDisconnectProvider: (providerId: string) => void;
   enrichModel: (raw: any, providerId: string) => ModelConfig;
+  /** In-app toast for non-blocking success/info notices (falls back to alert). */
+  onToast?: (message: string) => void;
 }
 
 const ProviderLogo: React.FC<{ providerId: string; org?: string; size?: number }> = ({ providerId, org, size = 24 }) => {
@@ -54,8 +56,13 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
   connectedProviders,
   onConnectProvider,
   onDisconnectProvider,
-  enrichModel
+  enrichModel,
+  onToast
 }) => {
+  const notify = (message: string) => {
+    if (onToast) onToast(message);
+    else alert(message);
+  };
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalProviderId, setModalProviderId] = useState('');
   const [connectionName, setConnectionName] = useState('');
@@ -82,6 +89,20 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       let rawModels: any[] = [];
       const key = apiKey.trim();
       const url = baseUrl.trim();
+
+      // Validate the Base Endpoint URL up front so a typos/malformed value
+      // surfaces as a friendly message instead of a raw fetch/JSON-parse error.
+      if (url) {
+        let parsed: URL | null = null;
+        try {
+          parsed = new URL(url);
+        } catch {
+          parsed = null;
+        }
+        if (!parsed || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) {
+          throw new Error('That Base Endpoint URL looks invalid. Use a full http(s) URL (e.g. https://api.openai.com/v1).');
+        }
+      }
 
       const fmtTokens = (n: number): string => {
         if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
@@ -225,7 +246,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         baseUrl: url
       }, newConfigs);
 
-      alert(`✅ Connected to ${connectionName} — ${rawModels.length} models imported.`);
+      notify(`Connected to ${connectionName} — ${rawModels.length} models imported.`);
       setIsModalOpen(false);
     } catch (e: any) {
       console.error(e);
@@ -258,7 +279,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
 
     const defaults = knownDefaults[modalProviderId];
     if (!defaults) {
-      alert('No offline fallback available for this provider. Please connect online to fetch models.');
+      notify('No preset models are available for this provider. Connect online to fetch its model list.');
       return;
     }
 
@@ -274,7 +295,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       baseUrl
     }, newConfigs);
 
-    alert(`Offline fallback: added ${defaults.length} known model(s) for ${connectionName}.`);
+    notify(`Added ${defaults.length} known model(s) for ${connectionName} without testing the connection.`);
     setIsModalOpen(false);
   };
 
@@ -415,9 +436,10 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
             <div className="mt-5 flex items-center justify-between gap-3">
               <button
                 onClick={handleForceConnect}
+                title="Add this provider's known models without testing the connection"
                 className="ui-btn-ghost text-xs underline-offset-2 hover:underline"
               >
-                Force Connect (Offline)
+                Add Without Testing
               </button>
               <div className="flex gap-2">
                 <button onClick={() => setIsModalOpen(false)} className="ui-btn">

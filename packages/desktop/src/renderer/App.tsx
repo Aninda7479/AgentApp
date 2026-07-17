@@ -892,6 +892,7 @@ export const App: React.FC = () => {
               onUnsandboxedActionsChange={handleUnsandboxedActionsChange}
               internetAccessLevel={internetAccessLevel}
               onInternetAccessLevelChange={handleInternetAccessLevelChange}
+              onToast={triggerToast}
               appVersion={appVersion}
               onCheckForUpdates={handleCheckForUpdates}
               updateStatus={updateStatus}

@@ -73,6 +73,8 @@ export interface SettingsViewProps {
   onUnsandboxedActionsChange: (val: boolean) => void;
   internetAccessLevel: InternetAccessLevel;
   onInternetAccessLevelChange: (level: InternetAccessLevel) => void;
+  /** In-app toast for non-blocking notices from child panels (e.g. Providers). */
+  onToast?: (message: string) => void;
   appVersion?: string;
   onCheckForUpdates?: () => void;
   updateStatus?: UpdateStatus | null;

@@ -373,6 +373,8 @@ export const Composer: React.FC<ComposerProps> = ({
             <button
               data-testid="composer-attach-btn"
               onClick={() => onAttachClick?.()}
+              aria-label="Attach file"
+              title="Attach file"
               className="text-brand-textMuted hover:text-brand-textMain p-2 rounded-lg bg-brand-popover/60 hover:bg-brand-popover border border-brand-border transition-colors cursor-pointer"
             >
               <Plus className="w-5 h-5" />
@@ -452,6 +454,7 @@ export const Composer: React.FC<ComposerProps> = ({
               data-testid="composer-mic-btn"
               onClick={toggleDictation}
               title={!SpeechRecognitionCtor ? 'Voice input not supported here' : listening ? 'Stop dictation' : 'Dictate with your voice'}
+              aria-label={!SpeechRecognitionCtor ? 'Voice input not supported here' : listening ? 'Stop dictation' : 'Dictate with your voice'}
               className={`p-2 rounded-lg border transition-colors cursor-pointer ${
                 listening
                   ? 'bg-[color:var(--neon-destructive)]/15 border-[color:var(--neon-destructive)]/40 text-[color:var(--neon-destructive)]'
@@ -466,6 +469,7 @@ export const Composer: React.FC<ComposerProps> = ({
               <button
                 data-testid="btn-stop"
                 onClick={onStop}
+                aria-label="Stop generating"
                 className="bg-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/85 hover:shadow-[0_0_12px_var(--neon-destructive)] text-white rounded-full w-8 h-8 flex items-center justify-center font-bold cursor-pointer transition-all duration-150 active:scale-[0.92]"
               >
                 <span className="text-[10px] leading-none">⏹</span>
@@ -474,6 +478,7 @@ export const Composer: React.FC<ComposerProps> = ({
               <button
                 data-testid="btn-send"
                 onClick={handleSend}
+                aria-label="Send message"
                 disabled={disabled || !prompt.trim() || !hasModels}
                 className={`rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150 ${
                   !prompt.trim() || disabled || !hasModels
