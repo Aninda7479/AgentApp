@@ -214,7 +214,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   return (
     <div
       data-testid="title-bar"
-      className="h-10 bg-brand-sidebar border-b border-brand-border/40 flex items-center justify-between px-3 select-none drag-window z-100"
+      className="title-bar h-10 flex items-center justify-between px-3 select-none drag-window z-100"
       style={isElectron ? ({ WebkitAppRegion: 'drag' } as React.CSSProperties) : undefined}
     >
       {/* Left side: Logo, Nav History, and Application Menu */}
@@ -227,7 +227,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         {onToggleMobileNav && (
           <button
             onClick={onToggleMobileNav}
-            className="lg:hidden w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer shrink-0"
+            className="atmo-btn lg:hidden w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer shrink-0"
             title="Menu"
             aria-label="Toggle navigation menu"
           >
@@ -245,7 +245,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           <button
             onClick={onNavigateBack}
             disabled={!canNavigateBack}
-            className={`w-6 h-6 flex items-center justify-center rounded transition-all ${
+            className={`atmo-btn w-6 h-6 flex items-center justify-center rounded transition-all ${
               canNavigateBack
                 ? 'hover:bg-white/5 hover:text-brand-textMain cursor-pointer'
                 : 'opacity-35 cursor-not-allowed'
@@ -257,7 +257,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           <button
             onClick={onNavigateForward}
             disabled={!canNavigateForward}
-            className={`w-6 h-6 flex items-center justify-center rounded transition-all ${
+            className={`atmo-btn w-6 h-6 flex items-center justify-center rounded transition-all ${
               canNavigateForward
                 ? 'hover:bg-white/5 hover:text-brand-textMain cursor-pointer'
                 : 'opacity-35 cursor-not-allowed'
@@ -273,7 +273,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             <div key={group.key} className="relative">
               <button
                 onClick={() => toggleMenu(group.key)}
-                className={`cursor-pointer px-2 py-1 rounded hover:bg-white/5 hover:text-brand-textMain transition-all duration-150 active:scale-95 ${
+                className={`atmo-btn cursor-pointer px-2 py-1 rounded hover:bg-white/5 hover:text-brand-textMain transition-all duration-150 active:scale-95 ${
                   openMenu === group.key ? 'text-brand-textMain bg-white/5' : ''
                 }`}
               >
@@ -302,7 +302,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         {/* Theme toggle (all sizes) */}
         <button
           onClick={onToggleTheme}
-          className="w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
+          className="atmo-btn w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
           title={themeMode === 'light' ? 'Switch to dark' : 'Switch to light'}
           aria-label="Toggle theme"
         >
@@ -314,7 +314,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           <div className="hidden sm:flex items-center gap-1">
             <button
               onClick={onOpenAccount}
-              className="w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
+              className="atmo-btn w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
               title="Account / change password"
               aria-label="Account"
             >
@@ -322,7 +322,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             </button>
             <button
               onClick={onLogout}
-              className="w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
+              className="atmo-btn w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
               title="Log out"
               aria-label="Log out"
             >
@@ -334,7 +334,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         <button
           data-testid="byok-badge-trigger"
           onClick={onOpenProviders}
-          className="bg-brand-card hover:bg-brand-popover border border-brand-border/80 text-brand-textMain px-3 py-1 rounded-full text-[10px] cursor-pointer flex items-center gap-1 transition-all duration-150 font-semibold shadow-sm active:scale-[0.98]"
+          className="byok-badge bg-brand-card hover:bg-brand-popover border border-brand-border/80 text-brand-textMain px-3 py-1 rounded-full text-[10px] cursor-pointer flex items-center gap-1 transition-all duration-150 font-semibold shadow-sm active:scale-[0.98]"
         >
           <Key size={10} className="text-brand-textMuted" />
           <span>BYOK: {hasOpenAiKey ? 'OpenAI' : 'Configure'}</span>
@@ -344,7 +344,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         <div className="lg:hidden relative">
           <button
             onClick={() => toggleMenu('more')}
-            className={`w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer ${
+            className={`atmo-btn w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer ${
               openMenu === 'more' ? 'text-brand-textMain bg-white/5' : ''
             }`}
             title="Menu"
@@ -372,8 +372,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             <button
               data-testid="win-minimize"
               onClick={() => onWindowControl('minimize')}
-              className="w-8 h-8 flex items-center justify-center text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 rounded transition-colors cursor-pointer"
-              title="Minimize"
+               className="atmo-btn w-8 h-8 flex items-center justify-center text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 rounded transition-colors cursor-pointer"
+               title="Minimize"
             >
               <svg width="10" height="1" viewBox="0 0 10 1" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect width="10" height="1" rx="0.5" fill="currentColor" />
@@ -382,8 +382,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             <button
               data-testid="win-maximize"
               onClick={() => onWindowControl('maximize')}
-              className="w-8 h-8 flex items-center justify-center text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 rounded transition-colors cursor-pointer"
-              title="Maximize"
+               className="atmo-btn w-8 h-8 flex items-center justify-center text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 rounded transition-colors cursor-pointer"
+               title="Maximize"
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect x="0.5" y="0.5" width="9" height="9" rx="0.5" stroke="currentColor" strokeWidth="1" />
@@ -392,8 +392,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             <button
               data-testid="win-close"
               onClick={() => onWindowControl('close')}
-              className="w-8 h-8 flex items-center justify-center text-brand-textMuted hover:text-white hover:bg-[color:var(--neon-destructive)] rounded transition-colors cursor-pointer"
-              title="Close"
+               className="atmo-btn w-8 h-8 flex items-center justify-center text-brand-textMuted hover:text-white hover:bg-[color:var(--neon-destructive)] rounded transition-colors cursor-pointer"
+               title="Close"
             >
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />

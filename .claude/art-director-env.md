@@ -35,10 +35,11 @@ Established design system (packages/desktop/src/renderer/BrandLogo.tsx + login.h
 Page queue (breadth-first, from art-director-state.md):
 1. BrandLogo (atmosphere mark) — DONE (committed earlier)
 2. Main app shell ambient background + empty/loading copy (App.tsx) — DONE
-3. Login / account auth pages (standalone HTML) — login DONE; account.html RESTYLE REMAINS (this item)
-4. TitleBar / header (desktop renderer)
-5. Sidebar conversation list (desktop renderer)
+ 3. Login / account auth pages (standalone HTML) — DONE (account.html restyle 8b9a915)
+ 4. TitleBar / header (desktop renderer) — DONE this cycle
+ 5. Sidebar conversation list (desktop renderer) — NEXT
 
-Playwright MCP: available this session (mcp__playwright__* tools present).
+Playwright MCP: NOT available this session (no mcp__playwright__* tools) — same as prior
+art-director runs; proceed code-only and flag for a visual pass once MCP is attached.
 
 Last verified: 2026-07-17
