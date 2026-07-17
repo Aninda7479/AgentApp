@@ -13,7 +13,8 @@ import { BYOKProviderManager } from './byok.js';
 import { createProviderAdapter } from './models.js';
 import { SettingsStorage } from '../storage/settings-store.js';
 import { ModelGovStorage } from '../storage/model-gov.js';
-import { providerHealth } from './provider-health.js';
+import { providerHealth, classifyProviderError } from './provider-health.js';
+import { deriveReasoningEffortFromDifficulty, candidateCountForDifficulty } from './reasoning-effort.js';
 import {
   detectInputModalities,
   planModalityBridge,
@@ -32,6 +33,34 @@ export interface RouterOptions {
   /** Default reasoning effort applied to every request unless the caller sets
    *  its own `request.reasoningEffort` (caller preference wins). */
   reasoningEffort?: ReasoningEffort;
+  /** Observability hook: fired whenever the router avoids, demotes, or fails
+   *  over a provider (mission: make the "can't be banned out from under you"
+   *  resilience *visible* rather than silent). See {@link RerouteEvent}. */
+  onReroute?: (e: RerouteEvent) => void;
+}
+
+/**
+ * A structured record of one resilience decision the router made — emitted via
+ * `RouterOptions.onReroute` so the engine/GUI can show the user *why* a
+ * provider was skipped or a request rerouted. This is the visibility half of
+ * the health monitor: the router already reroutes silently; this makes that
+ * audible.
+ *
+ * `reason` is one of:
+ * - `'health-skip'`  — a provider was passed over because a healthier one was
+ *   available (it will only be tried as a last resort if everything else fails).
+ * - `'health-last-resort'` — every provider is unhealthy, so an unhealthy
+ *   provider is being attempted anyway (no healthier option exists).
+ * - `'error'` — an attempt against a provider failed; `to` names the next
+ *   provider that will be tried, or is absent when this was the final attempt.
+ */
+export interface RerouteEvent {
+  from: string;
+  to?: string;
+  reason: 'health-skip' | 'health-last-resort' | 'error';
+  /** Live access status of `from` at decision time (when health-driven). */
+  status?: 'available' | 'locked' | 'rate_limited' | 'deprecated';
+  detail?: string;
 }
 
 /** Routes completion requests to the best available provider with fallback and task-based model selection. */
@@ -58,9 +87,19 @@ export class ModelRouter {
     request: CompletionRequest,
     byokManager: BYOKProviderManager,
     overrideProvider?: AIProvider,
-    reasoningEffort?: ReasoningEffort
+    reasoningEffort?: ReasoningEffort,
+    onReroute?: (e: RerouteEvent) => void
   ): Promise<CompletionResponse> {
-    const effort = reasoningEffort ?? this.reasoningEffort;
+    // Difficulty-driven reasoning-effort cascade: escalate effort for
+    // reasoning/coding tasks scaled by difficulty, but only when the caller
+    // hasn't set an explicit effort (caller wins — never downgrade/override).
+    const explicitEffort = reasoningEffort ?? this.reasoningEffort;
+    const classification = classifyTask(request);
+    const effort =
+      explicitEffort ??
+      (classification.isReasoning || classification.isCoding
+        ? deriveReasoningEffortFromDifficulty(classification.difficulty)
+        : undefined);
     const req: CompletionRequest =
       effort && !request.reasoningEffort ? { ...request, reasoningEffort: effort } : request;
 
@@ -103,10 +142,41 @@ export class ModelRouter {
     const ranked = sortedConfigs.map((c, i) => ({ c, i, r: ModelRouter.healthRank(c.provider) }));
     ranked.sort((a, b) => (a.r - b.r) || (a.i - b.i));
     const ordered = ranked.map((x) => x.c);
+    const hasHealthy = ordered.some((c) => ModelRouter.healthRank(c.provider) === 0);
 
     const errors: string[] = [];
 
-    for (const config of ordered) {
+    // Surface resilience decisions up front: when a healthier provider exists,
+    // every unhealthy provider is being *deprioritized* (it will only be tried
+    // if all healthier ones fail). Emitting this before the loop means the user
+    // sees the skip even when the down provider is never actually contacted.
+    if (hasHealthy) {
+      for (const config of ordered) {
+        const status = providerHealth.getStatus(config.provider);
+        if (status !== 'available') {
+          onReroute?.({
+            from: config.provider,
+            reason: 'health-skip',
+            status,
+            detail: 'healthier provider available; will only be tried as last resort'
+          });
+        }
+      }
+    }
+
+    for (let i = 0; i < ordered.length; i++) {
+      const config = ordered[i];
+      const status = providerHealth.getStatus(config.provider);
+      // When NO provider is healthy, an unhealthy one is attempted as a genuine
+      // last resort — note that explicitly (it differs from a routine skip).
+      if (!hasHealthy && status !== 'available') {
+        onReroute?.({
+          from: config.provider,
+          reason: 'health-last-resort',
+          status,
+          detail: 'no healthier provider available'
+        });
+      }
       try {
         const adapter: BaseProviderAdapter = createProviderAdapter(config);
         const response = await adapter.complete(req);
@@ -116,6 +186,14 @@ export class ModelRouter {
         const message = err instanceof Error ? err.message : String(err);
         errors.push(`[${config.provider}]: ${message}`);
         providerHealth.recordFailure(config.provider, err);
+        const next = ordered[i + 1];
+        onReroute?.({
+          from: config.provider,
+          to: next?.provider,
+          reason: 'error',
+          status: classifyProviderError(err),
+          detail: message
+        });
       }
     }
 
@@ -144,13 +222,27 @@ export class ModelRouter {
     request: CompletionRequest,
     byokManager: BYOKProviderManager,
     pool: RouterModel[],
-    options?: { overrideProvider?: AIProvider; onBridge?: (plan: ModalityBridgePlan) => void },
+    options?: {
+      overrideProvider?: AIProvider;
+      onBridge?: (plan: ModalityBridgePlan) => void;
+      onReroute?: (e: RerouteEvent) => void;
+    },
     reasoningEffort?: ReasoningEffort
   ): Promise<CompletionResponse> {
-    const effort = reasoningEffort ?? this.reasoningEffort;
+    // Difficulty-driven reasoning-effort cascade (see completeWithFallback):
+    // escalate for reasoning/coding tasks by difficulty, never override an
+    // explicit caller effort.
+    const explicitEffort = reasoningEffort ?? this.reasoningEffort;
+    const classification = classifyTask(request);
+    const effort =
+      explicitEffort ??
+      (classification.isReasoning || classification.isCoding
+        ? deriveReasoningEffortFromDifficulty(classification.difficulty)
+        : undefined);
+    const onReroute = options?.onReroute;
     const required = detectInputModalities(request);
     if (required.length === 0 || pool.length === 0) {
-      return this.completeWithFallback(request, byokManager, options?.overrideProvider, effort);
+      return this.completeWithFallback(request, byokManager, options?.overrideProvider, effort, onReroute);
     }
 
     // Resolve the target model the final answer will come from.
@@ -169,13 +261,13 @@ export class ModelRouter {
     const plan = planModalityBridge({ requiredModalities: required, targetModel, pool });
     if (options?.onBridge) options.onBridge(plan);
     if (!plan.needsBridge || !plan.bridgeModel) {
-      return this.completeWithFallback(request, byokManager, options?.overrideProvider, effort);
+      return this.completeWithFallback(request, byokManager, options?.overrideProvider, effort, onReroute);
     }
 
     // 1) Bridge call — the vision/transcription model reads the raw attachment.
     const bridgeConfig = byokManager.getKey(plan.bridgeModel.providerId);
     if (!bridgeConfig) {
-      return this.completeWithFallback(request, byokManager, options?.overrideProvider, effort);
+      return this.completeWithFallback(request, byokManager, options?.overrideProvider, effort, onReroute);
     }
     const bridgeReq = withBridgeInstruction(request, bridgeInstruction(plan.bridgeType!));
     if (effort && !bridgeReq.reasoningEffort) bridgeReq.reasoningEffort = effort;
@@ -190,7 +282,7 @@ export class ModelRouter {
       plan.bridgeType === 'transcription' ? 'Transcript' : 'Image description'
     );
     if (effort && !targetReq.reasoningEffort) targetReq.reasoningEffort = effort;
-    return this.completeWithFallback(targetReq, byokManager, options?.overrideProvider, effort);
+    return this.completeWithFallback(targetReq, byokManager, options?.overrideProvider, effort, onReroute);
   }
 
   /**
@@ -254,6 +346,11 @@ export class ModelRouter {
    * runs each and merges their outputs. It shares the EXACT pool / override /
    * capability-gating / scoring logic with routeModelForTask so single-model and
    * multi-model routing never diverge.
+   *
+   * The candidate breadth escalates for high-difficulty tasks (difficulty-driven
+   * ensemble cascade): a hard task widens the parallel pool so the synthesis
+   * step merges more independent perspectives (quality + bias-resistance), while
+   * an explicit `count` is never reduced — only escalated upward when needed.
    */
   public static selectCandidateModels(
     prompt: string,
@@ -262,13 +359,15 @@ export class ModelRouter {
     request?: CompletionRequest
   ): Array<{ provider: string; model: string }> {
     if (allModels.length === 0) return [];
+    const classification = classifyTask(request ?? { messages: [{ role: 'user', content: prompt }] });
+    const effectiveCount = candidateCountForDifficulty(classification.difficulty, count);
     const prepared = ModelRouter.prepareRouting(prompt, allModels, request);
     if (prepared.override) return [prepared.override];
     const ranked = ModelRouter.rankModels(
       prepared.flags,
       ModelRouter.resolveCandidatePool(prepared.flags, prepared.enabledModels)
     );
-    const n = Math.max(1, Math.min(count, ranked.length));
+    const n = Math.max(1, Math.min(effectiveCount, ranked.length));
     return ranked.slice(0, n).map((c) => ({
       provider: c.model.providerId,
       model: ModelRouter.stripProviderPrefix(c.model.providerId, c.model.id)

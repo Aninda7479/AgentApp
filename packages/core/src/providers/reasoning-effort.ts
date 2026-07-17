@@ -1,5 +1,6 @@
 import { ReasoningEffort } from '../types/agent.js';
 import { resolveProviderFamily } from './provider-meta.js';
+import type { TaskDifficulty } from './task-classifier.js';
 
 /**
  * Reasoning-effort normalization — the P1 orchestration piece that makes a
@@ -143,4 +144,43 @@ export function applyReasoningEffort(
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null;
+}
+
+/**
+ * Difficulty-driven reasoning-effort cascade (mission: "escalate from small to
+ * large only when needed"). Maps a task's estimated {@link TaskDifficulty} onto
+ * a reasoning-effort tier — but ONLY when no explicit effort is already set
+ * (`base`). An explicit caller effort always wins, so this never downgrades or
+ * silently overrides a deliberate choice; it only *adds* effort for hard tasks
+ * that would otherwise run at the default and under-think.
+ *
+ *   - base set          → base (caller wins)
+ *   - difficulty `high` → 'high'
+ *   - difficulty `medium` → 'medium'
+ *   - difficulty `low`  → undefined (no escalation; preserve cost/latency)
+ */
+export function deriveReasoningEffortFromDifficulty(
+  difficulty: TaskDifficulty,
+  base?: ReasoningEffort
+): ReasoningEffort | undefined {
+  if (base) return base;
+  if (difficulty === 'high') return 'high';
+  if (difficulty === 'medium') return 'medium';
+  return undefined;
+}
+
+/**
+ * Difficulty-driven ensemble-breadth cascade. For a high-difficulty task we
+ * widen the parallel-multi-model (best-of-N / ensemble) candidate set so the
+ * synthesis step merges more independent perspectives (quality + bias-
+ * resistance). It NEVER reduces an explicit `baseCount` the caller chose — it
+ * only escalates upward when the task is hard, matching the "escalate only
+ * when needed" principle.
+ */
+export function candidateCountForDifficulty(
+  difficulty: TaskDifficulty,
+  baseCount: number = 2
+): number {
+  if (difficulty === 'high') return Math.max(baseCount, 3);
+  return baseCount;
 }

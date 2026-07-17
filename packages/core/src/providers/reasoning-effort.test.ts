@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeReasoningEffort,
   getReasoningRequestParams,
-  applyReasoningEffort
+  applyReasoningEffort,
+  deriveReasoningEffortFromDifficulty,
+  candidateCountForDifficulty
 } from './reasoning-effort.js';
 
 describe('normalizeReasoningEffort', () => {
@@ -90,5 +92,35 @@ describe('applyReasoningEffort', () => {
       maxOutputTokens: 100,
       thinkingConfig: { thinkingBudget: 1024, includeThoughts: false }
     });
+  });
+});
+
+describe('deriveReasoningEffortFromDifficulty (effort cascade)', () => {
+  it('escalates effort for high-difficulty tasks', () => {
+    expect(deriveReasoningEffortFromDifficulty('high')).toBe('high');
+  });
+  it('escalates effort to medium for medium-difficulty tasks', () => {
+    expect(deriveReasoningEffortFromDifficulty('medium')).toBe('medium');
+  });
+  it('does not escalate for low-difficulty tasks (preserve cost/latency)', () => {
+    expect(deriveReasoningEffortFromDifficulty('low')).toBeUndefined();
+  });
+  it('never overrides an explicit base effort (caller wins)', () => {
+    expect(deriveReasoningEffortFromDifficulty('low', 'high')).toBe('high');
+    expect(deriveReasoningEffortFromDifficulty('high', 'low')).toBe('low');
+  });
+});
+
+describe('candidateCountForDifficulty (ensemble breadth cascade)', () => {
+  it('widens the candidate pool for high-difficulty tasks', () => {
+    expect(candidateCountForDifficulty('high', 2)).toBe(3);
+    expect(candidateCountForDifficulty('high', 1)).toBe(3);
+  });
+  it('keeps the explicit count for non-high tasks', () => {
+    expect(candidateCountForDifficulty('medium', 2)).toBe(2);
+    expect(candidateCountForDifficulty('low', 2)).toBe(2);
+  });
+  it('never reduces an explicit larger count', () => {
+    expect(candidateCountForDifficulty('high', 5)).toBe(5);
   });
 });

@@ -22,7 +22,8 @@ export type AgentEventType =
   | 'done'           // generation complete
   | 'error'          // error occurred
   | 'abort'          // user stopped
-  | 'bestofn';       // best-of-N merge result (parallel multi-model orchestration)
+  | 'bestofn'        // best-of-N merge result (parallel multi-model orchestration)
+  | 'reroute';       // orchestrator avoided/failed-over a provider (resilience visible)
 
 export interface AgentEvent {
   type: AgentEventType;
@@ -48,6 +49,10 @@ export interface AgentEvent {
   agreement?: number;
   /** Number of distinct (normalized) answers among the candidates. */
   clusters?: number;
+  /** Resilience metadata, set on 'reroute' events: which provider was avoided,
+   *  demoted, or failed over, and why. Surfaces the "can't be banned out from
+   *  under you" promise to the GUI instead of failing silently. */
+  reroute?: RerouteEvent;
 }
 
 // ─── Orchestration helpers ────────────────────────────────────────────────────
@@ -126,7 +131,7 @@ import { capabilityRegistry } from './models.js';
 import { BestOfNStrategy, synthesizeEnsemble } from './best-of-n.js';
 import { ContentBlock, ImageAttachment, type CompletionRequest, type AIProvider, type ReasoningEffort } from '../types/agent.js';
 import { ModelRouter } from './router.js';
-import type { RouterModel } from './router.js';
+import type { RouterModel, RerouteEvent } from './router.js';
 import { BYOKProviderManager } from './byok.js';
 import { SettingsStorage, type ModelSettings } from '../storage/settings-store.js';
 import { ModelGovStorage } from '../storage/model-gov.js';
@@ -1000,6 +1005,9 @@ Key guidelines:
       pool?: RouterModel[];
       byokManager: BYOKProviderManager;
       sessionId?: string;
+      /** Optional caller hook for raw reroute events (the engine also emits a
+       *  'reroute' AgentEvent so the GUI can surface resilience decisions). */
+      onReroute?: (e: RerouteEvent) => void;
     }
   ): Promise<void> {
     const sessionId = opts.sessionId ?? `session-${Date.now()}`;
@@ -1017,6 +1025,19 @@ Key guidelines:
           if (plan.needsBridge) {
             onEvent({ type: 'thought', sessionId, content: `[Orchestrator] ${plan.reason}` });
           }
+        },
+        onReroute: (e: RerouteEvent) => {
+          // Surface the resilience decision (mission: the "can't be banned out
+          // from under you" reroute must be visible, not silent). The caller may
+          // also forward `e` to its own handler via opts.onReroute.
+          const label =
+            e.reason === 'error'
+              ? `rerouted from ${e.from}${e.to ? ` → ${e.to}` : ''} (failed: ${e.detail ?? e.status})`
+              : e.reason === 'health-skip'
+                ? `skipped ${e.from} (${e.status}: healthier option available)`
+                : `last resort: ${e.from} (${e.status}: no healthier provider)`;
+          onEvent({ type: 'reroute', sessionId, content: `[Orchestrator] ${label}` });
+          opts.onReroute?.(e);
         }
       },
       opts.config.reasoningEffort
