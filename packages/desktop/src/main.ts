@@ -2,7 +2,7 @@ import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, type IpcMai
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, capabilityRegistry, parseContextLimit } from '@superagent/core';
+import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, capabilityRegistry, parseContextLimit, MediaPipelineRouter } from '@superagent/core';
 
 // Set a custom userData path so all app data lives in <home>/.superagent.
 app.setPath('userData', getUserDataDirectory());
@@ -1003,6 +1003,80 @@ safeHandle('three-d-generate', async (_event, args: { name?: string; prompt?: st
   } catch (err: unknown) {
     return { ok: false, message: `3D Studio generation failed: ${(err as Error).message}` };
   }
+});
+
+// ─── IPC: Voice dictation (speech-to-text) ────────────────────────────────────
+// The Workspace composer's mic can transcribe recorded audio through a real STT
+// model (Whisper-compatible). The renderer records audio with MediaRecorder and
+// sends the raw bytes here; we resolve the provider key/base-URL selected in
+// Settings → Voice, then route through the core media pipeline.
+const mediaRouter = new MediaPipelineRouter();
+
+safeHandle('media-transcribe', async (_event, args: {
+  buffer?: number[] | ArrayBuffer | Uint8Array;
+  filename?: string;
+  mimeType?: string;
+}) => {
+  const settings = SettingsStorage.loadSettings();
+  const voice = settings?.voice || {};
+
+  // Normalize the incoming audio bytes to a Node Buffer.
+  let audioBuffer: Buffer;
+  const raw = args?.buffer;
+  if (!raw) {
+    return { ok: false, error: 'No audio was captured. Try holding the mic a bit longer.' };
+  }
+  if (Buffer.isBuffer(raw)) {
+    audioBuffer = raw;
+  } else if (raw instanceof ArrayBuffer) {
+    audioBuffer = Buffer.from(new Uint8Array(raw));
+  } else if (raw instanceof Uint8Array) {
+    audioBuffer = Buffer.from(raw);
+  } else if (Array.isArray(raw)) {
+    audioBuffer = Buffer.from(Uint8Array.from(raw));
+  } else {
+    return { ok: false, error: 'Unsupported audio payload.' };
+  }
+  if (audioBuffer.length === 0) {
+    return { ok: false, error: 'No audio was captured. Try holding the mic a bit longer.' };
+  }
+
+  // Resolve the provider selected for voice from the connected providers.
+  const providers = settings?.providers || [];
+  const provider = providers.find((p) => p.id === voice.providerId) || providers.find((p) => p.apiKey);
+  if (!provider || !provider.apiKey) {
+    return {
+      ok: false,
+      needsSetup: true,
+      error: 'No transcription model is configured. Open Settings → Voice & Mic and pick a provider + model (e.g. whisper-1).'
+    };
+  }
+
+  const model = voice.model?.trim() || 'whisper-1';
+  const result = await mediaRouter.executeTask(
+    {
+      taskType: 'audio-transcription',
+      audioTranscribe: {
+        audioBuffer,
+        filename: args?.filename || 'dictation.webm',
+        model,
+        language: voice.language?.trim() || undefined,
+        responseFormat: 'json'
+      }
+    },
+    {
+      provider: (provider.id as any) || 'openai',
+      apiKey: provider.apiKey,
+      baseUrl: provider.baseUrl || undefined,
+      modelName: model
+    }
+  );
+
+  if (result.status !== 'success' || !result.result) {
+    return { ok: false, error: result.error || 'Transcription failed.' };
+  }
+  const text = (result.result as { text?: string }).text || '';
+  return { ok: true, text };
 });
 
 safeHandle('three-d-list-models', async () => {

@@ -288,5 +288,56 @@ describe('Sandbox Engine Suite (Steps 009 - 015)', () => {
       expect(res.stderr).not.toMatch(/rejected by user permission/i);
       expect(fs.existsSync(marker)).toBe(false);
     });
+
+    it('deny-all mode blocks every command (no allowlist → "Never approve")', async () => {
+      let requested: any = null;
+      const runner = new SandboxRunner({
+        projectRoot: tempDir,
+        permissionMode: 'deny-all',
+        allowedCommands: [], // empty → deny-all gate is what fires
+        requestApproval: async (req) => { requested = req; return true; }
+      });
+      const marker = path.join(tempDir, 'deny-delete.txt');
+      await fs.promises.writeFile(marker, 'gone', 'utf8');
+
+      const res = await runner.runCommand('rm deny-delete.txt');
+      expect(requested).toBeNull(); // never asks the user
+      expect(res.stderr).toMatch(/Never approve/i);
+      expect(res.exitCode).toBe(126);
+      expect(fs.existsSync(marker)).toBe(true); // never ran
+    });
+
+    it('deny-all mode still runs a command on the project allowlist', async () => {
+      let requested: any = null;
+      const runner = new SandboxRunner({
+        projectRoot: tempDir,
+        permissionMode: 'deny-all',
+        allowedCommands: ['rm'], // first-token match permits rm *
+        requestApproval: async (req) => { requested = req; return true; }
+      });
+      const marker = path.join(tempDir, 'allow-delete.txt');
+      await fs.promises.writeFile(marker, 'gone', 'utf8');
+
+      const res = await runner.runCommand('rm allow-delete.txt');
+      expect(requested).toBeNull(); // allowlist path never prompts
+      expect(res.stderr).not.toMatch(/Never approve/i);
+      expect(fs.existsSync(marker)).toBe(false); // ran
+
+      // A command NOT on the allowlist is blocked.
+      const blocked = await runner.runCommand('git status');
+      expect(blocked.stderr).toMatch(/allowed commands/i);
+    });
+
+    it('deny-all mode also blocks file writes', async () => {
+      const runner = new SandboxRunner({
+        projectRoot: tempDir,
+        permissionMode: 'deny-all',
+        requestApproval: async () => true
+      });
+      const target = path.join(tempDir, 'should-not-write.txt');
+      const res = await runner.writeFile(target, 'nope');
+      expect(res.written).toBe(false);
+      expect(fs.existsSync(target)).toBe(false);
+    });
   });
 });

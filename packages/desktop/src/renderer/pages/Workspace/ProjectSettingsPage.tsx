@@ -1,7 +1,36 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Plus, Folder, Trash2, Terminal, Check, ArrowLeft, Boxes, Brain, ClipboardList } from 'lucide-react';
-import { StoredProject } from '../../types';
+import { X, Plus, Folder, Trash2, Terminal, Check, ArrowLeft, Boxes, Brain, ClipboardList, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { StoredProject, InheritableSandbox, InheritableApproval, InheritableInternet } from '../../types';
 import { ProjectService } from '../../logic/project';
+
+/** A small segmented toggle used for the inheritable Sandbox & Internet selects. */
+function Segmented<T extends string>(props: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}): React.ReactElement {
+  return (
+    <div className="inline-flex flex-wrap gap-1 bg-brand-bg/40 border border-brand-border/60 rounded-lg p-1">
+      {props.options.map((opt) => {
+        const active = props.value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => props.onChange(opt.value)}
+            className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+              active
+                ? 'bg-[var(--brand-highlight)] text-[color:var(--brand-highlight-text)]'
+                : 'text-brand-textMuted hover:bg-[var(--brand-hover)] hover:text-brand-textMain'
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export interface ProjectSettingsPageProps {
   /** The project currently being configured, or null if none is selected. */
@@ -38,6 +67,11 @@ export const ProjectSettingsPage: React.FC<ProjectSettingsPageProps> = ({
   const [newCommand, setNewCommand] = useState('');
   const commandInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Sandbox & Internet scope overrides ──
+  const [sandbox, setSandbox] = useState<InheritableSandbox>('inherit');
+  const [approval, setApproval] = useState<InheritableApproval>('inherit');
+  const [internet, setInternet] = useState<InheritableInternet>('inherit');
+
   // Re-seed the form whenever the active project changes.
   useEffect(() => {
     setFolders(project?.folders ?? []);
@@ -45,8 +79,11 @@ export const ProjectSettingsPage: React.FC<ProjectSettingsPageProps> = ({
     setAllowedSkills(project?.allowedSkills ?? []);
     setMemory(project?.memory ?? '');
     setInstructions(project?.instructions ?? '');
+    setSandbox(project?.settings?.sandbox ?? 'inherit');
+    setApproval(project?.settings?.approval ?? 'inherit');
+    setInternet(project?.settings?.internet ?? 'inherit');
     setNewCommand('');
-  }, [project?.name, project?.folders, project?.allowedCommands, project?.allowedSkills, project?.memory, project?.instructions]);
+  }, [project?.name, project?.folders, project?.allowedCommands, project?.allowedSkills, project?.memory, project?.instructions, project?.settings?.sandbox, project?.settings?.approval, project?.settings?.internet]);
 
   const handleAddFolder = async () => {
     const selected = await ProjectService.selectProjectFolders();
@@ -83,7 +120,8 @@ export const ProjectSettingsPage: React.FC<ProjectSettingsPageProps> = ({
       allowedCommands,
       allowedSkills,
       memory,
-      instructions
+      instructions,
+      settings: { sandbox, approval, internet }
     });
   };
 
@@ -215,6 +253,58 @@ export const ProjectSettingsPage: React.FC<ProjectSettingsPageProps> = ({
                 <button onClick={handleAddCommand} disabled={!newCommand.trim()} className="px-3 bg-[var(--brand-highlight)] hover:bg-[var(--brand-highlight-hover)] disabled:opacity-40 disabled:cursor-not-allowed text-[color:var(--brand-highlight-text)] rounded-lg text-xs font-semibold flex items-center justify-center cursor-pointer transition-colors">
                   <Plus size={14} />
                 </button>
+              </div>
+            </div>
+          </section>
+
+          {/* Sandbox & Internet (scope overrides) */}
+          <section className="flex flex-col gap-2">
+            <span className="ui-label flex items-center gap-1.5">
+              <ShieldCheck size={13} className="text-[color:var(--neon-constructive)]" /> Sandbox &amp; Internet
+            </span>
+            <div className="flex flex-col gap-3 bg-brand-bg/40 border border-brand-border/60 rounded-xl p-3">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[11px] text-brand-textMuted font-medium">Sandbox</span>
+                <Segmented
+                  value={sandbox}
+                  onChange={setSandbox}
+                  options={[
+                    { value: 'inherit', label: 'Inherit (global)' },
+                    { value: 'sandboxed', label: 'Sandboxed' },
+                    { value: 'full-access', label: 'Full access' }
+                  ]}
+                />
+                <span className="text-[10px] text-brand-textMuted/60">Full access lets the agent read/write anywhere on disk; Sandboxed confines file access to the authorized folders.</span>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[11px] text-brand-textMuted font-medium">Command approval</span>
+                <Segmented
+                  value={approval}
+                  onChange={setApproval}
+                  options={[
+                    { value: 'inherit', label: 'Inherit (global)' },
+                    { value: 'always', label: 'Always approve' },
+                    { value: 'ask', label: 'Ask for approval' },
+                    { value: 'never', label: 'Never approve' }
+                  ]}
+                />
+                <span className="text-[10px] text-brand-textMuted/60">Never approve blocks every command unless it is on the project's allowed-commands list.</span>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[11px] text-brand-textMuted font-medium">Internet access</span>
+                <Segmented
+                  value={internet}
+                  onChange={setInternet}
+                  options={[
+                    { value: 'inherit', label: 'Inherit (global)' },
+                    { value: 'all', label: 'Full access' },
+                    { value: 'observation', label: 'Observation only' },
+                    { value: 'none', label: 'None' }
+                  ]}
+                />
+                <span className="text-[10px] text-brand-textMuted/60">Observation only allows read-only GET requests; None blocks web fetch, search, and uploads (the AI provider API still works).</span>
               </div>
             </div>
           </section>

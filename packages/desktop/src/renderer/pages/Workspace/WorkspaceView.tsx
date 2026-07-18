@@ -43,6 +43,8 @@ interface WorkspaceViewProps {
   onRemoveAttachment?: (index: number) => void;
   /** Model of the currently open chat (used to default the composer selection). */
   activeChatModel?: string;
+  /** Approval choice seeded from the active chat/project/global "Sandbox & Internet" default. */
+  defaultApprovalMode?: 'always' | 'ask' | 'never';
   /** Called when the user changes the selected model in the composer. */
   onModelChange?: (model: string) => void;
   /** Projects available for the composer context switcher. */
@@ -54,6 +56,8 @@ interface WorkspaceViewProps {
   onUnsandboxedActionsChange?: (value: boolean) => void;
   /** Invoked when voice dictation is unavailable in this environment. */
   onMicUnavailable?: () => void;
+  /** Surfaces a user-facing mic notice (errors, setup hints) as a toast. */
+  onMicNotice?: (message: string) => void;
   /** Built-in slash commands for the composer autocomplete. */
   slashCommands?: import('../../components/slashCommands').SlashSuggestion[];
   /** Discovered skills for the composer autocomplete. */
@@ -269,11 +273,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   onRemoveAttachment,
   activeChatModel,
   onModelChange,
+  defaultApprovalMode,
   projects = [],
   onSelectProject,
   unsandboxedActions = false,
   onUnsandboxedActionsChange,
   onMicUnavailable,
+  onMicNotice,
   slashCommands,
   skills = [],
   lastError,
@@ -638,6 +644,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         availableModels={composerModelsFromCatalog(modelsCatalog)}
         emptyStateMessage={composerEmptyStateMessage(modelsCatalog)}
         defaultModel={activeChatModel && enabledModels.some(m => m.name === activeChatModel) ? activeChatModel : (enabledModels.length > 1 ? 'Orchestrator' : (enabledModels[0]?.name || ''))}
+        defaultApprovalMode={defaultApprovalMode}
         promptValue={composerPrompt}
         onPromptChange={onPromptChange}
         onAttachPastedFiles={onAttachPastedFiles}
@@ -649,6 +656,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         sandbox={!unsandboxedActions}
         onSandboxChange={(v) => onUnsandboxedActionsChange?.(!v)}
         onMicUnavailable={onMicUnavailable}
+        onMicNotice={onMicNotice}
         slashCommands={slashCommands}
         skills={skills}
         mcpServers={mcpServers.map((s) => ({ name: s.name, id: s.id }))}

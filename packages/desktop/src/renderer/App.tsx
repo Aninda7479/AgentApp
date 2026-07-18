@@ -14,6 +14,7 @@ import { SettingsView, ProviderConnection, ModelConfig } from './pages/Settings/
 import type { InternetAccessLevel } from './pages/Settings/types';
 import { CreateProjectModal } from './pages/Workspace/CreateProjectModal';
 import { ConfigureProjectModal } from './pages/Workspace/ConfigureProjectModal';
+import { ChatSettingsModal } from './pages/Workspace/ChatSettingsModal';
 import { TitleBar } from './components/TitleBar';
 import { AppToast } from './components/AppToast';
 import { WorkspaceView } from './pages/Workspace/WorkspaceView';
@@ -25,6 +26,7 @@ import { usePartners } from './pages/Settings/companion/library';
 import { PartnerOverlay } from './partner-popup/PartnerOverlay';
 import { ThreeDStudio } from './pages/Studio/ThreeDStudio';
 import { StoredChat, StoredProject } from './types';
+import { resolveScopeSettings } from './logic/scopeSettings';
 import { SessionLoopManager, LoopTask } from './logic/loop';
 import { useThemeMode } from './theme';
 import { getRouteFromLocation, pushRoute, subscribeRouteChange, buildPath } from './urlSync';
@@ -131,6 +133,8 @@ export const App: React.FC = () => {
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState<boolean>(false);
   const [isConfigureProjectOpen, setIsConfigureProjectOpen] = useState<boolean>(false);
   const [projectToConfigure, setProjectToConfigure] = useState<StoredProject | null>(null);
+  const [isChatSettingsOpen, setIsChatSettingsOpen] = useState<boolean>(false);
+  const [chatToConfigure, setChatToConfigure] = useState<StoredChat | null>(null);
   const [composerAttachments, setComposerAttachments] = useState<{ filename: string; sourcePath?: string; buffer?: number[] }[]>(() => {
     try {
       const cached = localStorage.getItem('composer_attachments_cache');
@@ -265,6 +269,27 @@ export const App: React.FC = () => {
 
   const activeChat = chats.find((chat) => chat.id === activeChatId) || null;
   const defaultComposerModel = lastUsedModel || modelsCatalog.find((m) => m.enabled)?.name || '';
+
+  // Resolve the effective sandbox + internet default for the active chat/project
+  // so the composer's controls can be seeded from it (settings = default,
+  // composer = per-send override per the approved plan).
+  const resolvedScope = useMemo(() => {
+    const project = projects.find((p) => p.name === activeProject) || null;
+    return resolveScopeSettings({
+      chat: activeChat,
+      project,
+      globalUnsandboxed: fullAccess,
+      globalInternet: internetAccessLevel
+    });
+    // recompute when the active scope or the global fallbacks change.
+  }, [activeChat, activeProject, projects, fullAccess, internetAccessLevel]);
+
+  // Seed the composer's sandbox badge from the resolved default whenever the
+  // active chat/project changes. The user can still toggle it per send.
+  useEffect(() => {
+    setFullAccess(resolvedScope.unsandboxed);
+  }, [resolvedScope.unsandboxed]);
+  const resolvedDefaultApproval = resolvedScope.approval;
   const isWebMode = !isElectron;
   const slashCommands = useMemo(() => builtinSuggestions(), []);
 
@@ -1033,6 +1058,10 @@ export const App: React.FC = () => {
             onOpenStandaloneChat={() => setActiveTab('standalone-chat')}
             onDeleteChat={handleDeleteChat}
             onSelectChat={handleSelectChat}
+            onChatSettings={(chat) => {
+              setChatToConfigure(chat);
+              setIsChatSettingsOpen(true);
+            }}
           />
         )}
 
@@ -1073,6 +1102,7 @@ export const App: React.FC = () => {
               onToast={triggerToast}
               onUndoStep={handleUndoStep}
               activeChatModel={activeChat?.model || lastUsedModel}
+              defaultApprovalMode={resolvedDefaultApproval}
               onModelChange={(model) => SettingsService.persistLastUsedModel(ctx, model)}
               onAttachClick={handleAttachFiles}
               onAttachPastedFiles={handleAttachPastedFiles}
@@ -1083,6 +1113,7 @@ export const App: React.FC = () => {
               unsandboxedActions={fullAccess}
               onUnsandboxedActionsChange={handleUnsandboxedActionsChange}
               onMicUnavailable={() => triggerToast('Voice input is not supported in this browser')}
+              onMicNotice={(msg) => triggerToast(msg)}
               slashCommands={slashCommands}
               skills={skills}
               lastError={activeChat?.lastError}
@@ -1229,6 +1260,14 @@ export const App: React.FC = () => {
 
       {/* Configure Project Modal */}
       <ConfigureProjectModal isOpen={isConfigureProjectOpen} onClose={() => setIsConfigureProjectOpen(false)} project={projectToConfigure} onSave={handleSaveProjectConfig} />
+      <ChatSettingsModal
+        isOpen={isChatSettingsOpen}
+        onClose={() => setIsChatSettingsOpen(false)}
+        chat={chatToConfigure}
+        onSave={(settings) => {
+          if (chatToConfigure) ConversationService.saveChatSettings(ctx, chatToConfigure.id, settings);
+        }}
+      />
 
       {/* Keyboard Shortcuts Modal */}
       <ShortcutsModal isOpen={isShortcutsOpen} onClose={() => setIsShortcutsOpen(false)} />

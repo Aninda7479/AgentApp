@@ -14,6 +14,7 @@ import { StoreService } from './store';
 import { SettingsService } from './settings';
 import { AttachmentService } from './attachments';
 import { AgentSimulator } from './simulation';
+import { resolveScopeSettings, approvalToPermissionMode } from './scopeSettings';
 import type { SlashResult } from './slash';
 
 /** Mutable ref bundle the `agent-event` streaming listener reads/writes. */
@@ -255,6 +256,26 @@ export class AgentService {
       const selectedModelName = options.model || '';
       const resolvedModel = AgentService.resolveModelId(activeProvider, selectedModelName, ctx.getModelsCatalog());
 
+      // ── Resolve the effective sandbox + internet policy ──
+      // Precedence: Chat → Project → Global. The composer's live toggles
+      // (approval dropdown + sandbox badge) act as per-send overrides and win
+      // over the persisted scope defaults for THIS run (see Part 5 seeding).
+      const activeChat = ctx.getChats().find((c) => c.id === chatId);
+      const resolvedScope = resolveScopeSettings({
+        chat: activeChat ?? null,
+        project: activeProjectConfig ?? null,
+        globalUnsandboxed: ctx.getFullAccess(),
+        globalInternet: ctx.getInternetAccessLevel()
+      });
+      // The composer's approval dropdown was packed into options.mode by
+      // ComposerService.buildSendOptions ('auto'→always, 'plan'→ask,
+      // 'bypass'→never). This is the bug fix: the choice now actually
+      // reaches the engine instead of being ignored.
+      const composerApproval: 'always' | 'ask' | 'never' =
+        options.mode === 'auto' ? 'always' : options.mode === 'bypass' ? 'never' : 'ask';
+      const unsandboxed = ctx.getFullAccess(); // composer sandbox badge (per-send)
+      const permissionMode = approvalToPermissionMode(composerApproval, unsandboxed);
+
       const agentConfig = {
         provider: activeProvider.type === 'env' || activeProvider.type === 'key' ? activeProvider.id : 'custom',
         apiKey: activeProvider.apiKey,
@@ -264,14 +285,17 @@ export class AgentService {
         allowedCommands: activeProjectConfig?.allowedCommands,
         // ── Sandbox wiring ── the desktop engine routes every command
         // and file write through a SandboxRunner driven by these. The
-        // UI toggles (Unsandboxed Terminal Actions / Confirm shell
-        // commands) are read here so the agent actually honors them.
-        unsandboxedActions: ctx.getFullAccess(),
-        permissionMode: (ctx.getFullAccess()
-          ? 'full-autonomy'
-          : (ctx.getDefaultPermissions() ? 'read-only' : 'auto-approve-edits')),
+        // composer approval dropdown + sandbox badge (per-send overrides)
+        // and the per-Project / per-Chat "Sandbox & Internet" settings
+        // (persisted defaults) are resolved into the values below.
+        unsandboxedActions: unsandboxed,
+        permissionMode,
         attachments: allAttachmentPaths.length > 0 ? allAttachmentPaths : undefined,
-        internetAccess: ctx.getInternetAccessLevel()
+        // Per-run internet level. The resolver already walked
+        // Chat → Project → Global, so this honors the most-specific scope
+        // that set a concrete value (config.internetAccess then governs
+        // web_fetch inside the engine).
+        internetAccess: resolvedScope.internet
       };
 
       AgentService.runRealAgent(ctx, {

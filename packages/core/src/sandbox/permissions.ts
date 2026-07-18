@@ -1,5 +1,11 @@
 /** Sandbox permission mode: controls file edit and command execution policies. */
-export type PermissionMode = 'read-only' | 'auto-approve-edits' | 'full-autonomy';
+export type PermissionMode =
+  | 'read-only'
+  | 'auto-approve-edits'
+  | 'full-autonomy'
+  /** "Never approve": deny every shell command and file write unless it is
+   *  pre-approved for the session or matched by the project allowlist. */
+  | 'deny-all';
 
 /** A request for user confirmation before performing an action. */
 export interface ConfirmationRequest {
@@ -59,7 +65,9 @@ export class PermissionModeController {
   }
 
   public canModifyFile(): boolean {
-    return this.mode !== 'read-only';
+    // 'deny-all' blocks file writes just like 'read-only' does, but (unlike
+    // read-only) it also blocks shell commands via the run gate in runtime.ts.
+    return this.mode !== 'read-only' && this.mode !== 'deny-all';
   }
 
   public canAutoExecuteCommand(): boolean {
@@ -69,6 +77,11 @@ export class PermissionModeController {
   public async requestApproval(request: ConfirmationRequest): Promise<boolean> {
     if (this.mode === 'full-autonomy') {
       return true;
+    }
+    // 'deny-all' never asks the user — it auto-denies, except for the
+    // narrow pre-approved/allowlisted exceptions that callers check beforehand.
+    if (this.mode === 'deny-all') {
+      return false;
     }
     if (this.onConfirmationRequired) {
       return await this.onConfirmationRequired(request);

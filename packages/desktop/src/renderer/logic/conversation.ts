@@ -155,6 +155,24 @@ export class ConversationService {
   }
 
   /**
+   * Persists per-chat sandbox + internet overrides. The chat-level scope wins
+   * over the parent project and the global default for this chat only.
+   */
+  static saveChatSettings(
+    ctx: AppContext,
+    chatId: string,
+    settings: import('../types').AgentScopeSettings
+  ): void {
+    ctx.setChats((prev) => {
+      const next = prev.map((c) =>
+        c.id === chatId ? { ...c, settings: { ...settings } } : c
+      );
+      ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), next);
+      return next;
+    });
+  }
+
+  /**
    * Opens a blank draft chat, optionally scoped to a project. Clears the
    * trajectory and navigates to the trajectory view.
    */

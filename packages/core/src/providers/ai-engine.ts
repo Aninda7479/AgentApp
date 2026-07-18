@@ -271,7 +271,11 @@ function grepSearch(dir: string, pattern: string, fileGlob?: string): string {
 
 export function createBuiltinTools(
   runnerOrRoot?: SandboxRunner | string,
-  allowedCommandsOrRoot?: string[] | string
+  allowedCommandsOrRoot?: string[] | string,
+  /** Resolves the effective internet-access level for this run. When omitted
+   *  the global persisted setting is used. Passed into `enforceNetworkAllowed`
+   *  so a per-project / per-chat internet policy actually takes effect. */
+  getInternetLevel?: () => InternetAccessLevel | undefined
 ): ToolDefinition[] {
   let runner: SandboxRunner;
   let projectRoot: string;
@@ -422,7 +426,12 @@ export function createBuiltinTools(
       execute: async ({ url, method }) => {
         const httpMethod = (method as string) || 'GET';
         try {
-          enforceNetworkAllowed({ kind: 'web-fetch', url: url as string, method: httpMethod });
+          enforceNetworkAllowed(
+            { kind: 'web-fetch', url: url as string, method: httpMethod },
+            // Honor the per-run (project / chat) internet policy when set;
+            // otherwise fall back to the global persisted setting.
+            getInternetLevel ? getInternetLevel() : undefined
+          );
         } catch (err: unknown) {
           return `Blocked by Internet Access policy: ${(err as Error).message}`;
         }
@@ -853,7 +862,15 @@ export class AgentEngine {
     });
 
     this.tools = [
-      ...createBuiltinTools(this.sandbox, effectiveRoot),
+      ...createBuiltinTools(
+        this.sandbox,
+        effectiveRoot,
+        // Wire the per-run internet policy: when the caller set config.internetAccess
+        // (via a project/chat override), it governs web-fetch; otherwise the
+        // global persisted setting applies. Raw shell `curl`/`wget` are NOT gated
+        // by this — documented limitation, scoped separately from the sandbox.
+        () => config.internetAccess
+      ),
       ...(config.extraTools ?? [])
     ];
     this.history = [];

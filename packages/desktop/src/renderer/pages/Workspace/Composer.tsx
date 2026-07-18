@@ -65,6 +65,12 @@ export interface ComposerProps {
   defaultModel?: string;
   /** Called whenever the user changes the selected model in the dropdown. */
   onModelChange?: (model: string) => void;
+  /**
+   * The approval choice seeded from the active chat/project/global "Sandbox &
+   * Internet" defaults. The user can still change it per send; this only sets
+   * the initial value when the active scope changes.
+   */
+  defaultApprovalMode?: 'always' | 'ask' | 'never';
   activeProject?: string;
   onAttachClick?: () => void;
   promptValue?: string;
@@ -83,6 +89,8 @@ export interface ComposerProps {
   onSandboxChange?: (value: boolean) => void;
   /** Invoked when the browser/Electron lacks the Web Speech API. */
   onMicUnavailable?: () => void;
+  /** Surfaces a user-facing mic notice (errors, setup hints) as a toast. */
+  onMicNotice?: (message: string) => void;
 
   // ── Slash-command autocomplete ──
   /** Built-in slash commands shown in the `/` autocomplete. */
@@ -121,9 +129,11 @@ export const Composer: React.FC<ComposerProps> = ({
   sandbox = true,
   onSandboxChange,
   onMicUnavailable,
+  onMicNotice,
   slashCommands,
   skills = [],
   mcpServers = [],
+  defaultApprovalMode
 }) => {
   const [localPrompt, setLocalPrompt] = useState('');
   const prompt = promptValue !== undefined ? promptValue : localPrompt;
@@ -136,8 +146,35 @@ export const Composer: React.FC<ComposerProps> = ({
 
   // Voice dictation
   const [listening, setListening] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const recognitionRef = useRef<any>(null);
   const basePromptRef = useRef<string>('');
+  // Model-based (cloud STT) path state.
+  const mediaRecorderRef = useRef<any>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const [voiceEngine, setVoiceEngine] = useState<'auto' | 'browser' | 'model'>('auto');
+  const [voiceModelAvailable, setVoiceModelAvailable] = useState<boolean | null>(null);
+
+  const ipcRenderer = typeof window !== 'undefined' && (window as any).require
+    ? (window as any).require('electron').ipcRenderer
+    : null;
+
+  // Resolve which engine the mic should use, and whether a cloud model is ready.
+  useEffect(() => {
+    if (!ipcRenderer) return;
+    let active = true;
+    ipcRenderer.invoke('settings-read').then((settings: any) => {
+      if (!active) return;
+      const voice = settings?.voice || {};
+      setVoiceEngine(voice.engine === 'browser' || voice.engine === 'model' ? voice.engine : 'auto');
+      const providers = settings?.providers || [];
+      const provider = providers.find((p: any) => p.id === voice.providerId) || providers.find((p: any) => p.apiKey);
+      setVoiceModelAvailable(Boolean(provider?.apiKey));
+    }).catch(() => { /* leave defaults */ });
+    return () => { active = false; };
+  }, []);
+
+  const usesModelEngine = voiceEngine === 'model' || (voiceEngine === 'auto' && voiceModelAvailable === true);
 
   // Project switcher popover
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
@@ -263,7 +300,120 @@ export const Composer: React.FC<ComposerProps> = ({
     }
   }, [defaultModel]);
 
+  // Seed the approval dropdown from the active chat/project/global default. The
+  // user can still change it per send; this only sets the initial value
+  // when the resolved scope's default changes.
+  useEffect(() => {
+    if (defaultApprovalMode) {
+      setApprovalMode(defaultApprovalMode);
+    }
+  }, [defaultApprovalMode]);
+
+  const stopMicStream = () => {
+    try {
+      micStreamRef.current?.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+    } catch {
+      /* ignore */
+    }
+    micStreamRef.current = null;
+  };
+
+  const finalizeTranscription = (text: string) => {
+    setTranscribing(false);
+    const base = basePromptRef.current;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setPrompt(base + (base && !base.endsWith(' ') ? ' ' : '') + trimmed);
+  };
+
+  const appendTranscript = (text: string) => {
+    const base = basePromptRef.current;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setPrompt(base + (base && !base.endsWith(' ') ? ' ' : '') + trimmed);
+  };
+
+  /** Model-based dictation: record audio with MediaRecorder, then transcribe. */
+  const startModelDictation = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      onMicNotice?.('Microphone access is not available in this environment.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
+      const chunks: BlobPart[] = [];
+      const mimeType = ['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/wav'].find(
+        (t) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(t)
+      ) || '';
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e: any) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
+      recorder.onstop = async () => {
+        stopMicStream();
+        setListening(false);
+        const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+        if (blob.size === 0) {
+          setTranscribing(false);
+          return;
+        }
+        setTranscribing(true);
+        try {
+          const buf = new Uint8Array(await blob.arrayBuffer());
+          const res = ipcRenderer
+            ? await ipcRenderer.invoke('media-transcribe', {
+                buffer: Array.from(buf),
+                filename: mimeType.includes('webm') ? 'dictation.webm' : 'dictation.bin',
+                mimeType
+              })
+            : null;
+          if (res?.ok) {
+            finalizeTranscription(res.text || '');
+          } else {
+            setTranscribing(false);
+            onMicNotice?.(res?.error || 'Transcription failed.');
+          }
+        } catch (err: any) {
+          setTranscribing(false);
+          onMicNotice?.(err?.message ? `Transcription failed: ${err.message}` : 'Transcription failed.');
+        }
+      };
+      basePromptRef.current = prompt;
+      recorder.start();
+      setListening(true);
+    } catch (err: any) {
+      stopMicStream();
+      setListening(false);
+      const denied = /denied|notallowed|permission/i.test(String(err?.message || err?.name || ''));
+      onMicNotice?.(denied ? 'Microphone permission was denied.' : 'Could not start the microphone.');
+    }
+  };
+
+  const stopModelDictation = () => {
+    try {
+      mediaRecorderRef.current?.stop();
+    } catch {
+      stopMicStream();
+      setListening(false);
+    }
+  };
+
   const toggleDictation = () => {
+    // Cloud STT model path (Auto-with-config or explicit Model engine).
+    if (usesModelEngine) {
+      if (listening || transcribing) {
+        if (transcribing) return;
+        stopModelDictation();
+        return;
+      }
+      startModelDictation();
+      return;
+    }
+
+    // Browser Web Speech API path.
     if (!SpeechRecognitionCtor) {
       onMicUnavailable?.();
       return;
@@ -282,8 +432,7 @@ export const Composer: React.FC<ComposerProps> = ({
       for (let i = 0; i < event.results.length; i++) {
         text += event.results[i][0].transcript;
       }
-      const base = basePromptRef.current;
-      setPrompt(base + (base && !base.endsWith(' ') && text ? ' ' : '') + text);
+      appendTranscript(text);
     };
     rec.onend = () => setListening(false);
     rec.onerror = () => setListening(false);
@@ -299,6 +448,12 @@ export const Composer: React.FC<ComposerProps> = ({
   useEffect(() => {
     return () => {
       recognitionRef.current?.stop?.();
+      try {
+        mediaRecorderRef.current?.stop?.();
+      } catch {
+        /* already stopped */
+      }
+      stopMicStream();
     };
   }, []);
 
@@ -497,16 +652,33 @@ export const Composer: React.FC<ComposerProps> = ({
             {/* Mic / voice dictation */}
             <button
               data-testid="composer-mic-btn"
+              data-testid-mic-state={transcribing ? 'transcribing' : listening ? 'listening' : 'idle'}
               onClick={toggleDictation}
-              title={!SpeechRecognitionCtor ? 'Voice input not supported here' : listening ? 'Stop dictation' : 'Dictate with your voice'}
-              aria-label={!SpeechRecognitionCtor ? 'Voice input not supported here' : listening ? 'Stop dictation' : 'Dictate with your voice'}
+              title={
+                transcribing
+                  ? 'Transcribing…'
+                  : listening
+                  ? 'Stop dictation'
+                  : usesModelEngine
+                  ? 'Dictate with your voice (cloud model)'
+                  : (SpeechRecognitionCtor ? 'Dictate with your voice' : 'Voice input not supported here')
+              }
+              aria-label={
+                transcribing
+                  ? 'Transcribing'
+                  : listening
+                  ? 'Stop dictation'
+                  : 'Dictate with your voice'
+              }
               className={`p-2 rounded-lg border transition-colors cursor-pointer ${
                 listening
                   ? 'bg-[color:var(--neon-destructive)]/15 border-[color:var(--neon-destructive)]/40 text-[color:var(--neon-destructive)]'
+                  : transcribing
+                  ? 'bg-[color:var(--neon-live)]/15 border-[color:var(--neon-live)]/40 text-[color:var(--neon-live)]'
                   : 'bg-brand-popover/60 hover:bg-brand-popover border-brand-border text-brand-textMuted hover:text-brand-textMain'
               }`}
             >
-              <Mic className={`w-4 h-4 ${listening ? 'animate-pulse' : ''}`} />
+              <Mic className={`w-4 h-4 ${listening ? 'animate-pulse' : transcribing ? 'animate-pulse' : ''}`} />
             </button>
 
             {/* Submit / Stop */}
@@ -588,6 +760,12 @@ export const Composer: React.FC<ComposerProps> = ({
           <div className="absolute -top-7 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1 rounded-full bg-[color:var(--neon-destructive)]/15 border border-[color:var(--neon-destructive)]/30 text-[color:var(--neon-destructive)] text-[10px] font-semibold animate-fade-in">
             <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-destructive)] animate-pulse" />
             Listening…
+          </div>
+        )}
+        {transcribing && (
+          <div className="absolute -top-7 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1 rounded-full bg-[color:var(--neon-live)]/15 border border-[color:var(--neon-live)]/30 text-[color:var(--neon-live)] text-[10px] font-semibold animate-fade-in">
+            <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)] animate-pulse" />
+            Transcribing…
           </div>
         )}
       </div>

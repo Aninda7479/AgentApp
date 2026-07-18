@@ -43,6 +43,8 @@ export interface SidebarProps {
   onConfigureProject?: (project: StoredProject) => void;
   /** Opens the full-page Project Settings for the given project (replaces the quick modal). */
   onProjectSettings?: (project: StoredProject) => void;
+  /** Opens the per-chat Sandbox & Internet settings modal for the given chat. */
+  onChatSettings?: (chat: StoredChat) => void;
   /** Opens the Standalone Chat settings page. */
   onOpenStandaloneChat?: () => void;
   onDeleteChat?: (id: string) => void;
@@ -77,6 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDeleteProject,
   onConfigureProject,
   onProjectSettings,
+  onChatSettings,
   onOpenStandaloneChat,
   onDeleteChat,
   onSelectChat,
@@ -396,6 +399,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                   <span className="text-[10px] text-brand-textMuted/40 group-hover:hidden">
                                     {isChatRunning ? 'Working...' : chat.timestamp}
                                   </span>
+                                  {onChatSettings && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onChatSettings(chat);
+                                      }}
+                                      className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all cursor-pointer"
+                                      title="Chat Settings"
+                                    >
+                                      <Settings className="w-3 h-3" />
+                                    </button>
+                                  )}
                                   {onDeleteChat && (
                                     <button
                                       onClick={(e) => {
