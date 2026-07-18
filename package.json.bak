@@ -16,10 +16,7 @@
     "node": ">=18"
   },
   "workspaces": [
-    "packages/core",
-    "packages/cli",
-    "packages/desktop",
-    "packages/web"
+    "packages/*"
   ],
   "scripts": {
     "start:app": "npm run start --workspace=@superagent/desktop",

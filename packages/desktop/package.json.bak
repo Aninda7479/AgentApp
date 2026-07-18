@@ -19,7 +19,7 @@
     "lint:tokens": "node scripts/check-tokens.mjs"
   },
   "dependencies": {
-    "@superagent/core": "file:../core",
+    "@superagent/core": "^0.1.0",
     "electron-updater": "^6.8.9",
     "systeminformation": "^5.23.0",
     "esbuild": "^0.25.0",
@@ -60,15 +60,6 @@
       "assets/icon.icns",
       "assets/icon.svg"
     ],
-    "asar": true,
-    "asarUnpack": [
-      "**/*.node",
-      "**/node_modules/esbuild/**",
-      "**/node_modules/systeminformation/**",
-      "**/node_modules/sharp/**",
-      "**/node_modules/@img/**",
-      "**/node_modules/@modelcontextprotocol/**"
-    ],
     "publish": [
       {
         "provider": "github",
@@ -78,9 +69,10 @@
     ],
     "win": {
       "icon": "assets/icon.ico",
-      "artifactName": "SuperAgent-Setup-${version}.${ext}",
+      "artifactName": "SuperAgent-Setup-${version}.exe",
       "target": [
-        "nsis"
+        "nsis",
+        "portable"
       ]
     },
     "mac": {
