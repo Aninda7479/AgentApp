@@ -2,7 +2,7 @@ import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, type IpcMai
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth } from '@superagent/core';
+import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, capabilityRegistry, parseContextLimit } from '@superagent/core';
 
 // Set a custom userData path so all app data lives in <home>/.superagent.
 app.setPath('userData', getUserDataDirectory());
@@ -19,6 +19,31 @@ import { logError, errorMessage, registerErrorToasts, IpcErrorEnvelope } from '.
 // conversation approaches the model's capacity.
 let petContextMax = 0;
 let petContextTotal = 0;
+
+/**
+ * Resolves the numeric context-window size (in tokens) for the effective model
+ * the orchestrator selected. Tries, in order:
+ *   1. the core capability registry (`contextWindow` for known models),
+ *   2. the user's model catalog `contextLimit` string (e.g. "2M", "128k"),
+ *   3. a sensible default (128k).
+ * This is what makes the gauge + auto-compaction "adjust with the Model
+ * orchestrator" — the denominator follows whichever model routing picks.
+ */
+function resolveContextWindow(
+  modelId: string,
+  catalog?: Array<{ id?: string; name?: string; contextLimit?: string }>
+): number {
+  const stripped = modelId.includes('-') ? modelId.slice(modelId.indexOf('-') + 1) : modelId;
+  const fromRegistry = capabilityRegistry.getCapability(modelId)?.contextWindow
+    ?? capabilityRegistry.getCapability(stripped)?.contextWindow;
+  if (fromRegistry) return fromRegistry;
+
+  const entry = (catalog || []).find((m) => m.id === modelId || m.id === stripped || m.name === modelId);
+  const fromCatalog = entry ? parseContextLimit(entry.contextLimit) : undefined;
+  if (fromCatalog) return fromCatalog;
+
+  return 128000;
+}
 
 // Machine identity used in connection logging (see the agent-run handler below).
 const DEVICE_NAME = os.hostname();
@@ -156,8 +181,10 @@ safeHandle('agent-run', async (event, {
     sessionWindows.set(sessionId, win);
     if (!engine) {
       let finalConfig = { ...config };
+      // Load settings once for this session so both orchestrator routing AND
+      // context-window resolution can read models/providers from the same source.
+      const settings = SettingsStorage.loadSettings();
       if (config.model === 'auto' || config.model === 'Model Governance') {
-        const settings = SettingsStorage.loadSettings();
         // Apply the Orchestrator's default reasoning effort only when the
         // composer/turn didn't set one (caller preference wins). 'off' means
         // leave the per-turn/cascade logic untouched.
@@ -215,10 +242,13 @@ safeHandle('agent-run', async (event, {
       }
       finalConfig.extraTools = connectedTools();
       finalConfig.requestApproval = buildRequestApproval(sessionId, win);
+      // Resolve the effective model's context window (orchestrator-aware) so the
+      // engine's live usage gauge + auto-compaction use the right denominator.
+      finalConfig.contextWindow = resolveContextWindow(finalConfig.model, settings?.models);
       engine = new AgentEngine(finalConfig, sessionId);
       activeSessions.set(sessionId, engine);
       // Reset context-usage tracking for this run.
-      petContextMax = finalConfig.maxTokens ?? 0;
+      petContextMax = finalConfig.contextWindow ?? 0;
       petContextTotal = 0;
     }
 
@@ -236,8 +266,14 @@ safeHandle('agent-run', async (event, {
         const petMood = petWindowManager.moodFromAgentEvent(agentEvent.type);
         if (petMood) petWindowManager.setMood(petMood);
 
-        // Context-window usage → dark circles when near capacity.
-        if (agentEvent.usage) {
+        // Context-window usage → dark circles when near capacity. The engine's
+        // own `context` estimates are preferred (accurate, model-aware); the raw
+        // `usage.totalTokens` from providers is used as a fallback when present.
+        if (agentEvent.context) {
+          petContextTotal = agentEvent.context.used;
+          petContextMax = agentEvent.context.limit;
+          petWindowManager.setContext(agentEvent.context.pct / 100);
+        } else if (agentEvent.usage) {
           petContextTotal = agentEvent.usage.totalTokens || petContextTotal;
           if (petContextMax > 0) {
             petWindowManager.setContext(petContextTotal / petContextMax);
@@ -272,6 +308,24 @@ safeHandle('agent-stop', (_event, sessionId: string) => {
     activeSessions.delete(sessionId);
   }
   return { stopped: true };
+});
+
+/**
+ * agent-compact: Compact the live conversation history of a running session's
+ * engine. Invoked by the desktop `/compact` slash command. Returns the
+ * before/after token estimate so the UI can report savings.
+ */
+safeHandle('agent-compact', (_event, sessionId: string) => {
+  const engine = activeSessions.get(sessionId);
+  if (!engine) {
+    return { compacted: false, tokensBefore: 0, tokensAfter: 0 };
+  }
+  const result = engine.compactHistory();
+  return {
+    compacted: true,
+    tokensBefore: result.tokensBefore,
+    tokensAfter: result.tokensAfter
+  };
 });
 
 /**

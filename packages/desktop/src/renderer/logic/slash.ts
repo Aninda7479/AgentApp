@@ -12,6 +12,25 @@ import { StepFactory } from './steps';
 import { SettingsService } from './settings';
 import { hasCapableProvider, type MediaCapability } from './capabilities';
 
+/**
+ * Collapses the visible trajectory steps into a single compaction summary plus
+ * the most recent turns, so the gauge + conversation reflect `/compact` in
+ * simulation mode (where there is no live engine history to compact). Returns
+ * false when there is nothing meaningful to compact.
+ */
+function compactVisibleSteps(ctx: AppContext, ts: string): boolean {
+  const steps = ctx.getTrajectorySteps();
+  if (!steps || steps.length <= 2) return false;
+  const kept = steps.slice(-2);
+  const summary = StepFactory.assistantStep(
+    `[Context compacted] The previous ${steps.length - kept.length} turns were summarized to free up the context window. The conversation continues below.`,
+    `compact-${Date.now()}`,
+    ts
+  );
+  ctx.setTrajectorySteps([summary, ...kept]);
+  return true;
+}
+
 /** Extra capabilities the router needs that aren't part of the core `AppContext`. */
 export interface SlashDeps {
   /** Discovered workspace skills (for `/<skillId>` routing). */
@@ -166,9 +185,39 @@ export class SlashRouter {
       case 'config':
         ctx.setActiveTab('settings');
         return { consumed: true };
-      case 'compact':
-        ctx.triggerToast('Context compaction runs automatically during long sessions');
+      case 'compact': {
+        const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        // Prefer the live engine: real agent runs keep their full history in the
+        // main process, so compaction must happen there (against the orchestrator-
+        // selected model's context window). The engine reports token savings.
+        if (ctx.ipc) {
+          try {
+            const sessionId = `session-${ctx.getActiveChatId()}`;
+            const result = (await ctx.ipc.invoke('agent-compact', sessionId)) as
+              | { compacted: boolean; tokensBefore: number; tokensAfter: number }
+              | undefined;
+            if (result?.compacted) {
+              // Keep the visible trajectory in sync with the engine's compaction.
+              compactVisibleSteps(ctx, ts);
+              const saved = Math.max(0, result.tokensBefore - result.tokensAfter);
+              ctx.triggerToast(
+                `Context compacted! Freed ~${saved} tokens (${result.tokensBefore} → ${result.tokensAfter}).`
+              );
+              return { consumed: true };
+            }
+          } catch {
+            // No live engine for this session — fall through to local collapse.
+          }
+        }
+        // Simulation / no live engine: collapse the visible steps locally so the
+        // gauge + conversation reflect the compaction.
+        if (compactVisibleSteps(ctx, ts)) {
+          ctx.triggerToast('Context compacted (simulation mode).');
+        } else {
+          ctx.triggerToast('Context is already compact.');
+        }
         return { consumed: true };
+      }
       case 'loop': {
         if (!deps.startLoop || !deps.stopLoop || !deps.listLoops || !deps.clearLoops) {
           ctx.triggerToast('Loop feature is not supported in this environment', 'error');

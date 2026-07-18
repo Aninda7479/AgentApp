@@ -20,7 +20,8 @@ export type AgentEventType =
   | 'thought'        // agent reasoning step
   | 'done'           // generation complete
   | 'error'          // error occurred
-  | 'abort';         // user stopped
+  | 'abort'          // user stopped
+  | 'context';       // live context-window usage estimate (used by the UI gauge)
 
 export interface AgentEvent {
   type: AgentEventType;
@@ -34,6 +35,14 @@ export interface AgentEvent {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+  };
+  /** Live context-window usage estimate, emitted as the conversation grows so
+   *  the workspace can render a "how full is the context window" gauge. `pct`
+   *  is 0..100 against the orchestrator-selected model's context window. */
+  context?: {
+    used: number;
+    limit: number;
+    pct: number;
   };
 }
 
@@ -63,7 +72,9 @@ import {
   SandboxRunner,
   PermissionMode,
   ConfirmationHandler,
-  ReasoningEffort
+  ReasoningEffort,
+  chunkedCompactMessages,
+  extractTextContent
 } from '@superagent/core';
 
 // ─── path scoping ──────────────────────────────────────────────────────────────
@@ -423,9 +434,23 @@ export interface AgentEngineConfig {
    *  router/adapter "thinking" controls. Caller preference wins over the
    *  saved Orchestrator default. */
   reasoningEffort?: ReasoningEffort;
+  /** Context-window size (in tokens) of the effective model. Drives the live
+   *  context-usage gauge and the auto-compaction threshold. Resolved from the
+   *  orchestrator-routed model (ModelContext / catalog contextLimit); defaults
+   *  to 128k when unset. */
+  contextWindow?: number;
 }
 
 // ─── Agent Engine ─────────────────────────────────────────────────────────────
+
+/** True when a provider error indicates the context window was exceeded. Used
+ *  to trigger automatic compaction + retry instead of surfacing a hard failure. */
+export function isContextOverflowError(message: string): boolean {
+  if (!message) return false;
+  return /context length|context window|maximum context|max.*context|token limit|too many tokens|request too large|exceeds.{0,24}context|context.{0,12}exceed|prompt is too long|input.{0,12}too long|input length|sequence too long/i.test(
+    message
+  );
+}
 
 export class AgentEngine {
   private config: AgentEngineConfig;
@@ -435,6 +460,9 @@ export class AgentEngine {
   /** The single safe-execution layer all tool file/command ops route through. */
   private sandbox: SandboxRunner;
   public readonly sessionId: string;
+  /** Context-window size (tokens) of the effective model, used for the live
+   *  usage gauge + auto-compaction threshold. Defaults to 128k if unset. */
+  private contextWindow: number;
 
   constructor(config: AgentEngineConfig, sessionId?: string) {
     this.config = config;
@@ -500,6 +528,53 @@ Key guidelines:
     this.history.push({ role: 'system', content: sysPrompt + internetAccessSection });
 
     this.history.push({ role: 'system', content: sysPrompt });
+
+    this.contextWindow = config.contextWindow ?? 128000;
+  }
+
+  /** Rough token estimate (~4 chars/token) for a block of text. */
+  private estimateTokens(text: string): number {
+    if (!text) return 0;
+    return Math.max(1, Math.ceil(text.length / 4));
+  }
+
+  /**
+   * Live estimate of how full the context window is, computed from the engine's
+   * REAL conversation history (system prompt + all turns + tool definitions) —
+   * not just the visible renderer steps. This is what drives the workspace gauge
+   * and the auto-compaction decision. `limit` is the orchestrator-selected
+   * model's context window (defaults to 128k).
+   */
+  public estimateContextUsage(): { used: number; limit: number; pct: number } {
+    let used = 0;
+    for (const m of this.history) {
+      used += this.estimateTokens(extractTextContent(m.content));
+    }
+    // Tool definitions are re-sent on every model call, so they count too.
+    for (const t of this.tools) {
+      used += this.estimateTokens(t.name) + this.estimateTokens(t.description) + this.estimateTokens(JSON.stringify(t.parameters));
+    }
+    const limit = this.contextWindow;
+    const pct = limit > 0 ? Number(((used / limit) * 100).toFixed(2)) : 0;
+    return { used, limit, pct };
+  }
+
+  /**
+   * Compacts the engine's real conversation history in place using the shared,
+   * chunked compaction primitive. The middle of the conversation is split into
+   * bounded chunks, each summarized independently, so compaction never fails on
+   * an over-bloated context. Returns the before/after token estimate.
+   */
+  public compactHistory(): { tokensBefore: number; tokensAfter: number } {
+    const tokensBefore = this.estimateContextUsage().used;
+    const plain = this.history.map((m) => ({ role: m.role, content: extractTextContent(m.content) }));
+    const res = chunkedCompactMessages(plain, { keepRecentCount: 4 });
+    if (!res.wasCompacted) {
+      return { tokensBefore, tokensAfter: tokensBefore };
+    }
+    this.history = res.messages.map((m) => ({ role: m.role, content: m.content })) as ChatMessage[];
+    const tokensAfter = this.estimateContextUsage().used;
+    return { tokensBefore, tokensAfter };
   }
 
   private buildUserContent(content: string, attachments: string[] = []): string | RichContentPart[] {
@@ -576,19 +651,58 @@ Key guidelines:
 
     let iterations = 0;
     const MAX_ITERATIONS = 16; // prevent infinite loops while allowing multi-step tool workflows
+    // Automatic compactions when the context window overflows or is near-full.
+    // Bounded so a single un-compactable turn can't loop forever.
+    let autoCompactions = 0;
+    const MAX_AUTO_COMPACTIONS = 3;
+
+    const emitContext = () => {
+      const u = this.estimateContextUsage();
+      onEvent({ type: 'context', sessionId: this.sessionId, context: { used: u.used, limit: u.limit, pct: u.pct } });
+    };
+    // Surface the initial usage estimate as soon as the run starts.
+    emitContext();
 
     try {
       while (iterations < MAX_ITERATIONS) {
         iterations++;
 
-        // ── Stream from provider ────────────────────────────────────────
-        const { fullContent, toolCalls } = await this.streamFromProvider(
-          onEvent,
-          this.abortController.signal
-        );
+        // ── Proactive guard: if dangerously full, compact before calling the
+        //    model so we never even hit a context-overflow error. ───────────
+        const preUsage = this.estimateContextUsage();
+        if (preUsage.pct > 90 && autoCompactions < MAX_AUTO_COMPACTIONS && this.history.length > 6) {
+          this.compactHistory();
+          autoCompactions++;
+          emitContext();
+        }
+
+        // ── Stream from provider (with reactive auto-compact on overflow) ──
+        let fullContent = '';
+        let toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
+        try {
+          const r = await this.streamFromProvider(onEvent, this.abortController.signal);
+          fullContent = r.fullContent;
+          toolCalls = r.toolCalls;
+        } catch (streamErr: unknown) {
+          const msg = (streamErr as Error).message || String(streamErr);
+          // The model failed because the context is too large: compact the
+          // history and re-attempt the same turn (up to MAX_AUTO_COMPACTIONS).
+          if (
+            isContextOverflowError(msg) &&
+            autoCompactions < MAX_AUTO_COMPACTIONS &&
+            this.history.length > 6
+          ) {
+            this.compactHistory();
+            autoCompactions++;
+            emitContext();
+            continue; // re-enter the loop and retry this turn with less history
+          }
+          throw streamErr; // unrelated error — surface it normally
+        }
 
         // Append assistant message to history
         this.history.push({ role: 'assistant', content: fullContent });
+        emitContext();
 
         // ── No tool calls → done ────────────────────────────────────────
         if (toolCalls.length === 0) {
@@ -642,6 +756,7 @@ Key guidelines:
           });
         }
 
+        emitContext();
         // Loop: continue with tool results fed back to model
       }
 

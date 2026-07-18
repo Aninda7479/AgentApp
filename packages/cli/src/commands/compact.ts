@@ -1,4 +1,5 @@
 import { SlashCommandRouter, SlashCommandContext, SlashCommandResult } from './router.js';
+import { chunkedCompactMessages } from '@superagent/core';
 
 /** A single message in the conversation context with role and content. */
 export interface ContextMessage {
@@ -63,19 +64,16 @@ export class ContextCompressor {
       };
     }
 
-    const systemMessages: ContextMessage[] = [];
-    let startIndex = 0;
-    // Preserve leading system messages (e.g. initial instructions)
-    while (startIndex < messages.length && messages[startIndex].role === 'system') {
-      systemMessages.push(messages[startIndex]);
-      startIndex++;
-    }
+    // Delegate to the shared, chunked compaction primitive so an over-bloated
+    // context is divided into small parts and summarized without failing. A
+    // single summary message is produced (content is the joined chunked
+    // summaries) to preserve the existing /compact contract.
+    const res = chunkedCompactMessages(
+      messages.map((m) => ({ role: m.role, content: m.content })),
+      { keepRecentCount: keepRecent }
+    );
 
-    // Split: recent messages to keep, middle messages to summarize
-    const recentMessages = messages.slice(messages.length - keepRecent);
-    const middleMessages = messages.slice(startIndex, messages.length - keepRecent);
-
-    if (middleMessages.length === 0) {
+    if (!res.wasCompacted) {
       return {
         originalCount,
         compactedCount: messages.length,
@@ -84,18 +82,11 @@ export class ContextCompressor {
       };
     }
 
-    let summaryText = `[Context summary: ${middleMessages.length} previous turns compacted]`;
-    if (options.summarizer) {
-      summaryText = await options.summarizer(middleMessages);
-    }
-
-    const summaryMessage: ContextMessage = {
-      role: 'system',
-      content: summaryText,
-      tokens: ContextCompressor.estimateTokens(summaryText)
-    };
-
-    const newMessages = [...systemMessages, summaryMessage, ...recentMessages];
+    const newMessages: ContextMessage[] = res.messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+      tokens: ContextCompressor.estimateTokens(m.content)
+    }));
 
     const originalTokens = messages.reduce((acc, m) => acc + (m.tokens || ContextCompressor.estimateTokens(m.content)), 0);
     const compactedTokens = newMessages.reduce((acc, m) => acc + (m.tokens || ContextCompressor.estimateTokens(m.content)), 0);

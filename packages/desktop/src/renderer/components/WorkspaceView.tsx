@@ -6,6 +6,7 @@ import { MCPServerInfo } from './MCPDashboard';
 import { ModelConfig } from '../settings/SettingsView';
 import { WorkspaceService } from '../logic/workspace';
 import { BrandLogo } from '../BrandLogo';
+import { computeContextUsage, type ContextUsage } from '../logic/context';
 
 /** Represents a parallel agent session with its own trajectory. */
 export interface AgentSession {
@@ -60,6 +61,13 @@ interface WorkspaceViewProps {
   lastError?: string;
   /** Re-sends the last user prompt when the response failed. */
   onRetryLast?: () => void;
+  /** Live context-window usage from the engine (null → UI estimates from steps). */
+  contextUsage?: ContextUsage | null;
+  /** Context-window limit of the active model (e.g. "128k", "2M") for the
+   *  demo-mode estimate when no live engine signal is available. */
+  activeModelContextLimit?: string;
+  /** Triggered when the user clicks the context-usage ring (runs /compact). */
+  onCompact?: () => void;
 }
 
 const recommendations = [
@@ -111,6 +119,61 @@ const ElapsedTimer: React.FC<{ startedAt: number; running: boolean }> = ({ start
     <span className="text-brand-textMuted text-[11px]">
       Working for <span className="text-brand-textMain font-medium">{label}</span>
     </span>
+  );
+};
+
+// ─── Context-usage ring ───────────────────────────────────────────────────────
+interface ContextUsageRingProps {
+  /** 0..100 percentage of the context window used. */
+  pct: number;
+  used: number;
+  limit: number;
+  onClick?: () => void;
+}
+
+/**
+ * A small circular gauge showing how full the model's context window is. Colour
+ * shifts green → amber → red as usage climbs; clicking it triggers a manual
+ * `/compact`. Diameter is intentionally tiny so it sits unobtrusively in the
+ * workspace header.
+ */
+const ContextUsageRing: React.FC<ContextUsageRingProps> = ({ pct, used, limit, onClick }) => {
+  const size = 20;
+  const stroke = 2.5;
+  const r = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(100, pct));
+  const offset = circumference * (1 - clamped / 100);
+
+  const color =
+    clamped > 85 ? 'var(--neon-destructive)' : clamped > 60 ? 'var(--neon-attention)' : 'var(--neon-live)';
+  const title = `Context window: ${used.toLocaleString()} / ${limit.toLocaleString()} tokens (${clamped}%) — click to compact`;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={`relative flex items-center justify-center p-0 bg-transparent border-0 cursor-pointer ${clamped > 85 ? 'animate-pulse' : ''}`}
+      style={{ width: size, height: size }}
+    >
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--brand-border-strong)" strokeWidth={stroke} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          style={{ transition: 'stroke-dashoffset 0.4s ease, stroke 0.3s ease' }}
+        />
+      </svg>
+    </button>
   );
 };
 
@@ -209,7 +272,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   slashCommands,
   skills = [],
   lastError,
-  onRetryLast
+  onRetryLast,
+  contextUsage,
+  activeModelContextLimit,
+  onCompact
 }) => {
   // Only surface models the user has ENABLED in Settings → Models. Each catalog
   // entry carries a per-model `enabled` flag (ModelConfig.enabled); connected
@@ -243,6 +309,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
   const activeSession = agentSessions.find(s => s.id === activeSessionId) || agentSessions[0];
   const showMultiAgentBar = agentSessions.length > 1;
+
+  // Effective context-window usage: prefer the live engine signal; fall back to
+  // an estimate from the visible steps (demo/simulation mode). `usage` is null
+  // when the model's context window can't be resolved (gauge hidden).
+  const usage: ContextUsage | null =
+    contextUsage ?? computeContextUsage(activeSession?.steps || trajectorySteps, activeModelContextLimit);
 
   // Mirror the composer's gate: an agent session can't actually run until a
   // usable (enabled) model exists, so the entry points that spawn one are
@@ -345,6 +417,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
           {/* Elapsed timer */}
           <ElapsedTimer startedAt={activeSession?.startedAt || Date.now()} running={activeSession?.isGenerating || false} />
+
+          {/* Context-window usage ring — how full the model's context is */}
+          {usage && (
+            <ContextUsageRing
+              pct={usage.pct}
+              used={usage.used}
+              limit={usage.limit}
+              onClick={onCompact}
+            />
+          )}
 
           {/* MCP + Model info */}
           <div className="hidden sm:flex items-center gap-2 text-[10px] text-brand-textMuted/70">

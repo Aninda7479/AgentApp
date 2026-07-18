@@ -48,6 +48,7 @@ import { PartnerSyncService } from './logic/partner';
 import { UpdateService } from './logic/updates';
 import type { PartnerController } from './logic/agentStream';
 import type { AppContext, NavigationSnapshot } from './logic/types';
+import type { ContextUsage } from './logic/context';
 
 /**
  * Root application component — the DESIGN SHELL.
@@ -108,6 +109,10 @@ export const App: React.FC = () => {
   const [toastOpen, setToastOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
   const [toastType, setToastType] = useState<'info' | 'error'>('info');
+  // Live context-window usage reported by the engine (null until a real agent
+  // run streams a `context` event; the workspace falls back to a local estimate
+  // in demo/simulation mode).
+  const [liveContextUsage, setLiveContextUsage] = useState<ContextUsage | null>(null);
   const [composerPrompt, setComposerPrompt] = useState<string>(() => {
     try {
       return localStorage.getItem('composer_prompt_cache') || '';
@@ -360,6 +365,11 @@ export const App: React.FC = () => {
     [ctx, streaming, slashDispatch]
   );
   sendPromptRef.current = handleSendPrompt;
+
+  // Triggered by clicking the context-usage ring in the workspace header.
+  const handleCompactRequest = useCallback(() => {
+    slashDispatch('/compact', { model: defaultComposerModel, mode: 'chat', attachments: [] });
+  }, [slashDispatch, defaultComposerModel]);
 
   // Re-send the last user message of the active chat (Retry on a failed run).
   const handleRetryLast = useCallback(async () => {
@@ -782,11 +792,16 @@ export const App: React.FC = () => {
   // ── Real AI streaming via agent-event IPC (logic lives in AgentStreamService) ─
   useEffect(() => {
     if (!ipc) return;
-    const handleAgentEvent = AgentStreamService.createHandler(ctx, streaming, partnersRef);
+    const handleAgentEvent = AgentStreamService.createHandler(ctx, streaming, partnersRef, setLiveContextUsage);
     ipc.on('agent-event', handleAgentEvent);
     return () => ipc.removeListener('agent-event', handleAgentEvent);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ipc, ctx, streaming, partnersRef]);
+
+  // Reset the live context gauge when switching chats (a new run repopulates it).
+  useEffect(() => {
+    setLiveContextUsage(null);
+  }, [activeChatId]);
 
   // ── Sandbox permission prompts (user-in-the-loop) ───────────────────────
   useEffect(() => {
@@ -971,6 +986,11 @@ export const App: React.FC = () => {
               skills={skills}
               lastError={activeChat?.lastError}
               onRetryLast={handleRetryLast}
+              contextUsage={liveContextUsage}
+              activeModelContextLimit={
+                modelsCatalog.find((m) => m.name === (activeChat?.model || lastUsedModel))?.contextLimit
+              }
+              onCompact={handleCompactRequest}
             />
           )}
 

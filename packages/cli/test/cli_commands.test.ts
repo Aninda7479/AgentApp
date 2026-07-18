@@ -179,7 +179,7 @@ describe('CLI Shortcuts & Slash Commands Suite (Steps 068 - 073)', () => {
       expect(result.summaryAdded).toBe(true);
       expect(result.compactedCount).toBe(4); // system + summary + 2 recent
       expect(result.messages[0].role).toBe('system');
-      expect(result.messages[1].content).toContain('Context summary');
+      expect(result.messages[1].content).toContain('[COMPACTED CONTEXT SUMMARY]');
     });
 
     it('should handle /compact command execution via SlashCommandRouter', async () => {
