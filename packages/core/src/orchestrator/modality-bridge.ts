@@ -12,7 +12,7 @@
  * in `reason` (and surfaced via `onBridge`) so it is visible, never silent.
  *
  * Everything here is pure/deterministic except the actual adapter `.complete()`
- * call performed by the caller (ModelRouter.completeWithBridge) — so the planning
+ * call performed by the caller (OrchestratorRouter.completeWithBridge) — so the planning
  * and request-augmentation logic is unit-testable with no network.
  */
 

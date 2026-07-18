@@ -2,10 +2,14 @@ import { BrowserWindow, BrowserWindowConstructorOptions, app, ipcMain, shell } f
 import path from 'path';
 import fs from 'fs';
 
-/** Resolves the packaged brand icon (build/icon.png), or undefined if absent. */
+/** Resolves the packaged brand icon (.ico on Windows, .png elsewhere), or undefined if absent. */
 function appIconPath(): string | undefined {
-  const p = path.join(app.getAppPath(), 'assets', 'icon.png');
-  return fs.existsSync(p) ? p : undefined;
+  const ext = process.platform === 'win32' ? 'ico' : 'png';
+  const p = path.join(app.getAppPath(), 'assets', `icon.${ext}`);
+  if (fs.existsSync(p)) return p;
+
+  const fallback = path.join(app.getAppPath(), 'assets', 'icon.png');
+  return fs.existsSync(fallback) ? fallback : undefined;
 }
 
 /** Options for creating a managed BrowserWindow, with optional name and main-window flag. */

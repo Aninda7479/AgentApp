@@ -12,9 +12,9 @@ import { dirname } from 'path';
 import {
   SettingsStorage,
   UsageTracker,
-  ModelRouter,
+  OrchestratorRouter,
   buildRequest,
-  ModelGovStorage,
+  OrchestratorStorage,
   buildRouterPool,
   PlaywrightBrowserEngine,
   ComputerUse,
@@ -202,15 +202,15 @@ async function runAgentEngine(
     let engine = activeSessions.get(sessionId);
     if (!engine) {
       const finalConfig = { ...config };
-      // Auto-route model if set to 'auto' or 'Model Governance'
-      if (config.model === 'auto' || config.model === 'Model Governance') {
+      // Auto-route model if set to 'auto', 'Orchestrator' or 'Model Governance'
+      if (config.model === 'auto' || config.model === 'Orchestrator' || config.model === 'Model Governance') {
         const settings = SettingsStorage.loadSettings();
         // Build a proper RouterModel[] pool (providerId + capability/access
         // signals) from the user's configured models. routeModelForTask reads
         // RouterModel fields that raw settings.models don't always carry.
         const enabledModels = buildRouterPool(settings.models ?? []).filter((m) => m.enabled);
         try {
-          const routed = ModelRouter.routeModelForTask(prompt, enabledModels, buildRequest(prompt, currentAttachments));
+          const routed = OrchestratorRouter.routeModelForTask(prompt, enabledModels, buildRequest(prompt, currentAttachments));
           if (routed && routed.model) {
             finalConfig.provider = routed.provider as any;
             finalConfig.model = routed.model;
@@ -231,7 +231,7 @@ async function runAgentEngine(
           if (fallback) {
             console.warn(`[web] Orchestrator routing failed (${routeErr?.message}); falling back to ${fallback.providerId}/${fallback.id}.`);
             finalConfig.provider = fallback.providerId as any;
-            finalConfig.model = ModelRouter.stripProviderPrefix(fallback.providerId, fallback.id);
+            finalConfig.model = OrchestratorRouter.stripProviderPrefix(fallback.providerId, fallback.id);
             const byok = settings.providers?.find(p => p.id === fallback.providerId);
             if (byok) {
               finalConfig.apiKey = byok.apiKey;
@@ -295,18 +295,19 @@ async function autoDetectProviders() {
   return ProviderAutoDetector.detect();
 }
 
-// ─── Model Governance Prompt Optimization ────────────────────────────────────
-/** Uses an AI engine to optimize the Model Governance system prompt. */
+// ─── Orchestrator Prompt Optimization ────────────────────────────────────────
+/** Uses an AI engine to optimize the Orchestrator system prompt. */
 async function optimizeInstructionsByAI() {
   const settings = SettingsStorage.loadSettings();
-  const govEnabledIds = settings.modelGov?.enabledModels || [];
+  const orchestratorSettings = settings.orchestrator || settings.modelGov;
+  const govEnabledIds = orchestratorSettings?.enabledModels || [];
   
   const activeModels = (settings.models || []).filter(m => 
     govEnabledIds.includes(m.id) || 
     govEnabledIds.includes(`${m.providerId}-${m.id}`)
   );
 
-  const currentInstructions = ModelGovStorage.loadInstructions();
+  const currentInstructions = OrchestratorStorage.loadInstructions();
   const providers = settings.providers || [];
   const activeProvider = providers.find(p => p.apiKey);
   const activeModelSetting = settings.models?.find(m => m.enabled && m.providerId === activeProvider?.id);
@@ -326,7 +327,7 @@ async function optimizeInstructionsByAI() {
 
   const engine = new AgentEngine(engineConfig, `optimize-prompt-${Date.now()}`);
   
-  const optimizationPrompt = `You are a system prompt optimizer. You are optimizing the Model Governance System Instructions for a Sakana Fugu-class routing conductor.
+  const optimizationPrompt = `You are a system prompt optimizer. You are optimizing the Orchestrator System Instructions for a Sakana Fugu-class routing conductor.
 
 Here is the current pool of enabled models:
 ${activeModels.map(m => `- ${m.name} (${m.providerId}) - Pricing: Input ${m.pricing?.inputPer1M || 'N/A'}, Output ${m.pricing?.outputPer1M || 'N/A'}`).join('\n')}
@@ -336,8 +337,9 @@ Here is the current instructions file content:
 ${currentInstructions}
 \`\`\`
 
-Optimization Goal: ${settings.modelGov?.optimizationGoal || 'balanced'}
-Routing Strategy: ${settings.modelGov?.routingStrategy || 'router'}
+Optimization Goal: ${orchestratorSettings?.optimizationGoal || 'balanced'}
+Routing Strategy: ${orchestratorSettings?.routingStrategy || 'router'}
+${orchestratorSettings?.freeOnly ? 'NOTE: Free-Only mode is enabled. The Orchestrator should only utilize free, local, or custom models. Avoid paid options.' : ''}
 
 Please optimize these system instructions to:
 1. Make the categorization boundaries more precise for the specific models in this pool.
@@ -361,7 +363,7 @@ Please optimize these system instructions to:
     .replace(/```$/, '')
     .trim();
 
-  ModelGovStorage.saveInstructions(optimizedContent);
+  OrchestratorStorage.saveInstructions(optimizedContent);
   return optimizedContent;
 }
 
@@ -533,17 +535,17 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         UsageTracker.clearUsage();
         result = null;
         break;
-      case 'model-gov-read-instructions':
-        result = ModelGovStorage.loadInstructions();
+      case 'orchestrator-read-instructions':
+        result = OrchestratorStorage.loadInstructions();
         break;
-      case 'model-gov-write-instructions':
-        ModelGovStorage.saveInstructions(args[0]);
+      case 'orchestrator-write-instructions':
+        OrchestratorStorage.saveInstructions(args[0]);
         result = null;
         break;
-      case 'model-gov-update-instructions':
-        result = await ModelGovStorage.autoUpdateInstructions();
+      case 'orchestrator-update-instructions':
+        result = await OrchestratorStorage.autoUpdateInstructions();
         break;
-      case 'model-gov-optimize-instructions-by-ai':
+      case 'orchestrator-optimize-instructions-by-ai':
         result = await optimizeInstructionsByAI();
         break;
       case 'browser-navigate': {

@@ -26,7 +26,7 @@ import { ThreeDStudio } from './3d_studio/ThreeDStudio';
 import { StoredChat, StoredProject } from './types';
 import { SessionLoopManager, LoopTask } from './logic/loop';
 import { useThemeMode } from './theme';
-import { getRouteFromLocation, pushRoute, subscribeRouteChange } from './urlSync';
+import { getRouteFromLocation, pushRoute, subscribeRouteChange, buildPath } from './urlSync';
 
 // ── Logic layer (separated from design; see renderer/logic/*) ────────────────
 import { FormatService } from './logic/format';
@@ -609,18 +609,78 @@ export const App: React.FC = () => {
   }, [ipc, activeTab]);
 
   // ── Discovered skills ──────────────────────────────────────────────────────
+  const [importableSkills, setImportableSkills] = useState<{ id: string; name: string }[]>([]);
+
   useEffect(() => {
     if (!ipc) return;
     const proj = projects.find((p) => p.name === activeProject);
     const root = proj?.folders?.[0];
+    const dirs = root ? [
+      `${root}/.superagent/skills`,
+      `${root}/.cloud/skills`,
+      `${root}/.agents/skills`,
+      `${root}/.claude/skills`
+    ] : undefined;
     ipc
-      .invoke('skills-list', { dir: root ? `${root}/.superagent/skills` : undefined })
+      .invoke('skills-list', { dir: dirs })
       .then((res: any) => {
         const list = Array.isArray(res) ? res : (res?.skills ?? []);
         setSkills(Array.isArray(list) ? list : []);
       })
       .catch(() => setSkills([]));
   }, [ipc, projects, activeProject]);
+
+  // Manual "Scan for skills" — scans global ~/.claude/skills + ~/.agents/skills
+  // (and the active project's dot-folders) and only surfaces the import prompt
+  // when something is actually importable.
+  const handleScanSkills = useCallback(() => {
+    if (!ipc) return;
+    const proj = projects.find((p) => p.name === activeProject);
+    const root = proj?.folders?.[0];
+    ipc
+      .invoke('skills-import-check', { projectRoot: root })
+      .then((res: any) => {
+        if (res && res.canImport && Array.isArray(res.skills) && res.skills.length > 0) {
+          setImportableSkills(res.skills);
+        } else {
+          setImportableSkills([]);
+          triggerToast('No new skills to import.', 'info');
+        }
+      })
+      .catch(() => setImportableSkills([]));
+  }, [ipc, projects, activeProject, triggerToast]);
+
+  const handleImportSkills = useCallback(() => {
+    const proj = projects.find((p) => p.name === activeProject);
+    const root = proj?.folders?.[0];
+    if (!root || !ipc) return;
+    ipc
+      .invoke('skills-import-perform', { projectRoot: root })
+      .then((res: any) => {
+        if (res && res.success) {
+          triggerToast(`Successfully imported ${res.importedCount} skill(s) into .superagent/skills!`);
+          setImportableSkills([]);
+          // Force refresh discovered skills
+          ipc
+            .invoke('skills-list', { dir: [
+              `${root}/.superagent/skills`,
+              `${root}/.cloud/skills`,
+              `${root}/.agents/skills`,
+              `${root}/.claude/skills`
+            ]})
+            .then((listRes: any) => {
+              const list = Array.isArray(listRes) ? listRes : (listRes?.skills ?? []);
+              setSkills(Array.isArray(list) ? list : []);
+            })
+            .catch(() => {});
+        } else {
+          triggerToast(res?.error || 'Failed to import skills.', 'error');
+        }
+      })
+      .catch((err: any) => {
+        triggerToast(`Failed to import skills: ${err.message}`, 'error');
+      });
+  }, [ipc, projects, activeProject, triggerToast]);
 
   // ── Curated skill catalog (Settings → Skills; separate from the slash surface) ──
   useEffect(() => {
@@ -707,11 +767,15 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     return subscribeRouteChange((route) => {
-      setActiveTab(route.activeTab);
-      setActiveChatId(route.activeChatId);
-      setSettingsCategory(route.settingsCategory);
+      const currentPath = buildPath({ activeTab, activeChatId, settingsCategory });
+      const newPath = buildPath(route);
+      if (currentPath !== newPath) {
+        setActiveTab(route.activeTab);
+        setActiveChatId(route.activeChatId);
+        setSettingsCategory(route.settingsCategory);
+      }
     });
-  }, [setActiveTab, setActiveChatId, setSettingsCategory]);
+  }, [activeTab, activeChatId, settingsCategory, setActiveTab, setActiveChatId, setSettingsCategory]);
 
   // Keyboard shortcut listeners
   useEffect(() => {
@@ -801,6 +865,18 @@ export const App: React.FC = () => {
   // Reset the live context gauge when switching chats (a new run repopulates it).
   useEffect(() => {
     setLiveContextUsage(null);
+  }, [activeChatId]);
+
+  // Sync trajectory steps when activeChatId changes (e.g. via routing / back button)
+  useEffect(() => {
+    if (!activeChatId || activeChatId === 'draft-chat') {
+      setTrajectorySteps([]);
+      return;
+    }
+    const chat = chats.find((c) => c.id === activeChatId);
+    if (chat) {
+      setTrajectorySteps(chat.steps);
+    }
   }, [activeChatId]);
 
   // ── Sandbox permission prompts (user-in-the-loop) ───────────────────────
@@ -991,6 +1067,9 @@ export const App: React.FC = () => {
                 modelsCatalog.find((m) => m.name === (activeChat?.model || lastUsedModel))?.contextLimit
               }
               onCompact={handleCompactRequest}
+              importableSkills={importableSkills}
+              onImportSkills={handleImportSkills}
+              onScanSkills={handleScanSkills}
             />
           )}
 
@@ -1045,6 +1124,7 @@ export const App: React.FC = () => {
               onToggleModel={handleToggleModel}
               skills={settingsSkills}
               onToggleSkill={(skillId, enabled) => console.log(`Toggled skill ${skillId}: ${enabled}`)}
+              onScanSkills={handleScanSkills}
               pluginCatalog={pluginCatalog}
               pluginEnabled={pluginEnabled}
               onTogglePlugin={handleTogglePlugin}

@@ -14,6 +14,8 @@ export interface ModelUsageRecord {
   timestamp: string;
   /** Wall-clock duration of the generation call, in ms (used for tok/s). Optional for back-compat. */
   durationMs?: number;
+  /** Status of the model call. */
+  status?: 'success' | 'failure';
 }
 
 /** Aggregated usage statistics grouped by model+provider. */
@@ -121,7 +123,8 @@ export class UsageTracker {
     completionTokens: number,
     costPer1MPrompt?: number,
     costPer1MCompletion?: number,
-    durationMs?: number
+    durationMs?: number,
+    status?: 'success' | 'failure'
   ): void {
     const records = this.loadUsage();
     
@@ -146,7 +149,8 @@ export class UsageTracker {
       totalTokens: promptTokens + completionTokens,
       cost: totalCost,
       timestamp: new Date().toISOString(),
-      durationMs
+      durationMs,
+      status: status || 'success'
     };
 
     records.push(newRecord);

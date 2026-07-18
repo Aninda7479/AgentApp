@@ -4,22 +4,32 @@ import { Scale, Save, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sli
 import { Button, Select } from '../components/ui';
 
 /** Props for the Orchestrator settings panel. */
-interface ModelGovSettingsProps {
+interface OrchestratorSettingsProps {
   modelsCatalog: ModelConfig[];
   onSaveSettings: (patch: {
-    modelGov: {
+    orchestrator?: {
       enabledModels: string[];
       autoUpdateInstructions: boolean;
       optimizationGoal: 'quality' | 'cost' | 'balanced';
       routingStrategy: 'orchestrator' | 'router';
       reasoningEffort: 'off' | 'low' | 'medium' | 'high';
       categoryOverrides: Record<string, string>;
-    }
+      freeOnly: boolean;
+    };
+    modelGov?: {
+      enabledModels: string[];
+      autoUpdateInstructions: boolean;
+      optimizationGoal: 'quality' | 'cost' | 'balanced';
+      routingStrategy: 'orchestrator' | 'router';
+      reasoningEffort: 'off' | 'low' | 'medium' | 'high';
+      categoryOverrides: Record<string, string>;
+      freeOnly: boolean;
+    };
   }) => void;
 }
 
 /** Settings panel for Fugu-based model orchestration, routing strategy, and system instructions. */
-export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
+export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
   modelsCatalog,
   onSaveSettings
 }) => {
@@ -34,6 +44,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
     vision: '',
     conversations: ''
   });
+  const [freeOnly, setFreeOnly] = useState(false);
   const [instructions, setInstructions] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -67,9 +78,9 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
     setLoading(true);
     try {
       const settings = await ipc.invoke('settings-read') as any;
-      const inst = await ipc.invoke('model-gov-read-instructions') as string;
+      const inst = await ipc.invoke('orchestrator-read-instructions') as string;
       
-      const gov = settings.modelGov || {};
+      const gov = settings.orchestrator || settings.modelGov || {};
       
       // Default to enabling all available models in the catalog if none are specifically saved
       const savedEnabled = gov.enabledModels || modelsCatalog.map(m => m.id);
@@ -79,6 +90,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       setOptimizationGoal(gov.optimizationGoal || 'balanced');
       setRoutingStrategy(gov.routingStrategy || 'router');
       setReasoningEffort(gov.reasoningEffort || 'off');
+      setFreeOnly(!!gov.freeOnly);
       setCategoryOverrides({
         coding: gov.categoryOverrides?.coding || '',
         reasoning: gov.categoryOverrides?.reasoning || '',
@@ -99,24 +111,28 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
     setSaving(true);
     setMessage(null);
     try {
+      const patch = {
+        enabledModels,
+        autoUpdateInstructions: autoUpdate,
+        optimizationGoal,
+        routingStrategy,
+        reasoningEffort,
+        categoryOverrides,
+        freeOnly
+      };
+
       // Save configuration patch
       onSaveSettings({
-        modelGov: {
-          enabledModels,
-          autoUpdateInstructions: autoUpdate,
-          optimizationGoal,
-          routingStrategy,
-          reasoningEffort,
-          categoryOverrides
-        }
+        orchestrator: patch,
+        modelGov: patch
       });
 
       // Write instructions markdown file
-      await ipc.invoke('model-gov-write-instructions', instructions);
+      await ipc.invoke('orchestrator-write-instructions', instructions);
       setMessage({ text: 'Orchestrator settings and system instructions saved successfully!', type: 'success' });
       
       // Re-load instructions in case they were dynamically recompiled in background
-      const inst = await ipc.invoke('model-gov-read-instructions') as string;
+      const inst = await ipc.invoke('orchestrator-read-instructions') as string;
       setInstructions(inst);
     } catch (e: any) {
       setMessage({ text: `Failed to save changes: ${e.message}`, type: 'error' });
@@ -130,9 +146,9 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
     setUpdatingPrice(true);
     setMessage(null);
     try {
-      const newInst = await ipc.invoke('model-gov-update-instructions') as string;
+      const newInst = await ipc.invoke('orchestrator-update-instructions') as string;
       setInstructions(newInst);
-      setMessage({ text: 'Model instructions and pricing rates updated from OpenRouter API successfully!', type: 'success' });
+      setMessage({ text: 'Orchestrator instructions and pricing rates updated from OpenRouter API successfully!', type: 'success' });
     } catch (e: any) {
       setMessage({ text: `Pricing update failed: ${e.message}`, type: 'error' });
     } finally {
@@ -146,7 +162,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
     setOptimizing(true);
     setMessage(null);
     try {
-      const newInst = await ipc.invoke('model-gov-optimize-instructions-by-ai') as string;
+      const newInst = await ipc.invoke('orchestrator-optimize-instructions-by-ai') as string;
       setInstructions(newInst);
       setMessage({ text: 'Orchestrator system instructions optimized by AI successfully!', type: 'success' });
     } catch (e: any) {
@@ -157,12 +173,24 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
   };
 
   const toggleModelSelection = (modelId: string) => {
+    // If Free Only is enabled, do not allow selecting a paid model
+    const m = modelsCatalog.find(model => model.id === modelId);
+    if (freeOnly && m && !m.free) {
+      setMessage({ text: 'Cannot enable paid models when "Free Only" mode is active.', type: 'error' });
+      return;
+    }
     setEnabledModels(prev =>
       prev.includes(modelId) ? prev.filter(id => id !== modelId) : [...prev, modelId]
     );
   };
 
-  const selectAllModels = () => setEnabledModels(modelsCatalog.map(m => m.id));
+  const selectAllModels = () => {
+    if (freeOnly) {
+      setEnabledModels(modelsCatalog.filter(m => m.free).map(m => m.id));
+    } else {
+      setEnabledModels(modelsCatalog.map(m => m.id));
+    }
+  };
   const clearAllModels = () => setEnabledModels([]);
 
   const handleOverrideChange = (category: string, value: string) => {
@@ -170,6 +198,15 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       ...prev,
       [category]: value
     }));
+  };
+
+  const handleToggleFreeOnly = (checked: boolean) => {
+    setFreeOnly(checked);
+    if (checked) {
+      // Auto enable all free models and disable all paid models
+      const freeModelIds = modelsCatalog.filter(m => m.free).map(m => m.id);
+      setEnabledModels(freeModelIds);
+    }
   };
 
   useEffect(() => {
@@ -371,7 +408,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
               Choose which enabled models the Orchestrator can route prompts across. Output quality and pricing rates determine selection.
             </p>
           </div>
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 items-center">
             <div className="relative">
               <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-brand-textMuted pointer-events-none" />
               <input
@@ -383,6 +420,16 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
             </div>
             {modelsCatalog.length > 0 && (
               <>
+                <button
+                  onClick={() => handleToggleFreeOnly(!freeOnly)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer border transition-all ${
+                    freeOnly 
+                      ? 'bg-[var(--brand-accent-tint)] border-[var(--brand-accent-border)] text-brand-textMain'
+                      : 'border-brand-border bg-brand-bg/40 text-brand-textMuted hover:bg-brand-hover'
+                  }`}
+                >
+                  {freeOnly ? 'Free Only: On' : 'Free Only'}
+                </button>
                 <Button onClick={selectAllModels} variant="ghost" size="sm">Select all</Button>
                 <Button onClick={clearAllModels} variant="ghost" size="sm">Clear</Button>
               </>
@@ -404,15 +451,17 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
                 const inPrice = m.pricing?.inputPer1M;
                 const outPrice = m.pricing?.outputPer1M;
                 const hasPrice = !m.free && (inPrice || outPrice);
+                const disabled = freeOnly && !m.free;
                 return (
                 <button
                   key={m.id}
                   onClick={() => toggleModelSelection(m.id)}
+                  disabled={disabled}
                   className={`flex items-center justify-between p-3 rounded-lg border text-left cursor-pointer transition-all ${
                     isSelected
                       ? 'bg-[var(--brand-accent-tint)] border-[var(--brand-accent-border)] text-brand-textMain'
                       : 'bg-brand-bg/40 border-brand-border/40 hover:bg-brand-hover text-brand-textMuted'
-                  }`}
+                  } ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
                 >
                   <div className="min-w-0">
                     <div className="text-xs font-semibold truncate">{m.name}</div>
@@ -516,7 +565,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
         <div>
           <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
             <FileText size={14} className="text-[var(--brand-accent)]" />
-            <span>Orchestrator System Instructions (model-gov-instructions.md) [Dynamic]</span>
+            <span>Orchestrator System Instructions (orchestrator-instructions.md) [Dynamic]</span>
           </h2>
           <p className="text-[11px] text-brand-textMuted mt-1">
             Markdown system guidelines used to direct task assignments. Automatically re-compiles when you save settings changes.

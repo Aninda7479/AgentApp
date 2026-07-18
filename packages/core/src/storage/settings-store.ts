@@ -72,8 +72,8 @@ export interface GeneralAppSettings {
   unsandboxedActions?: boolean;
 }
 
-/** Model governance: enabled models, routing strategy, and optimization goal. */
-export interface ModelGovSettings {
+/** Orchestrator settings: enabled models, routing strategy, optimization goal, and free-only mode. */
+export interface OrchestratorSettings {
   enabledModels?: string[];
   autoUpdateInstructions?: boolean;
   optimizationGoal?: 'quality' | 'cost' | 'balanced';
@@ -82,7 +82,10 @@ export interface ModelGovSettings {
    *  leave the per-turn/cascade logic untouched (caller preference still wins). */
   reasoningEffort?: 'off' | 'low' | 'medium' | 'high';
   categoryOverrides?: Record<string, string>;
+  freeOnly?: boolean;
 }
+
+export type ModelGovSettings = OrchestratorSettings;
 
 /** Settings for the built-in browser automation engine. */
 export interface BrowserUseSettings {
@@ -147,6 +150,7 @@ export interface AppSettings {
   models?: ModelSettings[];
   lastUsedModel?: LastUsedModelSettings;
   general?: GeneralAppSettings;
+  orchestrator?: OrchestratorSettings;
   modelGov?: ModelGovSettings;
   browserUse?: BrowserUseSettings;
   computerUse?: ComputerUseSettings;
@@ -238,6 +242,7 @@ export class SettingsStorage {
         models: settings.models !== undefined ? (settings.models === null ? undefined : settings.models) : current.models,
         lastUsedModel: settings.lastUsedModel !== undefined ? (settings.lastUsedModel === null ? undefined : { ...current.lastUsedModel, ...settings.lastUsedModel }) : current.lastUsedModel,
         general: settings.general !== undefined ? (settings.general === null ? undefined : { ...current.general, ...settings.general }) : current.general,
+        orchestrator: settings.orchestrator !== undefined ? (settings.orchestrator === null ? undefined : { ...current.orchestrator, ...settings.orchestrator }) : current.orchestrator,
         modelGov: settings.modelGov !== undefined ? (settings.modelGov === null ? undefined : { ...current.modelGov, ...settings.modelGov }) : current.modelGov,
         internetAccess: settings.internetAccess !== undefined ? (settings.internetAccess === null ? undefined : { ...current.internetAccess, ...settings.internetAccess }) : current.internetAccess,
         plugins: settings.plugins !== undefined ? (settings.plugins === null ? undefined : { ...current.plugins, ...settings.plugins }) : current.plugins,

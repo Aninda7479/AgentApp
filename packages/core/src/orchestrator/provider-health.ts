@@ -13,7 +13,7 @@
  *   `<PROVIDER> API error [<status>]: <body>`, so a status-code parser works for
  *   OpenAI / Anthropic / Gemini / Ollama / custom uniformly. Network failures
  *   (fetch rejection) carry no status and are treated as transient.
- * - The tracker is a module-level singleton so all ModelRouter instances share
+ * - The tracker is a module-level singleton so all OrchestratorRouter instances share
  *   one view of provider liveness. A `reset()` is exported for tests.
  * - Rate limits are cooldown-based (retried after a window); auth failures
  *   (locked) and deprecations are sticky until explicitly reset, because
@@ -166,7 +166,7 @@ export class ProviderHealthTracker {
 }
 
 /**
- * Shared singleton so all ModelRouter instances agree on provider liveness.
+ * Shared singleton so all OrchestratorRouter instances agree on provider liveness.
  * Reset in tests between cases.
  */
 export const providerHealth = new ProviderHealthTracker();

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Check, Search, Wrench, AlertTriangle } from 'lucide-react';
+import { Sparkles, Check, Search, Wrench, AlertTriangle, RefreshCw } from 'lucide-react';
 
 /** Readiness status shared by skills and plugins. */
 export type IntegrationStatus = 'active' | 'under-development' | 'incomplete';
@@ -37,6 +37,8 @@ interface IntegrationsSettingsProps {
   mcpDashboard: React.ReactNode;
   skills: IntegrationsSkill[];
   onToggleSkill: (id: string, enabled: boolean) => void;
+  /** Manually scan global ~/.claude/skills + ~/.agents/skills (and project dot-folders) for importable skills. */
+  onScanSkills?: () => void;
   pluginCatalog: IntegrationsPlugin[];
   pluginEnabled: Record<string, boolean>;
   onTogglePlugin: (id: string, enabled: boolean) => void;
@@ -87,6 +89,7 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
   mcpDashboard,
   skills,
   onToggleSkill,
+  onScanSkills,
   pluginCatalog,
   pluginEnabled,
   onTogglePlugin
@@ -207,8 +210,20 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
       {/* Skills panel */}
       {view === 'skills' && (
         <div className="flex flex-col" data-testid="integration-view-skills">
-          <div className="ui-label mb-3">
-            {skills.filter((s) => s.status !== 'under-development' && s.enabled !== false).length} enabled
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="ui-label">
+              {skills.filter((s) => s.status !== 'under-development' && s.enabled !== false).length} enabled
+            </div>
+            {onScanSkills && (
+              <button
+                type="button"
+                data-testid="scan-skills-button"
+                onClick={onScanSkills}
+                className="flex items-center gap-1.5 rounded-lg border border-brand-border bg-brand-bg px-2.5 py-1 text-[11px] font-medium text-brand-textMain transition-colors hover:bg-brand-hover"
+              >
+                <RefreshCw size={12} /> Scan for skills
+              </button>
+            )}
           </div>
           {skills.length === 0 ? (
             <div className="ui-card px-6 py-10 text-center text-sm text-brand-textMuted">

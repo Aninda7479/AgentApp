@@ -60,13 +60,13 @@ export interface AgentEvent {
 /**
  * Builds a RouterModel[] pool for the orchestration router from the user's
  * configured models (SettingsStorage). Vision/tool capability isn't stored as a
- * boolean on ModelSettings, so it is derived from ModelGovStorage scores — the
- * same source model-gov.ts uses — keeping the pool consistent with the rest of
- * the governance layer.
+ * boolean on ModelSettings, so it is derived from OrchestratorStorage scores — the
+ * same source storage.ts uses — keeping the pool consistent with the rest of
+ * the Orchestrator layer.
  */
 export function buildRouterPool(models: ModelSettings[]): RouterModel[] {
   return models.map((m) => {
-    const scores = ModelGovStorage.getModelScores(m.id);
+    const scores = OrchestratorStorage.getModelScores(m.id);
     // Best-effort enrichment with the extended registry signals (speed/intelligence
     // tier, dollar cost). The catalog id may carry a `${providerId}-` prefix the
     // registry doesn't, so try the stripped native id as a fallback. Missing
@@ -83,6 +83,7 @@ export function buildRouterPool(models: ModelSettings[]): RouterModel[] {
       supportsVision: scores.vision >= 75,
       supportsTools: scores.coding >= 70 || scores.reasoning >= 75,
       inputModalities: m.inputModalities as RouterModel['inputModalities'],
+      outputModalities: m.outputModalities as RouterModel['outputModalities'],
       accessStatus: 'available',
       speedTier: cap?.speedTier,
       intelligenceTier: cap?.intelligenceTier,
@@ -128,13 +129,13 @@ import { PlaywrightBrowserEngine } from '../automation/browser.js';
 import { BrowserLifecycleService } from '../automation/browser-service.js';
 import { resolveProviderFamily, resolveBaseUrl } from './provider-meta.js';
 import { capabilityRegistry } from './models.js';
-import { BestOfNStrategy, synthesizeEnsemble } from './best-of-n.js';
+import { BestOfNStrategy, synthesizeEnsemble } from '../orchestrator/best-of-n.js';
 import { ContentBlock, ImageAttachment, type CompletionRequest, type AIProvider, type ReasoningEffort } from '../types/agent.js';
-import { ModelRouter } from './router.js';
-import type { RouterModel, RerouteEvent } from './router.js';
+import { OrchestratorRouter } from '../orchestrator/router.js';
+import type { RouterModel, RerouteEvent } from '../orchestrator/router.js';
 import { BYOKProviderManager } from './byok.js';
 import { SettingsStorage, type ModelSettings } from '../storage/settings-store.js';
-import { ModelGovStorage } from '../storage/model-gov.js';
+import { OrchestratorStorage } from '../orchestrator/storage.js';
 import { toOpenAIMessages, toAnthropicMessages } from './multimodal.js';
 
 const execAsync = promisify(exec);
@@ -1013,7 +1014,7 @@ Key guidelines:
     const sessionId = opts.sessionId ?? `session-${Date.now()}`;
     const pool = opts.pool ?? buildRouterPool(SettingsStorage.loadSettings().models ?? []);
     const request = buildBridgeRequest(userPrompt, opts.attachments);
-    const router = new ModelRouter({ preferredProvider: opts.config.provider as AIProvider });
+    const router = new OrchestratorRouter({ preferredProvider: opts.config.provider as AIProvider });
 
     const res = await router.completeWithBridge(
       request,
@@ -1038,9 +1039,9 @@ Key guidelines:
                 : `last resort: ${e.from} (${e.status}: no healthier provider)`;
           onEvent({ type: 'reroute', sessionId, content: `[Orchestrator] ${label}` });
           opts.onReroute?.(e);
-        }
-      },
-      opts.config.reasoningEffort
+        },
+        reasoningEffort: opts.config.reasoningEffort
+      }
     );
 
     onEvent({ type: 'token', sessionId, content: res.content });
@@ -1083,47 +1084,63 @@ Key guidelines:
     let res: { fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> };
 
     const startMs = Date.now();
-    if (family === 'anthropic') {
-      res = await this.streamAnthropic(onEvent, signal);
-    } else if (family === 'gemini') {
-      res = await this.streamGemini(onEvent, signal);
-    } else if (family === 'ollama') {
-      res = await this.streamOllama(onEvent, signal);
-    } else {
-      // Everything else (OpenAI, DeepSeek, DeepInfra, OpenRouter, Kimi, …)
-      // speaks the OpenAI-compatible Chat Completions protocol.
-      res = await this.streamOpenAI(onEvent, signal);
-    }
-    const durationMs = Date.now() - startMs;
+    try {
+      if (family === 'anthropic') {
+        res = await this.streamAnthropic(onEvent, signal);
+      } else if (family === 'gemini') {
+        res = await this.streamGemini(onEvent, signal);
+      } else if (family === 'ollama') {
+        res = await this.streamOllama(onEvent, signal);
+      } else {
+        // Everything else (OpenAI, DeepSeek, DeepInfra, OpenRouter, Kimi, …)
+        // speaks the OpenAI-compatible Chat Completions protocol.
+        res = await this.streamOpenAI(onEvent, signal);
+      }
+      const durationMs = Date.now() - startMs;
 
-    // Compute estimated token usage: 1 token ~ 4 characters
-    const inputChars = this.history.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
-    const promptTokens = Math.max(1, Math.round(inputChars / 4));
-    const completionTokens = Math.max(1, Math.round(res.fullContent.length / 4));
+      // Compute estimated token usage: 1 token ~ 4 characters
+      const inputChars = this.history.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
+      const promptTokens = Math.max(1, Math.round(inputChars / 4));
+      const completionTokens = Math.max(1, Math.round(res.fullContent.length / 4));
 
-    // Track usage in centralized storage
-    UsageTracker.trackUsage(
-      this.config.provider,
-      this.config.model,
-      promptTokens,
-      completionTokens,
-      undefined,
-      undefined,
-      durationMs
-    );
-
-    // Emit usage stats back to renderer
-    onEvent({
-      type: 'token',
-      sessionId: this.sessionId,
-      usage: {
+      // Track usage in centralized storage
+      UsageTracker.trackUsage(
+        this.config.provider,
+        this.config.model,
         promptTokens,
         completionTokens,
-        totalTokens: promptTokens + completionTokens
-      }
-    });
+        undefined,
+        undefined,
+        durationMs,
+        'success'
+      );
 
-    return res;
+      // Emit usage stats back to renderer
+      onEvent({
+        type: 'token',
+        sessionId: this.sessionId,
+        usage: {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens
+        }
+      });
+
+      return res;
+    } catch (err) {
+      const durationMs = Date.now() - startMs;
+      UsageTracker.trackUsage(
+        this.config.provider,
+        this.config.model,
+        0,
+        0,
+        undefined,
+        undefined,
+        durationMs,
+        'failure'
+      );
+      throw err;
+    }
   }
 
   // ── OpenAI / Custom (OpenAI-compatible) Streaming ────────────────────────

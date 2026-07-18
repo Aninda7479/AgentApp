@@ -2,7 +2,7 @@ import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, type IpcMai
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, capabilityRegistry, parseContextLimit } from '@superagent/core';
+import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, capabilityRegistry, parseContextLimit } from '@superagent/core';
 
 // Set a custom userData path so all app data lives in <home>/.superagent.
 app.setPath('userData', getUserDataDirectory());
@@ -57,7 +57,7 @@ async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
 // via Electron IPC (replaces HTTP SSE in desktop context)
 
 import { AgentEngine, AgentEngineConfig, AgentEvent, resolveWithinAnyRoot, generateChatName } from './main/ai-engine';
-import { listSkills } from './main/skills';
+import { listSkills, checkSkillsToImport, importSkills } from './main/skills';
 import {
   connectServer,
   disconnectServer,
@@ -184,11 +184,11 @@ safeHandle('agent-run', async (event, {
       // Load settings once for this session so both orchestrator routing AND
       // context-window resolution can read models/providers from the same source.
       const settings = SettingsStorage.loadSettings();
-      if (config.model === 'auto' || config.model === 'Model Governance') {
+      if (config.model === 'auto' || config.model === 'Orchestrator' || config.model === 'Model Governance') {
         // Apply the Orchestrator's default reasoning effort only when the
         // composer/turn didn't set one (caller preference wins). 'off' means
         // leave the per-turn/cascade logic untouched.
-        const govEffort = settings.modelGov?.reasoningEffort;
+        const govEffort = (settings.orchestrator || settings.modelGov)?.reasoningEffort;
         if (!finalConfig.reasoningEffort && govEffort && govEffort !== 'off') {
           finalConfig.reasoningEffort = govEffort;
         }
@@ -198,7 +198,7 @@ safeHandle('agent-run', async (event, {
         // feeding it the raw list can resolve to a model with no provider.
         const enabledModels = buildRouterPool(settings.models ?? []).filter((m) => m.enabled);
         try {
-          const routed = ModelRouter.routeModelForTask(prompt, enabledModels, buildRequest(prompt, currentAttachments));
+          const routed = OrchestratorRouter.routeModelForTask(prompt, enabledModels, buildRequest(prompt, currentAttachments));
           if (routed && routed.model) {
             finalConfig.provider = routed.provider as any;
             finalConfig.model = routed.model;
@@ -219,7 +219,7 @@ safeHandle('agent-run', async (event, {
           if (fallback) {
             console.warn(`[desktop] Orchestrator routing failed (${(routeErr as Error).message}); falling back to ${fallback.providerId}/${fallback.id}.`);
             finalConfig.provider = fallback.providerId as any;
-            finalConfig.model = ModelRouter.stripProviderPrefix(fallback.providerId, fallback.id);
+            finalConfig.model = OrchestratorRouter.stripProviderPrefix(fallback.providerId, fallback.id);
             const byok = settings.providers?.find((p) => p.id === fallback.providerId);
             if (byok) {
               finalConfig.apiKey = byok.apiKey;
@@ -395,11 +395,27 @@ safeHandle('agent-permission-response', (_event, {
 });
 
 // ─── IPC: Skills discovery (for the Composer slash autocomplete) ──────────────
-safeHandle('skills-list', (_event, { dir }: { dir?: string }) => {
+safeHandle('skills-list', (_event, { dir }: { dir?: string | string[] }) => {
   try {
     return listSkills(dir);
   } catch {
     return [];
+  }
+});
+
+safeHandle('skills-import-check', async (_event, { projectRoot }: { projectRoot?: string }) => {
+  try {
+    return await checkSkillsToImport(projectRoot);
+  } catch {
+    return { canImport: false, skills: [] };
+  }
+});
+
+safeHandle('skills-import-perform', async (_event, { projectRoot }: { projectRoot?: string }) => {
+  try {
+    return await importSkills(projectRoot);
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
 });
 
@@ -518,27 +534,28 @@ safeHandle('usage-pricing', () => {
   return UsageTracker.getPricing();
 });
 
-safeHandle('model-gov-read-instructions', () => {
-  return ModelGovStorage.loadInstructions();
+safeHandle('orchestrator-read-instructions', () => {
+  return OrchestratorStorage.loadInstructions();
 });
 
-safeHandle('model-gov-write-instructions', (_event, content: string) => {
-  ModelGovStorage.saveInstructions(content);
+safeHandle('orchestrator-write-instructions', (_event, content: string) => {
+  OrchestratorStorage.saveInstructions(content);
 });
 
-safeHandle('model-gov-update-instructions', async () => {
-  return await ModelGovStorage.autoUpdateInstructions();
+safeHandle('orchestrator-update-instructions', async () => {
+  return await OrchestratorStorage.autoUpdateInstructions();
 });
 
-safeHandle('model-gov-optimize-instructions-by-ai', async () => {
+safeHandle('orchestrator-optimize-instructions-by-ai', async () => {
   const settings = SettingsStorage.loadSettings();
-  const govEnabledIds = settings.modelGov?.enabledModels || [];
+  const orchestratorSettings = settings.orchestrator || settings.modelGov;
+  const govEnabledIds = orchestratorSettings?.enabledModels || [];
 
   const activeModels = (settings.models || []).filter(m =>
     govEnabledIds.includes(m.id) ||
     govEnabledIds.includes(`${m.providerId}-${m.id}`)
   );
-  const currentInstructions = ModelGovStorage.loadInstructions();
+  const currentInstructions = OrchestratorStorage.loadInstructions();
 
   const providers = settings.providers || [];
   const activeProvider = providers.find(p => p.apiKey);
@@ -559,7 +576,7 @@ safeHandle('model-gov-optimize-instructions-by-ai', async () => {
 
   const engine = new AgentEngine(engineConfig, `optimize-prompt-${Date.now()}`);
   
-  const optimizationPrompt = `You are a system prompt optimizer. You are optimizing the Model Governance System Instructions for a Sakana Fugu-class routing conductor.
+  const optimizationPrompt = `You are a system prompt optimizer. You are optimizing the Orchestrator System Instructions for a Sakana Fugu-class routing conductor.
 
 Here is the current pool of enabled models:
 ${activeModels.map(m => `- ${m.name} (${m.providerId}) - Pricing: Input ${m.pricing?.inputPer1M || 'N/A'}, Output ${m.pricing?.outputPer1M || 'N/A'}`).join('\n')}
@@ -569,8 +586,9 @@ Here is the current instructions file content:
 ${currentInstructions}
 \`\`\`
 
-Optimization Goal: ${settings.modelGov?.optimizationGoal || 'balanced'}
-Routing Strategy: ${settings.modelGov?.routingStrategy || 'router'}
+Optimization Goal: ${orchestratorSettings?.optimizationGoal || 'balanced'}
+Routing Strategy: ${orchestratorSettings?.routingStrategy || 'router'}
+${orchestratorSettings?.freeOnly ? 'NOTE: Free-Only mode is enabled. The Orchestrator should only utilize free, local, or custom models. Avoid paid options.' : ''}
 
 Please optimize these system instructions to:
 1. Make the categorization boundaries more precise for the specific models in this pool.
@@ -594,7 +612,7 @@ Please optimize these system instructions to:
     .replace(/```$/, '')
     .trim();
 
-  ModelGovStorage.saveInstructions(optimizedContent);
+  OrchestratorStorage.saveInstructions(optimizedContent);
   return optimizedContent;
 });
 
@@ -1518,11 +1536,11 @@ app.whenReady().then(async () => {
   // Auto-update check (no-ops in dev where electron-updater isn't installed).
   setupAutoUpdater();
 
-  // Model Gov startup instructions auto-update check
+  // Orchestrator startup instructions auto-update check
   try {
     const settings = SettingsStorage.loadSettings();
-    if (settings.modelGov?.autoUpdateInstructions) {
-      ModelGovStorage.autoUpdateInstructions().catch(e => console.error('Model Gov instructions auto-update failed:', e));
+    if ((settings.orchestrator || settings.modelGov)?.autoUpdateInstructions) {
+      OrchestratorStorage.autoUpdateInstructions().catch(e => console.error('Orchestrator instructions auto-update failed:', e));
     }
   } catch (e) {
     // Ignore settings errors at startup

@@ -9,7 +9,7 @@ import { ModelsSettings } from './ModelsSettings';
 import { PlaceholderSettings } from './PlaceholderSettings';
 import { PetsSettings } from './PetsSettings';
 import { UsageTrackerSettings } from './UsageTrackerSettings';
-import { ModelGovSettings } from './ModelGovSettings';
+import { OrchestratorSettings } from './OrchestratorSettings';
 import { BrowserUseSettings } from './BrowserUseSettings';
 import { ComputerUseSettings } from './ComputerUseSettings';
 import { ThreeDSettings } from './ThreeDSettings';
@@ -450,7 +450,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           />
         )}
         {activeCategory === 'model-gov' && (
-          <ModelGovSettings
+          <OrchestratorSettings
             modelsCatalog={modelsCatalog}
             onSaveSettings={(patch) => {
               const ipc = typeof window !== 'undefined' && (window as any).require

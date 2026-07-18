@@ -23,12 +23,11 @@ import {
 import { ComposerService } from '../logic/composer';
 
 /**
- * The auto-routing sentinel. The internal value stays `'Model Governance'` so the
- * orchestrator's routing branch (main process) keeps resolving it; in the Workspace
- * composer it is displayed as `AUTO_ROUTE_LABEL` with a distinct icon. This rename
- * is display-only and scoped to the Workspace — the Settings panel is untouched.
+ * The auto-routing sentinel. The internal value is `'Orchestrator'` so the
+ * orchestrator's routing branch (main process) resolves it; in the Workspace
+ * composer it is displayed as `AUTO_ROUTE_LABEL` with a distinct icon.
  */
-const AUTO_ROUTE_MODEL = 'Model Governance';
+const AUTO_ROUTE_MODEL = 'Orchestrator';
 const AUTO_ROUTE_LABEL = 'Orchestrator';
 
 
@@ -244,11 +243,11 @@ export const Composer: React.FC<ComposerProps> = ({
   };
 
   const hasModels = availableModels && availableModels.length > 0;
-  // "Model Governance" is the auto-router meta-entry, not a concrete sendable
+  // "Orchestrator" is the auto-router meta-entry, not a concrete sendable
   // model. Surface a hint when it's selected so the user understands they can
   // pick a specific model to send directly (addresses the silent composer
   // dead-end the ux-critic flagged — no guidance when the router is selected).
-  const selectedIsRouter = selectedModel === 'Model Governance';
+  const selectedIsRouter = selectedModel === 'Orchestrator';
 
   useEffect(() => {
     if (hasModels) {

@@ -7,7 +7,7 @@ import {
   AIProvider
 } from '../types/agent.js';
 import { contentToText } from './multimodal.js';
-import { applyReasoningEffort } from './reasoning-effort.js';
+import { applyReasoningEffort } from '../orchestrator/reasoning-effort.js';
 
 /** Provider adapter for the Google Gemini Generative Language API. */
 export class GeminiAdapter implements BaseProviderAdapter {

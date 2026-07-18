@@ -1,5 +1,5 @@
 import { ReasoningEffort } from '../types/agent.js';
-import { resolveProviderFamily } from './provider-meta.js';
+import { resolveProviderFamily } from '../providers/provider-meta.js';
 import type { TaskDifficulty } from './task-classifier.js';
 
 /**

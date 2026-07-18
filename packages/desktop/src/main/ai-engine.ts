@@ -501,7 +501,28 @@ export class AgentEngine {
           ? `\n\nThis is a standalone chat (no project workspace). Your file access is restricted to the chat attachments folder: ${effectiveRoot}\nDo NOT attempt to read or list files outside this folder.`
           : '');
 
-    const sysPrompt = config.systemPrompt || (`You are SuperAgent, a powerful autonomous AI coding assistant.
+    let customRules = '';
+    if (effectiveRoot) {
+      const candidates = [
+        path.join(effectiveRoot, '.superagent', 'AGENTS.md'),
+        path.join(effectiveRoot, 'AGENTS.md'),
+        path.join(effectiveRoot, '.claude', 'CLAUDE.md'),
+        path.join(effectiveRoot, '.cloud', 'agent.md')
+      ];
+      for (const p of candidates) {
+        try {
+          if (fs.existsSync(p)) {
+            const content = fs.readFileSync(p, 'utf8').trim();
+            if (content) {
+              customRules += `\n\nCustom instructions from ${path.basename(p)}:\n${content}`;
+              break;
+            }
+          }
+        } catch {}
+      }
+    }
+
+    const sysPrompt = (config.systemPrompt || (`You are SuperAgent, a powerful autonomous AI coding assistant.
 
 You have access to tools to read files, list directories, search codebases, run shell commands, and write files.
 Use tools progressively — don't dump the whole codebase; fetch what you need when you need it.
@@ -512,7 +533,7 @@ Key guidelines:
 - Verify changes compile/work after editing
 - Be concise but thorough in explanations
 - When you edit files, mention which files changed and the diff summary
-- If a tool fails twice, stop retrying the same approach and explain the limitation instead` + attachmentSection + scopeSection);
+- If a tool fails twice, stop retrying the same approach and explain the limitation instead` + attachmentSection + scopeSection)) + customRules;
 
     // ── Internet Access policy ─────────────────────────────────────────────
     // Inform the model of the governing network policy so it does not waste
@@ -526,8 +547,6 @@ Key guidelines:
           : 'You may use the network freely, but prefer local tools when they suffice.');
 
     this.history.push({ role: 'system', content: sysPrompt + internetAccessSection });
-
-    this.history.push({ role: 'system', content: sysPrompt });
 
     this.contextWindow = config.contextWindow ?? 128000;
   }

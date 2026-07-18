@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarDays, Folder, Plug, Sparkles, Stethoscope, Terminal, Bot, Plus, X } from 'lucide-react';
+import { CalendarDays, Folder, Plug, Sparkles, Stethoscope, Terminal, Bot, Plus, X, RefreshCw } from 'lucide-react';
 import { Composer, ComposerOptions } from './Composer';
 import { TrajectoryCanvas, TrajectoryStep } from './TrajectoryCanvas';
 import { MCPServerInfo } from './MCPDashboard';
@@ -69,6 +69,10 @@ interface WorkspaceViewProps {
   activeModelContextLimit?: string;
   /** Triggered when the user clicks the context-usage ring (runs /compact). */
   onCompact?: () => void;
+  importableSkills?: { id: string; name: string }[];
+  onImportSkills?: () => void;
+  /** Manually scan global ~/.claude/skills + ~/.agents/skills (and project dot-folders) for importable skills. */
+  onScanSkills?: () => void;
 }
 
 const recommendations = [
@@ -276,7 +280,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   onRetryLast,
   contextUsage,
   activeModelContextLimit,
-  onCompact
+  onCompact,
+  importableSkills = [],
+  onImportSkills,
+  onScanSkills
 }) => {
   // Only surface models the user has ENABLED in Settings → Models. Each catalog
   // entry carries a per-model `enabled` flag (ModelConfig.enabled); connected
@@ -470,6 +477,18 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             );
           })()}
         </div>
+
+        {/* Scan for skills */}
+        {onScanSkills && (
+          <button
+            type="button"
+            data-testid="workspace-scan-skills"
+            onClick={onScanSkills}
+            className="flex items-center gap-1 rounded-md border border-brand-border bg-brand-bg px-2 py-1 text-[10px] font-medium text-brand-textMain transition-colors hover:bg-brand-hover"
+          >
+            <RefreshCw size={11} /> Scan
+          </button>
+        )}
       </div>
 
       {/* ── Multi-Agent Tab Bar (only when > 1 session) ──────────────────── */}
@@ -482,6 +501,24 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           onCloseSession={handleCloseSession}
           disabled={noModels}
         />
+      )}
+
+      {/* ── Import Skills Alert Banner ───────────────────────────────────── */}
+      {importableSkills && importableSkills.length > 0 && (
+        <div className="bg-brand-sidebar border-b border-brand-border p-3 flex items-center justify-between gap-4 text-xs">
+          <div className="flex items-center gap-2 text-brand-textMain">
+            <span className="text-base">💡</span>
+            <span>
+              Found <strong>{importableSkills.length}</strong> new skill(s) in your skill folders (global <code>~/.claude/skills</code> / <code>~/.agents/skills</code> and project dot-folders). Would you like to import them into <code>.superagent/skills</code>?
+            </span>
+          </div>
+          <button
+            onClick={onImportSkills}
+            className="flex-shrink-0 bg-brand-primary text-brand-bg px-3 py-1.5 rounded-lg hover:bg-brand-primary/95 transition font-semibold text-[10px] uppercase tracking-wider"
+          >
+            Import Skills
+          </button>
+        </div>
       )}
 
       {/* ── Trajectory Canvas ─────────────────────────────────────────────── */}
@@ -600,7 +637,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         onAttachClick={onAttachClick}
         availableModels={composerModelsFromCatalog(modelsCatalog)}
         emptyStateMessage={composerEmptyStateMessage(modelsCatalog)}
-        defaultModel={activeChatModel && enabledModels.some(m => m.name === activeChatModel) ? activeChatModel : (enabledModels.length > 1 ? 'Model Governance' : (enabledModels[0]?.name || ''))}
+        defaultModel={activeChatModel && enabledModels.some(m => m.name === activeChatModel) ? activeChatModel : (enabledModels.length > 1 ? 'Orchestrator' : (enabledModels[0]?.name || ''))}
         promptValue={composerPrompt}
         onPromptChange={onPromptChange}
         onAttachPastedFiles={onAttachPastedFiles}
@@ -632,7 +669,7 @@ export function composerModelsFromCatalog(modelsCatalog: ModelConfig[]): string[
   const enabled = modelsCatalog.filter((m) => m.enabled);
   if (enabled.length === 0) return [];
   if (enabled.length === 1) return [enabled[0].name];
-  return ['Model Governance', ...enabled.map((m) => m.name)];
+  return ['Orchestrator', ...enabled.map((m) => m.name)];
 }
 
 /**

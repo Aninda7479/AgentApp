@@ -233,14 +233,22 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
         // ── Standard chatting branch ──
         updateChatSteps([
           ...currentSteps,
-          StepFactory.thoughtStep('Formulating structured markdown reply with available model credentials and MCP bindings.')
+          StepFactory.thoughtStep('Checking active workspace credentials and connected LLM providers...')
         ]);
 
         setTimeout(() => {
           finalizeSimulation([
             ...currentSteps,
             StepFactory.assistantStep(
-              'I am connected and ready. I can write and compile code, interface with your local filesystem via MCP tool servers, query your memory profiles, and manage/preview your uploaded image and video assets. How should we proceed?'
+              `⚠️ **Demo Mode (Simulation)**
+
+No active AI provider credentials were found. To run the real coding assistant, please set up an API key:
+
+1. Open **Settings** (click the gear icon or navigate to the Settings tab).
+2. Add an API key under **Providers** (OpenAI, Anthropic, Gemini, Ollama, etc.).
+3. Choose your active model from the composer dropdown.
+
+Once configured, the agent will have full capabilities to read/write code, run builds, execute commands, and use MCP tool servers in your workspace.`
             )
           ]);
         }, 1200);

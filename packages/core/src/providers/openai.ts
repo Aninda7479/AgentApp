@@ -6,7 +6,7 @@ import {
   ModelCapability,
   AIProvider
 } from '../types/agent.js';
-import { applyReasoningEffort } from './reasoning-effort.js';
+import { applyReasoningEffort } from '../orchestrator/reasoning-effort.js';
 
 /** Provider adapter for OpenAI-compatible Chat Completions API. */
 export class OpenAIAdapter implements BaseProviderAdapter {

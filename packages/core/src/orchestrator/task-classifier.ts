@@ -13,7 +13,7 @@
  *    escalate reasoning effort or trigger an ensemble.
  *  - goalHint: an optional quality / cost / latency preference surfaced by the
  *    text. It is a *hint only* — it never overrides the user's explicit
- *    modelGov.optimizationGoal.
+ *    orchestrator.optimizationGoal.
  *
  * Everything here is pure and deterministic (no network), so it is directly
  * unit-testable with synthetic requests.

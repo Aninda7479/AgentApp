@@ -7,7 +7,7 @@ import {
   AIProvider
 } from '../types/agent.js';
 import { toAnthropicMessages } from './multimodal.js';
-import { applyReasoningEffort } from './reasoning-effort.js';
+import { applyReasoningEffort } from '../orchestrator/reasoning-effort.js';
 
 /** Provider adapter for the Anthropic Messages API (Claude). */
 export class AnthropicAdapter implements BaseProviderAdapter {
