@@ -16,7 +16,19 @@ export * from './orchestrator/task-classifier.js';
 export * from './orchestrator/best-of-n.js';
 export * from './orchestrator/storage.js';
 export * from './providers/autodetect.js';
-export { AgentEngine as SuperAgentEngine, buildRouterPool, type AgentEvent, type AgentEngineConfig } from './providers/ai-engine.js';
+export {
+  AgentEngine,
+  AgentEngine as SuperAgentEngine,
+  buildRouterPool,
+  type AgentEvent,
+  type AgentEngineConfig,
+  isContextOverflowError,
+  MultiAgentManager,
+  multiAgentManager,
+  createBuiltinTools,
+  isCommandAllowed,
+  type AgentEventType
+} from './providers/ai-engine.js';
 export * from './tools/media.js';
 export * from './tools/mcp.js';
 export * from './tools/threed.js';
@@ -49,6 +61,7 @@ export * from './mcp/guard.js';
 export * from './mcp/ide.js';
 
 export * from './integrations/catalog.js';
+export * from './integrations/partner-store.js';
 export * from './integrations/plugins.js';
 export * from './integrations/skills-catalog.js';
 
@@ -76,4 +89,6 @@ export * from './media/ppt_stylizer.js';
 
 /** Shared launcher for the self-hosted web server (CLI `--start-web` + Desktop). */
 export * from './web-server.js';
+export * from './providers/system-info.js';
+
 

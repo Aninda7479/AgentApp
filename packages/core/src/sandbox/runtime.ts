@@ -130,6 +130,10 @@ export class SandboxRunner {
     this.projectRoot = root;
   }
 
+  public getProjectRoot(): string | undefined {
+    return this.projectRoot;
+  }
+
   public getMode(): PermissionMode {
     return this.controller.getMode();
   }
