@@ -349,7 +349,7 @@ export const UsageTrackerSettings: React.FC = () => {
       </div>
 
       {/* Headline metrics */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <MetricCard
           icon={Wallet}
           label="Expense"
@@ -359,7 +359,6 @@ export const UsageTrackerSettings: React.FC = () => {
         />
         <MetricCard icon={BarChart2} label="Tokens" value={fmtTokens(totals.tokens)} sub={`${fmtTokens(totals.input)} in · ${fmtTokens(totals.output)} out`} />
         <MetricCard icon={Cpu} label="Requests" value={`${totals.calls}`} sub="API calls" />
-        <MetricCard icon={Clock} label="Uptime" value={fmtUptime(uptimeMs)} sub="this session" />
       </div>
 
       {/* Expense overview — explicit periods */}

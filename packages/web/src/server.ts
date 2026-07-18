@@ -535,6 +535,9 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         UsageTracker.clearUsage();
         result = null;
         break;
+      case 'usage-pricing':
+        result = UsageTracker.getPricing();
+        break;
       case 'orchestrator-read-instructions':
         result = OrchestratorStorage.loadInstructions();
         break;

@@ -74,7 +74,8 @@ import {
   ConfirmationHandler,
   ReasoningEffort,
   chunkedCompactMessages,
-  extractTextContent
+  extractTextContent,
+  UsageTracker
 } from '@superagent/core';
 
 // ─── path scoping ──────────────────────────────────────────────────────────────
@@ -818,16 +819,70 @@ Key guidelines:
     onEvent: (event: AgentEvent) => void,
     signal: AbortSignal
   ): Promise<{ fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> }> {
-    const { provider } = this.config;
-
+    const { provider, model } = this.config;
     const family = resolveProviderFamily(provider);
-    if (family === 'anthropic') return this.streamAnthropic(onEvent, signal);
-    if (family === 'gemini') return this.streamGemini(onEvent, signal);
-    if (family === 'ollama') return this.streamOllama(onEvent, signal);
 
-    // Everything else (OpenAI, DeepSeek, DeepInfra, OpenRouter, Kimi, …) speaks
-    // the OpenAI-compatible Chat Completions protocol.
-    return this.streamOpenAI(onEvent, signal);
+    let res: { fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> };
+    const startMs = Date.now();
+
+    try {
+      if (family === 'anthropic') {
+        res = await this.streamAnthropic(onEvent, signal);
+      } else if (family === 'gemini') {
+        res = await this.streamGemini(onEvent, signal);
+      } else if (family === 'ollama') {
+        res = await this.streamOllama(onEvent, signal);
+      } else {
+        // Everything else (OpenAI, DeepSeek, DeepInfra, OpenRouter, Kimi, …) speaks
+        // the OpenAI-compatible Chat Completions protocol.
+        res = await this.streamOpenAI(onEvent, signal);
+      }
+
+      const durationMs = Date.now() - startMs;
+
+      // Compute estimated token usage: 1 token ~ 4 characters
+      const inputChars = this.history.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
+      const promptTokens = Math.max(1, Math.round(inputChars / 4));
+      const completionTokens = Math.max(1, Math.round(res.fullContent.length / 4));
+
+      // Track usage in centralized storage
+      UsageTracker.trackUsage(
+        provider,
+        model,
+        promptTokens,
+        completionTokens,
+        undefined,
+        undefined,
+        durationMs,
+        'success'
+      );
+
+      // Emit usage stats back to renderer
+      onEvent({
+        type: 'token',
+        sessionId: this.sessionId,
+        usage: {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens
+        }
+      });
+
+      return res;
+    } catch (err) {
+      const durationMs = Date.now() - startMs;
+      UsageTracker.trackUsage(
+        provider,
+        model,
+        0,
+        0,
+        undefined,
+        undefined,
+        durationMs,
+        'failure'
+      );
+      throw err;
+    }
   }
 
   // ── OpenAI / Custom (OpenAI-compatible) Streaming ────────────────────────
