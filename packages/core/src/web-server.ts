@@ -52,6 +52,8 @@ export function locateWebServerEntry(): string | null {
   if (resourcesPath) {
     const packed = path.join(resourcesPath, 'web', 'server.js');
     if (fs.existsSync(packed)) return packed;
+    const packedDist = path.join(resourcesPath, 'web', 'dist', 'server.js');
+    if (fs.existsSync(packedDist)) return packedDist;
   }
 
   // Monorepo dev: this file lives at packages/core/dist/web-server.js, so walk
@@ -100,6 +102,8 @@ export function startWebServer(options: StartWebServerOptions = {}): ChildProces
   const env: NodeJS.ProcessEnv = { ...process.env };
   if (options.port != null) env.PORT = String(options.port);
   if (options.host != null) env.HOST = options.host;
+  // If launching from an Electron executable, force it to run as a node child process.
+  env.ELECTRON_RUN_AS_NODE = '1';
 
   const child = spawn(process.execPath, [entry], {
     env,

@@ -53,7 +53,9 @@ export const WebAppSettings: React.FC = () => {
 
   useEffect(() => {
     refreshStatus();
-    if (!ipc) return;
+    const interval = setInterval(refreshStatus, 3000);
+
+    if (!ipc) return () => clearInterval(interval);
     ipc
       .invoke('settings-read')
       .then((settings: any) => {
@@ -65,6 +67,8 @@ export const WebAppSettings: React.FC = () => {
       .catch(() => {
         /* ignore */
       });
+
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

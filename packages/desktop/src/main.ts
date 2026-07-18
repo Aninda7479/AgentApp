@@ -1407,6 +1407,19 @@ safeHandle('web-stop', () => {
 });
 
 /** Reports whether the web server is currently running and on which port/host. */
+/** Helper to determine the local machine's primary non-internal IPv4 address (e.g. Wi-Fi / LAN IP). */
+function getLocalIpAddress(): string {
+  const interfaces = os.networkInterfaces();
+  for (const list of Object.values(interfaces)) {
+    for (const info of list || []) {
+      if ((String(info.family) === 'IPv4' || String(info.family) === '4') && !info.internal) {
+        return info.address;
+      }
+    }
+  }
+  return 'localhost';
+}
+
 safeHandle('web-status', () => {
   // The port is set in the *child* server's env (not the desktop parent's), so
   // read the effective port from the persisted Web App setting `web-start`
@@ -1418,11 +1431,12 @@ safeHandle('web-status', () => {
   } catch {
     /* ignore */
   }
+  const localIp = getLocalIpAddress();
   return {
     running: isWebServerRunning(),
     port,
     url: `http://localhost:${port}`,
-    lanUrl: `http://0.0.0.0:${port}`
+    lanUrl: `http://${localIp}:${port}`
   };
 });
 

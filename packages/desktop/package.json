@@ -61,6 +61,12 @@
       "assets/icon.icns",
       "assets/icon.svg"
     ],
+    "extraResources": [
+      {
+        "from": "web",
+        "to": "web"
+      }
+    ],
     "asar": true,
     "asarUnpack": [
       "**/*.node",

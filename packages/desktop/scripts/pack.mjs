@@ -35,6 +35,14 @@ function sh(cmd, args, opts = {}) {
   return spawnSync(cmd, args, { stdio: 'inherit', ...opts });
 }
 
+// Verify that the web server package is built.
+const webServerSrc = path.join(repoRoot, 'packages', 'web', 'dist', 'server.js');
+if (!fs.existsSync(webServerSrc)) {
+  console.error('[pack] ❌ Web server build output not found at packages/web/dist/server.js.');
+  console.error('[pack] Please build the web package first with `npm run build --workspace=@superagent/web`.');
+  process.exit(1);
+}
+
 console.log('[pack] staging app into', packDir);
 rmrf(packDir);
 fs.mkdirSync(packDir, { recursive: true });
@@ -77,6 +85,41 @@ if (installResult.status !== 0) {
   if (installResult.error) console.error('[pack] spawn error:', installResult.error.message);
   rmrf(packDir);
   process.exit(installResult.status || 1);
+}
+
+// Copy `@superagent/web` into the staged directory.
+console.log('[pack] copying @superagent/web to staged web directory');
+fs.cpSync(path.join(repoRoot, 'packages', 'web'), path.join(packDir, 'web'), {
+  recursive: true,
+  filter: (src) => {
+    const rel = path.relative(path.join(repoRoot, 'packages', 'web'), src);
+    const ignore = ['node_modules', 'tmp', 'logs', 'test'];
+    return !ignore.some(dir => rel === dir || rel.startsWith(dir + path.sep));
+  }
+});
+
+// Read the staged web package.json and replace the core workspace dependency with a relative file link.
+const webPkgPath = path.join(packDir, 'web', 'package.json');
+const webPkg = JSON.parse(fs.readFileSync(webPkgPath, 'utf8'));
+if (webPkg.dependencies && webPkg.dependencies['@superagent/core']) {
+  webPkg.dependencies['@superagent/core'] = 'file:../core';
+}
+fs.writeFileSync(webPkgPath, JSON.stringify(webPkg, null, 2), 'utf8');
+
+// Run a production-only npm install inside the staged web directory to resolve
+// all web server dependencies (and their transitive dependencies) cleanly and physically.
+console.log('[pack] running npm install inside staged web directory...');
+const webInstallResult = spawnSync('npm', ['install', '--omit=dev', '--no-audit', '--no-fund', '--prefer-offline'], {
+  cwd: path.join(packDir, 'web'),
+  shell: true,
+  stdio: 'inherit'
+});
+
+if (webInstallResult.status !== 0) {
+  console.error('[pack] npm install failed inside staged web directory (exit', webInstallResult.status, ')');
+  if (webInstallResult.error) console.error('[pack] spawn error:', webInstallResult.error.message);
+  rmrf(packDir);
+  process.exit(webInstallResult.status || 1);
 }
 
 // Run electron-builder from the staged dir (no workspace detection → app root =
@@ -143,6 +186,15 @@ try {
   rmrf(packDir);
   process.exit(1);
 }
+
+// Verify that the web server extra resource was copied successfully.
+const packedWebEntry = path.join(builtDir, 'win-unpacked', 'resources', 'web', 'dist', 'server.js');
+if (!fs.existsSync(packedWebEntry)) {
+  console.error('[pack] ❌ packaged web server is missing at resources/web/dist/server.js');
+  rmrf(packDir);
+  process.exit(1);
+}
+console.log('[pack] ✅ web server extra resource verified');
 
 rmrf(outDir);
 fs.cpSync(builtDir, outDir, { recursive: true });
