@@ -834,10 +834,24 @@ Key guidelines:
       if ((err as Error).name === 'AbortError') {
         onEvent({ type: 'abort', sessionId: this.sessionId });
       } else {
+        let errMsg = (err as Error).message || String(err);
+        
+        // Enrich local connection refusal errors (e.g. Ollama or custom local server not running)
+        const cause = (err as any).cause;
+        if (cause && (cause.code === 'ECONNREFUSED' || cause.message?.includes('ECONNREFUSED'))) {
+          const baseUrl = this.config.baseUrl || (this.config.provider === 'ollama' ? 'http://localhost:11434' : '');
+          if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
+            const providerName = this.config.provider === 'ollama' ? 'Ollama (Local)' : 'Local server';
+            errMsg = `${providerName} connection refused. Is the local service running on ${baseUrl}?`;
+          }
+        } else if (errMsg === 'fetch failed' && this.config.provider === 'ollama') {
+          errMsg = `Ollama connection failed. Is Ollama running on http://localhost:11434?`;
+        }
+
         onEvent({
           type: 'error',
           sessionId: this.sessionId,
-          error: (err as Error).message || String(err)
+          error: errMsg
         });
       }
     }

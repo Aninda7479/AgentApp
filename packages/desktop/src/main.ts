@@ -262,7 +262,11 @@ safeHandle('agent-run', async (event, {
             try {
               const fs = require('fs');
               const path = require('path');
-              const configFilePath = path.join(finalConfig.projectRoot, 'chat_config.json');
+              const projectDataDir = path.join(finalConfig.projectRoot, '.superagent');
+              if (!fs.existsSync(projectDataDir)) {
+                fs.mkdirSync(projectDataDir, { recursive: true });
+              }
+              const configFilePath = path.join(projectDataDir, 'chat_config.json');
               fs.writeFileSync(configFilePath, JSON.stringify({ chatName }, null, 2), 'utf8');
               console.log(`[desktop] Saved chat config to ${configFilePath}`);
             } catch (fsErr) {
