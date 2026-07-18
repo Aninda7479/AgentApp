@@ -22,6 +22,7 @@ export interface AgentEvent {
   toolArgs?: Record<string, unknown>;
   toolResult?: string;
   error?: string;
+  chatName?: string;
   /** Live context-window usage estimate, set on `type: 'context'` events. */
   context?: { used: number; limit: number; pct: number };
 }
@@ -50,6 +51,14 @@ export class AgentStreamService {
     return (_event: unknown, agentEvent: AgentEvent) => {
       const chatId = streaming.chatIdRef.current;
       if (!chatId) return;
+
+      // ── chat-name: update the chat title in state and store ──
+      if (agentEvent.type === 'chat-name' && agentEvent.chatName) {
+        StoreService.updateChatRecord(ctx, chatId, (current) => ({
+          ...current,
+          title: agentEvent.chatName!
+        }));
+      }
 
       // ── context: forward live context-window usage to the UI gauge ──
       if (agentEvent.type === 'context' && agentEvent.context && onContext) {

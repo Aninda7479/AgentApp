@@ -7,6 +7,7 @@ import { ModelConfig } from '../settings/SettingsView';
 import { WorkspaceService } from '../logic/workspace';
 import { BrandLogo } from '../BrandLogo';
 import { computeContextUsage, type ContextUsage } from '../logic/context';
+import { StoredProject } from '../types';
 
 /** Represents a parallel agent session with its own trajectory. */
 export interface AgentSession {
@@ -45,7 +46,7 @@ interface WorkspaceViewProps {
   /** Called when the user changes the selected model in the composer. */
   onModelChange?: (model: string) => void;
   /** Projects available for the composer context switcher. */
-  projects?: { name: string }[];
+  projects?: StoredProject[];
   /** Switch the active project from the composer. */
   onSelectProject?: (name: string) => void;
   /** Real execution-mode setting (true = full system access). */
@@ -284,6 +285,19 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   // user hide models they don't want from the workspace/composer dropdown.
   const enabledModels = modelsCatalog.filter((m) => m.enabled);
 
+  const getBasename = (pathStr: string) => {
+    if (!pathStr) return '';
+    const parts = pathStr.split(/[\\/]/);
+    return parts[parts.length - 1] || pathStr;
+  };
+
+  const activeProjectObj = projects.find((p) => p.name === activeProject);
+  const activeFolderPath = activeProjectObj?.folders?.[0] || '';
+  const displayWorkspaceName = activeFolderPath 
+    ? getBasename(activeFolderPath) 
+    : (activeProject ? getBasename(activeProject) : 'workspace');
+
+
   // ── Multi-agent session state ──────────────────────────────────────────────
   const [agentSessions, setAgentSessions] = useState<AgentSession[]>([
     {
@@ -395,23 +409,22 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     <>
       {/* ── Workspace Header Bar ─────────────────────────────────────────── */}
       <div className="h-9 border-b border-brand-border flex items-center justify-between gap-2 px-3 sm:px-5 bg-brand-sidebar/80 backdrop-blur-xl flex-shrink-0">
-        <div className="flex items-center gap-2 text-[11px] text-brand-textMuted min-w-0">
-          <Folder size={11} className="text-brand-textMuted flex-shrink-0" />
-          <span className="text-brand-textMain font-medium truncate">
-            {activeProject || 'Workspace'}
+        <div className="flex items-center gap-1.5 text-[10px] font-mono text-brand-textMuted min-w-0 tracking-tight">
+          <span className="text-brand-textMain/85 font-medium truncate">
+            {displayWorkspaceName}
           </span>
-          {activeProject && <span className="text-brand-textMuted/50 flex-shrink-0">/</span>}
-          <span className="text-brand-textMuted truncate">
-            {activeSession?.label !== activeProject ? activeSession?.label : 'agent'}
+          <span className="text-brand-textMuted/30 select-none">/</span>
+          <span className="text-brand-textMuted/70 truncate">
+            {activeSession?.id === 'session-main' ? 'agent-01' : activeSession?.label.toLowerCase().replace(/\s+/g, '-')}
           </span>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           {/* Running agents count badge */}
           {agentSessions.filter(s => s.isGenerating).length > 0 && (
-            <div className="flex items-center gap-1.5 text-[11px] text-[var(--neon-live)]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--neon-live)] animate-pulse" />
-              <span className="hidden sm:inline">{agentSessions.filter(s => s.isGenerating).length} agent{agentSessions.filter(s => s.isGenerating).length > 1 ? 's' : ''} running</span>
+            <div className="flex items-center gap-1.5 text-[10px] font-mono text-[color:var(--neon-live)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)] animate-pulse" />
+              <span className="hidden sm:inline">{agentSessions.filter(s => s.isGenerating).length} active</span>
             </div>
           )}
 
@@ -428,13 +441,34 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             />
           )}
 
-          {/* MCP + Model info */}
-          <div className="hidden sm:flex items-center gap-2 text-[10px] text-brand-textMuted/70">
-            <span className="flex items-center gap-1">
-              <span className={`w-1 h-1 rounded-full ${mcpServers.filter(s => s.enabled).length > 0 ? 'bg-[color:var(--neon-live)]' : 'bg-brand-textMuted/30'}`} />
-              <span>{mcpServers.filter(s => s.enabled).length} MCP</span>
-            </span>
-          </div>
+          {/* MCP Info */}
+          {(() => {
+            const enabledServers = mcpServers.filter(s => s.enabled);
+            const failedServers = enabledServers.filter(s => s.status === 'error');
+            const hasFailed = failedServers.length > 0;
+            const hasEnabled = enabledServers.length > 0;
+            
+            let dotColor = 'bg-brand-textMuted/20';
+            let tooltip = 'no mcp servers';
+            
+            if (hasFailed) {
+              dotColor = 'bg-[color:var(--neon-destructive)] animate-pulse';
+              tooltip = `mcp Connection failed: ${failedServers.map(s => s.name).join(', ')}`;
+            } else if (hasEnabled) {
+              dotColor = 'bg-[color:var(--neon-live)]';
+              tooltip = `mcp: ${enabledServers.length} online`;
+            }
+            
+            return (
+              <span 
+                className="flex items-center gap-1.5 text-[10px] font-mono text-brand-textMuted/60 cursor-help"
+                title={tooltip}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+                <span>mcp: {enabledServers.length}</span>
+              </span>
+            );
+          })()}
         </div>
       </div>
 
@@ -500,16 +534,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
               Pick a starting point below — or just describe what you have in mind.
             </p>
 
-            {/* Status bar */}
-            <div className="w-full max-w-[680px] mb-4 px-3.5 py-2.5 glass-card rounded-lg text-[11px] text-brand-textMuted flex gap-2 items-center border border-brand-border">
-              <Terminal size={13} className="text-brand-textMuted flex-shrink-0" />
-              <div>
-                <span className="font-bold text-brand-textMuted mr-1.5 uppercase tracking-wider text-[9px]">
-                  System:
-                </span>
-                <span>SuperAgent Desktop ready — {enabledModels.length > 0 ? `${enabledModels.length} model${enabledModels.length !== 1 ? 's' : ''} connected` : 'configure providers in Settings'}</span>
-              </div>
-            </div>
+
 
             {/* Recommendation cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-[680px] mb-5">
@@ -531,18 +556,18 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             </div>
 
             {/* Status pills */}
-            <div className="flex gap-2 items-center flex-wrap text-[10px] text-brand-textMuted border-t border-brand-border/30 pt-4 w-full max-w-[680px] justify-center">
-              <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-2.5 py-1 rounded-full shadow-sm">
-                <span className={`w-1 h-1 rounded-full ${enabledModels.length > 0 ? 'bg-[color:var(--neon-constructive)] animate-pulse' : 'bg-brand-textMuted/30'}`} />
-                <span>Models: {enabledModels.length > 0 ? enabledModels.length : 'None'}</span>
+            <div className="flex items-center gap-x-4 gap-y-2 flex-wrap text-[10px] text-brand-textMuted font-mono border-t border-brand-border/20 pt-4 w-full max-w-[680px] justify-center select-none">
+              <div className="flex items-center gap-1.5">
+                <span className={`w-1 h-1 rounded-full ${enabledModels.length > 0 ? 'bg-[color:var(--neon-constructive)]' : 'bg-brand-textMuted/20'}`} />
+                <span>models: {enabledModels.length > 0 ? enabledModels.length : 'none'}</span>
               </div>
-              <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-2.5 py-1 rounded-full shadow-sm">
-                <span className={`w-1 h-1 rounded-full ${mcpServers.filter(s => s.enabled).length > 0 ? 'bg-[color:var(--neon-live)] animate-pulse' : 'bg-brand-textMuted/30'}`} />
-                <span>MCP: {mcpServers.filter(s => s.enabled).length} online</span>
+              <div className="flex items-center gap-1.5">
+                <span className={`w-1 h-1 rounded-full ${mcpServers.filter(s => s.enabled).length > 0 ? 'bg-[color:var(--neon-live)]' : 'bg-brand-textMuted/20'}`} />
+                <span>mcp: {mcpServers.filter(s => s.enabled).length} online</span>
               </div>
-              <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-2.5 py-1 rounded-full shadow-sm">
-                <span className={`w-1 h-1 rounded-full ${hasCredentials ? 'bg-[color:var(--neon-live)] animate-pulse' : 'bg-[color:var(--neon-attention)]'}`} />
-                <span>Keys: {hasCredentials ? 'Active' : 'Setup needed'}</span>
+              <div className="flex items-center gap-1.5">
+                <span className={`w-1 h-1 rounded-full ${hasCredentials ? 'bg-[color:var(--neon-live)]' : 'bg-[color:var(--neon-attention)]'}`} />
+                <span>keys: {hasCredentials ? 'active' : 'setup'}</span>
               </div>
               <button
                 onClick={handleAddAgentSession}

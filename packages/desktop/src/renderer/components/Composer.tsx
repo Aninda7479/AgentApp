@@ -398,11 +398,11 @@ export const Composer: React.FC<ComposerProps> = ({
         {selectedIsRouter && (
           <div
             data-testid="composer-router-hint"
-            className="mb-3 flex items-start gap-1.5 text-[11px] leading-snug text-brand-textMuted"
+            className="mb-3 flex items-center gap-1.5 text-[10px] font-mono text-brand-textMuted/65 leading-none"
           >
-            <Info className="mt-0.5 w-3 h-3 shrink-0" />
+            <Info className="w-3 h-3 shrink-0 text-brand-textMuted/50" />
             <span>
-              “Model Governance” auto-routes your request across models. Pick a specific model above to send directly to it.
+              auto-routing: active across available models
             </span>
           </div>
         )}

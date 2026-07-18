@@ -250,6 +250,37 @@ safeHandle('agent-run', async (event, {
       // Reset context-usage tracking for this run.
       petContextMax = finalConfig.contextWindow ?? 0;
       petContextTotal = 0;
+
+      // Asynchronously generate chat name for the first message of the session
+      (async () => {
+        try {
+          const chatName = await generateChatName(prompt, finalConfig);
+          
+          // Write to chat config file of that folder (if available)
+          if (finalConfig.projectRoot) {
+            try {
+              const fs = require('fs');
+              const path = require('path');
+              const configFilePath = path.join(finalConfig.projectRoot, 'chat_config.json');
+              fs.writeFileSync(configFilePath, JSON.stringify({ chatName }, null, 2), 'utf8');
+              console.log(`[desktop] Saved chat config to ${configFilePath}`);
+            } catch (fsErr) {
+              console.error('[desktop] Failed to write chat_config.json:', fsErr);
+            }
+          }
+          
+          // Emit agent-event of type 'chat-name'
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('agent-event', {
+              type: 'chat-name',
+              sessionId,
+              chatName
+            });
+          }
+        } catch (nameErr) {
+          console.error('[desktop] Error in chat name generation sequence:', nameErr);
+        }
+      })();
     }
 
     // Run agent; emit each event back to renderer

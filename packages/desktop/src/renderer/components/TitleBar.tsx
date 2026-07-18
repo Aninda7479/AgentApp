@@ -290,8 +290,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       </div>
 
       {/* Middle side: Window Title label */}
-      <div className="hidden sm:block text-[11px] text-brand-textMuted/60 font-semibold absolute left-1/2 -translate-x-1/2 pointer-events-none select-none tracking-wider">
-        SuperAgent
+      <div className="hidden sm:block text-[9px] font-mono text-brand-textMuted/40 absolute left-1/2 -translate-x-1/2 pointer-events-none select-none tracking-widest uppercase">
+        superagent
       </div>
 
       {/* Right side: theme, BYOK status, menu (mobile), and custom Window controls */}

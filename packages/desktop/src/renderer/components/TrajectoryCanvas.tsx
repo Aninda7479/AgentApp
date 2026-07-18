@@ -473,10 +473,10 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
         {turns.map((turn, turnIdx) => (
           <div key={turn.userSteps[0]?.id || `turn-${turnIdx}`} className="flex flex-col gap-0">
             {/* ── User Prompt Bubble ─────────────────────────────────── */}
-            <div className="flex justify-center mb-6 mt-2">
+            <div className="flex justify-center mb-5 mt-2">
               <div
                 data-testid={`step-user-${turn.userSteps[0]?.id || turnIdx}`}
-                className="relative group bg-brand-card border border-brand-border/80 rounded-2xl px-5 py-3 max-w-[88%] text-brand-textMain text-[14px] leading-[1.7] tracking-[0.01em] shadow-sm hover:border-brand-border-strong transition-all"
+                className="relative group bg-brand-card/30 backdrop-blur-sm border border-brand-border/40 rounded-xl px-4 py-2.5 max-w-[80%] text-brand-textMain text-[13px] leading-relaxed shadow-sm hover:border-brand-border/80 transition-all font-sans"
               >
                 {turn.userSteps.map((step, idx) => (
                   <div key={step.id} className={idx > 0 ? 'mt-2.5' : ''}>
@@ -650,12 +650,9 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
               return (
                 <div
                   key={step.id}
-                  className="flex flex-col gap-1 items-start max-w-[90%] animate-fade-in mb-1"
+                  className="flex flex-col gap-0.5 items-start max-w-[90%] animate-fade-in mb-1"
                 >
-                  <div className="text-[10px] text-brand-textMuted font-semibold pl-1 select-none font-sans uppercase tracking-wider">
-                    Thought
-                  </div>
-                  <div className="bg-brand-card/65 border border-brand-border/50 rounded-2xl rounded-tl-sm px-4 py-2.5 text-xs text-brand-textMain leading-relaxed shadow-sm font-sans [&_p]:text-[12px] [&_p]:leading-relaxed [&_p]:text-brand-textMain [&_code]:text-[11px] [&_code]:bg-brand-popover [&_code]:border [&_code]:border-brand-border/60 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_p]:!text-[12px] [&_p]:!leading-relaxed [&_p]:!text-brand-textMain [&_code]:!text-[11px] [&_code]:!bg-brand-popover [&_code]:!border [&_code]:!border-brand-border/60 [&_code]:!px-1.5 [&_code]:!py-0.5 [&_code]:!rounded [&_code]:!font-mono">
+                  <div className="bg-brand-card/20 border border-brand-border/30 rounded-lg px-3.5 py-2 text-[12px] text-brand-textMuted leading-relaxed font-sans border-l-2 border-l-brand-highlight/40">
                     <MarkdownText content={step.content} />
                   </div>
                 </div>
@@ -669,27 +666,28 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
               <div
                 key={step.id}
                 data-testid={`step-tool-${step.id}`}
-                className="flex flex-col gap-1 items-start max-w-[95%] w-full animate-fade-in mb-1 font-sans"
+                className="flex flex-col gap-1 items-start max-w-full w-full animate-fade-in mb-1 font-sans"
               >
-                <div className="text-[10px] text-brand-textMuted font-semibold pl-1 select-none uppercase tracking-wider">
-                  Tool Call
-                </div>
-                <div className="bg-brand-popover/45 border border-brand-border/40 rounded-xl px-3.5 py-2.5 flex flex-col gap-1.5 font-mono text-[11px] text-brand-textMuted leading-normal w-full shadow-sm">
-                  <div className="flex items-center gap-2">
+                <div className="bg-brand-card/20 border border-brand-border/30 rounded-lg px-3 py-1.5 flex items-center justify-between gap-3 font-mono text-[10.5px] text-brand-textMuted/80 w-full hover:bg-brand-card/30 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
                     <span
                       className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                         isSuccess ? 'bg-[color:var(--neon-constructive)]' :
                         isError ? 'bg-[color:var(--neon-destructive)]' : 'bg-[color:var(--neon-live)]'
                       }`}
                     />
-                    <span className="text-brand-textMain font-semibold font-mono">{step.toolName || 'tool'}</span>
-                    <span className="text-[10px] text-brand-textMuted/60 uppercase tracking-wider select-none font-sans">
-                      {step.status || 'running'}
+                    <span className="text-brand-textMain/90 font-medium font-mono shrink-0">{step.toolName || 'tool'}</span>
+                    <span className="text-brand-textMuted/40 select-none">|</span>
+                    <span className="text-brand-textMuted/70 truncate font-mono select-all flex-1">
+                      {TrajectoryService.summarizeToolContent(step)}
                     </span>
                   </div>
-                  <div className="text-brand-textMuted/80 text-[10.5px] truncate font-mono select-all w-full font-mono">
-                    {TrajectoryService.summarizeToolContent(step)}
-                  </div>
+                  <span className={`text-[9px] font-semibold uppercase tracking-wider shrink-0 ${
+                    isSuccess ? 'text-[color:var(--neon-constructive)]/80' :
+                    isError ? 'text-[color:var(--neon-destructive)]/80' : 'text-[color:var(--neon-live)]/80'
+                  }`}>
+                    {step.status || 'running'}
+                  </span>
                 </div>
               </div>
             );
