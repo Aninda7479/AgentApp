@@ -44,6 +44,7 @@ import {
   getAuthenticatedUser,
   isAuthDisabled
 } from './auth.js';
+import { getSystemInfo } from './system-info.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -537,6 +538,9 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         break;
       case 'usage-pricing':
         result = UsageTracker.getPricing();
+        break;
+      case 'system-info':
+        result = await getSystemInfo();
         break;
       case 'orchestrator-read-instructions':
         result = OrchestratorStorage.loadInstructions();

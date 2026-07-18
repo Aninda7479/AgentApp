@@ -25,6 +25,7 @@
   "dependencies": {
     "@superagent/core": "^0.1.0",
     "express": "^4.19.2",
+    "systeminformation": "^5.31.17",
     "ws": "^8.17.0"
   },
   "devDependencies": {
