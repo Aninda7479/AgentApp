@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { SettingsStorage } from '@superagent/core';
+import { runUpdate } from '../commands/update.js';
 
 /** Parsed CLI flags and options for the chat command. */
 export interface CliOptions {
@@ -48,6 +49,16 @@ export function createCliProgram(onExecute?: (options: CliOptions, prompt?: stri
 
       // Return the (possibly async) result so `program.parseAsync` awaits it.
       return onExecute?.(mergedOptions, prompt);
+    });
+
+  // `superagent update` — self-update the Core + CLI + Web install from npm
+  // (Option 1). Mirrors the desktop's in-app "Check for Updates" flow.
+  program
+    .command('update')
+    .description('Update the SuperAgent CLI and web server to the latest published npm version')
+    .option('-c, --check', 'Check for a newer version without installing', false)
+    .action((options: { check?: boolean }) => {
+      runUpdate({ check: Boolean(options.check) });
     });
 
   return program;

@@ -25,8 +25,9 @@ export default function Nav() {
         </Link>
 
         <nav className="nav-links" aria-label="Primary">
+          <NavLink to="/cli">CLI</NavLink>
+          <NavLink to="/desktop">Desktop</NavLink>
           <NavLink to="/#features">Features</NavLink>
-          <NavLink to="/#install">Install</NavLink>
           <NavLink to="/faq">FAQ</NavLink>
           <a href={`${GH}/blob/main/README.md`} target="_blank" rel="noopener">Docs</a>
         </nav>
@@ -38,7 +39,7 @@ export default function Nav() {
             </svg>
             <span>GitHub</span>
           </a>
-          <Link className="btn btn-primary btn-sm" to="/#install" onClick={close}>Get SuperAgent</Link>
+          <Link className="btn btn-primary btn-sm" to="/cli" onClick={close}>Get SuperAgent</Link>
           <button
             className="nav-toggle"
             aria-label="Toggle menu"
@@ -54,8 +55,9 @@ export default function Nav() {
 
       {open && (
         <nav className="mobile-menu" aria-label="Mobile">
+          <Link to="/cli" onClick={close}>CLI</Link>
+          <Link to="/desktop" onClick={close}>Desktop</Link>
           <Link to="/#features" onClick={close}>Features</Link>
-          <Link to="/#install" onClick={close}>Install</Link>
           <Link to="/faq" onClick={close}>FAQ</Link>
           <a href={`${GH}/blob/main/README.md`} target="_blank" rel="noopener" onClick={close}>Docs</a>
         </nav>

@@ -15,8 +15,8 @@ export default function Home() {
             <h1 className="h-display">An autonomous agent, <span className="accent">running on your terms.</span></h1>
             <p className="lead">SuperAgent codes, drives your browser, generates media, and runs terminal workflows — all on your machine. One command and it’s awake, working, and entirely yours.</p>
             <div className="hero-cta">
-              <a className="btn btn-primary" href="/#install">Install the CLI</a>
-              <a className="btn btn-ghost" href="/#install">Download the app</a>
+              <a className="btn btn-primary" href="/cli">Install the CLI</a>
+              <a className="btn btn-ghost" href="/desktop">Download the app</a>
             </div>
             <div className="stat-strip">
               <span>GPL-3.0 / AGPL-3.0</span>

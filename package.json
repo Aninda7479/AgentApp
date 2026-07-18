@@ -31,6 +31,7 @@
     "dev": "npm run dev --workspace=@superagent/desktop",
     "test": "npm test --workspace=@superagent/core && npm test --workspace=@superagent/cli && npm test --workspace=@superagent/desktop && npm test --workspace=@superagent/web",
     "pub:core": "npm publish --workspace=@superagent/core --access public",
-    "pub:cli": "npm publish --workspace=@superagent/cli --access public"
+    "pub:cli": "npm publish --workspace=@superagent/cli --access public",
+    "pub:web": "npm publish --workspace=@superagent/web --access public"
   }
 }

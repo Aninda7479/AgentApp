@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  # ── Publish Core + CLI + Web to the public npm registry ──────────────────
+  publish-npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm ci
+
+      # Build in dependency order (cli/web depend on core).
+      - run: npm run build --workspace=@superagent/core
+      - run: npm run build --workspace=@superagent/cli
+      - run: npm run build --workspace=@superagent/web
+
+      - run: npm publish --workspace=@superagent/core --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish --workspace=@superagent/cli --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish --workspace=@superagent/web --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ── Build + publish desktop installers (Option 2) to GitHub Releases ──────
+  build-desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      # Desktop imports @superagent/core — build it first so types resolve.
+      - run: npm run build --workspace=@superagent/core
+      - run: npm run build --workspace=@superagent/desktop
+
+      # Unsigned for now: skip code-signing auto-discovery.
+      # electron-builder publishes assets + latest*.yml to the GitHub Release.
+      - name: Package & publish (macOS)
+        if: matrix.os == 'macos-latest'
+        run: npm run pack --workspace=@superagent/desktop -- --publish=always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Package & publish (Windows)
+        if: matrix.os == 'windows-latest'
+        run: npm run pack --workspace=@superagent/desktop -- --publish=always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Package & publish (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run pack --workspace=@superagent/desktop -- --publish=always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'

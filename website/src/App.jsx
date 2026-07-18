@@ -4,6 +4,8 @@ import Nav from './components/Nav.jsx'
 import Footer from './components/Footer.jsx'
 import Home from './pages/Home.jsx'
 import FaqPage from './pages/FaqPage.jsx'
+import CliPage from './pages/CliPage.jsx'
+import DesktopPage from './pages/DesktopPage.jsx'
 import NotFound from './pages/NotFound.jsx'
 
 // On navigation: jump to the hash target if present, otherwise scroll to top.
@@ -30,6 +32,8 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/cli" element={<CliPage />} />
+          <Route path="/desktop" element={<DesktopPage />} />
           <Route path="/faq" element={<FaqPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

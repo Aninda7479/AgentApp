@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "SuperAgent desktop app (Electron) — a Codex-inspired autonomous AI agent UI",
   "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Aninda7479/AgentApp.git",
+    "directory": "packages/desktop"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -56,11 +61,14 @@
     ],
     "publish": [
       {
-        "provider": "github"
+        "provider": "github",
+        "owner": "Aninda7479",
+        "repo": "AgentApp"
       }
     ],
     "win": {
       "icon": "assets/icon.ico",
+      "artifactName": "SuperAgent-Setup-${version}.exe",
       "target": [
         "nsis",
         "portable"
@@ -68,6 +76,7 @@
     },
     "mac": {
       "icon": "assets/icon.icns",
+      "artifactName": "SuperAgent-${version}.dmg",
       "target": [
         "dmg"
       ],
@@ -75,6 +84,7 @@
     },
     "linux": {
       "icon": "assets/icon.png",
+      "artifactName": "SuperAgent-${version}.AppImage",
       "target": [
         "AppImage",
         "deb"

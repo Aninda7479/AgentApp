@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { prefersReducedMotion } from '../lib/motion.js'
 import { useCopy } from '../lib/useCopy.js'
+import { INSTALL_SH, INSTALL_PS1 } from '../config.js'
 
 const COMMANDS = {
-  powershell: 'irm https://superagent.ai/install.ps1 | iex',
-  macos: 'curl -fsSL https://superagent.ai/install.sh | sh',
-  linux: 'curl -fsSL https://superagent.ai/install.sh | sh'
+  powershell: `irm ${INSTALL_PS1} | iex`,
+  macos: `curl -fsSL ${INSTALL_SH} | sh`,
+  linux: `curl -fsSL ${INSTALL_SH} | sh`
 }
 
 const BOOT = [

@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react'
 // and preview servers fall back to index.html for unknown routes, so deep
 // links like /faq work without a server config.
 export default defineConfig({
+  // Project-page base on GitHub Pages is /<repo>/; override with BASE_PATH
+  // (e.g. "" for a custom domain) when building for deploy.
+  base: process.env.BASE_PATH || '/AgentApp/',
   plugins: [react()],
   server: { host: true, port: 5173 },
   preview: { host: true, port: 4173 }
