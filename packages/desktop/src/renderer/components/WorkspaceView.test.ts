@@ -50,7 +50,7 @@ describe('composerModelsFromCatalog', () => {
     expect(composerModelsFromCatalog(catalog)).toEqual([]);
   });
 
-  it('shows "Model Governance" once there are 2+ enabled models, dropping disabled ones', () => {
+  it('shows "Orchestrator" once there are 2+ enabled models, dropping disabled ones', () => {
     const catalog = [
       mk('or-a', 'Model A', true),
       mk('or-b', 'Model B', true),

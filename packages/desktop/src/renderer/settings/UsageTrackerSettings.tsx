@@ -7,12 +7,9 @@ import {
   BarChart2,
   Cpu,
   Clock,
-  Zap,
   Tag,
-  Layers,
   ArrowDown,
   ArrowUp,
-  Info,
   LucideIcon
 } from 'lucide-react';
 
@@ -26,6 +23,7 @@ interface ModelUsageRecord {
   cost: number;
   timestamp: string;
   durationMs?: number;
+  status?: 'success' | 'failure';
 }
 
 /** Per-model per-million-token pricing. */
@@ -90,6 +88,9 @@ interface AggRow {
   cost: number;
   calls: number;
   durationMs: number;
+  successes: number;
+  failures: number;
+  timedCalls: number;
 }
 
 function aggregate(records: ModelUsageRecord[]): AggRow[] {
@@ -98,7 +99,19 @@ function aggregate(records: ModelUsageRecord[]): AggRow[] {
     const key = `${r.provider}:${r.model}`;
     let row = map.get(key);
     if (!row) {
-      row = { model: r.model, provider: r.provider, input: 0, output: 0, total: 0, cost: 0, calls: 0, durationMs: 0 };
+      row = {
+        model: r.model,
+        provider: r.provider,
+        input: 0,
+        output: 0,
+        total: 0,
+        cost: 0,
+        calls: 0,
+        durationMs: 0,
+        successes: 0,
+        failures: 0,
+        timedCalls: 0
+      };
       map.set(key, row);
     }
     row.input += r.promptTokens;
@@ -107,6 +120,14 @@ function aggregate(records: ModelUsageRecord[]): AggRow[] {
     row.cost += r.cost;
     row.calls += 1;
     row.durationMs += r.durationMs ?? 0;
+    if (r.durationMs && r.durationMs > 0) {
+      row.timedCalls += 1;
+    }
+    if (r.status === 'failure') {
+      row.failures += 1;
+    } else {
+      row.successes += 1;
+    }
   }
   return Array.from(map.values()).sort((a, b) => b.cost - a.cost);
 }
@@ -390,53 +411,8 @@ export const UsageTrackerSettings: React.FC = () => {
         )}
       </div>
 
-      {/* Token use per model (input / output) */}
-      <div className="ui-card p-4">
-        <SectionTitle icon={Layers}>Token use per model</SectionTitle>
-        {rows.length > 0 ? (
-          <div className="space-y-3.5">
-            {rows.map((r) => {
-              const inputPct = r.total > 0 ? (r.input / r.total) * 100 : 0;
-              return (
-                <div key={`${r.provider}:${r.model}`}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-medium text-brand-textMain">{r.model}</span>
-                    <span className="text-[11px] text-brand-textMuted font-mono">
-                      {fmtTokens(r.input)} in · {fmtTokens(r.output)} out
-                    </span>
-                  </div>
-                  <div className="flex h-2 w-full overflow-hidden rounded-full bg-brand-hover">
-                    <div className="h-full bg-brand-accent transition-all" style={{ width: `${inputPct}%` }} />
-                    <div className="h-full bg-brand-text-muted/50" style={{ width: `${100 - inputPct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-xs text-brand-textMuted">No token activity in this period.</p>
-        )}
-      </div>
-
-      {/* Token generation speed */}
-      <div className="ui-card p-4">
-        <SectionTitle icon={Zap}>Token generation speed</SectionTitle>
-        <div className="flex items-end gap-3">
-          <span className="text-3xl font-bold text-brand-textMain font-outfit tracking-tight">{fmtSpeed(scopedSpeed.tps)}</span>
-          <span className="text-xs text-brand-textMuted mb-1">
-            {scopedSpeed.measured > 0
-              ? `avg across ${scopedSpeed.measured} timed generation${scopedSpeed.measured === 1 ? '' : 's'}`
-              : 'timing starts on your next generation'}
-          </span>
-        </div>
-        <p className="mt-2 flex items-center gap-1.5 text-[11px] text-brand-textMuted">
-          <Info size={12} />
-          Measured from the duration of each model call (input + output tokens ÷ elapsed time).
-        </p>
-      </div>
-
       {/* Model breakdown table */}
-      <div className="ui-card overflow-hidden">
+      <div className="ui-card overflow-hidden col-span-1 sm:col-span-2 lg:col-span-3">
         <div className="px-4 py-3 border-b border-brand-border/60 bg-brand-hover">
           <SectionTitle icon={BarChart2}>Model breakdown</SectionTitle>
         </div>
@@ -445,27 +421,32 @@ export const UsageTrackerSettings: React.FC = () => {
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-brand-border/60 text-brand-textMuted bg-brand-hover select-none">
-                  <th className="px-4 py-2 font-semibold">Model</th>
-                  <th className="px-4 py-2 font-semibold">Provider</th>
-                  <th className="px-4 py-2 font-semibold text-right">Requests</th>
-                  <th className="px-4 py-2 font-semibold text-right">Input</th>
-                  <th className="px-4 py-2 font-semibold text-right">Output</th>
-                  <th className="px-4 py-2 font-semibold text-right">Total</th>
+                  <th className="px-4 py-2 font-semibold">Model Name & Details</th>
+                  <th className="px-4 py-2 font-semibold text-right">Avg Token/s</th>
+                  <th className="px-4 py-2 font-semibold text-right">Token Used</th>
                   <th className="px-4 py-2 font-semibold text-right">Cost</th>
+                  <th className="px-4 py-2 font-semibold text-right">Uptime(%)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-border/40">
-                {rows.map((r) => (
-                  <tr key={`${r.provider}:${r.model}`} className="hover:bg-brand-hover text-brand-textMuted">
-                    <td className="px-4 py-2.5 font-medium text-brand-textMain">{r.model}</td>
-                    <td className="px-4 py-2.5 capitalize">{r.provider}</td>
-                    <td className="px-4 py-2.5 text-right font-mono">{r.calls}</td>
-                    <td className="px-4 py-2.5 text-right font-mono">{fmtTokens(r.input)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono">{fmtTokens(r.output)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono">{fmtTokens(r.total)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-brand-textMain font-semibold">{fmtMoney(r.cost)}</td>
-                  </tr>
-                ))}
+                {rows.map((r) => {
+                  const avgTps = r.durationMs > 0 ? (r.total / (r.durationMs / 1000)).toFixed(1) : '-';
+                  const uptime = ((r.successes * 100) / r.calls).toFixed(1) + '%';
+                  return (
+                    <tr key={`${r.provider}:${r.model}`} className="hover:bg-brand-hover text-brand-textMuted">
+                      <td className="px-4 py-2.5">
+                        <div className="font-medium text-brand-textMain">{r.model}</div>
+                        <div className="text-[10px] text-brand-textMuted mt-0.5 capitalize">{r.provider} · {r.calls} request{r.calls === 1 ? '' : 's'}</div>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono">{avgTps}</td>
+                      <td className="px-4 py-2.5 text-right font-mono" title={`${fmtTokens(r.input)} in · ${fmtTokens(r.output)} out`}>
+                        {fmtTokens(r.total)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-brand-textMain font-semibold">{fmtMoney(r.cost)}</td>
+                      <td className="px-4 py-2.5 text-right font-mono font-semibold" style={{ color: r.failures > 0 ? 'var(--neon-attention)' : 'var(--neon-constructive)' }}>{uptime}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

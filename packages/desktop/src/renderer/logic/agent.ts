@@ -193,9 +193,11 @@ export class AgentService {
     const attachmentSteps = savedAttachments.map((att, idx) => StepFactory.attachmentStep(att.filename, att.fullPath, undefined, undefined));
     const combinedSteps = [userStep, ...attachmentSteps];
 
-    // Decide whether we have real credentials to run a live agent.
+    // Decide whether we have real credentials or a routing configuration to run a live agent.
     const activeProvider = AgentService.resolveActiveProvider(options, ctx.getConnectedProviders(), ctx.getModelsCatalog());
-    const hasRealCredentials = Boolean(activeProvider?.apiKey);
+    const isOrchestrator = options.model === 'Orchestrator' || options.model === 'Model Governance' || options.model === 'auto';
+    const isLocalOrCustom = activeProvider && (activeProvider.id === 'ollama' || activeProvider.id === 'custom' || activeProvider.baseUrl);
+    const hasRealCredentials = Boolean(activeProvider?.apiKey) || isOrchestrator || isLocalOrCustom;
 
     if (isNew) {
       const newChat = {

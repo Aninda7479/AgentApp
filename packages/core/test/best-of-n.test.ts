@@ -59,8 +59,8 @@ describe('OrchestratorRouter.selectCandidateModels (top-N selection)', () => {
     expect(top).toHaveLength(1);
   });
 
-  it('returns [] for an empty model list', () => {
-    expect(OrchestratorRouter.selectCandidateModels('hi', [], 3)).toEqual([]);
+  it('throws an error for an empty model list', () => {
+    expect(() => OrchestratorRouter.selectCandidateModels('hi', [], 3)).toThrow(/No models are enabled for the Orchestrator/);
   });
 
   it('hard-gates a vision task to vision-capable models only', () => {

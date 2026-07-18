@@ -225,20 +225,13 @@ export class OrchestratorRouter {
     if (status === 'available') return 0;
     if (status === 'rate_limited') return 1;
     return 2; // locked | deprecated
-  }
-
-  public static routeModelForTask(
-    prompt: string,
-    allModels: RouterModel[],
-    request?: CompletionRequest
-  ): { provider: string; model: string } | null {
+  }  private static verifyPool(allModels: RouterModel[]): void {
     if (allModels.length === 0) {
       throw new Error(
         'No models are enabled for the Orchestrator. Please open Settings → Orchestrator and enable at least one model in the Model Pool, or select a model manually.'
       );
     }
 
-    // Modality coverage warnings
     const hasTextInput = allModels.some(m => !m.inputModalities || m.inputModalities.includes('text'));
     const hasImageInput = allModels.some(m => m.supportsVision || (m.inputModalities && m.inputModalities.includes('image')));
     const hasVideoInput = allModels.some(m => m.inputModalities && m.inputModalities.includes('video'));
@@ -270,6 +263,14 @@ export class OrchestratorRouter {
     if (!hasAudioOutput) {
       console.warn('[Orchestrator] Warning: No enabled model supports audio output.');
     }
+  }
+
+  public static routeModelForTask(
+    prompt: string,
+    allModels: RouterModel[],
+    request?: CompletionRequest
+  ): { provider: string; model: string } | null {
+    OrchestratorRouter.verifyPool(allModels);
 
     const prepared = OrchestratorRouter.prepareRouting(prompt, allModels, request);
     if (prepared.override) return prepared.override;
@@ -291,7 +292,7 @@ export class OrchestratorRouter {
     count: number = 2,
     request?: CompletionRequest
   ): Array<{ provider: string; model: string }> {
-    if (allModels.length === 0) return [];
+    OrchestratorRouter.verifyPool(allModels);
     const classification = classifyTask(request ?? { messages: [{ role: 'user', content: prompt }] });
     const effectiveCount = candidateCountForDifficulty(classification.difficulty, count);
     const prepared = OrchestratorRouter.prepareRouting(prompt, allModels, request);
