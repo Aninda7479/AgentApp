@@ -1,4 +1,5 @@
 import path from 'path';
+import { STORAGE_DIRS } from '@superagent/core';
 import type { ConversationRoots } from './types.js';
 
 /** Sanitizes a name into a filesystem-safe storage key. */
@@ -18,18 +19,29 @@ export function normalizeStorageKey(name: string): string {
 
 /** Returns the root directories for projects and chats under the user data folder. */
 export function getConversationRoots(userDataDir: string): ConversationRoots {
-  const baseDir = path.join(userDataDir, 'Conversation');
+  const baseDir = path.join(userDataDir, STORAGE_DIRS.conversation);
   return {
     userDataDir,
     baseDir,
-    projectsDir: path.join(baseDir, 'Projects'),
-    chatsDir: path.join(baseDir, 'Chats')
+    projectsDir: path.join(baseDir, 'projects'),
+    chatsDir: path.join(baseDir, 'chats')
   };
+}
+
+/**
+ * Returns true when `key` is already a generated storage ID of the form
+ * `XXXX-XXXX-XXXX-XXXX` (charset `1-9A-Z`, dashes only). Such keys are stored
+ * verbatim — `normalizeStorageKey` must NOT be applied to them, since it would
+ * lowercase the uppercase glyphs and break the on-disk naming convention.
+ */
+export function isValidStorageId(key: string): boolean {
+  return /^[1-9A-Z-]+$/.test(key);
 }
 
 /** Returns the filesystem path for a project's storage directory. */
 export function getProjectDirectory(userDataDir: string, projectKey: string): string {
-  return path.join(getConversationRoots(userDataDir).projectsDir, normalizeStorageKey(projectKey));
+  const safeKey = isValidStorageId(projectKey) ? projectKey : normalizeStorageKey(projectKey);
+  return path.join(getConversationRoots(userDataDir).projectsDir, safeKey);
 }
 
 /** Returns the path to a project's config JSON file. */

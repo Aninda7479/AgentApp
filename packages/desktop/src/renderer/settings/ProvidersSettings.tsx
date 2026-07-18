@@ -8,6 +8,10 @@ interface ProvidersSettingsProps {
   onConnectProvider: (provider: ProviderConnection, models: ModelConfig[]) => void;
   onDisconnectProvider: (providerId: string) => void;
   enrichModel: (raw: any, providerId: string) => ModelConfig;
+  /** In-app toast for non-blocking success/info notices (falls back to alert). */
+  onToast?: (message: string) => void;
+  /** True while the persisted store is still loading — show a skeleton, not empty. */
+  bootstrapping?: boolean;
 }
 
 const ProviderLogo: React.FC<{ providerId: string; org?: string; size?: number }> = ({ providerId, org, size = 24 }) => {
@@ -49,13 +53,31 @@ const POPULAR_PROVIDERS = [
   { id: 'deepinfra', name: 'DeepInfra', org: 'deepinfra', desc: 'Low cost serverless inference hosting provider', defaultUrl: 'https://api.deepinfra.com/v1' }
 ];
 
+// Providers that can function without an API key (local / self-hosted). Every
+// other popular/known provider needs a credential, so "Add Without Testing"
+// must not create a provider that can never actually send a request.
+const KEYLESS_PROVIDER_IDS = new Set(['ollama', 'custom']);
+
+/**
+ * Browser-safe fetch for provider connectivity tests. Shared with the other
+ * settings screens via ../web-fetch so the web/VPS build routes every provider
+ * call through the server-side proxy instead of hitting CORS in the browser.
+ */
+import { browserSafeFetch } from '../web-fetch.js';
+
 /** Manages provider connections: list connected providers, connect new ones via modal, and test endpoints. */
 export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
   connectedProviders,
   onConnectProvider,
   onDisconnectProvider,
-  enrichModel
+  enrichModel,
+  onToast,
+  bootstrapping = false
 }) => {
+  const notify = (message: string) => {
+    if (onToast) onToast(message);
+    else alert(message);
+  };
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalProviderId, setModalProviderId] = useState('');
   const [connectionName, setConnectionName] = useState('');
@@ -83,6 +105,20 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       const key = apiKey.trim();
       const url = baseUrl.trim();
 
+      // Validate the Base Endpoint URL up front so a typos/malformed value
+      // surfaces as a friendly message instead of a raw fetch/JSON-parse error.
+      if (url) {
+        let parsed: URL | null = null;
+        try {
+          parsed = new URL(url);
+        } catch {
+          parsed = null;
+        }
+        if (!parsed || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) {
+          throw new Error('That Base Endpoint URL looks invalid. Use a full http(s) URL (e.g. https://api.openai.com/v1).');
+        }
+      }
+
       const fmtTokens = (n: number): string => {
         if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
         if (n >= 1_000) return `${(n / 1_000).toFixed(0)}k`;
@@ -90,7 +126,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       };
 
       if (modalProviderId === 'ollama') {
-        const res = await fetch(`${url || 'http://localhost:11434'}/api/tags`);
+        const res = await browserSafeFetch(`${url || 'http://localhost:11434'}/api/tags`);
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.models ?? []).map((m: any) => ({
@@ -99,19 +135,19 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         }));
       } else if (modalProviderId === 'chatgpt') {
         const base = url || 'https://api.openai.com/v1';
-        const res = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+        const res = await browserSafeFetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.data ?? []).map((m: any) => ({ id: m.id, name: m.id }));
       } else if (modalProviderId === 'deepseek') {
         const base = url || 'https://api.deepseek.com';
-        const res = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+        const res = await browserSafeFetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.data ?? []).map((m: any) => ({ id: m.id, name: m.id }));
       } else if (modalProviderId === 'deepinfra') {
         const base = url || 'https://api.deepinfra.com/v1';
-        const res = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+        const res = await browserSafeFetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         const list = Array.isArray(data) ? data : (data.data ?? []);
@@ -121,7 +157,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
           apiType: m.type ?? m.model_type ?? undefined
         }));
       } else if (modalProviderId === 'google') {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+        const res = await browserSafeFetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.models ?? []).map((m: any) => ({
@@ -133,7 +169,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         }));
       } else if (modalProviderId === 'claude') {
         const base = url || 'https://api.anthropic.com/v1';
-        const res = await fetch(`${base}/models`, {
+        const res = await browserSafeFetch(`${base}/models`, {
           headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' }
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -141,12 +177,12 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         rawModels = (data.data ?? []).map((m: any) => ({ id: m.id, name: m.display_name ?? m.id }));
       } else if (modalProviderId === 'kimi') {
         const base = url || 'https://api.moonshot.cn/v1';
-        const res = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+        const res = await browserSafeFetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.data ?? []).map((m: any) => ({ id: m.id, name: m.id }));
       } else if (modalProviderId === 'openrouter') {
-        const res = await fetch('https://openrouter.ai/api/v1/models', {
+        const res = await browserSafeFetch('https://openrouter.ai/api/v1/models', {
           headers: { Authorization: `Bearer ${key}` }
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -170,7 +206,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         });
       } else if (modalProviderId === 'nvidia') {
         const base = url || 'https://integrate.api.nvidia.com/v1';
-        const res = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+        const res = await browserSafeFetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.data ?? []).map((m: any) => ({
@@ -184,7 +220,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         const authHeaders: Record<string, string> = {};
         if (key) authHeaders['Authorization'] = `Bearer ${key}`;
 
-        const res = await fetch(`${base}/api/tags`, { headers: authHeaders });
+        const res = await browserSafeFetch(`${base}/api/tags`, { headers: authHeaders });
         if (!res.ok) throw new Error(`Ollama Cloud API error [${res.status}]: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.models ?? []).map((m: any) => ({
@@ -204,7 +240,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         const base = url || 'https://api.openai.com/v1';
         const headers: Record<string, string> = {};
         if (key) headers['Authorization'] = `Bearer ${key}`;
-        const res = await fetch(`${base}/models`, { headers });
+        const res = await browserSafeFetch(`${base}/models`, { headers });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.data ?? []).map((m: any) => ({
@@ -225,7 +261,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         baseUrl: url
       }, newConfigs);
 
-      alert(`✅ Connected to ${connectionName} — ${rawModels.length} models imported.`);
+      notify(`Connected to ${connectionName} — ${rawModels.length} models imported.`);
       setIsModalOpen(false);
     } catch (e: any) {
       console.error(e);
@@ -258,7 +294,15 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
 
     const defaults = knownDefaults[modalProviderId];
     if (!defaults) {
-      alert('No offline fallback available for this provider. Please connect online to fetch models.');
+      notify('No preset models are available for this provider. Connect online to fetch its model list.');
+      return;
+    }
+
+    // Don't create a provider that can never send a request: key-required
+    // providers must have a credential before being added without a test.
+    if (!KEYLESS_PROVIDER_IDS.has(modalProviderId) && !apiKey.trim()) {
+      setErrorDetails('This provider needs an API key before it can be added. Enter your key, or use "Test & Connect" to verify the connection first.');
+      notify('Enter an API key before adding this provider without a test — a provider added with no key can’t send any requests.');
       return;
     }
 
@@ -274,7 +318,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       baseUrl
     }, newConfigs);
 
-    alert(`Offline fallback: added ${defaults.length} known model(s) for ${connectionName}.`);
+    notify(`Added ${defaults.length} known model(s) for ${connectionName} without testing the connection.`);
     setIsModalOpen(false);
   };
 
@@ -282,8 +326,27 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
     (p) => !connectedProviders.some((cp) => cp.id === p.id)
   );
 
-  const typeLabel = (type: string) =>
-    type === 'env' ? 'Environment' : type === 'key' ? 'API Key' : 'Custom';
+  // Resolve a friendly display name for a connected provider: when the user
+  // leaves the connection-name blank it defaults to the raw id (e.g. "claude"),
+  // so show the catalog's human label ("Claude") instead. A user-set custom
+  // name is always preserved.
+  const displayName = (p: { id: string; name: string }) =>
+    p.name && p.name !== p.id
+      ? p.name
+      : POPULAR_PROVIDERS.find((x) => x.id === p.id)?.name ?? p.name;
+
+  // Convey credential status, not just provider category. Previously a cloud
+  // provider connected without a key read as "Custom", so users couldn't tell
+  // which providers actually held credentials. API Key / Env var = has
+  // credentials; Local = self-hosted (no key needed); No key = missing creds.
+  const credStatus = (
+    p: { id: string; type: string }
+  ): { label: string; tone: 'constructive' | 'muted' | 'attention' } => {
+    if (p.type === 'key') return { label: 'API Key', tone: 'constructive' };
+    if (p.type === 'env') return { label: 'Env var', tone: 'constructive' };
+    if (KEYLESS_PROVIDER_IDS.has(p.id)) return { label: 'Local', tone: 'muted' };
+    return { label: 'No key', tone: 'attention' };
+  };
 
   return (
     <div className="mx-auto w-full max-w-3xl text-left">
@@ -297,7 +360,17 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       {/* Connected Providers List */}
       <section className="mb-8">
         <h3 className="ui-label mb-3">Connected providers</h3>
-        {connectedProviders.length === 0 ? (
+        {bootstrapping ? (
+          <div className="flex flex-col gap-2" aria-busy="true" aria-label="Loading connections">
+            {[0, 1].map((i) => (
+              <div key={i} className="ui-card flex items-center gap-3 p-3.5 sm:p-4">
+                <div className="h-6 w-6 flex-shrink-0 animate-pulse rounded-md bg-brand-hover" />
+                <div className="h-3.5 w-40 animate-pulse rounded bg-brand-hover" />
+                <div className="ml-auto h-3.5 w-16 animate-pulse rounded bg-brand-hover" />
+              </div>
+            ))}
+          </div>
+        ) : connectedProviders.length === 0 ? (
           <div className="ui-card px-6 py-10 text-center text-sm text-brand-textMuted">
             No active API connections. Connect one of the popular providers below.
           </div>
@@ -307,8 +380,8 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
               <div key={p.id} className="ui-card flex items-center justify-between gap-3 p-3.5 sm:p-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <ProviderLogo providerId={p.id} />
-                  <span className="truncate text-sm font-semibold text-brand-textMain">{p.name}</span>
-                  <span className="ui-badge bg-brand-popover text-brand-textMuted">{typeLabel(p.type)}</span>
+                  <span className="truncate text-sm font-semibold text-brand-textMain">{displayName(p)}</span>
+                  <span className={`ui-badge ${credStatus(p).tone}`}>{credStatus(p).label}</span>
                 </div>
                 <button
                   onClick={() => onDisconnectProvider(p.id)}
@@ -376,8 +449,9 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
 
             <div className="flex flex-col gap-3.5">
               <div className="flex flex-col gap-1 text-left">
-                <label className="ui-label">Connection Name</label>
+                <label className="ui-label" htmlFor="connect-name">Connection Name</label>
                 <input
+                  id="connect-name"
                   type="text"
                   value={connectionName}
                   onChange={(e) => setConnectionName(e.target.value)}
@@ -385,8 +459,9 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
                 />
               </div>
               <div className="flex flex-col gap-1 text-left">
-                <label className="ui-label">API Key / Token</label>
+                <label className="ui-label" htmlFor="connect-key">API Key / Token</label>
                 <input
+                  id="connect-key"
                   type="password"
                   placeholder="Enter credential token"
                   value={apiKey}
@@ -395,8 +470,9 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
                 />
               </div>
               <div className="flex flex-col gap-1 text-left">
-                <label className="ui-label">Base Endpoint URL</label>
+                <label className="ui-label" htmlFor="connect-url">Base Endpoint URL</label>
                 <input
+                  id="connect-url"
                   type="text"
                   placeholder="Defaults to standard URL if empty"
                   value={baseUrl}
@@ -412,12 +488,19 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
               </div>
             )}
 
+            {!KEYLESS_PROVIDER_IDS.has(modalProviderId) && !apiKey.trim() && (
+              <p className="mt-3 text-[11px] leading-snug text-brand-textMuted">
+                Enter an API key above to add {connectionName || modalProviderId} without testing — a provider with no key can’t send requests.
+              </p>
+            )}
             <div className="mt-5 flex items-center justify-between gap-3">
               <button
                 onClick={handleForceConnect}
-                className="ui-btn-ghost text-xs underline-offset-2 hover:underline"
+                disabled={!KEYLESS_PROVIDER_IDS.has(modalProviderId) && !apiKey.trim()}
+                title="Add this provider's known models without testing the connection"
+                className="ui-btn-ghost text-xs underline-offset-2 hover:underline disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
               >
-                Force Connect (Offline)
+                Add Without Testing
               </button>
               <div className="flex gap-2">
                 <button onClick={() => setIsModalOpen(false)} className="ui-btn">

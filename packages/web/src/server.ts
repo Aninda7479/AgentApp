@@ -1,4 +1,6 @@
+#!/usr/bin/env node
 import express from 'express';
+import type { Request, Response } from 'express';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
@@ -11,17 +13,27 @@ import {
   SettingsStorage,
   UsageTracker,
   ModelRouter,
+  buildRequest,
   ModelGovStorage,
+  buildRouterPool,
   PlaywrightBrowserEngine,
   ComputerUse,
   getUserDataDirectory,
+  STORAGE_DIRS,
   AuthStore,
-  ProviderAutoDetector
+  ProviderAutoDetector,
+  MCP_CATALOG,
+  PLUGIN_CATALOG,
+  MARKETPLACE_PLUGINS,
+  SKILL_CATALOG,
+  SkillStore,
+  providerHealth
 } from '@superagent/core';
 
 import { AgentEngine, AgentEngineConfig, AgentEvent } from './ai-engine.js';
 import { readConversationStore, writeConversationStore } from './storage/conversation-store.js';
 import { getChatDirectory } from './storage/paths.js';
+import * as PartnerStore from './partner-store.js';
 import {
   authGate,
   handleLogin,
@@ -45,6 +57,15 @@ app.use(express.json({ limit: '50mb' }));
 
 const userDataDir = getUserDataDirectory();
 
+// Web build version, read from the package manifest at startup.
+const WEB_VERSION = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8')).version;
+  } catch {
+    return '0.0.0';
+  }
+})();
+
 // ─── VPS Authentication ─────────────────────────────────────────────────────
 // Session-based login system. Credentials live in the shared core AuthStore so
 // the CLI/Desktop/Web all manage the same admin account. Auth is required by
@@ -65,15 +86,14 @@ app.post('/api/auth/logout', handleLogout);
 app.get('/api/auth/status', handleStatus);
 app.post('/api/auth/change-password', handleChangePassword);
 
-// Serve the standalone login/setup page (public).
+// Serve the standalone login/setup page (public; must stay before the gate).
 app.get('/login', (_req, res) => {
   res.sendFile(path.join(__dirname, 'login.html'));
 });
 
-// Serve the account (change password) page — protected by the gate below.
-app.get('/account', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'account.html'));
-});
+// NOTE: the account (change-password) page is registered AFTER `app.use(authGate)`
+// below, so it is actually session-protected. It was previously registered here
+// (before the gate) and was therefore reachable without authentication.
 
 if (isAuthDisabled()) {
   console.log('[Security Warning] SUPERAGENT_DISABLE_AUTH=true — running in OPEN mode with NO authentication.');
@@ -85,6 +105,14 @@ if (isAuthDisabled()) {
 
 // Gate everything else behind a valid session.
 app.use(authGate);
+
+// Serve the account (change-password) page. Registered AFTER the gate so it
+// requires an authenticated session — an unauthenticated request is redirected
+// to /login by the gate above. (This page was previously registered BEFORE the
+// gate and was therefore reachable without authentication.)
+app.get('/account', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'account.html'));
+});
 
 // ─── WebSocket Event Hub ────────────────────────────────────────────────────
 const connectedSockets = new Set<WebSocket>();
@@ -177,15 +205,48 @@ async function runAgentEngine(
       // Auto-route model if set to 'auto' or 'Model Governance'
       if (config.model === 'auto' || config.model === 'Model Governance') {
         const settings = SettingsStorage.loadSettings();
-        const enabledModels = settings.models?.filter(m => m.enabled) || [];
-        const routed = ModelRouter.routeModelForTask(prompt, enabledModels as any);
-        if (routed) {
-          finalConfig.provider = routed.provider as any;
-          finalConfig.model = routed.model;
-          const byok = settings.providers?.find(p => p.id === routed.provider);
-          if (byok) {
-            finalConfig.apiKey = byok.apiKey;
-            finalConfig.baseUrl = byok.baseUrl;
+        // Build a proper RouterModel[] pool (providerId + capability/access
+        // signals) from the user's configured models. routeModelForTask reads
+        // RouterModel fields that raw settings.models don't always carry.
+        const enabledModels = buildRouterPool(settings.models ?? []).filter((m) => m.enabled);
+        try {
+          const routed = ModelRouter.routeModelForTask(prompt, enabledModels, buildRequest(prompt, currentAttachments));
+          if (routed && routed.model) {
+            finalConfig.provider = routed.provider as any;
+            finalConfig.model = routed.model;
+            const byok = settings.providers?.find(p => p.id === routed.provider);
+            if (byok) {
+              finalConfig.apiKey = byok.apiKey;
+              finalConfig.baseUrl = byok.baseUrl;
+            } else if (!finalConfig.apiKey) {
+              console.warn(`[web] Orchestrator routed to '${routed.provider}' but no API key is configured for it; the reply may fail.`);
+            }
+          } else {
+            throw new Error('Orchestrator could not select a model for this task.');
+          }
+        } catch (routeErr: any) {
+          // Never go silently empty: fall back to the first enabled model so the
+          // user still gets a real reply instead of a blank turn.
+          const fallback = enabledModels[0];
+          if (fallback) {
+            console.warn(`[web] Orchestrator routing failed (${routeErr?.message}); falling back to ${fallback.providerId}/${fallback.id}.`);
+            finalConfig.provider = fallback.providerId as any;
+            finalConfig.model = ModelRouter.stripProviderPrefix(fallback.providerId, fallback.id);
+            const byok = settings.providers?.find(p => p.id === fallback.providerId);
+            if (byok) {
+              finalConfig.apiKey = byok.apiKey;
+              finalConfig.baseUrl = byok.baseUrl;
+            }
+          } else {
+            // No model configured/enabled — surface a clear, actionable error
+            // instead of forwarding the literal 'auto' string to the provider.
+            broadcast('agent-event', {
+              type: 'error',
+              sessionId,
+              error: routeErr?.message || String(routeErr)
+            });
+            activeSessions.delete(sessionId);
+            return;
           }
         }
       }
@@ -205,7 +266,13 @@ async function runAgentEngine(
       activeSessions.set(sessionId, engine);
     }
 
+    let replyLogged = false;
     await engine.run(prompt, (agentEvent: AgentEvent) => {
+      // Log the first reply token on the web connection (device-tagged).
+      if (agentEvent.type === 'token' && !replyLogged) {
+        replyLogged = true;
+        console.log(`[web] message RECEIVED — connection device: ${os.hostname()} | session: ${sessionId}`);
+      }
       broadcast('agent-event', agentEvent);
     }, currentAttachments);
 
@@ -299,9 +366,145 @@ Please optimize these system instructions to:
 }
 
 // ─── API Router mapping Electron IPC ─────────────────────────────────────────
-app.post('/api/ipc/:channel', async (req, res) => {
+app.post('/api/ipc/:channel', (req, res) => { void handleIpc(req, res); });
+
+// Provider connectivity proxy — forwards provider API calls server-side so the
+// web/VPS build (which reuses the *same* desktop renderer) can "Test & Connect"
+// without being blocked by CORS. The desktop Electron shell does NOT use this
+// (its renderer fetch is privileged and CORS-exempt). Registered behind authGate
+// so only authenticated sessions can reach it; restricted to http(s) urls.
+app.post('/api/provider-proxy', (req, res) => { void handleProviderProxy(req, res); });
+
+/**
+ * Forwards a provider API call server-side so the web/VPS build can test a
+ * provider connection without being blocked by CORS (the browser cannot call
+ * api.anthropic.com / api.openai.com / etc. directly). Returns a normalized
+ * envelope `{ ok, status, statusText, data }` that the renderer adapts into a
+ * Response-shaped object. Only ever exercised from the web shell; the desktop
+ * Electron shell keeps its privileged, CORS-exempt direct fetch.
+ *
+ * Exported so it can be unit-tested without booting a listener.
+ */
+export async function handleProviderProxy(req: Request, res: Response): Promise<void> {
+  const { method = 'GET', url, headers } = (req.body ?? {}) as {
+    method?: string;
+    url?: unknown;
+    headers?: Record<string, string>;
+  };
+  if (typeof url !== 'string' || !url) {
+    res.status(400).json({ error: 'provider-proxy requires a string "url".' });
+    return;
+  }
+  let target: URL;
+  try {
+    target = new URL(url);
+  } catch {
+    res.status(400).json({ error: 'provider-proxy "url" is not a valid URL.' });
+    return;
+  }
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+    res.status(400).json({ error: 'provider-proxy only allows http(s) urls.' });
+    return;
+  }
+  if (isPrivateHost(target.hostname)) {
+    // Prevent the proxy from being used as an SSRF relay to cloud-metadata
+    // endpoints (e.g. 169.254.169.254), the highest-risk target. We deliberately
+    // do NOT block LAN/loopback ranges here so self-hosted providers (Ollama on
+    // localhost, a LAN IP) reachable from the web shell still work. A stricter
+    // admin allowlist is an open question — see the auto-improve log.
+    res.status(400).json({ error: 'provider-proxy cannot target link-local (cloud-metadata) hosts.' });
+    return;
+  }
+  try {
+    const upstream = await fetch(target.toString(), {
+      method: (method || 'GET').toUpperCase(),
+      headers: (headers && typeof headers === 'object' ? headers : {}) as Record<string, string>,
+    } as any);
+    const text = await upstream.text();
+    let data: any = text;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      /* keep raw text when the body is not JSON */
+    }
+    res.json({ ok: upstream.ok, status: upstream.status, statusText: upstream.statusText, data });
+  } catch (e: any) {
+    res.status(502).json({ error: e?.message || 'Upstream request failed.', ok: false, status: 502 });
+  }
+}
+
+/**
+ * True for link-local (cloud-metadata) hosts — the highest-risk SSRF target
+ * (e.g. 169.254.169.254 on AWS/GCP/Azure). IPv4 literals only; hostnames are not
+ * resolved. We do NOT block LAN/loopback ranges so self-hosted providers still
+ * work; a stricter admin allowlist can be layered later if needed.
+ */
+function isPrivateHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    if (a === 169 && b === 254) return true; // link-local (cloud metadata)
+  }
+  return false;
+}
+
+/**
+ * Handles a single IPC channel invocation over HTTP (mirrors the Electron IPC
+ * surface for the web/VPS build). Exported so it can be unit-tested without
+ * booting a listener.
+ */
+export async function handleIpc(req: Request, res: Response): Promise<void> {
   const { channel } = req.params;
-  const args = req.body.args || [];
+  const args = Array.isArray(req.body?.args) ? req.body.args : [];
+  // Channels that require a payload argument. Without it they'd dereference
+  // `args[0].<field>` and throw inside the try, surfacing as a 500 — return a
+  // clear 400 instead (the request is malformed, not the server broken).
+  const ARGS_REQUIRED = new Set<string>([
+    'browser-navigate',
+    'copy-file-to-chat',
+    'read-file-base64',
+    'save-chat-media-buffer',
+    'agent-run',
+    'agent-stop'
+  ]);
+  if (ARGS_REQUIRED.has(channel) && args[0] == null) {
+    res.status(400).json({ error: `Channel "${channel}" requires a payload argument.` });
+    return;
+  }
+  // Channels that exist only in the Electron desktop build (native file pickers,
+  // 3D model generation, MCP subprocess management, auto-updater, and the 3D pet
+  // window). The web build ships the *same* desktop renderer, so it still invokes
+  // them — respond with a clear, non-error payload instead of a 404 so the UI
+  // degrades gracefully and the browser console stays clean.
+  const WEB_UNSUPPORTED = new Set<string>([
+    'check-for-updates',
+    'browser-close',
+    'pick-image-file',
+    'partner-install',
+    'partner-pick-model-file',
+    'partner-pick-model-folder',
+    'partner-import-model',
+    'partner-import-model-folder',
+    'pet-start',
+    'pet-stop',
+    'pet-set-visible',
+    'pet-say',
+    'three-d-generate',
+    'three-d-delete-model',
+    'three-d-import-external-model',
+    'three-d-list-models',
+    'mcp-connect',
+    'mcp-disconnect',
+    'mcp-list',
+    'mcp-call',
+    'mcp-install'
+  ]);
+  if (WEB_UNSUPPORTED.has(channel)) {
+    res.json({ data: { ok: false, unsupported: true, error: 'This feature is not available in the web build.' } });
+    return;
+  }
   try {
     let result: any;
     // Dispatch IPC channel to the corresponding handler
@@ -351,7 +554,7 @@ app.post('/api/ipc/:channel', async (req, res) => {
       }
       case 'browser-screenshot': {
         const browser = await getMainBrowser();
-        const logsDir = path.join(userDataDir, 'logs');
+        const logsDir = path.join(userDataDir, STORAGE_DIRS.logs);
         fs.mkdirSync(logsDir, { recursive: true });
         const screenshotPath = path.join(logsDir, `browser-screenshot-${Date.now()}.png`);
         await browser.takeScreenshot({ path: screenshotPath, fullPage: !!args[0]?.fullPage });
@@ -385,8 +588,27 @@ app.post('/api/ipc/:channel', async (req, res) => {
       }
       case 'read-file-base64': {
         const filePath = args[0];
-        const content = fs.readFileSync(filePath);
-        const ext = path.extname(filePath).toLowerCase();
+        if (typeof filePath !== 'string') {
+          res.status(400).json({ error: 'read-file-base64 requires a file path argument.' });
+          return;
+        }
+        // Confine reads to the project root and the user-data dir (chat media +
+        // logs). Reading arbitrary absolute paths would let an authenticated
+        // caller exfiltrate any file on disk — inconsistent with the
+        // project-root scoping the other file tools now enforce (4b0223f /
+        // abbad59 / 64655f9: read_file/list_dir/write_file/grep_search are all
+        // scoped). This channel is authenticated but is still reachable over
+        // HTTP in the web/VPS build and by the agent surface, so it must not be
+        // a free arbitrary-file-read primitive.
+        const resolved = path.resolve(filePath);
+        const allowedRoots = [path.resolve(process.cwd()), path.resolve(userDataDir)];
+        const inside = allowedRoots.some((r) => resolved === r || resolved.startsWith(r + path.sep));
+        if (!inside) {
+          res.status(400).json({ error: 'File is outside the allowed directories.' });
+          return;
+        }
+        const content = fs.readFileSync(resolved);
+        const ext = path.extname(resolved).toLowerCase();
         let mimeType = 'image/png';
         if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
         else if (ext === '.gif') mimeType = 'image/gif';
@@ -416,8 +638,16 @@ app.post('/api/ipc/:channel', async (req, res) => {
       case 'auto-detect-providers':
         result = await autoDetectProviders();
         break;
+      case 'provider-health-diagnostics':
+        // Mirrors the desktop `provider-health-diagnostics` IPC handler so the
+        // shared renderer's Model Gov settings panel can show live provider
+        // resilience (available / locked / throttled) on the web/VPS build too.
+        result = providerHealth.getDiagnostics();
+        break;
       case 'agent-run': {
         const { sessionId, prompt, config, currentAttachments } = args[0];
+        // Log the incoming user message on the web connection (device-tagged).
+        console.log(`[web] message SENT — connection device: ${os.hostname()} | session: ${sessionId} | model: ${config?.model}`);
         // Start engine asynchronously in background
         runAgentEngine(sessionId, prompt, config, currentAttachments);
         result = { status: 'started', sessionId };
@@ -436,6 +666,84 @@ app.post('/api/ipc/:channel', async (req, res) => {
       case 'agent-list':
         result = { sessions: Array.from(activeSessions.keys()) };
         break;
+
+      // ─── App version & catalogs (read-only, shared with desktop) ─────────────
+      case 'app-version':
+        result = WEB_VERSION;
+        break;
+      case 'mcp-catalog':
+        result = MCP_CATALOG;
+        break;
+      case 'plugins-catalog':
+        result = [...PLUGIN_CATALOG, ...MARKETPLACE_PLUGINS];
+        break;
+      case 'skills-catalog':
+        result = SKILL_CATALOG;
+        break;
+
+      // ─── Skills discovery (Composer slash autocomplete) ─────────────────────
+      case 'skills-list': {
+        const dir = typeof args[0] === 'object' && args[0] ? (args[0] as any).dir : undefined;
+        const dirs: string[] = [];
+        if (typeof dir === 'string' && fs.existsSync(dir)) dirs.push(dir);
+        const userSkills = path.join(userDataDir, STORAGE_DIRS.skills);
+        if (fs.existsSync(userSkills)) dirs.push(userSkills);
+        const store = new SkillStore();
+        for (const d of dirs) {
+          try {
+            await store.discoverSkills(d);
+          } catch {
+            /* unreadable directory — skip */
+          }
+        }
+        result = store.listSkills().map((s) => ({
+          id: s.id,
+          name: s.metadata.name,
+          description: s.metadata.description,
+          instructions: s.instructions
+        }));
+        break;
+      }
+
+      // ─── Partner store (web-persistent; shared renderer expects these) ───────
+      case 'partner-list':
+        result = PartnerStore.listPartners(userDataDir);
+        break;
+      case 'partner-get':
+        result = PartnerStore.getPartner(userDataDir, args[0]);
+        break;
+      case 'partner-get-active':
+        result = PartnerStore.getActivePartner(userDataDir);
+        break;
+      case 'partner-set-active':
+        PartnerStore.setActivePartner(userDataDir, args[0] ?? null);
+        result = { success: true };
+        break;
+      case 'partner-remove':
+        PartnerStore.removePartner(userDataDir, args[0]);
+        result = { success: true };
+        break;
+      case 'partner-import-json':
+        result = PartnerStore.importPartnerJson(userDataDir, args[0]);
+        break;
+      case 'partner-export':
+        // Desktop reveals the folder in the OS file manager; the web build just
+        // returns the on-disk path so the caller can surface it.
+        result = { success: true, folder: PartnerStore.partnerFolderPath(userDataDir, args[0]) };
+        break;
+
+      // ─── Pet (3D desktop companion) — no-op on the web build ─────────────────
+      case 'pet-status':
+        // No 3D pet window in the web build; report it as disabled so the UI
+        // hides the pet controls instead of offering a start that can't work.
+        result = { running: false, enabled: false };
+        break;
+      case 'pet-set-partner':
+        // The renderer pushes the active Partner manifest here to drive the pet.
+        // Harmless on web (no pet) — acknowledge so the call succeeds.
+        result = { ok: true };
+        break;
+
       default:
         res.status(404).json({ error: `IPC channel "${channel}" not implemented` });
         return;
@@ -445,7 +753,7 @@ app.post('/api/ipc/:channel', async (req, res) => {
     console.error(`[IPC Error] Channel ${channel} failed:`, err);
     res.status(500).json({ error: err.message || 'Internal Server Error' });
   }
-});
+}
 
 // ─── Static Web Asset Serving ────────────────────────────────────────────────
 const distPath = __dirname;
@@ -490,7 +798,8 @@ server.on('upgrade', (request, socket, head) => {
   }
 });
 
-server.listen(Number(PORT), HOST, () => {
+if (process.env.NODE_ENV !== 'test') {
+  server.listen(Number(PORT), HOST, () => {
   console.log(`================================================================`);
   console.log(`SuperAgent Web Server ignited at: http://localhost:${PORT}`);
   // Surface the LAN URLs so the server can be opened from phones / other machines.
@@ -499,4 +808,5 @@ server.listen(Number(PORT), HOST, () => {
   }
   console.log(`Resolving configuration and logs at: ${userDataDir}`);
   console.log(`================================================================`);
-});
+  });
+}

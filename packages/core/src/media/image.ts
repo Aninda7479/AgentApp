@@ -1,5 +1,5 @@
 import { BYOKConfig } from '../types/agent.js';
-import { hasRealMediaKey, NO_PROVIDER_MESSAGE } from './config.js';
+import { hasRealMediaKey, isMockKey, NO_PROVIDER_MESSAGE } from './config.js';
 
 /** Options for configuring an AI image generation request. */
 export interface ImageGenerationOptions {
@@ -116,7 +116,7 @@ export class ImageGenerator {
     // No real provider configured. If a mock key was explicitly supplied we
     // still allow offline fixtures; otherwise report a clear failure instead of
     // returning fabricated media with status 'success'.
-    if (config.apiKey === 'mock-key' || config.apiKey.includes('mock')) {
+    if (isMockKey(config)) {
       const mockImages: GeneratedImageData[] = [];
       const count = options.n || 1;
       for (let i = 0; i < count; i += 1) {

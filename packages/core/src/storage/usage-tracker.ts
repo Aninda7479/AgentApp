@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { getConfigDirectory, SettingsStorage } from './settings-store.js';
+import { getConfigDirectory } from './locations.js';
+import { SettingsStorage } from './settings-store.js';
 
 /** A single recorded usage entry for a model call. */
 export interface ModelUsageRecord {
@@ -11,6 +12,8 @@ export interface ModelUsageRecord {
   totalTokens: number;
   cost: number;
   timestamp: string;
+  /** Wall-clock duration of the generation call, in ms (used for tok/s). Optional for back-compat. */
+  durationMs?: number;
 }
 
 /** Aggregated usage statistics grouped by model+provider. */
@@ -117,7 +120,8 @@ export class UsageTracker {
     promptTokens: number,
     completionTokens: number,
     costPer1MPrompt?: number,
-    costPer1MCompletion?: number
+    costPer1MCompletion?: number,
+    durationMs?: number
   ): void {
     const records = this.loadUsage();
     
@@ -141,7 +145,8 @@ export class UsageTracker {
       completionTokens,
       totalTokens: promptTokens + completionTokens,
       cost: totalCost,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      durationMs
     };
 
     records.push(newRecord);
@@ -186,6 +191,21 @@ export class UsageTracker {
     }
 
     return Array.from(map.values());
+  }
+
+  /** Returns per-million-token pricing for every distinct model in the log. */
+  public static getPricing(): { model: string; provider: string; inputPrice: number; outputPrice: number }[] {
+    const records = this.loadUsage();
+    const seen = new Set<string>();
+    const result: { model: string; provider: string; inputPrice: number; outputPrice: number }[] = [];
+    for (const r of records) {
+      const key = `${r.provider}:${r.model}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const { inputPrice, outputPrice } = getModelPricing(r.provider, r.model);
+      result.push({ model: r.model, provider: r.provider, inputPrice, outputPrice });
+    }
+    return result;
   }
 
   /** Clears all recorded usage history from disk. */

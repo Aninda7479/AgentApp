@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import path from 'path';
 
 /** Item in the system tray context menu. */
 export interface TrayMenuItem {
@@ -57,7 +58,12 @@ export class SystemTrayManager extends EventEmitter {
 
     try {
       const { Tray, nativeImage } = this.electronProvider;
-      const image = iconPath ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
+      const resolvedIcon =
+        iconPath ||
+        (this.electronProvider.app
+          ? path.join(this.electronProvider.app.getAppPath(), 'assets', 'icon.png')
+          : '');
+      const image = resolvedIcon ? nativeImage.createFromPath(resolvedIcon) : nativeImage.createEmpty();
       this.trayInstance = new Tray(image);
       this.trayInstance.setToolTip(this.currentTooltip);
 

@@ -10,6 +10,26 @@ import type { SkillInfo } from '../components/slashCommands';
 import { BUILTIN_COMMANDS } from '../components/slashCommands';
 import { StepFactory } from './steps';
 import { SettingsService } from './settings';
+import { hasCapableProvider, type MediaCapability } from './capabilities';
+
+/**
+ * Collapses the visible trajectory steps into a single compaction summary plus
+ * the most recent turns, so the gauge + conversation reflect `/compact` in
+ * simulation mode (where there is no live engine history to compact). Returns
+ * false when there is nothing meaningful to compact.
+ */
+function compactVisibleSteps(ctx: AppContext, ts: string): boolean {
+  const steps = ctx.getTrajectorySteps();
+  if (!steps || steps.length <= 2) return false;
+  const kept = steps.slice(-2);
+  const summary = StepFactory.assistantStep(
+    `[Context compacted] The previous ${steps.length - kept.length} turns were summarized to free up the context window. The conversation continues below.`,
+    `compact-${Date.now()}`,
+    ts
+  );
+  ctx.setTrajectorySteps([summary, ...kept]);
+  return true;
+}
 
 /** Extra capabilities the router needs that aren't part of the core `AppContext`. */
 export interface SlashDeps {
@@ -32,6 +52,22 @@ export interface SlashDeps {
   listLoops?: () => any[];
   clearLoops?: () => void;
   runLoopX?: (prompt: string, count: number) => void;
+  /** Pre-fills the composer with a (usually sample-prompt) seed for capability commands. */
+  seedComposer?: (text: string) => void;
+  /** Whether the dedicated 3D Studio surface is enabled (gates the `/3d` routing). */
+  is3dEnabled?: boolean;
+}
+
+/**
+ * Result of dispatching a slash command. `consumed` is true when the input was
+ * handled as a command (so the caller should not also send it as a normal prompt).
+ * `keepComposer` is true for "prompt-seed" commands (e.g. /image) that pre-fill the
+ * composer with an editable prompt — the caller must NOT clear the composer in that
+ * case, or the seed (the user's only feedback) is wiped on the spot.
+ */
+export interface SlashResult {
+  consumed: boolean;
+  keepComposer?: boolean;
 }
 
 export class SlashRouter {
@@ -49,7 +85,7 @@ export class SlashRouter {
    * Dispatches a parsed slash command. `options` is the composer's current
    * options (used for `/status`, `/model set`, skill forwarding, etc.).
    */
-  static async dispatch(ctx: AppContext, parsed: { cmd: string; args: string[]; rawArgs: string }, options: ComposerOptions, deps: SlashDeps): Promise<boolean> {
+  static async dispatch(ctx: AppContext, parsed: { cmd: string; args: string[]; rawArgs: string }, options: ComposerOptions, deps: SlashDeps): Promise<SlashResult> {
     const { cmd, args } = parsed;
 
     // Skills are addressed by id, e.g. "/graphify".
@@ -57,36 +93,36 @@ export class SlashRouter {
     if (skill) {
       const composed = `Skill: ${skill.name}\n${skill.description}\n\nUser request: ${parsed.rawArgs}`;
       await deps.sendPrompt(composed, options);
-      return true;
+      return { consumed: true };
     }
 
     switch (cmd) {
       case 'init':
         deps.openConfigureProject();
-        return true;
+        return { consumed: true };
       case 'doctor':
         deps.openDoctor();
-        return true;
+        return { consumed: true };
       case 'clear':
         ctx.setActiveChatId('draft-chat');
         ctx.setTrajectorySteps([]);
         ctx.triggerToast('Conversation cleared');
-        return true;
+        return { consumed: true };
       case 'mcp': {
         if (args.length === 0) {
           ctx.setActiveTab('mcp');
-          return true;
+          return { consumed: true };
         }
         const [serverName, toolName, ...rest] = args;
         const server = ctx.getMcpServers().find((s) => s.name.toLowerCase() === serverName.toLowerCase());
         if (!server) {
           ctx.triggerToast(`Unknown MCP server: ${serverName}`, 'error');
-          return true;
+          return { consumed: true };
         }
         if (!toolName) {
           ctx.setActiveTab('mcp');
           ctx.triggerToast(`Server "${server.name}" exposes ${server.toolsCount} tool(s)`);
-          return true;
+          return { consumed: true };
         }
         const argStr = rest.join(' ');
         let parsedArgs: Record<string, any> = {};
@@ -95,7 +131,7 @@ export class SlashRouter {
             parsedArgs = JSON.parse(argStr);
           } catch {
             ctx.triggerToast('MCP tool args must be valid JSON', 'error');
-            return true;
+            return { consumed: true };
           }
         }
         try {
@@ -107,7 +143,7 @@ export class SlashRouter {
         } catch (err: unknown) {
           ctx.triggerToast(`MCP call failed: ${(err as Error).message}`, 'error');
         }
-        return true;
+        return { consumed: true };
       }
       case 'model': {
         const enabled = ctx.getModelsCatalog().filter((m) => m.enabled).map((m) => m.name);
@@ -122,47 +158,77 @@ export class SlashRouter {
         } else {
           ctx.triggerToast(`Models: ${enabled.slice(0, 8).join(', ')}${enabled.length > 8 ? '…' : ''}`);
         }
-        return true;
+        return { consumed: true };
       }
       case 'status': {
         const prov = ctx.getConnectedProviders().find((p) => p.apiKey)?.name || 'none';
         ctx.triggerToast(`Provider: ${prov} | Model: ${options.model} | MCP: ${ctx.getMcpServers().filter((s) => s.enabled).length}`);
-        return true;
+        return { consumed: true };
       }
       case 'theme': {
         const t = args[0];
         if (t === 'light' || t === 'dark') ctx.setThemeMode(t as any);
         else ctx.setThemeMode(ctx.getThemeMode() === 'light' ? 'dark' : 'light');
-        return true;
+        return { consumed: true };
       }
       case 'help': {
         const helpText = BUILTIN_COMMANDS.map((c) => `/${c.name} — ${c.description}`).join('\n');
         const step = StepFactory.helpStep(BUILTIN_COMMANDS.map((c) => ({ name: c.name, description: c.description })));
         ctx.setTrajectorySteps((prev) => [...prev, step]);
         if (!ctx.getActiveChatId()) ctx.setActiveChatId('draft-chat');
-        return true;
+        return { consumed: true };
       }
       case 'review':
       case 'diff':
         ctx.setActiveTab('diff');
-        return true;
+        return { consumed: true };
       case 'config':
         ctx.setActiveTab('settings');
-        return true;
-      case 'compact':
-        ctx.triggerToast('Context compaction runs automatically during long sessions');
-        return true;
+        return { consumed: true };
+      case 'compact': {
+        const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        // Prefer the live engine: real agent runs keep their full history in the
+        // main process, so compaction must happen there (against the orchestrator-
+        // selected model's context window). The engine reports token savings.
+        if (ctx.ipc) {
+          try {
+            const sessionId = `session-${ctx.getActiveChatId()}`;
+            const result = (await ctx.ipc.invoke('agent-compact', sessionId)) as
+              | { compacted: boolean; tokensBefore: number; tokensAfter: number }
+              | undefined;
+            if (result?.compacted) {
+              // Keep the visible trajectory in sync with the engine's compaction.
+              compactVisibleSteps(ctx, ts);
+              const saved = Math.max(0, result.tokensBefore - result.tokensAfter);
+              ctx.triggerToast(
+                `Context compacted! Freed ~${saved} tokens (${result.tokensBefore} → ${result.tokensAfter}).`
+              );
+              return { consumed: true };
+            }
+          } catch {
+            // No live engine for this session — fall through to local collapse.
+          }
+        }
+        // Simulation / no live engine: collapse the visible steps locally so the
+        // gauge + conversation reflect the compaction.
+        if (compactVisibleSteps(ctx, ts)) {
+          ctx.triggerToast('Context compacted (simulation mode).');
+        } else {
+          ctx.triggerToast('Context is already compact.');
+        }
+        return { consumed: true };
+      }
       case 'loop': {
         if (!deps.startLoop || !deps.stopLoop || !deps.listLoops || !deps.clearLoops) {
           ctx.triggerToast('Loop feature is not supported in this environment', 'error');
-          return true;
+          return { consumed: true };
         }
         
         if (args[0] === 'list' || args[0] === 'status') {
           const tasks = deps.listLoops();
           if (tasks.length === 0) {
             ctx.triggerToast('No active loop tasks running');
-            return true;
+            return { consumed: true };
           }
           const lines = ['=== Active Loop Tasks ==='];
           for (const t of tasks) {
@@ -171,14 +237,14 @@ export class SlashRouter {
           const step = StepFactory.helpStep([{ name: 'Active Loop Tasks', description: lines.join('\n') }]);
           ctx.setTrajectorySteps((prev) => [...prev, step]);
           if (!ctx.getActiveChatId()) ctx.setActiveChatId('draft-chat');
-          return true;
+          return { consumed: true };
         }
 
         if (args[0] === 'stop' || args[0] === 'cancel') {
           const id = args[1];
           if (!id) {
             ctx.triggerToast('Please specify the loop task ID to stop: /loop stop <id>', 'error');
-            return true;
+            return { consumed: true };
           }
           const stopped = deps.stopLoop(id);
           if (stopped) {
@@ -186,13 +252,13 @@ export class SlashRouter {
           } else {
             ctx.triggerToast(`Loop task ID not found: ${id}`, 'error');
           }
-          return true;
+          return { consumed: true };
         }
 
         if (args[0] === 'clear') {
           deps.clearLoops();
           ctx.triggerToast('All active loop tasks stopped');
-          return true;
+          return { consumed: true };
         }
 
         let interval: string | undefined = undefined;
@@ -220,14 +286,14 @@ export class SlashRouter {
         } catch (err) {
           ctx.triggerToast(`Failed to start loop: ${(err as Error).message}`, 'error');
         }
-        return true;
+        return { consumed: true };
       }
       case 'loop-x': {
         const count = parseInt(args[0], 10);
         const prompt = args.slice(1).join(' ');
         if (isNaN(count) || count <= 0 || !prompt) {
           ctx.triggerToast('Usage: /loop-x [number of runs] [prompt]', 'error');
-          return true;
+          return { consumed: true };
         }
 
         if (deps.runLoopX) {
@@ -235,7 +301,7 @@ export class SlashRouter {
         } else {
           ctx.triggerToast('Loop-X feature is not supported in this environment', 'error');
         }
-        return true;
+        return { consumed: true };
       }
       case 'learn':
       case 'permissions':
@@ -246,10 +312,60 @@ export class SlashRouter {
       case 'cost':
       case 'security':
         ctx.triggerToast(`"/${cmd}" is handled by the agent — ask as a normal request (desktop UI support coming soon)`);
-        return true;
+        return { consumed: true };
+      case 'image':
+      case 'video':
+      case 'audio':
+      case 'pdf': {
+        // Capability commands need a provider that can actually run them. If
+        // none is connected, fail loudly with an actionable path instead of
+        // seeding the composer and letting the call silently drop at send time.
+        const cap = cmd as MediaCapability;
+        if (!hasCapableProvider(ctx, cap)) {
+          ctx.triggerToast(
+            `No ${cap}-capable provider connected. Add one in Settings → Providers to use /${cmd}.`,
+            'error'
+          );
+          ctx.setActiveTab('settings');
+          ctx.setSettingsCategory('providers');
+          return { consumed: true };
+        }
+        // Prompt-seed commands: pre-fill the composer with an editable sample
+        // prompt (including any args the user typed) so they can finish and send
+        // intentionally. No auto-send — keeps the user in control of the call.
+        const verb =
+          cmd === 'image' ? 'Generate an image of'
+          : cmd === 'video' ? 'Generate a video of'
+          : cmd === 'audio' ? 'Generate audio of'
+          : 'Create a PDF about';
+        const seed = `${verb}${parsed.rawArgs ? ` ${parsed.rawArgs}` : ' '}`;
+        deps.seedComposer?.(seed);
+        return { consumed: true, keepComposer: true };
+      }
+      case '3d': {
+        // 3D needs the Studio feature enabled AND a usable provider. Without
+        // both, point the user at the right settings instead of a silent no-op.
+        if (!hasCapableProvider(ctx, '3d', { is3dEnabled: deps.is3dEnabled })) {
+          ctx.triggerToast(
+            '3D generation isn’t available yet. Enable 3D Model Gen in Settings and connect a 3D-capable provider.',
+            'error'
+          );
+          ctx.setActiveTab('settings');
+          ctx.setSettingsCategory('3d');
+          return { consumed: true };
+        }
+        if (deps.is3dEnabled) {
+          ctx.setActiveTab('studio');
+          ctx.triggerToast('Opened the 3D Studio — describe a model to generate');
+          return { consumed: true };
+        }
+        deps.seedComposer?.(`Generate a 3D model of${parsed.rawArgs ? ` ${parsed.rawArgs}` : ' '}`);
+        ctx.triggerToast('Tip: enable 3D Model Gen in Settings to open the dedicated Studio');
+        return { consumed: true, keepComposer: true };
+      }
       default:
         ctx.triggerToast(`Unknown command: /${cmd}`, 'error');
-        return true;
+        return { consumed: true };
     }
   }
 }

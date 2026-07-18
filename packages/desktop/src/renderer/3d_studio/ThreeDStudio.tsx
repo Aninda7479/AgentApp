@@ -135,10 +135,10 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
           path: 'offline_mock_gltf.gltf',
           format: 'gltf',
           provider: 'local',
-          message: 'Local mock character generated in web mode successfully!'
+          message: 'Preview character generated locally (web mode).'
         };
         setResult(demoResult);
-        triggerToast('Local mock model successfully generated (web mode)!', 'info');
+        triggerToast('Preview model ready (web mode).', 'info');
         setActiveStage(8);
         loadSavedModels();
       }, 2000);
@@ -283,7 +283,7 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
         <div className="flex items-center gap-4">
           <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900 border border-slate-800">
             <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
-            <span className="text-[10px] text-slate-300 font-medium">Cloud Credits: 27 remaining</span>
+            <span className="text-[10px] text-slate-300 font-medium">27 credits remaining</span>
           </div>
           <div className="w-8 h-8 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center cursor-pointer hover:bg-slate-800 transition-all">
             <Eye size={14} className="text-slate-400" />

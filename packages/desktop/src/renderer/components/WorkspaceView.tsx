@@ -5,6 +5,9 @@ import { TrajectoryCanvas, TrajectoryStep } from './TrajectoryCanvas';
 import { MCPServerInfo } from './MCPDashboard';
 import { ModelConfig } from '../settings/SettingsView';
 import { WorkspaceService } from '../logic/workspace';
+import { BrandLogo } from '../BrandLogo';
+import { computeContextUsage, type ContextUsage } from '../logic/context';
+import { StoredProject } from '../types';
 
 /** Represents a parallel agent session with its own trajectory. */
 export interface AgentSession {
@@ -43,7 +46,7 @@ interface WorkspaceViewProps {
   /** Called when the user changes the selected model in the composer. */
   onModelChange?: (model: string) => void;
   /** Projects available for the composer context switcher. */
-  projects?: { name: string }[];
+  projects?: StoredProject[];
   /** Switch the active project from the composer. */
   onSelectProject?: (name: string) => void;
   /** Real execution-mode setting (true = full system access). */
@@ -55,6 +58,17 @@ interface WorkspaceViewProps {
   slashCommands?: import('./slashCommands').SlashSuggestion[];
   /** Discovered skills for the composer autocomplete. */
   skills?: import('./slashCommands').SkillInfo[];
+  /** Last error recorded on the active chat, surfaced in the failed-response card. */
+  lastError?: string;
+  /** Re-sends the last user prompt when the response failed. */
+  onRetryLast?: () => void;
+  /** Live context-window usage from the engine (null → UI estimates from steps). */
+  contextUsage?: ContextUsage | null;
+  /** Context-window limit of the active model (e.g. "128k", "2M") for the
+   *  demo-mode estimate when no live engine signal is available. */
+  activeModelContextLimit?: string;
+  /** Triggered when the user clicks the context-usage ring (runs /compact). */
+  onCompact?: () => void;
 }
 
 const recommendations = [
@@ -109,6 +123,61 @@ const ElapsedTimer: React.FC<{ startedAt: number; running: boolean }> = ({ start
   );
 };
 
+// ─── Context-usage ring ───────────────────────────────────────────────────────
+interface ContextUsageRingProps {
+  /** 0..100 percentage of the context window used. */
+  pct: number;
+  used: number;
+  limit: number;
+  onClick?: () => void;
+}
+
+/**
+ * A small circular gauge showing how full the model's context window is. Colour
+ * shifts green → amber → red as usage climbs; clicking it triggers a manual
+ * `/compact`. Diameter is intentionally tiny so it sits unobtrusively in the
+ * workspace header.
+ */
+const ContextUsageRing: React.FC<ContextUsageRingProps> = ({ pct, used, limit, onClick }) => {
+  const size = 20;
+  const stroke = 2.5;
+  const r = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(100, pct));
+  const offset = circumference * (1 - clamped / 100);
+
+  const color =
+    clamped > 85 ? 'var(--neon-destructive)' : clamped > 60 ? 'var(--neon-attention)' : 'var(--neon-live)';
+  const title = `Context window: ${used.toLocaleString()} / ${limit.toLocaleString()} tokens (${clamped}%) — click to compact`;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={`relative flex items-center justify-center p-0 bg-transparent border-0 cursor-pointer ${clamped > 85 ? 'animate-pulse' : ''}`}
+      style={{ width: size, height: size }}
+    >
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--brand-border-strong)" strokeWidth={stroke} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          style={{ transition: 'stroke-dashoffset 0.4s ease, stroke 0.3s ease' }}
+        />
+      </svg>
+    </button>
+  );
+};
+
 // ─── Multi-Agent Tab Bar ──────────────────────────────────────────────────────
 interface AgentTabBarProps {
   sessions: AgentSession[];
@@ -116,6 +185,8 @@ interface AgentTabBarProps {
   onSelectSession: (id: string) => void;
   onAddSession: () => void;
   onCloseSession: (id: string) => void;
+  /** Disabled until at least one enabled model is connected. */
+  disabled: boolean;
 }
 
 const AgentTabBar: React.FC<AgentTabBarProps> = ({
@@ -123,7 +194,8 @@ const AgentTabBar: React.FC<AgentTabBarProps> = ({
   activeSessionId,
   onSelectSession,
   onAddSession,
-  onCloseSession
+  onCloseSession,
+  disabled
 }) => (
   <div className="flex items-center gap-1 px-4 py-1.5 border-b border-brand-border/60 bg-brand-sidebar overflow-x-auto scrollbar-thin">
     {sessions.map(session => (
@@ -133,7 +205,7 @@ const AgentTabBar: React.FC<AgentTabBarProps> = ({
         className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] font-medium transition-all select-none group flex-shrink-0 ${
           session.id === activeSessionId
             ? 'bg-brand-card border border-brand-border text-brand-textMain'
-            : 'text-brand-textMuted hover:text-brand-textMain hover:bg-white/5'
+            : 'text-brand-textMuted hover:text-brand-textMain hover:bg-[var(--brand-hover)]'
         }`}
       >
         <Bot size={11} className={session.isGenerating ? 'text-[var(--neon-live)] animate-pulse' : 'text-brand-textMuted'} />
@@ -155,8 +227,11 @@ const AgentTabBar: React.FC<AgentTabBarProps> = ({
     {/* Add new agent session */}
     <button
       onClick={onAddSession}
-      title="Run another agent in parallel"
-      className="flex items-center gap-1 px-2 py-1.5 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-all select-none flex-shrink-0"
+      disabled={disabled}
+      title={disabled ? 'Connect a model in Settings to use agents' : 'Run another agent in parallel'}
+      className={`flex items-center gap-1 px-2 py-1.5 rounded-md text-brand-textMuted transition-all select-none flex-shrink-0 ${
+        disabled ? 'opacity-40 cursor-not-allowed' : 'hover:text-brand-textMain hover:bg-brand-hover cursor-pointer'
+      }`}
     >
       <Plus size={12} />
       <span className="text-[11px]">New agent</span>
@@ -196,9 +271,32 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   onUnsandboxedActionsChange,
   onMicUnavailable,
   slashCommands,
-  skills = []
+  skills = [],
+  lastError,
+  onRetryLast,
+  contextUsage,
+  activeModelContextLimit,
+  onCompact
 }) => {
-  const enabledModels = modelsCatalog.filter(model => model.enabled);
+  // Only surface models the user has ENABLED in Settings → Models. Each catalog
+  // entry carries a per-model `enabled` flag (ModelConfig.enabled); connected
+  // providers' models default to enabled:true in enrichModel, so first-run users
+  // still see their connected models — the toggle is the refinement that lets a
+  // user hide models they don't want from the workspace/composer dropdown.
+  const enabledModels = modelsCatalog.filter((m) => m.enabled);
+
+  const getBasename = (pathStr: string) => {
+    if (!pathStr) return '';
+    const parts = pathStr.split(/[\\/]/);
+    return parts[parts.length - 1] || pathStr;
+  };
+
+  const activeProjectObj = projects.find((p) => p.name === activeProject);
+  const activeFolderPath = activeProjectObj?.folders?.[0] || '';
+  const displayWorkspaceName = activeFolderPath 
+    ? getBasename(activeFolderPath) 
+    : (activeProject ? getBasename(activeProject) : 'workspace');
+
 
   // ── Multi-agent session state ──────────────────────────────────────────────
   const [agentSessions, setAgentSessions] = useState<AgentSession[]>([
@@ -225,6 +323,18 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
 
   const activeSession = agentSessions.find(s => s.id === activeSessionId) || agentSessions[0];
   const showMultiAgentBar = agentSessions.length > 1;
+
+  // Effective context-window usage: prefer the live engine signal; fall back to
+  // an estimate from the visible steps (demo/simulation mode). `usage` is null
+  // when the model's context window can't be resolved (gauge hidden).
+  const usage: ContextUsage | null =
+    contextUsage ?? computeContextUsage(activeSession?.steps || trajectorySteps, activeModelContextLimit);
+
+  // Mirror the composer's gate: an agent session can't actually run until a
+  // usable (enabled) model exists, so the entry points that spawn one are
+  // disabled when there are no enabled models rather than letting a user create
+  // a dead, un-sendable agent.
+  const noModels = enabledModels.length === 0;
 
   const handleAddAgentSession = () => {
     const newId = `session-${Date.now()}`;
@@ -299,36 +409,66 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     <>
       {/* ── Workspace Header Bar ─────────────────────────────────────────── */}
       <div className="h-9 border-b border-brand-border flex items-center justify-between gap-2 px-3 sm:px-5 bg-brand-sidebar/80 backdrop-blur-xl flex-shrink-0">
-        <div className="flex items-center gap-2 text-[11px] text-brand-textMuted min-w-0">
-          <Folder size={11} className="text-brand-textMuted flex-shrink-0" />
-          <span className="text-brand-textMain font-medium truncate">
-            {activeProject || 'Workspace'}
+        <div className="flex items-center gap-1.5 text-[10px] font-mono text-brand-textMuted min-w-0 tracking-tight">
+          <span className="text-brand-textMain/85 font-medium truncate">
+            {displayWorkspaceName}
           </span>
-          {activeProject && <span className="text-brand-textMuted/50 flex-shrink-0">/</span>}
-          <span className="text-brand-textMuted truncate">
-            {activeSession?.label !== activeProject ? activeSession?.label : 'agent'}
+          <span className="text-brand-textMuted/30 select-none">/</span>
+          <span className="text-brand-textMuted/70 truncate">
+            {activeSession?.id === 'session-main' ? 'agent-01' : activeSession?.label.toLowerCase().replace(/\s+/g, '-')}
           </span>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           {/* Running agents count badge */}
           {agentSessions.filter(s => s.isGenerating).length > 0 && (
-            <div className="flex items-center gap-1.5 text-[11px] text-[var(--neon-live)]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--neon-live)] animate-pulse" />
-              <span className="hidden sm:inline">{agentSessions.filter(s => s.isGenerating).length} agent{agentSessions.filter(s => s.isGenerating).length > 1 ? 's' : ''} running</span>
+            <div className="flex items-center gap-1.5 text-[10px] font-mono text-[color:var(--neon-live)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)] animate-pulse" />
+              <span className="hidden sm:inline">{agentSessions.filter(s => s.isGenerating).length} active</span>
             </div>
           )}
 
           {/* Elapsed timer */}
           <ElapsedTimer startedAt={activeSession?.startedAt || Date.now()} running={activeSession?.isGenerating || false} />
 
-          {/* MCP + Model info */}
-          <div className="hidden sm:flex items-center gap-2 text-[10px] text-brand-textMuted/70">
-            <span className="flex items-center gap-1">
-              <span className={`w-1 h-1 rounded-full ${mcpServers.filter(s => s.enabled).length > 0 ? 'bg-[color:var(--neon-live)]' : 'bg-brand-textMuted/30'}`} />
-              <span>{mcpServers.filter(s => s.enabled).length} MCP</span>
-            </span>
-          </div>
+          {/* Context-window usage ring — how full the model's context is */}
+          {usage && (
+            <ContextUsageRing
+              pct={usage.pct}
+              used={usage.used}
+              limit={usage.limit}
+              onClick={onCompact}
+            />
+          )}
+
+          {/* MCP Info */}
+          {(() => {
+            const enabledServers = mcpServers.filter(s => s.enabled);
+            const failedServers = enabledServers.filter(s => s.status === 'error');
+            const hasFailed = failedServers.length > 0;
+            const hasEnabled = enabledServers.length > 0;
+            
+            let dotColor = 'bg-brand-textMuted/20';
+            let tooltip = 'no mcp servers';
+            
+            if (hasFailed) {
+              dotColor = 'bg-[color:var(--neon-destructive)] animate-pulse';
+              tooltip = `mcp Connection failed: ${failedServers.map(s => s.name).join(', ')}`;
+            } else if (hasEnabled) {
+              dotColor = 'bg-[color:var(--neon-live)]';
+              tooltip = `mcp: ${enabledServers.length} online`;
+            }
+            
+            return (
+              <span 
+                className="flex items-center gap-1.5 text-[10px] font-mono text-brand-textMuted/60 cursor-help"
+                title={tooltip}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+                <span>mcp: {enabledServers.length}</span>
+              </span>
+            );
+          })()}
         </div>
       </div>
 
@@ -340,6 +480,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           onSelectSession={setActiveSessionId}
           onAddSession={handleAddAgentSession}
           onCloseSession={handleCloseSession}
+          disabled={noModels}
         />
       )}
 
@@ -349,6 +490,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         isStreaming={activeSessionId === 'session-main' ? isGenerating : (activeSession?.isGenerating || false)}
         onViewDiff={onViewDiff}
         onUndoStep={onUndoStep}
+        lastError={lastError}
+        onRetryLast={onRetryLast}
         onActionClick={(action, data) => {
           if (action === 'openMedia') {
             WorkspaceService.openMedia(data?.mediaPath, () =>
@@ -362,6 +505,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
           <div className="flex flex-col items-center justify-center px-4 max-w-[760px] w-full mx-auto mt-6 mb-4 animate-fade-in relative">
             {/* Glow blob */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[360px] h-[360px] bg-brand-textMuted/5 rounded-full blur-[90px] pointer-events-none" />
+
+            {/* Brand emblem — the single focal motif of the empty state */}
+            <div className="relative mb-5 flex justify-center">
+              <div className="opacity-95 drop-shadow-[0_8px_24px_rgba(0,0,0,0.22)]">
+                <BrandLogo size={46} variant="glyph" />
+              </div>
+            </div>
 
             {/* Title */}
             <div
@@ -381,19 +531,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
               )}
             </div>
             <p className="text-brand-textMuted text-[11px] text-center mb-5">
-              Select a workflow below or write a custom request to start an agent session.
+              Pick a starting point below — or just describe what you have in mind.
             </p>
 
-            {/* Status bar */}
-            <div className="w-full max-w-[680px] mb-4 px-3.5 py-2.5 glass-card rounded-lg text-[11px] text-brand-textMuted flex gap-2 items-center border border-brand-border">
-              <Terminal size={13} className="text-brand-textMuted flex-shrink-0" />
-              <div>
-                <span className="font-bold text-brand-textMuted mr-1.5 uppercase tracking-wider text-[9px]">
-                  System:
-                </span>
-                <span>SuperAgent Desktop ready — {enabledModels.length > 0 ? `${enabledModels.length} model${enabledModels.length !== 1 ? 's' : ''} connected` : 'configure providers in Settings'}</span>
-              </div>
-            </div>
+
 
             {/* Recommendation cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-[680px] mb-5">
@@ -415,22 +556,28 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             </div>
 
             {/* Status pills */}
-            <div className="flex gap-2 items-center flex-wrap text-[10px] text-brand-textMuted border-t border-brand-border/30 pt-4 w-full max-w-[680px] justify-center">
-              <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-2.5 py-1 rounded-full shadow-sm">
-                <span className={`w-1 h-1 rounded-full ${enabledModels.length > 0 ? 'bg-[color:var(--neon-constructive)] animate-pulse' : 'bg-brand-textMuted/30'}`} />
-                <span>Models: {enabledModels.length > 0 ? enabledModels.length : 'None'}</span>
+            <div className="flex items-center gap-x-4 gap-y-2 flex-wrap text-[10px] text-brand-textMuted font-mono border-t border-brand-border/20 pt-4 w-full max-w-[680px] justify-center select-none">
+              <div className="flex items-center gap-1.5">
+                <span className={`w-1 h-1 rounded-full ${enabledModels.length > 0 ? 'bg-[color:var(--neon-constructive)]' : 'bg-brand-textMuted/20'}`} />
+                <span>models: {enabledModels.length > 0 ? enabledModels.length : 'none'}</span>
               </div>
-              <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-2.5 py-1 rounded-full shadow-sm">
-                <span className={`w-1 h-1 rounded-full ${mcpServers.filter(s => s.enabled).length > 0 ? 'bg-[color:var(--neon-live)] animate-pulse' : 'bg-brand-textMuted/30'}`} />
-                <span>MCP: {mcpServers.filter(s => s.enabled).length} online</span>
+              <div className="flex items-center gap-1.5">
+                <span className={`w-1 h-1 rounded-full ${mcpServers.filter(s => s.enabled).length > 0 ? 'bg-[color:var(--neon-live)]' : 'bg-brand-textMuted/20'}`} />
+                <span>mcp: {mcpServers.filter(s => s.enabled).length} online</span>
               </div>
-              <div className="flex items-center gap-1.5 bg-brand-card border border-brand-border px-2.5 py-1 rounded-full shadow-sm">
-                <span className={`w-1 h-1 rounded-full ${hasCredentials ? 'bg-[color:var(--neon-live)] animate-pulse' : 'bg-[color:var(--neon-attention)]'}`} />
-                <span>Keys: {hasCredentials ? 'Active' : 'Setup needed'}</span>
+              <div className="flex items-center gap-1.5">
+                <span className={`w-1 h-1 rounded-full ${hasCredentials ? 'bg-[color:var(--neon-live)]' : 'bg-[color:var(--neon-attention)]'}`} />
+                <span>keys: {hasCredentials ? 'active' : 'setup'}</span>
               </div>
               <button
                 onClick={handleAddAgentSession}
-                className="flex items-center gap-1.5 bg-brand-hover border border-brand-border hover:border-brand-border-strong px-2.5 py-1 rounded-full text-brand-textMain transition-all cursor-pointer"
+                disabled={noModels}
+                title={noModels ? 'Connect a model in Settings to use agents' : 'Run another agent in parallel'}
+                className={`flex items-center gap-1.5 border px-2.5 py-1 rounded-full text-brand-textMain transition-all ${
+                  noModels
+                    ? 'opacity-40 cursor-not-allowed border-brand-border bg-brand-hover'
+                    : 'bg-brand-hover border-brand-border hover:border-brand-border-strong cursor-pointer'
+                }`}
               >
                 <Bot size={10} />
                 <span>Run parallel agent</span>
@@ -451,7 +598,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         }}
         activeProject={activeProject}
         onAttachClick={onAttachClick}
-        availableModels={enabledModels.length > 1 ? ['Model Governance', ...enabledModels.map(model => model.name)] : enabledModels.map(model => model.name)}
+        availableModels={composerModelsFromCatalog(modelsCatalog)}
+        emptyStateMessage={composerEmptyStateMessage(modelsCatalog)}
         defaultModel={activeChatModel && enabledModels.some(m => m.name === activeChatModel) ? activeChatModel : (enabledModels.length > 1 ? 'Model Governance' : (enabledModels[0]?.name || ''))}
         promptValue={composerPrompt}
         onPromptChange={onPromptChange}
@@ -471,3 +619,37 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
     </>
   );
 };
+
+/**
+ * Builds the composer's model dropdown from the connected-providers model
+ * catalog, showing ONLY models the user has enabled in Settings → Models
+ * (ModelConfig.enabled). Disabled models are excluded so the dropdown reflects
+ * the user's selection there. Connected providers' models default to
+ * enabled:true in enrichModel, so first-run users still see their connected
+ * models — and the per-model toggle is what hides unwanted ones.
+ */
+export function composerModelsFromCatalog(modelsCatalog: ModelConfig[]): string[] {
+  const enabled = modelsCatalog.filter((m) => m.enabled);
+  if (enabled.length === 0) return [];
+  if (enabled.length === 1) return [enabled[0].name];
+  return ['Model Governance', ...enabled.map((m) => m.name)];
+}
+
+/**
+ * Chooses the composer's empty-state message based on *why* no model is
+ * available, so the remediation the user is told matches reality:
+ *  - catalog empty → no provider connected → send them to connect one.
+ *  - catalog non-empty but nothing enabled → a provider IS connected, the
+ *    models are just toggled off → send them to enable one (not "connect",
+ *    which was the old, misleading copy when providers were already connected).
+ * Returns null when at least one model is enabled (composer is usable).
+ */
+export function composerEmptyStateMessage(modelsCatalog: ModelConfig[]): string | null {
+  const hasAnyModel = modelsCatalog.length > 0;
+  const hasEnabled = modelsCatalog.some((m) => m.enabled);
+  if (hasEnabled) return null;
+  if (hasAnyModel) {
+    return 'You’re connected — enable a model in Settings → Models to begin.';
+  }
+  return 'Connect a provider in Settings → Providers, and we’re ready to chat.';
+}

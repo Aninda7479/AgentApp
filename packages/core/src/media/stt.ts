@@ -1,5 +1,5 @@
 import { BYOKConfig } from '../types/agent.js';
-import { hasRealMediaKey, NO_PROVIDER_MESSAGE } from './config.js';
+import { hasRealMediaKey, isMockKey, NO_PROVIDER_MESSAGE } from './config.js';
 
 export interface AudioTranscriptionOptions {
   audioBuffer: Buffer;
@@ -138,7 +138,7 @@ export class AudioTranscriber {
     // No real provider configured. If a mock key was explicitly supplied we
     // still allow offline fixtures; otherwise report a clear failure instead of
     // returning fabricated transcription with status 'success'.
-    if (config.apiKey === 'mock-key' || config.apiKey.includes('mock')) {
+    if (isMockKey(config)) {
       const mockText = 'This is a simulated transcription from AI Audio Processing & STT model.';
       return {
         id: taskId,

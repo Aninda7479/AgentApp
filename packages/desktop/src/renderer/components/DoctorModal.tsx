@@ -76,7 +76,7 @@ export const DoctorModal: React.FC<DoctorModalProps> = ({
           <div className="flex items-center gap-2.5">
             <Stethoscope className="w-5 h-5 text-(--brand-highlight)" />
             <div>
-              <h2 className="text-lg font-bold text-white m-0">Doctor Diagnostics</h2>
+              <h2 className="text-lg font-bold text-brand-textMain m-0">Doctor Diagnostics</h2>
               <p className="text-xs text-brand-textMuted mt-0.5">
                 Setup troubleshooting & configuration diagnostics
               </p>
@@ -107,7 +107,7 @@ export const DoctorModal: React.FC<DoctorModalProps> = ({
                 >
                   {getStatusIcon(check.status)}
                   <div className="space-y-0.5">
-                    <div className="text-xs font-semibold text-white">{check.name}</div>
+                    <div className="text-xs font-semibold text-brand-textMain">{check.name}</div>
                     <div className="text-[11px] text-brand-textMuted leading-relaxed">{check.detail}</div>
                   </div>
                 </div>

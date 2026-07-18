@@ -7,6 +7,52 @@
 
 ---
 
+## 🚀 Install
+
+SuperAgent ships in **two** builds that share the same autonomous core — both include the web UI.
+
+**Option 1 — Core + CLI + Web** (terminal, scripts, servers, CI). One command, no installers:
+
+```bash
+# Windows (PowerShell)
+irm https://aninda7479.github.io/AgentApp/install.ps1 | iex
+
+# macOS / Linux
+curl -fsSL https://aninda7479.github.io/AgentApp/install.sh | sh
+```
+
+Then run `superagent` (interactive TUI) or `superagent --start-web` (local web UI at `http://localhost:3000`).
+See the [CLI install page](https://aninda7479.github.io/AgentApp/cli).
+
+**Option 2 — Core + Desktop + Web** (native app for Windows / macOS / Linux):
+
+Download an installer for your OS from the [desktop download page](https://aninda7479.github.io/AgentApp/desktop)
+or the [latest GitHub release](https://github.com/Aninda7479/AgentApp/releases/latest).
+Installers auto-update in place.
+
+> Building from source? See **Quick Start** below.
+
+---
+
+## 🔄 Updating
+
+**CLI** (Option 1): the CLI self-updates from npm — pulling the same `@superagent/cli`
+and `@superagent/web` packages the release workflow publishes:
+
+```bash
+superagent update          # install the latest published version
+superagent update --check  # just check, don't install
+# or manually:
+npm install -g @superagent/cli @superagent/web
+```
+
+**Desktop** (Option 2): updates download automatically from GitHub Releases in the
+packaged app and install when you quit. Use **Settings → Updates → Check for Updates**
+to check on demand. Set `SUPERAGENT_DISABLE_UPDATER=1` to turn auto-update off.
+
+
+---
+
 ## 🌟 Features
 
 - 🧠 **Autonomous Agentic Workflows**: Multi-step reasoning, execution, and self-correction.
@@ -73,7 +119,7 @@ single admin password is the only proof of identity, so you only ever enter the
 password (in the browser) to sign in.
 
 Credentials are managed by the shared core `AuthStore` and persisted to
-`<userData>/Config/auth.json` (scrypt-hashed, 0600). The **same** store is used
+`<userData>/config/auth.json` (scrypt-hashed, 0600). The **same** store is used
 by the Web server *and* the CLI, so you can set or rotate the password from
 either side.
 

@@ -24,6 +24,22 @@ const KNOWN_TABS = ['trajectory', 'settings', 'mcp', 'scheduled', 'diff', 'partn
 // route ("/") rather than "/chat/draft-chat".
 const DRAFT_CHAT_ID = 'draft-chat';
 
+// Settings categories are keyed by hyphenated ids internally (e.g. "3d",
+// "model-gov"). A human-typed or bookmarked URL may use a friendlier slug
+// (e.g. "3d-model-gen"). Normalize incoming slugs to the canonical id so the
+// matching SettingsView panel always renders instead of a blank panel.
+const SETTINGS_SLUG_TO_ID: Record<string, string> = {
+  '3d-model-gen': '3d',
+  '3d-model-generation': '3d',
+  'model-governance': 'model-gov',
+  'model-government': 'model-gov'
+};
+
+function normalizeSettingsCategory(raw: string): string {
+  if (!raw || raw === 'general') return 'general';
+  return SETTINGS_SLUG_TO_ID[raw] || raw;
+}
+
 function isFileProtocol(): boolean {
   return typeof window !== 'undefined' && window.location.protocol === 'file:';
 }
@@ -44,7 +60,7 @@ export function getRouteFromLocation(): RouteState {
     return { activeTab: 'trajectory', activeChatId: segments[1], settingsCategory: 'general' };
   }
   if (segments[0] === 'settings') {
-    const category = segments[1] || 'general';
+    const category = normalizeSettingsCategory(segments[1] || 'general');
     return { activeTab: 'settings', activeChatId: null, settingsCategory: category };
   }
   const tab = segments[0];

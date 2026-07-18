@@ -11,6 +11,8 @@ import {
   Check,
   ShieldCheck,
   ShieldAlert,
+  Info,
+  Workflow,
 } from 'lucide-react';
 import {
   SlashSuggestion,
@@ -19,6 +21,16 @@ import {
   buildSuggestions,
 } from './slashCommands';
 import { ComposerService } from '../logic/composer';
+
+/**
+ * The auto-routing sentinel. The internal value stays `'Model Governance'` so the
+ * orchestrator's routing branch (main process) keeps resolving it; in the Workspace
+ * composer it is displayed as `AUTO_ROUTE_LABEL` with a distinct icon. This rename
+ * is display-only and scoped to the Workspace — the Settings panel is untouched.
+ */
+const AUTO_ROUTE_MODEL = 'Model Governance';
+const AUTO_ROUTE_LABEL = 'Orchestrator';
+
 
 /** Options returned by the Composer when a prompt is submitted. */
 export interface ComposerOptions {
@@ -45,6 +57,12 @@ export interface ComposerProps {
   isGenerating?: boolean;
   onStop?: () => void;
   availableModels?: string[];
+  /**
+   * State-aware message shown when no model is available (null when usable).
+   * Lets the placeholder tell the user the *correct* next step (connect a
+   * provider vs. enable a model) instead of a single generic string.
+   */
+  emptyStateMessage?: string | null;
   defaultModel?: string;
   /** Called whenever the user changes the selected model in the dropdown. */
   onModelChange?: (model: string) => void;
@@ -89,6 +107,7 @@ export const Composer: React.FC<ComposerProps> = ({
   isGenerating = false,
   onStop,
   availableModels = ['5.5 Medium', 'o3-mini', 'gpt-4o', 'claude-3-5-sonnet'],
+  emptyStateMessage,
   defaultModel = '5.5 Medium',
   activeProject = '',
   onAttachClick,
@@ -225,6 +244,11 @@ export const Composer: React.FC<ComposerProps> = ({
   };
 
   const hasModels = availableModels && availableModels.length > 0;
+  // "Model Governance" is the auto-router meta-entry, not a concrete sendable
+  // model. Surface a hint when it's selected so the user understands they can
+  // pick a specific model to send directly (addresses the silent composer
+  // dead-end the ux-critic flagged — no guidance when the router is selected).
+  const selectedIsRouter = selectedModel === 'Model Governance';
 
   useEffect(() => {
     if (hasModels) {
@@ -281,9 +305,14 @@ export const Composer: React.FC<ComposerProps> = ({
 
   const handleSend = () => {
     if (!prompt.trim() || disabled || isGenerating || !hasModels) return;
-    onSend(prompt, ComposerService.buildSendOptions(selectedModel, approvalMode, []));
+    const toSend = prompt;
+    // Clear BEFORE dispatching: prompt-seed commands (/image, /pdf, /3d, …) set
+    // the composer synchronously inside onSend, so clearing afterwards would wipe
+    // the seed the user is meant to review. Clearing first lets the seed win, and
+    // still clears instantly for normal sends.
     setPrompt('');
     basePromptRef.current = '';
+    onSend(toSend, ComposerService.buildSendOptions(selectedModel, approvalMode, []));
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -338,7 +367,7 @@ export const Composer: React.FC<ComposerProps> = ({
                 <button
                   type="button"
                   onClick={() => onRemoveAttachment && onRemoveAttachment(idx)}
-                  className="text-brand-textMuted hover:text-brand-textMain font-bold ml-1 rounded hover:bg-white/5 w-4 h-4 flex items-center justify-center transition-colors cursor-pointer"
+                  className="text-brand-textMuted hover:text-brand-textMain font-bold ml-1 rounded hover:bg-[var(--brand-hover)] w-4 h-4 flex items-center justify-center transition-colors cursor-pointer"
                 >
                   &times;
                 </button>
@@ -350,6 +379,7 @@ export const Composer: React.FC<ComposerProps> = ({
         <textarea
           ref={textareaRef}
           data-testid="composer-input"
+          aria-label="Message"
           value={prompt}
           onChange={(e) => {
             setPrompt(e.target.value);
@@ -359,11 +389,23 @@ export const Composer: React.FC<ComposerProps> = ({
           onClick={syncSlash}
           onSelect={syncSlash}
           onPaste={handlePaste}
-          placeholder={hasModels ? "Do anything — type / for commands, skills & MCP tools" : "No models are connected yet. Please go to Settings to connect a provider."}
+          placeholder={hasModels ? "Ask anything — or type / for skills, commands & tools" : (emptyStateMessage || "No models are connected yet. Please go to Settings to connect a provider.")}
           disabled={disabled}
           rows={1}
           className="bg-transparent border-none outline-none text-brand-textMain text-sm resize-none w-full min-h-11 leading-relaxed placeholder-brand-textMuted/55 font-sans disabled:opacity-50"
         />
+
+        {selectedIsRouter && (
+          <div
+            data-testid="composer-router-hint"
+            className="mb-3 flex items-center gap-1.5 text-[10px] font-mono text-brand-textMuted/65 leading-none"
+          >
+            <Info className="w-3 h-3 shrink-0 text-brand-textMuted/50" />
+            <span>
+              auto-routing: active across available models
+            </span>
+          </div>
+        )}
 
         {/* Toolbar row inside box */}
         <div className="flex items-center justify-between gap-2 flex-wrap border-t border-brand-border/60 pt-4 mt-4">
@@ -373,6 +415,8 @@ export const Composer: React.FC<ComposerProps> = ({
             <button
               data-testid="composer-attach-btn"
               onClick={() => onAttachClick?.()}
+              aria-label="Attach file"
+              title="Attach file"
               className="text-brand-textMuted hover:text-brand-textMain p-2 rounded-lg bg-brand-popover/60 hover:bg-brand-popover border border-brand-border transition-colors cursor-pointer"
             >
               <Plus className="w-5 h-5" />
@@ -435,13 +479,17 @@ export const Composer: React.FC<ComposerProps> = ({
             {/* Model Badge */}
             <div className="relative">
               <Select
-                options={availableModels.map((model) => ({ value: model, label: model, icon: <Cpu className="w-3.5 h-3.5" /> }))}
+                options={availableModels.map((model) =>
+                  model === AUTO_ROUTE_MODEL
+                    ? { value: model, label: AUTO_ROUTE_LABEL, icon: <Workflow className="w-3.5 h-3.5" />, description: 'Auto-routes each request to the best model for the job — or pick a specific model to send directly.' }
+                    : { value: model, label: model, icon: <Cpu className="w-3.5 h-3.5" /> }
+                )}
                 value={selectedModel}
                 onChange={(model) => {
                   setSelectedModel(model);
                   onModelChange?.(model);
                 }}
-                placeholder={hasModels ? 'Select model...' : 'No models connected'}
+                placeholder={hasModels ? 'Select model...' : (emptyStateMessage || 'No models connected')}
                 direction="up"
                 className="w-45 sm:w-55"
               />
@@ -452,6 +500,7 @@ export const Composer: React.FC<ComposerProps> = ({
               data-testid="composer-mic-btn"
               onClick={toggleDictation}
               title={!SpeechRecognitionCtor ? 'Voice input not supported here' : listening ? 'Stop dictation' : 'Dictate with your voice'}
+              aria-label={!SpeechRecognitionCtor ? 'Voice input not supported here' : listening ? 'Stop dictation' : 'Dictate with your voice'}
               className={`p-2 rounded-lg border transition-colors cursor-pointer ${
                 listening
                   ? 'bg-[color:var(--neon-destructive)]/15 border-[color:var(--neon-destructive)]/40 text-[color:var(--neon-destructive)]'
@@ -466,6 +515,7 @@ export const Composer: React.FC<ComposerProps> = ({
               <button
                 data-testid="btn-stop"
                 onClick={onStop}
+                aria-label="Stop generating"
                 className="bg-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/85 hover:shadow-[0_0_12px_var(--neon-destructive)] text-white rounded-full w-8 h-8 flex items-center justify-center font-bold cursor-pointer transition-all duration-150 active:scale-[0.92]"
               >
                 <span className="text-[10px] leading-none">⏹</span>
@@ -474,6 +524,7 @@ export const Composer: React.FC<ComposerProps> = ({
               <button
                 data-testid="btn-send"
                 onClick={handleSend}
+                aria-label="Send message"
                 disabled={disabled || !prompt.trim() || !hasModels}
                 className={`rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150 ${
                   !prompt.trim() || disabled || !hasModels

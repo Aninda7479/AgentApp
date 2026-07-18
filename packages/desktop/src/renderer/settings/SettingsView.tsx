@@ -14,6 +14,9 @@ import { BrowserUseSettings } from './BrowserUseSettings';
 import { ComputerUseSettings } from './ComputerUseSettings';
 import { ThreeDSettings } from './ThreeDSettings';
 import { UpdatesSettings } from './UpdatesSettings';
+import { AboutSettings } from './AboutSettings';
+import { WebAppSettings } from './WebAppSettings';
+import { browserSafeFetch } from '../web-fetch.js';
 
 /** Top-level settings page that renders a sidebar and the active settings category panel. */
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -43,6 +46,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onUnsandboxedActionsChange,
   internetAccessLevel,
   onInternetAccessLevelChange,
+  onToast,
+  bootstrapping,
   appVersion,
   onCheckForUpdates,
   updateStatus
@@ -143,7 +148,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         const collectedNames: string[] = [];
         for (let pageNum = 1; pageNum <= 4; pageNum++) {
           const url = `https://build.nvidia.com/models?filters=nimType%3Anim_type_preview&page=${pageNum}`;
-          const res = await fetch(url);
+          const res = await browserSafeFetch(url);
           if (!res.ok) continue;
           const html = await res.text();
           
@@ -376,7 +381,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       id: `${providerId}-${raw.id}`,
       name: raw.name,
       providerId,
-      enabled: false,
+      // Default to enabled so the workspace/composer dropdown reflects connected
+      // models out of the box. The Settings → Models toggle lets the user hide
+      // models they don't want; gating on `enabled` then works as expected.
+      enabled: true,
       description: raw.description,
       contextLimit: ctxLimit ?? raw.contextLimit,
       outputLimit: raw.outputLimit,
@@ -428,6 +436,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onConnectProvider={onConnectProvider}
             onDisconnectProvider={onDisconnectProvider}
             enrichModel={enrichModel}
+            onToast={onToast}
+            bootstrapping={bootstrapping}
           />
         )}
         {activeCategory === 'models' && (
@@ -455,8 +465,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           />
         )}
         {activeCategory === 'usage' && <UsageTrackerSettings />}
-        {activeCategory === 'mcp' && (
+        {(activeCategory === 'skills' ||
+          activeCategory === 'connectors' ||
+          activeCategory === 'plugins') && (
           <IntegrationsSettings
+            view={activeCategory}
             mcpDashboard={mcpDashboard}
             skills={skills}
             onToggleSkill={onToggleSkill}
@@ -514,6 +527,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onCheckForUpdates={onCheckForUpdates ?? (() => {})}
             checking={updateStatus?.status === 'checking'}
           />
+        )}
+        {activeCategory === 'about' && (
+          <AboutSettings appVersion={appVersion} />
+        )}
+        {activeCategory === 'web-app' && (
+          <WebAppSettings />
         )}
       </div>
     </div>

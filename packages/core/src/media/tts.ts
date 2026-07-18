@@ -1,5 +1,5 @@
 import { BYOKConfig } from '../types/agent.js';
-import { hasRealMediaKey, NO_PROVIDER_MESSAGE } from './config.js';
+import { hasRealMediaKey, isMockKey, NO_PROVIDER_MESSAGE } from './config.js';
 
 export interface SpeechSynthesisOptions {
   text: string;
@@ -101,7 +101,7 @@ export class SpeechSynthesizer {
     // No real provider configured. If a mock key was explicitly supplied we
     // still allow offline fixtures; otherwise report a clear failure instead of
     // returning fabricated audio with status 'success'.
-    if (config.apiKey === 'mock-key' || config.apiKey.includes('mock')) {
+    if (isMockKey(config)) {
       const mockAudioBuffer = Buffer.from(`MOCK_AUDIO_SYNTHESIS_DATA_${taskId}`);
       return {
         id: taskId,

@@ -94,7 +94,7 @@ So you only *need* to define the moods you care about.
 
 To add a Partner companion to your library:
 
-1. **Folder import.** Open the **Partner** tab → **Import folder**, and select the directory containing your `partner.json` manifest. It is copied into `~/AppData/Roaming/OpenSource/AgentApp/pets/<id>/` (your OS user-data directory), including any models, scripts, or image files.
+1. **Folder import.** Open the **Partner** tab → **Import folder**, and select the directory containing your `partner.json` manifest. It is copied into `~/.superagent/partners/<id>/` (your OS user-data directory), including any models, scripts, or image files.
 2. **Dynamic Script Loading.** If your folder contains a custom script (specified by `"script": "index.js"` in the manifest), the app loads the compiled JS script dynamically, resolving its metadata at runtime.
 
 **Import a 3D model file.** With an active Partner selected, click **Import 3D model** on the Partner tab and choose a `.vrm`, `.glb`, or `.gltf` file. The file is copied into that Partner's folder and recorded in its manifest (`vrm` for `.vrm`, otherwise `model`), so your choice is saved and restored. A `.glb`/`.gltf` takes precedence over a `.vrm` for the 3D pet. *(Legacy path — see "Import 3D Model Folder" below for the recommended, format-flexible approach.)*

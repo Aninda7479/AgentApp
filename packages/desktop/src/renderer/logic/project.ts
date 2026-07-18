@@ -1,4 +1,5 @@
 import type { StoredProject } from '../types';
+import { FormatService } from './format';
 
 /**
  * Backend / Electron boundary helpers for project (folder) selection and
@@ -55,6 +56,7 @@ export class ProjectService {
    * non-blank and at least one folder exists.
    */
   static buildProject(name: string, folders: string[]): StoredProject {
-    return { name: name.trim(), folders };
+    // Assign a random storage ID so the project folder never collides on disk.
+    return { name: name.trim(), folders, storageKey: FormatService.generateStorageId() };
   }
 }

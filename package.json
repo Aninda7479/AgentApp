@@ -25,11 +25,13 @@
 
     "dev:app": "npm run dev --workspace=@superagent/desktop",
     "dev:web": "npm run dev --workspace=@superagent/web",
+    "dev:site": "cd website && npm run dev",
 
     "build": "npm run build --workspace=@superagent/core && npm run build --workspace=@superagent/cli && npm run build --workspace=@superagent/desktop && npm run build --workspace=@superagent/web",
     "dev": "npm run dev --workspace=@superagent/desktop",
-    "test": "npm test --workspace=@superagent/core && npm test --workspace=@superagent/cli && npm test --workspace=@superagent/desktop",
+    "test": "npm test --workspace=@superagent/core && npm test --workspace=@superagent/cli && npm test --workspace=@superagent/desktop && npm test --workspace=@superagent/web",
     "pub:core": "npm publish --workspace=@superagent/core --access public",
-    "pub:cli": "npm publish --workspace=@superagent/cli --access public"
+    "pub:cli": "npm publish --workspace=@superagent/cli --access public",
+    "pub:web": "npm publish --workspace=@superagent/web --access public"
   }
 }

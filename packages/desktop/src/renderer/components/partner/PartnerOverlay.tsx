@@ -129,7 +129,7 @@ export const PartnerOverlay: React.FC<PartnerOverlayProps> = ({
     <div
       data-testid="partner-overlay"
       data-mood={mood}
-      className="fixed bottom-24 right-5 z-40 flex flex-col items-end gap-2 select-none"
+      className="pointer-events-none fixed top-1/2 right-5 z-40 flex flex-col items-end gap-2 select-none"
       style={{ transform: `translate(${offset.dx}px, ${offset.dy}px)` }}
     >
       {reaction.line && (
@@ -140,16 +140,22 @@ export const PartnerOverlay: React.FC<PartnerOverlayProps> = ({
           {reaction.line}
         </div>
       )}
+      {/* Card is pointer-events-none so its (transparent) bounding box never
+          eats taps over the composer's Send button — the 3c8727a fix only freed
+          the gap between bubble and card, not the card over the composer. Only
+          the avatar (drag handle) and the Hide button capture pointer events. */}
       <div
-        className="glass-panel flex items-center gap-3 rounded-2xl px-3 py-2 shadow-lg cursor-grab active:cursor-grabbing"
+        className="pointer-events-none glass-panel flex items-center gap-3 rounded-2xl px-3 py-2 shadow-lg"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         style={{ borderColor: `color-mix(in srgb, ${accent} 40%, transparent)` }}
         title={`${manifest.name} — drag to move`}
       >
-        <PetSprite manifest={manifest} mood={mood} size={40} />
-        <div className="pr-1">
+        <span className="pointer-events-auto cursor-grab active:cursor-grabbing">
+          <PetSprite manifest={manifest} mood={mood} size={40} />
+        </span>
+        <div className="pointer-events-none pr-1">
           <div className="text-[13px] font-semibold text-brand-textMain leading-tight">{manifest.name}</div>
           <div className="ui-eyebrow">{manifest.kind}</div>
         </div>
@@ -157,7 +163,7 @@ export const PartnerOverlay: React.FC<PartnerOverlayProps> = ({
           data-testid="partner-hide"
           onClick={onToggle}
           title="Hide Partner"
-          className="ml-1 flex h-6 w-6 items-center justify-center rounded-md text-brand-textMuted hover:bg-white/10 hover:text-brand-textMain transition-colors"
+          className="pointer-events-auto ml-1 flex h-6 w-6 items-center justify-center rounded-md text-brand-textMuted hover:bg-[var(--brand-hover-strong)] hover:text-brand-textMain transition-colors"
         >
           <X size={14} />
         </button>

@@ -50,7 +50,15 @@ export class ModelCapabilityRegistry {
         maxOutputTokens: 4096,
         supportsVision: true,
         supportsTools: true,
-        supportsReasoning: false
+        supportsReasoning: false,
+        inputModalities: ['text', 'image'],
+        outputModalities: ['text'],
+        specialties: ['vision', 'general'],
+        speedTier: 'balanced',
+        intelligenceTier: 'high',
+        accessStatus: 'available',
+        reasoningEffortLevels: [],
+        moderationLevel: 'standard'
       },
       {
         id: 'o3-mini',
@@ -60,7 +68,15 @@ export class ModelCapabilityRegistry {
         maxOutputTokens: 100000,
         supportsVision: false,
         supportsTools: true,
-        supportsReasoning: true
+        supportsReasoning: true,
+        inputModalities: ['text'],
+        outputModalities: ['text'],
+        specialties: ['reasoning', 'math', 'coding'],
+        speedTier: 'slow',
+        intelligenceTier: 'high',
+        accessStatus: 'available',
+        reasoningEffortLevels: ['low', 'medium', 'high'],
+        moderationLevel: 'standard'
       },
       {
         id: 'gpt-4o-mini',
@@ -70,7 +86,15 @@ export class ModelCapabilityRegistry {
         maxOutputTokens: 4096,
         supportsVision: true,
         supportsTools: true,
-        supportsReasoning: false
+        supportsReasoning: false,
+        inputModalities: ['text', 'image'],
+        outputModalities: ['text'],
+        specialties: ['vision', 'general', 'cost-efficient'],
+        speedTier: 'fast',
+        intelligenceTier: 'mid',
+        accessStatus: 'available',
+        reasoningEffortLevels: [],
+        moderationLevel: 'standard'
       },
       // Anthropic
       {
@@ -81,7 +105,15 @@ export class ModelCapabilityRegistry {
         maxOutputTokens: 8192,
         supportsVision: true,
         supportsTools: true,
-        supportsReasoning: true
+        supportsReasoning: true,
+        inputModalities: ['text', 'image'],
+        outputModalities: ['text'],
+        specialties: ['coding', 'reasoning', 'vision', 'agents'],
+        speedTier: 'balanced',
+        intelligenceTier: 'high',
+        accessStatus: 'available',
+        reasoningEffortLevels: ['low', 'medium', 'high'],
+        moderationLevel: 'standard'
       },
       {
         id: 'claude-3-5-sonnet-20241022',
@@ -91,7 +123,15 @@ export class ModelCapabilityRegistry {
         maxOutputTokens: 8192,
         supportsVision: true,
         supportsTools: true,
-        supportsReasoning: false
+        supportsReasoning: false,
+        inputModalities: ['text', 'image'],
+        outputModalities: ['text'],
+        specialties: ['coding', 'vision', 'agents'],
+        speedTier: 'balanced',
+        intelligenceTier: 'high',
+        accessStatus: 'available',
+        reasoningEffortLevels: [],
+        moderationLevel: 'standard'
       },
       {
         id: 'claude-3-opus-20240229',
@@ -101,7 +141,15 @@ export class ModelCapabilityRegistry {
         maxOutputTokens: 4096,
         supportsVision: true,
         supportsTools: true,
-        supportsReasoning: false
+        supportsReasoning: false,
+        inputModalities: ['text', 'image'],
+        outputModalities: ['text'],
+        specialties: ['reasoning', 'vision', 'long-form'],
+        speedTier: 'slow',
+        intelligenceTier: 'frontier',
+        accessStatus: 'available',
+        reasoningEffortLevels: [],
+        moderationLevel: 'standard'
       },
       // Gemini
       {
@@ -112,7 +160,15 @@ export class ModelCapabilityRegistry {
         maxOutputTokens: 8192,
         supportsVision: true,
         supportsTools: true,
-        supportsReasoning: true
+        supportsReasoning: true,
+        inputModalities: ['text', 'image'],
+        outputModalities: ['text'],
+        specialties: ['vision', 'long-context', 'cost-efficient'],
+        speedTier: 'fast',
+        intelligenceTier: 'high',
+        accessStatus: 'available',
+        reasoningEffortLevels: ['low', 'medium', 'high'],
+        moderationLevel: 'standard'
       },
       {
         id: 'gemini-1.5-pro',
@@ -122,7 +178,15 @@ export class ModelCapabilityRegistry {
         maxOutputTokens: 8192,
         supportsVision: true,
         supportsTools: true,
-        supportsReasoning: false
+        supportsReasoning: false,
+        inputModalities: ['text', 'image'],
+        outputModalities: ['text'],
+        specialties: ['vision', 'long-context'],
+        speedTier: 'balanced',
+        intelligenceTier: 'high',
+        accessStatus: 'available',
+        reasoningEffortLevels: [],
+        moderationLevel: 'standard'
       },
       // DeepSeek
       {
@@ -133,7 +197,15 @@ export class ModelCapabilityRegistry {
         maxOutputTokens: 8192,
         supportsVision: false,
         supportsTools: true,
-        supportsReasoning: false
+        supportsReasoning: false,
+        inputModalities: ['text'],
+        outputModalities: ['text'],
+        specialties: ['coding', 'cost-efficient'],
+        speedTier: 'fast',
+        intelligenceTier: 'mid',
+        accessStatus: 'available',
+        reasoningEffortLevels: [],
+        moderationLevel: 'low'
       },
       {
         id: 'deepseek-reasoner',
@@ -143,7 +215,15 @@ export class ModelCapabilityRegistry {
         maxOutputTokens: 8192,
         supportsVision: false,
         supportsTools: true,
-        supportsReasoning: true
+        supportsReasoning: true,
+        inputModalities: ['text'],
+        outputModalities: ['text'],
+        specialties: ['reasoning', 'math', 'cost-efficient'],
+        speedTier: 'slow',
+        intelligenceTier: 'high',
+        accessStatus: 'available',
+        reasoningEffortLevels: ['low', 'medium', 'high'],
+        moderationLevel: 'low'
       }
     ];
 
@@ -190,3 +270,11 @@ export class ModelCapabilityRegistry {
     return availableModels;
   }
 }
+
+/**
+ * Shared, lazily-populated capability registry. `registerDefaults()` runs in
+ * the constructor, and `getAvailableModels` augments it with live-discovered
+ * models. Imported by the orchestration layer (e.g. `ai-engine.buildRouterPool`)
+ * to enrich the routing pool with tier/cost signals without re-instantiating.
+ */
+export const capabilityRegistry = new ModelCapabilityRegistry();

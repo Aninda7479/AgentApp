@@ -96,7 +96,7 @@ describe('CLI Command Unit Tools', () => {
       );
       expect(skillRes.success).toBe(true);
 
-      const skillFileExists = await fs.stat(path.join(testTmpDir, '.agent', 'skills', 'web-scraping', 'SKILL.md'));
+      const skillFileExists = await fs.stat(path.join(testTmpDir, '.superagent', 'skills', 'web-scraping', 'SKILL.md'));
       expect(skillFileExists.isFile()).toBe(true);
 
       const listRes = await handleLearnCommand(['list'], context);
@@ -113,7 +113,7 @@ describe('CLI Command Unit Tools', () => {
       const initRes = await handleInitCommand([], testTmpDir);
       expect(initRes.success).toBe(true);
 
-      const contextJson = JSON.parse(await fs.readFile(path.join(testTmpDir, '.agent', 'context.json'), 'utf-8'));
+      const contextJson = JSON.parse(await fs.readFile(path.join(testTmpDir, '.superagent', 'context.json'), 'utf-8'));
       expect(contextJson.projectName).toBe('test-app');
       expect(contextJson.frameworks).toContain('React');
 

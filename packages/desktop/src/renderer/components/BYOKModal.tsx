@@ -83,7 +83,7 @@ export const BYOKModal: React.FC<BYOKModalProps> = ({
           <div className="flex items-center gap-2.5">
             <span className="text-xl">⚙️</span>
             <div>
-              <h2 className="text-lg font-bold text-white m-0">BYOK Provider Settings</h2>
+              <h2 className="text-lg font-bold text-brand-textMain m-0">BYOK Provider Settings</h2>
               <p className="text-xs text-brand-textMuted mt-0.5">
                 Bring Your Own Keys & Endpoint Configurations
               </p>

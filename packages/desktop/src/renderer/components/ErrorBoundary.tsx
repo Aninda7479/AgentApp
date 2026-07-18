@@ -44,7 +44,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
             </p>
             <button
               onClick={() => this.setState({ hasError: false })}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-brand-border bg-brand-popover text-brand-textMain font-sans text-sm hover:bg-white/5 transition-all cursor-pointer"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-brand-border bg-brand-popover text-brand-textMain font-sans text-sm hover:bg-[var(--brand-hover)] transition-all cursor-pointer"
             >
               <RotateCcw size={14} /> Try again
             </button>

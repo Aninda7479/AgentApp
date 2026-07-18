@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { SettingsStorage } from '@superagent/core';
-import { getChatDirectory, getChatJsonPath, getConversationRoots, getProjectConfigPath, getProjectDirectory, normalizeStorageKey } from './paths.js';
+import { getChatDirectory, getChatJsonPath, getConversationRoots, getProjectConfigPath, getProjectDirectory, normalizeStorageKey, isValidStorageId } from './paths.js';
 import type { ConversationRoots, StoreData, StoredChat, StoredProject } from './types.js';
 
 type ProjectRecord = StoredProject & { storageKey: string };
@@ -110,7 +110,11 @@ function readChatRecord(chatJsonPath: string, projectName: string, projectKey?: 
 
 /** Resolves a unique storage key for a project and builds its record. */
 function resolveProjectKey(project: StoredProject, usedKeys: Set<string>): ProjectRecord {
-  const storageKey = uniqueStorageKey(normalizeStorageKey(project.storageKey || project.name), usedKeys);
+  const baseKey =
+    project.storageKey && isValidStorageId(project.storageKey)
+      ? project.storageKey
+      : normalizeStorageKey(project.storageKey || project.name);
+  const storageKey = uniqueStorageKey(baseKey, usedKeys);
   return {
     ...project,
     name: project.name.trim(),
@@ -184,6 +188,10 @@ function readProjectsAndChats(roots: ConversationRoots): { projects: ProjectReco
 
 /** Iterates project directories and returns the first one matching the predicate. */
 function findProjectRecord(roots: ConversationRoots, matcher: (project: ProjectRecord) => boolean): ProjectRecord | null {
+  // No projects dir yet (e.g. saving a standalone chat before any project
+  // exists) means there is no match — treat the missing dir as "no projects"
+  // rather than logging a spurious ENOENT.
+  if (!fs.existsSync(roots.projectsDir)) return null;
   try {
     for (const folderName of fs.readdirSync(roots.projectsDir)) {
       const projectDir = path.join(roots.projectsDir, folderName);

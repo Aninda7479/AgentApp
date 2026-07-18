@@ -1,0 +1,54 @@
+name: Deploy Site
+
+# Builds the promotion site (website/) and publishes it to GitHub Pages.
+# Required once: repo Settings → Pages → Source = "GitHub Actions".
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install & build site
+        working-directory: website
+        # BASE_PATH is the repo name for GitHub Pages project sites.
+        # Leave empty (BASE_PATH="") when deploying to a custom domain.
+        run: |
+          npm ci
+          npm run build
+        env:
+          BASE_PATH: '/AgentApp/'
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

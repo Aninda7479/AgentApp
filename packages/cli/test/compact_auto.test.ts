@@ -80,3 +80,52 @@ describe('/compact threshold & status subcommands', () => {
     expect(res.output).toContain('Usage: /compact threshold');
   });
 });
+
+describe('ContextCompressor chunked compaction (over-bloated context)', () => {
+  it('divides a massively bloated middle into bounded chunks and compacts', async () => {
+    // 1 system + 600 large turns (~1k chars each) + 4 recent = 605 messages.
+    const big: ContextMessage[] = [{ role: 'system', content: 'You are helpful.' }];
+    for (let i = 0; i < 600; i++) {
+      big.push({
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: `Turn ${i}: ${'x'.repeat(1000)}`
+      });
+    }
+    const recent = [
+      { role: 'user', content: 'Summarize the plan' },
+      { role: 'assistant', content: 'Here is the plan.' },
+      { role: 'user', content: 'Now implement it' },
+      { role: 'assistant', content: 'Implemented.' }
+    ];
+    const messages = [...big, ...recent];
+
+    const originalCount = messages.length;
+    const result = await ContextCompressor.compress(messages, { keepRecentCount: 4 });
+
+    expect(result.summaryAdded).toBe(true);
+    // Compaction collapses hundreds of turns into a tiny fixed footprint.
+    expect(result.compactedCount).toBeLessThan(20);
+    expect(result.compactedCount).toBeLessThan(originalCount);
+    expect(result.tokensSaved).toBeGreaterThan(0);
+    // The summary is bounded (cannot itself blow past a small context window)
+    // even though the input was ~600k tokens.
+    expect(result.messages[1].content).toContain('[COMPACTED CONTEXT SUMMARY]');
+    expect(result.messages[1].content.length).toBeLessThan(200_000);
+    // Recent turns are preserved verbatim.
+    expect(result.messages[result.messages.length - 1].content).toBe('Implemented.');
+  });
+
+  it('does not break when the middle has thousands of turns (multi-part summary)', async () => {
+    const messages: ContextMessage[] = [{ role: 'system', content: 'sys' }];
+    for (let i = 0; i < 3000; i++) {
+      messages.push({ role: i % 2 === 0 ? 'user' : 'assistant', content: `msg ${i} ${'y'.repeat(500)}` });
+    }
+    const result = await ContextCompressor.compress(messages, { keepRecentCount: 4 });
+    expect(result.summaryAdded).toBe(true);
+    // Even with thousands of turns, the compacted list stays small and the
+    // summary is capped (maxParts) so it never grows without bound.
+    expect(result.compactedCount).toBeLessThan(20);
+    expect(result.messages[1].content.length).toBeLessThan(200_000);
+  });
+});
+

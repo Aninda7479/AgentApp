@@ -60,6 +60,88 @@ import { resolveProviderFamily, resolveBaseUrl } from '@superagent/core';
 
 const execAsync = promisify(exec);
 
+// ─── grep helper (in-process, no external binary) ─────────────────────────────
+// Searches files recursively using Node's fs + RegExp instead of shelling out to
+// the system `grep`. This (a) closes a command-injection vector that existed
+// when the pattern was interpolated into a shell string, and (b) keeps the tool
+// working on platforms without a `grep` binary (e.g. stock Windows) — the engine
+// is meant to run anywhere the user runs it, not just on *nix.
+function globToRegExp(glob: string): RegExp {
+  const escaped = glob
+    .replace(/[.+^${}()|\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
+  return new RegExp(`^${escaped}$`);
+}
+
+function walkFiles(root: string, visit: (file: string) => void): void {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      walkFiles(full, visit);
+    } else if (entry.isFile()) {
+      visit(full);
+    }
+  }
+}
+
+function grepSearch(dir: string, pattern: string, fileGlob?: string): string {
+  let regex: RegExp;
+  try {
+    regex = new RegExp(pattern);
+  } catch {
+    return `Error: invalid search pattern: ${pattern}`;
+  }
+
+  const globRe = fileGlob ? globToRegExp(fileGlob) : null;
+  const matches: string[] = [];
+
+  try {
+    walkFiles(dir, (file) => {
+      if (matches.length >= 50) return;
+      if (globRe && !globRe.test(path.basename(file))) return;
+      let content: string;
+      try {
+        content = fs.readFileSync(file, 'utf-8');
+      } catch {
+        return; // skip unreadable / binary files
+      }
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        if (regex.test(lines[i])) {
+          matches.push(`${file}:${i + 1}:${lines[i]}`);
+          if (matches.length >= 50) return;
+        }
+      }
+    });
+  } catch (err: unknown) {
+    return `Error searching files: ${(err as Error).message}`;
+  }
+
+  return matches.join('\n') || '(no matches found)';
+}
+
+// ─── path scoping ──────────────────────────────────────────────────────────────
+// Resolves a tool-supplied path against the project root and refuses anything
+// that escapes it (e.g. "../../etc/passwd"). The built-in file tools must never
+// read/write/list outside the user's project — mission point 1: the agent
+// cannot freely browse the whole filesystem. Returns the resolved absolute path,
+// or null if it escapes the root.
+function resolveWithinRoot(projectRoot: string, target: string): string | null {
+  const root = path.resolve(projectRoot);
+  const resolved = path.resolve(projectRoot, target);
+  const normRoot = root.toLowerCase();
+  const normResolved = resolved.toLowerCase();
+  const inside = normResolved === normRoot || normResolved.startsWith(normRoot + path.sep);
+  return inside ? resolved : null;
+}
+
 function makeSafeExec(projectRoot: string) {
   return async (command: string): Promise<string> => {
     try {
@@ -76,8 +158,28 @@ function makeSafeExec(projectRoot: string) {
   };
 }
 
+/**
+ * Returns true when `command` is permitted by the project's command allowlist.
+ * An empty/undefined allowlist permits everything — confinement is opt-in, so
+ * the user must explicitly pre-approve commands in project settings for the
+ * restriction to take effect. Matching is prefix-based on the first token(s):
+ * allowing "git" permits `git` and `git status`, but not `github-clone …`.
+ * Mirrors the same guard in the desktop and core engines so run_command
+ * enforces the same policy everywhere (mission point #1).
+ */
+export function isCommandAllowed(command: string, allowedCommands?: string[]): boolean {
+  if (!allowedCommands || allowedCommands.length === 0) return true;
+  const cmd = command.trim();
+  if (cmd.length === 0) return false;
+  const firstToken = cmd.split(/\s+/)[0];
+  return allowedCommands.some((allowed) => {
+    const a = allowed.trim();
+    return a !== '' && (cmd === a || firstToken === a || cmd.startsWith(a + ' '));
+  });
+}
+
 /** Creates the built-in file ops, search, and shell tools scoped to a project root. */
-export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDefinition[] {
+export function createBuiltinTools(projectRoot: string = process.cwd(), allowedCommands?: string[]): ToolDefinition[] {
   const safeExec = makeSafeExec(projectRoot);
 
   return [
@@ -93,10 +195,9 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ path: filePath }) => {
+        const resolved = resolveWithinRoot(projectRoot, filePath as string);
+        if (!resolved) return `Error: path is outside the project root: ${filePath}`;
         try {
-          const resolved = path.isAbsolute(filePath as string)
-            ? filePath as string
-            : path.join(projectRoot, filePath as string);
           const content = fs.readFileSync(resolved, 'utf-8');
           const lines = content.split('\n');
           if (lines.length > 500) {
@@ -121,10 +222,9 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ path: dirPath }) => {
+        const resolved = resolveWithinRoot(projectRoot, dirPath as string);
+        if (!resolved) return `Error: path is outside the project root: ${dirPath}`;
         try {
-          const resolved = path.isAbsolute(dirPath as string)
-            ? dirPath as string
-            : path.join(projectRoot, dirPath as string);
           const entries = fs.readdirSync(resolved, { withFileTypes: true });
           const lines = entries.slice(0, 200).map(e => {
             if (e.isDirectory()) return `[DIR]  ${e.name}/`;
@@ -156,12 +256,16 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ pattern, directory, fileGlob }) => {
-        const dir = directory ? path.join(projectRoot, directory as string) : projectRoot;
-        const globStr = fileGlob ? `--include="${fileGlob}"` : '';
-        const cmd = `grep -rn --color=never ${globStr} "${(pattern as string).replace(/"/g, '\\"')}" "${dir}"`;
-        const result = await safeExec(cmd);
-        const lines = result.split('\n').slice(0, 50);
-        return lines.join('\n') || '(no matches found)';
+        if (!pattern) return '(no matches found)';
+        let dir: string;
+        if (directory) {
+          const resolved = resolveWithinRoot(projectRoot, directory as string);
+          if (!resolved) return `Error: path is outside the project root: ${directory}`;
+          dir = resolved;
+        } else {
+          dir = projectRoot;
+        }
+        return grepSearch(dir, pattern as string, fileGlob as string | undefined);
       }
     },
 
@@ -177,6 +281,9 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ command }) => {
+        if (!isCommandAllowed(command as string, allowedCommands)) {
+          return `Error: command is not in the project's allowed commands: ${command}. Add it to the project's allowed commands in settings to permit it.`;
+        }
         return safeExec(command as string);
       }
     },
@@ -194,10 +301,9 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ path: filePath, content }) => {
+        const resolved = resolveWithinRoot(projectRoot, filePath as string);
+        if (!resolved) return `Error: path is outside the project root: ${filePath}`;
         try {
-          const resolved = path.isAbsolute(filePath as string)
-            ? filePath as string
-            : path.join(projectRoot, filePath as string);
           fs.mkdirSync(path.dirname(resolved), { recursive: true });
           fs.writeFileSync(resolved, content as string, 'utf-8');
           const lines = (content as string).split('\n').length;
@@ -247,6 +353,10 @@ export interface AgentEngineConfig {
   attachments?: string[];
   maxTokens?: number;
   temperature?: number;
+  /** Pre-approved shell commands for this project. When non-empty, run_command
+   *  only executes commands whose first token(s) match an entry (prefix-based).
+   *  Opt-in: an empty/undefined list permits all commands. */
+  allowedCommands?: string[];
 }
 
 // ─── Agent Engine ─────────────────────────────────────────────────────────────
@@ -269,7 +379,7 @@ export class AgentEngine {
     const effectiveRoot = config.projectRoot
       || (config.attachments?.[0] ? path.dirname(config.attachments[0]) : process.cwd());
 
-    this.tools = createBuiltinTools(effectiveRoot);
+    this.tools = createBuiltinTools(effectiveRoot, config.allowedCommands);
     this.history = [];
 
     // ── Build system prompt ────────────────────────────────────────────────

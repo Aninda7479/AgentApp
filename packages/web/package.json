@@ -3,13 +3,24 @@
   "version": "0.1.0",
   "description": "SuperAgent web server + responsive SPA (Electron-compatible shared renderer)",
   "main": "dist/server.js",
+  "bin": {
+    "superagent-web": "dist/server.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "scripts": {
     "build:client": "node scripts/build.js",
     "build:server": "tsc",
     "build": "npm run build:client && npm run build:server",
     "start": "node dist/server.js",
-    "dev": "npm run build:client && concurrently -n \"tsc,server\" -c \"green,magenta\" \"tsc -w\" \"nodemon --watch dist/server.js dist/server.js\""
+    "dev": "npm run build:client && concurrently -n \"tsc,server\" -c \"green,magenta\" \"tsc -w\" \"nodemon --watch dist/server.js dist/server.js\"",
+    "prepublishOnly": "npm run build",
+    "test": "vitest run"
   },
   "dependencies": {
     "@superagent/core": "^0.1.0",
@@ -23,6 +34,7 @@
     "concurrently": "^10.0.3",
     "esbuild": "^0.28.1",
     "nodemon": "^3.1.14",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.9"
   }
 }

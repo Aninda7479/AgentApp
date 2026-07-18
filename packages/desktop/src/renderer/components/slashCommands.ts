@@ -34,6 +34,13 @@ export interface BuiltinCommandDef {
   description: string;
   action: string;
   usage?: string;
+  /**
+   * Text inserted into the composer when the suggestion is accepted. Defaults to
+   * `/<name> ` (the bare command). Capability commands override this with a
+   * sample-prompt seed so picking them pre-fills an editable prompt the user can
+   * finish and send — a discoverable, intentional entry point to media gen.
+   */
+  insertText?: string;
 }
 
 /**
@@ -63,6 +70,17 @@ export const BUILTIN_COMMANDS: BuiltinCommandDef[] = [
   { name: 'loop', description: 'Start, stop, or list recurring agent prompts/maintenance tasks', action: 'loop', usage: '/loop [interval] [prompt] | /loop list | /loop stop <id> | /loop clear' },
   { name: 'loop-x', description: 'Run a prompt iteratively for a fixed number of runs and compact context between runs', action: 'loop-x', usage: '/loop-x [number of runs] [prompt]' },
   { name: 'help', description: 'Show this list of available slash commands', action: 'help' },
+  // ── Capability entry points ────────────────────────────────────────────────
+  // These are *prompt seeds*, not agent-dispatched actions: picking one
+  // pre-fills the composer with an editable sample prompt (via `insertText`)
+  // so a user can intentionally invoke a media/capability without guessing a
+  // natural-language phrasing. They complement the agent's NL routing of these
+  // capabilities and make them discoverable from the `/` palette.
+  { name: 'image', description: 'Generate an image from a text prompt', action: 'image', insertText: 'Generate an image of ' },
+  { name: 'video', description: 'Generate a short video from a text prompt', action: 'video', insertText: 'Generate a video of ' },
+  { name: 'audio', description: 'Generate or transcribe audio from a prompt', action: 'audio', insertText: 'Generate audio of ' },
+  { name: '3d', description: 'Generate a 3D model from a text or image prompt', action: '3d', insertText: 'Generate a 3D model of ' },
+  { name: 'pdf', description: 'Create, read, or edit a PDF document', action: 'pdf', insertText: 'Create a PDF about ' },
 ];
 
 /** Converts the static built-in catalog into selectable suggestions. */
@@ -72,7 +90,7 @@ export function builtinSuggestions(): SlashSuggestion[] {
     label: `/${c.name}`,
     description: c.description,
     category: 'builtin' as const,
-    insertText: `/${c.name} `,
+    insertText: c.insertText ?? `/${c.name} `,
     action: c.action,
     usage: c.usage,
   }));

@@ -58,7 +58,7 @@ export const PetsSettings: React.FC = () => {
   return (
     <div data-testid="pets-settings" className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       <div>
-        <h2 className="font-outfit text-lg font-semibold text-brand-textMain">Companion (Desktop Pet)</h2>
+        <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain">Companion (Desktop Pet)</h1>
         <p className="mt-1 text-sm text-brand-textMuted">
           A 3D character that greets you, then rests in the top-right corner and
           reacts to your agent. It never starts on its own — launch it below.
@@ -70,7 +70,7 @@ export const PetsSettings: React.FC = () => {
       <div className="ui-card p-5">
         <div className="mb-3 flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-[var(--brand-accent)]" />
-          <h3 className="text-sm font-semibold text-brand-textMain">How she behaves</h3>
+          <h2 className="text-sm font-semibold text-brand-textMain">How she behaves</h2>
         </div>
         <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
           {BEHAVIORS.map((b) => (

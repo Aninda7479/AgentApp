@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import { getUserDataDirectory, getConfigDirectory, STORAGE_DIRS } from './locations.js';
 
 /** Theme preference settings for desktop and CLI surfaces. */
 export interface ThemeSettings {
@@ -78,6 +78,9 @@ export interface ModelGovSettings {
   autoUpdateInstructions?: boolean;
   optimizationGoal?: 'quality' | 'cost' | 'balanced';
   routingStrategy?: 'orchestrator' | 'router';
+  /** Default reasoning effort applied to Orchestrator-routed turns. 'off' means
+   *  leave the per-turn/cascade logic untouched (caller preference still wins). */
+  reasoningEffort?: 'off' | 'low' | 'medium' | 'high';
   categoryOverrides?: Record<string, string>;
 }
 
@@ -124,6 +127,19 @@ export interface ThreeDSettings {
 /** Map of built-in plugin id → whether the user has enabled it. */
 export type PluginsSettings = Record<string, boolean>;
 
+/**
+ * Configuration for the self-hosted **Web App** (the web server that the
+ * Desktop app can start from Settings → Web App, and which the CLI can start
+ * with `superagent --start-web`). The server itself lives in `@superagent/web`;
+ * these fields only persist the user's preferred port / auto-start toggle.
+ */
+export interface WebAppSettings {
+  /** TCP port the hosted web server binds to (default 3000). */
+  port?: number;
+  /** When true, the Desktop app launches the web server on startup. */
+  autoStart?: boolean;
+}
+
 /** Top-level application settings object persisted to disk. */
 export interface AppSettings {
   theme?: ThemeSettings;
@@ -137,6 +153,7 @@ export interface AppSettings {
   internetAccess?: InternetAccessSettings;
   plugins?: PluginsSettings;
   threeD?: ThreeDSettings;
+  webApp?: WebAppSettings;
 }
 
 /** Resolved file system paths for user data and config files. */
@@ -147,28 +164,9 @@ export interface SettingsPaths {
   backupFilePath: string;
 }
 
-/** Returns the OS-specific user data directory for the application. */
-export function getUserDataDirectory(): string {
-  if (process.env.VITEST) {
-    const workerId = process.env.VITEST_WORKER_ID || '1';
-    return path.join(process.cwd(), 'tmp', `test_tmp_settings_dir_${workerId}`);
-  }
-
-  const home = os.homedir();
-  if (process.platform === 'win32') {
-    return path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'OpenSource', 'AgentApp');
-  }
-
-  if (process.platform === 'darwin') {
-    return path.join(home, 'Library', 'Application Support', 'OpenSource', 'AgentApp');
-  }
-
-  return path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), 'OpenSource', 'AgentApp');
-}
-
 /** Resolves all relevant file paths from a base directory. */
 export function getSettingsPaths(baseDirectory = getUserDataDirectory()): SettingsPaths {
-  const configDirectory = path.join(baseDirectory, 'Config');
+  const configDirectory = path.join(baseDirectory, STORAGE_DIRS.config);
   const settingsFilePath = path.join(configDirectory, 'settings.json');
   return {
     userDataDirectory: baseDirectory,
@@ -176,15 +174,6 @@ export function getSettingsPaths(baseDirectory = getUserDataDirectory()): Settin
     settingsFilePath,
     backupFilePath: `${settingsFilePath}.bak`
   };
-}
-
-/** Ensures the config directory exists and returns its path. */
-export function getConfigDirectory(): string {
-  const { configDirectory } = getSettingsPaths();
-  if (!fs.existsSync(configDirectory)) {
-    fs.mkdirSync(configDirectory, { recursive: true });
-  }
-  return configDirectory;
 }
 
 /** Returns the path to the main settings JSON file. */

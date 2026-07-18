@@ -15,10 +15,18 @@ export type PluginCapability =
   | 'pdf'
   | 'spreadsheets'
   | 'presentations'
-  | 'visualize';
+  | 'visualize'
+  /** Marketplace/under-development plugins that do not yet map to a runtime module. */
+  | 'marketplace';
 
 /** Coarse grouping used for UI layout. */
 export type PluginCategory = 'automation' | 'document' | 'media';
+
+/** Lifecycle/readiness status surfaced in the Settings UI. */
+export type PluginStatus = 'active' | 'under-development' | 'incomplete';
+
+/** Whether the plugin ships with the app or comes from the marketplace catalog. */
+export type PluginSource = 'builtin' | 'marketplace';
 
 /** A single built-in plugin definition. */
 export interface PluginCatalogEntry {
@@ -38,6 +46,10 @@ export interface PluginCatalogEntry {
   defaultEnabled: boolean;
   /** Free-form tags. */
   tags: string[];
+  /** Readiness status. Built-ins default to `active`; marketplace items are `under-development`. */
+  status?: PluginStatus;
+  /** Origin of the plugin. Defaults to `builtin`. */
+  source?: PluginSource;
 }
 
 /** The seven built-in plugins. */
@@ -111,6 +123,225 @@ export const PLUGIN_CATALOG: PluginCatalogEntry[] = [
     category: 'media',
     defaultEnabled: false,
     tags: ['media', 'data']
+  }
+];
+
+/**
+ * Marketplace plugins surfaced in Settings → Plugins as inactive and flagged
+ * "Under Development". These do NOT map to a runtime capability module yet, so
+ * every entry shares `capability: 'marketplace'` and `defaultEnabled: false`.
+ * They are merged into the desktop/web `plugins-catalog` response at the IPC
+ * layer — kept separate from `PLUGIN_CATALOG` so the built-in catalog (and its
+ * unique-capability invariant) stays intact.
+ */
+export const MARKETPLACE_PLUGINS: PluginCatalogEntry[] = [
+  {
+    id: 'pdf-viewer',
+    capability: 'marketplace',
+    name: 'PDF Viewer',
+    description:
+      'View, annotate, and sign PDFs in a live interactive viewer. Mark up contracts, fill forms with visual feedback, stamp approvals, and place signatures — then download the annotated copy.',
+    icon: '📄',
+    category: 'document',
+    defaultEnabled: false,
+    tags: ['pdf', 'documents', 'signing'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'small-business',
+    capability: 'marketplace',
+    name: 'Small Business',
+    description:
+      'Pre-built small business workflows (including payroll planning, month-end close, weekly briefs, and growth campaigns) using your QuickBooks, PayPal, HubSpot, Docusign, Gsuite, O365, Canva, and other connected tools. You approve every step that touches money or customers.',
+    icon: '🏪',
+    category: 'automation',
+    defaultEnabled: false,
+    tags: ['business', 'workflows', 'finance'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'operations',
+    capability: 'marketplace',
+    name: 'Operations',
+    description:
+      'Optimize business operations — vendor management, process documentation, change management, capacity planning, and compliance tracking. Keep your organization running efficiently.',
+    icon: '⚙️',
+    category: 'automation',
+    defaultEnabled: false,
+    tags: ['operations', 'process', 'compliance'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'design',
+    capability: 'marketplace',
+    name: 'Design',
+    description:
+      'Accelerate design workflows — critique, design system management, UX writing, accessibility audits, research synthesis, and dev handoff. From exploration to pixel-perfect specs.',
+    icon: '🎨',
+    category: 'media',
+    defaultEnabled: false,
+    tags: ['design', 'ux', 'accessibility'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'human-resources',
+    capability: 'marketplace',
+    name: 'Human Resources',
+    description:
+      'Streamline people operations — recruiting, onboarding, performance reviews, compensation analysis, and policy guidance. Maintain compliance and keep your team running smoothly.',
+    icon: '👥',
+    category: 'automation',
+    defaultEnabled: false,
+    tags: ['hr', 'people', 'recruiting'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'engineering',
+    capability: 'marketplace',
+    name: 'Engineering',
+    description:
+      'Streamline engineering workflows — standups, code review, architecture decisions, incident response, and technical documentation. Works with your existing tools or standalone.',
+    icon: '🛠️',
+    category: 'automation',
+    defaultEnabled: false,
+    tags: ['engineering', 'code-review', 'devops'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'bio-research',
+    capability: 'marketplace',
+    name: 'Bio Research',
+    description:
+      'Connect to preclinical research tools and databases (literature search, genomics analysis, target prioritization) to accelerate early-stage life sciences R&D',
+    icon: '🧬',
+    category: 'automation',
+    defaultEnabled: false,
+    tags: ['research', 'genomics', 'science'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'marketing',
+    capability: 'marketplace',
+    name: 'Marketing',
+    description:
+      'Create content, plan campaigns, and analyze performance across marketing channels. Maintain brand voice consistency, track competitors, and report on what\'s working.',
+    icon: '📣',
+    category: 'media',
+    defaultEnabled: false,
+    tags: ['marketing', 'content', 'campaigns'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'product-management',
+    capability: 'marketplace',
+    name: 'Product Management',
+    description:
+      'Write feature specs, plan roadmaps, and synthesize user research faster. Keep stakeholders updated and stay ahead of the competitive landscape.',
+    icon: '🗺️',
+    category: 'document',
+    defaultEnabled: false,
+    tags: ['product', 'roadmap', 'specs'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'data',
+    capability: 'marketplace',
+    name: 'Data',
+    description:
+      'Write SQL, explore datasets, and generate insights faster. Build visualizations and dashboards, and turn raw data into clear stories for stakeholders.',
+    icon: '📊',
+    category: 'media',
+    defaultEnabled: false,
+    tags: ['data', 'sql', 'analytics'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'finance',
+    capability: 'marketplace',
+    name: 'Finance',
+    description:
+      'Streamline finance and accounting workflows, from journal entries and reconciliation to financial statements and variance analysis. Speed up audit prep, month-end close, and keeping your books clean.',
+    icon: '💰',
+    category: 'document',
+    defaultEnabled: false,
+    tags: ['finance', 'accounting', 'audit'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'sales',
+    capability: 'marketplace',
+    name: 'Sales',
+    description:
+      'Prospect, craft outreach, and build deal strategy faster. Prep for calls, manage your pipeline, and write personalized messaging that moves deals forward.',
+    icon: '🤝',
+    category: 'automation',
+    defaultEnabled: false,
+    tags: ['sales', 'crm', 'outreach'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'productivity',
+    capability: 'marketplace',
+    name: 'Productivity',
+    description:
+      'Manage tasks, plan your day, and build up memory of important context about your work. Syncs with your calendar, email, and chat to keep everything organized and on track.',
+    icon: '✅',
+    category: 'automation',
+    defaultEnabled: false,
+    tags: ['productivity', 'tasks', 'calendar'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'legal',
+    capability: 'marketplace',
+    name: 'Legal',
+    description:
+      'Speed up contract review, NDA triage, and compliance workflows for in-house legal teams. Draft legal briefs, organize precedent research, and manage institutional knowledge.',
+    icon: '⚖️',
+    category: 'document',
+    defaultEnabled: false,
+    tags: ['legal', 'contracts', 'compliance'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'enterprise-search',
+    capability: 'marketplace',
+    name: 'Enterprise Search',
+    description:
+      'Search across all of your company\'s tools in one place. Find anything across email, chat, documents, and wikis without switching between apps.',
+    icon: '🔎',
+    category: 'automation',
+    defaultEnabled: false,
+    tags: ['search', 'enterprise', 'knowledge'],
+    status: 'under-development',
+    source: 'marketplace'
+  },
+  {
+    id: 'customer-support',
+    capability: 'marketplace',
+    name: 'Customer Support',
+    description:
+      'Triage tickets, draft responses, escalate issues, and build your knowledge base. Research customer context and turn resolved issues into self-service content.',
+    icon: '🎧',
+    category: 'automation',
+    defaultEnabled: false,
+    tags: ['support', 'tickets', 'knowledge-base'],
+    status: 'under-development',
+    source: 'marketplace'
   }
 ];
 

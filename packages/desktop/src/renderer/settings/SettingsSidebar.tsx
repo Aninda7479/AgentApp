@@ -3,19 +3,23 @@ import {
   Archive,
   ArrowLeft,
   Box,
+  Boxes,
   Search,
   Bot,
   FolderArchive,
+  Info,
   LucideIcon,
   PawPrint,
   Plug,
   Settings,
   SlidersHorizontal,
+  Sparkles,
   SquareTerminal,
   MonitorSmartphone,
   MousePointer2,
-  Scale,
-  RefreshCw
+  Network,
+  RefreshCw,
+  Globe
 } from 'lucide-react';
 
 /** A single navigation entry in the settings sidebar. */
@@ -44,11 +48,13 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
   "AI Config": [
     { id: 'providers', label: 'Providers', Icon: SlidersHorizontal },
     { id: 'models', label: 'Models', Icon: Bot },
-    { id: 'model-gov', label: 'Model Gov', Icon: Scale },
+    { id: 'model-gov', label: 'Orchestrator', Icon: Network },
     { id: 'usage', label: 'AI Usage', Icon: SquareTerminal }
   ],
   Integrations: [
-    { id: 'mcp', label: 'MCP', Icon: Plug },
+    { id: 'skills', label: 'Skills', Icon: Sparkles },
+    { id: 'connectors', label: 'Connectors', Icon: Plug },
+    { id: 'plugins', label: 'Plugins', Icon: Boxes },
     { id: 'browser-use', label: 'Browser Use', Icon: MonitorSmartphone },
     { id: 'computer-use', label: 'Computer Use', Icon: MousePointer2 }
   ],
@@ -56,8 +62,12 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
     { id: 'archived-chats', label: 'Archived Chats', Icon: Archive },
     { id: 'archived-projects', label: 'Archived Projects', Icon: FolderArchive }
   ],
+  Hosting: [
+    { id: 'web-app', label: 'Web App', Icon: Globe }
+  ],
   About: [
-    { id: 'updates', label: 'Updates', Icon: RefreshCw }
+    { id: 'updates', label: 'Updates', Icon: RefreshCw },
+    { id: 'about', label: 'About', Icon: Info }
   ]
 };
 

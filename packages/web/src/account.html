@@ -3,19 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#08090d" />
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23a16207'/><path d='M11 22L16 10l5 12' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/><circle cx='16' cy='22.5' r='1.8' fill='white'/><circle cx='21' cy='10' r='1.8' fill='white'/></svg>" />
+  <meta name="theme-color" content="#0a0f1f" />
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+  <link rel="alternate icon" type="image/png" href="/icon.png" />
+  <link rel="manifest" href="/manifest.json" />
   <title>Account · SuperAgent</title>
   <style>
     :root {
-      --bg: #08090d;
-      --panel: rgba(255, 255, 255, 0.04);
-      --border: rgba(255, 255, 255, 0.1);
-      --text: #e5e7eb;
-      --muted: #9ca3af;
-      --accent: #a16207;          /* Sophisticated dark yellow */
-      --accent-hover: #854d0e;
-      --accent-text: #fef9c3;
+      --bg: #0a0f1f;
+      --panel: rgba(12, 17, 28, 0.55);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #eef1f6;
+      --muted: #9aa6b8;
+      /* Warm "dawn" accent — calm sand, echoes the moon glow */
+      --accent: #d9a066;
+      --accent-hover: #e7b27d;
+      --accent-text: #1a1410;
       --danger: #f87171;
       --ok: #34d399;
     }
@@ -27,60 +30,146 @@
     }
     body {
       display: flex; align-items: center; justify-content: center; padding: 24px;
-      background: var(--bg);
+      background: var(--bg); overflow: hidden;
+    }
+
+    /* ── Layered atmosphere (dusk) — fixed, behind the card ───────────────── */
+    .atmosphere {
+      position: fixed; inset: 0; z-index: 0; overflow: hidden;
+      background:
+        radial-gradient(120% 80% at 78% 12%, rgba(217, 160, 102, 0.10), transparent 55%),
+        linear-gradient(180deg, #0a0f1f 0%, #102233 38%, #16323a 68%, #14302a 100%);
+    }
+    .moon {
+      position: absolute; top: 12%; right: 16%;
+      width: 132px; height: 132px; border-radius: 50%;
+      background: radial-gradient(circle at 38% 36%, #fdf6e3 0%, #f3e7c9 46%, #e7d3a6 72%, #d9bf8e 100%);
+      box-shadow: 0 0 70px 28px rgba(243, 231, 201, 0.18), inset -10px -12px 26px rgba(120, 96, 60, 0.25);
+      animation: moonBreath 11s ease-in-out infinite;
+    }
+    .stars { position: absolute; inset: 0; opacity: 0.7; }
+    .stars i {
+      position: absolute; width: 2px; height: 2px; border-radius: 50%;
+      background: #eef1f6; box-shadow: 0 0 6px rgba(238, 241, 246, 0.8);
+      animation: twinkle 6s ease-in-out infinite;
+    }
+    .stars i:nth-child(1) { top: 14%; left: 18%; animation-delay: 0s; }
+    .stars i:nth-child(2) { top: 22%; left: 42%; animation-delay: 1.4s; }
+    .stars i:nth-child(3) { top: 9%;  left: 62%; animation-delay: 2.6s; }
+    .stars i:nth-child(4) { top: 30%; left: 78%; animation-delay: 0.8s; }
+    .stars i:nth-child(5) { top: 18%; left: 88%; animation-delay: 3.4s; }
+    .stars i:nth-child(6) { top: 36%; left: 30%; animation-delay: 2.0s; }
+
+    .hills { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 46%; display: block; }
+    .hill-back  { fill: #1f4a47; opacity: 0.45; animation: driftA 120s ease-in-out infinite alternate; transform-origin: bottom; }
+    .hill-mid   { fill: #1a3d38; opacity: 0.65; animation: driftB 150s ease-in-out infinite alternate; transform-origin: bottom; }
+    .hill-front { fill: #143028; opacity: 0.96; animation: driftA 180s ease-in-out infinite alternate; transform-origin: bottom; }
+
+    @keyframes moonBreath { 0%,100% { transform: scale(1); opacity: 0.92; } 50% { transform: scale(1.04); opacity: 1; } }
+    @keyframes twinkle { 0%,100% { opacity: 0.25; } 50% { opacity: 0.8; } }
+    @keyframes driftA { from { transform: translateX(0); } to { transform: translateX(-34px); } }
+    @keyframes driftB { from { transform: translateX(0); } to { transform: translateX(26px); } }
+    @media (prefers-reduced-motion: reduce) {
+      .moon, .stars i, .hill-back, .hill-mid, .hill-front { animation: none; }
     }
     .card {
-      width: 100%; max-width: 420px;
-      background: var(--panel); border: 1px solid var(--border); border-radius: 18px;
-      padding: 32px 30px; backdrop-filter: blur(14px);
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      position: relative; z-index: 1;
+      width: 100%; max-width: 400px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 20px;
+      padding: 38px 32px; backdrop-filter: blur(18px) saturate(120%);
+      -webkit-backdrop-filter: blur(18px) saturate(120%);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+      animation: rise 0.5s ease both;
     }
-    .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
-    h1 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.02em; }
-    .who { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+    .logo {
+      width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+      background: transparent; margin-bottom: 20px;
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+    }
+    .sub { color: var(--muted); font-size: 13.5px; margin: 0 0 6px; line-height: 1.5; }
+    .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+    .head .logo { margin-bottom: 0; }
+    h1 { font-size: 23px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.02em; }
     label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
     .field { margin-bottom: 16px; }
     input {
-      width: 100%; padding: 11px 13px; background: rgba(0, 0, 0, 0.25);
-      border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 14px;
+      width: 100%; padding: 12px 14px; background: rgba(0, 0, 0, 0.28);
+      border: 1px solid var(--border); border-radius: 11px; color: var(--text); font-size: 14px;
       outline: none; transition: border-color 0.15s, box-shadow 0.15s;
     }
-    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(161, 98, 7, 0.18); }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(217, 160, 102, 0.20); }
     button {
-      width: 100%; padding: 12px; margin-top: 6px; border: 1px solid rgba(0, 0, 0, 0.15); border-radius: 10px;
-      font-size: 14px; font-weight: 600; cursor: pointer; transition: transform 0.1s, background-color 0.15s;
-      background: var(--accent); color: var(--accent-text);
+      width: 100%; padding: 12px; margin-top: 8px;
+      background: linear-gradient(145deg, var(--accent) 0%, #c98e54 100%); color: var(--accent-text);
+      border: 1px solid rgba(0, 0, 0, 0.15); border-radius: 11px; font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: transform 0.1s, filter 0.15s;
     }
-    button:hover { background: var(--accent-hover); }
-    button:active { transform: scale(0.98); }
+    button:hover { filter: brightness(1.05); }
+    button:active { transform: scale(0.985); }
     button:disabled { opacity: 0.6; cursor: not-allowed; }
     .linkbtn {
       background: none; color: var(--muted); font-size: 12px; width: auto; padding: 6px 10px;
       border: 1px solid var(--border); border-radius: 8px; margin: 0;
     }
     .linkbtn:hover { color: var(--text); filter: none; }
-    .msg { display: none; margin-bottom: 16px; padding: 10px 12px; border-radius: 10px; font-size: 13px; }
-    .msg.show { display: block; }
+    .msg { display: none; margin-bottom: 16px; padding: 10px 12px; border-radius: 11px; font-size: 13px; }
+    .msg.show { display: block; animation: rise 0.2s ease both; }
     .msg.error { background: rgba(248, 113, 113, 0.12); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--danger); }
     .msg.ok { background: rgba(52, 211, 153, 0.12); border: 1px solid rgba(52, 211, 153, 0.3); color: var(--ok); }
     .row { display: flex; gap: 10px; margin-top: 8px; }
-    .row button { margin-top: 0; }
+    .row button { margin-top: 0; flex: 1; }
     hr { border: none; border-top: 1px solid var(--border); margin: 4px 0 20px; }
   </style>
 </head>
 <body>
+  <div class="atmosphere" aria-hidden="true">
+    <div class="moon"></div>
+    <div class="stars"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <svg class="hills" viewBox="0 0 1440 320" preserveAspectRatio="none" aria-hidden="true">
+      <path class="hill-back"  d="M0,196 C240,150 480,224 720,188 C960,152 1200,216 1440,176 L1440,320 L0,320 Z" />
+      <path class="hill-mid"   d="M0,238 C200,202 400,266 720,230 C1000,198 1240,256 1440,228 L1440,320 L0,320 Z" />
+      <path class="hill-front" d="M0,280 C260,252 520,300 760,276 C1020,250 1240,294 1440,272 L1440,320 L0,320 Z" />
+    </svg>
+  </div>
+
   <form class="card" id="account-form">
-    <div class="top">
-      <div>
-        <h1>Account settings</h1>
-        <div class="who" id="who">Signed in</div>
+    <header class="head">
+      <div class="logo" role="img" aria-label="SuperAgent">
+        <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="as-sky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#9ec7bd" />
+              <stop offset="48%" stop-color="#dce6cf" />
+              <stop offset="100%" stop-color="#f3cda4" />
+            </linearGradient>
+            <radialGradient id="as-glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#fff4dd" stop-opacity="0.85" />
+              <stop offset="100%" stop-color="#fff4dd" stop-opacity="0" />
+            </radialGradient>
+            <clipPath id="as-clip"><rect x="2" y="2" width="28" height="28" rx="8" /></clipPath>
+          </defs>
+          <rect x="2" y="2" width="28" height="28" rx="8" fill="url(#as-sky)" />
+          <g clip-path="url(#as-clip)">
+            <circle cx="16" cy="12.5" r="8.5" fill="url(#as-glow)" />
+            <circle cx="16" cy="12.5" r="4.4" fill="#fff2d8" />
+            <path d="M19.4 9.2 q1 -1 2 0 q1 -1 2 0" stroke="#fff" stroke-opacity="0.7" stroke-width="0.9" stroke-linecap="round" fill="none" />
+            <path d="M23.6 11 q0.8 -0.8 1.6 0 q0.8 -0.8 1.6 0" stroke="#fff" stroke-opacity="0.55" stroke-width="0.8" stroke-linecap="round" fill="none" />
+            <path d="M2 21 C8 17 13 20 18 18 C23 16 27 19 30 18 L30 30 L2 30 Z" fill="#93b6ab" />
+            <path d="M2 24 C7 21 12 24 17 22 C22 20 27 23 30 22 L30 30 L2 30 Z" fill="#5f8a7e" />
+            <path d="M2 27 C6 25 11 27 16 26 C21 25 26 27 30 26 L30 30 L2 30 Z" fill="#2f5147" />
+          </g>
+          <rect x="2" y="2" width="28" height="28" rx="8" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1" />
+        </svg>
       </div>
       <button type="button" class="linkbtn" id="back">← Back to app</button>
-    </div>
+    </header>
+    <h1>Account settings</h1>
+    <p class="sub">You're signed in. Keep your sign-in details current.</p>
     <hr />
 
-    <div class="msg error" id="error"></div>
-    <div class="msg ok" id="success"></div>
+    <div class="msg error" id="error" role="alert" aria-live="assertive"></div>
+    <div class="msg ok" id="success" aria-live="polite"></div>
 
     <div class="field">
       <label for="currentPassword">Current password</label>
@@ -97,7 +186,7 @@
 
     <button type="submit" id="submit">Update password</button>
     <div class="row">
-      <button type="button" class="linkbtn" id="logout" style="flex:1;">Log out</button>
+      <button type="button" class="linkbtn" id="logout">Log out</button>
     </div>
   </form>
 
@@ -122,7 +211,7 @@
         .then(function (s) {
           if (!s || (s.authRequired && !s.authenticated)) { window.location.replace('/login'); return; }
           if (!s.authRequired) {
-            show(errorBox, 'Authentication is disabled on this server.');
+            show(errorBox, "This server doesn't require a password.");
             submitBtn.disabled = true;
           }
         })
@@ -142,7 +231,7 @@
         e.preventDefault();
         var newPassword = document.getElementById('newPassword').value;
         var confirm = document.getElementById('confirm').value;
-        if (newPassword !== confirm) { show(errorBox, 'New passwords do not match.'); return; }
+        if (newPassword !== confirm) { show(errorBox, "Those new passwords don't match."); return; }
 
         submitBtn.disabled = true;
         submitBtn.textContent = 'Updating…';
@@ -156,21 +245,39 @@
             newPassword: newPassword
           })
         })
-          .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, data: d }; }); })
+          .then(function (res) {
+            // Read the body as text first so a non-JSON error response (e.g. the
+            // server's default 500 HTML page) can't throw while parsing JSON and
+            // get misreported as a network failure in the catch below.
+            return res.text().then(function (text) {
+              var data = null;
+              try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+              return { ok: res.ok, status: res.status, data: data };
+            });
+          })
           .then(function (result) {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Update password';
-             if (result.ok) {
-               show(okBox, 'Password updated successfully.');
-               form.reset();
-             } else {
-              show(errorBox, (result.data && result.data.error) || 'Update failed.');
+            if (result.ok) {
+              show(okBox, 'Your password has been updated.');
+              form.reset();
+              return;
+            }
+            // The server answered, so this is NOT a network error. Distinguish a
+            // server-side fault (5xx) from a normal auth/validation failure.
+            var serverMsg = result.data && result.data.error;
+            if (result.status >= 500) {
+              show(errorBox, 'The server hit an error. Please try again in a moment.');
+            } else {
+              show(errorBox, serverMsg || "We couldn't update your password. Please try again.");
             }
           })
           .catch(function () {
+            // fetch only rejects on a genuine network/connection failure (server
+            // restart, offline) — never on an HTTP error status.
             submitBtn.disabled = false;
             submitBtn.textContent = 'Update password';
-            show(errorBox, 'Network error. Please try again.');
+            show(errorBox, "We couldn't reach the server. Please try again.");
           });
       });
     })();

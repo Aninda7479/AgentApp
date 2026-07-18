@@ -8,7 +8,9 @@ import {
   TrajectoryCompactor,
   LearningLoopEngine,
   SkillStore,
-  AgentMessage
+  AgentMessage,
+  chunkedCompactMessages,
+  summarizeOlder
 } from '../src/index.js';
 
 describe('Memory Engine Suite (Steps 021 - 026)', () => {
@@ -123,6 +125,62 @@ describe('Memory Engine Suite (Steps 021 - 026)', () => {
       expect(result.compactedMessages.length).toBeLessThan(messages.length);
       expect(result.summaryCreated).toContain('[COMPACTED CONTEXT SUMMARY]');
       expect(result.compactedMessages[0].content).toBe('System instructions');
+    });
+  });
+
+  describe('Step 024b: Chunked compaction primitive', () => {
+    it('summarizes older turns in bounded chunks and preserves system + recent', () => {
+      const messages = [
+        { role: 'system' as const, content: 'System instructions' }
+      ];
+      // A substantial older section so the chunked summary is genuinely smaller
+      // than the raw turns (for a tiny chat the verbose summary can outweigh the
+      // original — which is why the live TrajectoryCompactor gates on a threshold).
+      for (let i = 1; i <= 18; i++) {
+        messages.push({
+          role: i % 2 === 1 ? ('user' as const) : ('assistant' as const),
+          content: `Turn ${i}: a detailed multi-sentence message describing the work done on the project, including rationale, edge cases, and follow-up items that accumulated over a long autonomous session.`
+        });
+      }
+      messages.push({ role: 'user' as const, content: 'Turn 19 recent question' });
+      messages.push({ role: 'assistant' as const, content: 'Turn 19 recent answer' });
+
+      const res = chunkedCompactMessages(messages, { keepRecentCount: 2 });
+      expect(res.wasCompacted).toBe(true);
+      // system + 1 summary + 2 recent
+      expect(res.messages.length).toBe(4);
+      expect(res.messages[0].content).toBe('System instructions');
+      expect(res.messages[1].content).toContain('[COMPACTED CONTEXT SUMMARY]');
+      expect(res.messages[res.messages.length - 1].content).toBe('Turn 19 recent answer');
+    });
+
+    it('never produces an unbounded summary no matter how bloated the input', () => {
+      const messages = [{ role: 'system' as const, content: 'sys' }];
+      for (let i = 0; i < 5000; i++) {
+        messages.push({
+          role: i % 2 === 0 ? ('user' as const) : ('assistant' as const),
+          content: `Turn ${i} ${'z'.repeat(800)}`
+        });
+      }
+      const res = chunkedCompactMessages(messages, { keepRecentCount: 4 });
+      expect(res.wasCompacted).toBe(true);
+      expect(res.messages.length).toBeLessThan(20);
+      expect(res.messages[1].content.length).toBeLessThan(200_000);
+      // Multi-part summary is labelled when the middle spans many chunks.
+      expect(res.messages[1].content).toContain('Part 1/');
+      // For a genuinely bloated context the compacted tokens are far below raw.
+      expect(res.tokensAfter).toBeLessThan(res.tokensBefore);
+    });
+
+    it('does not compact when there is nothing meaningful to summarize', () => {
+      const messages = [
+        { role: 'system' as const, content: 'sys' },
+        { role: 'user' as const, content: 'hi' },
+        { role: 'assistant' as const, content: 'hello' }
+      ];
+      const res = chunkedCompactMessages(messages, { keepRecentCount: 4 });
+      expect(res.wasCompacted).toBe(false);
+      expect(res.messages.length).toBe(messages.length);
     });
   });
 

@@ -191,7 +191,7 @@ const PromptCopyButton: React.FC<{ content: string }> = ({ content }) => {
     <button
       onClick={handleCopy}
       title="Copy prompt"
-      className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-all cursor-pointer text-[10px]"
+      className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-[var(--brand-hover)] transition-all cursor-pointer text-[10px]"
     >
       {copied ? <Check size={11} className="text-[color:var(--neon-constructive)]" /> : <Copy size={11} />}
       <span>{copied ? 'Copied' : 'Copy'}</span>
@@ -221,7 +221,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({ content, onThumbsUp, on
       <button
         onClick={handleCopy}
         title="Copy"
-        className="p-1.5 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-all cursor-pointer"
+        className="p-1.5 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-[var(--brand-hover)] transition-all cursor-pointer"
       >
         {copied ? <Check size={13} className="text-[color:var(--neon-constructive)]" /> : <Copy size={13} />}
       </button>
@@ -370,6 +370,10 @@ export interface TrajectoryCanvasProps {
   onViewDiff?: (file: string, original: string, modified: string) => void;
   onActionClick?: (action: string, data: any) => void;
   onUndoStep?: (stepId: string) => void;
+  /** Last error recorded on the active chat, surfaced in the failed-response card. */
+  lastError?: string;
+  /** Re-sends the last user prompt (when the response failed). */
+  onRetryLast?: () => void;
   children?: React.ReactNode;
   initialExpanded?: boolean;
 }
@@ -381,6 +385,8 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
   onViewDiff,
   onActionClick,
   onUndoStep,
+  lastError,
+  onRetryLast,
   children,
   initialExpanded = false
 }) => {
@@ -457,6 +463,8 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
             isStreaming={isStreaming && turns.length === 0}
             onViewDiff={onViewDiff}
             onActionClick={onActionClick}
+            lastError={lastError}
+            onRetryLast={onRetryLast}
             initialExpanded={initialExpanded}
           />
         )}
@@ -465,10 +473,10 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
         {turns.map((turn, turnIdx) => (
           <div key={turn.userSteps[0]?.id || `turn-${turnIdx}`} className="flex flex-col gap-0">
             {/* ── User Prompt Bubble ─────────────────────────────────── */}
-            <div className="flex justify-center mb-6 mt-2">
+            <div className="flex justify-center mb-5 mt-2">
               <div
                 data-testid={`step-user-${turn.userSteps[0]?.id || turnIdx}`}
-                className="relative group bg-brand-card border border-brand-border/80 rounded-2xl px-5 py-3 max-w-[88%] text-brand-textMain text-[14px] leading-[1.7] tracking-[0.01em] shadow-sm hover:border-brand-border-strong transition-all"
+                className="relative group bg-brand-card/30 backdrop-blur-sm border border-brand-border/40 rounded-xl px-4 py-2.5 max-w-[80%] text-brand-textMain text-[13px] leading-relaxed shadow-sm hover:border-brand-border/80 transition-all font-sans"
               >
                 {turn.userSteps.map((step, idx) => (
                   <div key={step.id} className={idx > 0 ? 'mt-2.5' : ''}>
@@ -489,7 +497,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                         </div>
                         <button
                           onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
-                          className="bg-white/5 border border-brand-border hover:bg-white/10 text-brand-textMain px-3 py-1 rounded-lg cursor-pointer text-xs font-semibold transition-all"
+                          className="bg-[var(--brand-hover)] border border-brand-border hover:bg-[var(--brand-hover-strong)] text-brand-textMain px-3 py-1 rounded-lg cursor-pointer text-xs font-semibold transition-all"
                         >
                           Open
                         </button>
@@ -527,6 +535,8 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 isStreaming={isStreaming && turnIdx === turns.length - 1}
                 onViewDiff={onViewDiff}
                 onActionClick={onActionClick}
+                lastError={lastError}
+                onRetryLast={onRetryLast}
                 initialExpanded={initialExpanded}
               />
             )}
@@ -561,6 +571,10 @@ interface AgentResponseBlockProps {
   isStreaming: boolean;
   onViewDiff?: (file: string, original: string, modified: string) => void;
   onActionClick?: (action: string, data: any) => void;
+  /** Last error recorded on the active chat, surfaced in the failed-response card. */
+  lastError?: string;
+  /** Re-sends the last user prompt (when the response failed). */
+  onRetryLast?: () => void;
   initialExpanded?: boolean;
 }
 
@@ -571,6 +585,8 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
   isStreaming,
   onViewDiff,
   onActionClick,
+  lastError,
+  onRetryLast,
   initialExpanded = false
 }) => {
   // Categorize the steps:
@@ -634,12 +650,9 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
               return (
                 <div
                   key={step.id}
-                  className="flex flex-col gap-1 items-start max-w-[90%] animate-fade-in mb-1"
+                  className="flex flex-col gap-0.5 items-start max-w-[90%] animate-fade-in mb-1"
                 >
-                  <div className="text-[10px] text-brand-textMuted font-semibold pl-1 select-none font-sans uppercase tracking-wider">
-                    Thought
-                  </div>
-                  <div className="bg-brand-card/65 border border-brand-border/50 rounded-2xl rounded-tl-sm px-4 py-2.5 text-xs text-brand-textMain leading-relaxed shadow-sm font-sans [&_p]:text-[12px] [&_p]:leading-relaxed [&_p]:text-brand-textMain [&_code]:text-[11px] [&_code]:bg-brand-popover [&_code]:border [&_code]:border-brand-border/60 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_p]:!text-[12px] [&_p]:!leading-relaxed [&_p]:!text-brand-textMain [&_code]:!text-[11px] [&_code]:!bg-brand-popover [&_code]:!border [&_code]:!border-brand-border/60 [&_code]:!px-1.5 [&_code]:!py-0.5 [&_code]:!rounded [&_code]:!font-mono">
+                  <div className="bg-brand-card/20 border border-brand-border/30 rounded-lg px-3.5 py-2 text-[12px] text-brand-textMuted leading-relaxed font-sans border-l-2 border-l-brand-highlight/40">
                     <MarkdownText content={step.content} />
                   </div>
                 </div>
@@ -653,27 +666,28 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
               <div
                 key={step.id}
                 data-testid={`step-tool-${step.id}`}
-                className="flex flex-col gap-1 items-start max-w-[95%] w-full animate-fade-in mb-1 font-sans"
+                className="flex flex-col gap-1 items-start max-w-full w-full animate-fade-in mb-1 font-sans"
               >
-                <div className="text-[10px] text-brand-textMuted font-semibold pl-1 select-none uppercase tracking-wider">
-                  Tool Call
-                </div>
-                <div className="bg-brand-popover/45 border border-brand-border/40 rounded-xl px-3.5 py-2.5 flex flex-col gap-1.5 font-mono text-[11px] text-brand-textMuted leading-normal w-full shadow-sm">
-                  <div className="flex items-center gap-2">
+                <div className="bg-brand-card/20 border border-brand-border/30 rounded-lg px-3 py-1.5 flex items-center justify-between gap-3 font-mono text-[10.5px] text-brand-textMuted/80 w-full hover:bg-brand-card/30 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
                     <span
                       className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                         isSuccess ? 'bg-[color:var(--neon-constructive)]' :
                         isError ? 'bg-[color:var(--neon-destructive)]' : 'bg-[color:var(--neon-live)]'
                       }`}
                     />
-                    <span className="text-brand-textMain font-semibold font-mono">{step.toolName || 'tool'}</span>
-                    <span className="text-[10px] text-brand-textMuted/60 uppercase tracking-wider select-none font-sans">
-                      {step.status || 'running'}
+                    <span className="text-brand-textMain/90 font-medium font-mono shrink-0">{step.toolName || 'tool'}</span>
+                    <span className="text-brand-textMuted/40 select-none">|</span>
+                    <span className="text-brand-textMuted/70 truncate font-mono select-all flex-1">
+                      {TrajectoryService.summarizeToolContent(step)}
                     </span>
                   </div>
-                  <div className="text-brand-textMuted/80 text-[10.5px] truncate font-mono select-all w-full font-mono">
-                    {TrajectoryService.summarizeToolContent(step)}
-                  </div>
+                  <span className={`text-[9px] font-semibold uppercase tracking-wider shrink-0 ${
+                    isSuccess ? 'text-[color:var(--neon-constructive)]/80' :
+                    isError ? 'text-[color:var(--neon-destructive)]/80' : 'text-[color:var(--neon-live)]/80'
+                  }`}>
+                    {step.status || 'running'}
+                  </span>
                 </div>
               </div>
             );
@@ -742,9 +756,25 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
 
       {/* If completed but no assistant reply was rendered, show the response failed card */}
       {assistantSteps.length === 0 && !isStreaming && (
-        <div className="text-[color:var(--neon-destructive)] bg-[color:var(--neon-destructive)]/10 border border-[color:var(--neon-destructive)]/25 px-4 py-2.5 rounded-xl text-xs font-semibold select-none max-w-fit flex items-center gap-2 mt-1 animate-fade-in font-sans">
-          <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-destructive)] animate-pulse" />
-          <span>Agent Response Failed</span>
+        <div className="text-[color:var(--neon-destructive)] bg-[color:var(--neon-destructive)]/10 border border-[color:var(--neon-destructive)]/25 px-4 py-3 rounded-xl text-xs select-none max-w-fit flex flex-col gap-2 mt-1 animate-fade-in font-sans">
+          <div className="flex items-center gap-2 font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-destructive)] animate-pulse" />
+            <span>Agent Response Failed</span>
+          </div>
+          {lastError ? (
+            <div className="text-[color:var(--neon-destructive)]/90 leading-relaxed">{lastError}</div>
+          ) : (
+            <div className="text-brand-textMuted">The agent didn't return a response. Check the provider connection and try again.</div>
+          )}
+          {onRetryLast && (
+            <button
+              onClick={onRetryLast}
+              className="self-start flex items-center gap-1.5 mt-1 px-3 py-1.5 rounded-lg border border-[color:var(--neon-destructive)]/40 text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/15 transition-colors cursor-pointer text-xs font-semibold"
+            >
+              <RotateCcw size={12} />
+              <span>Retry</span>
+            </button>
+          )}
         </div>
       )}
 

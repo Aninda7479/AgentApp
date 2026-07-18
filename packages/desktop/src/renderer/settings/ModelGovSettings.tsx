@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { ModelConfig } from './types';
-import { Scale, Save, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award, Sparkles, Coins, Cpu, Layers, Zap, Bot } from 'lucide-react';
+import { Scale, Save, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award, Sparkles, Coins, Cpu, Layers, Zap, Bot, Brain, Activity, Search, Circle } from 'lucide-react';
 import { Button, Select } from '../components/ui';
 
-/** Props for the Model Governance settings panel. */
+/** Props for the Orchestrator settings panel. */
 interface ModelGovSettingsProps {
   modelsCatalog: ModelConfig[];
   onSaveSettings: (patch: {
@@ -12,6 +12,7 @@ interface ModelGovSettingsProps {
       autoUpdateInstructions: boolean;
       optimizationGoal: 'quality' | 'cost' | 'balanced';
       routingStrategy: 'orchestrator' | 'router';
+      reasoningEffort: 'off' | 'low' | 'medium' | 'high';
       categoryOverrides: Record<string, string>;
     }
   }) => void;
@@ -26,6 +27,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
   const [autoUpdate, setAutoUpdate] = useState(false);
   const [optimizationGoal, setOptimizationGoal] = useState<'quality' | 'cost' | 'balanced'>('balanced');
   const [routingStrategy, setRoutingStrategy] = useState<'orchestrator' | 'router'>('router');
+  const [reasoningEffort, setReasoningEffort] = useState<'off' | 'low' | 'medium' | 'high'>('off');
   const [categoryOverrides, setCategoryOverrides] = useState<Record<string, string>>({
     coding: '',
     reasoning: '',
@@ -37,6 +39,24 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
   const [saving, setSaving] = useState(false);
   const [updatingPrice, setUpdatingPrice] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Live provider-health diagnostics (the resilience signal).
+  const [health, setHealth] = useState<Record<string, { status: string; cooldownRemainingMs: number; consecutiveFailures: number }>>({});
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const refreshHealth = async () => {
+    if (!ipc) return;
+    setHealthLoading(true);
+    try {
+      const diag = await ipc.invoke('provider-health-diagnostics') as Record<string, { status: string; cooldownRemainingMs: number; consecutiveFailures: number }>;
+      setHealth(diag || {});
+    } catch {
+      /* non-fatal — leave last known state */
+    } finally {
+      setHealthLoading(false);
+    }
+  };
 
   const ipc = typeof window !== 'undefined' && (window as any).require
     ? (window as any).require('electron').ipcRenderer
@@ -58,6 +78,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       setAutoUpdate(!!gov.autoUpdateInstructions);
       setOptimizationGoal(gov.optimizationGoal || 'balanced');
       setRoutingStrategy(gov.routingStrategy || 'router');
+      setReasoningEffort(gov.reasoningEffort || 'off');
       setCategoryOverrides({
         coding: gov.categoryOverrides?.coding || '',
         reasoning: gov.categoryOverrides?.reasoning || '',
@@ -65,8 +86,9 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
         conversations: gov.categoryOverrides?.conversations || ''
       });
       setInstructions(inst || '');
+      refreshHealth();
     } catch (e) {
-      console.error('Failed to load Model Gov configurations:', e);
+      console.error('Failed to load Orchestrator configurations:', e);
     } finally {
       setLoading(false);
     }
@@ -84,13 +106,14 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
           autoUpdateInstructions: autoUpdate,
           optimizationGoal,
           routingStrategy,
+          reasoningEffort,
           categoryOverrides
         }
       });
 
       // Write instructions markdown file
       await ipc.invoke('model-gov-write-instructions', instructions);
-      setMessage({ text: 'Model Governance settings and system instructions saved successfully!', type: 'success' });
+      setMessage({ text: 'Orchestrator settings and system instructions saved successfully!', type: 'success' });
       
       // Re-load instructions in case they were dynamically recompiled in background
       const inst = await ipc.invoke('model-gov-read-instructions') as string;
@@ -125,7 +148,7 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
     try {
       const newInst = await ipc.invoke('model-gov-optimize-instructions-by-ai') as string;
       setInstructions(newInst);
-      setMessage({ text: 'Model Governance system instructions optimized by AI successfully!', type: 'success' });
+      setMessage({ text: 'Orchestrator system instructions optimized by AI successfully!', type: 'success' });
     } catch (e: any) {
       setMessage({ text: `AI Optimization failed: ${e.message}`, type: 'error' });
     } finally {
@@ -134,10 +157,13 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
   };
 
   const toggleModelSelection = (modelId: string) => {
-    setEnabledModels(prev => 
+    setEnabledModels(prev =>
       prev.includes(modelId) ? prev.filter(id => id !== modelId) : [...prev, modelId]
     );
   };
+
+  const selectAllModels = () => setEnabledModels(modelsCatalog.map(m => m.id));
+  const clearAllModels = () => setEnabledModels([]);
 
   const handleOverrideChange = (category: string, value: string) => {
     setCategoryOverrides(prev => ({
@@ -150,13 +176,20 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
     loadSettingsAndInstructions();
   }, [modelsCatalog]);
 
+  // Keep the provider-health view live (ticking cooldown countdown).
+  useEffect(() => {
+    if (!ipc) return;
+    const id = setInterval(refreshHealth, 2000);
+    return () => clearInterval(id);
+  }, [ipc]);
+
   const activeSwarmModels = modelsCatalog.filter(m => enabledModels.includes(m.id));
 
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-brand-textMuted text-xs">
         <RefreshCw className="w-5 h-5 animate-spin text-[var(--brand-accent)] mb-2" />
-        <span>Loading Model Governance system config...</span>
+        <span>Loading Orchestrator system config...</span>
       </div>
     );
   }
@@ -166,9 +199,9 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-brand-border/60 pb-4">
         <div>
-          <h2 className="text-base font-bold text-brand-textMain">Model Governance (Fugu Orchestration)</h2>
+          <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain">Orchestrator</h1>
           <p className="text-xs text-brand-textMuted mt-1">
-            Dynamic routing mechanism inspired by Sakana AI's Fugu conducting agent. Auto-switches between enabled models depending on the complexity, cost, and context of each query.
+            Model orchestration layer that auto-routes each query across your enabled models based on complexity, cost, and capability — so no single provider can become a point of failure.
           </p>
         </div>
         <div className="flex gap-2">
@@ -212,12 +245,12 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
       )}
 
       {/* swarm tuning controls */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
-          <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+          <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
             <Sliders size={14} className="text-[var(--brand-accent)]" />
             <span>Optimization Goal</span>
-          </h3>
+          </h2>
           <div className="space-y-1">
             <label className="text-[10px] text-brand-textMuted uppercase font-bold tracking-wider">Select routing objective</label>
             <Select
@@ -233,12 +266,12 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
         </div>
 
         <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
-          <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+          <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
             <Award size={14} className="text-[var(--brand-accent)]" />
             <span>Routing Strategy</span>
-          </h3>
+          </h2>
           <div className="space-y-1">
-            <label className="text-[10px] text-brand-textMuted uppercase font-bold tracking-wider">Decentralization level</label>
+            <label className="text-[10px] text-brand-textMuted uppercase font-bold tracking-wider">Dispatch mode</label>
             <Select
               options={[
                 { value: 'router', label: 'Single Model Router (Fastest execution)', icon: <Cpu className="w-3.5 h-3.5" /> },
@@ -249,15 +282,38 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
             />
           </div>
         </div>
+
+        <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
+          <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+            <Brain size={14} className="text-[var(--brand-accent)]" />
+            <span>Default Reasoning Effort</span>
+          </h2>
+          <div className="space-y-1">
+            <label className="text-[10px] text-brand-textMuted uppercase font-bold tracking-wider">Thinking depth for routed turns</label>
+            <Select
+              options={[
+                { value: 'off', label: 'Auto (let the orchestrator decide per task)', icon: <Zap className="w-3.5 h-3.5" /> },
+                { value: 'low', label: 'Low (fastest, cheapest)', icon: <Zap className="w-3.5 h-3.5" /> },
+                { value: 'medium', label: 'Medium (balanced thinking)', icon: <Brain className="w-3.5 h-3.5" /> },
+                { value: 'high', label: 'High (deepest reasoning)', icon: <Brain className="w-3.5 h-3.5" /> }
+              ]}
+              value={reasoningEffort}
+              onChange={(val) => setReasoningEffort(val as any)}
+            />
+            <p className="text-[10px] text-brand-textMuted mt-1.5">
+              Overrides per-turn cascade only when no explicit effort is set — hard tasks still escalate.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* category overrides */}
       <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-4">
         <div>
-          <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+          <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
             <Settings size={14} className="text-[var(--brand-accent)]" />
             <span>Category Overrides</span>
-          </h3>
+          </h2>
           <p className="text-[11px] text-brand-textMuted mt-1">
             Set static model assignments for specific task domains, overriding dynamic routing options.
           </p>
@@ -304,21 +360,51 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
 
       {/* Model Selector list */}
       <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-3">
-        <div>
-          <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
-            <CheckSquare size={14} className="text-[var(--brand-accent)]" />
-            <span>Governance Swarm Pool</span>
-          </h3>
-          <p className="text-[11px] text-brand-textMuted mt-1">
-            Choose which enabled models are available for Fugu to route prompts to. Output quality and pricing rates will determine selection.
-          </p>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+              <CheckSquare size={14} className="text-[var(--brand-accent)]" />
+              <span>Orchestrator Model Pool</span>
+              <span className="ui-badge muted">{enabledModels.length}/{modelsCatalog.length}</span>
+            </h2>
+            <p className="text-[11px] text-brand-textMuted mt-1">
+              Choose which enabled models the Orchestrator can route prompts across. Output quality and pricing rates determine selection.
+            </p>
+          </div>
+          <div className="flex gap-1.5">
+            <div className="relative">
+              <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-brand-textMuted pointer-events-none" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Filter models…"
+                className="w-40 pl-7 pr-2 py-1.5 rounded-md border border-brand-border bg-brand-bg text-xs text-brand-textMain outline-none focus:border-[var(--brand-accent-border)]"
+              />
+            </div>
+            {modelsCatalog.length > 0 && (
+              <>
+                <Button onClick={selectAllModels} variant="ghost" size="sm">Select all</Button>
+                <Button onClick={clearAllModels} variant="ghost" size="sm">Clear</Button>
+              </>
+            )}
+          </div>
         </div>
 
         {modelsCatalog.length > 0 ? (
           <div className="grid grid-cols-2 gap-2 mt-2">
-            {modelsCatalog.map((m) => {
-              const isSelected = enabledModels.includes(m.id);
-              return (
+            {modelsCatalog
+              .filter((m) => {
+                const q = searchQuery.trim().toLowerCase();
+                if (!q) return true;
+                return m.name.toLowerCase().includes(q) || m.providerId.toLowerCase().includes(q);
+              })
+              .map((m) => {
+                const isSelected = enabledModels.includes(m.id);
+                const modalities = (m.inputModalities || []).filter((mod) => mod !== 'text');
+                const inPrice = m.pricing?.inputPer1M;
+                const outPrice = m.pricing?.outputPer1M;
+                const hasPrice = !m.free && (inPrice || outPrice);
+                return (
                 <button
                   key={m.id}
                   onClick={() => toggleModelSelection(m.id)}
@@ -328,14 +414,30 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
                       : 'bg-brand-bg/40 border-brand-border/40 hover:bg-brand-hover text-brand-textMuted'
                   }`}
                 >
-                  <div>
-                    <div className="text-xs font-semibold">{m.name}</div>
-                    <div className="text-[10px] opacity-70 mt-0.5 capitalize">{m.providerId}</div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold truncate">{m.name}</div>
+                    <div className="text-[10px] opacity-70 mt-0.5 capitalize truncate">{m.providerId}{m.contextLimit ? ` · ${m.contextLimit}` : ''}</div>
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {m.free && (
+                        <span className="ui-badge" style={{ color: 'var(--neon-constructive)', borderColor: 'var(--neon-constructive)' }}>Free</span>
+                      )}
+                      {hasPrice && (
+                        <span className="ui-badge muted" title="Input / Output per 1M tokens">
+                          ${inPrice || '?'}/${outPrice || '?'}
+                        </span>
+                      )}
+                      {modalities.map((mod) => (
+                        <span key={mod} className="ui-badge muted capitalize">{mod}</span>
+                      ))}
+                      {m.contextLimit && (
+                        <span className="ui-badge muted" title="Context window">{m.contextLimit}</span>
+                      )}
+                    </div>
                   </div>
                   {isSelected ? (
-                    <CheckSquare size={16} className="text-[var(--brand-accent)] flex-shrink-0" />
+                    <CheckSquare size={16} className="text-[var(--brand-accent)] flex-shrink-0 ml-2" />
                   ) : (
-                    <Square size={16} className="text-brand-border flex-shrink-0" />
+                    <Square size={16} className="text-brand-border flex-shrink-0 ml-2" />
                   )}
                 </button>
               );
@@ -348,13 +450,74 @@ export const ModelGovSettings: React.FC<ModelGovSettingsProps> = ({
         )}
       </div>
 
+      {/* Provider Health — resilience visibility */}
+      <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+              <Activity size={14} className="text-[var(--brand-accent)]" />
+              <span>Provider Health</span>
+            </h2>
+            <p className="text-[11px] text-brand-textMuted mt-1">
+              Live status of every provider the Orchestrator has contacted. Throttled providers are avoided and rerouted automatically — here's the why.
+            </p>
+          </div>
+          <Button onClick={refreshHealth} variant="ghost" size="sm" disabled={healthLoading}>
+            <RefreshCw className={`w-3.5 h-3.5 ${healthLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </Button>
+        </div>
+
+        {Object.keys(health).length === 0 ? (
+          <div className="text-center text-xs text-brand-textMuted py-4">
+            No provider activity recorded yet. The Orchestrator logs health after it routes or retries a request.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {Object.entries(health).map(([provider, diag]) => {
+              const status = diag.status as 'available' | 'locked' | 'rate_limited' | 'deprecated';
+              const dotColor =
+                status === 'available' ? 'var(--neon-constructive)' :
+                status === 'rate_limited' ? 'var(--neon-attention)' :
+                'var(--neon-destructive)';
+              const statusLabel =
+                status === 'available' ? 'Available' :
+                status === 'rate_limited' ? `Throttled${diag.cooldownRemainingMs > 0 ? ` · ${Math.ceil(diag.cooldownRemainingMs / 1000)}s` : ''}` :
+                status === 'locked' ? 'Locked (auth)' : 'Deprecated';
+              const statusNote =
+                status === 'rate_limited' ? 'Avoided until cooldown clears, then retried.' :
+                status === 'locked' ? 'Check the API key in AI Config.' :
+                status === 'deprecated' ? 'Model/endpoint is gone — reconfigure.' :
+                'Healthy — eligible for routing.';
+              return (
+                <div key={provider} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-brand-border/40 bg-brand-bg/40">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Circle size={9} className="flex-shrink-0" style={{ fill: dotColor, color: dotColor }} />
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold capitalize truncate">{provider}</div>
+                      <div className="text-[10px] text-brand-textMuted">{statusNote}</div>
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-[11px] font-semibold" style={{ color: dotColor }}>{statusLabel}</div>
+                    {diag.consecutiveFailures > 0 && (
+                      <div className="text-[10px] text-brand-textMuted">{diag.consecutiveFailures} fail{diag.consecutiveFailures === 1 ? '' : 's'}</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Instructions Editor */}
       <div className="glass-card rounded-xl border border-brand-border/60 p-4 space-y-3">
         <div>
-          <h3 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
+          <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
             <FileText size={14} className="text-[var(--brand-accent)]" />
-            <span>Fugu System Instructions (model-gov-instructions.md) [Dynamic]</span>
-          </h3>
+            <span>Orchestrator System Instructions (model-gov-instructions.md) [Dynamic]</span>
+          </h2>
           <p className="text-[11px] text-brand-textMuted mt-1">
             Markdown system guidelines used to direct task assignments. Automatically re-compiles when you save settings changes.
           </p>

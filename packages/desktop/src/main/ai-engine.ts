@@ -20,7 +20,8 @@ export type AgentEventType =
   | 'thought'        // agent reasoning step
   | 'done'           // generation complete
   | 'error'          // error occurred
-  | 'abort';         // user stopped
+  | 'abort'          // user stopped
+  | 'context';       // live context-window usage estimate (used by the UI gauge)
 
 export interface AgentEvent {
   type: AgentEventType;
@@ -34,6 +35,14 @@ export interface AgentEvent {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+  };
+  /** Live context-window usage estimate, emitted as the conversation grows so
+   *  the workspace can render a "how full is the context window" gauge. `pct`
+   *  is 0..100 against the orchestrator-selected model's context window. */
+  context?: {
+    used: number;
+    limit: number;
+    pct: number;
   };
 }
 
@@ -52,8 +61,6 @@ export interface ToolDefinition {
 
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import {
   resolveProviderFamily,
   resolveBaseUrl,
@@ -61,30 +68,150 @@ import {
   getInternetAccessLevel,
   describeInternetAccessLevel,
   InternetAccessLevel,
-  createThreeDTool
+  createThreeDTool,
+  SandboxRunner,
+  PermissionMode,
+  ConfirmationHandler,
+  ReasoningEffort,
+  chunkedCompactMessages,
+  extractTextContent
 } from '@superagent/core';
 
-const execAsync = promisify(exec);
-
-function makeSafeExec(projectRoot: string) {
-  return async (command: string): Promise<string> => {
-    try {
-      const { stdout, stderr } = await execAsync(command, {
-        cwd: projectRoot,
-        timeout: 30000,
-        maxBuffer: 1024 * 1024 * 4 // 4MB
-      });
-      return stdout || stderr || '(no output)';
-    } catch (err: unknown) {
-      const e = err as { message?: string; stdout?: string; stderr?: string };
-      return `Error: ${e.message || String(err)}\n${e.stderr || ''}`.trim();
-    }
-  };
+// ─── path scoping ──────────────────────────────────────────────────────────────
+// Resolves a tool-supplied path against the project root and refuses anything
+// that escapes it (e.g. "../../etc/passwd"). The built-in file tools must never
+// read/write/list outside the user's project — mission point 1: the agent
+// cannot freely browse the whole filesystem. Returns the resolved absolute path,
+// or null if it escapes the root. Mirrors the web engine's guard (4b0223f /
+// abbad59) so desktop and web stay consistent.
+function resolveWithinRoot(projectRoot: string, target: string): string | null {
+  const root = path.resolve(projectRoot);
+  const resolved = path.resolve(projectRoot, target);
+  const normRoot = root.toLowerCase();
+  const normResolved = resolved.toLowerCase();
+  const inside = normResolved === normRoot || normResolved.startsWith(normRoot + path.sep);
+  return inside ? resolved : null;
 }
 
-export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDefinition[] {
-  const safeExec = makeSafeExec(projectRoot);
+/**
+ * Resolves `target` against an allowlist of directories and returns the
+ * absolute path if it stays inside one of them, or `null` if it escapes.
+ * Case-insensitive so it behaves on Windows (which folds case on paths).
+ * Mirrors the web `read-file-base64` scope check (e38c276) and the desktop
+ * builtin-tool guard (`resolveWithinRoot`) so every file-read channel enforces
+ * the same project-root boundary — mission point #1: the agent must never
+ * freely browse the filesystem. Used by the desktop `read-file-base64` IPC
+ * handler, which passes `[userDataDir, ...projectFolders]`.
+ */
+export function resolveWithinAnyRoot(target: string, allowedRoots: string[]): string | null {
+  const resolved = path.resolve(target);
+  const normTarget = resolved.toLowerCase();
+  for (const root of allowedRoots) {
+    const normRoot = path.resolve(root).toLowerCase();
+    if (normTarget === normRoot || normTarget.startsWith(normRoot + path.sep)) {
+      return resolved;
+    }
+  }
+  return null;
+}
 
+/**
+ * Returns true when `command` is permitted by the project's command allowlist.
+ * An empty/undefined allowlist permits everything — confinement is opt-in, so
+ * the user must explicitly pre-approve commands in project settings for the
+ * restriction to take effect. Matching is prefix-based on the first token(s):
+ * allowing "git" permits `git` and `git status`, but not `github-clone …`.
+ * Mirrors the same guard in the web and core engines so run_command enforces
+ * the same policy everywhere — mission point #1 (the user controls what the
+ * agent may execute in their project). The allowlist is set via the desktop
+ * ConfigureProjectModal and persisted on the StoredProject.
+ */
+export function isCommandAllowed(command: string, allowedCommands?: string[]): boolean {
+  if (!allowedCommands || allowedCommands.length === 0) return true;
+  const cmd = command.trim();
+  if (cmd.length === 0) return false;
+  const firstToken = cmd.split(/\s+/)[0];
+  return allowedCommands.some((allowed) => {
+    const a = allowed.trim();
+    return a !== '' && (cmd === a || firstToken === a || cmd.startsWith(a + ' '));
+  });
+}
+
+// ─── grep helper (in-process, no external binary) ─────────────────────────────
+// Searches files recursively using Node's fs + RegExp instead of shelling out to
+// the system `grep`. This (a) closes a command-injection vector that existed
+// when the pattern was interpolated into a shell string, and (b) keeps the tool
+// working on platforms without a `grep` binary (e.g. stock Windows) — the engine
+// is meant to run anywhere the user runs it, not just on *nix.
+function globToRegExp(glob: string): RegExp {
+  const escaped = glob
+    .replace(/[.+^${}()|\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
+  return new RegExp(`^${escaped}$`);
+}
+
+function walkFiles(root: string, visit: (file: string) => void): void {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      walkFiles(full, visit);
+    } else if (entry.isFile()) {
+      visit(full);
+    }
+  }
+}
+
+function grepSearch(dir: string, pattern: string, fileGlob?: string): string {
+  let regex: RegExp;
+  try {
+    regex = new RegExp(pattern);
+  } catch {
+    return `Error: invalid search pattern: ${pattern}`;
+  }
+
+  const globRe = fileGlob ? globToRegExp(fileGlob) : null;
+  const matches: string[] = [];
+
+  try {
+    walkFiles(dir, (file) => {
+      if (matches.length >= 50) return;
+      if (globRe && !globRe.test(path.basename(file))) return;
+      let content: string;
+      try {
+        content = fs.readFileSync(file, 'utf-8');
+      } catch {
+        return; // skip unreadable / binary files
+      }
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        if (regex.test(lines[i])) {
+          matches.push(`${file}:${i + 1}:${lines[i]}`);
+          if (matches.length >= 50) return;
+        }
+      }
+    });
+  } catch (err: unknown) {
+    return `Error searching files: ${(err as Error).message}`;
+  }
+
+  return matches.join('\n') || '(no matches found)';
+}
+
+/**
+ * Builds the agent's built-in tool set. All command execution and file
+ * mutation routes through the supplied `SandboxRunner`, which enforces the
+ * safety contract (hard blocks, allowlist, path scoping, approval gating,
+ * secret redaction, atomic writes). `projectRoot` is the default directory for
+ * unscoped searches when no directory is supplied.
+ */
+export function createBuiltinTools(runner: SandboxRunner, projectRoot?: string): ToolDefinition[] {
   return [
     {
       name: 'read_file',
@@ -98,19 +225,14 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ path: filePath }) => {
-        try {
-          const resolved = path.isAbsolute(filePath as string)
-            ? filePath as string
-            : path.join(projectRoot, filePath as string);
-          const content = fs.readFileSync(resolved, 'utf-8');
-          const lines = content.split('\n');
-          if (lines.length > 500) {
-            return lines.slice(0, 500).join('\n') + `\n\n... (truncated, ${lines.length - 500} more lines)`;
-          }
-          return content;
-        } catch (err: unknown) {
-          return `Error reading file: ${(err as Error).message}`;
+        const res = await runner.readFile(filePath as string);
+        if (!res) return `Error: path is outside the project root: ${filePath}`;
+        if (res.isBinary) return '[Binary File]';
+        const lines = res.content.split('\n');
+        if (lines.length > 500) {
+          return lines.slice(0, 500).join('\n') + `\n\n... (truncated, ${lines.length - 500} more lines)`;
         }
+        return res.content;
       }
     },
 
@@ -126,10 +248,9 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ path: dirPath }) => {
+        const resolved = runner.resolvePath(dirPath as string);
+        if (!resolved) return `Error: path is outside the project root: ${dirPath}`;
         try {
-          const resolved = path.isAbsolute(dirPath as string)
-            ? dirPath as string
-            : path.join(projectRoot, dirPath as string);
           const entries = fs.readdirSync(resolved, { withFileTypes: true });
           const lines = entries.slice(0, 200).map(e => {
             if (e.isDirectory()) return `[DIR]  ${e.name}/`;
@@ -161,12 +282,16 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ pattern, directory, fileGlob }) => {
-        const dir = directory ? path.join(projectRoot, directory as string) : projectRoot;
-        const globStr = fileGlob ? `--include="${fileGlob}"` : '';
-        const cmd = `grep -rn --color=never ${globStr} "${(pattern as string).replace(/"/g, '\\"')}" "${dir}"`;
-        const result = await safeExec(cmd);
-        const lines = result.split('\n').slice(0, 50);
-        return lines.join('\n') || '(no matches found)';
+        if (!pattern) return '(no matches found)';
+        let dir: string;
+        if (directory) {
+          const resolved = runner.resolvePath(directory as string);
+          if (!resolved) return `Error: path is outside the project root: ${directory}`;
+          dir = resolved;
+        } else {
+          dir = projectRoot ?? process.cwd();
+        }
+        return grepSearch(dir, pattern as string, fileGlob as string | undefined);
       }
     },
 
@@ -182,7 +307,8 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ command }) => {
-        return safeExec(command as string);
+        const res = await runner.runCommand(command as string);
+        return res.stdout || res.stderr || '(no output)';
       }
     },
 
@@ -199,17 +325,10 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ path: filePath, content }) => {
-        try {
-          const resolved = path.isAbsolute(filePath as string)
-            ? filePath as string
-            : path.join(projectRoot, filePath as string);
-          fs.mkdirSync(path.dirname(resolved), { recursive: true });
-          fs.writeFileSync(resolved, content as string, 'utf-8');
-          const lines = (content as string).split('\n').length;
-          return `Successfully wrote ${lines} lines to ${filePath}`;
-        } catch (err: unknown) {
-          return `Error writing file: ${(err as Error).message}`;
-        }
+        const res = await runner.writeFile(filePath as string, content as string);
+        if (!res.written) return `Error writing file: ${res.error ?? 'write failed'}`;
+        const lines = (content as string).split('\n').length;
+        return `Successfully wrote ${lines} lines to ${filePath}`;
       }
     },
 
@@ -239,7 +358,8 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
             signal: AbortSignal.timeout(15000)
           });
           const text = await response.text();
-          const truncated = text.length > 8000 ? text.slice(0, 8000) + `\n\n... (truncated, ${text.length - 8000} more chars)` : text;
+          const body = String(text);
+          const truncated = body.length > 8000 ? body.slice(0, 8000) + `\n\n... (truncated, ${body.length - 8000} more chars)` : body;
           return `HTTP ${response.status} ${response.statusText}\n\n${truncated}`;
         } catch (err: unknown) {
           return `Error fetching ${url}: ${(err as Error).message}`;
@@ -250,7 +370,7 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
     // 3D character / model generation (Tripo3D / Meshy comparable). Gated by
     // Settings → 3D Model Gen (off by default); returns a structured result
     // object that the renderer parses to show + animate the produced model.
-    createThreeDTool(projectRoot)
+    createThreeDTool(projectRoot ?? '')
   ];
 }
 
@@ -293,16 +413,56 @@ export interface AgentEngineConfig {
   internetAccess?: InternetAccessLevel;
   /** Additional tools (e.g. discovered MCP tools) merged into the agent's toolset. */
   extraTools?: ToolDefinition[];
+  /** Pre-approved shell commands for this project. When non-empty, run_command
+   *  only executes commands whose first token(s) match an entry (prefix-based).
+   *  Opt-in: an empty/undefined list permits all commands. Set via the desktop
+   *  ConfigureProjectModal and persisted on the StoredProject. */
+  allowedCommands?: string[];
+  /** Sandbox permission mode controlling approval gating. Defaults to
+   *  'auto-approve-edits' when omitted. Mapped from the UI's
+   *  unsandboxedActions / confirmShellCommands toggles. */
+  permissionMode?: PermissionMode;
+  /** Full system access: disables project-root path scoping for files.
+   *  Mirrors the UI "Unsandboxed Terminal Actions" toggle. Even when true,
+   *  hard-blocked destructive commands are never executed. */
+  unsandboxed?: boolean;
+  /** User-in-the-loop approval callback (injected by the desktop host so a
+   *  permission prompt can be surfaced in the renderer). When omitted, risky
+   *  commands are denied by default (safe). */
+  requestApproval?: ConfirmationHandler;
+  /** Default reasoning effort for this run; forwarded to the orchestrator's
+   *  router/adapter "thinking" controls. Caller preference wins over the
+   *  saved Orchestrator default. */
+  reasoningEffort?: ReasoningEffort;
+  /** Context-window size (in tokens) of the effective model. Drives the live
+   *  context-usage gauge and the auto-compaction threshold. Resolved from the
+   *  orchestrator-routed model (ModelContext / catalog contextLimit); defaults
+   *  to 128k when unset. */
+  contextWindow?: number;
 }
 
 // ─── Agent Engine ─────────────────────────────────────────────────────────────
+
+/** True when a provider error indicates the context window was exceeded. Used
+ *  to trigger automatic compaction + retry instead of surfacing a hard failure. */
+export function isContextOverflowError(message: string): boolean {
+  if (!message) return false;
+  return /context length|context window|maximum context|max.*context|token limit|too many tokens|request too large|exceeds.{0,24}context|context.{0,12}exceed|prompt is too long|input.{0,12}too long|input length|sequence too long/i.test(
+    message
+  );
+}
 
 export class AgentEngine {
   private config: AgentEngineConfig;
   private tools: ToolDefinition[];
   private history: ChatMessage[];
   private abortController: AbortController | null = null;
+  /** The single safe-execution layer all tool file/command ops route through. */
+  private sandbox: SandboxRunner;
   public readonly sessionId: string;
+  /** Context-window size (tokens) of the effective model, used for the live
+   *  usage gauge + auto-compaction threshold. Defaults to 128k if unset. */
+  private contextWindow: number;
 
   constructor(config: AgentEngineConfig, sessionId?: string) {
     this.config = config;
@@ -314,7 +474,19 @@ export class AgentEngine {
     const effectiveRoot = config.projectRoot
       || (config.attachments?.[0] ? path.dirname(config.attachments[0]) : process.cwd());
 
-    this.tools = [...createBuiltinTools(effectiveRoot), ...(config.extraTools ?? [])];
+    // ── Sandbox: single safe-execution layer ──────────────────────────
+    // Every command run and file mutation the agent performs routes through
+    // this runner, which enforces the safety contract (hard blocks, allowlist,
+    // path scoping, approval gating, secret redaction, atomic writes).
+    this.sandbox = new SandboxRunner({
+      projectRoot: effectiveRoot,
+      allowedCommands: config.allowedCommands,
+      permissionMode: config.permissionMode ?? 'auto-approve-edits',
+      unsandboxed: config.unsandboxed ?? false,
+      requestApproval: config.requestApproval
+    });
+
+    this.tools = [...createBuiltinTools(this.sandbox, effectiveRoot), ...(config.extraTools ?? [])];
     this.history = [];
 
     // ── Build system prompt ────────────────────────────────────────────────
@@ -356,6 +528,53 @@ Key guidelines:
     this.history.push({ role: 'system', content: sysPrompt + internetAccessSection });
 
     this.history.push({ role: 'system', content: sysPrompt });
+
+    this.contextWindow = config.contextWindow ?? 128000;
+  }
+
+  /** Rough token estimate (~4 chars/token) for a block of text. */
+  private estimateTokens(text: string): number {
+    if (!text) return 0;
+    return Math.max(1, Math.ceil(text.length / 4));
+  }
+
+  /**
+   * Live estimate of how full the context window is, computed from the engine's
+   * REAL conversation history (system prompt + all turns + tool definitions) —
+   * not just the visible renderer steps. This is what drives the workspace gauge
+   * and the auto-compaction decision. `limit` is the orchestrator-selected
+   * model's context window (defaults to 128k).
+   */
+  public estimateContextUsage(): { used: number; limit: number; pct: number } {
+    let used = 0;
+    for (const m of this.history) {
+      used += this.estimateTokens(extractTextContent(m.content));
+    }
+    // Tool definitions are re-sent on every model call, so they count too.
+    for (const t of this.tools) {
+      used += this.estimateTokens(t.name) + this.estimateTokens(t.description) + this.estimateTokens(JSON.stringify(t.parameters));
+    }
+    const limit = this.contextWindow;
+    const pct = limit > 0 ? Number(((used / limit) * 100).toFixed(2)) : 0;
+    return { used, limit, pct };
+  }
+
+  /**
+   * Compacts the engine's real conversation history in place using the shared,
+   * chunked compaction primitive. The middle of the conversation is split into
+   * bounded chunks, each summarized independently, so compaction never fails on
+   * an over-bloated context. Returns the before/after token estimate.
+   */
+  public compactHistory(): { tokensBefore: number; tokensAfter: number } {
+    const tokensBefore = this.estimateContextUsage().used;
+    const plain = this.history.map((m) => ({ role: m.role, content: extractTextContent(m.content) }));
+    const res = chunkedCompactMessages(plain, { keepRecentCount: 4 });
+    if (!res.wasCompacted) {
+      return { tokensBefore, tokensAfter: tokensBefore };
+    }
+    this.history = res.messages.map((m) => ({ role: m.role, content: m.content })) as ChatMessage[];
+    const tokensAfter = this.estimateContextUsage().used;
+    return { tokensBefore, tokensAfter };
   }
 
   private buildUserContent(content: string, attachments: string[] = []): string | RichContentPart[] {
@@ -401,6 +620,13 @@ Key guidelines:
     this.abortController?.abort();
   }
 
+  /** Expose the sandbox runner so the host can inject live approval
+   *  decisions (e.g. a "Always allow" choice adds the command to the
+   *  session allowlist). Returns null only if construction failed. */
+  public getSandbox(): SandboxRunner {
+    return this.sandbox;
+  }
+
   /** Get tool definitions in OpenAI JSON Schema format */
   private getToolSchemas() {
     return this.tools.map(t => ({
@@ -425,19 +651,58 @@ Key guidelines:
 
     let iterations = 0;
     const MAX_ITERATIONS = 16; // prevent infinite loops while allowing multi-step tool workflows
+    // Automatic compactions when the context window overflows or is near-full.
+    // Bounded so a single un-compactable turn can't loop forever.
+    let autoCompactions = 0;
+    const MAX_AUTO_COMPACTIONS = 3;
+
+    const emitContext = () => {
+      const u = this.estimateContextUsage();
+      onEvent({ type: 'context', sessionId: this.sessionId, context: { used: u.used, limit: u.limit, pct: u.pct } });
+    };
+    // Surface the initial usage estimate as soon as the run starts.
+    emitContext();
 
     try {
       while (iterations < MAX_ITERATIONS) {
         iterations++;
 
-        // ── Stream from provider ────────────────────────────────────────
-        const { fullContent, toolCalls } = await this.streamFromProvider(
-          onEvent,
-          this.abortController.signal
-        );
+        // ── Proactive guard: if dangerously full, compact before calling the
+        //    model so we never even hit a context-overflow error. ───────────
+        const preUsage = this.estimateContextUsage();
+        if (preUsage.pct > 90 && autoCompactions < MAX_AUTO_COMPACTIONS && this.history.length > 6) {
+          this.compactHistory();
+          autoCompactions++;
+          emitContext();
+        }
+
+        // ── Stream from provider (with reactive auto-compact on overflow) ──
+        let fullContent = '';
+        let toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
+        try {
+          const r = await this.streamFromProvider(onEvent, this.abortController.signal);
+          fullContent = r.fullContent;
+          toolCalls = r.toolCalls;
+        } catch (streamErr: unknown) {
+          const msg = (streamErr as Error).message || String(streamErr);
+          // The model failed because the context is too large: compact the
+          // history and re-attempt the same turn (up to MAX_AUTO_COMPACTIONS).
+          if (
+            isContextOverflowError(msg) &&
+            autoCompactions < MAX_AUTO_COMPACTIONS &&
+            this.history.length > 6
+          ) {
+            this.compactHistory();
+            autoCompactions++;
+            emitContext();
+            continue; // re-enter the loop and retry this turn with less history
+          }
+          throw streamErr; // unrelated error — surface it normally
+        }
 
         // Append assistant message to history
         this.history.push({ role: 'assistant', content: fullContent });
+        emitContext();
 
         // ── No tool calls → done ────────────────────────────────────────
         if (toolCalls.length === 0) {
@@ -491,6 +756,7 @@ Key guidelines:
           });
         }
 
+        emitContext();
         // Loop: continue with tool results fed back to model
       }
 
@@ -1001,3 +1267,95 @@ export class MultiAgentManager {
 }
 
 export const multiAgentManager = new MultiAgentManager();
+
+export async function generateChatName(prompt: string, config: AgentEngineConfig): Promise<string> {
+  const { provider, model, apiKey, baseUrl } = config;
+  const rawPrompt = prompt.trim();
+  let defaultTitle = rawPrompt.length > 25 ? rawPrompt.slice(0, 25).trim() + '...' : rawPrompt;
+  
+  if (!apiKey && provider !== 'ollama') {
+    return defaultTitle;
+  }
+  
+  try {
+    const summarizePrompt = `Summarize this user prompt into a short, concise, and clean chat name/title of at most 3 words. Return ONLY the title text, nothing else, no quotes, no period:\n\n${rawPrompt}`;
+    const family = resolveProviderFamily(provider);
+    
+    if (family === 'anthropic') {
+      const anthropicHost = resolveBaseUrl('anthropic', baseUrl).replace(/\/v1\/?$/, '');
+      const url = `${anthropicHost}/v1/messages`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'anthropic-version': '2023-06-01',
+          'x-api-key': apiKey || ''
+        },
+        body: JSON.stringify({
+          model: model || 'claude-3-5-sonnet-20241022',
+          messages: [{ role: 'user', content: [{ type: 'text', text: summarizePrompt }] }],
+          max_tokens: 30
+        })
+      });
+      if (!response.ok) throw new Error(`Anthropic HTTP error ${response.status}`);
+      const json: any = await response.json();
+      return json.content?.[0]?.text?.trim() || defaultTitle;
+    }
+    
+    if (family === 'gemini') {
+      const geminiHost = resolveBaseUrl('google', baseUrl).replace(/\/+$/, '');
+      const url = `${geminiHost}/v1beta/models/${model || 'gemini-2.0-flash'}:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: summarizePrompt }] }]
+        })
+      });
+      if (!response.ok) throw new Error(`Gemini HTTP error ${response.status}`);
+      const json: any = await response.json();
+      return json.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || defaultTitle;
+    }
+    
+    if (family === 'ollama') {
+      const ollamaHost = (baseUrl || 'http://localhost:11434').replace(/\/+$/, '');
+      const url = `${ollamaHost}/api/chat`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: model || 'llama3.2',
+          messages: [{ role: 'user', content: summarizePrompt }],
+          stream: false
+        })
+      });
+      if (!response.ok) throw new Error(`Ollama HTTP error ${response.status}`);
+      const json: any = await response.json();
+      return json.message?.content?.trim() || defaultTitle;
+    }
+    
+    // OpenAI-compatible
+    const openAiHost = resolveBaseUrl(provider, baseUrl);
+    const url = `${openAiHost}/chat/completions`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: summarizePrompt }],
+        temperature: 0.5,
+        max_tokens: 30
+      })
+    });
+    if (!response.ok) throw new Error(`OpenAI HTTP error ${response.status}`);
+    const json: any = await response.json();
+    return json.choices?.[0]?.message?.content?.trim() || defaultTitle;
+  } catch (err) {
+    console.error('[desktop] generateChatName error:', err);
+    return defaultTitle;
+  }
+}
+

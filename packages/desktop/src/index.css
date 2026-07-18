@@ -50,6 +50,14 @@
   --brand-border: rgba(255, 255, 255, 0.07);
   --brand-border-strong: rgba(255, 255, 255, 0.13);
 
+  /* ── App-shell ambient "layered atmosphere" backdrop (Atmosphere mode) ──
+     Faint, theme-adaptive depth bands + a soft accent glow, painted behind
+     all content so the canvas reads considered without harming text contrast. */
+  --brand-atmo-glow: rgba(165, 180, 252, 0.10);  /* brand-accent violet, low */
+  --brand-atmo-1: rgba(255, 255, 255, 0.035);
+  --brand-atmo-2: rgba(255, 255, 255, 0.055);
+  --brand-atmo-3: rgba(255, 255, 255, 0.085);
+
   /* ── Typography ── */
   --brand-text-main: #ECEDEF;
   --brand-text-muted: #86868F;
@@ -59,6 +67,23 @@
   --brand-hover-strong: rgba(255, 255, 255, 0.09);
   --brand-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
   --brand-shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.38);
+
+  /* ── Global keyboard focus ring ────────────────────────────────────────────
+     A single, high-contrast, consistent focus indicator for EVERY interactive
+     element (buttons, links, the composer textarea, sidebar nav, app bar) so
+     keyboard and screen-reader users always see where focus is. Prior to this,
+     only elements carrying the .ui-focus class had a ring and .ui-input reset
+     outline to none with a near-invisible shadow — so toolbar/sidebar/composer
+     controls had effectively no visible focus (WCAG 2.4.7 / 2.4.11). Placed
+     before component rules so it overrides their `outline: none`. */
+  --focus-ring: 0 0 0 2px var(--brand-bg), 0 0 0 3px var(--brand-accent);
+
+
+*:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
+  box-shadow: var(--focus-ring);
+}
 
   /* ── Primary action: quiet monochrome (near-white pill, dark ink) ── */
   --brand-highlight: #E6E6EA;
@@ -94,6 +119,12 @@
 
   --brand-border: rgba(0, 0, 0, 0.08);
   --brand-border-strong: rgba(0, 0, 0, 0.15);
+
+  /* ── App-shell ambient "layered atmosphere" backdrop (Atmosphere mode) ── */
+  --brand-atmo-glow: rgba(79, 70, 229, 0.07);
+  --brand-atmo-1: rgba(0, 0, 0, 0.025);
+  --brand-atmo-2: rgba(0, 0, 0, 0.04);
+  --brand-atmo-3: rgba(0, 0, 0, 0.06);
 
   --brand-text-main: #16161a;
   --brand-text-muted: #65656d;
@@ -264,8 +295,8 @@ body {
 .ui-input::placeholder { color: color-mix(in srgb, var(--brand-text-muted) 55%, transparent); }
 .ui-input:focus {
   outline: none;
-  border-color: var(--brand-border-strong);
-  box-shadow: 0 0 0 3px var(--brand-hover);
+  border-color: var(--brand-accent-border);
+  box-shadow: 0 0 0 3px var(--brand-accent-tint);
 }
 /* Extreme-weight-contrast typography helpers */
 .ui-eyebrow {
@@ -709,6 +740,44 @@ body {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--brand-border);
+}
+
+/* ══ Top application bar ─────────────────────────────────────────────────────
+   A quiet "sky band": the bar reads as translucent so the app-shell's ambient
+   layered-atmosphere glow (defined in :root as --brand-atmo-*) bleeds through
+   from behind, tying the header into the same contemplative sky as the brand
+   mark. Depth comes from a top→bottom wash (more open at the crown, settling
+   into the sidebar toward the content) plus a single hairline. Motion is
+   limited to color/elevation only — no transforms — so it is reduced-motion
+   safe. All values are theme-adaptive CSS vars, so dark and light share it. */
+.title-bar {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--brand-sidebar) 74%, transparent),
+    color-mix(in srgb, var(--brand-sidebar) 93%, transparent)
+  );
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  backdrop-filter: blur(10px) saturate(120%);
+  box-shadow: inset 0 -1px 0 var(--brand-border);
+}
+.title-bar .atmo-btn {
+  transition: background-color 0.18s ease-out, color 0.18s ease-out,
+    box-shadow 0.18s ease-out, border-color 0.18s ease-out;
+}
+.title-bar .atmo-btn:hover {
+  box-shadow: 0 0 0 1px var(--brand-border-strong), var(--brand-shadow-soft);
+}
+.title-bar .byok-badge {
+  transition: background-color 0.18s ease-out, color 0.18s ease-out,
+    border-color 0.18s ease-out, box-shadow 0.18s ease-out;
+}
+.title-bar .byok-badge:hover {
+  border-color: var(--brand-border-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-hover-strong) 60%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .title-bar .atmo-btn,
+  .title-bar .byok-badge { transition: none; }
 }
 
 /* Top-application menu */

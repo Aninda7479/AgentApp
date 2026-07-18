@@ -21,7 +21,9 @@ export type AgentEventType =
   | 'thought'        // agent reasoning step
   | 'done'           // generation complete
   | 'error'          // error occurred
-  | 'abort';         // user stopped
+  | 'abort'          // user stopped
+  | 'bestofn'        // best-of-N merge result (parallel multi-model orchestration)
+  | 'reroute';       // orchestrator avoided/failed-over a provider (resilience visible)
 
 export interface AgentEvent {
   type: AgentEventType;
@@ -36,6 +38,72 @@ export interface AgentEvent {
     completionTokens: number;
     totalTokens: number;
   };
+  /** best-of-N merge metadata, set on 'bestofn' events. */
+  candidates?: Array<{ provider: string; model: string }>;
+  strategy?: BestOfNStrategy;
+  mergedCount?: number;
+  toolFallback?: boolean;
+  /** Agreement ratio 0..1 across candidates (1 = unanimous). A bias-resistance
+   *  signal: high agreement means the answer is robust to any single model's
+   *  biases; low agreement means the models diverged. */
+  agreement?: number;
+  /** Number of distinct (normalized) answers among the candidates. */
+  clusters?: number;
+  /** Resilience metadata, set on 'reroute' events: which provider was avoided,
+   *  demoted, or failed over, and why. Surfaces the "can't be banned out from
+   *  under you" promise to the GUI instead of failing silently. */
+  reroute?: RerouteEvent;
+}
+
+// ─── Orchestration helpers ────────────────────────────────────────────────────
+
+/**
+ * Builds a RouterModel[] pool for the orchestration router from the user's
+ * configured models (SettingsStorage). Vision/tool capability isn't stored as a
+ * boolean on ModelSettings, so it is derived from ModelGovStorage scores — the
+ * same source model-gov.ts uses — keeping the pool consistent with the rest of
+ * the governance layer.
+ */
+export function buildRouterPool(models: ModelSettings[]): RouterModel[] {
+  return models.map((m) => {
+    const scores = ModelGovStorage.getModelScores(m.id);
+    // Best-effort enrichment with the extended registry signals (speed/intelligence
+    // tier, dollar cost). The catalog id may carry a `${providerId}-` prefix the
+    // registry doesn't, so try the stripped native id as a fallback. Missing
+    // metadata leaves the fields undefined and the router falls back to its
+    // neutral midpoint — never a hard error.
+    const cap =
+      capabilityRegistry.getCapability(m.id) ??
+      capabilityRegistry.getCapability(m.id.includes('-') ? m.id.slice(m.id.indexOf('-') + 1) : m.id);
+    return {
+      id: m.id,
+      name: m.name,
+      providerId: m.providerId,
+      enabled: m.enabled,
+      supportsVision: scores.vision >= 75,
+      supportsTools: scores.coding >= 70 || scores.reasoning >= 75,
+      inputModalities: m.inputModalities as RouterModel['inputModalities'],
+      accessStatus: 'available',
+      speedTier: cap?.speedTier,
+      intelligenceTier: cap?.intelligenceTier,
+      costPer1kTokens: cap?.costPer1kTokens
+    };
+  });
+}
+
+/**
+ * Builds a CompletionRequest from a prompt + attachments, encoding each image
+ * attachment as an image_url content block so the modality bridge can detect a
+ * vision input and plan accordingly.
+ */
+export function buildBridgeRequest(prompt: string, attachments?: ImageAttachment[]): CompletionRequest {
+  const content: ContentBlock[] = [{ type: 'text', text: prompt }];
+  if (attachments) {
+    for (const att of attachments) {
+      content.push({ type: 'image_url', image_url: { url: att.dataUrl } });
+    }
+  }
+  return { messages: [{ role: 'user', content }] };
 }
 
 // ─── Tool Definitions ─────────────────────────────────────────────────────────
@@ -59,7 +127,14 @@ import { ComputerUse } from '../automation/computer-use.js';
 import { PlaywrightBrowserEngine } from '../automation/browser.js';
 import { BrowserLifecycleService } from '../automation/browser-service.js';
 import { resolveProviderFamily, resolveBaseUrl } from './provider-meta.js';
-import { ContentBlock, ImageAttachment } from '../types/agent.js';
+import { capabilityRegistry } from './models.js';
+import { BestOfNStrategy, synthesizeEnsemble } from './best-of-n.js';
+import { ContentBlock, ImageAttachment, type CompletionRequest, type AIProvider, type ReasoningEffort } from '../types/agent.js';
+import { ModelRouter } from './router.js';
+import type { RouterModel, RerouteEvent } from './router.js';
+import { BYOKProviderManager } from './byok.js';
+import { SettingsStorage, type ModelSettings } from '../storage/settings-store.js';
+import { ModelGovStorage } from '../storage/model-gov.js';
 import { toOpenAIMessages, toAnthropicMessages } from './multimodal.js';
 
 const execAsync = promisify(exec);
@@ -84,7 +159,27 @@ function makeSafeExec(projectRoot: string) {
   };
 }
 
-export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDefinition[] {
+/**
+ * Returns true when `command` is permitted by the project's command allowlist.
+ * An empty/undefined allowlist permits everything — confinement is opt-in, so
+ * the user must explicitly pre-approve commands in project settings for the
+ * restriction to take effect. Matching is prefix-based on the first token(s):
+ * allowing "git" permits `git` and `git status`, but not `github-clone …`.
+ * Mirrors the same guard in the desktop and web engines so run_command
+ * enforces the same policy everywhere (mission point #1).
+ */
+export function isCommandAllowed(command: string, allowedCommands?: string[]): boolean {
+  if (!allowedCommands || allowedCommands.length === 0) return true;
+  const cmd = command.trim();
+  if (cmd.length === 0) return false;
+  const firstToken = cmd.split(/\s+/)[0];
+  return allowedCommands.some((allowed) => {
+    const a = allowed.trim();
+    return a !== '' && (cmd === a || firstToken === a || cmd.startsWith(a + ' '));
+  });
+}
+
+export function createBuiltinTools(projectRoot: string = process.cwd(), allowedCommands?: string[]): ToolDefinition[] {
   const safeExec = makeSafeExec(projectRoot);
 
   return [
@@ -184,6 +279,9 @@ export function createBuiltinTools(projectRoot: string = process.cwd()): ToolDef
         additionalProperties: false
       },
       execute: async ({ command }) => {
+        if (!isCommandAllowed(command as string, allowedCommands)) {
+          return `Error: command is not in the project's allowed commands: ${command}. Add it to the project's allowed commands in settings to permit it.`;
+        }
         return safeExec(command as string);
       }
     },
@@ -548,6 +646,40 @@ export interface AgentEngineConfig {
   projectRoot?: string;
   maxTokens?: number;
   temperature?: number;
+  /** Per-request reasoning-effort tier, honored by orchestrated (bridge) turns. */
+  reasoningEffort?: ReasoningEffort;
+  /** Pre-approved shell commands for this project. When non-empty, run_command
+   *  only executes commands whose first token(s) match an entry (prefix-based).
+   *  Opt-in: an empty/undefined list permits all commands. */
+  allowedCommands?: string[];
+}
+
+/** A single parallel candidate for best-of-N orchestration. Extends the base
+ *  config so a candidate can override provider/model/apiKey/baseUrl independently. */
+export interface BestOfNCandidate {
+  provider: string;
+  model: string;
+  apiKey?: string;
+  baseUrl?: string;
+}
+
+/**
+ * Config for {@link AgentEngine.runBestOfN} — runs several task-matched models
+ * in parallel and merges their outputs (mission point 2: route a task to
+ * whichever models are actually good at it, then combine). A strict superset of
+ * AgentEngineConfig: when `candidates` is omitted, runBestOfN degrades to a
+ * normal single-model run so callers never have to branch.
+ */
+export interface BestOfNConfig extends AgentEngineConfig {
+  /** The N models to run in parallel. Falls back to `[config]` when empty. */
+  candidates?: BestOfNCandidate[];
+  /** Merge strategy (see mergeBestOfN). Defaults to 'consensus'. */
+  strategy?: BestOfNStrategy;
+  /** When true (default) final text is merged; only meaningful when no
+   *  candidate needs tools. Set false to get per-candidate text unmerged. */
+  merge?: boolean;
+  /** Optional session id used for emitted events (defaults to a generated id). */
+  sessionId?: string;
 }
 
 // ─── Agent Engine ─────────────────────────────────────────────────────────────
@@ -555,14 +687,14 @@ export interface AgentEngineConfig {
 export class AgentEngine {
   private config: AgentEngineConfig;
   private tools: ToolDefinition[];
-  private history: ChatMessage[];
+  protected history: ChatMessage[];
   private abortController: AbortController | null = null;
   public readonly sessionId: string;
 
   constructor(config: AgentEngineConfig, sessionId?: string) {
     this.config = config;
     this.sessionId = sessionId || `session-${Date.now()}`;
-    this.tools = createBuiltinTools(config.projectRoot);
+    this.tools = createBuiltinTools(config.projectRoot, config.allowedCommands);
     this.history = [];
 
     // System prompt matching OpenCode's AGENTS.md pattern
@@ -710,6 +842,237 @@ Key guidelines:
     }
   }
 
+  /**
+   * Run a SINGLE generation turn (no tool-call loop) against the current
+   * history and return its text + any tool calls. Pure/stateless with respect
+   * to `this.history` so it can be reused by {@link runBestOfN} across N
+   * parallel candidates without mutating shared state between them.
+   */
+  public async runTurn(
+    onEvent: (event: AgentEvent) => void,
+    signal?: AbortSignal
+  ): Promise<{ fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> }> {
+    return this.streamFromProvider(onEvent, signal ?? this.abortController?.signal ?? new AbortController().signal);
+  }
+
+  /**
+   * Best-of-N parallel orchestration (mission point 2): run several
+   * task-matched models at once and combine their outputs.
+   *
+   * - When `candidates` is omitted/empty it degrades to a single normal
+   *   {@link run} on the base config — callers never need to branch.
+   * - Candidates run in parallel via Promise.all. If ANY candidate decides to
+   *   call a tool (agentic work), we fall back to a normal single-model
+   *   run on the first candidate so tool execution stays correct — best-of-N
+   *   merging only applies to plain generation turns.
+   * - Final text from the surviving candidates is merged with {@link mergeBestOfN}
+   *   (consensus / longest / first). Empty/errored candidates are dropped, so a
+   *   single healthy model still yields a result. If every candidate errors, the
+   *   best-of-N attempt is reported as one 'error' event (not N errors).
+   */
+  public static async runBestOfN(
+    userPrompt: string,
+    onEvent: (event: AgentEvent) => void,
+    config: BestOfNConfig,
+    attachments?: ImageAttachment[]
+  ): Promise<void> {
+    const base: BestOfNCandidate = {
+      provider: config.provider,
+      model: config.model,
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl
+    };
+    const candidates = (config.candidates && config.candidates.length > 0)
+      ? config.candidates
+      : [base];
+    const strategy = config.strategy ?? 'consensus';
+    const doMerge = config.merge ?? true;
+    const sessionId = config.sessionId ?? `session-${Date.now()}`;
+
+    // Degrade to a normal single-model run when there's only one candidate and
+    // the caller requested no merge — keeps the historical run() path identical.
+    if (candidates.length === 1 && !doMerge) {
+      const engine = new AgentEngine(config, sessionId);
+      await engine.run(userPrompt, onEvent, attachments);
+      return;
+    }
+
+    const engine = new AgentEngine(config, sessionId);
+    const sharedHistory = engine.buildHistory(userPrompt, attachments);
+
+    const abort = new AbortController();
+    const perCandidate = candidates.map((c) => {
+      const candConfig: AgentEngineConfig = {
+        ...config,
+        provider: c.provider,
+        model: c.model,
+        apiKey: c.apiKey ?? config.apiKey,
+        baseUrl: c.baseUrl ?? config.baseUrl
+      };
+      const candEngine = new AgentEngine(candConfig, `${sessionId}-cand`);
+      // Independent history copy per candidate; tool results are not fed back
+      // during the parallel phase (tool-needing candidates fall back below).
+      candEngine.history = sharedHistory.map((m) => ({ ...m }));
+      return candEngine.runTurn(onEvent, abort.signal);
+    });
+
+    const results = await Promise.all(
+      perCandidate.map((p) => p.then((r) => ({ ok: true as const, r }), (e: unknown) => ({ ok: false as const, e })))
+    );
+
+    const texts: string[] = [];
+    const toolFallback = results.some((res) => res.ok && res.r.toolCalls.length > 0);
+    const metaCandidates = candidates.map((c) => ({ provider: c.provider, model: c.model }));
+
+    for (const res of results) {
+      if (res.ok) texts.push(res.r.fullContent);
+    }
+
+    // A candidate needed tools → best-of-N merging isn't meaningful; run the
+    // first candidate as a full agentic loop instead (correctness over merge).
+    if (toolFallback) {
+      onEvent({
+        type: 'bestofn',
+        sessionId: sessionId,
+        candidates: metaCandidates,
+        strategy,
+        mergedCount: 0,
+        toolFallback: true
+      });
+      const leadConfig: AgentEngineConfig = {
+        ...config,
+        provider: candidates[0].provider,
+        model: candidates[0].model,
+        apiKey: candidates[0].apiKey ?? config.apiKey,
+        baseUrl: candidates[0].baseUrl ?? config.baseUrl
+      };
+      const lead = new AgentEngine(leadConfig, sessionId);
+      if (attachments && attachments.length > 0) {
+        const content: ContentBlock[] = [{ type: 'text', text: userPrompt }];
+        for (const att of attachments) content.push({ type: 'image_url', image_url: { url: att.dataUrl } });
+        lead.addUserMessage(content);
+      } else {
+        lead.addUserMessage(userPrompt);
+      }
+      await lead.run(userPrompt, onEvent, attachments);
+      return;
+    }
+
+    if (texts.length === 0) {
+      const firstErr = (results.find((r) => !r.ok) as { e: unknown } | undefined)?.e;
+      onEvent({
+        type: 'error',
+        sessionId: sessionId,
+        error: firstErr ? (firstErr as Error).message || String(firstErr) : 'All best-of-N candidates failed.'
+      });
+      return;
+    }
+
+    const merged = doMerge ? synthesizeEnsemble(texts, strategy) : null;
+    const mergedText = doMerge ? merged!.text : texts.join('\n\n');
+    onEvent({
+      type: 'bestofn',
+      sessionId: sessionId,
+      content: mergedText,
+      candidates: metaCandidates,
+      strategy,
+      mergedCount: texts.length,
+      agreement: doMerge ? merged!.agreement : undefined,
+      clusters: doMerge ? merged!.clusters : undefined
+    });
+    onEvent({ type: 'done', sessionId: sessionId });
+  }
+
+  /**
+   * Orchestrated, bridge-aware completion (mission point #1: a model's input
+   * limits shouldn't block a task). Builds a request from the prompt +
+   * attachments and routes it through ModelRouter.completeWithBridge, which
+   * inserts a vision/transcription model ahead of a target that can't read the
+   * input modality, then answers on the augmented text-only request. The handoff
+   * is surfaced as a 'thought' event so it is visible, not silent.
+   *
+   * This is ADDITIVE: the streaming AgentEngine.run() path is unchanged, so
+   * callers that want orchestration (e.g. a multimodal turn) invoke this instead.
+   * The caller supplies the BYOKProviderManager (no hidden secure-storage
+   * coupling); the pool defaults to the user's configured models.
+   */
+  public static async runOrchestrated(
+    userPrompt: string,
+    onEvent: (event: AgentEvent) => void,
+    opts: {
+      config: AgentEngineConfig;
+      attachments?: ImageAttachment[];
+      pool?: RouterModel[];
+      byokManager: BYOKProviderManager;
+      sessionId?: string;
+      /** Optional caller hook for raw reroute events (the engine also emits a
+       *  'reroute' AgentEvent so the GUI can surface resilience decisions). */
+      onReroute?: (e: RerouteEvent) => void;
+    }
+  ): Promise<void> {
+    const sessionId = opts.sessionId ?? `session-${Date.now()}`;
+    const pool = opts.pool ?? buildRouterPool(SettingsStorage.loadSettings().models ?? []);
+    const request = buildBridgeRequest(userPrompt, opts.attachments);
+    const router = new ModelRouter({ preferredProvider: opts.config.provider as AIProvider });
+
+    const res = await router.completeWithBridge(
+      request,
+      opts.byokManager,
+      pool,
+      {
+        overrideProvider: opts.config.provider as AIProvider,
+        onBridge: (plan) => {
+          if (plan.needsBridge) {
+            onEvent({ type: 'thought', sessionId, content: `[Orchestrator] ${plan.reason}` });
+          }
+        },
+        onReroute: (e: RerouteEvent) => {
+          // Surface the resilience decision (mission: the "can't be banned out
+          // from under you" reroute must be visible, not silent). The caller may
+          // also forward `e` to its own handler via opts.onReroute.
+          const label =
+            e.reason === 'error'
+              ? `rerouted from ${e.from}${e.to ? ` → ${e.to}` : ''} (failed: ${e.detail ?? e.status})`
+              : e.reason === 'health-skip'
+                ? `skipped ${e.from} (${e.status}: healthier option available)`
+                : `last resort: ${e.from} (${e.status}: no healthier provider)`;
+          onEvent({ type: 'reroute', sessionId, content: `[Orchestrator] ${label}` });
+          opts.onReroute?.(e);
+        }
+      },
+      opts.config.reasoningEffort
+    );
+
+    onEvent({ type: 'token', sessionId, content: res.content });
+    onEvent({ type: 'done', sessionId });
+  }
+
+  /** Build the initial history (system + this turn's user message, plain or
+   *  multimodal) shared by every best-of-N candidate. Returns a fresh array so
+   *  each candidate engine owns an independent copy (no shared-state mutation). */
+  private buildHistory(userPrompt: string, attachments?: ImageAttachment[]): ChatMessage[] {
+    const sysPrompt = this.config.systemPrompt || `You are SuperAgent, a powerful autonomous AI coding assistant.
+
+You have access to tools to read files, list directories, search codebases, run shell commands, and write files.
+Use tools progressively — don't dump the whole codebase; fetch what you need when you need it.
+
+Key guidelines:
+- Think step by step before acting
+- Read relevant files before making edits
+- Verify changes compile/work after editing
+- Be concise but thorough in explanations
+- When you edit files, mention which files changed and the diff summary`;
+    const history: ChatMessage[] = [{ role: 'system', content: sysPrompt }];
+    if (attachments && attachments.length > 0) {
+      const content: ContentBlock[] = [{ type: 'text', text: userPrompt }];
+      for (const att of attachments) content.push({ type: 'image_url', image_url: { url: att.dataUrl } });
+      history.push({ role: 'user', content });
+    } else {
+      history.push({ role: 'user', content: userPrompt });
+    }
+    return history;
+  }
+
   /** Stream a single turn from the configured provider */
   private async streamFromProvider(
     onEvent: (event: AgentEvent) => void,
@@ -719,6 +1082,7 @@ Key guidelines:
 
     let res: { fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> };
 
+    const startMs = Date.now();
     if (family === 'anthropic') {
       res = await this.streamAnthropic(onEvent, signal);
     } else if (family === 'gemini') {
@@ -730,6 +1094,7 @@ Key guidelines:
       // speaks the OpenAI-compatible Chat Completions protocol.
       res = await this.streamOpenAI(onEvent, signal);
     }
+    const durationMs = Date.now() - startMs;
 
     // Compute estimated token usage: 1 token ~ 4 characters
     const inputChars = this.history.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
@@ -741,7 +1106,10 @@ Key guidelines:
       this.config.provider,
       this.config.model,
       promptTokens,
-      completionTokens
+      completionTokens,
+      undefined,
+      undefined,
+      durationMs
     );
 
     // Emit usage stats back to renderer

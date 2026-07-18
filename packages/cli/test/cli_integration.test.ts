@@ -100,7 +100,7 @@ describe('Step 080: CLI Integration Verification Suite', () => {
     const initResult = await ProjectContextGenerator.generateContext(targetFolder, true);
     expect(initResult.success).toBe(true);
 
-    const contextJson = await fs.readFile(path.join(targetFolder, '.agent', 'context.json'), 'utf-8');
+    const contextJson = await fs.readFile(path.join(targetFolder, '.superagent', 'context.json'), 'utf-8');
     expect(contextJson).toContain('sub-cli');
     expect(contextJson).toContain('TypeScript');
   });

@@ -47,6 +47,12 @@ function useSecureCookies(): boolean {
 }
 
 // ─── Session token: base64url(payload).hmac ──────────────────────────────────
+// Payload = { u: username, v: sessionVersion, exp: expiry }. The `v` field binds
+// a token to the password at issue time: changing the password bumps the stored
+// session version (and rotates the signing secret), so every token issued on
+// another device before the change stops verifying and that device is forced to
+// re-authenticate. The device that performed the change is re-issued a fresh
+// token so it stays logged in.
 
 /** Signs arbitrary data with the persistent session secret from core. */
 function sign(data: string): string {
@@ -58,7 +64,11 @@ function sign(data: string): string {
 
 /** Creates a signed session token embedding the username and an expiry. */
 export function createSessionToken(username: string): string {
-  const payload = JSON.stringify({ u: username, exp: Date.now() + sessionTtlMs() });
+  const payload = JSON.stringify({
+    u: username,
+    v: AuthStore.getSessionVersion(),
+    exp: Date.now() + sessionTtlMs()
+  });
   const encoded = Buffer.from(payload, 'utf-8').toString('base64url');
   return `${encoded}.${sign(encoded)}`;
 }
@@ -83,6 +93,10 @@ export function verifySessionToken(token: string | undefined): string | null {
   try {
     const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf-8'));
     if (typeof payload.exp !== 'number' || payload.exp < Date.now()) return null;
+    // Reject tokens minted before the current password version. A password change
+    // bumps the stored version, so every older session (other devices) is invalid.
+    const tokenVersion = typeof payload.v === 'number' ? payload.v : 0;
+    if (tokenVersion !== AuthStore.getSessionVersion()) return null;
     return typeof payload.u === 'string' ? payload.u : null;
   } catch {
     return null;
@@ -332,6 +346,29 @@ export function handleLogout(_req: Request, res: Response): void {
  * POST /api/auth/change-password — updates the password (and optionally the
  * username) after verifying the current password. Requires an active session.
  */
+/**
+ * Validates the change-password request body. Kept pure so it can be unit-tested
+ * without touching the credential store. Rejects missing/non-string fields and an
+ * empty new password *before* any credential write happens — previously an empty
+ * `newPassword` was forwarded straight to `AuthStore.changePassword`.
+ */
+export function validateChangePasswordInput(body: {
+  currentPassword?: unknown;
+  newPassword?: unknown;
+}): { ok: true; currentPassword: string; newPassword: string } | { ok: false; error: string } {
+  const { currentPassword, newPassword } = body;
+  if (typeof currentPassword !== 'string') {
+    return { ok: false, error: 'Current password is required.' };
+  }
+  if (typeof newPassword !== 'string') {
+    return { ok: false, error: 'New password is required.' };
+  }
+  if (newPassword.trim().length === 0) {
+    return { ok: false, error: 'New password cannot be empty.' };
+  }
+  return { ok: true, currentPassword, newPassword };
+}
+
 export function handleChangePassword(req: Request, res: Response): void {
   if (isAuthDisabled()) {
     res.status(400).json({ error: 'Authentication is disabled on this server.' });
@@ -343,12 +380,16 @@ export function handleChangePassword(req: Request, res: Response): void {
     return;
   }
 
-  const { currentPassword, newPassword } = (req.body || {}) as {
-    currentPassword?: string;
-    newPassword?: string;
-  };
+  const input = validateChangePasswordInput((req.body || {}) as {
+    currentPassword?: unknown;
+    newPassword?: unknown;
+  });
+  if (!input.ok) {
+    res.status(400).json({ error: input.error });
+    return;
+  }
 
-  const result = AuthStore.changePassword(currentPassword || '', newPassword || '');
+  const result = AuthStore.changePassword(input.currentPassword, input.newPassword);
   if (!result.ok) {
     res.status(400).json({ error: result.error });
     return;

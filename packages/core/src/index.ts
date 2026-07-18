@@ -11,8 +11,11 @@ export * from './providers/custom.js';
 export * from './providers/models.js';
 export * from './providers/provider-meta.js';
 export * from './providers/router.js';
+export * from './providers/provider-health.js';
+export * from './providers/task-classifier.js';
+export * from './providers/best-of-n.js';
 export * from './providers/autodetect.js';
-export { AgentEngine as SuperAgentEngine, type AgentEvent, type AgentEngineConfig } from './providers/ai-engine.js';
+export { AgentEngine as SuperAgentEngine, buildRouterPool, type AgentEvent, type AgentEngineConfig } from './providers/ai-engine.js';
 export * from './tools/media.js';
 export * from './tools/mcp.js';
 export * from './tools/threed.js';
@@ -46,6 +49,7 @@ export * from './mcp/ide.js';
 
 export * from './integrations/catalog.js';
 export * from './integrations/plugins.js';
+export * from './integrations/skills-catalog.js';
 
 export * from './media/router.js';
 export * from './media/image.js';
@@ -68,4 +72,7 @@ export * from './media/pdf_extractor.js';
 export * from './media/ppt_outline.js';
 export * from './media/ppt_builder.js';
 export * from './media/ppt_stylizer.js';
+
+/** Shared launcher for the self-hosted web server (CLI `--start-web` + Desktop). */
+export * from './web-server.js';
 

@@ -6,6 +6,7 @@ import { DiffViewer } from './components/DiffViewer';
 import { BYOKModal } from './components/BYOKModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { DoctorModal } from './components/DoctorModal';
+import { PermissionDialog } from './components/PermissionDialog';
 import { MCPDashboard, MCPServerInfo } from './components/MCPDashboard';
 import { SearchModal } from './components/SearchModal';
 import { ScheduledView } from './components/ScheduledView';
@@ -47,6 +48,7 @@ import { PartnerSyncService } from './logic/partner';
 import { UpdateService } from './logic/updates';
 import type { PartnerController } from './logic/agentStream';
 import type { AppContext, NavigationSnapshot } from './logic/types';
+import type { ContextUsage } from './logic/context';
 
 /**
  * Root application component — the DESIGN SHELL.
@@ -71,7 +73,9 @@ export const App: React.FC = () => {
   const [workMode, setWorkMode] = useState<'coding' | 'everyday'>('coding');
   const [defaultPermissions, setDefaultPermissions] = useState<boolean>(true);
   const [autoReview, setAutoReview] = useState<boolean>(true);
-  const [fullAccess, setFullAccess] = useState<boolean>(true);
+  // Sandboxed by default: a fresh install must start confined to the project
+  // folder, not with full system access. The user opts INTO full access.
+  const [fullAccess, setFullAccess] = useState<boolean>(false);
   const [settingsHydrated, setSettingsHydrated] = useState<boolean>(false);
   const [internetAccessLevel, setInternetAccessLevel] = useState<InternetAccessLevel>('all');
   const [appVersion, setAppVersion] = useState<string>('');
@@ -93,6 +97,11 @@ export const App: React.FC = () => {
   const [searchModalOpen, setSearchModalOpen] = useState<boolean>(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
   const [isDoctorOpen, setIsDoctorOpen] = useState<boolean>(false);
+  const [pendingPermission, setPendingPermission] = useState<{
+    id: string;
+    sessionId: string;
+    request: { action: string; command?: string; filePath?: string; details?: Record<string, unknown> };
+  } | null>(null);
   const [profilePopoverOpen, setProfilePopoverOpen] = useState<boolean>(false);
   const [settingsCategory, setSettingsCategory] = useState<string>(initialRoute.settingsCategory);
   const [activeProject, setActiveProject] = useState<string>('');
@@ -100,6 +109,10 @@ export const App: React.FC = () => {
   const [toastOpen, setToastOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
   const [toastType, setToastType] = useState<'info' | 'error'>('info');
+  // Live context-window usage reported by the engine (null until a real agent
+  // run streams a `context` event; the workspace falls back to a local estimate
+  // in demo/simulation mode).
+  const [liveContextUsage, setLiveContextUsage] = useState<ContextUsage | null>(null);
   const [composerPrompt, setComposerPrompt] = useState<string>(() => {
     try {
       return localStorage.getItem('composer_prompt_cache') || '';
@@ -129,6 +142,10 @@ export const App: React.FC = () => {
   // Providers & Models
   const [connectedProviders, setConnectedProviders] = useState<ProviderConnection[]>([]);
   const [modelsCatalog, setModelsCatalog] = useState<ModelConfig[]>([]);
+  // True until the persisted store has been read at startup. While bootstrapping,
+  // the catalog/providers are merely not-yet-loaded (not genuinely empty), so
+  // panels must show a loading state rather than a false "nothing connected".
+  const [bootstrapping, setBootstrapping] = useState<boolean>(true);
 
   // Trajectory steps (the canvas)
   const [trajectorySteps, setTrajectorySteps] = useState<TrajectoryStep[]>([
@@ -158,6 +175,8 @@ export const App: React.FC = () => {
   // BYOK + discovered skills
   const [byokKeys] = useState<Record<string, string>>({ openai: '', anthropic: '', gemini: '' });
   const [skills, setSkills] = useState<(SkillInfo & { instructions?: string })[]>([]);
+  // Curated "under development" skills (Settings → Skills only; never the slash surface).
+  const [skillCatalog, setSkillCatalog] = useState<any[]>([]);
 
   // Resolve ipcRenderer safely
   const ipc = typeof window !== 'undefined' && (window as any).require
@@ -169,13 +188,15 @@ export const App: React.FC = () => {
   const stateRef = useRef({
     projects, chats, connectedProviders, modelsCatalog, mcpServers,
     activeChatId, activeProject, draftProject, internetAccessLevel, themeMode,
-    composerAttachments, trajectorySteps, lastUsedModel
+    composerAttachments, trajectorySteps, lastUsedModel,
+    fullAccess, defaultPermissions
   });
   useEffect(() => {
     stateRef.current = {
       projects, chats, connectedProviders, modelsCatalog, mcpServers,
       activeChatId, activeProject, draftProject, internetAccessLevel, themeMode,
-      composerAttachments, trajectorySteps, lastUsedModel
+      composerAttachments, trajectorySteps, lastUsedModel,
+      fullAccess, defaultPermissions
     };
   });
 
@@ -222,6 +243,8 @@ export const App: React.FC = () => {
       getActiveProject: () => stateRef.current.activeProject,
       getDraftProject: () => stateRef.current.draftProject,
       getInternetAccessLevel: () => stateRef.current.internetAccessLevel,
+      getFullAccess: () => stateRef.current.fullAccess,
+      getDefaultPermissions: () => stateRef.current.defaultPermissions,
       getThemeMode: () => stateRef.current.themeMode,
       getComposerAttachments: () => stateRef.current.composerAttachments,
       getTrajectorySteps: () => stateRef.current.trajectorySteps,
@@ -320,12 +343,14 @@ export const App: React.FC = () => {
         stopLoop,
         listLoops,
         clearLoops,
-        runLoopX
+        runLoopX,
+        seedComposer: (text: string) => setComposerPrompt(text),
+        is3dEnabled: showStudio
       };
       slashDepsRef.current = deps;
       return deps;
     },
-    [skills, startLoop, stopLoop, listLoops, clearLoops, runLoopX]
+    [skills, startLoop, stopLoop, listLoops, clearLoops, runLoopX, showStudio]
   );
   const slashDispatch = useCallback(
     (raw: string, options: ComposerOptions) => SlashRouter.dispatch(ctx, SlashRouter.parse(raw), options, slashDeps),
@@ -340,6 +365,21 @@ export const App: React.FC = () => {
     [ctx, streaming, slashDispatch]
   );
   sendPromptRef.current = handleSendPrompt;
+
+  // Triggered by clicking the context-usage ring in the workspace header.
+  const handleCompactRequest = useCallback(() => {
+    slashDispatch('/compact', { model: defaultComposerModel, mode: 'chat', attachments: [] });
+  }, [slashDispatch, defaultComposerModel]);
+
+  // Re-send the last user message of the active chat (Retry on a failed run).
+  const handleRetryLast = useCallback(async () => {
+    const chat = ctx.getChats().find((c) => c.id === ctx.getActiveChatId());
+    const lastUserStep = [...(chat?.steps ?? [])].reverse().find((s) => s.type === 'user');
+    if (!lastUserStep) return;
+    const prompt = lastUserStep.content;
+    const model = chat?.model || lastUsedModel;
+    await handleSendPrompt(prompt, { model: model || undefined, attachments: [] });
+  }, [ctx, handleSendPrompt, lastUsedModel]);
 
   // ── Settings toggles (mirror state + persist) ──────────────────────────────
   const handleWorkModeChange = (mode: 'coding' | 'everyday') => {
@@ -383,7 +423,10 @@ export const App: React.FC = () => {
   const handleWindowControl = (action: 'minimize' | 'maximize' | 'close') => WindowService.control(action);
   const handleStopActiveRun = () => AgentService.stopRun(ctx, ctx.getActiveChatId());
   const handleQuit = () => WindowService.control('close');
-  const handleAbout = () => triggerToast('SuperAgent — open-source autonomous AI agent');
+  const handleAbout = () => {
+    setActiveTab('settings');
+    setSettingsCategory('about');
+  };
 
   // ── Project / chat CRUD (delegates to ConversationService) ─────────────────
   const handleCreateProject = (newProj: StoredProject) => ConversationService.createProject(ctx, newProj);
@@ -410,8 +453,25 @@ export const App: React.FC = () => {
 
   // ── Attachments ────────────────────────────────────────────────────────────
   const handleAttachFiles = async () => {
-    const filePaths: string[] = (await ipc?.invoke('select-files')) as string[];
-    AttachmentService.fromFiles(ctx, filePaths);
+    if (ipc) {
+      const filePaths: string[] = (await ipc.invoke('select-files')) as string[];
+      AttachmentService.fromFiles(ctx, filePaths);
+      return;
+    }
+    // Web/VPS build has no native file dialog (Electron's select-files IPC is
+    // absent). Fall back to a hidden <input type="file"> and route the chosen
+    // File objects through fromPaste, which reads them into buffers — the same
+    // path clipboard paste uses in the web build. Without this, the Attach
+    // button is a silent no-op in the browser (ux-critic HIGH finding).
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.onchange = () => {
+      if (input.files && input.files.length > 0) {
+        void AttachmentService.fromPaste(ctx, input.files);
+      }
+    };
+    input.click();
   };
   const handleAttachPastedFiles = (files: FileList) => AttachmentService.fromPaste(ctx, files);
   const handleRemoveAttachment = (index: number) => AttachmentService.remove(ctx, index);
@@ -471,12 +531,17 @@ export const App: React.FC = () => {
 
   // Startup: load persisted data, then auto-detect new providers.
   useEffect(() => {
-    if (!ipc) return; // No Electron IPC — start empty for test environments
+    if (!ipc) {
+      // No Electron IPC (web/test) — nothing to hydrate; settle immediately.
+      setBootstrapping(false);
+      return;
+    }
     (async () => {
       const loaded = await StoreService.bootstrap(ctx);
       await SettingsService.readInto(ctx);
       setSettingsHydrated(true);
       await ProvidersService.autoDetect(ctx, loaded.loadedProviders, loaded.loadedModels, loaded.finalProjects, loaded.finalChats);
+      setBootstrapping(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -549,13 +614,50 @@ export const App: React.FC = () => {
     const proj = projects.find((p) => p.name === activeProject);
     const root = proj?.folders?.[0];
     ipc
-      .invoke('skills-list', { dir: root ? `${root}/skills` : undefined })
+      .invoke('skills-list', { dir: root ? `${root}/.superagent/skills` : undefined })
       .then((res: any) => {
         const list = Array.isArray(res) ? res : (res?.skills ?? []);
         setSkills(Array.isArray(list) ? list : []);
       })
       .catch(() => setSkills([]));
   }, [ipc, projects, activeProject]);
+
+  // ── Curated skill catalog (Settings → Skills; separate from the slash surface) ──
+  useEffect(() => {
+    if (!ipc) return;
+    ipc
+      .invoke('skills-catalog')
+      .then((list: any) => setSkillCatalog(Array.isArray(list) ? list : []))
+      .catch(() => setSkillCatalog([]));
+  }, [ipc]);
+
+  // Merge discovered + catalog skills for Settings → Skills. Discovered skills are
+  // validated: a missing name/description marks them "Incomplete"; otherwise "Active".
+  const settingsSkills = useMemo(() => {
+    const discovered = skills.map((s: any) => {
+      const complete =
+        s.name && s.name !== 'Unnamed Skill' &&
+        s.description && s.description !== 'No description provided' &&
+        !!s.instructions?.trim();
+      return {
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        enabled: true,
+        status: (complete ? 'active' : 'incomplete') as 'active' | 'incomplete',
+        source: 'discovered' as const
+      };
+    });
+    const catalog = skillCatalog.map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      enabled: false,
+      status: (s.status ?? 'under-development') as 'active' | 'under-development' | 'incomplete',
+      source: 'catalog' as const
+    }));
+    return [...discovered, ...catalog];
+  }, [skills, skillCatalog]);
 
   // Navigation history bookkeeping.
   useEffect(() => {
@@ -690,11 +792,40 @@ export const App: React.FC = () => {
   // ── Real AI streaming via agent-event IPC (logic lives in AgentStreamService) ─
   useEffect(() => {
     if (!ipc) return;
-    const handleAgentEvent = AgentStreamService.createHandler(ctx, streaming, partnersRef);
+    const handleAgentEvent = AgentStreamService.createHandler(ctx, streaming, partnersRef, setLiveContextUsage);
     ipc.on('agent-event', handleAgentEvent);
     return () => ipc.removeListener('agent-event', handleAgentEvent);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ipc, ctx, streaming, partnersRef]);
+
+  // Reset the live context gauge when switching chats (a new run repopulates it).
+  useEffect(() => {
+    setLiveContextUsage(null);
+  }, [activeChatId]);
+
+  // ── Sandbox permission prompts (user-in-the-loop) ───────────────────────
+  useEffect(() => {
+    if (!ipc) return;
+    const handlePermissionRequest = (_e: unknown, payload: {
+      id: string;
+      sessionId: string;
+      request: { action: string; command?: string; filePath?: string; details?: Record<string, unknown> };
+    }) => {
+      setPendingPermission({ id: payload.id, sessionId: payload.sessionId, request: payload.request });
+    };
+    ipc.on('agent-permission-request', handlePermissionRequest);
+    return () => ipc.removeListener('agent-permission-request', handlePermissionRequest);
+  }, [ipc]);
+
+  const resolvePermission = (approved: boolean, remember: boolean) => {
+    if (!pendingPermission) return;
+    ipc?.invoke('agent-permission-response', {
+      id: pendingPermission.id,
+      approved,
+      remember
+    }).catch(() => {});
+    setPendingPermission(null);
+  };
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -704,6 +835,15 @@ export const App: React.FC = () => {
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
       className="flex flex-col h-dvh w-full max-w-full bg-brand-bg text-brand-textMain overflow-hidden overflow-x-hidden font-sans select-none"
     >
+      {/* Skip link: first focusable element so keyboard/SR users can bypass the
+          title bar + sidebar and jump straight to the primary content. Hidden
+          until focused (standard sr-only pattern), then shown as a floating chip. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-[10000] focus:rounded-lg focus:bg-brand-popover focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-brand-textMain focus:ring-2 focus:ring-brand-border-strong focus:outline-none"
+      >
+        Skip to main content
+      </a>
       <TitleBar
         hasOpenAiKey={Boolean(byokKeys.openai)}
         onOpenProviders={() => {
@@ -762,6 +902,11 @@ export const App: React.FC = () => {
               if (tab === 'settings') {
                 setActiveTab('settings');
                 setSettingsCategory('general');
+              } else if (tab === 'studio-settings') {
+                // Ghost "3D Studio" entry when 3D is disabled: open its settings
+                // so the user can enable the capability rather than hiding it.
+                setActiveTab('settings');
+                setSettingsCategory('3d');
               } else {
                 setActiveTab(tab);
               }
@@ -790,7 +935,21 @@ export const App: React.FC = () => {
           />
         )}
 
-        <div className="flex-1 flex flex-col relative overflow-hidden bg-brand-bg pb-18 md:pb-0">
+        <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col relative isolate overflow-hidden bg-brand-bg pb-18 md:pb-0 focus:outline-none">
+          {/* Ambient "layered atmosphere" backdrop — a soft accent glow and three
+              calm depth bands, painted behind all content (Atmosphere mode, low
+              opacity). Decorative only; never sits behind text contrast. */}
+          <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
+            <div
+              className="absolute inset-0"
+              style={{ background: 'radial-gradient(120% 85% at 86% -8%, var(--brand-atmo-glow), transparent 52%)' }}
+            />
+            <svg className="absolute inset-x-0 bottom-0 h-[38%] w-full" viewBox="0 0 1440 320" preserveAspectRatio="none" fill="none">
+              <path d="M0 206 C240 168 480 232 720 198 C960 164 1200 222 1440 188 L1440 320 L0 320 Z" fill="var(--brand-atmo-1)" />
+              <path d="M0 244 C220 210 440 272 720 238 C1000 206 1240 262 1440 234 L1440 320 L0 320 Z" fill="var(--brand-atmo-2)" />
+              <path d="M0 280 C260 254 520 300 760 280 C1020 258 1240 298 1440 278 L1440 320 L0 320 Z" fill="var(--brand-atmo-3)" />
+            </svg>
+          </div>
           {activeTab === 'trajectory' && (
             <WorkspaceView
               activeProject={activeProject}
@@ -825,6 +984,13 @@ export const App: React.FC = () => {
               onMicUnavailable={() => triggerToast('Voice input is not supported in this browser')}
               slashCommands={slashCommands}
               skills={skills}
+              lastError={activeChat?.lastError}
+              onRetryLast={handleRetryLast}
+              contextUsage={liveContextUsage}
+              activeModelContextLimit={
+                modelsCatalog.find((m) => m.name === (activeChat?.model || lastUsedModel))?.contextLimit
+              }
+              onCompact={handleCompactRequest}
             />
           )}
 
@@ -877,7 +1043,7 @@ export const App: React.FC = () => {
               onConnectProvider={handleConnectProvider}
               onDisconnectProvider={handleDisconnectProvider}
               onToggleModel={handleToggleModel}
-              skills={skills}
+              skills={settingsSkills}
               onToggleSkill={(skillId, enabled) => console.log(`Toggled skill ${skillId}: ${enabled}`)}
               pluginCatalog={pluginCatalog}
               pluginEnabled={pluginEnabled}
@@ -892,6 +1058,8 @@ export const App: React.FC = () => {
               onUnsandboxedActionsChange={handleUnsandboxedActionsChange}
               internetAccessLevel={internetAccessLevel}
               onInternetAccessLevelChange={handleInternetAccessLevelChange}
+              onToast={triggerToast}
+              bootstrapping={bootstrapping}
               appVersion={appVersion}
               onCheckForUpdates={handleCheckForUpdates}
               updateStatus={updateStatus}
@@ -916,18 +1084,16 @@ export const App: React.FC = () => {
           {activeTab === 'mcp' && (
             <MCPDashboard servers={mcpServers} onAddServer={handleAddMcpServer} onRemoveServer={handleRemoveMcpServer} onToggleServer={handleToggleMcpServer} />
           )}
-        </div>
+        </main>
       </div>
 
       {/* Mobile bottom navigation (phones only) */}
       <BottomNav
         activeTab={activeTab}
-        showStudio={showStudio}
         onSelectTab={(tab) => {
           setActiveTab(tab);
           setMobileNavOpen(false);
         }}
-        mcpCount={mcpServers.filter((s) => s.enabled).length}
       />
 
       {/* search dialog overlay */}
@@ -957,6 +1123,13 @@ export const App: React.FC = () => {
 
       {/* Doctor Diagnostics Modal */}
       <DoctorModal isOpen={isDoctorOpen} onClose={() => setIsDoctorOpen(false)} byokKeys={byokKeys} modelsCatalog={modelsCatalog} unsandboxedActions={fullAccess} />
+
+      {/* Sandbox permission prompt — user-in-the-loop approval */}
+      <PermissionDialog
+        isOpen={pendingPermission !== null}
+        request={pendingPermission?.request ?? null}
+        onResolve={resolvePermission}
+      />
 
       <AppToast open={toastOpen} message={toastMessage} type={toastType} onClose={() => setToastOpen(false)} />
 

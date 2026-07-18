@@ -1,10 +1,10 @@
 /**
  * Optional Electron auto-updater wiring.
  *
- * `electron-updater` is a devDependency and is only present in packaged builds,
- * so this module loads it lazily. When the module is missing (dev runs) or the
- * dynamic import fails, setupAutoUpdater() silently no-ops and the app behaves
- * exactly as before.
+ * `electron-updater` is a runtime dependency (declared in `dependencies`, not
+ * `devDependencies`) so that electron-builder bundles it into the packaged
+ * app.asar. This module still loads it lazily and no-ops gracefully if the
+ * import fails for any reason, so dev runs behave exactly as before.
  *
  * Updates are served from the GitHub Releases feed configured under the
  * `build.publish` key in package.json. To point at a private feed instead, set:

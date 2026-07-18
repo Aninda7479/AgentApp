@@ -3,6 +3,19 @@ import { Check, Code2, MessageSquare, Moon, Sun, Monitor, Globe, Eye, Ban } from
 import { ThemeMode } from '../types';
 import { InternetAccessLevel } from './types';
 
+/**
+ * Copy for the terminal execution-scope toggle. The old label
+ * ("Unsandboxed Terminal Actions") was jargon a first-time user couldn't parse;
+ * this names the ON state plainly ("Full System Access") and tells the user
+ * that OFF (the safe default) confines the agent to the project folder, while
+ * destructive commands are always blocked either way.
+ */
+export const FULL_SYSTEM_ACCESS_TOGGLE = {
+  label: 'Full System Access',
+  description:
+    'Lets the agent run terminal commands anywhere on this machine. Off (recommended) confines it to your project folder. Even when on, destructive commands (rm -rf /, format) are always blocked.'
+} as const;
+
 /** Props for the general settings panel. */
 interface GeneralSettingsProps {
   themeMode: ThemeMode;
@@ -42,7 +55,7 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ label, description, value, onChan
       aria-pressed={value}
     >
       <span
-        className={`block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+        className={`block h-5 w-5 rounded-full bg-brand-card shadow-sm transition-transform ${
           value ? 'translate-x-5' : 'translate-x-0'
         }`}
       />
@@ -185,8 +198,8 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
             onChange={onAutoReviewPlanChange}
           />
           <ToggleRow
-            label="Unsandboxed Terminal Actions"
-            description="Allow commands to execute outside local virtual sandbox isolation folders."
+            label={FULL_SYSTEM_ACCESS_TOGGLE.label}
+            description={FULL_SYSTEM_ACCESS_TOGGLE.description}
             value={unsandboxedActions}
             onChange={onUnsandboxedActionsChange}
           />

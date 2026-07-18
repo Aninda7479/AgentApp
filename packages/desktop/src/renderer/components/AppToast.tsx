@@ -69,7 +69,7 @@ export const AppToast: React.FC<AppToastProps> = ({ open, message, type = 'info'
         <button
           onClick={handleCopy}
           title="Copy message"
-          className="p-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-all cursor-pointer"
+          className="p-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-[var(--brand-hover)] transition-all cursor-pointer"
         >
           {copied ? <Check size={12} className="text-[color:var(--neon-constructive)]" /> : <Copy size={12} />}
         </button>

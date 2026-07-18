@@ -9,10 +9,41 @@ import type { TrajectoryStep } from '../components/TrajectoryCanvas';
 
 export class FormatService {
   /**
+   * Charset for storage IDs: digits `1-9` and uppercase `A-Z` (no `0`, no
+   * lowercase). Chosen to avoid any ambiguous/look-alike glyphs and to keep
+   * folder names case-stable across filesystems.
+   */
+  static readonly STORAGE_ID_CHARS = '123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  /**
+   * Generates a collision-resistant storage ID of the form `XXXX-XXXX-XXXX-XXXX`
+   * where each `X` is drawn from [[STORAGE_ID_CHARS]] (`1-9A-Z`). Used for chat
+   * and project folder names so duplicate titles can never collide on disk.
+   * Uses `crypto.getRandomValues` (available in the browser/Electron renderer).
+   */
+  static generateStorageId(): string {
+    const groups: string[] = [];
+    const bytes = new Uint8Array(16);
+    (globalThis.crypto ?? crypto).getRandomValues(bytes);
+    for (let g = 0; g < 4; g++) {
+      let group = '';
+      for (let i = 0; i < 4; i++) {
+        const idx = bytes[g * 4 + i] % FormatService.STORAGE_ID_CHARS.length;
+        group += FormatService.STORAGE_ID_CHARS[idx];
+      }
+      groups.push(group);
+    }
+    return groups.join('-');
+  }
+
+  /**
    * Converts a chat title into a safe, URL-friendly folder name.
    * Lowercases, strips non `[a-z0-9-_]` characters, collapses whitespace to
    * dashes, and truncates to 30 chars. Falls back to `chat-<timestamp>` if the
    * result is empty. (Timestamp is supplied by the caller so this stays pure.)
+   *
+   * @deprecated Folder names are now random storage IDs (see
+   * `generateStorageId`); kept only for legacy/display fallbacks.
    */
   static sanitizeFolderName(name: string, now: number = Date.now()): string {
     let sanitized = name

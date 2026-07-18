@@ -14,6 +14,7 @@ import { StoreService } from './store';
 import { SettingsService } from './settings';
 import { AttachmentService } from './attachments';
 import { AgentSimulator } from './simulation';
+import type { SlashResult } from './slash';
 
 /** Mutable ref bundle the `agent-event` streaming listener reads/writes. */
 export interface StreamingRefs {
@@ -149,13 +150,15 @@ export class AgentService {
     prompt: string,
     options: ComposerOptions,
     streaming: StreamingRefs,
-    onSlashCommand: (raw: string, options: ComposerOptions) => Promise<boolean>
+    onSlashCommand: (raw: string, options: ComposerOptions) => Promise<SlashResult>
   ): Promise<void> {
     const trimmed = prompt.trim();
     if (trimmed.startsWith('/')) {
-      const consumed = await onSlashCommand(trimmed, options);
-      if (consumed) {
-        ctx.setComposerPrompt('');
+      const res = await onSlashCommand(trimmed, options);
+      if (res.consumed) {
+        // Seed commands (/image, /3d, …) pre-fill the composer for the user to
+        // review and send intentionally — don't wipe that seed.
+        if (!res.keepComposer) ctx.setComposerPrompt('');
         return;
       }
     }
@@ -170,13 +173,13 @@ export class AgentService {
 
     if (chatId === 'draft-chat') {
       isNew = true;
-      const chatTitle = prompt.length > 25 ? prompt.slice(0, 25).trim() + '...' : prompt.trim();
-      const sanitized = FormatService.sanitizeFolderName(chatTitle);
-      let uniqueChatId = sanitized;
-      let counter = 1;
-      while (ctx.getChats().some((c) => c.id === uniqueChatId)) {
-        uniqueChatId = `${sanitized}-${counter}`;
-        counter++;
+      // Assign a random, collision-resistant storage ID (`XXXX-XXXX-XXXX-XXXX`)
+      // as the chat folder name so duplicate titles never collide on disk.
+      let uniqueChatId = FormatService.generateStorageId();
+      let guard = 0;
+      while (ctx.getChats().some((c) => c.id === uniqueChatId) && guard < 10) {
+        uniqueChatId = FormatService.generateStorageId();
+        guard++;
       }
       chatId = uniqueChatId;
       projectScope = ctx.getDraftProject() || '';
@@ -256,6 +259,15 @@ export class AgentService {
         baseUrl: activeProvider.baseUrl || undefined,
         model: resolvedModel,
         projectRoot: resolvedProjectRoot,
+        allowedCommands: activeProjectConfig?.allowedCommands,
+        // ── Sandbox wiring ── the desktop engine routes every command
+        // and file write through a SandboxRunner driven by these. The
+        // UI toggles (Unsandboxed Terminal Actions / Confirm shell
+        // commands) are read here so the agent actually honors them.
+        unsandboxedActions: ctx.getFullAccess(),
+        permissionMode: (ctx.getFullAccess()
+          ? 'full-autonomy'
+          : (ctx.getDefaultPermissions() ? 'read-only' : 'auto-approve-edits')),
         attachments: allAttachmentPaths.length > 0 ? allAttachmentPaths : undefined,
         internetAccess: ctx.getInternetAccessLevel()
       };

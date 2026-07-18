@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="sa-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#9ec7bd"/>
+      <stop offset="48%" stop-color="#dce6cf"/>
+      <stop offset="100%" stop-color="#f3cda4"/>
+    </linearGradient>
+    <radialGradient id="sa-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff4dd" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#fff4dd" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="sa-clip">
+      <rect x="64" y="64" width="896" height="896" rx="224" ry="224"/>
+    </clipPath>
+  </defs>
+
+  <!-- Sky — the atmosphere backdrop (rounded tile, transparent corners). -->
+  <rect x="64" y="64" width="896" height="896" rx="224" ry="224" fill="url(#sa-sky)"/>
+
+  <g clip-path="url(#sa-clip)">
+    <!-- Soft halo around the disc. -->
+    <circle cx="512" cy="400" r="272" fill="url(#sa-glow)"/>
+    <!-- Focal disc (sun). -->
+    <circle cx="512" cy="400" r="141" fill="#fff2d8"/>
+    <!-- Contemplative bird-flock marks. -->
+    <path d="M620.8 294.4 q32 -32 64 0 q32 -32 64 0" stroke="#ffffff" stroke-opacity="0.7" stroke-width="29" stroke-linecap="round" fill="none"/>
+    <path d="M755.2 352 q25.6 -25.6 51.2 0 q25.6 -25.6 51.2 0" stroke="#ffffff" stroke-opacity="0.55" stroke-width="25.6" stroke-linecap="round" fill="none"/>
+    <!-- Layered mountains — depth via flat, deepening silhouettes (back to front). -->
+    <path d="M64 672 C256 544 416 640 576 576 C736 512 864 608 960 576 L960 960 L64 960 Z" fill="#93b6ab"/>
+    <path d="M64 768 C224 672 384 768 544 704 C704 640 864 736 960 704 L960 960 L64 960 Z" fill="#5f8a7e"/>
+    <path d="M64 864 C192 800 352 864 512 832 C672 800 832 864 960 832 L960 960 L64 960 Z" fill="#2f5147"/>
+  </g>
+
+  <!-- Frame — subtle edge so the tile reads on any background. -->
+  <rect x="64" y="64" width="896" height="896" rx="224" ry="224" fill="none" stroke="#ffffff" stroke-opacity="0.13" stroke-width="4"/>
+</svg>

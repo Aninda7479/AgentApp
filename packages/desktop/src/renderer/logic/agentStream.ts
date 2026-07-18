@@ -22,6 +22,9 @@ export interface AgentEvent {
   toolArgs?: Record<string, unknown>;
   toolResult?: string;
   error?: string;
+  chatName?: string;
+  /** Live context-window usage estimate, set on `type: 'context'` events. */
+  context?: { used: number; limit: number; pct: number };
 }
 
 /** Minimal slice of the partners controller the streaming handler touches. */
@@ -42,11 +45,25 @@ export class AgentStreamService {
   static createHandler(
     ctx: AppContext,
     streaming: StreamingRefs,
-    partnersRef: { current: PartnerController }
+    partnersRef: { current: PartnerController },
+    onContext?: (usage: { used: number; limit: number; pct: number }) => void
   ): (event: unknown, agentEvent: AgentEvent) => void {
     return (_event: unknown, agentEvent: AgentEvent) => {
       const chatId = streaming.chatIdRef.current;
       if (!chatId) return;
+
+      // ── chat-name: update the chat title in state and store ──
+      if (agentEvent.type === 'chat-name' && agentEvent.chatName) {
+        StoreService.updateChatRecord(ctx, chatId, (current) => ({
+          ...current,
+          title: agentEvent.chatName!
+        }));
+      }
+
+      // ── context: forward live context-window usage to the UI gauge ──
+      if (agentEvent.type === 'context' && agentEvent.context && onContext) {
+        onContext(agentEvent.context);
+      }
 
       // ── token: append to the streaming buffer, update (or create) the assistant step ──
       if (agentEvent.type === 'token') {
