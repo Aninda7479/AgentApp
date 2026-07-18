@@ -1,7 +1,7 @@
 import { BrowserWindow, screen } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import type { PartnerManifest } from '../renderer/components/partner/types';
+import type { PartnerManifest } from '../renderer/partner-popup/types';
 import {
   computeCenterPos,
   computeHomePos,

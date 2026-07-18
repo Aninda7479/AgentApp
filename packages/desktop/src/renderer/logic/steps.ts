@@ -7,7 +7,7 @@
  * need a stable id (e.g. the streaming assistant step tracked by a ref) can
  * supply their own; otherwise a fresh id/timestamp is generated.
  */
-import type { TrajectoryStep } from '../components/TrajectoryCanvas';
+import type { TrajectoryStep } from '../pages/Workspace/TrajectoryCanvas';
 
 export class StepFactory {
   /** Generates a unique step id with the given prefix (e.g. "step-user"). */

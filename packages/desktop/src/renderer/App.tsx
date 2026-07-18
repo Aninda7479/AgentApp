@@ -1,28 +1,29 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Sidebar } from './components/Sidebar';
-import { TrajectoryStep } from './components/TrajectoryCanvas';
+import { Sidebar } from './pages/Workspace/Sidebar';
+import { TrajectoryStep } from './pages/Workspace/TrajectoryCanvas';
 import { ComposerOptions } from './logic/types';
-import { DiffViewer } from './components/DiffViewer';
-import { BYOKModal } from './components/BYOKModal';
+import { DiffViewer } from './pages/Workspace/DiffViewer';
+import { BYOKModal } from './pages/Settings/BYOKModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { DoctorModal } from './components/DoctorModal';
-import { PermissionDialog } from './components/PermissionDialog';
-import { MCPDashboard, MCPServerInfo } from './components/MCPDashboard';
+import { PermissionDialog } from './pages/Workspace/PermissionDialog';
+import { MCPDashboard, MCPServerInfo } from './pages/Settings/MCPDashboard';
 import { SearchModal } from './components/SearchModal';
-import { ScheduledView } from './components/ScheduledView';
-import { SettingsView, ProviderConnection, ModelConfig } from './settings/SettingsView';
-import type { InternetAccessLevel } from './settings/types';
-import { CreateProjectModal } from './components/CreateProjectModal';
-import { ConfigureProjectModal } from './components/ConfigureProjectModal';
+import { ScheduledView } from './pages/Workspace/ScheduledView';
+import { SettingsView, ProviderConnection, ModelConfig } from './pages/Settings/SettingsView';
+import type { InternetAccessLevel } from './pages/Settings/types';
+import { CreateProjectModal } from './pages/Workspace/CreateProjectModal';
+import { ConfigureProjectModal } from './pages/Workspace/ConfigureProjectModal';
 import { TitleBar } from './components/TitleBar';
 import { AppToast } from './components/AppToast';
-import { WorkspaceView } from './components/WorkspaceView';
+import { WorkspaceView } from './pages/Workspace/WorkspaceView';
+import { ProjectSettingsPage } from './pages/Workspace/ProjectSettingsPage';
+import { StandaloneChatPage } from './pages/Workspace/StandaloneChatPage';
 import { builtinSuggestions, SkillInfo } from './components/slashCommands';
 import { BottomNav } from './components/BottomNav';
-import { usePartners } from './components/partner/library';
-import { PartnerView } from './components/partner/PartnerView';
-import { PartnerOverlay } from './components/partner/PartnerOverlay';
-import { ThreeDStudio } from './3d_studio/ThreeDStudio';
+import { usePartners } from './pages/Settings/companion/library';
+import { PartnerOverlay } from './partner-popup/PartnerOverlay';
+import { ThreeDStudio } from './pages/Studio/ThreeDStudio';
 import { StoredChat, StoredProject } from './types';
 import { SessionLoopManager, LoopTask } from './logic/loop';
 import { useThemeMode } from './theme';
@@ -266,6 +267,19 @@ export const App: React.FC = () => {
   const defaultComposerModel = lastUsedModel || modelsCatalog.find((m) => m.enabled)?.name || '';
   const isWebMode = !isElectron;
   const slashCommands = useMemo(() => builtinSuggestions(), []);
+
+  // Skill catalog offered to the Project Settings + Standalone Chat pages as
+  // project-only / chat-only skills (deduped by id).
+  const availableSkills = useMemo(() => {
+    const all = [...skills, ...skillCatalog].map((s: any) => ({ id: s.id, name: s.name }));
+    const seen = new Set<string>();
+    return all.filter((s) => {
+      if (!s.id) return false;
+      if (seen.has(s.id)) return false;
+      seen.add(s.id);
+      return true;
+    });
+  }, [skills, skillCatalog]);
 
   const loopManagerRef = useRef<SessionLoopManager | null>(null);
   const [, setActiveLoopsList] = useState<LoopTask[]>([]);
@@ -916,7 +930,7 @@ export const App: React.FC = () => {
           until focused (standard sr-only pattern), then shown as a floating chip. */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-[10000] focus:rounded-lg focus:bg-brand-popover focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-brand-textMain focus:ring-2 focus:ring-brand-border-strong focus:outline-none"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-10000 focus:rounded-lg focus:bg-brand-popover focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-brand-textMain focus:ring-2 focus:ring-brand-border-strong focus:outline-none"
       >
         Skip to main content
       </a>
@@ -962,7 +976,7 @@ export const App: React.FC = () => {
       {/* Main Body container */}
       <div className="flex-1 flex overflow-hidden overflow-x-hidden relative min-w-0">
         {/* Mobile drawer backdrop */}
-        {mobileNavOpen && activeTab !== 'settings' && activeTab !== 'studio' && (
+        {mobileNavOpen && activeTab !== 'settings' && activeTab !== 'studio' && activeTab !== 'project-settings' && activeTab !== 'standalone-chat' && (
           <div
             className="lg:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
             onClick={() => setMobileNavOpen(false)}
@@ -970,7 +984,7 @@ export const App: React.FC = () => {
           />
         )}
         {/* Hide main sidebar when viewing Settings page, matching Image 4 */}
-        {activeTab !== 'settings' && activeTab !== 'studio' && (
+        {activeTab !== 'settings' && activeTab !== 'studio' && activeTab !== 'project-settings' && activeTab !== 'standalone-chat' && (
           <Sidebar
             activeTab={activeTab}
             showStudio={showStudio}
@@ -983,6 +997,11 @@ export const App: React.FC = () => {
                 // so the user can enable the capability rather than hiding it.
                 setActiveTab('settings');
                 setSettingsCategory('3d');
+              } else if (tab === 'companion') {
+                // "Companion" sidebar entry routes into Settings → Companion
+                // (the merged Partner/Pet page), matching the Pets ghost pattern.
+                setActiveTab('settings');
+                setSettingsCategory('companion');
               } else {
                 setActiveTab(tab);
               }
@@ -1006,6 +1025,12 @@ export const App: React.FC = () => {
               setProjectToConfigure(proj);
               setIsConfigureProjectOpen(true);
             }}
+            onProjectSettings={(proj) => {
+              setProjectToConfigure(proj);
+              handleSelectProject(proj.name);
+              setActiveTab('project-settings');
+            }}
+            onOpenStandaloneChat={() => setActiveTab('standalone-chat')}
             onDeleteChat={handleDeleteChat}
             onSelectChat={handleSelectChat}
           />
@@ -1040,7 +1065,7 @@ export const App: React.FC = () => {
               onSendPrompt={handleSendPrompt}
               onStop={handleStopActiveRun}
               onViewDiff={handleViewDiff}
-              onOpenMcp={() => setActiveTab('mcp')}
+              onOpenMcp={() => { setActiveTab('settings'); setSettingsCategory('connectors'); }}
               onOpenSettings={() => {
                 setActiveTab('settings');
                 setSettingsCategory('general');
@@ -1077,21 +1102,32 @@ export const App: React.FC = () => {
             <ScheduledView onCreateTask={handleCreateTaskFromChat} onUseTemplate={handleUseTemplate} />
           )}
 
-
-          {activeTab === 'partner' && (
-            <PartnerView
-              pets={partners.pets}
-              activeId={partners.activeId}
-              petRunning={partners.petRunning}
-              onSetActive={(id) => partners.setActive(id)}
-              onInstallFromFolder={() => partners.installFromFolder()}
-              onInstallFromJson={(json) => { void partners.installFromJson(json); }}
-              onRemove={(id) => partners.remove(id)}
-              onExport={(id) => partners.exportPet(id)}
-              onImportModel={(id, filePath) => partners.importModel(id, filePath)}
-              onImportModelFolder={(id, folderPath) => partners.importModelFolder(id, folderPath)}
+          {activeTab === 'project-settings' && (
+            <ProjectSettingsPage
+              project={projectToConfigure || projects.find((p) => p.name === activeProject) || null}
+              projects={projects}
+              availableSkills={availableSkills}
+              onSave={(updated) => {
+                handleSaveProjectConfig(updated);
+                setProjectToConfigure(updated);
+                triggerToast('Project settings saved');
+              }}
+              onBack={() => setActiveTab('trajectory')}
+              onSelectProject={(name) => {
+                const proj = projects.find((p) => p.name === name) || null;
+                setProjectToConfigure(proj);
+                handleSelectProject(name);
+              }}
             />
           )}
+
+          {activeTab === 'standalone-chat' && (
+            <StandaloneChatPage
+              availableSkills={availableSkills}
+              onBack={() => setActiveTab('trajectory')}
+            />
+          )}
+
 
           {activeTab === 'studio' && showStudio && (
             <ThreeDStudio
@@ -1159,10 +1195,6 @@ export const App: React.FC = () => {
               onClose={() => setActiveTab('trajectory')}
               onReview={handleReviewDiff}
             />
-          )}
-
-          {activeTab === 'mcp' && (
-            <MCPDashboard servers={mcpServers} onAddServer={handleAddMcpServer} onRemoveServer={handleRemoveMcpServer} onToggleServer={handleToggleMcpServer} />
           )}
         </main>
       </div>

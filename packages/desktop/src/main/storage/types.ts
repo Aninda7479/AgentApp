@@ -1,4 +1,4 @@
-import { TrajectoryStep } from '../../renderer/components/TrajectoryCanvas';
+import { TrajectoryStep } from '../../renderer/pages/Workspace/TrajectoryCanvas';
 
 export type { TrajectoryStep };
 
