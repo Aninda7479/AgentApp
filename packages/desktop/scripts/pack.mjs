@@ -122,13 +122,21 @@ if (webInstallResult.status !== 0) {
   process.exit(webInstallResult.status || 1);
 }
 
+// Target platform configuration. Accepts process arguments: --win, --mac, --linux.
+const args = process.argv.slice(2);
+let targetPlatform = 'win';
+if (args.includes('--mac')) targetPlatform = 'mac';
+else if (args.includes('--linux')) targetPlatform = 'linux';
+else if (args.includes('--win')) targetPlatform = 'win';
+else if (process.platform === 'darwin') targetPlatform = 'mac';
+else if (process.platform === 'linux') targetPlatform = 'linux';
+
 // Run electron-builder from the staged dir (no workspace detection → app root =
 // staged dir). Output into a relative dir inside the staged dir, then move it out.
-// On Windows the .bin shim is an extensionless script, so invoke the .cmd via cmd.
-const ebCmd = path.join(repoRoot, 'node_modules', '.bin', 'electron-builder.cmd');
+const cliPath = path.join(repoRoot, 'node_modules', 'electron-builder', 'cli.js');
 const logPath = path.join(desktopDir, 'pack-eb.log');
-console.log('[pack] running electron-builder (log →', logPath + ')');
-const result = spawnSync('cmd', ['/c', ebCmd, '--config.directories.output=' + outName], {
+console.log(`[pack] running electron-builder for --${targetPlatform} (log → ${logPath})`);
+const result = spawnSync(process.execPath, [cliPath, '--config.directories.output=' + outName, '--' + targetPlatform], {
   cwd: packDir,
   encoding: 'utf8',
   maxBuffer: 50 * 1024 * 1024
@@ -153,7 +161,18 @@ if (!fs.existsSync(builtDir)) {
 // Self-verify the asar actually contains the app + bundled renderer + three
 // addons. Without this check a workspace-hoisting regression would ship a
 // black-screen build (dist/ dropped) and we'd only find out at runtime.
-const asarPath = path.join(builtDir, 'win-unpacked', 'resources', 'app.asar');
+// Resolve verification paths dynamically based on target platform.
+let asarPath, packedWebEntry;
+if (targetPlatform === 'mac') {
+  asarPath = path.join(builtDir, 'mac', 'SuperAgent.app', 'Contents', 'Resources', 'app.asar');
+  packedWebEntry = path.join(builtDir, 'mac', 'SuperAgent.app', 'Contents', 'Resources', 'web', 'dist', 'server.js');
+} else if (targetPlatform === 'linux') {
+  asarPath = path.join(builtDir, 'linux-unpacked', 'resources', 'app.asar');
+  packedWebEntry = path.join(builtDir, 'linux-unpacked', 'resources', 'web', 'dist', 'server.js');
+} else {
+  asarPath = path.join(builtDir, 'win-unpacked', 'resources', 'app.asar');
+  packedWebEntry = path.join(builtDir, 'win-unpacked', 'resources', 'web', 'dist', 'server.js');
+}
 // NOTE: the three.js addons (OrbitControls, GLTFLoader, RoomEnvironment) are
 // intentionally NOT required here — bundle-renderer.mjs inlines them into
 // dist/renderer/entry.js / dist/pet/entry.js, so they don't need to ship in
@@ -188,9 +207,8 @@ try {
 }
 
 // Verify that the web server extra resource was copied successfully.
-const packedWebEntry = path.join(builtDir, 'win-unpacked', 'resources', 'web', 'dist', 'server.js');
 if (!fs.existsSync(packedWebEntry)) {
-  console.error('[pack] ❌ packaged web server is missing at resources/web/dist/server.js');
+  console.error('[pack] ❌ packaged web server is missing at:', packedWebEntry);
   rmrf(packDir);
   process.exit(1);
 }
@@ -202,5 +220,5 @@ fs.cpSync(builtDir, outDir, { recursive: true });
 // Clean up the staging dir (removes the junction too).
 rmrf(packDir);
 
-console.log('[pack] done →', path.join(outDir, 'SuperAgent-Setup-0.1.0.exe'));
+console.log(`[pack] done → packaged files copied to ${outDir}`);
 console.log('[pack] build log saved at', logPath);
