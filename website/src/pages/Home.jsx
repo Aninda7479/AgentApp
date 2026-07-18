@@ -1,15 +1,14 @@
-import Orb from '../components/Orb.jsx'
 import Terminal from '../components/Terminal.jsx'
 import InstallForks from '../components/InstallForks.jsx'
 import Features from '../components/Features.jsx'
 import CtaBand from '../components/CtaBand.jsx'
+import Atmosphere from '../components/Atmosphere.jsx'
 
 export default function Home() {
   return (
     <>
       <section className="hero container">
-        <div className="hero-bg" aria-hidden="true" />
-        <Orb className="hero-orb" size={520} />
+        <Atmosphere variant="dusk" />
         <div className="hero-grid">
           <div>
             <p className="eyebrow">Open-source · Autonomous · Privacy-first</p>
@@ -31,12 +30,16 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section container" id="install">
-        <InstallForks />
+      <section id="install" style={{ background: 'linear-gradient(180deg, #143028 0%, #112821 100%)', width: '100%', overflow: 'hidden' }}>
+        <div className="section container">
+          <InstallForks />
+        </div>
       </section>
 
-      <section className="section container" id="features">
-        <Features />
+      <section id="features" style={{ background: 'linear-gradient(180deg, #112821 0%, #0d1f1a 100%)', width: '100%', overflow: 'hidden' }}>
+        <div className="section container">
+          <Features />
+        </div>
       </section>
 
       <CtaBand />

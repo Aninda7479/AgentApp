@@ -62,6 +62,13 @@ async function build() {
   fs.copyFileSync(path.join(webRoot, 'src/account.html'), path.join(distDir, 'account.html'));
   console.log('[Build] account.html copied.');
 
+  // 3d. Copy PWA Assets (manifest.json, sw.js, icon.png, icon.svg)
+  fs.copyFileSync(path.join(webRoot, 'src/manifest.json'), path.join(distDir, 'manifest.json'));
+  fs.copyFileSync(path.join(webRoot, 'src/sw.js'), path.join(distDir, 'sw.js'));
+  fs.copyFileSync(path.join(webRoot, 'src/icon.png'), path.join(distDir, 'icon.png'));
+  fs.copyFileSync(path.join(webRoot, 'src/icon.svg'), path.join(distDir, 'icon.svg'));
+  console.log('[Build] PWA assets and brand logos copied to dist.');
+
   // 4. Resolve and Copy CSS (use desktop index.css or built desktop/dist/index.css)
   const desktopBuiltCss = path.join(desktopRoot, 'dist/index.css');
   const desktopSrcCss = path.join(desktopRoot, 'src/index.css');

@@ -56,7 +56,7 @@ async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
 // Architecture matches OpenCode/Codex: streaming SSE events forwarded to renderer
 // via Electron IPC (replaces HTTP SSE in desktop context)
 
-import { AgentEngine, AgentEngineConfig, AgentEvent, resolveWithinAnyRoot } from './main/ai-engine';
+import { AgentEngine, AgentEngineConfig, AgentEvent, resolveWithinAnyRoot, generateChatName } from './main/ai-engine';
 import { listSkills } from './main/skills';
 import {
   connectServer,

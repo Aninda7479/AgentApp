@@ -10,7 +10,7 @@ export const faqs = [
   {
     q: 'What do I need to run it?',
     a: (
-      <p><b>CLI:</b> paste the install command and it fetches a portable build — or use Node.js 18+ with npm/pnpm. <b>Desktop:</b> Windows 10+, macOS 12+, or a recent Linux. Either way you’ll add a model provider API key; SuperAgent is provider-agnostic, so you bring your own.</p>
+      <p><b>CLI (Core + CLI + Web):</b> Paste the install command into your terminal to fetch the portable CLI. On Windows (PowerShell), run <code style={code}>irm https://superagent.ai/install.ps1 | iex</code>; on macOS/Linux (Bash), run <code style={code}>curl -fsSL https://superagent.ai/install.sh | sh</code>. <b>Desktop App (Core + Desktop + Web):</b> Download and launch the native executable installer for Windows, macOS, or Linux. Either way, you’ll add your own API key; SuperAgent is provider-agnostic.</p>
     )
   },
   {

@@ -7,11 +7,7 @@ export default function Footer() {
     <footer className="footer">
       <div className="container footer-inner">
         <Link className="brand" to="/">
-          <svg className="mark" viewBox="0 0 26 26" fill="none" aria-hidden="true">
-            <circle cx="13" cy="13" r="11" stroke="var(--agent)" strokeOpacity=".7" strokeWidth="1.5" />
-            <ellipse cx="13" cy="13" rx="11.5" ry="4.2" stroke="rgba(255,255,255,.35)" strokeWidth="1" transform="rotate(-24 13 13)" />
-            <circle cx="13" cy="13" r="5" fill="var(--super)" />
-          </svg>
+          <img className="mark" src="/icon.svg" alt="SuperAgent Logo" width="26" height="26" />
           SuperAgent
         </Link>
         <nav className="footer-links" aria-label="Footer">
