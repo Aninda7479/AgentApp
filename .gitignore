@@ -14,6 +14,9 @@ jspm_packages/
 # Build and distribution outputs
 dist/
 dist-release/
+dist-release-app/
+
+
 build/
 out/
 .next/
