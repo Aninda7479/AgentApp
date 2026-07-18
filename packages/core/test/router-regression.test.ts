@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ModelRouter, ModelGovStorage } from '../src/index.js';
+import { OrchestratorRouter, OrchestratorStorage } from '../src/index.js';
 
 /**
  * Regression tests for model-id routing.
@@ -11,20 +11,20 @@ import { ModelRouter, ModelGovStorage } from '../src/index.js';
  * router only strips the first prefix and would hand NVIDIA an invalid
  * `nvidia/llama-3.1-...` id.
  */
-describe('ModelRouter.routeModelForTask id integrity', () => {
+describe('OrchestratorRouter.routeModelForTask id integrity', () => {
   const models = [
     { id: 'nvidia-llama-3.1-nemotron-70b-instruct', name: 'Llama 3.1 Nemotron 70B Instruct', providerId: 'nvidia', enabled: true }
   ];
 
   it('recovers the canonical provider-native id for a correct catalog id', () => {
-    const route = ModelRouter.routeModelForTask('summarize this text', models);
+    const route = OrchestratorRouter.routeModelForTask('summarize this text', models);
     expect(route).not.toBeNull();
     expect(route!.provider).toBe('nvidia');
     expect(route!.model).toBe('llama-3.1-nemotron-70b-instruct');
   });
 
   it('does NOT leave a second provider prefix after stripping', () => {
-    const route = ModelRouter.routeModelForTask('summarize this text', models);
+    const route = OrchestratorRouter.routeModelForTask('summarize this text', models);
     expect(route!.model).not.toContain('/');
     expect(route!.model).not.toMatch(/^nvidia-/);
   });
@@ -34,7 +34,7 @@ describe('ModelRouter.routeModelForTask id integrity', () => {
     // After the NVIDIA knownDefaults fix, the catalog id for a force-connected
     // NVIDIA model is e.g. `nvidia-llama-3.1-nemotron-70b-instruct` and must
     // route to the clean native id `llama-3.1-nemotron-70b-instruct`.
-    const route = ModelRouter.routeModelForTask('summarize this text', models);
+    const route = OrchestratorRouter.routeModelForTask('summarize this text', models);
     expect(route!.model).toBe('llama-3.1-nemotron-70b-instruct');
     expect(route!.model.startsWith('nvidia-')).toBe(false);
     expect(route!.model.includes('/')).toBe(false);
@@ -47,7 +47,7 @@ describe('ModelRouter.routeModelForTask id integrity', () => {
  * capability score is comparable to a non-vision model. When no per-model
  * capability flags are supplied, behaviour must be unchanged.
  */
-describe('ModelRouter.routeModelForTask capability-awareness', () => {
+describe('OrchestratorRouter.routeModelForTask capability-awareness', () => {
   const visionModel = {
     id: 'openai-gpt-4-vision', name: 'GPT-4 Vision', providerId: 'openai', enabled: true,
     supportsVision: true, supportsTools: true
@@ -60,7 +60,7 @@ describe('ModelRouter.routeModelForTask capability-awareness', () => {
   beforeEach(() => {
     // Pin the score engine so the test is deterministic: both models get the
     // same generic scores, isolating the capability multiplier's effect.
-    vi.spyOn(ModelGovStorage, 'getModelScores').mockReturnValue({
+    vi.spyOn(OrchestratorStorage, 'getModelScores').mockReturnValue({
       coding: 50, reasoning: 50, vision: 50, costEfficiency: 50, general: 50
     });
   });
@@ -70,7 +70,7 @@ describe('ModelRouter.routeModelForTask capability-awareness', () => {
   });
 
   it('prefers a vision-capable model for an image task', () => {
-    const route = ModelRouter.routeModelForTask('describe this image', [plainModel, visionModel]);
+    const route = OrchestratorRouter.routeModelForTask('describe this image', [plainModel, visionModel]);
     expect(route!.model).toBe('gpt-4-vision');
   });
 
@@ -79,7 +79,7 @@ describe('ModelRouter.routeModelForTask capability-awareness', () => {
       { id: 'openai-gpt-4o-mini', name: 'GPT-4o Mini', providerId: 'openai', enabled: true },
       { id: 'openai-gpt-4-vision', name: 'GPT-4 Vision', providerId: 'openai', enabled: true }
     ];
-    const route = ModelRouter.routeModelForTask('describe this image', noCaps as any);
+    const route = OrchestratorRouter.routeModelForTask('describe this image', noCaps as any);
     // Without capability data the router can't boost, so the tie breaks on the
     // stable sort order (first model) — unchanged legacy behaviour.
     expect(route!.model).toBe('gpt-4o-mini');
@@ -94,7 +94,7 @@ describe('ModelRouter.routeModelForTask capability-awareness', () => {
       id: 'anthropic-claude-no-tool', name: 'Claude Plain', providerId: 'anthropic', enabled: true,
       supportsVision: false, supportsTools: false
     };
-    const route = ModelRouter.routeModelForTask('write a python function', [nonTool, coder]);
+    const route = OrchestratorRouter.routeModelForTask('write a python function', [nonTool, coder]);
     expect(route!.model).toBe('claude-tool');
   });
 });
@@ -105,7 +105,7 @@ describe('ModelRouter.routeModelForTask capability-awareness', () => {
  * the pool, even if it scores higher on the generic axis. These guard the fix
  * that turned the boost into an actual candidate filter.
  */
-describe('ModelRouter.routeModelForTask capability exclusion', () => {
+describe('OrchestratorRouter.routeModelForTask capability exclusion', () => {
   const visionModel = {
     id: 'openai-gpt-4-vision', name: 'GPT-4 Vision', providerId: 'openai', enabled: true,
     supportsVision: true, supportsTools: true
@@ -118,7 +118,7 @@ describe('ModelRouter.routeModelForTask capability exclusion', () => {
   beforeEach(() => {
     // Make plainModel dominate on the generic axis so the boost alone would NOT
     // save us — only the hard filter can route the vision task correctly.
-    vi.spyOn(ModelGovStorage, 'getModelScores').mockImplementation((id: string) => {
+    vi.spyOn(OrchestratorStorage, 'getModelScores').mockImplementation((id: string) => {
       if (id.includes('gpt-4-vision')) return { coding: 50, reasoning: 50, vision: 50, costEfficiency: 50 };
       return { coding: 96, reasoning: 96, vision: 96, costEfficiency: 96 };
     });
@@ -127,13 +127,13 @@ describe('ModelRouter.routeModelForTask capability exclusion', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('never routes a vision task to a non-vision model when a capable one is available', () => {
-    const route = ModelRouter.routeModelForTask('describe this image', [plainModel, visionModel]);
+    const route = OrchestratorRouter.routeModelForTask('describe this image', [plainModel, visionModel]);
     expect(route!.model).toBe('gpt-4-vision');
   });
 
   it('falls back to the full pool for a vision task when no vision model is present', () => {
     const onlyPlain = { id: 'deepseek-deepseek-chat', name: 'DeepSeek Chat', providerId: 'deepseek', enabled: true, supportsVision: false, supportsTools: true };
-    const route = ModelRouter.routeModelForTask('describe this image', [onlyPlain]);
+    const route = OrchestratorRouter.routeModelForTask('describe this image', [onlyPlain]);
     // No vision-capable model in the pool → must not crash or return null; it
     // falls back to the only available model (provider prefix is stripped).
     expect(route).not.toBeNull();
@@ -144,7 +144,7 @@ describe('ModelRouter.routeModelForTask capability exclusion', () => {
   it('never routes a coding task to a tool-less model when a tool-capable one is available', () => {
     const toolLess = { id: 'openai-reasoner', name: 'Reasoner', providerId: 'openai', enabled: true, supportsVision: false, supportsTools: false };
     const toolModel = { id: 'anthropic-claude-tool', name: 'Claude Coder', providerId: 'anthropic', enabled: true, supportsVision: false, supportsTools: true };
-    const route = ModelRouter.routeModelForTask('write a python function', [toolLess, toolModel]);
+    const route = OrchestratorRouter.routeModelForTask('write a python function', [toolLess, toolModel]);
     expect(route!.model).toBe('claude-tool');
   });
 });
@@ -154,8 +154,8 @@ describe('ModelRouter.routeModelForTask capability exclusion', () => {
  * missing Model Governance selection must fail loud-and-clear, not silently
  * forward the literal string "auto" to a provider and produce a cryptic error).
  */
-describe('ModelRouter.routeModelForTask empty list', () => {
+describe('OrchestratorRouter.routeModelForTask empty list', () => {
   it('throws an actionable error instead of returning null (leaking "auto")', () => {
-    expect(() => ModelRouter.routeModelForTask('summarize this text', [])).toThrow(/no models/i);
+    expect(() => OrchestratorRouter.routeModelForTask('summarize this text', [])).toThrow(/no models/i);
   });
 });

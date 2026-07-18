@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ModelRouter, ModelGovStorage, mergeBestOfN, type BestOfNStrategy } from '../src/index.js';
+import { OrchestratorRouter, OrchestratorStorage, mergeBestOfN, type BestOfNStrategy } from '../src/index.js';
 import type { RouterModel } from '../src/index.js';
 
 /**
@@ -27,16 +27,16 @@ const nonTool: RouterModel = {
   supportsVision: false, supportsTools: false
 };
 
-describe('ModelRouter.selectCandidateModels (top-N selection)', () => {
+describe('OrchestratorRouter.selectCandidateModels (top-N selection)', () => {
   beforeEach(() => {
-    vi.spyOn(ModelGovStorage, 'getModelScores').mockReturnValue({
+    vi.spyOn(OrchestratorStorage, 'getModelScores').mockReturnValue({
       coding: 50, reasoning: 50, vision: 50, costEfficiency: 50, general: 50
     });
   });
   afterEach(() => vi.restoreAllMocks());
 
   it('returns the single best model when count is 1 (matches routeModelForTask)', () => {
-    const top = ModelRouter.selectCandidateModels('describe this image', [plainModel, visionModel], 1);
+    const top = OrchestratorRouter.selectCandidateModels('describe this image', [plainModel, visionModel], 1);
     expect(top).toHaveLength(1);
     expect(top[0].model).toBe('gpt-4-vision');
   });
@@ -46,7 +46,7 @@ describe('ModelRouter.selectCandidateModels (top-N selection)', () => {
       id: 'anthropic-claude-opus', name: 'Claude Opus', providerId: 'anthropic', enabled: true,
       supportsVision: true, supportsTools: true
     };
-    const top = ModelRouter.selectCandidateModels('describe this image', [plainModel, visionModel, visionModel2], 2);
+    const top = OrchestratorRouter.selectCandidateModels('describe this image', [plainModel, visionModel, visionModel2], 2);
     expect(top).toHaveLength(2);
     // The non-vision model is hard-gated out; the two vision models remain,
     // ranked (here equal scores → stable array order) with vision first.
@@ -55,27 +55,27 @@ describe('ModelRouter.selectCandidateModels (top-N selection)', () => {
   });
 
   it('clamps the result to the pool size when count exceeds available models', () => {
-    const top = ModelRouter.selectCandidateModels('summarize this text', [plainModel], 4);
+    const top = OrchestratorRouter.selectCandidateModels('summarize this text', [plainModel], 4);
     expect(top).toHaveLength(1);
   });
 
   it('returns [] for an empty model list', () => {
-    expect(ModelRouter.selectCandidateModels('hi', [], 3)).toEqual([]);
+    expect(OrchestratorRouter.selectCandidateModels('hi', [], 3)).toEqual([]);
   });
 
   it('hard-gates a vision task to vision-capable models only', () => {
     // plainModel dominates on the generic axis; the gate must still exclude it.
-    vi.spyOn(ModelGovStorage, 'getModelScores').mockImplementation((id: string) =>
+    vi.spyOn(OrchestratorStorage, 'getModelScores').mockImplementation((id: string) =>
       id.includes('gpt-4-vision')
         ? { coding: 50, reasoning: 50, vision: 50, costEfficiency: 50 }
         : { coding: 96, reasoning: 96, vision: 96, costEfficiency: 96 }
     );
-    const top = ModelRouter.selectCandidateModels('describe this image', [plainModel, visionModel], 2);
+    const top = OrchestratorRouter.selectCandidateModels('describe this image', [plainModel, visionModel], 2);
     expect(top.every((m) => m.model === 'gpt-4-vision')).toBe(true);
   });
 
   it('selects tool-capable models for a coding task', () => {
-    const top = ModelRouter.selectCandidateModels('write a python function', [nonTool, coder], 2);
+    const top = OrchestratorRouter.selectCandidateModels('write a python function', [nonTool, coder], 2);
     expect(top[0].model).toBe('claude-tool');
     expect(top.some((m) => m.model === 'claude-plain')).toBe(false);
   });

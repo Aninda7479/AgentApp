@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
  */
 const captured: { request: any } = { request: null };
 
-vi.mock('./models.js', async (importActual) => {
+vi.mock('../providers/models.js', async (importActual) => {
   const actual = await importActual<typeof import('./models.js')>();
   return {
     ...actual,
@@ -23,8 +23,8 @@ vi.mock('./models.js', async (importActual) => {
   };
 });
 
-import { ModelRouter, type RouterModel } from './router.js';
-import { BYOKProviderManager } from './byok.js';
+import { OrchestratorRouter, type RouterModel } from './router.js';
+import { BYOKProviderManager } from '../providers/byok.js';
 import type { BYOKConfig } from '../types/agent.js';
 
 function cfg(provider: string): BYOKConfig {
@@ -48,9 +48,9 @@ beforeEach(() => {
   captured.request = null;
 });
 
-describe('ModelRouter difficulty cascade — reasoning-effort escalation', () => {
+describe('OrchestratorRouter difficulty cascade — reasoning-effort escalation', () => {
   it('auto-escalates reasoning effort to high for a hard reasoning task', async () => {
-    const router = new ModelRouter({ preferredProvider: 'openai' });
+    const router = new OrchestratorRouter({ preferredProvider: 'openai' });
     await router.completeWithFallback(
       { messages: [{ role: 'user', content: 'prove this theorem step by step, a complex and difficult problem requiring multiple steps' }] } as any,
       mgrWith(cfg('openai'))
@@ -59,7 +59,7 @@ describe('ModelRouter difficulty cascade — reasoning-effort escalation', () =>
   });
 
   it('does NOT add reasoning effort for a trivial non-reasoning task (preserve cost/latency)', async () => {
-    const router = new ModelRouter({ preferredProvider: 'openai' });
+    const router = new OrchestratorRouter({ preferredProvider: 'openai' });
     await router.completeWithFallback(
       { messages: [{ role: 'user', content: 'hi, what is the weather today?' }] } as any,
       mgrWith(cfg('openai'))
@@ -68,7 +68,7 @@ describe('ModelRouter difficulty cascade — reasoning-effort escalation', () =>
   });
 
   it('never overrides an explicit caller effort (caller wins over cascade)', async () => {
-    const router = new ModelRouter({ preferredProvider: 'openai', reasoningEffort: 'low' });
+    const router = new OrchestratorRouter({ preferredProvider: 'openai', reasoningEffort: 'low' });
     await router.completeWithFallback(
       { messages: [{ role: 'user', content: 'prove this theorem step by step, complex and difficult requiring multiple steps' }] } as any,
       mgrWith(cfg('openai'))
@@ -77,9 +77,9 @@ describe('ModelRouter difficulty cascade — reasoning-effort escalation', () =>
   });
 });
 
-describe('ModelRouter difficulty cascade — ensemble candidate breadth', () => {
+describe('OrchestratorRouter difficulty cascade — ensemble candidate breadth', () => {
   it('widens the candidate pool to 3 for a high-difficulty coding task', () => {
-    const picks = ModelRouter.selectCandidateModels(
+    const picks = OrchestratorRouter.selectCandidateModels(
       'refactor this complex and difficult distributed system architecture requiring multiple steps',
       FOUR_TOOLS,
       2
@@ -88,7 +88,7 @@ describe('ModelRouter difficulty cascade — ensemble candidate breadth', () => 
   });
 
   it('keeps the default count for a low-difficulty task', () => {
-    const picks = ModelRouter.selectCandidateModels('hi there, how are you today?', FOUR_TOOLS, 2);
+    const picks = OrchestratorRouter.selectCandidateModels('hi there, how are you today?', FOUR_TOOLS, 2);
     expect(picks).toHaveLength(2);
   });
 });

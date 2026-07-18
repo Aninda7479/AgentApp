@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
  * adapter can throw a status-coded error the health tracker classifies, then
  * assert the router reroutes and records the failure. The real
  * provider-health singleton is used (not mocked), so we exercise the actual
- * wiring in ModelRouter.completeWithFallback.
+ * wiring in OrchestratorRouter.completeWithFallback.
  */
 const fakeAdapters: Record<string, { complete: () => Promise<any> }> = {};
 
@@ -23,9 +23,9 @@ vi.mock('../providers/models.js', async (importActual) => {
   };
 });
 
-import { ModelRouter } from './router.js';
+import { OrchestratorRouter } from './router.js';
 import { providerHealth, resetProviderHealth } from './provider-health.js';
-import { BYOKProviderManager } from './byok.js';
+import { BYOKProviderManager } from '../providers/byok.js';
 import type { BYOKConfig } from '../types/agent.js';
 
 const OK_RESPONSE = { text: 'ok', usage: {} };
@@ -45,12 +45,12 @@ beforeEach(() => {
   for (const k of Object.keys(fakeAdapters)) delete fakeAdapters[k];
 });
 
-describe('ModelRouter.completeWithFallback — health-aware reroute', () => {
+describe('OrchestratorRouter.completeWithFallback — health-aware reroute', () => {
   it('reroutes to a healthy provider when the preferred one is rate-limited', async () => {
     fakeAdapters['openai'] = { complete: async () => { throw new Error('OpenAI API error [429]: slow down'); } };
     fakeAdapters['anthropic'] = { complete: async () => OK_RESPONSE };
 
-    const router = new ModelRouter({ preferredProvider: 'openai', fallbackOrder: ['anthropic'] });
+    const router = new OrchestratorRouter({ preferredProvider: 'openai', fallbackOrder: ['anthropic'] });
     const res = await router.completeWithFallback({ messages: [] } as any, mgrWith(cfg('openai'), cfg('anthropic')));
 
     expect(res).toBe(OK_RESPONSE);
@@ -65,7 +65,7 @@ describe('ModelRouter.completeWithFallback — health-aware reroute', () => {
     fakeAdapters['openai'] = { complete: async () => { openaiCalls++; throw new Error('OpenAI API error [429]: slow'); } };
     fakeAdapters['anthropic'] = { complete: async () => OK_RESPONSE };
 
-    const router = new ModelRouter({ preferredProvider: 'openai', fallbackOrder: ['anthropic'] });
+    const router = new OrchestratorRouter({ preferredProvider: 'openai', fallbackOrder: ['anthropic'] });
     const res = await router.completeWithFallback({ messages: [] } as any, mgrWith(cfg('openai'), cfg('anthropic')));
 
     expect(res).toBe(OK_RESPONSE);
@@ -76,7 +76,7 @@ describe('ModelRouter.completeWithFallback — health-aware reroute', () => {
     providerHealth.recordFailure('openai', new Error('OpenAI API error [429]: slow'));
     fakeAdapters['openai'] = { complete: async () => OK_RESPONSE };
 
-    const router = new ModelRouter({ preferredProvider: 'openai' });
+    const router = new OrchestratorRouter({ preferredProvider: 'openai' });
     await router.completeWithFallback({ messages: [] } as any, mgrWith(cfg('openai')));
 
     expect(providerHealth.getStatus('openai')).toBe('available');
@@ -86,7 +86,7 @@ describe('ModelRouter.completeWithFallback — health-aware reroute', () => {
     fakeAdapters['openai'] = { complete: async () => { throw new Error('OpenAI API error [500]: boom'); } };
     fakeAdapters['anthropic'] = { complete: async () => { throw new Error('Anthropic API error [500]: boom'); } };
 
-    const router = new ModelRouter({ preferredProvider: 'openai', fallbackOrder: ['anthropic'] });
+    const router = new OrchestratorRouter({ preferredProvider: 'openai', fallbackOrder: ['anthropic'] });
     await expect(
       router.completeWithFallback({ messages: [] } as any, mgrWith(cfg('openai'), cfg('anthropic')))
     ).rejects.toThrow(/All provider fallbacks failed/);

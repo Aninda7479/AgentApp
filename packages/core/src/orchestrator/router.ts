@@ -93,9 +93,7 @@ export class OrchestratorRouter {
       ...this.fallbackOrder
     ].filter((v, i, self) => self.indexOf(v) === i);
 
-    const healthyOrder = providerOrder.sort(
-      (a, b) => OrchestratorRouter.healthRank(a) - OrchestratorRouter.healthRank(b)
-    );
+    const healthyOrder = providerOrder;
 
     let lastError: Error | null = null;
 
@@ -107,7 +105,13 @@ export class OrchestratorRouter {
       if (!config) continue;
 
       const rank = OrchestratorRouter.healthRank(provider);
-      if (rank > 0 && providerOrder.some((p) => OrchestratorRouter.healthRank(p) === 0)) {
+      // A healthy fallback is only a reason to skip an unhealthy provider if it
+      // is actually configured. (Otherwise a lone rate-limited provider would be
+      // skipped in favour of unconfigured "healthy" defaults and never recover.)
+      const hasHealthyConfiguredLater = providerOrder
+        .slice(i + 1)
+        .some((p) => byokManager.getKey(p) && OrchestratorRouter.healthRank(p) === 0);
+      if (rank > 0 && hasHealthyConfiguredLater) {
         onReroute?.({
           from: provider,
           to: nextProvider,
@@ -140,14 +144,14 @@ export class OrchestratorRouter {
           from: provider,
           to: nextProvider,
           reason: 'error',
+          status: providerHealth.getStatus(provider),
           detail: err.message || String(err)
         });
       }
     }
 
-    throw (
-      lastError ||
-      new Error('Model execution failed: no configured providers succeeded or were available.')
+    throw new Error(
+      `All provider fallbacks failed: ${lastError ? lastError.message : 'no configured providers succeeded or were available.'}`
     );
   }
 
@@ -187,7 +191,10 @@ export class OrchestratorRouter {
         try {
           const helperAdapter = createProviderAdapter(helperConfig);
           const inst = bridgeInstruction(plan.bridgeType ?? 'vision');
-          const helperRequest = withBridgeInstruction(request, inst);
+          const helperRequest = {
+            ...withBridgeInstruction(request, inst),
+            reasoningEffort: options?.reasoningEffort
+          };
           const helperResponse = await helperAdapter.complete(helperRequest);
 
           activeRequest = augmentRequestForBridge(request, helperResponse.content, plan.bridgeType ?? 'bridge');

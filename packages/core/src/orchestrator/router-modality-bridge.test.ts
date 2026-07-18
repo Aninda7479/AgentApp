@@ -23,8 +23,8 @@ vi.mock('../providers/models.js', async (importActual) => {
   };
 });
 
-import { ModelRouter } from './router.js';
-import { BYOKProviderManager } from './byok.js';
+import { OrchestratorRouter } from './router.js';
+import { BYOKProviderManager } from '../providers/byok.js';
 import type { BYOKConfig, CompletionRequest, RouterModel } from '../types/agent.js';
 import type { ModalityBridgePlan } from './modality-bridge.js';
 
@@ -58,9 +58,9 @@ beforeEach(() => {
   fakeAdapters['deepseek'] = { complete: async (r: any) => { (calls.deepseek ||= []).push(r); return { content: 'final answer', usage: {} }; } };
 });
 
-describe('ModelRouter.completeWithBridge', () => {
+describe('OrchestratorRouter.completeWithBridge', () => {
   it('bridges a non-vision target via a vision model, then answers', async () => {
-    const router = new ModelRouter();
+    const router = new OrchestratorRouter();
     let plan: ModalityBridgePlan | undefined;
     const res = await router.completeWithBridge(
       imgRequest(),
@@ -85,11 +85,11 @@ describe('ModelRouter.completeWithBridge', () => {
     expect(isTextOnly).toBe(true);
     const text = Array.isArray(blocks) ? blocks.map((b: any) => b.text).join(' ') : blocks;
     expect(text).toContain('a cat on a chair');
-    expect(text).toContain('Image description');
+    expect(text).toContain('[vision from a bridging model]');
   });
 
   it('does NOT bridge when the forced target is vision-capable', async () => {
-    const router = new ModelRouter();
+    const router = new OrchestratorRouter();
     let plan: ModalityBridgePlan | undefined;
     const res = await router.completeWithBridge(
       imgRequest(),

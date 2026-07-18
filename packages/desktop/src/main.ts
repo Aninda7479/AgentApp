@@ -14,6 +14,7 @@ import { getChatDirectory } from './main/storage/index.js';
 import * as PartnerStore from './main/partner-store';
 import { petWindowManager } from './main/pet-window';
 import { logError, errorMessage, registerErrorToasts, IpcErrorEnvelope } from './main/error-log';
+import { getSystemInfo } from './main/system-info';
 
 // Tracks context-window usage so the pet can show "dark circles" when the
 // conversation approaches the model's capacity.
@@ -517,6 +518,12 @@ safeHandle('settings-read', () => {
 safeHandle('settings-write', (_event, settings) => {
   SettingsStorage.saveSettings(settings);
 });
+
+// ── Hardware detection for the Local Model (Ollama) manager ────────────────
+// Returns CPU/GPU/RAM/storage/unified-memory details so the renderer can
+// recommend models that actually fit the machine. Runs in the main process;
+// see ./main/system-info.ts for the per-probe implementation.
+safeHandle('system-info', () => getSystemInfo());
 
 safeHandle('usage-summary', () => {
   return UsageTracker.getSummary();

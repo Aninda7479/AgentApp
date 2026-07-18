@@ -28,13 +28,13 @@ describe('composerModelsFromCatalog', () => {
     expect(composerModelsFromCatalog([mk('openrouter-auto', 'Auto Router', true)])).toEqual(['Auto Router']);
   });
 
-  it('offers "Model Governance" + every ENABLED model when several are enabled', () => {
+  it('offers "Orchestrator" + every ENABLED model when several are enabled', () => {
     const catalog = [
       mk('or-a', 'Model A', true),
       mk('or-b', 'Model B', true),
       mk('or-c', 'Model C', true)
     ];
-    expect(composerModelsFromCatalog(catalog)).toEqual(['Model Governance', 'Model A', 'Model B', 'Model C']);
+    expect(composerModelsFromCatalog(catalog)).toEqual(['Orchestrator', 'Model A', 'Model B', 'Model C']);
   });
 
   it('excludes disabled models — only enabled ones are offered', () => {
@@ -56,7 +56,7 @@ describe('composerModelsFromCatalog', () => {
       mk('or-b', 'Model B', true),
       mk('or-c', 'Model C', false)
     ];
-    expect(composerModelsFromCatalog(catalog)).toEqual(['Model Governance', 'Model A', 'Model B']);
+    expect(composerModelsFromCatalog(catalog)).toEqual(['Orchestrator', 'Model A', 'Model B']);
   });
 });
 

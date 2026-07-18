@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ModelRouter, type RouterModel } from './router.js';
+import { OrchestratorRouter, type RouterModel } from './router.js';
 import { SettingsStorage } from '../storage/settings-store.js';
 
 /**
@@ -28,7 +28,7 @@ describe('rankModels — quality goal folds intelligenceTier', () => {
       { id: 'alpha-model', providerId: 'openai', enabled: true, supportsTools: true, intelligenceTier: 'high' },
       { id: 'beta-model', providerId: 'anthropic', enabled: true, supportsTools: true, intelligenceTier: 'mid' }
     ];
-    const pick = ModelRouter.routeModelForTask('write a function to parse json', pool);
+    const pick = OrchestratorRouter.routeModelForTask('write a function to parse json', pool);
     expect(pick.model).toBe('alpha-model'); // high (85) beats mid (60)
   });
 });
@@ -39,7 +39,7 @@ describe('rankModels — cost goal folds costPer1kTokens', () => {
       { id: 'cheap-model', providerId: 'openai', enabled: true, supportsTools: true, costPer1kTokens: 0.001 },
       { id: 'pricey-model', providerId: 'anthropic', enabled: true, supportsTools: true, costPer1kTokens: 0.5 }
     ];
-    const pick = ModelRouter.routeModelForTask('write a function to parse json', pool);
+    const pick = OrchestratorRouter.routeModelForTask('write a function to parse json', pool);
     expect(pick.model).toBe('cheap-model');
   });
 });
@@ -50,18 +50,21 @@ describe('rankModels — balanced goal blends speed + cost', () => {
       { id: 'fast-model', providerId: 'openai', enabled: true, supportsTools: true, speedTier: 'fast', costPer1kTokens: 0.001 },
       { id: 'slow-model', providerId: 'anthropic', enabled: true, supportsTools: true, speedTier: 'slow', costPer1kTokens: 0.5 }
     ];
-    const pick = ModelRouter.routeModelForTask('write a function to parse json', pool);
+    const pick = OrchestratorRouter.routeModelForTask('write a function to parse json', pool);
     expect(pick.model).toBe('fast-model');
   });
 });
 
 describe('rankModels — backward-compatible when tiers are absent', () => {
-  it('still ranks by task (vision) score with no tier metadata (gemini-3 > gpt-4o)', () => {
+  it('still ranks by task (vision) score with no tier metadata (gpt-4o wins on curated vision score)', () => {
     const pool: RouterModel[] = [
       { id: 'gpt-4o', providerId: 'openai', enabled: true, supportsVision: true },
       { id: 'gemini-3', providerId: 'google', enabled: true, supportsVision: true }
     ];
-    const pick = ModelRouter.routeModelForTask('describe this image and screenshot', pool);
-    expect(pick.model).toBe('gemini-3');
+    const pick = OrchestratorRouter.routeModelForTask('describe this image and screenshot', pool);
+    // No tier metadata → the curated capability DB drives the score. gpt-4o has
+    // a higher curated vision score (76) than gemini-3 (no entry → default 30),
+    // and both are vision-capable, so gpt-4o ranks first for a vision task.
+    expect(pick.model).toBe('gpt-4o');
   });
 });

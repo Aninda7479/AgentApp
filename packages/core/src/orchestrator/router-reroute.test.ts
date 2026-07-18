@@ -22,9 +22,9 @@ vi.mock('../providers/models.js', async (importActual) => {
   };
 });
 
-import { ModelRouter, type RerouteEvent } from './router.js';
+import { OrchestratorRouter, type RerouteEvent } from './router.js';
 import { providerHealth, resetProviderHealth } from './provider-health.js';
-import { BYOKProviderManager } from './byok.js';
+import { BYOKProviderManager } from '../providers/byok.js';
 import type { BYOKConfig } from '../types/agent.js';
 
 const OK_RESPONSE = { text: 'ok', usage: {} };
@@ -44,11 +44,11 @@ beforeEach(() => {
   for (const k of Object.keys(fakeAdapters)) delete fakeAdapters[k];
 });
 
-describe('ModelRouter.completeWithFallback — reroute observability', () => {
+describe('OrchestratorRouter.completeWithFallback — reroute observability', () => {
   it('emits NO reroute events when the first healthy provider succeeds', async () => {
     fakeAdapters['openai'] = { complete: async () => OK_RESPONSE };
     const events: RerouteEvent[] = [];
-    const router = new ModelRouter({ preferredProvider: 'openai' });
+    const router = new OrchestratorRouter({ preferredProvider: 'openai' });
     await router.completeWithFallback({ messages: [] } as any, mgrWith(cfg('openai')), undefined, undefined, (e) => events.push(e));
     expect(events).toEqual([]);
   });
@@ -61,7 +61,7 @@ describe('ModelRouter.completeWithFallback — reroute observability', () => {
     fakeAdapters['anthropic'] = { complete: async () => OK_RESPONSE };
 
     const events: RerouteEvent[] = [];
-    const router = new ModelRouter({ preferredProvider: 'openai', fallbackOrder: ['anthropic'] });
+    const router = new OrchestratorRouter({ preferredProvider: 'openai', fallbackOrder: ['anthropic'] });
     const res = await router.completeWithFallback({ messages: [] } as any, mgrWith(cfg('openai'), cfg('anthropic')), undefined, undefined, (e) => events.push(e));
 
     expect(res).toBe(OK_RESPONSE);
@@ -76,7 +76,7 @@ describe('ModelRouter.completeWithFallback — reroute observability', () => {
     fakeAdapters['anthropic'] = { complete: async () => OK_RESPONSE };
 
     const events: RerouteEvent[] = [];
-    const router = new ModelRouter({ preferredProvider: 'openai', fallbackOrder: ['anthropic'] });
+    const router = new OrchestratorRouter({ preferredProvider: 'openai', fallbackOrder: ['anthropic'] });
     const res = await router.completeWithFallback({ messages: [] } as any, mgrWith(cfg('openai'), cfg('anthropic')), undefined, undefined, (e) => events.push(e));
 
     expect(res).toBe(OK_RESPONSE);
@@ -89,7 +89,7 @@ describe('ModelRouter.completeWithFallback — reroute observability', () => {
     fakeAdapters['anthropic'] = { complete: async () => { throw new Error('Anthropic API error [500]: boom'); } };
 
     const events: RerouteEvent[] = [];
-    const router = new ModelRouter({ preferredProvider: 'openai', fallbackOrder: ['anthropic'] });
+    const router = new OrchestratorRouter({ preferredProvider: 'openai', fallbackOrder: ['anthropic'] });
     await expect(
       router.completeWithFallback({ messages: [] } as any, mgrWith(cfg('openai'), cfg('anthropic')), undefined, undefined, (e) => events.push(e))
     ).rejects.toThrow(/All provider fallbacks failed/);
@@ -107,7 +107,7 @@ describe('ModelRouter.completeWithFallback — reroute observability', () => {
     fakeAdapters['anthropic'] = { complete: async () => { throw new Error('Anthropic API error [500]: down'); } };
 
     const events: RerouteEvent[] = [];
-    const router = new ModelRouter({ preferredProvider: 'openai', fallbackOrder: ['anthropic'] });
+    const router = new OrchestratorRouter({ preferredProvider: 'openai', fallbackOrder: ['anthropic'] });
     const res = await router.completeWithFallback({ messages: [] } as any, mgrWith(cfg('openai'), cfg('anthropic')), undefined, undefined, (e) => events.push(e));
 
     expect(res).toBe(OK_RESPONSE);
@@ -126,7 +126,7 @@ describe('ModelRouter.completeWithFallback — reroute observability', () => {
  */
 describe('AgentEngine.runOrchestrated — surfaces reroute as an event', () => {
   it('emits a "reroute" event when the router fails over a provider', async () => {
-    const { AgentEngine } = await import('./ai-engine.js');
+    const { AgentEngine } = await import('../providers/ai-engine.js');
     fakeAdapters['openai'] = { complete: async () => { throw new Error('OpenAI API error [429]: slow'); } };
     fakeAdapters['anthropic'] = { complete: async () => ({ content: 'answer', usage: {} }) };
 

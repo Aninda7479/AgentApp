@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ModelRouter, type RouterModel } from './router.js';
+import { OrchestratorRouter, type RouterModel } from './router.js';
 import { SettingsStorage } from '../storage/settings-store.js';
 
 /**
@@ -59,9 +59,9 @@ beforeEach(() => {
   SettingsStorage.clearCache();
 });
 
-describe('ModelRouter.resolveCandidatePool (capability gate)', () => {
+describe('OrchestratorRouter.resolveCandidatePool (capability gate)', () => {
   it('pure vision task is restricted to vision-capable models', () => {
-    const result = (ModelRouter as any).resolveCandidatePool(
+    const result = (OrchestratorRouter as any).resolveCandidatePool(
       { isCoding: false, isReasoning: false, isVision: true },
       ALL
     );
@@ -73,7 +73,7 @@ describe('ModelRouter.resolveCandidatePool (capability gate)', () => {
   });
 
   it('pure coding task is restricted to tool-capable models', () => {
-    const result = (ModelRouter as any).resolveCandidatePool(
+    const result = (OrchestratorRouter as any).resolveCandidatePool(
       { isCoding: true, isReasoning: false, isVision: false },
       ALL
     );
@@ -86,7 +86,7 @@ describe('ModelRouter.resolveCandidatePool (capability gate)', () => {
 
   it('mixed vision + coding task requires BOTH vision and tools (regression)', () => {
     // Before the fix this gate used OR, so a tool-only model could win a vision task.
-    const result = (ModelRouter as any).resolveCandidatePool(
+    const result = (OrchestratorRouter as any).resolveCandidatePool(
       { isCoding: true, isReasoning: false, isVision: true },
       ALL
     );
@@ -99,7 +99,7 @@ describe('ModelRouter.resolveCandidatePool (capability gate)', () => {
 
   it('falls back to the full pool when no capable model is present', () => {
     const visionTaskPool = [TOOLS_ONLY, NEITHER]; // no vision-capable model
-    const result = (ModelRouter as any).resolveCandidatePool(
+    const result = (OrchestratorRouter as any).resolveCandidatePool(
       { isCoding: false, isReasoning: false, isVision: true },
       visionTaskPool
     );
@@ -108,7 +108,7 @@ describe('ModelRouter.resolveCandidatePool (capability gate)', () => {
   });
 });
 
-describe('ModelRouter.resolveCandidatePool (availability filter)', () => {
+describe('OrchestratorRouter.resolveCandidatePool (availability filter)', () => {
   // Availability pre-filter: a model whose accessStatus is locked / rate_limited
   // / deprecated must never be selected, even if it is capability-fit. This is
   // the core "can't be banned out from under you" guarantee.
@@ -130,7 +130,7 @@ describe('ModelRouter.resolveCandidatePool (availability filter)', () => {
   };
 
   it('drops rate_limited models from the candidate pool', () => {
-    const result = (ModelRouter as any).resolveCandidatePool(
+    const result = (OrchestratorRouter as any).resolveCandidatePool(
       { isCoding: false, isReasoning: false, isVision: true },
       [RATE_LIMITED_VISION, AVAILABLE_VISION]
     );
@@ -140,7 +140,7 @@ describe('ModelRouter.resolveCandidatePool (availability filter)', () => {
   });
 
   it('a coding task never selects a locked or deprecated tool model', () => {
-    const result = (ModelRouter as any).resolveCandidatePool(
+    const result = (OrchestratorRouter as any).resolveCandidatePool(
       { isCoding: true, isReasoning: false, isVision: false },
       [LOCKED_TOOLS, DEPRECATED_TOOLS, AVAILABLE_VISION]
     );
@@ -155,7 +155,7 @@ describe('ModelRouter.resolveCandidatePool (availability filter)', () => {
       id: 'gpt-4o', name: 'GPT-4o', providerId: 'openai', enabled: true,
       supportsVision: true, supportsTools: false
     };
-    const result = (ModelRouter as any).resolveCandidatePool(
+    const result = (OrchestratorRouter as any).resolveCandidatePool(
       { isCoding: false, isReasoning: false, isVision: true },
       [legacy]
     );
@@ -163,7 +163,7 @@ describe('ModelRouter.resolveCandidatePool (availability filter)', () => {
   });
 
   it('never empties the pool: if every model is unavailable it falls back to the full pool', () => {
-    const result = (ModelRouter as any).resolveCandidatePool(
+    const result = (OrchestratorRouter as any).resolveCandidatePool(
       { isCoding: false, isReasoning: false, isVision: false },
       [LOCKED_TOOLS, DEPRECATED_TOOLS]
     );
@@ -173,19 +173,21 @@ describe('ModelRouter.resolveCandidatePool (availability filter)', () => {
   });
 });
 
-describe('ModelRouter.routeModelForTask', () => {
+describe('OrchestratorRouter.routeModelForTask', () => {
   it('throws when no models are configured', () => {
-    expect(() => ModelRouter.routeModelForTask('hello', [])).toThrow();
+    expect(() => OrchestratorRouter.routeModelForTask('hello', [])).toThrow();
   });
 
   it('selects the highest-scored vision model for a vision prompt', () => {
-    const pick = ModelRouter.routeModelForTask('describe this image and screenshot', ALL);
-    expect(pick.provider).toBe('google'); // gemini-3 has the highest vision score
-    expect(pick.model).toBe('gemini-3');
+    const pick = OrchestratorRouter.routeModelForTask('describe this image and screenshot', ALL);
+    // gpt-4o curates to a higher vision score (76) than gemini-3 (no DB entry →
+    // default 30), and both are vision-capable, so gpt-4o ranks first.
+    expect(pick.provider).toBe('openai');
+    expect(pick.model).toBe('gpt-4o');
   });
 
   it('selects a tool-capable model for a coding prompt', () => {
-    const pick = ModelRouter.routeModelForTask('write a function to parse json', ALL);
+    const pick = OrchestratorRouter.routeModelForTask('write a function to parse json', ALL);
     expect(pick.provider).toBe('anthropic');
     expect(pick.model).toBe('claude-sonnet');
   });
@@ -194,15 +196,15 @@ describe('ModelRouter.routeModelForTask', () => {
     SettingsStorage.saveSettings({
       modelGov: { categoryOverrides: { vision: 'openai-gpt-4o' } }
     });
-    const pick = ModelRouter.routeModelForTask('analyze this photo', ALL);
+    const pick = OrchestratorRouter.routeModelForTask('analyze this photo', ALL);
     expect(pick.provider).toBe('openai');
     expect(pick.model).toBe('gpt-4o');
   });
 });
 
-describe('ModelRouter.selectCandidateModels (best-of-N pool)', () => {
+describe('OrchestratorRouter.selectCandidateModels (best-of-N pool)', () => {
   it('returns only models satisfying every required modality for a mixed task', () => {
-    const picks = ModelRouter.selectCandidateModels(
+    const picks = OrchestratorRouter.selectCandidateModels(
       'write code to draw a diagram',
       ALL,
       2
@@ -213,7 +215,7 @@ describe('ModelRouter.selectCandidateModels (best-of-N pool)', () => {
   });
 
   it('returns up to `count` candidates for a pure coding task', () => {
-    const picks = ModelRouter.selectCandidateModels('refactor this class', ALL, 2);
+    const picks = OrchestratorRouter.selectCandidateModels('refactor this class', ALL, 2);
     expect(picks).toHaveLength(2);
     const ids = picks.map((p) => p.model);
     expect(ids).toContain('claude-sonnet');
@@ -221,27 +223,27 @@ describe('ModelRouter.selectCandidateModels (best-of-N pool)', () => {
   });
 });
 
-describe('ModelRouter.stripProviderPrefix', () => {
+describe('OrchestratorRouter.stripProviderPrefix', () => {
   it('strips exactly the single canonical provider prefix', () => {
-    expect((ModelRouter as any).stripProviderPrefix('openai', 'openai-gpt-4o')).toBe('gpt-4o');
+    expect((OrchestratorRouter as any).stripProviderPrefix('openai', 'openai-gpt-4o')).toBe('gpt-4o');
   });
 
   it('strips one prefix even when the input carries a malformed double prefix', () => {
     // The catalog contract is exactly one `${providerId}-` prefix; a doubled
     // id is malformed upstream. We strip once and leave the remaining
     // canonical `${providerId}-${nativeId}` intact rather than consuming it.
-    expect((ModelRouter as any).stripProviderPrefix('openai', 'openai-openai-gpt-4o')).toBe('openai-gpt-4o');
+    expect((OrchestratorRouter as any).stripProviderPrefix('openai', 'openai-openai-gpt-4o')).toBe('openai-gpt-4o');
   });
 
   it('preserves a native id that begins with the providerId (Claude/DeepSeek)', () => {
     // Regression: a repeat-strip loop previously corrupted these into
     // `sonnet-4-5` / `chat`. The catalog id is `${providerId}-${nativeId}`,
     // so a single strip must yield the native id the API expects.
-    expect((ModelRouter as any).stripProviderPrefix('claude', 'claude-claude-sonnet-4-5')).toBe('claude-sonnet-4-5');
-    expect((ModelRouter as any).stripProviderPrefix('deepseek', 'deepseek-deepseek-chat')).toBe('deepseek-chat');
+    expect((OrchestratorRouter as any).stripProviderPrefix('claude', 'claude-claude-sonnet-4-5')).toBe('claude-sonnet-4-5');
+    expect((OrchestratorRouter as any).stripProviderPrefix('deepseek', 'deepseek-deepseek-chat')).toBe('deepseek-chat');
   });
 
   it('leaves an unprefixed id untouched', () => {
-    expect((ModelRouter as any).stripProviderPrefix('anthropic', 'claude-sonnet')).toBe('claude-sonnet');
+    expect((OrchestratorRouter as any).stripProviderPrefix('anthropic', 'claude-sonnet')).toBe('claude-sonnet');
   });
 });

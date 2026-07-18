@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Box,
   Boxes,
+  HardDrive,
   Search,
   Bot,
   FolderArchive,
@@ -48,6 +49,7 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
   "AI Config": [
     { id: 'providers', label: 'Providers', Icon: SlidersHorizontal },
     { id: 'models', label: 'Models', Icon: Bot },
+    { id: 'local-model', label: 'Local Model', Icon: HardDrive },
     { id: 'model-gov', label: 'Orchestrator', Icon: Network },
     { id: 'usage', label: 'AI Usage', Icon: SquareTerminal }
   ],

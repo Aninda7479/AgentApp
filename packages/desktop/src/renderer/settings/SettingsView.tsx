@@ -6,6 +6,7 @@ import { GeneralSettings } from './GeneralSettings';
 import { IntegrationsSettings, IntegrationsSkill, IntegrationsPlugin } from './IntegrationsSettings';
 import { ProvidersSettings } from './ProvidersSettings';
 import { ModelsSettings } from './ModelsSettings';
+import { LocalModelSettings } from './LocalModelSettings';
 import { PlaceholderSettings } from './PlaceholderSettings';
 import { PetsSettings } from './PetsSettings';
 import { UsageTrackerSettings } from './UsageTrackerSettings';
@@ -447,6 +448,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onConnectProvider={onConnectProvider}
             onToggleModel={onToggleModel}
             enrichModel={enrichModel}
+          />
+        )}
+        {activeCategory === 'local-model' && (
+          <LocalModelSettings
+            connectedProviders={connectedProviders}
+            modelsCatalog={modelsCatalog}
+            onConnectProvider={onConnectProvider}
+            enrichModel={enrichModel}
+            onToast={onToast}
           />
         )}
         {activeCategory === 'model-gov' && (
