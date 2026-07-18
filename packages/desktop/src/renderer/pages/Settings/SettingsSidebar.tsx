@@ -10,6 +10,7 @@ import {
   FolderArchive,
   Info,
   LucideIcon,
+  Mic,
   PawPrint,
   Plug,
   Settings,
@@ -51,6 +52,7 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
     { id: 'models', label: 'Models', Icon: Bot },
     { id: 'local-model', label: 'Local Model', Icon: HardDrive },
     { id: 'model-gov', label: 'Orchestrator', Icon: Network },
+    { id: 'voice', label: 'Voice & Mic', Icon: Mic },
     { id: 'usage', label: 'AI Usage', Icon: SquareTerminal }
   ],
   Integrations: [

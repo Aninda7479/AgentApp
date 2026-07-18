@@ -127,6 +127,27 @@ export interface ThreeDSettings {
   mode?: 'chat' | 'studio';
 }
 
+/**
+ * Voice / microphone dictation settings for the Workspace composer.
+ *
+ * - `engine` — which speech-to-text path the mic button uses:
+ *     - `auto`    — use the configured STT model when a provider + model are
+ *                   available, otherwise fall back to the browser Web Speech API.
+ *     - `browser` — always use the browser's Web Speech API (no model needed,
+ *                   but unreliable inside Electron).
+ *     - `model`   — always transcribe through the selected cloud STT model.
+ * - `providerId` — id of the connected provider (matches `ProviderSettings.id`)
+ *   whose API key/base URL is used for model transcription.
+ * - `model` — STT model name (e.g. `whisper-1`).
+ * - `language` — optional ISO-639-1 hint (e.g. `en`) passed to the model.
+ */
+export interface VoiceSettings {
+  engine?: 'auto' | 'browser' | 'model';
+  providerId?: string;
+  model?: string;
+  language?: string;
+}
+
 /** Map of built-in plugin id → whether the user has enabled it. */
 export type PluginsSettings = Record<string, boolean>;
 
@@ -158,6 +179,7 @@ export interface AppSettings {
   plugins?: PluginsSettings;
   threeD?: ThreeDSettings;
   webApp?: WebAppSettings;
+  voice?: VoiceSettings;
 }
 
 /** Resolved file system paths for user data and config files. */
@@ -246,7 +268,8 @@ export class SettingsStorage {
         modelGov: settings.modelGov !== undefined ? (settings.modelGov === null ? undefined : { ...current.modelGov, ...settings.modelGov }) : current.modelGov,
         internetAccess: settings.internetAccess !== undefined ? (settings.internetAccess === null ? undefined : { ...current.internetAccess, ...settings.internetAccess }) : current.internetAccess,
         plugins: settings.plugins !== undefined ? (settings.plugins === null ? undefined : { ...current.plugins, ...settings.plugins }) : current.plugins,
-        threeD: settings.threeD !== undefined ? (settings.threeD === null ? undefined : settings.threeD) : current.threeD
+        threeD: settings.threeD !== undefined ? (settings.threeD === null ? undefined : settings.threeD) : current.threeD,
+        voice: settings.voice !== undefined ? (settings.voice === null ? undefined : { ...current.voice, ...settings.voice }) : current.voice
       };
 
       this.cachedSettings = updated;

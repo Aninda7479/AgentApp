@@ -11,6 +11,7 @@ import { PlaceholderSettings } from './PlaceholderSettings';
 import { CompanionSettings } from './companion/CompanionSettings';
 import { UsageTrackerSettings } from './UsageTrackerSettings';
 import { OrchestratorSettings } from './OrchestratorSettings';
+import { VoiceSettings } from './VoiceSettings';
 import { BrowserUseSettings } from './BrowserUseSettings';
 import { ComputerUseSettings } from './ComputerUseSettings';
 import { ThreeDSettings } from './ThreeDSettings';
@@ -472,6 +473,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             }}
           />
         )}
+        {activeCategory === 'voice' && <VoiceSettings />}
         {activeCategory === 'usage' && <UsageTrackerSettings />}
         {(activeCategory === 'skills' ||
           activeCategory === 'connectors' ||
