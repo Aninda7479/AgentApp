@@ -72,7 +72,7 @@ export function getRouteFromLocation(): RouteState {
 
 /** Builds the URL path for a given view state. */
 export function buildPath(state: RouteState): string {
-  if (state.activeChatId && state.activeChatId !== DRAFT_CHAT_ID) {
+  if (state.activeTab === 'trajectory' && state.activeChatId && state.activeChatId !== DRAFT_CHAT_ID) {
     return `/chat/${state.activeChatId}`;
   }
   if (state.activeTab === 'settings') {
