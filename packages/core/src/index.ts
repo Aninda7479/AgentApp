@@ -73,3 +73,6 @@ export * from './media/ppt_outline.js';
 export * from './media/ppt_builder.js';
 export * from './media/ppt_stylizer.js';
 
+/** Shared launcher for the self-hosted web server (CLI `--start-web` + Desktop). */
+export * from './web-server.js';
+

@@ -2,7 +2,7 @@ import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, type IpcMai
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, capabilityRegistry, parseContextLimit } from '@superagent/core';
+import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, capabilityRegistry, parseContextLimit } from '@superagent/core';
 
 // Set a custom userData path so all app data lives in <home>/.superagent.
 app.setPath('userData', getUserDataDirectory());
@@ -1313,6 +1313,75 @@ safeHandle('pet-set-visible', (_event, visible: boolean) => {
   return { ok: true };
 });
 
+// ─── IPC: Self-hosted Web App (start / stop / status / password) ─────────────
+// The Desktop app can host the same web server the @superagent/web package runs
+// (e.g. to let other devices on the LAN open SuperAgent in a browser). The
+// server is launched as a child Node process via core's shared `startWebServer`
+// helper — identical to the CLI `superagent --start-web` path.
+
+/**
+ * Starts the web server on the requested port (default 3000). If one is already
+ * running it is left untouched (the renderer toggles Start/Stop instead of
+ * restarting). Returns the running status so the UI can refresh immediately.
+ */
+safeHandle('web-start', (_event, { port }: { port?: number } = {}) => {
+  if (isWebServerRunning()) {
+    return { ok: true, alreadyRunning: true, running: true, port };
+  }
+  const resolvedPort = Number(port) || 3000;
+  startWebServer({ port: resolvedPort });
+  // Persist the chosen port so Settings + auto-start agree.
+  try {
+    const settings = SettingsStorage.loadSettings();
+    SettingsStorage.saveSettings({ ...settings, webApp: { ...settings.webApp, port: resolvedPort } });
+  } catch {
+    /* settings persistence is best-effort */
+  }
+  return { ok: true, running: true, port: resolvedPort };
+});
+
+/** Stops the web server child process if running. */
+safeHandle('web-stop', () => {
+  stopWebServer();
+  return { ok: true, running: false };
+});
+
+/** Reports whether the web server is currently running and on which port/host. */
+safeHandle('web-status', () => {
+  // The port is set in the *child* server's env (not the desktop parent's), so
+  // read the effective port from the persisted Web App setting `web-start`
+  // writes, falling back to the env/default.
+  let port = Number(process.env.PORT) || 3000;
+  try {
+    const saved = SettingsStorage.loadSettings().webApp?.port;
+    if (saved) port = saved;
+  } catch {
+    /* ignore */
+  }
+  return {
+    running: isWebServerRunning(),
+    port,
+    url: `http://localhost:${port}`,
+    lanUrl: `http://0.0.0.0:${port}`
+  };
+});
+
+/**
+ * Changes the Web App admin password. The web server shares core's AuthStore
+ * with the Desktop app, so updating it here immediately affects the web login.
+ * Requires the current password (the default is "admin" before any is set).
+ */
+safeHandle('web-change-password', (_event, { current, next }: { current?: string; next?: string } = {}) => {
+  if (!next || next.length < 6) {
+    return { ok: false, error: 'New password must be at least 6 characters.' };
+  }
+  const result = AuthStore.changePassword(current ?? '', next);
+  if (!result.ok) {
+    return { ok: false, error: result.error || 'Failed to change password.' };
+  }
+  return { ok: true };
+});
+
 // ─── IPC: Auto-detect local providers on startup ─────────────────────────────
 // Delegates to core's ProviderAutoDetector (shared with the Web server) so both
 // surfaces discover providers identically.
@@ -1385,6 +1454,28 @@ app.whenReady().then(async () => {
 
   initApp();
   setupDevWatcher();
+
+  // Auto-start the self-hosted Web App if the user enabled it in
+  // Settings → Web App. Launched shortly after boot so the main window is up
+  // first; failures are logged but never block startup.
+  try {
+    const webSettings = SettingsStorage.loadSettings().webApp;
+    if (webSettings?.autoStart) {
+      setTimeout(() => {
+        try {
+          if (!isWebServerRunning()) {
+            startWebServer({ port: webSettings.port || 3000 });
+            console.log('[web] Auto-started the Web App (port ' + (webSettings.port || 3000) + ').');
+          }
+        } catch (e) {
+          console.error('[web] Auto-start failed:', e);
+        }
+      }, 1500);
+    }
+  } catch {
+    /* settings read is best-effort */
+  }
+
   // NOTE: the 3D Partner does NOT auto-start. The user launches it manually from
   // the Partner page or Settings → Pets (see startPet / the 'pet-start' IPC).
   // Once running, Ctrl+Q closes it and it stays closed until started again.

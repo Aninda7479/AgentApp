@@ -18,7 +18,8 @@ import {
   MonitorSmartphone,
   MousePointer2,
   Network,
-  RefreshCw
+  RefreshCw,
+  Globe
 } from 'lucide-react';
 
 /** A single navigation entry in the settings sidebar. */
@@ -60,6 +61,9 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
   Archived: [
     { id: 'archived-chats', label: 'Archived Chats', Icon: Archive },
     { id: 'archived-projects', label: 'Archived Projects', Icon: FolderArchive }
+  ],
+  Hosting: [
+    { id: 'web-app', label: 'Web App', Icon: Globe }
   ],
   About: [
     { id: 'updates', label: 'Updates', Icon: RefreshCw },

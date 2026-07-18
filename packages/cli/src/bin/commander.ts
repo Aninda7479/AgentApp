@@ -22,7 +22,9 @@ export function createCliProgram(onExecute?: (options: CliOptions, prompt?: stri
     .name('superagent')
     .description('SuperAgent Terminal CLI — Powered by BYOK AI Models')
     .version('0.1.0')
-    .exitOverride();
+    .exitOverride()
+    .option('--start-web', 'Start the SuperAgent web server and host the web app (same as `npm start:web`)')
+    .option('--web-port <port>', 'Port for the web server when using --start-web', '3000');
 
   program
     .command('chat [prompt]', { isDefault: true })

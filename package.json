@@ -25,6 +25,7 @@
 
     "dev:app": "npm run dev --workspace=@superagent/desktop",
     "dev:web": "npm run dev --workspace=@superagent/web",
+    "dev:site": "cd website && npm run dev",
 
     "build": "npm run build --workspace=@superagent/core && npm run build --workspace=@superagent/cli && npm run build --workspace=@superagent/desktop && npm run build --workspace=@superagent/web",
     "dev": "npm run dev --workspace=@superagent/desktop",

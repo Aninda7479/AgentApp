@@ -15,6 +15,7 @@ import { ComputerUseSettings } from './ComputerUseSettings';
 import { ThreeDSettings } from './ThreeDSettings';
 import { UpdatesSettings } from './UpdatesSettings';
 import { AboutSettings } from './AboutSettings';
+import { WebAppSettings } from './WebAppSettings';
 import { browserSafeFetch } from '../web-fetch.js';
 
 /** Top-level settings page that renders a sidebar and the active settings category panel. */
@@ -529,6 +530,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         )}
         {activeCategory === 'about' && (
           <AboutSettings appVersion={appVersion} />
+        )}
+        {activeCategory === 'web-app' && (
+          <WebAppSettings />
         )}
       </div>
     </div>

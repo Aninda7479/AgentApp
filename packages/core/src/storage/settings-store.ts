@@ -127,6 +127,19 @@ export interface ThreeDSettings {
 /** Map of built-in plugin id → whether the user has enabled it. */
 export type PluginsSettings = Record<string, boolean>;
 
+/**
+ * Configuration for the self-hosted **Web App** (the web server that the
+ * Desktop app can start from Settings → Web App, and which the CLI can start
+ * with `superagent --start-web`). The server itself lives in `@superagent/web`;
+ * these fields only persist the user's preferred port / auto-start toggle.
+ */
+export interface WebAppSettings {
+  /** TCP port the hosted web server binds to (default 3000). */
+  port?: number;
+  /** When true, the Desktop app launches the web server on startup. */
+  autoStart?: boolean;
+}
+
 /** Top-level application settings object persisted to disk. */
 export interface AppSettings {
   theme?: ThemeSettings;
@@ -140,6 +153,7 @@ export interface AppSettings {
   internetAccess?: InternetAccessSettings;
   plugins?: PluginsSettings;
   threeD?: ThreeDSettings;
+  webApp?: WebAppSettings;
 }
 
 /** Resolved file system paths for user data and config files. */
