@@ -1,29 +1,5 @@
 {
-    "enabledPlugins": {
-        "frontend-design@claude-plugins-official": true
-    },
-    "hooks": {
-        "UserPromptSubmit": [
-            {
-                "matcher": "",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "node .claude/hooks/context-guard.js"
-                    }
-                ]
-            }
-        ],
-        "PreToolUse": [
-            {
-                "matcher": "",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "node .claude/hooks/context-guard.js"
-                    }
-                ]
-            }
-        ]
-    }
+  "enabledMcpjsonServers": [
+    "playwright"
+  ]
 }

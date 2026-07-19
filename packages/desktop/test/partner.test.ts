@@ -2,18 +2,17 @@ import { describe, it, expect } from 'vitest';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 
-import { PartnerView } from '../src/renderer/components/partner/PartnerView';
-import { PartnerOverlay } from '../src/renderer/components/partner/PartnerOverlay';
-import { PartnerCreator } from '../src/renderer/components/partner/PartnerCreator';
-import { PetSprite } from '../src/renderer/components/partner/PetSprite';
-import { DEFAULT_PARTNERS } from '../src/renderer/components/partner/defaultPartners';
+import { PartnerOverlay } from '../src/renderer/partner-popup/PartnerOverlay';
+import { PartnerCreator } from '../src/renderer/pages/Settings/companion/PartnerCreator';
+import { PetSprite } from '../src/renderer/partner-popup/PetSprite';
+import { DEFAULT_PARTNERS } from '../src/renderer/pages/Settings/companion/defaultPartners';
 import {
   validatePartnerManifest,
   normalizeManifest,
   moodReaction,
   type PartnerManifest
-} from '../src/renderer/components/partner/types';
-import { mergePets } from '../src/renderer/components/partner/library';
+} from '../src/renderer/partner-popup/types';
+import { mergePets } from '../src/renderer/pages/Settings/companion/library';
 
 const CUSTOM: PartnerManifest = {
   schema: 'superagent-partner',
@@ -89,46 +88,6 @@ describe('Partner library merge', () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(merged.find((p) => p.id === DEFAULT_PARTNERS[0].id)?.description).toBe('edited');
     expect(merged.find((p) => p.id === 'mochi')).toBeDefined();
-  });
-});
-
-describe('PartnerView (gallery)', () => {
-  const noop = () => {};
-
-  it('renders built-in and custom partners with controls', () => {
-    const html = renderToString(
-      React.createElement(PartnerView, {
-        pets: [DEFAULT_PARTNERS[0], CUSTOM],
-        activeId: DEFAULT_PARTNERS[0].id,
-        onSetActive: noop,
-        onInstallFromFolder: noop,
-        onInstallFromJson: noop,
-        onRemove: noop,
-        onExport: noop
-      })
-    );
-    expect(html).toContain('Partner');
-    expect(html).toContain(DEFAULT_PARTNERS[0].name);
-    expect(html).toContain(CUSTOM.name);
-    // Active badge for the default, Set active for the custom one.
-    expect(html).toContain('Active');
-    expect(html).toContain(`data-testid="partner-set-active-${CUSTOM.id}"`);
-  });
-
-  it('hides remove for built-ins but shows it for custom pets', () => {
-    const html = renderToString(
-      React.createElement(PartnerView, {
-        pets: [DEFAULT_PARTNERS[0], CUSTOM],
-        activeId: null,
-        onSetActive: noop,
-        onInstallFromFolder: noop,
-        onInstallFromJson: noop,
-        onRemove: noop,
-        onExport: noop
-      })
-    );
-    expect(html).not.toContain(`data-testid="partner-remove-${DEFAULT_PARTNERS[0].id}"`);
-    expect(html).toContain(`data-testid="partner-remove-${CUSTOM.id}"`);
   });
 });
 

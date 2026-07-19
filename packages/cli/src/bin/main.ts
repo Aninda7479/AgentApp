@@ -5,8 +5,40 @@ import { createCliProgram } from './commander.js';
 import { registerExecCommand, executeScript } from './exec.js';
 import { App } from '../ui/App.js';
 import { tryAcquireAutoImproveLock } from '../auto-improve-lock.js';
-import { startWebServer, stopWebServer, isWebServerRunning } from '@superagent/core';
+import {
+  startWebServer,
+  stopWebServer,
+  isWebServerRunning,
+  readWebServerLock,
+  WebServerAlreadyRunningError
+} from '@superagent/core';
 import type { CliOptions } from './commander.js';
+
+// `superagent --stop-web` / `--web-status` coordinate the single shared web
+// server across the CLI, Desktop app, and standalone host via a lock file in
+// ~/.superagent. Intercept before commander parses so the chat TUI never renders.
+if (process.argv.includes('--stop-web')) {
+  const stopped = stopWebServer();
+  console.log(stopped ? 'SuperAgent web server stopped.' : 'No SuperAgent web server is running.');
+  process.exit(0);
+}
+
+if (process.argv.includes('--web-status')) {
+  if (isWebServerRunning()) {
+    const lock = readWebServerLock();
+    if (lock) {
+      console.log(
+        `SuperAgent web server is RUNNING on port ${lock.port} ` +
+          `(started by ${lock.startedBy}, PID ${lock.pid}).`
+      );
+    } else {
+      console.log('SuperAgent web server is RUNNING.');
+    }
+  } else {
+    console.log('SuperAgent web server is NOT running.');
+  }
+  process.exit(0);
+}
 
 // `superagent --start-web` launches the self-hosted web server (the same host
 // build the Web package runs) and keeps the CLI process alive as its parent.
@@ -18,10 +50,16 @@ if (process.argv.includes(WEB_FLAG)) {
   const port = portIdx !== -1 ? Number(process.argv[portIdx + 1]) : (portArg && /^\d+$/.test(portArg) ? Number(portArg) : 3000);
 
   try {
-    const child = startWebServer({ port });
+    const child = startWebServer({ port, startedBy: 'cli' });
     console.log(`SuperAgent web server starting on http://localhost:${port} (LAN: http://0.0.0.0:${port}) …`);
     console.log('PID ' + child.pid + ' — press Ctrl+C to stop.');
   } catch (err) {
+    // Single-instance guard: another surface (Desktop / standalone) already
+    // holds the port. Report who, and exit cleanly (0) — this isn't a failure.
+    if (err instanceof WebServerAlreadyRunningError) {
+      console.log(err.message + ' Use `superagent --stop-web` to stop it first.');
+      process.exit(0);
+    }
     console.error('[web] ' + (err instanceof Error ? err.message : String(err)));
     process.exit(1);
   }

@@ -68,17 +68,17 @@ vi.mock('electron', () => {
 });
 
 import { WindowManager } from '../src/main/window';
-import { Sidebar } from '../src/renderer/components/Sidebar';
-import { TrajectoryCanvas, TrajectoryStep } from '../src/renderer/components/TrajectoryCanvas';
-import { Composer } from '../src/renderer/components/Composer';
-import { DiffViewer } from '../src/renderer/components/DiffViewer';
-import { BYOKModal } from '../src/renderer/components/BYOKModal';
-import { MCPDashboard, MCPServerInfo } from '../src/renderer/components/MCPDashboard';
+import { Sidebar } from '../src/renderer/pages/Workspace/Sidebar';
+import { TrajectoryCanvas, TrajectoryStep } from '../src/renderer/pages/Workspace/TrajectoryCanvas';
+import { Composer } from '../src/renderer/pages/Workspace/Composer';
+import { DiffViewer } from '../src/renderer/pages/Workspace/DiffViewer';
+import { BYOKModal } from '../src/renderer/pages/Settings/BYOKModal';
+import { MCPDashboard, MCPServerInfo } from '../src/renderer/pages/Settings/MCPDashboard';
 import { SearchModal } from '../src/renderer/components/SearchModal';
-import { ScheduledView } from '../src/renderer/components/ScheduledView';
-import { SettingsView } from '../src/renderer/settings/SettingsView';
-import { IntegrationsSettings } from '../src/renderer/settings/IntegrationsSettings';
-import { McpInstallModal } from '../src/renderer/components/McpInstallModal';
+import { ScheduledView } from '../src/renderer/pages/Workspace/ScheduledView';
+import { SettingsView } from '../src/renderer/pages/Settings/SettingsView';
+import { IntegrationsSettings } from '../src/renderer/pages/Settings/IntegrationsSettings';
+import { McpInstallModal } from '../src/renderer/pages/Settings/McpInstallModal';
 import { App } from '../src/renderer/App';
 
 describe('Step 081: Electron Main Process & Multi-Window Manager', () => {

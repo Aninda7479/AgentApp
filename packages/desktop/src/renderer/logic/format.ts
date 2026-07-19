@@ -5,7 +5,7 @@
  * and trajectory steps. Keeping them here means the design layer can call them
  * without owning any logic.
  */
-import type { TrajectoryStep } from '../components/TrajectoryCanvas';
+import type { TrajectoryStep } from '../pages/Workspace/TrajectoryCanvas';
 
 export class FormatService {
   /**

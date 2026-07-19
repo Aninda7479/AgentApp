@@ -16,10 +16,10 @@
  */
 import type { Dispatch, SetStateAction } from 'react';
 import type { StoredChat, StoredProject, ThemeMode } from '../types';
-import type { TrajectoryStep } from '../components/TrajectoryCanvas';
-import type { ProviderConnection, ModelConfig } from '../settings/SettingsView';
-import type { MCPServerInfo } from '../components/MCPDashboard';
-import type { InternetAccessLevel } from '../settings/types';
+import type { TrajectoryStep } from '../pages/Workspace/TrajectoryCanvas';
+import type { ProviderConnection, ModelConfig } from '../pages/Settings/SettingsView';
+import type { MCPServerInfo } from '../pages/Settings/MCPDashboard';
+import type { InternetAccessLevel } from '../pages/Settings/types';
 
 export type {
   StoredChat,

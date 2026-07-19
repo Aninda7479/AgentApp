@@ -72,8 +72,8 @@ export interface GeneralAppSettings {
   unsandboxedActions?: boolean;
 }
 
-/** Model governance: enabled models, routing strategy, and optimization goal. */
-export interface ModelGovSettings {
+/** Orchestrator settings: enabled models, routing strategy, optimization goal, and free-only mode. */
+export interface OrchestratorSettings {
   enabledModels?: string[];
   autoUpdateInstructions?: boolean;
   optimizationGoal?: 'quality' | 'cost' | 'balanced';
@@ -82,7 +82,10 @@ export interface ModelGovSettings {
    *  leave the per-turn/cascade logic untouched (caller preference still wins). */
   reasoningEffort?: 'off' | 'low' | 'medium' | 'high';
   categoryOverrides?: Record<string, string>;
+  freeOnly?: boolean;
 }
+
+export type ModelGovSettings = OrchestratorSettings;
 
 /** Settings for the built-in browser automation engine. */
 export interface BrowserUseSettings {
@@ -124,6 +127,60 @@ export interface ThreeDSettings {
   mode?: 'chat' | 'studio';
 }
 
+/**
+ * Voice / microphone dictation settings for the Workspace composer.
+ *
+ * - `engine` — which speech-to-text path the mic button uses:
+ *     - `auto`    — use the configured STT model when a provider + model are
+ *                   available, otherwise fall back to the browser Web Speech API.
+ *     - `browser` — always use the browser's Web Speech API (no model needed,
+ *                   but unreliable inside Electron).
+ *     - `model`   — always transcribe through the selected cloud STT model.
+ * - `providerId` — id of the connected provider (matches `ProviderSettings.id`)
+ *   whose API key/base URL is used for model transcription.
+ * - `model` — STT model name (e.g. `whisper-1`).
+ * - `language` — optional ISO-639-1 hint (e.g. `en`) passed to the model.
+ * - `dictionary` — optional custom vocabulary that biases cloud (Whisper-style)
+ *   transcription toward user-specific words/names and away from gibberish. It
+ *   is turned into the STT `prompt` parameter; it has no effect on the browser
+ *   Web Speech engine, which exposes no vocabulary hook.
+ */
+export interface VoiceDictionary {
+  /** Preferred words / names / phrases to bias spelling toward. */
+  words?: string[];
+  /** Explicit `from → to` corrections for repeatable mis-hearings. */
+  corrections?: { from: string; to: string }[];
+}
+
+/**
+ * On-device Whisper (transformers.js / WASM ONNX) transcription config.
+ * When `enabled`, the mic transcribes audio in-process instead of via a
+ * cloud STT endpoint. The model is downloaded once to `modelDir`.
+ */
+export interface LocalWhisperSettings {
+  enabled: boolean;
+  /** Whisper size tier — accuracy vs RAM/VRAM + speed. */
+  size: 'tiny' | 'base' | 'small' | 'medium' | 'large';
+  /** ISO-639-1 language hint; ignored when `autoDetect` is true. */
+  language: string;
+  /** When true, drop the language hint and let Whisper auto-detect. */
+  autoDetect: boolean;
+  /** Compute target; `auto` prefers WebGPU when available, else WASM. */
+  device: 'cpu' | 'gpu' | 'auto';
+  /** Where the model is cached (defaults to ~/.superagent/models/whisper). */
+  modelDir: string;
+}
+
+export interface VoiceSettings {
+  engine?: 'auto' | 'browser' | 'model' | 'local';
+  providerId?: string;
+  model?: string;
+  language?: string;
+  dictionary?: VoiceDictionary;
+  /** On-device Whisper transcription config (see {@link LocalWhisperSettings}). */
+  localWhisper?: LocalWhisperSettings;
+}
+
 /** Map of built-in plugin id → whether the user has enabled it. */
 export type PluginsSettings = Record<string, boolean>;
 
@@ -147,6 +204,7 @@ export interface AppSettings {
   models?: ModelSettings[];
   lastUsedModel?: LastUsedModelSettings;
   general?: GeneralAppSettings;
+  orchestrator?: OrchestratorSettings;
   modelGov?: ModelGovSettings;
   browserUse?: BrowserUseSettings;
   computerUse?: ComputerUseSettings;
@@ -154,6 +212,7 @@ export interface AppSettings {
   plugins?: PluginsSettings;
   threeD?: ThreeDSettings;
   webApp?: WebAppSettings;
+  voice?: VoiceSettings;
 }
 
 /** Resolved file system paths for user data and config files. */
@@ -238,10 +297,12 @@ export class SettingsStorage {
         models: settings.models !== undefined ? (settings.models === null ? undefined : settings.models) : current.models,
         lastUsedModel: settings.lastUsedModel !== undefined ? (settings.lastUsedModel === null ? undefined : { ...current.lastUsedModel, ...settings.lastUsedModel }) : current.lastUsedModel,
         general: settings.general !== undefined ? (settings.general === null ? undefined : { ...current.general, ...settings.general }) : current.general,
+        orchestrator: settings.orchestrator !== undefined ? (settings.orchestrator === null ? undefined : { ...current.orchestrator, ...settings.orchestrator }) : current.orchestrator,
         modelGov: settings.modelGov !== undefined ? (settings.modelGov === null ? undefined : { ...current.modelGov, ...settings.modelGov }) : current.modelGov,
         internetAccess: settings.internetAccess !== undefined ? (settings.internetAccess === null ? undefined : { ...current.internetAccess, ...settings.internetAccess }) : current.internetAccess,
         plugins: settings.plugins !== undefined ? (settings.plugins === null ? undefined : { ...current.plugins, ...settings.plugins }) : current.plugins,
-        threeD: settings.threeD !== undefined ? (settings.threeD === null ? undefined : settings.threeD) : current.threeD
+        threeD: settings.threeD !== undefined ? (settings.threeD === null ? undefined : settings.threeD) : current.threeD,
+        voice: settings.voice !== undefined ? (settings.voice === null ? undefined : { ...current.voice, ...settings.voice }) : current.voice
       };
 
       this.cachedSettings = updated;

@@ -65,7 +65,12 @@ export class StoreService {
     if (stored.projects.length > 0) {
       const defaultProject = stored.projects[0].name;
       ctx.setActiveProject(defaultProject);
-      const matchingChat = stored.chats.find((c) => c.project === defaultProject);
+
+      const requestedChatId = ctx.getActiveChatId();
+      const matchingChat = requestedChatId && requestedChatId !== 'draft-chat'
+        ? stored.chats.find((c) => c.id === requestedChatId)
+        : null;
+
       if (matchingChat) {
         ctx.setActiveChatId(matchingChat.id);
         ctx.setTrajectorySteps(matchingChat.steps);

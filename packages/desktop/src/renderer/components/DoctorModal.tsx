@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Stethoscope, CheckCircle2, AlertTriangle, XCircle, RefreshCw } from 'lucide-react';
 import { Button } from './ui';
-import { ModelConfig } from '../settings/SettingsView';
+import { ModelConfig } from '../pages/Settings/SettingsView';
 import { DiagnosticsService, DiagnosticCheck } from '../logic/diagnostics';
 
 export interface DoctorModalProps {

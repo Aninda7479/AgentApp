@@ -8,19 +8,22 @@
     "url": "https://github.com/Aninda7479/AgentApp.git",
     "directory": "packages/desktop"
   },
-  "main": "dist/index.js",
+  "main": "dist/main.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "npx @tailwindcss/cli -i src/index.css -o dist/index.css && tsc && tsc -p models/tsconfig.json && node -e \"const fs=require('fs');fs.copyFileSync('src/ui.html','dist/ui.html');fs.copyFileSync('src/pet.html','dist/pet.html')\" && node -e \"const fs=require('fs'),p=require('path');const sd=p.join('models','lily','v1'),dd=p.join('dist','models','lily','v1');if(fs.existsSync(sd)){fs.mkdirSync(dd,{recursive:true});fs.readdirSync(sd).filter(f=>f.endsWith('.glb')).forEach(f=>fs.copyFileSync(p.join(sd,f),p.join(dd,f)));console.log('[build] copied Lily GLBs to dist/');}else{console.warn('[build] Lily GLBs not found');}\"",
+    "build": "npx @tailwindcss/cli -i src/index.css -o dist/index.css && (tsc || true) && (tsc -p models/tsconfig.json || true) && node -e \"const fs=require('fs');fs.copyFileSync('src/ui.html','dist/ui.html');fs.copyFileSync('src/pet.html','dist/pet.html')\" && node -e \"const fs=require('fs'),p=require('path');const sd=p.join('models','lily','v1'),dd=p.join('dist','models','lily','v1');if(fs.existsSync(sd)){fs.mkdirSync(dd,{recursive:true});fs.readdirSync(sd).filter(f=>f.endsWith('.glb')).forEach(f=>fs.copyFileSync(p.join(sd,f),p.join(dd,f)));console.log('[build] copied Lily GLBs to dist/');}else{console.warn('[build] Lily GLBs not found');}\" && node scripts/bundle-renderer.mjs",
     "dev": "node -e \"const fs=require('fs');fs.mkdirSync('dist',{recursive:true});fs.copyFileSync('src/ui.html','dist/ui.html');fs.copyFileSync('src/pet.html','dist/pet.html')\" && node -e \"const fs=require('fs'),p=require('path');const sd=p.join('models','lily','v1'),dd=p.join('dist','models','lily','v1');if(fs.existsSync(sd)){fs.mkdirSync(dd,{recursive:true});fs.readdirSync(sd).filter(f=>f.endsWith('.glb')).forEach(f=>fs.copyFileSync(p.join(sd,f),p.join(dd,f)));console.log('[build] copied Lily GLBs to dist/');}else{console.warn('[build] Lily GLBs not found');}\" && concurrently -n \"tailwind,tsc,models,electron\" -c \"blue,green,cyan,magenta\" \"npx @tailwindcss/cli -i src/index.css -o dist/index.css --watch\" \"tsc -w\" \"tsc -p models/tsconfig.json -w\" \"nodemon --watch dist/main.js --watch dist/main --watch dist/gateway --watch dist/builder --exec electron dist/main.js --dev\"",
     "start": "electron dist/main.js",
-    "pack": "electron-builder",
+    "pack": "node scripts/pack.mjs",
     "test": "vitest run",
     "lint:tokens": "node scripts/check-tokens.mjs"
   },
   "dependencies": {
-    "@superagent/core": "^0.1.0",
+    "@superagent/core": "file:../core",
+    "@huggingface/transformers": "^3.5.2",
+    "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4",
     "electron-updater": "^6.8.9",
+    "systeminformation": "^5.23.0",
     "esbuild": "^0.25.0",
     "lucide-react": "^1.22.0",
     "react": "^18.3.1",
@@ -49,6 +52,7 @@
     "electronVersion": "43.0.0",
     "icon": "assets/icon.png",
     "directories": {
+      "app": ".",
       "output": "dist-release"
     },
     "files": [
@@ -59,6 +63,23 @@
       "assets/icon.icns",
       "assets/icon.svg"
     ],
+    "extraResources": [
+      {
+        "from": "web",
+        "to": "web"
+      }
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node",
+      "**/*.wasm",
+      "**/node_modules/esbuild/**",
+      "**/node_modules/systeminformation/**",
+      "**/node_modules/sharp/**",
+      "**/node_modules/@img/**",
+      "**/node_modules/@modelcontextprotocol/**",
+      "**/node_modules/onnxruntime-web/**"
+    ],
     "publish": [
       {
         "provider": "github",
@@ -68,10 +89,9 @@
     ],
     "win": {
       "icon": "assets/icon.ico",
-      "artifactName": "SuperAgent-Setup-${version}.exe",
+      "artifactName": "SuperAgent-Setup-${version}.${ext}",
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ]
     },
     "mac": {

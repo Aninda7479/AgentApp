@@ -7,7 +7,7 @@ import {
   AIProvider
 } from '../types/agent.js';
 import { resolveBaseUrl, getProviderMeta } from './provider-meta.js';
-import { applyReasoningEffort } from './reasoning-effort.js';
+import { applyReasoningEffort } from '../orchestrator/reasoning-effort.js';
 
 /** Generic provider adapter for OpenAI-compatible third-party / self-hosted endpoints. */
 export class CustomAdapter implements BaseProviderAdapter {

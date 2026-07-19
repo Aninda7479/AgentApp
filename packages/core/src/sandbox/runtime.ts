@@ -130,6 +130,10 @@ export class SandboxRunner {
     this.projectRoot = root;
   }
 
+  public getProjectRoot(): string | undefined {
+    return this.projectRoot;
+  }
+
   public getMode(): PermissionMode {
     return this.controller.getMode();
   }
@@ -196,6 +200,26 @@ export class SandboxRunner {
         durationMs: 0,
         timedOut: false
       };
+    }
+
+    // 2b. "Never approve" (deny-all) gate. Every command is blocked unless it
+    //     is pre-approved for the session OR matches a non-empty project
+    //     allowlist. Pre-approval covers both the user's "Always allow" choice
+    //     and the session allowlist added via addSessionAllow.
+    if (this.controller.getMode() === 'deny-all') {
+      const allowlisted =
+        (this.allowedCommands.length > 0 && isCommandAllowed(command, this.allowedCommands)) ||
+        this.controller.isPreApproved(command);
+      if (!allowlisted) {
+        return {
+          stdout: '',
+          stderr:
+            'Blocked by the "Never approve" policy: this command is not on the project\'s allowed-commands list or pre-approved for this session.',
+          exitCode: 126,
+          durationMs: 0,
+          timedOut: false
+        };
+      }
     }
 
     // 3. Confine the working directory to the project root unless unsandboxed.

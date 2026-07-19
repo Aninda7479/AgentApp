@@ -137,6 +137,7 @@ export class AgentStreamService {
         streaming.bufferRef.current = '';
         streaming.stepIdRef.current = null;
         streaming.chatIdRef.current = null;
+        ctx.setIsGenerating(false);
         if (agentEvent.type === 'error') {
           ctx.triggerToast(`Agent error: ${agentEvent.error || 'Unknown error'}`);
         }

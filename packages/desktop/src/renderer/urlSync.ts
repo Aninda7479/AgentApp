@@ -17,7 +17,7 @@ export interface RouteState {
   settingsCategory: string;
 }
 
-const KNOWN_TABS = ['trajectory', 'settings', 'mcp', 'scheduled', 'diff', 'partner', 'studio'];
+const KNOWN_TABS = ['trajectory', 'settings', 'scheduled', 'diff', 'studio', 'project-settings', 'standalone-chat'];
 
 // Sentinel id used by the app for a chat that is being composed but not yet
 // saved. It is not a real, shareable chat, so it must map to the home
@@ -72,7 +72,7 @@ export function getRouteFromLocation(): RouteState {
 
 /** Builds the URL path for a given view state. */
 export function buildPath(state: RouteState): string {
-  if (state.activeChatId && state.activeChatId !== DRAFT_CHAT_ID) {
+  if (state.activeTab === 'trajectory' && state.activeChatId && state.activeChatId !== DRAFT_CHAT_ID) {
     return `/chat/${state.activeChatId}`;
   }
   if (state.activeTab === 'settings') {

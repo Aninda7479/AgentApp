@@ -66,4 +66,22 @@ describe('Internet Access control', () => {
     expect(describeInternetAccessLevel('observation')).toMatch(/read public web pages/i);
     expect(describeInternetAccessLevel('all')).toMatch(/freely/i);
   });
+
+  it('explicit level arg overrides the persisted global setting', () => {
+    // Global is "all", but a per-run (project / chat) override of
+    // "none" must win without mutating the global store.
+    SettingsStorage.saveSettings({ internetAccess: { level: 'all' } });
+    expect(getInternetAccessLevel()).toBe('all');
+    expect(isNetworkAllowed({ kind: 'web-fetch', url: 'https://example.com' }, 'none')).toBe(false);
+    expect(isNetworkAllowed({ kind: 'web-fetch', url: 'https://example.com' }, 'observation')).toBe(true);
+    expect(() => enforceNetworkAllowed({ kind: 'web-fetch', url: 'https://example.com', method: 'POST' }, 'none'))
+      .toThrow(InternetAccessDeniedError);
+    // Global is untouched by the override arg.
+    expect(getInternetAccessLevel()).toBe('all');
+  });
+
+  it('undefined level arg falls back to the persisted global setting', () => {
+    SettingsStorage.saveSettings({ internetAccess: { level: 'none' } });
+    expect(isNetworkAllowed({ kind: 'web-fetch', url: 'https://example.com' }, undefined)).toBe(false);
+  });
 });

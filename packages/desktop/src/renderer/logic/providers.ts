@@ -119,7 +119,7 @@ export class ProvidersService {
           id: `${d.id}-${m.id}`,
           name: m.name,
           providerId: d.id,
-          enabled: true,
+          enabled: false,
           contextLimit: 'n/a'
         });
       }

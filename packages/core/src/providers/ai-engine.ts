@@ -23,7 +23,8 @@ export type AgentEventType =
   | 'error'          // error occurred
   | 'abort'          // user stopped
   | 'bestofn'        // best-of-N merge result (parallel multi-model orchestration)
-  | 'reroute';       // orchestrator avoided/failed-over a provider (resilience visible)
+  | 'reroute'        // orchestrator avoided/failed-over a provider (resilience visible)
+  | 'context';       // live context-window usage estimate (used by the UI gauge)
 
 export interface AgentEvent {
   type: AgentEventType;
@@ -53,6 +54,14 @@ export interface AgentEvent {
    *  demoted, or failed over, and why. Surfaces the "can't be banned out from
    *  under you" promise to the GUI instead of failing silently. */
   reroute?: RerouteEvent;
+  /** Live context-window usage estimate, emitted as the conversation grows so
+   *  the workspace can render a "how full is the context window" gauge. `pct`
+   *  is 0..100 against the orchestrator-selected model's context window. */
+  context?: {
+    used: number;
+    limit: number;
+    pct: number;
+  };
 }
 
 // ─── Orchestration helpers ────────────────────────────────────────────────────
@@ -60,13 +69,13 @@ export interface AgentEvent {
 /**
  * Builds a RouterModel[] pool for the orchestration router from the user's
  * configured models (SettingsStorage). Vision/tool capability isn't stored as a
- * boolean on ModelSettings, so it is derived from ModelGovStorage scores — the
- * same source model-gov.ts uses — keeping the pool consistent with the rest of
- * the governance layer.
+ * boolean on ModelSettings, so it is derived from OrchestratorStorage scores — the
+ * same source storage.ts uses — keeping the pool consistent with the rest of
+ * the Orchestrator layer.
  */
 export function buildRouterPool(models: ModelSettings[]): RouterModel[] {
   return models.map((m) => {
-    const scores = ModelGovStorage.getModelScores(m.id);
+    const scores = OrchestratorStorage.getModelScores(m.id);
     // Best-effort enrichment with the extended registry signals (speed/intelligence
     // tier, dollar cost). The catalog id may carry a `${providerId}-` prefix the
     // registry doesn't, so try the stripped native id as a fallback. Missing
@@ -83,6 +92,7 @@ export function buildRouterPool(models: ModelSettings[]): RouterModel[] {
       supportsVision: scores.vision >= 75,
       supportsTools: scores.coding >= 70 || scores.reasoning >= 75,
       inputModalities: m.inputModalities as RouterModel['inputModalities'],
+      outputModalities: m.outputModalities as RouterModel['outputModalities'],
       accessStatus: 'available',
       speedTier: cap?.speedTier,
       intelligenceTier: cap?.intelligenceTier,
@@ -111,8 +121,8 @@ export function buildBridgeRequest(prompt: string, attachments?: ImageAttachment
 export interface ToolDefinition {
   name: string;
   description: string;
-  parameters: Record<string, unknown>; // JSON Schema
-  execute: (args: Record<string, unknown>) => Promise<string>;
+  parameters: Record<string, any>; // JSON Schema
+  execute: (args: Record<string, any>, config?: any) => Promise<any>;
 }
 
 // ─── Built-in Agent Tools ─────────────────────────────────────────────────────
@@ -122,20 +132,27 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { SandboxRunner } from '../sandbox/runtime.js';
+import { PermissionMode, ConfirmationHandler } from '../sandbox/permissions.js';
+import { InternetAccessLevel } from '../storage/settings-store.js';
+import { enforceNetworkAllowed } from '../security/internet-access.js';
+import { createThreeDTool } from '../tools/threed.js';
+import { chunkedCompactMessages, extractTextContent } from '../memory/compactor.js';
 import { UsageTracker } from '../storage/usage-tracker.js';
 import { ComputerUse } from '../automation/computer-use.js';
 import { PlaywrightBrowserEngine } from '../automation/browser.js';
 import { BrowserLifecycleService } from '../automation/browser-service.js';
 import { resolveProviderFamily, resolveBaseUrl } from './provider-meta.js';
 import { capabilityRegistry } from './models.js';
-import { BestOfNStrategy, synthesizeEnsemble } from './best-of-n.js';
+import { BestOfNStrategy, synthesizeEnsemble } from '../orchestrator/best-of-n.js';
 import { ContentBlock, ImageAttachment, type CompletionRequest, type AIProvider, type ReasoningEffort } from '../types/agent.js';
-import { ModelRouter } from './router.js';
-import type { RouterModel, RerouteEvent } from './router.js';
+import { OrchestratorRouter } from '../orchestrator/router.js';
+import type { RouterModel, RerouteEvent } from '../orchestrator/router.js';
 import { BYOKProviderManager } from './byok.js';
 import { SettingsStorage, type ModelSettings } from '../storage/settings-store.js';
-import { ModelGovStorage } from '../storage/model-gov.js';
+import { OrchestratorStorage } from '../orchestrator/storage.js';
 import { toOpenAIMessages, toAnthropicMessages } from './multimodal.js';
+
 
 const execAsync = promisify(exec);
 
@@ -179,8 +196,101 @@ export function isCommandAllowed(command: string, allowedCommands?: string[]): b
   });
 }
 
-export function createBuiltinTools(projectRoot: string = process.cwd(), allowedCommands?: string[]): ToolDefinition[] {
-  const safeExec = makeSafeExec(projectRoot);
+function globToRegExp(glob: string): RegExp {
+  const escaped = glob
+    .replace(/[.+^${}()|\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
+  return new RegExp(`^${escaped}$`);
+}
+
+function walkFiles(root: string, visit: (file: string) => void): void {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      walkFiles(full, visit);
+    } else if (entry.isFile()) {
+      visit(full);
+    }
+  }
+}
+
+function grepSearch(dir: string, pattern: string, fileGlob?: string): string {
+  let regex: RegExp;
+  try {
+    regex = new RegExp(pattern);
+  } catch {
+    return `Error: invalid search pattern: ${pattern}`;
+  }
+
+  let globRegex: RegExp | null = null;
+  if (fileGlob) {
+    globRegex = globToRegExp(fileGlob);
+  }
+
+  const results: string[] = [];
+  let fileCount = 0;
+  let matchCount = 0;
+
+  walkFiles(dir, (file) => {
+    if (globRegex && !globRegex.test(path.basename(file))) return;
+    fileCount++;
+
+    try {
+      const content = fs.readFileSync(file, 'utf8');
+      if (content.includes('\0')) return; // skip binary files
+
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        if (regex.test(lines[i])) {
+          matchCount++;
+          if (results.length < 50) {
+            const relative = path.relative(dir, file);
+            results.push(`${relative}:${i + 1}:${lines[i].trim()}`);
+          }
+        }
+      }
+    } catch {
+      // ignore unreadable files
+    }
+  });
+
+  if (results.length === 0) return '(no matches found)';
+  const summary = `Found ${matchCount} match(es) across ${fileCount} file(s).`;
+  if (matchCount > 50) {
+    return `${results.join('\n')}\n\n... (truncated, showing 50 of ${matchCount} matches)`;
+  }
+  return `${results.join('\n')}\n\n${summary}`;
+}
+
+export function createBuiltinTools(
+  runnerOrRoot?: SandboxRunner | string,
+  allowedCommandsOrRoot?: string[] | string,
+  /** Resolves the effective internet-access level for this run. When omitted
+   *  the global persisted setting is used. Passed into `enforceNetworkAllowed`
+   *  so a per-project / per-chat internet policy actually takes effect. */
+  getInternetLevel?: () => InternetAccessLevel | undefined
+): ToolDefinition[] {
+  let runner: SandboxRunner;
+  let projectRoot: string;
+
+  if (runnerOrRoot instanceof SandboxRunner) {
+    runner = runnerOrRoot;
+    projectRoot = typeof allowedCommandsOrRoot === 'string' ? allowedCommandsOrRoot : (runner.getProjectRoot() || process.cwd());
+  } else {
+    projectRoot = (runnerOrRoot as string) || process.cwd();
+    const allowed = Array.isArray(allowedCommandsOrRoot) ? allowedCommandsOrRoot : undefined;
+    runner = new SandboxRunner({
+      projectRoot,
+      allowedCommands: allowed
+    });
+  }
 
   return [
     {
@@ -195,19 +305,14 @@ export function createBuiltinTools(projectRoot: string = process.cwd(), allowedC
         additionalProperties: false
       },
       execute: async ({ path: filePath }) => {
-        try {
-          const resolved = path.isAbsolute(filePath as string)
-            ? filePath as string
-            : path.join(projectRoot, filePath as string);
-          const content = fs.readFileSync(resolved, 'utf-8');
-          const lines = content.split('\n');
-          if (lines.length > 500) {
-            return lines.slice(0, 500).join('\n') + `\n\n... (truncated, ${lines.length - 500} more lines)`;
-          }
-          return content;
-        } catch (err: unknown) {
-          return `Error reading file: ${(err as Error).message}`;
+        const res = await runner.readFile(filePath as string);
+        if (!res) return `Error: path is outside the project root: ${filePath}`;
+        if (res.isBinary) return '[Binary File]';
+        const lines = res.content.split('\n');
+        if (lines.length > 500) {
+          return lines.slice(0, 500).join('\n') + `\n\n... (truncated, ${lines.length - 500} more lines)`;
         }
+        return res.content;
       }
     },
 
@@ -223,10 +328,9 @@ export function createBuiltinTools(projectRoot: string = process.cwd(), allowedC
         additionalProperties: false
       },
       execute: async ({ path: dirPath }) => {
+        const resolved = runner.resolvePath(dirPath as string);
+        if (!resolved) return `Error: path is outside the project root: ${dirPath}`;
         try {
-          const resolved = path.isAbsolute(dirPath as string)
-            ? dirPath as string
-            : path.join(projectRoot, dirPath as string);
           const entries = fs.readdirSync(resolved, { withFileTypes: true });
           const lines = entries.slice(0, 200).map(e => {
             if (e.isDirectory()) return `[DIR]  ${e.name}/`;
@@ -258,12 +362,16 @@ export function createBuiltinTools(projectRoot: string = process.cwd(), allowedC
         additionalProperties: false
       },
       execute: async ({ pattern, directory, fileGlob }) => {
-        const dir = directory ? path.join(projectRoot, directory as string) : projectRoot;
-        const globStr = fileGlob ? `--include="${fileGlob}"` : '';
-        const cmd = `grep -rn --color=never ${globStr} "${(pattern as string).replace(/"/g, '\\"')}" "${dir}"`;
-        const result = await safeExec(cmd);
-        const lines = result.split('\n').slice(0, 50);
-        return lines.join('\n') || '(no matches found)';
+        if (!pattern) return '(no matches found)';
+        let dir: string;
+        if (directory) {
+          const resolved = runner.resolvePath(directory as string);
+          if (!resolved) return `Error: path is outside the project root: ${directory}`;
+          dir = resolved;
+        } else {
+          dir = projectRoot ?? process.cwd();
+        }
+        return grepSearch(dir, pattern as string, fileGlob as string | undefined);
       }
     },
 
@@ -279,10 +387,8 @@ export function createBuiltinTools(projectRoot: string = process.cwd(), allowedC
         additionalProperties: false
       },
       execute: async ({ command }) => {
-        if (!isCommandAllowed(command as string, allowedCommands)) {
-          return `Error: command is not in the project's allowed commands: ${command}. Add it to the project's allowed commands in settings to permit it.`;
-        }
-        return safeExec(command as string);
+        const res = await runner.runCommand(command as string);
+        return res.stdout || res.stderr || '(no output)';
       }
     },
 
@@ -299,19 +405,52 @@ export function createBuiltinTools(projectRoot: string = process.cwd(), allowedC
         additionalProperties: false
       },
       execute: async ({ path: filePath, content }) => {
+        const res = await runner.writeFile(filePath as string, content as string);
+        if (!res.written) return `Error writing file: ${res.error ?? 'write failed'}`;
+        const lines = (content as string).split('\n').length;
+        return `Successfully wrote ${lines} lines to ${filePath}`;
+      }
+    },
+    {
+      name: 'web_fetch',
+      description: 'Fetch the contents of a public URL over the internet (read-only GET). Useful for reading docs, web pages, or API responses. Subject to the "Internet Access" policy.',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'The fully-qualified URL to fetch' },
+          method: { type: 'string', description: 'HTTP method, defaults to GET. Only GET is permitted under "Observation only" access.' }
+        },
+        required: ['url'],
+        additionalProperties: false
+      },
+      execute: async ({ url, method }) => {
+        const httpMethod = (method as string) || 'GET';
         try {
-          const resolved = path.isAbsolute(filePath as string)
-            ? filePath as string
-            : path.join(projectRoot, filePath as string);
-          fs.mkdirSync(path.dirname(resolved), { recursive: true });
-          fs.writeFileSync(resolved, content as string, 'utf-8');
-          const lines = (content as string).split('\n').length;
-          return `Successfully wrote ${lines} lines to ${filePath}`;
+          enforceNetworkAllowed(
+            { kind: 'web-fetch', url: url as string, method: httpMethod },
+            // Honor the per-run (project / chat) internet policy when set;
+            // otherwise fall back to the global persisted setting.
+            getInternetLevel ? getInternetLevel() : undefined
+          );
         } catch (err: unknown) {
-          return `Error writing file: ${(err as Error).message}`;
+          return `Blocked by Internet Access policy: ${(err as Error).message}`;
+        }
+        try {
+          const response = await fetch(url as string, {
+            method: httpMethod,
+            headers: { 'User-Agent': 'SuperAgent/0.1 (+https://github.com/Aninda7479/AgentApp)' },
+            signal: AbortSignal.timeout(15000)
+          });
+          const text = await response.text();
+          const body = String(text);
+          const truncated = body.length > 8000 ? body.slice(0, 8000) + `\n\n... (truncated, ${body.length - 8000} more chars)` : body;
+          return `HTTP ${response.status} ${response.statusText}\n\n${truncated}`;
+        } catch (err: unknown) {
+          return `Error fetching ${url}: ${(err as Error).message}`;
         }
       }
     },
+    createThreeDTool(projectRoot),
     {
       name: 'screenshot_screen',
       description: 'Capture a PNG screenshot of the user\'s desktop display. Returns the file path of the saved screenshot.',
@@ -652,6 +791,21 @@ export interface AgentEngineConfig {
    *  only executes commands whose first token(s) match an entry (prefix-based).
    *  Opt-in: an empty/undefined list permits all commands. */
   allowedCommands?: string[];
+  /** Sandbox permission mode controlling approval gating. Defaults to
+   *  'auto-approve-edits' when omitted. */
+  permissionMode?: PermissionMode;
+  /** Full system access: disables project-root path scoping for files. */
+  unsandboxed?: boolean;
+  /** User-in-the-loop approval callback. */
+  requestApproval?: ConfirmationHandler;
+  /** Additional tools merged into the agent's toolset. */
+  extraTools?: ToolDefinition[];
+  /** Absolute paths to all files attached to this chat session */
+  attachments?: string[];
+  /** Internet access governance level for this run */
+  internetAccess?: InternetAccessLevel;
+  /** Context-window size (in tokens) of the effective model. */
+  contextWindow?: number;
 }
 
 /** A single parallel candidate for best-of-N orchestration. Extends the base
@@ -689,12 +843,36 @@ export class AgentEngine {
   private tools: ToolDefinition[];
   protected history: ChatMessage[];
   private abortController: AbortController | null = null;
+  private sandbox: SandboxRunner;
   public readonly sessionId: string;
+  private contextWindow: number;
 
   constructor(config: AgentEngineConfig, sessionId?: string) {
     this.config = config;
     this.sessionId = sessionId || `session-${Date.now()}`;
-    this.tools = createBuiltinTools(config.projectRoot, config.allowedCommands);
+
+    const effectiveRoot = config.projectRoot || process.cwd();
+
+    this.sandbox = new SandboxRunner({
+      projectRoot: effectiveRoot,
+      allowedCommands: config.allowedCommands,
+      permissionMode: config.permissionMode ?? 'auto-approve-edits',
+      unsandboxed: config.unsandboxed ?? false,
+      requestApproval: config.requestApproval
+    });
+
+    this.tools = [
+      ...createBuiltinTools(
+        this.sandbox,
+        effectiveRoot,
+        // Wire the per-run internet policy: when the caller set config.internetAccess
+        // (via a project/chat override), it governs web-fetch; otherwise the
+        // global persisted setting applies. Raw shell `curl`/`wget` are NOT gated
+        // by this — documented limitation, scoped separately from the sandbox.
+        () => config.internetAccess
+      ),
+      ...(config.extraTools ?? [])
+    ];
     this.history = [];
 
     // System prompt matching OpenCode's AGENTS.md pattern
@@ -711,6 +889,41 @@ Key guidelines:
 - When you edit files, mention which files changed and the diff summary`;
 
     this.history.push({ role: 'system', content: sysPrompt });
+    this.contextWindow = config.contextWindow ?? 128000;
+  }
+
+  private estimateTokens(text: string): number {
+    if (!text) return 0;
+    return Math.max(1, Math.ceil(text.length / 4));
+  }
+
+  public estimateContextUsage(): { used: number; limit: number; pct: number } {
+    let used = 0;
+    for (const m of this.history) {
+      used += this.estimateTokens(extractTextContent(m.content));
+    }
+    for (const t of this.tools) {
+      used += this.estimateTokens(t.name) + this.estimateTokens(t.description) + this.estimateTokens(JSON.stringify(t.parameters));
+    }
+    const limit = this.contextWindow;
+    const pct = limit > 0 ? Number(((used / limit) * 100).toFixed(2)) : 0;
+    return { used, limit, pct };
+  }
+
+  public compactHistory(): { tokensBefore: number; tokensAfter: number } {
+    const tokensBefore = this.estimateContextUsage().used;
+    const plain = this.history.map((m) => ({ role: m.role, content: extractTextContent(m.content) }));
+    const res = chunkedCompactMessages(plain, { keepRecentCount: 4 });
+    if (!res.wasCompacted) {
+      return { tokensBefore, tokensAfter: tokensBefore };
+    }
+    this.history = res.messages.map((m) => ({ role: m.role, content: m.content })) as ChatMessage[];
+    const tokensAfter = this.estimateContextUsage().used;
+    return { tokensBefore, tokensAfter };
+  }
+
+  public getSandbox(): SandboxRunner {
+    return this.sandbox;
   }
 
   /** Add a user message to history (plain text or multimodal content blocks). */
@@ -740,16 +953,45 @@ Key guidelines:
   public async run(
     userPrompt: string,
     onEvent: (event: AgentEvent) => void,
-    attachments?: ImageAttachment[]
+    attachments?: ImageAttachment[] | string[]
   ): Promise<void> {
     this.abortController = new AbortController();
 
-    // Build the user message. When attachments are present, emit a multimodal
-    // content array (one text block + one image_url block per attachment);
-    // otherwise keep the plain-string form for backward compatibility.
+    let mappedAttachments: ImageAttachment[] | undefined = undefined;
     if (attachments && attachments.length > 0) {
+      if (typeof attachments[0] === 'string') {
+        mappedAttachments = [];
+        for (const attPath of (attachments as string[])) {
+          try {
+            const resolved = path.resolve(attPath);
+            if (fs.existsSync(resolved)) {
+              const buf = fs.readFileSync(resolved);
+              const ext = resolved.split('.').pop()?.toLowerCase() ?? '';
+              let mime = 'image/png';
+              if (ext === 'jpg' || ext === 'jpeg') mime = 'image/jpeg';
+              else if (ext === 'gif') mime = 'image/gif';
+              else if (ext === 'webp') mime = 'image/webp';
+              
+              mappedAttachments.push({
+                path: resolved,
+                mediaType: mime,
+                dataUrl: `data:${mime};base64,${buf.toString('base64')}`,
+                size: buf.length
+              });
+            }
+          } catch {
+            // ignore
+          }
+        }
+      } else {
+        mappedAttachments = attachments as ImageAttachment[];
+      }
+    }
+
+    // Build the user message.
+    if (mappedAttachments && mappedAttachments.length > 0) {
       const content: ContentBlock[] = [{ type: 'text', text: userPrompt }];
-      for (const att of attachments) {
+      for (const att of mappedAttachments) {
         content.push({ type: 'image_url', image_url: { url: att.dataUrl } });
       }
       this.addUserMessage(content);
@@ -759,19 +1001,51 @@ Key guidelines:
 
     let iterations = 0;
     const MAX_ITERATIONS = 10; // prevent infinite loops
+    let autoCompactions = 0;
+    const MAX_AUTO_COMPACTIONS = 3;
+
+    const emitContext = () => {
+      onEvent({
+        type: 'context',
+        sessionId: this.sessionId,
+        context: this.estimateContextUsage()
+      });
+    };
+
+    emitContext();
 
     try {
       while (iterations < MAX_ITERATIONS) {
         iterations++;
 
         // ── Stream from provider ────────────────────────────────────────
-        const { fullContent, toolCalls } = await this.streamFromProvider(
-          onEvent,
-          this.abortController.signal
-        );
+        let fullContent = '';
+        let toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
+        try {
+          const r = await this.streamFromProvider(
+            onEvent,
+            this.abortController.signal
+          );
+          fullContent = r.fullContent;
+          toolCalls = r.toolCalls;
+        } catch (streamErr: unknown) {
+          const msg = (streamErr as Error).message || String(streamErr);
+          if (
+            isContextOverflowError(msg) &&
+            autoCompactions < MAX_AUTO_COMPACTIONS &&
+            this.history.length > 6
+          ) {
+            this.compactHistory();
+            autoCompactions++;
+            emitContext();
+            continue; // retry this turn with compacted history
+          }
+          throw streamErr;
+        }
 
         // Append assistant message to history
         this.history.push({ role: 'assistant', content: fullContent });
+        emitContext();
 
         // ── No tool calls → done ────────────────────────────────────────
         if (toolCalls.length === 0) {
@@ -791,7 +1065,7 @@ Key guidelines:
             content: `Calling ${tc.name}(${JSON.stringify(tc.args)})`
           });
 
-          let result: string;
+          let result: any;
           if (!tool) {
             result = `Error: Unknown tool "${tc.name}"`;
           } else {
@@ -802,18 +1076,20 @@ Key guidelines:
             }
           }
 
+          const resultText = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+
           onEvent({
             type: 'tool_result',
             sessionId: this.sessionId,
             toolName: tc.name,
-            toolResult: result,
-            content: result.slice(0, 200) // truncated for display
+            toolResult: resultText,
+            content: resultText.slice(0, 200) // truncated for display
           });
 
           // Add tool result to history
           this.history.push({
             role: 'tool',
-            content: result,
+            content: resultText,
             toolCallId: tc.id,
             name: tc.name
           });
@@ -833,10 +1109,24 @@ Key guidelines:
       if ((err as Error).name === 'AbortError') {
         onEvent({ type: 'abort', sessionId: this.sessionId });
       } else {
+        let errMsg = (err as Error).message || String(err);
+        
+        // Enrich local connection refusal errors (e.g. Ollama or custom local server not running)
+        const cause = (err as any).cause;
+        if (cause && (cause.code === 'ECONNREFUSED' || cause.message?.includes('ECONNREFUSED'))) {
+          const baseUrl = this.config.baseUrl || (this.config.provider === 'ollama' ? 'http://localhost:11434' : '');
+          if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
+            const providerName = this.config.provider === 'ollama' ? 'Ollama (Local)' : 'Local server';
+            errMsg = `${providerName} connection refused. Is the local service running on ${baseUrl}?`;
+          }
+        } else if (errMsg === 'fetch failed' && this.config.provider === 'ollama') {
+          errMsg = `Ollama connection failed. Is Ollama running on http://localhost:11434?`;
+        }
+
         onEvent({
           type: 'error',
           sessionId: this.sessionId,
-          error: (err as Error).message || String(err)
+          error: errMsg
         });
       }
     }
@@ -1013,7 +1303,7 @@ Key guidelines:
     const sessionId = opts.sessionId ?? `session-${Date.now()}`;
     const pool = opts.pool ?? buildRouterPool(SettingsStorage.loadSettings().models ?? []);
     const request = buildBridgeRequest(userPrompt, opts.attachments);
-    const router = new ModelRouter({ preferredProvider: opts.config.provider as AIProvider });
+    const router = new OrchestratorRouter({ preferredProvider: opts.config.provider as AIProvider });
 
     const res = await router.completeWithBridge(
       request,
@@ -1038,9 +1328,9 @@ Key guidelines:
                 : `last resort: ${e.from} (${e.status}: no healthier provider)`;
           onEvent({ type: 'reroute', sessionId, content: `[Orchestrator] ${label}` });
           opts.onReroute?.(e);
-        }
-      },
-      opts.config.reasoningEffort
+        },
+        reasoningEffort: opts.config.reasoningEffort
+      }
     );
 
     onEvent({ type: 'token', sessionId, content: res.content });
@@ -1083,47 +1373,63 @@ Key guidelines:
     let res: { fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> };
 
     const startMs = Date.now();
-    if (family === 'anthropic') {
-      res = await this.streamAnthropic(onEvent, signal);
-    } else if (family === 'gemini') {
-      res = await this.streamGemini(onEvent, signal);
-    } else if (family === 'ollama') {
-      res = await this.streamOllama(onEvent, signal);
-    } else {
-      // Everything else (OpenAI, DeepSeek, DeepInfra, OpenRouter, Kimi, …)
-      // speaks the OpenAI-compatible Chat Completions protocol.
-      res = await this.streamOpenAI(onEvent, signal);
-    }
-    const durationMs = Date.now() - startMs;
+    try {
+      if (family === 'anthropic') {
+        res = await this.streamAnthropic(onEvent, signal);
+      } else if (family === 'gemini') {
+        res = await this.streamGemini(onEvent, signal);
+      } else if (family === 'ollama') {
+        res = await this.streamOllama(onEvent, signal);
+      } else {
+        // Everything else (OpenAI, DeepSeek, DeepInfra, OpenRouter, Kimi, …)
+        // speaks the OpenAI-compatible Chat Completions protocol.
+        res = await this.streamOpenAI(onEvent, signal);
+      }
+      const durationMs = Date.now() - startMs;
 
-    // Compute estimated token usage: 1 token ~ 4 characters
-    const inputChars = this.history.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
-    const promptTokens = Math.max(1, Math.round(inputChars / 4));
-    const completionTokens = Math.max(1, Math.round(res.fullContent.length / 4));
+      // Compute estimated token usage: 1 token ~ 4 characters
+      const inputChars = this.history.reduce((acc, m) => acc + (typeof m.content === 'string' ? m.content.length : 0), 0);
+      const promptTokens = Math.max(1, Math.round(inputChars / 4));
+      const completionTokens = Math.max(1, Math.round(res.fullContent.length / 4));
 
-    // Track usage in centralized storage
-    UsageTracker.trackUsage(
-      this.config.provider,
-      this.config.model,
-      promptTokens,
-      completionTokens,
-      undefined,
-      undefined,
-      durationMs
-    );
-
-    // Emit usage stats back to renderer
-    onEvent({
-      type: 'token',
-      sessionId: this.sessionId,
-      usage: {
+      // Track usage in centralized storage
+      UsageTracker.trackUsage(
+        this.config.provider,
+        this.config.model,
         promptTokens,
         completionTokens,
-        totalTokens: promptTokens + completionTokens
-      }
-    });
+        undefined,
+        undefined,
+        durationMs,
+        'success'
+      );
 
-    return res;
+      // Emit usage stats back to renderer
+      onEvent({
+        type: 'token',
+        sessionId: this.sessionId,
+        usage: {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens
+        }
+      });
+
+      return res;
+    } catch (err) {
+      const durationMs = Date.now() - startMs;
+      UsageTracker.trackUsage(
+        this.config.provider,
+        this.config.model,
+        0,
+        0,
+        undefined,
+        undefined,
+        durationMs,
+        'failure'
+      );
+      throw err;
+    }
   }
 
   // ── OpenAI / Custom (OpenAI-compatible) Streaming ────────────────────────
@@ -1536,3 +1842,11 @@ export class MultiAgentManager {
 }
 
 export const multiAgentManager = new MultiAgentManager();
+
+export function isContextOverflowError(message: string): boolean {
+  if (!message) return false;
+  return /context length|context window|maximum context|max.*context|token limit|too many tokens|request too large|exceeds.{0,24}context|context.{0,12}exceed|prompt is too long|input.{0,12}too long|input length|sequence too long/i.test(
+    message
+  );
+}
+

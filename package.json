@@ -16,7 +16,10 @@
     "node": ">=18"
   },
   "workspaces": [
-    "packages/*"
+    "packages/core",
+    "packages/cli",
+    "packages/desktop",
+    "packages/web"
   ],
   "scripts": {
     "start:app": "npm run start --workspace=@superagent/desktop",
@@ -30,8 +33,15 @@
     "build": "npm run build --workspace=@superagent/core && npm run build --workspace=@superagent/cli && npm run build --workspace=@superagent/desktop && npm run build --workspace=@superagent/web",
     "dev": "npm run dev --workspace=@superagent/desktop",
     "test": "npm test --workspace=@superagent/core && npm test --workspace=@superagent/cli && npm test --workspace=@superagent/desktop && npm test --workspace=@superagent/web",
+    
     "pub:core": "npm publish --workspace=@superagent/core --access public",
     "pub:cli": "npm publish --workspace=@superagent/cli --access public",
-    "pub:web": "npm publish --workspace=@superagent/web --access public"
+    "pub:web": "npm publish --workspace=@superagent/web --access public",
+
+    "pack:desktop": "npm run pack --workspace=@superagent/desktop",
+    "pack:desktop-win": "npm run pack --workspace=@superagent/desktop -- --win",
+    "pack:desktop-mac": "npm run pack --workspace=@superagent/desktop -- --mac",
+    "pack:desktop-linux": "npm run pack --workspace=@superagent/desktop -- --linux",
+    "pack:desktop-all": "npm run pack:desktop-mac && npm run pack:desktop-win && npm run pack:desktop-linux"
   }
 }

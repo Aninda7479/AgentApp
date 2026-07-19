@@ -72,9 +72,17 @@ function isLocalhost(url?: string): boolean {
  *  - `observation`→ allowed only for read-only GET/HEAD requests, plus
  *                   localhost and the provider `api` kind. Mutating methods
  *                   (POST/PUT/DELETE/PATCH) and `upload` are blocked.
+ *
+ * @param levelOverride When provided, this explicit level is used instead of
+ *   the persisted global setting. Callers that scope access per run (e.g. a
+ *   per-project / per-chat internet policy) pass it here so concurrent
+ *   sessions never share a single mutable global.
  */
-export function isNetworkAllowed(context: NetworkRequestContext): boolean {
-  const level = getInternetAccessLevel();
+export function isNetworkAllowed(
+  context: NetworkRequestContext,
+  levelOverride?: InternetAccessLevel
+): boolean {
+  const level = levelOverride ?? getInternetAccessLevel();
 
   if (level === 'all') return true;
 
@@ -96,9 +104,12 @@ export function isNetworkAllowed(context: NetworkRequestContext): boolean {
 }
 
 /** Throws {@link InternetAccessDeniedError} when the operation is not allowed. */
-export function enforceNetworkAllowed(context: NetworkRequestContext): void {
-  if (!isNetworkAllowed(context)) {
-    throw new InternetAccessDeniedError(getInternetAccessLevel(), context);
+export function enforceNetworkAllowed(
+  context: NetworkRequestContext,
+  levelOverride?: InternetAccessLevel
+): void {
+  if (!isNetworkAllowed(context, levelOverride)) {
+    throw new InternetAccessDeniedError(levelOverride ?? getInternetAccessLevel(), context);
   }
 }
 

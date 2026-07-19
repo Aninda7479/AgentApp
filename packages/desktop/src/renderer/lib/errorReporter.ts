@@ -75,6 +75,12 @@ function wrapInvoke(invoke: (channel: string, ...args: any[]) => Promise<any>) {
         reportError('ipc:' + channel, (result as IpcErrorEnvelope).error);
         return null;
       }
+      // The app's handlers universally signal failure with `{ ok: false, error }`
+      // (see safeHandle). Surface those as toasts too — otherwise a failed
+      // operation produces no error and looks like a silent no-op.
+      if (result && typeof result === 'object' && result.ok === false && result.error) {
+        reportError('ipc:' + channel, result.error);
+      }
       return result;
     } catch (err) {
       reportError('ipc:' + channel, err);

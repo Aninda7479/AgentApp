@@ -44,7 +44,18 @@ export class TerminalShellExecutor {
     }
 
     const preApproved = this.permissionController.isPreApproved(command);
-    if (check.riskLevel === 'potentially_dangerous' && this.permissionController.getMode() !== 'full-autonomy' && !preApproved) {
+    const executorMode = this.permissionController.getMode();
+    // Deny-all never prompts here: the runner has already filtered to
+    // allowlisted / pre-approved commands only, so anything reaching the
+    // executor under deny-all is permitted to run. Only full-autonomy and
+    // deny-all skip the prompt for dangerous commands; everything else
+    // (auto-approve-edits, read-only) gates risky commands.
+    if (
+      check.riskLevel === 'potentially_dangerous' &&
+      executorMode !== 'full-autonomy' &&
+      executorMode !== 'deny-all' &&
+      !preApproved
+    ) {
       const approved = await this.permissionController.requestApproval({
         action: 'execute_command',
         command,
@@ -53,7 +64,7 @@ export class TerminalShellExecutor {
       if (!approved) {
         throw new Error(`Execution rejected by user permission policy for command: ${command}`);
       }
-    } else if (this.permissionController.getMode() === 'read-only' && !preApproved) {
+    } else if (executorMode === 'read-only' && !preApproved) {
       const isReadOnlyCommand = /^(ls|dir|cat|echo|pwd|whoami|git status|git log|git diff)\b/i.test(command.trim());
       if (!isReadOnlyCommand) {
         const approved = await this.permissionController.requestApproval({

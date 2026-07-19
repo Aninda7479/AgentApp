@@ -1,32 +1,35 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Sidebar } from './components/Sidebar';
-import { TrajectoryStep } from './components/TrajectoryCanvas';
+import { Sidebar } from './pages/Workspace/Sidebar';
+import { TrajectoryStep } from './pages/Workspace/TrajectoryCanvas';
 import { ComposerOptions } from './logic/types';
-import { DiffViewer } from './components/DiffViewer';
-import { BYOKModal } from './components/BYOKModal';
+import { DiffViewer } from './pages/Workspace/DiffViewer';
+import { BYOKModal } from './pages/Settings/BYOKModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { DoctorModal } from './components/DoctorModal';
-import { PermissionDialog } from './components/PermissionDialog';
-import { MCPDashboard, MCPServerInfo } from './components/MCPDashboard';
+import { PermissionDialog } from './pages/Workspace/PermissionDialog';
+import { MCPDashboard, MCPServerInfo } from './pages/Settings/MCPDashboard';
 import { SearchModal } from './components/SearchModal';
-import { ScheduledView } from './components/ScheduledView';
-import { SettingsView, ProviderConnection, ModelConfig } from './settings/SettingsView';
-import type { InternetAccessLevel } from './settings/types';
-import { CreateProjectModal } from './components/CreateProjectModal';
-import { ConfigureProjectModal } from './components/ConfigureProjectModal';
+import { ScheduledView } from './pages/Workspace/ScheduledView';
+import { SettingsView, ProviderConnection, ModelConfig } from './pages/Settings/SettingsView';
+import type { InternetAccessLevel } from './pages/Settings/types';
+import { CreateProjectModal } from './pages/Workspace/CreateProjectModal';
+import { ConfigureProjectModal } from './pages/Workspace/ConfigureProjectModal';
+import { ChatSettingsModal } from './pages/Workspace/ChatSettingsModal';
 import { TitleBar } from './components/TitleBar';
 import { AppToast } from './components/AppToast';
-import { WorkspaceView } from './components/WorkspaceView';
+import { WorkspaceView } from './pages/Workspace/WorkspaceView';
+import { ProjectSettingsPage } from './pages/Workspace/ProjectSettingsPage';
+import { StandaloneChatPage } from './pages/Workspace/StandaloneChatPage';
 import { builtinSuggestions, SkillInfo } from './components/slashCommands';
 import { BottomNav } from './components/BottomNav';
-import { usePartners } from './components/partner/library';
-import { PartnerView } from './components/partner/PartnerView';
-import { PartnerOverlay } from './components/partner/PartnerOverlay';
-import { ThreeDStudio } from './3d_studio/ThreeDStudio';
+import { usePartners } from './pages/Settings/companion/library';
+import { PartnerOverlay } from './partner-popup/PartnerOverlay';
+import { ThreeDStudio } from './pages/Studio/ThreeDStudio';
 import { StoredChat, StoredProject } from './types';
+import { resolveScopeSettings } from './logic/scopeSettings';
 import { SessionLoopManager, LoopTask } from './logic/loop';
 import { useThemeMode } from './theme';
-import { getRouteFromLocation, pushRoute, subscribeRouteChange } from './urlSync';
+import { getRouteFromLocation, pushRoute, subscribeRouteChange, buildPath } from './urlSync';
 
 // ── Logic layer (separated from design; see renderer/logic/*) ────────────────
 import { FormatService } from './logic/format';
@@ -130,6 +133,8 @@ export const App: React.FC = () => {
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState<boolean>(false);
   const [isConfigureProjectOpen, setIsConfigureProjectOpen] = useState<boolean>(false);
   const [projectToConfigure, setProjectToConfigure] = useState<StoredProject | null>(null);
+  const [isChatSettingsOpen, setIsChatSettingsOpen] = useState<boolean>(false);
+  const [chatToConfigure, setChatToConfigure] = useState<StoredChat | null>(null);
   const [composerAttachments, setComposerAttachments] = useState<{ filename: string; sourcePath?: string; buffer?: number[] }[]>(() => {
     try {
       const cached = localStorage.getItem('composer_attachments_cache');
@@ -264,8 +269,42 @@ export const App: React.FC = () => {
 
   const activeChat = chats.find((chat) => chat.id === activeChatId) || null;
   const defaultComposerModel = lastUsedModel || modelsCatalog.find((m) => m.enabled)?.name || '';
+
+  // Resolve the effective sandbox + internet default for the active chat/project
+  // so the composer's controls can be seeded from it (settings = default,
+  // composer = per-send override per the approved plan).
+  const resolvedScope = useMemo(() => {
+    const project = projects.find((p) => p.name === activeProject) || null;
+    return resolveScopeSettings({
+      chat: activeChat,
+      project,
+      globalUnsandboxed: fullAccess,
+      globalInternet: internetAccessLevel
+    });
+    // recompute when the active scope or the global fallbacks change.
+  }, [activeChat, activeProject, projects, fullAccess, internetAccessLevel]);
+
+  // Seed the composer's sandbox badge from the resolved default whenever the
+  // active chat/project changes. The user can still toggle it per send.
+  useEffect(() => {
+    setFullAccess(resolvedScope.unsandboxed);
+  }, [resolvedScope.unsandboxed]);
+  const resolvedDefaultApproval = resolvedScope.approval;
   const isWebMode = !isElectron;
   const slashCommands = useMemo(() => builtinSuggestions(), []);
+
+  // Skill catalog offered to the Project Settings + Standalone Chat pages as
+  // project-only / chat-only skills (deduped by id).
+  const availableSkills = useMemo(() => {
+    const all = [...skills, ...skillCatalog].map((s: any) => ({ id: s.id, name: s.name }));
+    const seen = new Set<string>();
+    return all.filter((s) => {
+      if (!s.id) return false;
+      if (seen.has(s.id)) return false;
+      seen.add(s.id);
+      return true;
+    });
+  }, [skills, skillCatalog]);
 
   const loopManagerRef = useRef<SessionLoopManager | null>(null);
   const [, setActiveLoopsList] = useState<LoopTask[]>([]);
@@ -609,18 +648,78 @@ export const App: React.FC = () => {
   }, [ipc, activeTab]);
 
   // ── Discovered skills ──────────────────────────────────────────────────────
+  const [importableSkills, setImportableSkills] = useState<{ id: string; name: string }[]>([]);
+
   useEffect(() => {
     if (!ipc) return;
     const proj = projects.find((p) => p.name === activeProject);
     const root = proj?.folders?.[0];
+    const dirs = root ? [
+      `${root}/.superagent/skills`,
+      `${root}/.cloud/skills`,
+      `${root}/.agents/skills`,
+      `${root}/.claude/skills`
+    ] : undefined;
     ipc
-      .invoke('skills-list', { dir: root ? `${root}/.superagent/skills` : undefined })
+      .invoke('skills-list', { dir: dirs })
       .then((res: any) => {
         const list = Array.isArray(res) ? res : (res?.skills ?? []);
         setSkills(Array.isArray(list) ? list : []);
       })
       .catch(() => setSkills([]));
   }, [ipc, projects, activeProject]);
+
+  // Manual "Scan for skills" — scans global ~/.claude/skills + ~/.agents/skills
+  // (and the active project's dot-folders) and only surfaces the import prompt
+  // when something is actually importable.
+  const handleScanSkills = useCallback(() => {
+    if (!ipc) return;
+    const proj = projects.find((p) => p.name === activeProject);
+    const root = proj?.folders?.[0];
+    ipc
+      .invoke('skills-import-check', { projectRoot: root })
+      .then((res: any) => {
+        if (res && res.canImport && Array.isArray(res.skills) && res.skills.length > 0) {
+          setImportableSkills(res.skills);
+        } else {
+          setImportableSkills([]);
+          triggerToast('No new skills to import.', 'info');
+        }
+      })
+      .catch(() => setImportableSkills([]));
+  }, [ipc, projects, activeProject, triggerToast]);
+
+  const handleImportSkills = useCallback(() => {
+    const proj = projects.find((p) => p.name === activeProject);
+    const root = proj?.folders?.[0];
+    if (!root || !ipc) return;
+    ipc
+      .invoke('skills-import-perform', { projectRoot: root })
+      .then((res: any) => {
+        if (res && res.success) {
+          triggerToast(`Successfully imported ${res.importedCount} skill(s) into .superagent/skills!`);
+          setImportableSkills([]);
+          // Force refresh discovered skills
+          ipc
+            .invoke('skills-list', { dir: [
+              `${root}/.superagent/skills`,
+              `${root}/.cloud/skills`,
+              `${root}/.agents/skills`,
+              `${root}/.claude/skills`
+            ]})
+            .then((listRes: any) => {
+              const list = Array.isArray(listRes) ? listRes : (listRes?.skills ?? []);
+              setSkills(Array.isArray(list) ? list : []);
+            })
+            .catch(() => {});
+        } else {
+          triggerToast(res?.error || 'Failed to import skills.', 'error');
+        }
+      })
+      .catch((err: any) => {
+        triggerToast(`Failed to import skills: ${err.message}`, 'error');
+      });
+  }, [ipc, projects, activeProject, triggerToast]);
 
   // ── Curated skill catalog (Settings → Skills; separate from the slash surface) ──
   useEffect(() => {
@@ -707,11 +806,15 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     return subscribeRouteChange((route) => {
-      setActiveTab(route.activeTab);
-      setActiveChatId(route.activeChatId);
-      setSettingsCategory(route.settingsCategory);
+      const currentPath = buildPath({ activeTab, activeChatId, settingsCategory });
+      const newPath = buildPath(route);
+      if (currentPath !== newPath) {
+        setActiveTab(route.activeTab);
+        setActiveChatId(route.activeChatId);
+        setSettingsCategory(route.settingsCategory);
+      }
     });
-  }, [setActiveTab, setActiveChatId, setSettingsCategory]);
+  }, [activeTab, activeChatId, settingsCategory, setActiveTab, setActiveChatId, setSettingsCategory]);
 
   // Keyboard shortcut listeners
   useEffect(() => {
@@ -803,6 +906,18 @@ export const App: React.FC = () => {
     setLiveContextUsage(null);
   }, [activeChatId]);
 
+  // Sync trajectory steps when activeChatId changes (e.g. via routing / back button)
+  useEffect(() => {
+    if (!activeChatId || activeChatId === 'draft-chat') {
+      setTrajectorySteps([]);
+      return;
+    }
+    const chat = chats.find((c) => c.id === activeChatId);
+    if (chat) {
+      setTrajectorySteps(chat.steps);
+    }
+  }, [activeChatId]);
+
   // ── Sandbox permission prompts (user-in-the-loop) ───────────────────────
   useEffect(() => {
     if (!ipc) return;
@@ -840,7 +955,7 @@ export const App: React.FC = () => {
           until focused (standard sr-only pattern), then shown as a floating chip. */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-[10000] focus:rounded-lg focus:bg-brand-popover focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-brand-textMain focus:ring-2 focus:ring-brand-border-strong focus:outline-none"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-10000 focus:rounded-lg focus:bg-brand-popover focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-brand-textMain focus:ring-2 focus:ring-brand-border-strong focus:outline-none"
       >
         Skip to main content
       </a>
@@ -886,7 +1001,7 @@ export const App: React.FC = () => {
       {/* Main Body container */}
       <div className="flex-1 flex overflow-hidden overflow-x-hidden relative min-w-0">
         {/* Mobile drawer backdrop */}
-        {mobileNavOpen && activeTab !== 'settings' && activeTab !== 'studio' && (
+        {mobileNavOpen && activeTab !== 'settings' && activeTab !== 'studio' && activeTab !== 'project-settings' && activeTab !== 'standalone-chat' && (
           <div
             className="lg:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
             onClick={() => setMobileNavOpen(false)}
@@ -894,7 +1009,7 @@ export const App: React.FC = () => {
           />
         )}
         {/* Hide main sidebar when viewing Settings page, matching Image 4 */}
-        {activeTab !== 'settings' && activeTab !== 'studio' && (
+        {activeTab !== 'settings' && activeTab !== 'studio' && activeTab !== 'project-settings' && activeTab !== 'standalone-chat' && (
           <Sidebar
             activeTab={activeTab}
             showStudio={showStudio}
@@ -907,6 +1022,11 @@ export const App: React.FC = () => {
                 // so the user can enable the capability rather than hiding it.
                 setActiveTab('settings');
                 setSettingsCategory('3d');
+              } else if (tab === 'companion') {
+                // "Companion" sidebar entry routes into Settings → Companion
+                // (the merged Partner/Pet page), matching the Pets ghost pattern.
+                setActiveTab('settings');
+                setSettingsCategory('companion');
               } else {
                 setActiveTab(tab);
               }
@@ -930,8 +1050,21 @@ export const App: React.FC = () => {
               setProjectToConfigure(proj);
               setIsConfigureProjectOpen(true);
             }}
+            onProjectSettings={(proj) => {
+              setProjectToConfigure(proj);
+              handleSelectProject(proj.name);
+              setActiveTab('project-settings');
+            }}
             onDeleteChat={handleDeleteChat}
             onSelectChat={handleSelectChat}
+            onChatSettings={(chat) => {
+              setChatToConfigure(chat);
+              setIsChatSettingsOpen(true);
+            }}
+            onStandaloneChatSettings={(chat) => {
+              setChatToConfigure(chat);
+              setActiveTab('standalone-chat');
+            }}
           />
         )}
 
@@ -964,7 +1097,7 @@ export const App: React.FC = () => {
               onSendPrompt={handleSendPrompt}
               onStop={handleStopActiveRun}
               onViewDiff={handleViewDiff}
-              onOpenMcp={() => setActiveTab('mcp')}
+              onOpenMcp={() => { setActiveTab('settings'); setSettingsCategory('connectors'); }}
               onOpenSettings={() => {
                 setActiveTab('settings');
                 setSettingsCategory('general');
@@ -972,6 +1105,7 @@ export const App: React.FC = () => {
               onToast={triggerToast}
               onUndoStep={handleUndoStep}
               activeChatModel={activeChat?.model || lastUsedModel}
+              defaultApprovalMode={resolvedDefaultApproval}
               onModelChange={(model) => SettingsService.persistLastUsedModel(ctx, model)}
               onAttachClick={handleAttachFiles}
               onAttachPastedFiles={handleAttachPastedFiles}
@@ -982,6 +1116,7 @@ export const App: React.FC = () => {
               unsandboxedActions={fullAccess}
               onUnsandboxedActionsChange={handleUnsandboxedActionsChange}
               onMicUnavailable={() => triggerToast('Voice input is not supported in this browser')}
+              onMicNotice={(msg) => triggerToast(msg)}
               slashCommands={slashCommands}
               skills={skills}
               lastError={activeChat?.lastError}
@@ -991,6 +1126,9 @@ export const App: React.FC = () => {
                 modelsCatalog.find((m) => m.name === (activeChat?.model || lastUsedModel))?.contextLimit
               }
               onCompact={handleCompactRequest}
+              importableSkills={importableSkills}
+              onImportSkills={handleImportSkills}
+              onScanSkills={handleScanSkills}
             />
           )}
 
@@ -998,21 +1136,38 @@ export const App: React.FC = () => {
             <ScheduledView onCreateTask={handleCreateTaskFromChat} onUseTemplate={handleUseTemplate} />
           )}
 
-
-          {activeTab === 'partner' && (
-            <PartnerView
-              pets={partners.pets}
-              activeId={partners.activeId}
-              petRunning={partners.petRunning}
-              onSetActive={(id) => partners.setActive(id)}
-              onInstallFromFolder={() => partners.installFromFolder()}
-              onInstallFromJson={(json) => { void partners.installFromJson(json); }}
-              onRemove={(id) => partners.remove(id)}
-              onExport={(id) => partners.exportPet(id)}
-              onImportModel={(id, filePath) => partners.importModel(id, filePath)}
-              onImportModelFolder={(id, folderPath) => partners.importModelFolder(id, folderPath)}
+          {activeTab === 'project-settings' && (
+            <ProjectSettingsPage
+              project={projectToConfigure || projects.find((p) => p.name === activeProject) || null}
+              projects={projects}
+              availableSkills={availableSkills}
+              onSave={(updated) => {
+                handleSaveProjectConfig(updated);
+                setProjectToConfigure(updated);
+                triggerToast('Project settings saved');
+              }}
+              onBack={() => setActiveTab('trajectory')}
+              onSelectProject={(name) => {
+                const proj = projects.find((p) => p.name === name) || null;
+                setProjectToConfigure(proj);
+                handleSelectProject(name);
+              }}
             />
           )}
+
+          {activeTab === 'standalone-chat' && (
+            <StandaloneChatPage
+              chat={chatToConfigure}
+              availableSkills={availableSkills}
+              onSave={(config, settings) => {
+                if (chatToConfigure) {
+                  ConversationService.saveStandaloneChatConfig(ctx, chatToConfigure.id, config, settings);
+                }
+              }}
+              onBack={() => setActiveTab('trajectory')}
+            />
+          )}
+
 
           {activeTab === 'studio' && showStudio && (
             <ThreeDStudio
@@ -1045,6 +1200,7 @@ export const App: React.FC = () => {
               onToggleModel={handleToggleModel}
               skills={settingsSkills}
               onToggleSkill={(skillId, enabled) => console.log(`Toggled skill ${skillId}: ${enabled}`)}
+              onScanSkills={handleScanSkills}
               pluginCatalog={pluginCatalog}
               pluginEnabled={pluginEnabled}
               onTogglePlugin={handleTogglePlugin}
@@ -1080,10 +1236,6 @@ export const App: React.FC = () => {
               onReview={handleReviewDiff}
             />
           )}
-
-          {activeTab === 'mcp' && (
-            <MCPDashboard servers={mcpServers} onAddServer={handleAddMcpServer} onRemoveServer={handleRemoveMcpServer} onToggleServer={handleToggleMcpServer} />
-          )}
         </main>
       </div>
 
@@ -1117,6 +1269,14 @@ export const App: React.FC = () => {
 
       {/* Configure Project Modal */}
       <ConfigureProjectModal isOpen={isConfigureProjectOpen} onClose={() => setIsConfigureProjectOpen(false)} project={projectToConfigure} onSave={handleSaveProjectConfig} />
+      <ChatSettingsModal
+        isOpen={isChatSettingsOpen}
+        onClose={() => setIsChatSettingsOpen(false)}
+        chat={chatToConfigure}
+        onSave={(settings) => {
+          if (chatToConfigure) ConversationService.saveChatSettings(ctx, chatToConfigure.id, settings);
+        }}
+      />
 
       {/* Keyboard Shortcuts Modal */}
       <ShortcutsModal isOpen={isShortcutsOpen} onClose={() => setIsShortcutsOpen(false)} />

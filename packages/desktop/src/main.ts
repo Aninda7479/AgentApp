@@ -2,7 +2,7 @@ import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, type IpcMai
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, ModelRouter, ModelGovStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, capabilityRegistry, parseContextLimit } from '@superagent/core';
+import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber } from '@superagent/core';
 
 // Set a custom userData path so all app data lives in <home>/.superagent.
 app.setPath('userData', getUserDataDirectory());
@@ -12,8 +12,10 @@ import { setupAutoUpdater } from './main/updater';
 import { readStore, writeStore, StoreData } from './main/store';
 import { getChatDirectory } from './main/storage/index.js';
 import * as PartnerStore from './main/partner-store';
+import * as whisperLocal from './main/whisper-local';
 import { petWindowManager } from './main/pet-window';
 import { logError, errorMessage, registerErrorToasts, IpcErrorEnvelope } from './main/error-log';
+import { getSystemInfo } from './main/system-info';
 
 // Tracks context-window usage so the pet can show "dark circles" when the
 // conversation approaches the model's capacity.
@@ -57,7 +59,7 @@ async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
 // via Electron IPC (replaces HTTP SSE in desktop context)
 
 import { AgentEngine, AgentEngineConfig, AgentEvent, resolveWithinAnyRoot, generateChatName } from './main/ai-engine';
-import { listSkills } from './main/skills';
+import { listSkills, checkSkillsToImport, importSkills } from './main/skills';
 import {
   connectServer,
   disconnectServer,
@@ -184,11 +186,11 @@ safeHandle('agent-run', async (event, {
       // Load settings once for this session so both orchestrator routing AND
       // context-window resolution can read models/providers from the same source.
       const settings = SettingsStorage.loadSettings();
-      if (config.model === 'auto' || config.model === 'Model Governance') {
+      if (config.model === 'auto' || config.model === 'Orchestrator' || config.model === 'Model Governance') {
         // Apply the Orchestrator's default reasoning effort only when the
         // composer/turn didn't set one (caller preference wins). 'off' means
         // leave the per-turn/cascade logic untouched.
-        const govEffort = settings.modelGov?.reasoningEffort;
+        const govEffort = (settings.orchestrator || settings.modelGov)?.reasoningEffort;
         if (!finalConfig.reasoningEffort && govEffort && govEffort !== 'off') {
           finalConfig.reasoningEffort = govEffort;
         }
@@ -198,7 +200,7 @@ safeHandle('agent-run', async (event, {
         // feeding it the raw list can resolve to a model with no provider.
         const enabledModels = buildRouterPool(settings.models ?? []).filter((m) => m.enabled);
         try {
-          const routed = ModelRouter.routeModelForTask(prompt, enabledModels, buildRequest(prompt, currentAttachments));
+          const routed = OrchestratorRouter.routeModelForTask(prompt, enabledModels, buildRequest(prompt, currentAttachments));
           if (routed && routed.model) {
             finalConfig.provider = routed.provider as any;
             finalConfig.model = routed.model;
@@ -219,7 +221,7 @@ safeHandle('agent-run', async (event, {
           if (fallback) {
             console.warn(`[desktop] Orchestrator routing failed (${(routeErr as Error).message}); falling back to ${fallback.providerId}/${fallback.id}.`);
             finalConfig.provider = fallback.providerId as any;
-            finalConfig.model = ModelRouter.stripProviderPrefix(fallback.providerId, fallback.id);
+            finalConfig.model = OrchestratorRouter.stripProviderPrefix(fallback.providerId, fallback.id);
             const byok = settings.providers?.find((p) => p.id === fallback.providerId);
             if (byok) {
               finalConfig.apiKey = byok.apiKey;
@@ -261,7 +263,11 @@ safeHandle('agent-run', async (event, {
             try {
               const fs = require('fs');
               const path = require('path');
-              const configFilePath = path.join(finalConfig.projectRoot, 'chat_config.json');
+              const projectDataDir = path.join(finalConfig.projectRoot, '.superagent');
+              if (!fs.existsSync(projectDataDir)) {
+                fs.mkdirSync(projectDataDir, { recursive: true });
+              }
+              const configFilePath = path.join(projectDataDir, 'chat_config.json');
               fs.writeFileSync(configFilePath, JSON.stringify({ chatName }, null, 2), 'utf8');
               console.log(`[desktop] Saved chat config to ${configFilePath}`);
             } catch (fsErr) {
@@ -395,11 +401,27 @@ safeHandle('agent-permission-response', (_event, {
 });
 
 // ─── IPC: Skills discovery (for the Composer slash autocomplete) ──────────────
-safeHandle('skills-list', (_event, { dir }: { dir?: string }) => {
+safeHandle('skills-list', (_event, { dir }: { dir?: string | string[] }) => {
   try {
     return listSkills(dir);
   } catch {
     return [];
+  }
+});
+
+safeHandle('skills-import-check', async (_event, { projectRoot }: { projectRoot?: string }) => {
+  try {
+    return await checkSkillsToImport(projectRoot);
+  } catch {
+    return { canImport: false, skills: [] };
+  }
+});
+
+safeHandle('skills-import-perform', async (_event, { projectRoot }: { projectRoot?: string }) => {
+  try {
+    return await importSkills(projectRoot);
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
 });
 
@@ -498,9 +520,27 @@ safeHandle('settings-read', () => {
   return SettingsStorage.loadSettings();
 });
 
-safeHandle('settings-write', (_event, settings) => {
-  SettingsStorage.saveSettings(settings);
+safeHandle('settings-write', (_event, settingsPatch) => {
+  const oldSettings = SettingsStorage.loadSettings();
+  SettingsStorage.saveSettings(settingsPatch);
+
+  const oldVoice = oldSettings?.voice || {};
+  const updatedSettings = SettingsStorage.loadSettings();
+  const newVoice = updatedSettings?.voice || {};
+
+  if (
+    (oldVoice.localWhisper?.enabled && !newVoice.localWhisper?.enabled) ||
+    (oldVoice.localWhisper?.enabled && oldVoice.localWhisper?.size !== newVoice.localWhisper?.size)
+  ) {
+    void whisperLocal.freePipeline();
+  }
 });
+
+// ── Hardware detection for the Local Model (Ollama) manager ────────────────
+// Returns CPU/GPU/RAM/storage/unified-memory details so the renderer can
+// recommend models that actually fit the machine. Runs in the main process;
+// see ./main/system-info.ts for the per-probe implementation.
+safeHandle('system-info', () => getSystemInfo());
 
 safeHandle('usage-summary', () => {
   return UsageTracker.getSummary();
@@ -518,27 +558,28 @@ safeHandle('usage-pricing', () => {
   return UsageTracker.getPricing();
 });
 
-safeHandle('model-gov-read-instructions', () => {
-  return ModelGovStorage.loadInstructions();
+safeHandle('orchestrator-read-instructions', () => {
+  return OrchestratorStorage.loadInstructions();
 });
 
-safeHandle('model-gov-write-instructions', (_event, content: string) => {
-  ModelGovStorage.saveInstructions(content);
+safeHandle('orchestrator-write-instructions', (_event, content: string) => {
+  OrchestratorStorage.saveInstructions(content);
 });
 
-safeHandle('model-gov-update-instructions', async () => {
-  return await ModelGovStorage.autoUpdateInstructions();
+safeHandle('orchestrator-update-instructions', async () => {
+  return await OrchestratorStorage.autoUpdateInstructions();
 });
 
-safeHandle('model-gov-optimize-instructions-by-ai', async () => {
+safeHandle('orchestrator-optimize-instructions-by-ai', async () => {
   const settings = SettingsStorage.loadSettings();
-  const govEnabledIds = settings.modelGov?.enabledModels || [];
+  const orchestratorSettings = settings.orchestrator || settings.modelGov;
+  const govEnabledIds = orchestratorSettings?.enabledModels || [];
 
   const activeModels = (settings.models || []).filter(m =>
     govEnabledIds.includes(m.id) ||
     govEnabledIds.includes(`${m.providerId}-${m.id}`)
   );
-  const currentInstructions = ModelGovStorage.loadInstructions();
+  const currentInstructions = OrchestratorStorage.loadInstructions();
 
   const providers = settings.providers || [];
   const activeProvider = providers.find(p => p.apiKey);
@@ -559,7 +600,7 @@ safeHandle('model-gov-optimize-instructions-by-ai', async () => {
 
   const engine = new AgentEngine(engineConfig, `optimize-prompt-${Date.now()}`);
   
-  const optimizationPrompt = `You are a system prompt optimizer. You are optimizing the Model Governance System Instructions for a Sakana Fugu-class routing conductor.
+  const optimizationPrompt = `You are a system prompt optimizer. You are optimizing the Orchestrator System Instructions for a Sakana Fugu-class routing conductor.
 
 Here is the current pool of enabled models:
 ${activeModels.map(m => `- ${m.name} (${m.providerId}) - Pricing: Input ${m.pricing?.inputPer1M || 'N/A'}, Output ${m.pricing?.outputPer1M || 'N/A'}`).join('\n')}
@@ -569,8 +610,9 @@ Here is the current instructions file content:
 ${currentInstructions}
 \`\`\`
 
-Optimization Goal: ${settings.modelGov?.optimizationGoal || 'balanced'}
-Routing Strategy: ${settings.modelGov?.routingStrategy || 'router'}
+Optimization Goal: ${orchestratorSettings?.optimizationGoal || 'balanced'}
+Routing Strategy: ${orchestratorSettings?.routingStrategy || 'router'}
+${orchestratorSettings?.freeOnly ? 'NOTE: Free-Only mode is enabled. The Orchestrator should only utilize free, local, or custom models. Avoid paid options.' : ''}
 
 Please optimize these system instructions to:
 1. Make the categorization boundaries more precise for the specific models in this pool.
@@ -594,7 +636,7 @@ Please optimize these system instructions to:
     .replace(/```$/, '')
     .trim();
 
-  ModelGovStorage.saveInstructions(optimizedContent);
+  OrchestratorStorage.saveInstructions(optimizedContent);
   return optimizedContent;
 });
 
@@ -973,6 +1015,221 @@ safeHandle('three-d-generate', async (_event, args: { name?: string; prompt?: st
     return res;
   } catch (err: unknown) {
     return { ok: false, message: `3D Studio generation failed: ${(err as Error).message}` };
+  }
+});
+
+// ─── IPC: Voice dictation (speech-to-text) ────────────────────────────────────
+// The Workspace composer's mic can transcribe recorded audio through a real STT
+// model (Whisper-compatible). The renderer records audio with MediaRecorder and
+// sends the raw bytes here; we resolve the provider key/base-URL selected in
+// Settings → Voice, then route through the core media pipeline.
+const mediaRouter = new MediaPipelineRouter();
+
+// Register the on-device Whisper (transformers.js) transcription backend.
+// When a transcription request carries `provider: 'local'`, Core's
+// AudioTranscriber delegates to this instead of an HTTP endpoint.
+AudioTranscriber.setLocalBackend(async (options, config) => {
+  const lw = (config as any).localWhisper;
+  const size = (lw?.size as any) || 'tiny';
+  const device = (lw?.device as any) || 'auto';
+  const cfg = (config as any) || {};
+  const res = await whisperLocal.transcribe(
+    Buffer.isBuffer(options.audioBuffer) ? options.audioBuffer : Buffer.from(options.audioBuffer as any),
+    {
+      size,
+      language: (lw?.language as string) || (options.language as string) || '',
+      autoDetect: lw?.autoDetect !== false,
+      device,
+      modelDir: (lw?.modelDir as string) || whisperLocal.defaultModelDir(),
+      ...cfg
+    }
+  );
+  return {
+    id: `local_stt_${Date.now()}`,
+    status: 'success' as const,
+    text: res.text || '',
+    provider: 'local',
+    model: `whisper-${size}`,
+    createdAt: Date.now()
+  };
+});
+
+safeHandle('media-transcribe', async (_event, args: {
+  buffer?: number[] | ArrayBuffer | Uint8Array;
+  filename?: string;
+  mimeType?: string;
+}) => {
+  const settings = SettingsStorage.loadSettings();
+  const voice = settings?.voice || {};
+
+  // Normalize the incoming audio bytes to a Node Buffer.
+  let audioBuffer: Buffer;
+  const raw = args?.buffer;
+  if (!raw) {
+    return { ok: false, error: 'No audio was captured. Try holding the mic a bit longer.' };
+  }
+  if (Buffer.isBuffer(raw)) {
+    audioBuffer = raw;
+  } else if (raw instanceof Uint8Array || (raw && typeof raw === 'object' && 'buffer' in (raw as any))) {
+    const r = raw as any;
+    audioBuffer = Buffer.from(r.buffer, r.byteOffset ?? 0, r.byteLength ?? r.length);
+  } else if (raw instanceof ArrayBuffer) {
+    audioBuffer = Buffer.from(new Uint8Array(raw));
+  } else if (Array.isArray(raw)) {
+    audioBuffer = Buffer.from(Uint8Array.from(raw));
+  } else {
+    return { ok: false, error: 'Unsupported audio payload.' };
+  }
+  if (audioBuffer.length === 0) {
+    return { ok: false, error: 'No audio was captured. Try holding the mic a bit longer.' };
+  }
+
+  // Parse custom vocabulary/dictionary first as it may be used by the local Whisper branch.
+  const dict = voice.dictionary || {};
+  const dictWords: string[] = Array.isArray(dict.words)
+    ? dict.words.map((w: unknown) => String(w).trim()).filter(Boolean)
+    : [];
+  const dictCorrections: { from: string; to: string }[] = Array.isArray(dict.corrections)
+    ? dict.corrections
+        .map((c: any) => ({ from: String(c?.from ?? '').trim(), to: String(c?.to ?? '').trim() }))
+        .filter((c: { from: string; to: string }) => c.from && c.to)
+    : [];
+
+  // On-device Whisper branch: when the user enabled local STT, transcribe
+  // in-process (transformers.js) instead of over HTTP. The custom
+  // dictionary corrections are applied deterministically to the result
+  // (transformers.js ASR has no OpenAI `prompt` param).
+  if (voice.localWhisper?.enabled) {
+    const lw = voice.localWhisper;
+    const result = await mediaRouter.executeTask(
+      {
+        taskType: 'audio-transcription',
+        audioTranscribe: {
+          audioBuffer,
+          filename: args?.filename || 'dictation.wav',
+          model: `whisper-${lw.size}`,
+          language: lw.autoDetect ? undefined : lw.language?.trim() || undefined,
+          local: true
+        }
+      },
+      {
+        provider: 'local',
+        apiKey: '',
+        baseUrl: undefined,
+        modelName: `whisper-${lw.size}`,
+        localWhisper: lw
+      } as any
+    );
+
+    if (result.status !== 'success' || !result.result) {
+      return { ok: false, error: result.error || 'Local transcription failed.' };
+    }
+    let text = (result.result as { text?: string }).text || '';
+    for (const c of dictCorrections) {
+      if (c.from && c.to) {
+        text = text.split(c.from).join(c.to);
+      }
+    }
+    return { ok: true, text };
+  }
+
+  // Resolve the provider selected for voice from the connected providers.
+  const providers = settings?.providers || [];
+  const provider = providers.find((p) => p.id === voice.providerId) || providers.find((p) => p.apiKey);
+  if (!provider || !provider.apiKey) {
+    return {
+      ok: false,
+      needsSetup: true,
+      error: 'No transcription model is configured. Open Settings → Voice & Mic and pick a provider + model (e.g. whisper-1).'
+    };
+  }
+
+  const model = voice.model?.trim() || 'whisper-1';
+
+  // Build an optional vocabulary-biasing prompt from the user's custom
+  // dictionary. Whisper-compatible STT APIs accept a `prompt` that nudges the
+  // model toward specific spellings/names and away from gibberish. Preferred
+  // words seed the spelling; correction pairs describe the intended fix.
+  const promptParts: string[] = [];
+  if (dictWords.length > 0) {
+    promptParts.push(`Use these spellings: ${dictWords.join(', ')}.`);
+  }
+  if (dictCorrections.length > 0) {
+    promptParts.push(
+      dictCorrections.map((c) => `Replace "${c.from}" with "${c.to}".`).join(' ')
+    );
+  }
+  const vocabPrompt = promptParts.join(' ').trim();
+
+  const result = await mediaRouter.executeTask(
+    {
+      taskType: 'audio-transcription',
+      audioTranscribe: {
+        audioBuffer,
+        filename: args?.filename || 'dictation.webm',
+        model,
+        language: voice.language?.trim() || undefined,
+        prompt: vocabPrompt || undefined,
+        responseFormat: 'json'
+      }
+    },
+    {
+      provider: (provider.id as any) || 'openai',
+      apiKey: provider.apiKey,
+      baseUrl: provider.baseUrl || undefined,
+      modelName: model
+    }
+  );
+
+  if (result.status !== 'success' || !result.result) {
+    return { ok: false, error: result.error || 'Transcription failed.' };
+  }
+  const text = (result.result as { text?: string }).text || '';
+  return { ok: true, text };
+});
+
+// ─── IPC: Local Whisper (transformers.js) management ───────────────
+safeHandle('whisper-local-status', (_event, args: { size?: string; modelDir?: string }) => {
+  try {
+    const size = (args?.size as any) || 'tiny';
+    const dir = args?.modelDir || whisperLocal.defaultModelDir();
+    return { ok: true, status: whisperLocal.getStatus(size, dir) };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? String(err) };
+  }
+});
+
+safeHandle('whisper-local-download', async (event, args: { size?: string; modelDir?: string }) => {
+  try {
+    const size = (args?.size as any) || 'tiny';
+    const dir = args?.modelDir || whisperLocal.defaultModelDir();
+    await whisperLocal.download(size, dir, (progress: number, statusText: string) => {
+      try { event.sender?.send('whisper-local-progress', { size, progress, statusText }); } catch { /* noop */ }
+    });
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? String(err) };
+  }
+});
+
+safeHandle('whisper-local-delete', async (_event, args: { size?: string; modelDir?: string }) => {
+  try {
+    const size = (args?.size as any) || 'tiny';
+    const dir = args?.modelDir || whisperLocal.defaultModelDir();
+    await whisperLocal.deleteModel(size, dir);
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? String(err) };
+  }
+});
+
+safeHandle('whisper-local-setdir', (_event, args: { dir: string }) => {
+  try {
+    const res = whisperLocal.validateModelDir(args?.dir || '');
+    if (!res.ok) return { ok: false, error: res.error };
+    return { ok: true, modelDir: args.dir };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? String(err) };
   }
 });
 
@@ -1356,11 +1613,33 @@ safeHandle('pet-set-visible', (_event, visible: boolean) => {
  * restarting). Returns the running status so the UI can refresh immediately.
  */
 safeHandle('web-start', (_event, { port }: { port?: number } = {}) => {
+  // Cross-process guard: a server started by the CLI (or standalone) also counts.
   if (isWebServerRunning()) {
-    return { ok: true, alreadyRunning: true, running: true, port };
+    const lock = readWebServerLock();
+    return {
+      ok: true,
+      alreadyRunning: true,
+      running: true,
+      port: lock?.port ?? port,
+      startedBy: lock?.startedBy ?? 'standalone'
+    };
   }
   const resolvedPort = Number(port) || 3000;
-  startWebServer({ port: resolvedPort });
+  try {
+    startWebServer({ port: resolvedPort, startedBy: 'desktop' });
+  } catch (err) {
+    // Lost a race with another surface that started between the check and here.
+    if (err instanceof WebServerAlreadyRunningError) {
+      return {
+        ok: true,
+        alreadyRunning: true,
+        running: true,
+        port: err.lock.port,
+        startedBy: err.lock.startedBy
+      };
+    }
+    return { ok: false, running: false, error: err instanceof Error ? err.message : String(err) };
+  }
   // Persist the chosen port so Settings + auto-start agree.
   try {
     const settings = SettingsStorage.loadSettings();
@@ -1378,10 +1657,24 @@ safeHandle('web-stop', () => {
 });
 
 /** Reports whether the web server is currently running and on which port/host. */
+/** Helper to determine the local machine's primary non-internal IPv4 address (e.g. Wi-Fi / LAN IP). */
+function getLocalIpAddress(): string {
+  const interfaces = os.networkInterfaces();
+  for (const list of Object.values(interfaces)) {
+    for (const info of list || []) {
+      if ((String(info.family) === 'IPv4' || String(info.family) === '4') && !info.internal) {
+        return info.address;
+      }
+    }
+  }
+  return 'localhost';
+}
+
 safeHandle('web-status', () => {
-  // The port is set in the *child* server's env (not the desktop parent's), so
-  // read the effective port from the persisted Web App setting `web-start`
-  // writes, falling back to the env/default.
+  const running = isWebServerRunning();
+  // Prefer the live lock (authoritative port + who started it — could be the
+  // CLI). Fall back to the persisted Web App setting, then env/default.
+  const lock = readWebServerLock();
   let port = Number(process.env.PORT) || 3000;
   try {
     const saved = SettingsStorage.loadSettings().webApp?.port;
@@ -1389,11 +1682,14 @@ safeHandle('web-status', () => {
   } catch {
     /* ignore */
   }
+  if (lock?.port) port = lock.port;
+  const localIp = getLocalIpAddress();
   return {
-    running: isWebServerRunning(),
+    running,
     port,
     url: `http://localhost:${port}`,
-    lanUrl: `http://0.0.0.0:${port}`
+    lanUrl: `http://${localIp}:${port}`,
+    startedBy: running ? lock?.startedBy ?? 'standalone' : null
   };
 });
 
@@ -1486,6 +1782,20 @@ app.whenReady().then(async () => {
   initApp();
   setupDevWatcher();
 
+  // Warm up local Whisper model if enabled to eliminate cold-start lag
+  try {
+    const settings = SettingsStorage.loadSettings();
+    if (settings?.voice?.localWhisper?.enabled) {
+      const size = settings.voice.localWhisper.size || 'tiny';
+      const dir = settings.voice.localWhisper.modelDir || whisperLocal.defaultModelDir();
+      void whisperLocal.warmup(size, dir).catch((err) => {
+        console.warn('Whisper worker warmup failed:', err);
+      });
+    }
+  } catch (err) {
+    console.error('Failed to load settings for Whisper warmup:', err);
+  }
+
   // Auto-start the self-hosted Web App if the user enabled it in
   // Settings → Web App. Launched shortly after boot so the main window is up
   // first; failures are logged but never block startup.
@@ -1495,7 +1805,7 @@ app.whenReady().then(async () => {
       setTimeout(() => {
         try {
           if (!isWebServerRunning()) {
-            startWebServer({ port: webSettings.port || 3000 });
+            startWebServer({ port: webSettings.port || 3000, startedBy: 'desktop' });
             console.log('[web] Auto-started the Web App (port ' + (webSettings.port || 3000) + ').');
           }
         } catch (e) {
@@ -1518,11 +1828,11 @@ app.whenReady().then(async () => {
   // Auto-update check (no-ops in dev where electron-updater isn't installed).
   setupAutoUpdater();
 
-  // Model Gov startup instructions auto-update check
+  // Orchestrator startup instructions auto-update check
   try {
     const settings = SettingsStorage.loadSettings();
-    if (settings.modelGov?.autoUpdateInstructions) {
-      ModelGovStorage.autoUpdateInstructions().catch(e => console.error('Model Gov instructions auto-update failed:', e));
+    if ((settings.orchestrator || settings.modelGov)?.autoUpdateInstructions) {
+      OrchestratorStorage.autoUpdateInstructions().catch(e => console.error('Orchestrator instructions auto-update failed:', e));
     }
   } catch (e) {
     // Ignore settings errors at startup
@@ -1540,4 +1850,5 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  void whisperLocal.freePipeline();
 });

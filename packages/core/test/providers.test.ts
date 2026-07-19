@@ -10,7 +10,7 @@ import {
   GeminiAdapter,
   CustomAdapter,
   ModelCapabilityRegistry,
-  ModelRouter,
+  OrchestratorRouter,
   CompletionRequest,
   AIProvider,
   createProviderAdapter,
@@ -251,7 +251,7 @@ describe('Phase 1 Core Provider Suite (Steps 001-008)', () => {
       byok.registerKey({ provider: 'openai', apiKey: 'sk-openai-fail' });
       byok.registerKey({ provider: 'anthropic', apiKey: 'sk-anthropic-success' });
 
-      const router = new ModelRouter({ preferredProvider: 'openai' });
+      const router = new OrchestratorRouter({ preferredProvider: 'openai' });
 
       vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
         if (url.includes('openai.com')) {

@@ -4,7 +4,7 @@ import { AgentEngine, type BestOfNConfig, type AgentEvent } from '../src/provide
 /**
  * Phase-2 of orchestration depth (mission point 2): the ENGINE wiring that runs
  * N task-matched models in parallel and merges their outputs. The selection
- * (ModelRouter.selectCandidateModels) and merge (mergeBestOfN) halves are
+ * (OrchestratorRouter.selectCandidateModels) and merge (mergeBestOfN) halves are
  * already unit-tested; this suite covers the new AgentEngine.runBestOfN path
  * WITHOUT spending any API budget — streamFromProvider is mocked per candidate,
  * so we exercise the orchestration, fallback, and error-handling logic only.

@@ -12,9 +12,9 @@ import { dirname } from 'path';
 import {
   SettingsStorage,
   UsageTracker,
-  ModelRouter,
+  OrchestratorRouter,
   buildRequest,
-  ModelGovStorage,
+  OrchestratorStorage,
   buildRouterPool,
   PlaywrightBrowserEngine,
   ComputerUse,
@@ -27,7 +27,11 @@ import {
   MARKETPLACE_PLUGINS,
   SKILL_CATALOG,
   SkillStore,
-  providerHealth
+  providerHealth,
+  writeWebServerLock,
+  clearWebServerLock,
+  readWebServerLock,
+  type WebServerLauncher
 } from '@superagent/core';
 
 import { AgentEngine, AgentEngineConfig, AgentEvent } from './ai-engine.js';
@@ -44,6 +48,7 @@ import {
   getAuthenticatedUser,
   isAuthDisabled
 } from './auth.js';
+import { getSystemInfo } from './system-info.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -202,15 +207,15 @@ async function runAgentEngine(
     let engine = activeSessions.get(sessionId);
     if (!engine) {
       const finalConfig = { ...config };
-      // Auto-route model if set to 'auto' or 'Model Governance'
-      if (config.model === 'auto' || config.model === 'Model Governance') {
+      // Auto-route model if set to 'auto', 'Orchestrator' or 'Model Governance'
+      if (config.model === 'auto' || config.model === 'Orchestrator' || config.model === 'Model Governance') {
         const settings = SettingsStorage.loadSettings();
         // Build a proper RouterModel[] pool (providerId + capability/access
         // signals) from the user's configured models. routeModelForTask reads
         // RouterModel fields that raw settings.models don't always carry.
         const enabledModels = buildRouterPool(settings.models ?? []).filter((m) => m.enabled);
         try {
-          const routed = ModelRouter.routeModelForTask(prompt, enabledModels, buildRequest(prompt, currentAttachments));
+          const routed = OrchestratorRouter.routeModelForTask(prompt, enabledModels, buildRequest(prompt, currentAttachments));
           if (routed && routed.model) {
             finalConfig.provider = routed.provider as any;
             finalConfig.model = routed.model;
@@ -231,7 +236,7 @@ async function runAgentEngine(
           if (fallback) {
             console.warn(`[web] Orchestrator routing failed (${routeErr?.message}); falling back to ${fallback.providerId}/${fallback.id}.`);
             finalConfig.provider = fallback.providerId as any;
-            finalConfig.model = ModelRouter.stripProviderPrefix(fallback.providerId, fallback.id);
+            finalConfig.model = OrchestratorRouter.stripProviderPrefix(fallback.providerId, fallback.id);
             const byok = settings.providers?.find(p => p.id === fallback.providerId);
             if (byok) {
               finalConfig.apiKey = byok.apiKey;
@@ -295,18 +300,19 @@ async function autoDetectProviders() {
   return ProviderAutoDetector.detect();
 }
 
-// ─── Model Governance Prompt Optimization ────────────────────────────────────
-/** Uses an AI engine to optimize the Model Governance system prompt. */
+// ─── Orchestrator Prompt Optimization ────────────────────────────────────────
+/** Uses an AI engine to optimize the Orchestrator system prompt. */
 async function optimizeInstructionsByAI() {
   const settings = SettingsStorage.loadSettings();
-  const govEnabledIds = settings.modelGov?.enabledModels || [];
+  const orchestratorSettings = settings.orchestrator || settings.modelGov;
+  const govEnabledIds = orchestratorSettings?.enabledModels || [];
   
   const activeModels = (settings.models || []).filter(m => 
     govEnabledIds.includes(m.id) || 
     govEnabledIds.includes(`${m.providerId}-${m.id}`)
   );
 
-  const currentInstructions = ModelGovStorage.loadInstructions();
+  const currentInstructions = OrchestratorStorage.loadInstructions();
   const providers = settings.providers || [];
   const activeProvider = providers.find(p => p.apiKey);
   const activeModelSetting = settings.models?.find(m => m.enabled && m.providerId === activeProvider?.id);
@@ -326,7 +332,7 @@ async function optimizeInstructionsByAI() {
 
   const engine = new AgentEngine(engineConfig, `optimize-prompt-${Date.now()}`);
   
-  const optimizationPrompt = `You are a system prompt optimizer. You are optimizing the Model Governance System Instructions for a Sakana Fugu-class routing conductor.
+  const optimizationPrompt = `You are a system prompt optimizer. You are optimizing the Orchestrator System Instructions for a Sakana Fugu-class routing conductor.
 
 Here is the current pool of enabled models:
 ${activeModels.map(m => `- ${m.name} (${m.providerId}) - Pricing: Input ${m.pricing?.inputPer1M || 'N/A'}, Output ${m.pricing?.outputPer1M || 'N/A'}`).join('\n')}
@@ -336,8 +342,9 @@ Here is the current instructions file content:
 ${currentInstructions}
 \`\`\`
 
-Optimization Goal: ${settings.modelGov?.optimizationGoal || 'balanced'}
-Routing Strategy: ${settings.modelGov?.routingStrategy || 'router'}
+Optimization Goal: ${orchestratorSettings?.optimizationGoal || 'balanced'}
+Routing Strategy: ${orchestratorSettings?.routingStrategy || 'router'}
+${orchestratorSettings?.freeOnly ? 'NOTE: Free-Only mode is enabled. The Orchestrator should only utilize free, local, or custom models. Avoid paid options.' : ''}
 
 Please optimize these system instructions to:
 1. Make the categorization boundaries more precise for the specific models in this pool.
@@ -361,7 +368,7 @@ Please optimize these system instructions to:
     .replace(/```$/, '')
     .trim();
 
-  ModelGovStorage.saveInstructions(optimizedContent);
+  OrchestratorStorage.saveInstructions(optimizedContent);
   return optimizedContent;
 }
 
@@ -533,17 +540,23 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         UsageTracker.clearUsage();
         result = null;
         break;
-      case 'model-gov-read-instructions':
-        result = ModelGovStorage.loadInstructions();
+      case 'usage-pricing':
+        result = UsageTracker.getPricing();
         break;
-      case 'model-gov-write-instructions':
-        ModelGovStorage.saveInstructions(args[0]);
+      case 'system-info':
+        result = await getSystemInfo();
+        break;
+      case 'orchestrator-read-instructions':
+        result = OrchestratorStorage.loadInstructions();
+        break;
+      case 'orchestrator-write-instructions':
+        OrchestratorStorage.saveInstructions(args[0]);
         result = null;
         break;
-      case 'model-gov-update-instructions':
-        result = await ModelGovStorage.autoUpdateInstructions();
+      case 'orchestrator-update-instructions':
+        result = await OrchestratorStorage.autoUpdateInstructions();
         break;
-      case 'model-gov-optimize-instructions-by-ai':
+      case 'orchestrator-optimize-instructions-by-ai':
         result = await optimizeInstructionsByAI();
         break;
       case 'browser-navigate': {
@@ -732,6 +745,51 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         result = { success: true, folder: PartnerStore.partnerFolderPath(userDataDir, args[0]) };
         break;
 
+      // ─── Web App hosting controls (desktop-only; web build self-reports) ─────
+      // The shared WebAppSettings renderer polls these. On the desktop build the
+      // main process manages a *child* web server (start/stop/status). On the web
+      // build there is no child to manage — the server answering this request IS
+      // the Web App — so report an honest running status and treat start/stop as
+      // no-ops. Without these, the renderer's 3s `web-status` poll 404s forever.
+      case 'web-status': {
+        const port = Number(process.env.PORT) || 3000;
+        const localIp = (() => {
+          const addrs = lanAddresses();
+          return addrs[0] || 'localhost';
+        })();
+        // Report who launched this server (cli / desktop / standalone) from the
+        // shared lock, so the Desktop UI can say "started from CLI" etc.
+        const startedBy = readWebServerLock()?.startedBy ?? 'standalone';
+        result = {
+          running: true,
+          port,
+          url: `http://localhost:${port}`,
+          lanUrl: `http://${localIp}:${port}`,
+          startedBy
+        };
+        break;
+      }
+      case 'web-start':
+        // Already running (you're connected to it) — acknowledge without acting.
+        result = { success: true, running: true };
+        break;
+      case 'web-stop':
+        // The Web App cannot stop itself from within the browser it's serving.
+        result = { success: false, error: 'The Web App cannot be stopped from within itself.' };
+        break;
+      case 'web-change-password': {
+        // AuthStore is shared across CLI/Desktop/Web, so this works on the web
+        // build too. Mirrors the desktop `web-change-password` handler.
+        const { current, next } = (args[0] as { current?: string; next?: string }) ?? {};
+        if (!next || next.length < 6) {
+          result = { ok: false, error: 'New password must be at least 6 characters.' };
+          break;
+        }
+        const changed = AuthStore.changePassword(current ?? '', next);
+        result = changed.ok ? { ok: true } : { ok: false, error: changed.error || 'Failed to change password.' };
+        break;
+      }
+
       // ─── Pet (3D desktop companion) — no-op on the web build ─────────────────
       case 'pet-status':
         // No 3D pet window in the web build; report it as disabled so the UI
@@ -808,5 +866,37 @@ if (process.env.NODE_ENV !== 'test') {
   }
   console.log(`Resolving configuration and logs at: ${userDataDir}`);
   console.log(`================================================================`);
+
+  // ─── Single-instance lock ownership ────────────────────────────────────────
+  // This process now owns the port, so it owns the shared lock. The CLI/Desktop
+  // read this file to enforce "only one web server" and to stop us cross-surface.
+  const now = Date.now();
+  const startedBy = (process.env.SUPERAGENT_WEB_LAUNCHER as WebServerLauncher) || 'standalone';
+  const writeLock = (heartbeat: number) =>
+    writeWebServerLock({
+      pid: process.pid,
+      port: Number(PORT),
+      host: HOST,
+      startedBy,
+      startedAt: now,
+      heartbeat
+    });
+  writeLock(now);
+  // Refresh the heartbeat so other surfaces see us as alive (staleness = 90s).
+  const heartbeat = setInterval(() => writeLock(Date.now()), 30_000);
+  heartbeat.unref?.(); // never keep the event loop alive just for the heartbeat
+
+  // Clear the lock on any shutdown path so the port is immediately reclaimable.
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    clearInterval(heartbeat);
+    // Only clear if the lock is still ours (avoid stomping a fast restart).
+    if (readWebServerLock()?.pid === process.pid) clearWebServerLock();
+  };
+  process.on('exit', cleanup);
+  process.on('SIGINT', () => { cleanup(); process.exit(0); });
+  process.on('SIGTERM', () => { cleanup(); process.exit(0); });
   });
 }
