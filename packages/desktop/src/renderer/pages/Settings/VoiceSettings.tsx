@@ -41,6 +41,21 @@ const bareModelId = (id: string, providerId?: string): string => {
   return id;
 };
 
+// Same transcription-family signal the app already uses to detect audio dictation
+// capability (capabilities.ts). A model is usable for STT only if it both
+// accepts *audio input* (we have that from the catalog modality) AND is a real
+// speech-to-text model — NOT a multimodal *chat* model (omni / reasoning)
+// that accepts audio inside a chat completion but has no /audio/transcriptions
+// endpoint. Those chat models surface a 400 ("model does not exist") if asked
+// to transcribe, so we keep them out of the STT picker.
+const TRANSCRIPTION_FAMILY = /whisper|transcrib|speech-to-text|\basr\b|\bstt\b|speech-recognition|voxtral|scribe|nova-\d|deepgram|gladia|assembl/;
+const NON_TRANSCRIPTION = /omni|reasoning|instruct|-chat\b|\bchat-/;
+const isTranscriptionModel = (id: string, name: string): boolean => {
+  const blob = `${id} ${name}`.toLowerCase();
+  if (NON_TRANSCRIPTION.test(blob)) return false;
+  return TRANSCRIPTION_FAMILY.test(blob);
+};
+
 const ENGINE_CHOICES: { id: Engine; title: string; desc: string; icon: React.ElementType }[] = [
   { id: 'auto',    title: 'Auto',        desc: 'Use a cloud model when one is selected, else the browser.',   icon: Zap },
   { id: 'model',   title: 'Cloud model', desc: 'Whisper / STT via your provider. Most accurate & reliable.',  icon: Cloud },
@@ -192,12 +207,15 @@ export const VoiceSettings: React.FC = () => {
   const selectedProvider = providers.find((p) => p.id === selectedModel?.providerId);
   const bareModel = selectedModel ? bareModelId(selectedModel.id, selectedModel.providerId) : '';
 
-  // STT-model options sourced ENTIRELY from the shared Models list: every
-  // audio-input model across all connected providers. Each row shows the model
-  // name, its provider, and its price. No provider picker, no presets.
+  // STT-model options sourced from the shared Models list: audio-input models
+  // across all connected providers that are actually speech-to-text models.
+  // Multimodal *chat* models (omni / reasoning) also accept audio input but have
+  // no /audio/transcriptions endpoint, so transcribing with them 400s — they're
+  // excluded here. Each row shows the model name, its provider, and its price.
   const sttOptions = useMemo<SearchableSelectOption[]>(() => {
     return models
       .filter((m) => (m.inputModalities || []).includes('audio'))
+      .filter((m) => isTranscriptionModel(m.id, m.name || ''))
       .map((m) => ({
         value: m.id,
         label: m.name || m.id,
@@ -326,16 +344,16 @@ export const VoiceSettings: React.FC = () => {
               value={modelKey}
               onChange={setModelKey}
               disabled={cloudDisabled}
-              placeholder={sttOptions.length ? 'Select an audio-input model' : 'No audio models in your list'}
+              placeholder={sttOptions.length ? 'Select a transcription model' : 'No transcription models in your list'}
             />
             {sttOptions.length === 0 ? (
               <div className="mt-1 flex items-center gap-1 text-[10px] text-[color:var(--neon-attention)]">
                 <ExternalLink size={10} />
-                <span>No audio-input models found. Enable one in Settings → Models (look for the <b>audio</b> input chip).</span>
+                <span>No speech-to-text models found (e.g. Whisper). Enable one in Settings → Models. Multimodal chat models that merely accept audio can't transcribe.</span>
               </div>
             ) : (
               <div className="mt-0.5 text-[10px] text-brand-textMuted">
-                Every audio-input model from your Models list. The provider is chosen automatically from the model.
+                Speech-to-text models from your Models list. The provider is chosen automatically from the model.
                 Prices are per 1M tokens; some audio models price per minute.
               </div>
             )}
