@@ -215,26 +215,14 @@ export interface AppProps {
 
 /** Claude-Code-style startup banner: name/version, active model + effort, cwd. */
 const Banner: React.FC<{ provider: string; model: string; cwd: string }> = ({ provider, model, cwd }) => (
+  // Uses only universally-supported box-drawing characters (single border)
+  // instead of quadrant-block glyphs (▟ ▙) that render as garbage in many
+  // terminals.
   <Box flexDirection="column" marginBottom={1}>
-    <Text bold color="cyan">
-      {'  ▟██████▙  '}
-    </Text>
-    <Text bold color="cyan">
-      {'  ███████  '}
-    </Text>
-    <Text color="cyan">{'  █ SuperAgent Terminal '}</Text>
-    <Text dimColor color="gray">{' v0.1.0'}</Text>
-    <Box>
-      <Text dimColor color="gray">
-        {'  '}
-        {provider}/{model} · effort xhigh
-      </Text>
-    </Box>
-    <Box>
-      <Text dimColor color="gray">
-        {'  '}
-        {cwd}
-      </Text>
+    <Box borderStyle="single" borderColor="cyan" paddingX={1} flexDirection="column">
+      <Text bold color="cyan">{'SuperAgent Terminal'}</Text>
+      <Text dimColor color="gray">{`${provider}/${model} · effort xhigh`}</Text>
+      <Text dimColor color="gray">{cwd}</Text>
     </Box>
   </Box>
 );
@@ -358,16 +346,27 @@ export const App: React.FC<AppProps> = ({
     const onData = (data: Buffer | string) => {
       if (isBusyRef.current) return;
       const str = data.toString();
+      // Home / End: jump to the oldest / newest message respectively.
+      if (str === '\x1b[H' || str === '\x1b[1~') {
+        setScrollOffset(maxScrollRef.current);
+        return;
+      }
+      if (str === '\x1b[F' || str === '\x1b[4~') {
+        setScrollOffset(0);
+        return;
+      }
+
+      const wheelStep = Math.max(1, Math.floor(maxHeightRef.current / 4));
       // SGR Mouse format: \x1b[<b;x;yM or \x1b[<b;x;ym
       const sgrMatch = str.match(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/);
       if (sgrMatch) {
         const btn = parseInt(sgrMatch[1], 10);
         if (btn === 64) {
-          // Scroll Wheel Up -> Scroll Chat History UP
-          setScrollOffset((prev) => Math.min(messagesRef.current.length - 1, prev + 1));
+          // Scroll Wheel Up -> Scroll Chat History UP (toward older)
+          setScrollOffset((prev) => Math.min(maxScrollRef.current, prev + wheelStep));
         } else if (btn === 65) {
-          // Scroll Wheel Down -> Scroll Chat History DOWN
-          setScrollOffset((prev) => Math.max(0, prev - 1));
+          // Scroll Wheel Down -> Scroll Chat History DOWN (toward newer)
+          setScrollOffset((prev) => Math.max(0, prev - wheelStep));
         }
         return;
       }
@@ -376,9 +375,9 @@ export const App: React.FC<AppProps> = ({
       if (str.startsWith('\x1b[M') && str.length >= 6) {
         const cb = str.charCodeAt(3) - 32;
         if (cb === 64 || cb === 96) {
-          setScrollOffset((prev) => Math.min(messagesRef.current.length - 1, prev + 1));
+          setScrollOffset((prev) => Math.min(maxScrollRef.current, prev + wheelStep));
         } else if (cb === 65 || cb === 97) {
-          setScrollOffset((prev) => Math.max(0, prev - 1));
+          setScrollOffset((prev) => Math.max(0, prev - wheelStep));
         }
       }
     };
@@ -412,6 +411,9 @@ export const App: React.FC<AppProps> = ({
   const historyRef = useRef<string[]>([]);
   const historyPosRef = useRef(0);
   const draftRef = useRef('');
+  // Live viewport metrics, read inside key/mouse handlers to avoid stale closures.
+  const maxHeightRef = useRef(4);
+  const maxScrollRef = useRef(0);
 
   const setMessages = useCallback((next: UiMessage[]) => {
     messagesRef.current = next;
@@ -790,11 +792,13 @@ export const App: React.FC<AppProps> = ({
   useInput((char, key) => {
     // Page scrolling (available anytime, even during generation)
     if (key.pageUp) {
-      setScrollOffset((prev) => Math.min(messagesRef.current.length - 1, prev + 1));
+      const step = Math.max(1, Math.floor(maxHeightRef.current / 2));
+      setScrollOffset((prev) => Math.min(maxScrollRef.current, prev + step));
       return;
     }
     if (key.pageDown) {
-      setScrollOffset((prev) => Math.max(0, prev - 1));
+      const step = Math.max(1, Math.floor(maxHeightRef.current / 2));
+      setScrollOffset((prev) => Math.max(0, prev - step));
       return;
     }
 
@@ -906,11 +910,13 @@ export const App: React.FC<AppProps> = ({
 
     // Normal editing mode.
     if (key.pageUp || (key.ctrl && key.upArrow)) {
-      setScrollOffset((prev) => Math.min(messagesRef.current.length - 1, prev + 3));
+      const step = Math.max(1, Math.floor(maxHeightRef.current / 2));
+      setScrollOffset((prev) => Math.min(maxScrollRef.current, prev + step));
       return;
     }
     if (key.pageDown || (key.ctrl && key.downArrow)) {
-      setScrollOffset((prev) => Math.max(0, prev - 3));
+      const step = Math.max(1, Math.floor(maxHeightRef.current / 2));
+      setScrollOffset((prev) => Math.max(0, prev - step));
       return;
     }
     if (key.ctrl && (input === 'o' || input === 'O')) {
@@ -998,71 +1004,72 @@ export const App: React.FC<AppProps> = ({
     ? [...messages, activeStreamingMsg]
     : messages;
 
-  const totalMessageCount = allMessagesToView.length;
-  const clampedScrollOffset = Math.min(Math.max(0, scrollOffset), Math.max(0, totalMessageCount - 1));
+  // ── Viewport: line-based, bottom-anchored scrolling ──
+  // Each message's height is estimated in rows; the banner occupies the top
+  // `BANNER_HEIGHT` rows. `scrollOffset` is now measured in *lines* (not whole
+  // messages), so long past replies stay reachable and scrolling is smooth.
+  const BANNER_HEIGHT = 6;
 
-  // Determine effective line budget for message log area
-  let maxHeight = terminalRows - 6; // Space for composer (3) + status bar (2) + margin (1)
-  if (isBusy) {
-    maxHeight -= 3; // Space for loader and tips
-  }
-  if (showPalette) {
-    const paletteHeight = Math.min(paletteRows.length, 14) + 3;
-    maxHeight -= paletteHeight;
-  }
-  if (picker.open) {
-    const pickerHeight = Math.min(modelItems.length, 12) + 3;
-    maxHeight -= pickerHeight;
-  }
+  // Effective line budget for the message log area.
+  let maxHeight = terminalRows - 6; // composer (3) + status bar (2) + margin (1)
+  if (isBusy) maxHeight -= 3; // loader + tips
+  if (showPalette) maxHeight -= Math.min(paletteRows.length, 14) + 3;
+  if (picker.open) maxHeight -= Math.min(modelItems.length, 12) + 3;
   maxHeight = Math.max(4, maxHeight);
+  maxHeightRef.current = maxHeight;
 
   const MAX_CODE_LINES = Math.max(4, Math.min(15, maxHeight - 4));
 
-  // End index of messages slice (based on scrollOffset)
-  const endIdx = totalMessageCount - clampedScrollOffset;
+  const messageHeights = allMessagesToView.map((m) =>
+    estimateMessageHeight(m, terminalColumns, MAX_CODE_LINES)
+  );
+  const contentHeight =
+    messageHeights.reduce((sum, h) => sum + h, 0) + BANNER_HEIGHT;
+
+  const maxScroll = Math.max(0, contentHeight - maxHeight);
+  maxScrollRef.current = maxScroll;
+  const scrollLines = Math.min(Math.max(0, scrollOffset), maxScroll);
+
+  // Visible window in content rows (bottom-anchored when scrollLines === 0).
+  const viewBottom = contentHeight - scrollLines;
+  const viewTop = Math.max(0, viewBottom - maxHeight);
+
+  // Cumulative row positions (banner occupies rows [0, BANNER_HEIGHT)).
+  const messagePositions = messageHeights.map((h, i) => {
+    const top = BANNER_HEIGHT + messageHeights.slice(0, i).reduce((a, b) => a + b, 0);
+    return { top, bottom: top + h };
+  });
+
   const messagesToRender: UiMessage[] = [];
-  let currentHeight = 0;
-
-  // We iterate backwards from endIdx - 1 to 0, adding messages until budget is filled
-  for (let i = endIdx - 1; i >= 0; i--) {
-    const msg = allMessagesToView[i];
-    const msgHeight = estimateMessageHeight(msg, terminalColumns, MAX_CODE_LINES);
-    let nextHeight = currentHeight + msgHeight;
-
-    // Include banner height if welcome system message is rendered at top
-    if (i === 0 && messages[0] && msg.id === messages[0].id) {
-      nextHeight += 6;
+  let hiddenCountAbove = 0;
+  let hiddenCountBelow = 0;
+  for (let i = 0; i < allMessagesToView.length; i++) {
+    const pos = messagePositions[i];
+    if (pos.bottom <= viewTop) {
+      hiddenCountAbove++;
+    } else if (pos.top >= viewBottom) {
+      hiddenCountBelow++;
+    } else {
+      messagesToRender.push(allMessagesToView[i]);
     }
-
-    if (nextHeight > maxHeight) {
-      // If no messages fit yet (e.g. single message taller than maxHeight), include this single message anyway
-      if (messagesToRender.length === 0) {
-        messagesToRender.unshift(msg);
-      }
-      break;
-    }
-
-    messagesToRender.unshift(msg);
-    currentHeight = nextHeight;
   }
 
-  // Check if there are messages above or below that are scrolled out of view
-  const firstRenderedIdx = messagesToRender.length > 0 ? allMessagesToView.indexOf(messagesToRender[0]) : 0;
-  const hiddenCountAbove = firstRenderedIdx > 0 ? firstRenderedIdx : 0;
-  const hiddenCountBelow = clampedScrollOffset;
+  const bannerVisible = viewTop < BANNER_HEIGHT;
 
   // Mouse click and scroll handlers
   const handleMouseEvent = useCallback((button: number, x: number, y: number, isRelease: boolean) => {
     if (isBusyRef.current) return;
 
     if (button === 64) {
-      // Scroll wheel up
-      setScrollOffset((prev) => Math.min(messagesRef.current.length - 1, prev + 1));
+      // Scroll wheel up (toward older messages)
+      const step = Math.max(1, Math.floor(maxHeightRef.current / 4));
+      setScrollOffset((prev) => Math.min(maxScrollRef.current, prev + step));
       return;
     }
     if (button === 65) {
-      // Scroll wheel down
-      setScrollOffset((prev) => Math.max(0, prev - 1));
+      // Scroll wheel down (toward newer messages)
+      const step = Math.max(1, Math.floor(maxHeightRef.current / 4));
+      setScrollOffset((prev) => Math.max(0, prev - step));
       return;
     }
 
@@ -1129,13 +1136,13 @@ export const App: React.FC<AppProps> = ({
         {hiddenCountAbove > 0 && (
           <Box paddingLeft={1} marginBottom={0}>
             <Text color="gray" dimColor>
-              {`▲ ${hiddenCountAbove} message${hiddenCountAbove === 1 ? '' : 's'} above (PageUp / Ctrl+Up to scroll)`}
+              {`▲ ${hiddenCountAbove} message${hiddenCountAbove === 1 ? '' : 's'} above (PageUp / Ctrl+Up / Home to scroll)`}
             </Text>
           </Box>
         )}
 
-        {/* Render banner scrollable at the top of messages list if the welcome message is visible in the viewport */}
-        {messagesToRender.includes(messages[0]) && (
+        {/* Render banner when the top of the content is visible in the viewport */}
+        {bannerVisible && (
           <Banner
             key="banner"
             provider={chatRef.current.provider}
@@ -1157,7 +1164,7 @@ export const App: React.FC<AppProps> = ({
         {hiddenCountBelow > 0 && (
           <Box paddingLeft={1} marginTop={0} marginBottom={1}>
             <Text color="cyan" dimColor>
-              {`▼ ${hiddenCountBelow} message${hiddenCountBelow === 1 ? '' : 's'} below (PageDown / Ctrl+Down to return)`}
+              {`▼ ${hiddenCountBelow} message${hiddenCountBelow === 1 ? '' : 's'} below (PageDown / Ctrl+Down / End to return)`}
             </Text>
           </Box>
         )}

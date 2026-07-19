@@ -244,7 +244,7 @@ export const MessageView: React.FC<{
             {m.tools!.map((t, i) => (
               <Box key={i} flexDirection="column">
                 <Text color="magenta" dimColor>
-                  {'⟢ Running: '}
+                  {'→ Running: '}
                   {t.name}
                   {Object.keys(t.args || {}).length > 0 ? `(${formatArgs(t.args)})` : ''}
                 </Text>
@@ -257,7 +257,7 @@ export const MessageView: React.FC<{
         {showSummary && toolSummaryText.length > 0 && (
           <Box marginBottom={1}>
             <Text color="gray" dimColor>
-              {'✻ '}
+              {'✓ '}
               {toolSummaryText}
             </Text>
           </Box>

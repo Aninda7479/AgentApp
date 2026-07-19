@@ -30,7 +30,7 @@ export const Composer: React.FC<ComposerProps> = ({
         ) : (
           <Text>{value}</Text>
         )}
-        <Text color="cyan">▋</Text>
+        <Text color="cyan">█</Text>
       </Box>
     </Box>
   );

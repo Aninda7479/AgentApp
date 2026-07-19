@@ -3,6 +3,7 @@ import * as path from 'path';
 import { Command } from 'commander';
 import { SuperAgentEngine, SettingsStorage } from '@superagent/core';
 import { prepareAttachments } from '../attachments.js';
+import { resolveConnection } from '../engine.js';
 
 /** Options for the non-interactive script execution command. */
 export interface ExecOptions {
@@ -68,17 +69,33 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
 
   const savedSettings = SettingsStorage.loadSettings();
   // Resolve provider and model from options, settings, or sensible defaults
-  const provider = options.provider || savedSettings.lastUsedModel?.provider || 'openai';
-  const model = options.model || savedSettings.lastUsedModel?.model || (provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : provider === 'gemini' ? 'gemini-1.5-pro' : 'gpt-4o');
+  let provider = options.provider || savedSettings.lastUsedModel?.provider || 'openai';
+  let model = options.model || savedSettings.lastUsedModel?.model || (provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : provider === 'gemini' ? 'gemini-1.5-pro' : 'gpt-4o');
+
+  // A `--model provider/model` value (e.g. openrouter/tencent/hy3:free) encodes
+  // the provider in the model string when --provider isn't given. Split it so
+  // connection resolution can find the right API key.
+  if (!options.provider && model && model.includes('/')) {
+    const slashIdx = model.indexOf('/');
+    provider = model.slice(0, slashIdx);
+    model = model.slice(slashIdx + 1);
+  }
+
+  // Resolve the live connection (real API key / base URL) the same way the TUI
+  // does, instead of the old dummy key, so one-shot mode can actually answer.
+  const conn = resolveConnection(provider, model);
+  const resolvedProvider = conn.provider || provider;
+  const resolvedModel = conn.model || model;
+  const apiKey = options.apiKey || conn.apiKey || 'exec-session-key';
 
   if (!options.silent) {
-    console.log(`[SuperAgent Exec] Running prompt using provider: ${provider}, model: ${model}...`);
+    console.log(`[SuperAgent Exec] Running prompt using provider: ${resolvedProvider}, model: ${resolvedModel}...`);
   }
 
   const engine = new SuperAgentEngine({
-    provider,
-    apiKey: options.apiKey || 'exec-session-key',
-    model,
+    provider: resolvedProvider,
+    apiKey,
+    model: resolvedModel,
     projectRoot: process.cwd()
   });
 

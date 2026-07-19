@@ -176,7 +176,7 @@ export const MarkdownStream: React.FC<MarkdownStreamProps> = ({
       })}
       {isStreaming && (
         <Box marginTop={0}>
-          <Text color="magenta"> ▋</Text>
+          <Text color="magenta"> █</Text>
         </Box>
       )}
       {verbose && (
