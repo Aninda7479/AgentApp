@@ -2,7 +2,7 @@ import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, type IpcMai
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, capabilityRegistry, parseContextLimit, MediaPipelineRouter } from '@superagent/core';
+import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter } from '@superagent/core';
 
 // Set a custom userData path so all app data lives in <home>/.superagent.
 app.setPath('userData', getUserDataDirectory());
@@ -1485,11 +1485,33 @@ safeHandle('pet-set-visible', (_event, visible: boolean) => {
  * restarting). Returns the running status so the UI can refresh immediately.
  */
 safeHandle('web-start', (_event, { port }: { port?: number } = {}) => {
+  // Cross-process guard: a server started by the CLI (or standalone) also counts.
   if (isWebServerRunning()) {
-    return { ok: true, alreadyRunning: true, running: true, port };
+    const lock = readWebServerLock();
+    return {
+      ok: true,
+      alreadyRunning: true,
+      running: true,
+      port: lock?.port ?? port,
+      startedBy: lock?.startedBy ?? 'standalone'
+    };
   }
   const resolvedPort = Number(port) || 3000;
-  startWebServer({ port: resolvedPort });
+  try {
+    startWebServer({ port: resolvedPort, startedBy: 'desktop' });
+  } catch (err) {
+    // Lost a race with another surface that started between the check and here.
+    if (err instanceof WebServerAlreadyRunningError) {
+      return {
+        ok: true,
+        alreadyRunning: true,
+        running: true,
+        port: err.lock.port,
+        startedBy: err.lock.startedBy
+      };
+    }
+    return { ok: false, running: false, error: err instanceof Error ? err.message : String(err) };
+  }
   // Persist the chosen port so Settings + auto-start agree.
   try {
     const settings = SettingsStorage.loadSettings();
@@ -1521,9 +1543,10 @@ function getLocalIpAddress(): string {
 }
 
 safeHandle('web-status', () => {
-  // The port is set in the *child* server's env (not the desktop parent's), so
-  // read the effective port from the persisted Web App setting `web-start`
-  // writes, falling back to the env/default.
+  const running = isWebServerRunning();
+  // Prefer the live lock (authoritative port + who started it — could be the
+  // CLI). Fall back to the persisted Web App setting, then env/default.
+  const lock = readWebServerLock();
   let port = Number(process.env.PORT) || 3000;
   try {
     const saved = SettingsStorage.loadSettings().webApp?.port;
@@ -1531,12 +1554,14 @@ safeHandle('web-status', () => {
   } catch {
     /* ignore */
   }
+  if (lock?.port) port = lock.port;
   const localIp = getLocalIpAddress();
   return {
-    running: isWebServerRunning(),
+    running,
     port,
     url: `http://localhost:${port}`,
-    lanUrl: `http://${localIp}:${port}`
+    lanUrl: `http://${localIp}:${port}`,
+    startedBy: running ? lock?.startedBy ?? 'standalone' : null
   };
 });
 
@@ -1638,7 +1663,7 @@ app.whenReady().then(async () => {
       setTimeout(() => {
         try {
           if (!isWebServerRunning()) {
-            startWebServer({ port: webSettings.port || 3000 });
+            startWebServer({ port: webSettings.port || 3000, startedBy: 'desktop' });
             console.log('[web] Auto-started the Web App (port ' + (webSettings.port || 3000) + ').');
           }
         } catch (e) {

@@ -8,6 +8,8 @@ interface WebStatus {
   port: number;
   url: string;
   lanUrl: string;
+  /** Which surface started the running server (null when stopped). */
+  startedBy?: 'cli' | 'desktop' | 'standalone' | null;
 }
 
 /** Result of a password-change attempt. */
@@ -197,6 +199,11 @@ export const WebAppSettings: React.FC = () => {
               <div>
                 <div className="text-sm font-medium text-brand-textMain">
                   {status?.running ? 'Web App is running' : 'Web App is stopped'}
+                  {status?.running && status.startedBy && status.startedBy !== 'desktop' && (
+                    <span className="ml-2 rounded bg-brand-bg px-1.5 py-0.5 text-[11px] font-normal text-brand-textMuted">
+                      started from {status.startedBy === 'cli' ? 'CLI' : status.startedBy}
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs leading-5 text-brand-textMuted">
                   {status?.running ? (

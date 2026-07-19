@@ -25,6 +25,8 @@ export function createCliProgram(onExecute?: (options: CliOptions, prompt?: stri
     .version('0.1.0')
     .exitOverride()
     .option('--start-web', 'Start the SuperAgent web server and host the web app (same as `npm start:web`)')
+    .option('--stop-web', 'Stop the running SuperAgent web server (even one started by the Desktop app)')
+    .option('--web-status', 'Print whether the SuperAgent web server is running, and who started it')
     .option('--web-port <port>', 'Port for the web server when using --start-web', '3000');
 
   program

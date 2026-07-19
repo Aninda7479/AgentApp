@@ -27,7 +27,11 @@ import {
   MARKETPLACE_PLUGINS,
   SKILL_CATALOG,
   SkillStore,
-  providerHealth
+  providerHealth,
+  writeWebServerLock,
+  clearWebServerLock,
+  readWebServerLock,
+  type WebServerLauncher
 } from '@superagent/core';
 
 import { AgentEngine, AgentEngineConfig, AgentEvent } from './ai-engine.js';
@@ -753,11 +757,15 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
           const addrs = lanAddresses();
           return addrs[0] || 'localhost';
         })();
+        // Report who launched this server (cli / desktop / standalone) from the
+        // shared lock, so the Desktop UI can say "started from CLI" etc.
+        const startedBy = readWebServerLock()?.startedBy ?? 'standalone';
         result = {
           running: true,
           port,
           url: `http://localhost:${port}`,
-          lanUrl: `http://${localIp}:${port}`
+          lanUrl: `http://${localIp}:${port}`,
+          startedBy
         };
         break;
       }
@@ -858,5 +866,37 @@ if (process.env.NODE_ENV !== 'test') {
   }
   console.log(`Resolving configuration and logs at: ${userDataDir}`);
   console.log(`================================================================`);
+
+  // ─── Single-instance lock ownership ────────────────────────────────────────
+  // This process now owns the port, so it owns the shared lock. The CLI/Desktop
+  // read this file to enforce "only one web server" and to stop us cross-surface.
+  const now = Date.now();
+  const startedBy = (process.env.SUPERAGENT_WEB_LAUNCHER as WebServerLauncher) || 'standalone';
+  const writeLock = (heartbeat: number) =>
+    writeWebServerLock({
+      pid: process.pid,
+      port: Number(PORT),
+      host: HOST,
+      startedBy,
+      startedAt: now,
+      heartbeat
+    });
+  writeLock(now);
+  // Refresh the heartbeat so other surfaces see us as alive (staleness = 90s).
+  const heartbeat = setInterval(() => writeLock(Date.now()), 30_000);
+  heartbeat.unref?.(); // never keep the event loop alive just for the heartbeat
+
+  // Clear the lock on any shutdown path so the port is immediately reclaimable.
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    clearInterval(heartbeat);
+    // Only clear if the lock is still ours (avoid stomping a fast restart).
+    if (readWebServerLock()?.pid === process.pid) clearWebServerLock();
+  };
+  process.on('exit', cleanup);
+  process.on('SIGINT', () => { cleanup(); process.exit(0); });
+  process.on('SIGTERM', () => { cleanup(); process.exit(0); });
   });
 }
