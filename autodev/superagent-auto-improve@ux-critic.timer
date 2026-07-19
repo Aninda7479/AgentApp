@@ -1,0 +1,12 @@
+# Install at /etc/systemd/system/superagent-auto-improve@ux-critic.timer
+# Read-only synthetic-user audit: feeds the shared queue, doesn't edit code.
+[Unit]
+Description=Run /ux-critic every 6 hours
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

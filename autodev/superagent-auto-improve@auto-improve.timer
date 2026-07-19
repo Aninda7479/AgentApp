@@ -1,0 +1,12 @@
+# Install at /etc/systemd/system/superagent-auto-improve@auto-improve.timer
+# Core loop: research, ship small verified improvements. Runs most often.
+[Unit]
+Description=Run /auto-improve every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

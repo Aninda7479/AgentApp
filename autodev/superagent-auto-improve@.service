@@ -1,0 +1,28 @@
+\
+# Install at /etc/systemd/system/superagent-auto-improve@.service
+# The "%i" instance name selects which skill to run, e.g.:
+#   superagent-auto-improve@auto-improve.timer
+#   superagent-auto-improve@orchestrator-dev.timer
+#   superagent-auto-improve@art-director.timer
+#   superagent-auto-improve@ux-critic.timer
+# All four share the skill's own lock file, so they can be scheduled
+# independently without cross-committing each other's staged files.
+
+[Unit]
+Description=SuperAgent autonomous /%i cycle
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=superagent
+Group=superagent
+EnvironmentFile=/etc/superagent-auto-improve.env
+Environment=SKILL=/%i
+ExecStart=/opt/superagent/run-auto-improve.sh
+
+# Light sandboxing. Loosen ProtectHome only if REPO_DIR lives under /home.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/superagent /var/log/superagent-auto-improve
