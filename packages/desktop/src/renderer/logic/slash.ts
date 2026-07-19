@@ -192,7 +192,7 @@ export class SlashRouter {
         // selected model's context window). The engine reports token savings.
         if (ctx.ipc) {
           try {
-            const sessionId = `session-${ctx.getActiveChatId()}`;
+            const sessionId = ctx.getActiveChatId();
             const result = (await ctx.ipc.invoke('agent-compact', sessionId)) as
               | { compacted: boolean; tokensBefore: number; tokensAfter: number }
               | undefined;

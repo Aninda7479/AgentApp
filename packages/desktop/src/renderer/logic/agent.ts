@@ -252,7 +252,7 @@ export class AgentService {
       );
       const activeProjectConfig = ctx.getProjects().find((p) => p.name === projectScope);
       const resolvedProjectRoot = activeProjectConfig?.folders?.[0] || undefined;
-      const sessionId = `session-${chatId}`;
+      const sessionId = chatId;
       const selectedModelName = options.model || '';
       const resolvedModel = AgentService.resolveModelId(activeProvider, selectedModelName, ctx.getModelsCatalog());
 
