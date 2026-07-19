@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Command } from 'commander';
-import { SuperAgentEngine, SettingsStorage } from '@superagent/core';
+import { SuperAgentEngine, SettingsStorage, OrchestratorRouter, buildRouterPool, isFreeModel, BYOKProviderManager, capabilityRegistry, type CompletionRequest, type ProviderSettings, type RouterModel } from '@superagent/core';
 import { prepareAttachments } from '../attachments.js';
 import { resolveConnection } from '../engine.js';
 
@@ -104,19 +104,82 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
   // Detect image paths (drag-and-drop / typed) and attach them as multimodal content.
   const { cleanText, attachments } = await prepareAttachments(promptText);
 
+  // `--model orchestrator` (or a saved Orchestrator routing strategy) routes the
+  // prompt through the real Model Orchestrator, which picks the best model for
+  // the task across the user's enabled pool instead of a single fixed model.
+  const useOrchestrator = model === 'orchestrator' || provider === 'orchestrator';
+
   try {
-    const chunks: string[] = [];
-    const onEvent = (event: { type: string; content?: string }): void => {
-      if (event.type === 'token' && event.content) chunks.push(event.content);
-    };
-    await engine.run(cleanText, onEvent, attachments);
-    if (chunks.length > 0) {
-      resultOutput = chunks.join('');
+    if (useOrchestrator) {
+      const freeOnly = !!savedSettings.orchestrator?.freeOnly;
+      // `completeWithFreePool` only registers keys from the `providers` arg
+      // (ProviderSettings). The Desktop stores keys there, but the CLI user may
+      // have stored keys purely in BYOK, so merge those in before routing.
+      const providers: ProviderSettings[] = [];
+      const seen = new Set<string>();
+      for (const p of savedSettings.providers ?? []) {
+        if (p.apiKey) {
+          providers.push(p);
+          seen.add(p.id);
+        }
+      }
+      try {
+        for (const cfg of new BYOKProviderManager().getAllConfigs()) {
+          if (cfg.apiKey && !seen.has(cfg.provider)) {
+            providers.push({ id: cfg.provider, apiKey: cfg.apiKey, baseUrl: cfg.baseUrl ?? undefined } as ProviderSettings);
+            seen.add(cfg.provider);
+          }
+        }
+      } catch {
+        /* ignore uninitialized BYOK */
+      }
+      const keyedProviders = new Set(providers.map((p) => p.id));
+
+      // Build the routing pool. Prefer the user's enabled models from settings;
+      // if none are configured (CLI-only / BYOK user), fall back to every model
+      // in the capability registry whose provider has a stored key.
+      let pool = buildRouterPool(savedSettings.models ?? []).filter(
+        (m) => m.enabled && keyedProviders.has(m.providerId) && (!freeOnly || isFreeModel(m))
+      );
+      if (pool.length === 0) {
+        pool = capabilityRegistry
+          .getAllCapabilities()
+          .filter((c) => keyedProviders.has(c.provider))
+          .map<RouterModel>((c) => ({
+            id: c.id,
+            name: c.name,
+            providerId: c.provider,
+            enabled: true,
+            supportsVision: c.supportsVision,
+            supportsTools: c.supportsTools,
+            inputModalities: c.inputModalities as RouterModel['inputModalities'],
+            outputModalities: c.outputModalities as RouterModel['outputModalities'],
+            accessStatus: 'available',
+            speedTier: c.speedTier,
+            intelligenceTier: c.intelligenceTier,
+            costPer1kTokens: c.costPer1kTokens
+          }))
+          .filter((m) => !freeOnly || isFreeModel(m));
+      }
+
+      const router = new OrchestratorRouter({});
+      const request: CompletionRequest = { messages: [{ role: 'user', content: cleanText }] };
+      const res = await router.completeWithFreePool(request, pool, providers);
+      resultOutput = res.content || '';
+    } else {
+      const chunks: string[] = [];
+      const onEvent = (event: { type: string; content?: string }): void => {
+        if (event.type === 'token' && event.content) chunks.push(event.content);
+      };
+      await engine.run(cleanText, onEvent, attachments);
+      if (chunks.length > 0) {
+        resultOutput = chunks.join('');
+      }
     }
-  } catch {
-    // Fallback response for execution in test environment (no live provider key)
-    const attNote = attachments.length > 0 ? ` with ${attachments.length} image attachment(s)` : '';
-    resultOutput = `Executed task successfully with provider '${provider}' and model '${model}'${attNote}. Response output generated for prompt: ${cleanText.substring(0, 40)}`;
+  } catch (err) {
+    // Surface the real failure (e.g. no models enabled for the Orchestrator, or
+    // a missing API key) instead of a misleading "Processed successfully".
+    resultOutput = `Error: ${err instanceof Error ? err.message : String(err)}`;
   }
 
   const executionTimeMs = Date.now() - startTime;

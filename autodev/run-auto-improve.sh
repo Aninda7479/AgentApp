@@ -1,40 +1,43 @@
 #!/usr/bin/env bash
-# run-auto-improve.sh — headless Claude Code driver for SuperAgent's
-# .claude/skills/{auto-improve,orchestrator-dev,art-director,ux-critic}.
+# run-auto-improve.sh — headless Claude Code driver for SuperAgent's auto-improvement skills.
 #
-# Runs ONE cycle and exits. Scheduled via the accompanying systemd
-# template unit + timers (or cron — see README.md). Never touches `main`;
-# only ever commits/pushes to $BRANCH. Merging side branch -> main stays a
-# manual PR decision by a human.
+# Runs ONE cycle and exits. Scheduled via systemd template unit + timers (or cron).
+# Creates a per-cycle dated branch (auto/YYYY-MM-DD-HHmm-<skill>), commits any changes
+# to it, pushes, and opens a draft PR targeting agent-development via `gh`.
+# Never touches main — merging side branch → agent-development stays a manual PR decision.
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
 # Configuration — override via environment (see superagent-auto-improve.env)
 # ---------------------------------------------------------------------------
 REPO_DIR="${REPO_DIR:?set REPO_DIR to the cloned AgentApp path, e.g. /opt/superagent/AgentApp}"
-BRANCH="${BRANCH:-side-dev}"                 # NEVER set this to main
-SKILL="${SKILL:-/auto-improve}"              # /auto-improve | /orchestrator-dev | /art-director | /ux-critic
-MAX_TURNS="${MAX_TURNS:-40}"
-MAX_BUDGET_USD="${MAX_BUDGET_USD:-2.00}"
-ALLOWED_TOOLS="${ALLOWED_TOOLS:-Read,Grep,Glob,Edit,Write,Bash,WebSearch,WebFetch,TodoWrite}"
+BASE_BRANCH="${BASE_BRANCH:-agent-development}"   # PR target — NEVER main
+SKILL="${SKILL:-/auto-improve}"
+BRANCH_PREFIX="${BRANCH_PREFIX:-auto}"
 LOG_DIR="${LOG_DIR:-/var/log/superagent-auto-improve}"
 PAUSE_FILE="${PAUSE_FILE:-$REPO_DIR/.claude/.auto-improve.pause}"
+AUTO_CREATE_PR="${AUTO_CREATE_PR:-true}"
+ALLOWED_TOOLS="${ALLOWED_TOOLS:-Read,Grep,Glob,Edit,Write,Bash,WebSearch,WebFetch,TodoWrite}"
+# Note: No MAX_TURNS or MAX_BUDGET_USD — the skill runs until it finishes naturally.
+# Use the PAUSE_FILE kill switch to stop a runaway: touch $PAUSE_FILE
 
-if [ "$BRANCH" = "main" ]; then
-  echo "Refusing to run: BRANCH is set to main. Use a side branch." >&2
+if [ "$BASE_BRANCH" = "main" ]; then
+  echo "Refusing to run: BASE_BRANCH is set to main. Use agent-development or a side branch." >&2
   exit 1
 fi
 
 mkdir -p "$LOG_DIR"
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
-run_log="$LOG_DIR/${ts}_$(basename "$SKILL").json"
+skill_name="$(basename "$SKILL")"
+CYCLE_BRANCH="${BRANCH_PREFIX}/$(date -u +%Y-%m-%d-%H%M)-${skill_name}"
+
+run_log="$LOG_DIR/${ts}_${skill_name}.json"
 driver_log="$LOG_DIR/driver.log"
 
-log() { echo "$ts [$SKILL] $*" >>"$driver_log"; }
+log() { echo "$ts [$skill_name] $*" >> "$driver_log"; }
 
 # ---------------------------------------------------------------------------
-# Kill switch — `touch` this file from anywhere to pause the whole loop
-# without touching systemd/cron config.
+# Kill switch
 # ---------------------------------------------------------------------------
 if [ -f "$PAUSE_FILE" ]; then
   log "paused (found $PAUSE_FILE) — skipping cycle"
@@ -44,46 +47,46 @@ fi
 cd "$REPO_DIR"
 
 # ---------------------------------------------------------------------------
-# Always operate on the side branch, never main. Create it from main on
-# first run if it doesn't exist yet.
+# Create research-cache dir (skills write research logs here)
 # ---------------------------------------------------------------------------
-git fetch origin main "$BRANCH" 2>>"$driver_log" || true
+mkdir -p .claude/research-cache
+mkdir -p .playwright
 
-if git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
-  git checkout -B "$BRANCH" "origin/$BRANCH"
+# ---------------------------------------------------------------------------
+# Fetch latest from remote and create per-cycle branch from BASE_BRANCH
+# ---------------------------------------------------------------------------
+git fetch origin "$BASE_BRANCH" 2>>"$driver_log" || true
+
+if git show-ref --verify --quiet "refs/remotes/origin/$BASE_BRANCH"; then
+  git checkout -B "$CYCLE_BRANCH" "origin/$BASE_BRANCH"
 else
-  log "branch $BRANCH not found on origin — creating from main"
-  git checkout -B "$BRANCH" origin/main
-  git push -u origin "$BRANCH"
+  log "base branch $BASE_BRANCH not found on origin — creating from current HEAD"
+  git checkout -B "$CYCLE_BRANCH"
 fi
 
-# Bail rather than clobber if a human left uncommitted work here.
+log "created cycle branch: $CYCLE_BRANCH"
+
+# Bail if working tree is dirty with unrelated changes.
 if [ -n "$(git status --porcelain)" ]; then
-  log "working tree dirty before run — skipping cycle rather than risk overwriting local changes"
+  log "working tree dirty before run — skipping cycle"
   exit 0
 fi
 
 # ---------------------------------------------------------------------------
-# Self-serialize against any `superagent` CLI process touching the same
-# tree (packages/cli/src/auto-improve-lock.ts reads this same env var).
-# The skill's own Step0 lock file handles concurrent skill runs.
+# Self-serialize with the TypeScript lock
 # ---------------------------------------------------------------------------
 export AUTO_IMPROVE_RUN="vps-${ts}"
 
 # ---------------------------------------------------------------------------
-# One headless cycle. --max-turns / --max-budget-usd are the outer spend
-# guard; the skill's own context-compaction checkpoints are the inner one.
-# Verify current flag names with `claude -p --help` periodically — CLI
-# flags do change between releases.
+# One headless cycle — no budget/turn caps
+# Skills run until they finish naturally; use the pause file to stop.
 # ---------------------------------------------------------------------------
 set +e
 claude -p "$SKILL" \
   --allowedTools "$ALLOWED_TOOLS" \
   --permission-mode acceptEdits \
-  --max-turns "$MAX_TURNS" \
-  --max-budget-usd "$MAX_BUDGET_USD" \
   --output-format json \
-  >"$run_log" 2>"$LOG_DIR/${ts}_$(basename "$SKILL").stderr.log"
+  > "$run_log" 2>"$LOG_DIR/${ts}_${skill_name}.stderr.log"
 exit_code=$?
 set -e
 
@@ -96,6 +99,74 @@ fi
 
 log "exit=$exit_code is_error=$is_error cost=\$${cost} turns=$turns log=$run_log"
 
-# Never merge to main here. Review side-branch commits and open a PR
-# yourself — see README.md.
+# ---------------------------------------------------------------------------
+# Push branch (if anything was committed by the skill)
+# ---------------------------------------------------------------------------
+if git log "origin/$BASE_BRANCH..HEAD" --oneline 2>/dev/null | grep -q .; then
+  git push -u origin "$CYCLE_BRANCH"
+  log "pushed branch: $CYCLE_BRANCH"
+
+  # -------------------------------------------------------------------------
+  # Generate PR body from the skill's log entry
+  # -------------------------------------------------------------------------
+  LATEST_LOG=$(tail -n 60 .claude/auto-improve-log.log 2>/dev/null || echo "No log entry found")
+  COMMITS=$(git log "origin/$BASE_BRANCH..HEAD" --oneline 2>/dev/null | head -10)
+  
+  cat > .claude/pr-body-latest.md << EOF
+## [AutoLoop] ${skill_name} — $(date -u +%Y-%m-%d)
+
+> Auto-generated by the SuperAgent self-improvement loop.
+> Review the diff, confirm no secrets or regressions, then merge when satisfied.
+
+### Commits in This Cycle
+\`\`\`
+${COMMITS}
+\`\`\`
+
+### Skill Log (latest entry)
+\`\`\`
+${LATEST_LOG}
+\`\`\`
+
+### Review Checklist
+- [ ] Read the diff — changes look intentional
+- [ ] Research sources cited in the log are real URLs (not hallucinated)
+- [ ] Build/test status confirmed (see CI check below)
+- [ ] No secrets, tokens, or personal paths committed
+- [ ] Merge → \`agent-development\` when satisfied
+
+*Branch: \`${CYCLE_BRANCH}\` → \`${BASE_BRANCH}\`*
+*Runner log: \`${run_log}\`*
+EOF
+
+  # -------------------------------------------------------------------------
+  # Create draft PR via gh CLI
+  # -------------------------------------------------------------------------
+  if [ "$AUTO_CREATE_PR" = "true" ] && command -v gh >/dev/null 2>&1; then
+    set +e
+    gh pr create \
+      --draft \
+      --base "$BASE_BRANCH" \
+      --head "$CYCLE_BRANCH" \
+      --title "[AutoLoop] ${skill_name} — $(date -u +%Y-%m-%d)" \
+      --body-file .claude/pr-body-latest.md \
+      --label "auto-generated" \
+      2>>"$driver_log"
+    pr_exit=$?
+    set -e
+    if [ $pr_exit -eq 0 ]; then
+      log "draft PR created → $BASE_BRANCH"
+    else
+      log "gh pr create failed (exit $pr_exit) — branch pushed, create PR manually"
+    fi
+  else
+    log "AUTO_CREATE_PR=false or gh not found — branch pushed, no PR created"
+  fi
+else
+  log "no new commits on $CYCLE_BRANCH — nothing to push or PR"
+  # Clean up the empty branch
+  git checkout "$BASE_BRANCH" 2>/dev/null || true
+  git branch -D "$CYCLE_BRANCH" 2>/dev/null || true
+fi
+
 exit 0

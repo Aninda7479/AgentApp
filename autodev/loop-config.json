@@ -1,0 +1,40 @@
+# SuperAgent Auto-Improvement Loop — Configuration
+# Each skill runs on its own schedule. Adjust intervals to taste.
+{
+  "branch_prefix": "auto",
+  "target_pr_branch": "agent-development",
+  "auto_create_pr": true,
+  "pr_draft": true,
+  "pr_label": "auto-generated",
+
+  "skill_schedule_minutes": {
+    "auto-improve":        30,
+    "orchestrator-dev":   120,
+    "art-director":       180,
+    "ux-critic":          120,
+    "security-auditor":   360,
+    "test-generator":     240,
+    "provider-scout":     480,
+    "dependency-guardian": 720
+  },
+
+  "drivers": {
+    "primary":   "claude-code-cli",
+    "secondary": "superagent-cli",
+    "tertiary":  "desktop"
+  },
+
+  "git": {
+    "never_target_branch": "main",
+    "pr_base_branch": "agent-development"
+  },
+
+  "notes": {
+    "playwright_skills": ["art-director", "ux-critic"],
+    "playwright_mode": "subprocess-only — main session is Playwright-free",
+    "research_cache_dir": ".claude/research-cache",
+    "shared_log": ".claude/auto-improve-log.log",
+    "lock_file": ".claude/.auto-improve.lock",
+    "pause_file": ".claude/.auto-improve.pause"
+  }
+}
