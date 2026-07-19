@@ -2118,7 +2118,12 @@ Key guidelines:
       messages,
       stream: true,
       options: {
-        temperature: this.config.temperature ?? 0.4
+        temperature: this.config.temperature ?? 0.4,
+        // Bound the generation length, mirroring the OpenAI path's `max_tokens`.
+        // Without this, Ollama's default is effectively unbounded (num_predict
+        // = -1), so a rambling local model can stream a huge response token by
+        // token, amplifying any per-token work on the renderer side.
+        num_predict: this.config.maxTokens ?? 4096
       }
     };
 

@@ -69,6 +69,11 @@ export class AgentStreamService {
       if (agentEvent.type === 'token') {
         streaming.bufferRef.current += agentEvent.content || '';
         const currentStepId = streaming.stepIdRef.current;
+        // persist=false: update in-memory/live state only. Serializing the whole
+        // store to disk on every token is an O(n²) memory/IO storm (it drove the
+        // renderer to multi-GB RSS on fast local providers like Ollama). The final
+        // steps are flushed once on the terminal done/error/abort event below, and
+        // the canonical transcript is persisted independently in the main process.
         StoreService.updateChatSteps(ctx, chatId, (prev) => {
           if (currentStepId) {
             return prev.map((s) => (s.id === currentStepId ? { ...s, content: streaming.bufferRef.current } : s));
@@ -87,7 +92,7 @@ export class AgentStreamService {
             }
           };
           return [...prev, newStep];
-        });
+        }, false);
       }
 
       // ── tool_call: append a "running" tool step to the trajectory ──

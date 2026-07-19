@@ -98,11 +98,23 @@ export class StoreService {
   /**
    * Applies a step-updater to one chat's trajectory and persists. Also mirrors
    * the result into the live canvas when the targeted chat is the active one.
+   *
+   * `persist` (default true) controls whether the ENTIRE store is serialized and
+   * written to disk over IPC. During token streaming this is called once per
+   * token; persisting the whole store (all chats + every step) on each token is
+   * an O(n²) allocation/IO storm that balloons the renderer's RSS into the
+   * gigabytes on fast local providers (e.g. Ollama, which streams uncapped tokens
+   * with no network latency) — see the token branch in AgentStreamService, which
+   * passes `persist: false` and relies on the terminal done/error/abort event to
+   * flush the final steps. The canonical transcript is independently persisted in
+   * the main process (MessageHistoryStore), so skipping per-token disk writes
+   * never loses data.
    */
   static updateChatSteps(
     ctx: AppContext,
     targetChatId: string,
-    updater: (prevSteps: TrajectoryStep[]) => TrajectoryStep[]
+    updater: (prevSteps: TrajectoryStep[]) => TrajectoryStep[],
+    persist: boolean = true
   ): void {
     ctx.setChats((prevChats) => {
       const chat = prevChats.find((c) => c.id === targetChatId);
@@ -116,7 +128,9 @@ export class StoreService {
       const nextChats = prevChats.map((c) =>
         c.id === targetChatId ? { ...c, steps: nextSteps } : c
       );
-      ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), nextChats);
+      if (persist) {
+        ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), nextChats);
+      }
       return nextChats;
     });
   }
