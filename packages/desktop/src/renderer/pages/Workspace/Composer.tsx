@@ -438,7 +438,7 @@ export const Composer: React.FC<ComposerProps> = ({
 
           const res = ipcRenderer
             ? await ipcRenderer.invoke('media-transcribe', {
-                buffer: Array.from(buf),
+                buffer: buf,
                 filename: 'dictation.wav',
                 mimeType: 'audio/wav'
               })

@@ -520,8 +520,20 @@ safeHandle('settings-read', () => {
   return SettingsStorage.loadSettings();
 });
 
-safeHandle('settings-write', (_event, settings) => {
-  SettingsStorage.saveSettings(settings);
+safeHandle('settings-write', (_event, settingsPatch) => {
+  const oldSettings = SettingsStorage.loadSettings();
+  SettingsStorage.saveSettings(settingsPatch);
+
+  const oldVoice = oldSettings?.voice || {};
+  const updatedSettings = SettingsStorage.loadSettings();
+  const newVoice = updatedSettings?.voice || {};
+
+  if (
+    (oldVoice.localWhisper?.enabled && !newVoice.localWhisper?.enabled) ||
+    (oldVoice.localWhisper?.enabled && oldVoice.localWhisper?.size !== newVoice.localWhisper?.size)
+  ) {
+    void whisperLocal.freePipeline();
+  }
 });
 
 // ── Hardware detection for the Local Model (Ollama) manager ────────────────
@@ -1058,10 +1070,11 @@ safeHandle('media-transcribe', async (_event, args: {
   }
   if (Buffer.isBuffer(raw)) {
     audioBuffer = raw;
+  } else if (raw instanceof Uint8Array || (raw && typeof raw === 'object' && 'buffer' in (raw as any))) {
+    const r = raw as any;
+    audioBuffer = Buffer.from(r.buffer, r.byteOffset ?? 0, r.byteLength ?? r.length);
   } else if (raw instanceof ArrayBuffer) {
     audioBuffer = Buffer.from(new Uint8Array(raw));
-  } else if (raw instanceof Uint8Array) {
-    audioBuffer = Buffer.from(raw);
   } else if (Array.isArray(raw)) {
     audioBuffer = Buffer.from(Uint8Array.from(raw));
   } else {
@@ -1199,11 +1212,11 @@ safeHandle('whisper-local-download', async (event, args: { size?: string; modelD
   }
 });
 
-safeHandle('whisper-local-delete', (_event, args: { size?: string; modelDir?: string }) => {
+safeHandle('whisper-local-delete', async (_event, args: { size?: string; modelDir?: string }) => {
   try {
     const size = (args?.size as any) || 'tiny';
     const dir = args?.modelDir || whisperLocal.defaultModelDir();
-    whisperLocal.deleteModel(size, dir);
+    await whisperLocal.deleteModel(size, dir);
     return { ok: true };
   } catch (err: any) {
     return { ok: false, error: err?.message ?? String(err) };
@@ -1823,4 +1836,5 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  void whisperLocal.freePipeline();
 });
