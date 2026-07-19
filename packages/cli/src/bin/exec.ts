@@ -80,8 +80,6 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
     provider = model.slice(0, slashIdx);
     model = model.slice(slashIdx + 1);
   }
-  // eslint-disable-next-line no-console
-  console.error('[dbg] options=' + JSON.stringify(options));
 
   // Resolve the live connection (real API key / base URL) the same way the TUI
   // does, instead of the old dummy key, so one-shot mode can actually answer.

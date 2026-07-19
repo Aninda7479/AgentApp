@@ -36,24 +36,36 @@ export function createCliProgram(onExecute?: (options: CliOptions, prompt?: stri
     .option('-k, --key <key>', 'Specify API key')
     .option('-p, --provider <provider>', 'Specify AI provider (openai, anthropic, gemini)')
     .option('-m, --model <model>', 'Specify model identifier')
+    .option('--chat <prompt>', 'Run a single prompt and exit (alias for a positional prompt)')
     .option('-v, --verbose', 'Enable verbose output', false)
     .option('--permission <level>', 'Execution permission level (ask, auto, deny)', 'ask')
     .option('-i, --interactive', 'Start interactive TUI session', true)
     .option('--resume <id>', 'Resume a previous session by its id')
     .action((prompt, options) => {
       const savedSettings = SettingsStorage.loadSettings();
+      // A `--model provider/model` value (e.g. openrouter/tencent/hy3:free)
+      // encodes the provider in the model string. Split it out, but only when
+      // `--provider` wasn't given explicitly, so an explicit flag always wins.
+      let provider = options.provider || savedSettings.lastUsedModel?.provider || 'openai';
+      let model = options.model || savedSettings.lastUsedModel?.model;
+      if (model && model.includes('/') && !options.provider) {
+        const slashIdx = model.indexOf('/');
+        provider = model.slice(0, slashIdx);
+        model = model.slice(slashIdx + 1);
+      }
+      const effectivePrompt = prompt || options.chat;
       const mergedOptions: CliOptions = {
         key: options.key,
-        provider: options.provider || savedSettings.lastUsedModel?.provider || 'openai',
-        model: options.model || savedSettings.lastUsedModel?.model,
+        provider,
+        model,
         verbose: Boolean(options.verbose),
         permission: (options.permission || 'ask') as 'ask' | 'auto' | 'deny',
-        interactive: !prompt && Boolean(options.interactive ?? true),
+        interactive: !effectivePrompt && Boolean(options.interactive ?? true),
         resume: options.resume,
       };
 
       // Return the (possibly async) result so `program.parseAsync` awaits it.
-      return onExecute?.(mergedOptions, prompt);
+      return onExecute?.(mergedOptions, effectivePrompt);
     });
 
   // `superagent update` — self-update the Core + CLI + Web install from npm
