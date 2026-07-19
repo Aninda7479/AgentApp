@@ -4,6 +4,7 @@ import { SettingsStorage } from './settings-store.js';
 import {
   getChatDirectory,
   getChatJsonPath,
+  getChatConfigPath,
   getConversationRoots,
   getProjectConfigPath,
   getProjectDirectory,
@@ -14,8 +15,10 @@ import type {
   ConversationRoots,
   StoreData,
   StoredChat,
+  StoredChatConfig,
   StoredProject
 } from './conversation-types.js';
+import { CHAT_FILE_KEYS, CHAT_CONFIG_KEYS } from './conversation-types.js';
 
 type ProjectRecord = StoredProject & { storageKey: string };
 
@@ -105,13 +108,34 @@ function readProjectRecord(projectDir: string, folderName: string): ProjectRecor
   };
 }
 
-/** Reads and deserializes a single chat.json file into a StoredChat record. */
-function readChatRecord(chatJsonPath: string, projectName: string, projectKey?: string): StoredChat | null {
+/** Splits a `StoredChat` into its `chat.json` (transcript) and `config.json`
+ *  (session/memory) file payloads, based on the shared key lists. */
+function splitChat(chat: StoredChat): {
+  chatFile: Partial<StoredChat>;
+  configFile: Partial<StoredChatConfig>;
+} {
+  const chatFile: Record<string, unknown> = {};
+  const configFile: Record<string, unknown> = {};
+  for (const k of CHAT_FILE_KEYS) if (k in chat) chatFile[k] = (chat as unknown as Record<string, unknown>)[k];
+  for (const k of CHAT_CONFIG_KEYS) if (k in chat) configFile[k] = (chat as unknown as Record<string, unknown>)[k];
+  return { chatFile: chatFile as Partial<StoredChat>, configFile: configFile as Partial<StoredChatConfig> };
+}
+
+/** Reads and deserializes a single chat into a StoredChat record, merging the
+ *  separate `config.json` (model, memory/context, etc.) when present. */
+function readChatRecord(
+  chatJsonPath: string,
+  projectName: string,
+  projectKey?: string,
+  configPath?: string
+): StoredChat | null {
   try {
     const chat = readJson<StoredChat>(chatJsonPath);
     if (!chat) return null;
+    const config = configPath ? readJson<StoredChatConfig>(configPath) : null;
     return {
       ...chat,
+      ...(config || {}),
       project: projectName,
       projectStorageKey: projectKey
     };
@@ -161,7 +185,9 @@ function readProjectsAndChats(roots: ConversationRoots): { projects: ProjectReco
         if (!fs.statSync(chatDir).isDirectory()) continue;
 
         const chatJsonPath = path.join(chatDir, 'chat.json');
-        const chat = fs.existsSync(chatJsonPath) ? readChatRecord(chatJsonPath, project.name, project.storageKey) : null;
+        const chat = fs.existsSync(chatJsonPath)
+          ? readChatRecord(chatJsonPath, project.name, project.storageKey, getChatConfigPath(roots.userDataDir, chatFolder, project.storageKey))
+          : null;
         if (chat) {
           const chatKey = `${project.storageKey}/${chat.id}`;
           if (!seenChats.has(chatKey)) {
@@ -183,7 +209,7 @@ function readProjectsAndChats(roots: ConversationRoots): { projects: ProjectReco
       const chatJsonPath = path.join(chatDir, 'chat.json');
       if (!fs.existsSync(chatJsonPath)) continue;
 
-      const chat = readChatRecord(chatJsonPath, '', undefined);
+      const chat = readChatRecord(chatJsonPath, '', undefined, getChatConfigPath(roots.userDataDir, chatFolder));
       if (chat) {
         const chatKey = `standalone/${chat.id}`;
         if (!seenChats.has(chatKey)) {
@@ -287,9 +313,14 @@ export function writeConversationStore(data: StoreData, userDataDir: string): vo
     const targetProjectKey = matchedProject?.storageKey;
     const targetChatDir = getChatDirectory(userDataDir, chat.id, targetProjectKey);
     ensureDirectory(targetChatDir);
+    const { chatFile, configFile } = splitChat(chat);
     writeJson(getChatJsonPath(userDataDir, chat.id, targetProjectKey), {
-      ...chat,
+      ...chatFile,
       projectStorageKey: targetProjectKey
+    });
+    writeJson(getChatConfigPath(userDataDir, chat.id, targetProjectKey), {
+      ...configFile,
+      updatedAt: new Date().toISOString()
     });
 
     activeChatFolders.add(targetProjectKey ? `${targetProjectKey}/${chat.id}` : `standalone/${chat.id}`);
@@ -359,16 +390,24 @@ export function readChat(userDataDir: string, chatId: string, projectKey?: strin
   return readChatRecord(chatJsonPath, projectName, projectKey);
 }
 
-/** Saves a chat record to disk, resolving its project association. */
+/** Saves a chat record to disk, resolving its project association. The
+ *  transcript goes to `chat.json`; session/memory state goes to `config.json`. */
 export function saveChat(userDataDir: string, chat: StoredChat): void {
   const roots = getConversationRoots(userDataDir);
   const project =
     (chat.projectStorageKey ? findProjectRecord(roots, (item) => item.storageKey === chat.projectStorageKey) : null) ||
     (chat.project ? findProjectRecord(roots, (item) => item.name === chat.project) : null);
   const targetProjectKey = project?.storageKey;
+  const chatDir = getChatDirectory(userDataDir, chat.id, targetProjectKey);
+  ensureDirectory(chatDir);
+  const { chatFile, configFile } = splitChat(chat);
   writeJson(getChatJsonPath(userDataDir, chat.id, targetProjectKey), {
-    ...chat,
+    ...chatFile,
     projectStorageKey: targetProjectKey
+  });
+  writeJson(getChatConfigPath(userDataDir, chat.id, targetProjectKey), {
+    ...configFile,
+    updatedAt: new Date().toISOString()
   });
 }
 
@@ -413,4 +452,43 @@ export function updateChat(
   const next = updater(existing);
   saveChat(userDataDir, { ...next, projectStorageKey: existing.projectStorageKey });
   return { ...next, projectStorageKey: existing.projectStorageKey };
+}
+
+/** Reads a chat's `config.json` (model, memory/context, etc.). */
+export function readChatConfig(
+  userDataDir: string,
+  chatId: string,
+  projectKey?: string
+): StoredChatConfig | null {
+  const configPath = getChatConfigPath(userDataDir, chatId, projectKey);
+  if (!fs.existsSync(configPath)) return null;
+  return readJson<StoredChatConfig>(configPath);
+}
+
+/** Writes a chat's `config.json`, merging with any existing config. */
+export function saveChatConfig(
+  userDataDir: string,
+  chatId: string,
+  config: StoredChatConfig,
+  projectKey?: string
+): StoredChatConfig {
+  const existing = readChatConfig(userDataDir, chatId, projectKey) ?? {};
+  const next: StoredChatConfig = { ...existing, ...config, updatedAt: new Date().toISOString() };
+  const configPath = getChatConfigPath(userDataDir, chatId, projectKey);
+  ensureDirectory(path.dirname(configPath));
+  writeJson(configPath, next);
+  return next;
+}
+
+/** Reads a chat's `config.json`, applies an updater, and saves it. */
+export function updateChatConfig(
+  userDataDir: string,
+  chatId: string,
+  updater: (config: StoredChatConfig) => StoredChatConfig,
+  projectKey?: string
+): StoredChatConfig | null {
+  const existing = readChatConfig(userDataDir, chatId, projectKey);
+  if (!existing) return null;
+  const next = updater(existing);
+  return saveChatConfig(userDataDir, chatId, next, projectKey);
 }

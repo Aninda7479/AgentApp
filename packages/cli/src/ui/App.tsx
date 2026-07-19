@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Box, Text, useApp, useInput, Static } from 'ink';
+import { Box, Text, useApp, useInput } from 'ink';
 import { Composer } from './Composer.js';
 import { MessageView, type UiMessage, type ToolCallInfo } from './MessageView.js';
 import { CommandPalette, type PaletteItem, type PaletteRow } from './CommandPalette.js';
@@ -21,6 +21,12 @@ import {
 } from '../engine.js';
 import { getRunnableSkills, type RunnableSkill } from '../skills.js';
 import { SettingsStorage, type ImageAttachment } from '@superagent/core';
+
+/** Generates a resume token of the form `XXXX-XXXX-XXXX-XXXX`. */
+function generateSessionId(): string {
+  const g = () => Math.random().toString(16).slice(2, 6).padEnd(4, '0').slice(0, 4);
+  return `${g()}-${g()}-${g()}-${g()}`;
+}
 
 /** Root props for the SuperAgent TUI application. */
 export interface AppProps {
@@ -70,6 +76,22 @@ export const App: React.FC<AppProps> = ({
   initialVerbose = false,
 }) => {
   const { exit } = useApp();
+
+  // Stable resume token printed on exit so the user can reopen this session.
+  const sessionIdRef = useRef<string>(generateSessionId());
+
+  // On unmount (any exit path: /exit, ctrl-c, error) print a resume command.
+  useEffect(() => {
+    return () => {
+      try {
+        process.stdout.write(
+          `\nTo resume this session later, run:\n  superagent --resume ${sessionIdRef.current}\n\n`
+        );
+      } catch {
+        /* ignore write failures (e.g. piped output) */
+      }
+    };
+  }, []);
 
   // Resolve the live default connection (honours an Anthropic-compatible proxy
   // configured via env, e.g. OpenRouter through ANTHROPIC_BASE_URL/_AUTH_TOKEN).
@@ -661,33 +683,41 @@ export const App: React.FC<AppProps> = ({
     ? ` · ${usage.totalTokens.toLocaleString()} tok (${usage.promptTokens.toLocaleString()}↑/${usage.completionTokens.toLocaleString()}↓)`
     : '';
 
+  // Full terminal height so the conversation + composer can be pinned to the
+  // bottom of the *visible* window instead of scrolling away (the old <Static>
+  // scrollback pushed the input to mid-screen once the log grew past one page).
+  const terminalRows = process.stdout.rows || 24;
+
   return (
-    <Box flexDirection="column">
-      {/* Banner is written ONCE to the top of the scrollback (Static) so it
-          stays fixed at the top and never scrolls with the conversation. */}
-      <Static items={['__banner__']}>
-        {() => (
-          <Banner provider={chatRef.current.provider} model={chatRef.current.model} cwd={process.cwd()} />
+    <Box flexDirection="column" height={terminalRows}>
+      {/* Fixed banner at the very top (rendered once). */}
+      <Banner
+        key="banner"
+        provider={chatRef.current.provider}
+        model={chatRef.current.model}
+        cwd={process.cwd()}
+      />
+
+      {/* Conversation log: grows to fill the space and anchors the newest
+          content to the bottom so the input line is always at the bottom. */}
+      <Box flexGrow={1} flexDirection="column" justifyContent="flex-end">
+        {messages.map((m: UiMessage) => (
+          <MessageView key={m.id} message={m} />
+        ))}
+
+        {/* Live streaming assistant pane (dynamic, re-renders per token). */}
+        {streaming && (
+          <MessageView
+            message={{
+              id: 'streaming',
+              role: 'assistant',
+              content: streaming.content,
+              isStreaming: true,
+              tools: streaming.tools,
+            }}
+          />
         )}
-      </Static>
-
-      {/* Persistent, scrolling conversation log. */}
-      <Static items={messages}>
-        {(m: UiMessage) => <MessageView key={m.id} message={m} />}
-      </Static>
-
-      {/* Live streaming assistant pane (dynamic, re-renders per token). */}
-      {streaming && (
-        <MessageView
-          message={{
-            id: 'streaming',
-            role: 'assistant',
-            content: streaming.content,
-            isStreaming: true,
-            tools: streaming.tools,
-          }}
-        />
-      )}
+      </Box>
 
       {/* Slash-command + skills palette (typing `/`). */}
       {showPalette && (
@@ -699,7 +729,7 @@ export const App: React.FC<AppProps> = ({
         <ModelPicker items={modelItems} selected={clampedModelSelected} total={modelItems.length} />
       )}
 
-      {/* Input line. */}
+      {/* Input line — always pinned just above the status bar. */}
       <Composer value={input} isBusy={isBusy} />
 
       {/* Bottom status bar (Claude-Code style). */}

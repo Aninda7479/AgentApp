@@ -69,3 +69,12 @@ export function getChatJsonPath(
 ): string {
   return path.join(getChatDirectory(userDataDir, chatId, projectKey), 'chat.json');
 }
+
+/** Returns the path to a chat's config JSON file (model, memory/context, etc.). */
+export function getChatConfigPath(
+  userDataDir: string,
+  chatId: string,
+  projectKey?: string
+): string {
+  return path.join(getChatDirectory(userDataDir, chatId, projectKey), 'config.json');
+}

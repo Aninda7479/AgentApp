@@ -53,7 +53,10 @@ export interface StoredProject {
   storageKey?: string;
 }
 
-/** A persisted chat conversation with its trajectory steps and metadata. */
+/** A persisted chat conversation with its trajectory steps and metadata.
+ *  This is the merged view returned to callers: transcript fields (`chat.json`)
+ *  plus session/memory fields (`config.json`). On disk those live in two files;
+ *  `readChat` / `saveChat` split and merge them transparently. */
 export interface StoredChat {
   id: string;
   title: string;
@@ -65,7 +68,65 @@ export interface StoredChat {
   isRunning?: boolean;
   startedAt?: number;
   lastError?: string;
+  /** Session/memory fields persisted in `config.json` (see `StoredChatConfig`). */
+  provider?: string;
+  baseUrl?: string;
+  contextWindow?: number;
+  memory?: string;
+  contextSummary?: string;
 }
+
+/**
+ * Per-chat configuration persisted separately from the chat transcript
+ * (`chat.json`). Keeps session/memory state — last-used model, provider,
+ * context window, and the agent's working memory/context — out of the
+ * message-only `chat.json` so the transcript stays pure conversation data.
+ */
+export interface StoredChatConfig {
+  /** Last-used model for this chat. */
+  model?: string;
+  /** Last-used provider for this chat. */
+  provider?: string;
+  /** Last-used base URL (for custom/self-hosted providers). */
+  baseUrl?: string;
+  /** Context-window size (tokens) of the last-used model. */
+  contextWindow?: number;
+  /**
+   * Persisted agent memory / context for this chat — e.g. a condensed summary
+   * of prior turns, user preferences, or project facts the agent should
+   * remember across sessions.
+   */
+  memory?: string;
+  /** The most recent compacted context summary, for fast resume without
+   *  replaying the whole transcript. */
+  contextSummary?: string;
+  /** ISO timestamp of the last config update. */
+  updatedAt?: string;
+}
+
+/** Keys that belong in `chat.json` (transcript / conversation-only data). */
+export const CHAT_FILE_KEYS = [
+  'id',
+  'title',
+  'project',
+  'timestamp',
+  'steps',
+  'projectStorageKey',
+  'isRunning',
+  'startedAt',
+  'lastError'
+] as const;
+
+/** Keys that belong in `config.json` (session / memory state). */
+export const CHAT_CONFIG_KEYS = [
+  'model',
+  'provider',
+  'baseUrl',
+  'contextWindow',
+  'memory',
+  'contextSummary',
+  'updatedAt'
+] as const;
 
 /** Top-level shape of all persisted conversation store data. */
 export interface StoreData {

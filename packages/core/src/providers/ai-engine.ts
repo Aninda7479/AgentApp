@@ -180,6 +180,8 @@ import { enforceNetworkAllowed } from '../security/internet-access.js';
 import { createThreeDTool } from '../tools/threed.js';
 import { chunkedCompactMessages, extractTextContent } from '../memory/compactor.js';
 import { MessageHistoryStore } from '../storage/message-history.js';
+import { saveChatConfig, readChatConfig } from '../storage/conversation-store.js';
+import type { StoredChatConfig } from '../storage/conversation-types.js';
 
 /** Tag marking AgentEngine's own condensed-history block inside `history`. */
 const SUMMARY_PREFIX = '[COMPACTED CONTEXT SUMMARY]';
@@ -1154,6 +1156,49 @@ Key guidelines:
   public async clearHistory(): Promise<void> {
     this.history = [];
     await MessageHistoryStore.clear(this.sessionId);
+  }
+
+  /**
+   * Persist this agent's per-chat session/memory state to the chat's
+   * `config.json`: last-used model/provider/baseUrl/contextWindow plus the
+   * current compacted context summary (the agent's working "memory"). Hosts
+   * call this after a run so a chat reopens with the same model and context,
+   * without replaying the whole transcript.
+   */
+  public persistChatConfig(
+    userDataDir: string,
+    chatId: string,
+    projectKey?: string
+  ): StoredChatConfig {
+    let contextSummary: string | undefined;
+    for (const m of this.history) {
+      const txt = extractTextContent(m.content);
+      if (m.role === 'system' && txt.startsWith(SUMMARY_PREFIX)) {
+        contextSummary = txt;
+        break;
+      }
+    }
+    return saveChatConfig(
+      userDataDir,
+      chatId,
+      {
+        model: this.config.model,
+        provider: this.config.provider,
+        baseUrl: this.config.baseUrl,
+        contextWindow: this.contextWindow,
+        contextSummary
+      },
+      projectKey
+    );
+  }
+
+  /** Load this chat's persisted `config.json` (model, memory/context). */
+  public loadChatConfig(
+    userDataDir: string,
+    chatId: string,
+    projectKey?: string
+  ): StoredChatConfig | null {
+    return readChatConfig(userDataDir, chatId, projectKey);
   }
 
   public getSandbox(): SandboxRunner {

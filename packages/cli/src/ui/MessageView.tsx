@@ -37,12 +37,9 @@ export const MessageView: React.FC<{ message: UiMessage }> = ({ message }) => {
   if (m.role === 'user') {
     return (
       <Box flexDirection="column" marginBottom={1}>
-        <Box>
-          <Text bold color="green">
-            {'❯ '}
-          </Text>
-          <Text>{m.content}</Text>
-        </Box>
+        <Text color="white" backgroundColor="blue">
+          {`❯ ${m.content}`}
+        </Text>
         {m.attachments && m.attachments.length > 0 && (
           <Text dimColor color="gray">
             {'  '}📎 {m.attachments.map((a) => a.path.split(/[\\/]/).pop()).join(', ')}
