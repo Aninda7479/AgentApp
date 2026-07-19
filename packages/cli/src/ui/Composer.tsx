@@ -1,83 +1,24 @@
-import React, { useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import React from 'react';
+import { Box, Text } from 'ink';
 
-/** Props for the Composer input component. */
+/** Props for the presentational Composer input line. All key handling lives in
+ *  App (a single useInput); this component only renders the current value. */
 export interface ComposerProps {
-  onSubmit: (input: string) => void;
-  onQueue?: (input: string) => void;
-  onTranscriptToggle?: () => void;
-  onPermissionCycle?: () => void;
-  isDisabled?: boolean;
+  value: string;
   placeholder?: string;
-  value?: string;
-  onChange?: (value: string) => void;
+  isBusy?: boolean;
 }
 
-/** Interactive text input component with keyboard shortcuts for queue, permissions, and transcript toggle. */
+/** Renders the current input line with a blinking-style cursor block. */
 export const Composer: React.FC<ComposerProps> = ({
-  onSubmit,
-  onQueue,
-  onTranscriptToggle,
-  onPermissionCycle,
-  isDisabled = false,
+  value,
   placeholder = 'Type a prompt or /command...',
-  value: externalValue,
-  onChange: externalOnChange,
+  isBusy = false,
 }) => {
-  const [internalValue, setInternalValue] = useState('');
-  const value = externalValue !== undefined ? externalValue : internalValue;
-
-  const setValue = (val: string) => {
-    if (externalOnChange) {
-      externalOnChange(val);
-    } else {
-      setInternalValue(val);
-    }
-  };
-
-  useInput((input, key) => {
-    if (isDisabled) return;
-
-    if (key.ctrl && (input === 'o' || input === 'O')) {
-      if (onTranscriptToggle) onTranscriptToggle();
-      return;
-    }
-
-    if (key.tab && key.shift) {
-      if (onPermissionCycle) onPermissionCycle();
-      return;
-    }
-
-    if (key.tab && !key.shift) {
-      if (value.trim().length > 0 && onQueue) {
-        onQueue(value.trim());
-        setValue('');
-      }
-      return;
-    }
-
-    if (key.return) {
-      if (value.trim().length > 0) {
-        onSubmit(value.trim());
-        setValue('');
-      }
-      return;
-    }
-
-    if (key.backspace || key.delete) {
-      setValue(value.slice(0, -1));
-      return;
-    }
-
-    if (input && !key.ctrl && !key.meta) {
-      setValue(value + input);
-    }
-  });
-
   return (
-    <Box borderStyle="round" borderColor={isDisabled ? 'gray' : 'blue'} paddingX={1}>
+    <Box borderStyle="round" borderColor={isBusy ? 'gray' : 'cyan'} paddingX={1}>
       <Text bold color="cyan">
-        ❯{' '}
+        {'❯ '}
       </Text>
       {value.length === 0 ? (
         <Text dimColor color="gray">
