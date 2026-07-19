@@ -152,8 +152,8 @@ function estimateMessageHeight(m: UiMessage, columns: number, maxCodeLines = 15)
           const totalLines = rawLines.length;
           const shouldTruncate = !m.isStreaming && maxCodeLines && totalLines > maxCodeLines;
           const displayCount = shouldTruncate ? maxCodeLines : totalLines;
-          // Code Header Bar (2) + Content Box Border (2) + Display Lines + Truncation Note (1 if truncated) + marginY (2)
-          contentHeight += displayCount + (shouldTruncate ? 1 : 0) + 6;
+          // Single Box (1 header row + 2 border lines + 2 marginY lines) + Display Lines + Truncation Note (1 if truncated)
+          contentHeight += displayCount + (shouldTruncate ? 1 : 0) + 5;
         } else if (token.type === 'bullet') {
           contentHeight += Math.max(1, Math.ceil(token.text.length / Math.max(1, cols - 6)));
         } else {
@@ -628,12 +628,10 @@ export const App: React.FC<AppProps> = ({
 
       await chatRef.current.send(promptText, attachments, {
         onToken: (t) => {
-          setScrollOffset(0);
           setStreaming((s) => ({ ...s, content: s.content + t }));
         },
         onUsage: (u) => setUsage(u),
         onToolCall: (name, args) => {
-          setScrollOffset(0);
           let originalContent: string | undefined;
           if (name === 'write_file' && typeof args.path === 'string') {
             const filePath = args.path;
@@ -930,12 +928,26 @@ export const App: React.FC<AppProps> = ({
 
   const { rows: terminalRows, columns: terminalColumns } = useTerminalDimensions();
 
-  // Estimate message heights and slice messages to fit the terminal screen responsive viewport
-  let currentHeight = 0;
-  let maxHeight = terminalRows - 6; // Leave space for composer (3) + status (2) + spacing (1)
+  // Combine stored messages and live streaming message into a unified list
+  const activeStreamingMsg: UiMessage | null = streaming ? {
+    id: 'streaming',
+    role: 'assistant',
+    content: streaming.content,
+    isStreaming: true,
+    tools: streaming.tools,
+  } : null;
 
+  const allMessagesToView: UiMessage[] = activeStreamingMsg && scrollOffset === 0
+    ? [...messages, activeStreamingMsg]
+    : messages;
+
+  const totalMessageCount = allMessagesToView.length;
+  const clampedScrollOffset = Math.min(Math.max(0, scrollOffset), Math.max(0, totalMessageCount - 1));
+
+  // Determine effective line budget for message log area
+  let maxHeight = terminalRows - 6; // Space for composer (3) + status bar (2) + margin (1)
   if (isBusy) {
-    maxHeight -= 3; // Leave space for loader and tips
+    maxHeight -= 3; // Space for loader and tips
   }
   if (showPalette) {
     const paletteHeight = Math.min(paletteRows.length, 14) + 3;
@@ -945,47 +957,42 @@ export const App: React.FC<AppProps> = ({
     const pickerHeight = Math.min(modelItems.length, 12) + 3;
     maxHeight -= pickerHeight;
   }
-  maxHeight = Math.max(5, maxHeight);
+  maxHeight = Math.max(4, maxHeight);
 
-  const MAX_CODE_LINES = 15;
+  const MAX_CODE_LINES = Math.max(4, Math.min(15, maxHeight - 4));
 
-  // If streaming is active and we are at the bottom (scrollOffset === 0), include streaming height
-  if (streaming && scrollOffset === 0) {
-    const streamingMsg: UiMessage = {
-      id: 'streaming',
-      role: 'assistant',
-      content: streaming.content,
-      isStreaming: true,
-      tools: streaming.tools,
-    };
-    currentHeight += estimateMessageHeight(streamingMsg, terminalColumns, MAX_CODE_LINES);
-  }
-
-  // Go backwards from messages.length - 1 - scrollOffset
-  const endIdx = messages.length - scrollOffset;
+  // End index of messages slice (based on scrollOffset)
+  const endIdx = totalMessageCount - clampedScrollOffset;
   const messagesToRender: UiMessage[] = [];
+  let currentHeight = 0;
 
+  // We iterate backwards from endIdx - 1 to 0, adding messages until budget is filled
   for (let i = endIdx - 1; i >= 0; i--) {
-    const msgHeight = estimateMessageHeight(messages[i], terminalColumns, MAX_CODE_LINES);
+    const msg = allMessagesToView[i];
+    const msgHeight = estimateMessageHeight(msg, terminalColumns, MAX_CODE_LINES);
     let nextHeight = currentHeight + msgHeight;
 
-    // If we are about to include the first message (welcome text), also add the banner height (6)
-    if (i === 0) {
+    // Include banner height if welcome system message is rendered at top
+    if (i === 0 && messages[0] && msg.id === messages[0].id) {
       nextHeight += 6;
     }
 
     if (nextHeight > maxHeight) {
+      // If no messages fit yet (e.g. single message taller than maxHeight), include this single message anyway
       if (messagesToRender.length === 0) {
-        messagesToRender.unshift(messages[i]);
-        if (i === 0) {
-          currentHeight = nextHeight;
-        }
+        messagesToRender.unshift(msg);
       }
       break;
     }
-    messagesToRender.unshift(messages[i]);
+
+    messagesToRender.unshift(msg);
     currentHeight = nextHeight;
   }
+
+  // Check if there are messages above or below that are scrolled out of view
+  const firstRenderedIdx = messagesToRender.length > 0 ? allMessagesToView.indexOf(messagesToRender[0]) : 0;
+  const hiddenCountAbove = firstRenderedIdx > 0 ? firstRenderedIdx : 0;
+  const hiddenCountBelow = clampedScrollOffset;
 
   // Mouse click and scroll handlers
   const handleMouseEvent = useCallback((button: number, x: number, y: number, isRelease: boolean) => {
@@ -1061,6 +1068,15 @@ export const App: React.FC<AppProps> = ({
       {/* Conversation log: grows to fill the space and anchors the newest
           content to the bottom so the input line is always at the bottom. */}
       <Box flexGrow={1} flexDirection="column" justifyContent="flex-end">
+        {/* Header scroll indicator if messages exist above */}
+        {hiddenCountAbove > 0 && (
+          <Box paddingLeft={1} marginBottom={0}>
+            <Text color="gray" dimColor>
+              {`▲ ${hiddenCountAbove} message${hiddenCountAbove === 1 ? '' : 's'} above (PageUp / Ctrl+Up to scroll)`}
+            </Text>
+          </Box>
+        )}
+
         {/* Render banner scrollable at the top of messages list if the welcome message is visible in the viewport */}
         {messagesToRender.includes(messages[0]) && (
           <Banner
@@ -1080,19 +1096,13 @@ export const App: React.FC<AppProps> = ({
           />
         ))}
 
-        {/* Live streaming assistant pane (dynamic, re-renders per token). */}
-        {streaming && scrollOffset === 0 && (
-          <MessageView
-            message={{
-              id: 'streaming',
-              role: 'assistant',
-              content: streaming.content,
-              isStreaming: true,
-              tools: streaming.tools,
-            }}
-            terminalColumns={terminalColumns}
-            maxCodeLines={MAX_CODE_LINES}
-          />
+        {/* Footer scroll indicator if user is scrolled up */}
+        {hiddenCountBelow > 0 && (
+          <Box paddingLeft={1} marginTop={0} marginBottom={1}>
+            <Text color="cyan" dimColor>
+              {`▼ ${hiddenCountBelow} message${hiddenCountBelow === 1 ? '' : 's'} below (PageDown / Ctrl+Down to return)`}
+            </Text>
+          </Box>
         )}
 
         {/* Spinning forming loader with tips when agent is thinking */}
