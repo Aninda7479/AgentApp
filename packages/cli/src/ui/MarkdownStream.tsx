@@ -6,6 +6,8 @@ export interface MarkdownStreamProps {
   content: string;
   isStreaming?: boolean;
   verbose?: boolean;
+  terminalColumns?: number;
+  maxCodeLines?: number;
 }
 
 /** Parsed markdown token representing a header, code block, bullet, or text line. */
@@ -69,8 +71,63 @@ export function parseMarkdownTokens(content: string): MarkdownToken[] {
   return tokens;
 }
 
+/** Renders a robust, bordered code block with a header bar and line wrapping safeguards. */
+const CodeBlockView: React.FC<{
+  text: string;
+  language?: string;
+  terminalColumns?: number;
+  maxCodeLines?: number;
+  isStreaming?: boolean;
+}> = ({ text, language, terminalColumns = 80, maxCodeLines, isStreaming = false }) => {
+  const codeWidth = Math.max(20, terminalColumns - 8);
+  const rawLines = text.split('\n');
+  const totalLines = rawLines.length;
+  const shouldTruncate = !isStreaming && maxCodeLines && totalLines > maxCodeLines;
+  const displayLines = shouldTruncate ? rawLines.slice(0, maxCodeLines) : rawLines;
+  const langLabel = language ? ` ${language} ` : ' code ';
+
+  return (
+    <Box flexDirection="column" marginY={1} width={codeWidth}>
+      {/* Code Header Bar */}
+      <Box borderStyle="single" borderColor="cyan" paddingX={1} justifyContent="space-between" width={codeWidth}>
+        <Text bold color="cyan">
+          {langLabel}
+        </Text>
+        <Text color="gray" dimColor>
+          {totalLines} lines
+        </Text>
+      </Box>
+
+      {/* Code Content Body */}
+      <Box borderStyle="single" borderColor="gray" paddingX={1} flexDirection="column" width={codeWidth}>
+        {displayLines.map((line, idx) => {
+          // Safeguard: truncate any single code line that exceeds container width so it never breaks the right border
+          const maxLineLen = codeWidth - 4;
+          const displayLine = line.length > maxLineLen ? line.slice(0, Math.max(1, maxLineLen - 3)) + '...' : line;
+          return (
+            <Text key={idx} color="yellow">
+              {displayLine || ' '}
+            </Text>
+          );
+        })}
+        {shouldTruncate && (
+          <Text color="gray" dimColor italic>
+            {`... (${totalLines - maxCodeLines!} more lines hidden)`}
+          </Text>
+        )}
+      </Box>
+    </Box>
+  );
+};
+
 /** Renders streaming markdown content with syntax-highlighted blocks and a cursor indicator. */
-export const MarkdownStream: React.FC<MarkdownStreamProps> = ({ content, isStreaming = false, verbose = false }) => {
+export const MarkdownStream: React.FC<MarkdownStreamProps> = ({
+  content,
+  isStreaming = false,
+  verbose = false,
+  terminalColumns = 80,
+  maxCodeLines
+}) => {
   const tokens = parseMarkdownTokens(content);
 
   return (
@@ -87,9 +144,14 @@ export const MarkdownStream: React.FC<MarkdownStreamProps> = ({ content, isStrea
         }
         if (token.type === 'codeblock') {
           return (
-            <Box key={index} marginY={1} paddingX={1} borderStyle="single" borderColor="gray">
-              <Text color="yellow">{token.text}</Text>
-            </Box>
+            <CodeBlockView
+              key={index}
+              text={token.text}
+              language={token.language}
+              terminalColumns={terminalColumns}
+              maxCodeLines={maxCodeLines}
+              isStreaming={isStreaming}
+            />
           );
         }
         if (token.type === 'bullet') {

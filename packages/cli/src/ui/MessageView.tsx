@@ -97,12 +97,14 @@ const FileDiffView: React.FC<{
   path: string;
   originalContent: string;
   modifiedContent: string;
-}> = ({ path: filePath, originalContent, modifiedContent }) => {
+  terminalColumns?: number;
+}> = ({ path: filePath, originalContent, modifiedContent, terminalColumns = 80 }) => {
   const diffLines = DiffReviewer.generateDiffLines(originalContent, modifiedContent);
   const addedCount = diffLines.filter(l => l.type === 'add').length;
   const removedCount = diffLines.filter(l => l.type === 'delete').length;
   const chunks = groupDiffIntoChunks(diffLines, 3);
   const isNew = !originalContent;
+  const maxLineLen = Math.max(20, terminalColumns - 10);
 
   return (
     <Box flexDirection="column" marginY={1}>
@@ -123,22 +125,24 @@ const FileDiffView: React.FC<{
             {chunk.lines.map((line, lineIdx) => {
               const lineNum = line.type === 'delete' ? line.oldLineNumber : line.newLineNumber;
               const lineNumStr = String(lineNum).padEnd(5, ' ');
+              const rawContent = line.content || '';
+              const content = rawContent.length > maxLineLen ? rawContent.slice(0, Math.max(1, maxLineLen - 3)) + '...' : rawContent;
               if (line.type === 'add') {
                 return (
                   <Text key={lineIdx} color="green">
-                    {lineNumStr}+ {line.content}
+                    {lineNumStr}+ {content}
                   </Text>
                 );
               } else if (line.type === 'delete') {
                 return (
                   <Text key={lineIdx} color="red">
-                    {lineNumStr}- {line.content}
+                    {lineNumStr}- {content}
                   </Text>
                 );
               } else {
                 return (
                   <Text key={lineIdx} color="gray" dimColor>
-                    {lineNumStr}  {line.content}
+                    {lineNumStr}  {content}
                   </Text>
                 );
               }
@@ -190,7 +194,11 @@ function getToolSummary(tools: ToolCallInfo[], elapsedMs?: number): string {
 
 /** Renders one chat message in the Claude-Code style: `❯` for user turns, an
  *  indented markdown body for assistant turns, tool-call lines, and a footer. */
-export const MessageView: React.FC<{ message: UiMessage }> = ({ message }) => {
+export const MessageView: React.FC<{
+  message: UiMessage;
+  terminalColumns?: number;
+  maxCodeLines?: number;
+}> = ({ message, terminalColumns = 80, maxCodeLines }) => {
   const m = message;
 
   if (m.role === 'user') {
@@ -257,7 +265,12 @@ export const MessageView: React.FC<{ message: UiMessage }> = ({ message }) => {
 
         {/* Render assistant text response */}
         {m.content.length > 0 ? (
-          <MarkdownStream content={m.content} isStreaming={m.isStreaming} />
+          <MarkdownStream
+            content={m.content}
+            isStreaming={m.isStreaming}
+            terminalColumns={terminalColumns}
+            maxCodeLines={maxCodeLines}
+          />
         ) : (
           m.isStreaming && !hasTools && (
             <Text color="blue" dimColor>
@@ -273,6 +286,7 @@ export const MessageView: React.FC<{ message: UiMessage }> = ({ message }) => {
             path={t.args.path as string}
             originalContent={t.originalContent!}
             modifiedContent={t.args.content as string || ''}
+            terminalColumns={terminalColumns}
           />
         ))}
       </Box>

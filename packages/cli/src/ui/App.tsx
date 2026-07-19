@@ -106,9 +106,10 @@ function groupDiffIntoChunks(diffLines: any[], contextSize = 3): DiffChunk[] {
   return chunks;
 }
 
-function estimateMessageHeight(m: UiMessage, columns: number): number {
+function estimateMessageHeight(m: UiMessage, columns: number, maxCodeLines = 15): number {
   const cols = columns && columns > 0 ? columns : 80;
   let height = 0;
+
   if (m.role === 'user') {
     const text = `❯ ${m.content}`;
     height += Math.max(1, Math.ceil(text.length / cols));
@@ -124,6 +125,9 @@ function estimateMessageHeight(m: UiMessage, columns: number): number {
     let contentHeight = 0;
     if (m.tools && m.tools.length > 0) {
       contentHeight += 1; // summary line
+      if (m.isStreaming) {
+        contentHeight += m.tools.length;
+      }
       for (const t of m.tools) {
         if (t.name === 'write_file' && t.result && t.originalContent !== undefined) {
           const diffLines = DiffReviewer.generateDiffLines(t.originalContent, t.args.content as string || '');
@@ -131,21 +135,35 @@ function estimateMessageHeight(m: UiMessage, columns: number): number {
           if (chunks.length > 0) {
             contentHeight += 2; // Title + count
             for (const chunk of chunks) {
-              contentHeight += chunk.lines.length;
+              contentHeight += Math.min(chunk.lines.length, 10);
             }
           }
         }
       }
     }
+
     if (m.content.length > 0) {
-      const lines = m.content.split('\n');
-      for (const line of lines) {
-        if (line.startsWith('```')) continue;
-        contentHeight += Math.max(1, Math.ceil(line.length / Math.max(1, cols - 4)));
+      const tokens = parseMarkdownTokens(m.content);
+      for (const token of tokens) {
+        if (token.type === 'header') {
+          contentHeight += 1;
+        } else if (token.type === 'codeblock') {
+          const rawLines = token.text.split('\n');
+          const totalLines = rawLines.length;
+          const shouldTruncate = !m.isStreaming && maxCodeLines && totalLines > maxCodeLines;
+          const displayCount = shouldTruncate ? maxCodeLines : totalLines;
+          // Code Header Bar (2) + Content Box Border (2) + Display Lines + Truncation Note (1 if truncated) + marginY (2)
+          contentHeight += displayCount + (shouldTruncate ? 1 : 0) + 6;
+        } else if (token.type === 'bullet') {
+          contentHeight += Math.max(1, Math.ceil(token.text.length / Math.max(1, cols - 6)));
+        } else {
+          contentHeight += Math.max(1, Math.ceil(token.text.length / Math.max(1, cols - 4)));
+        }
       }
     } else if (m.isStreaming) {
       contentHeight += 1;
     }
+
     height += contentHeight;
     height += 1; // marginBottom={1}
   }
@@ -153,6 +171,7 @@ function estimateMessageHeight(m: UiMessage, columns: number): number {
 }
 import { Composer } from './Composer.js';
 import { MessageView, type UiMessage, type ToolCallInfo } from './MessageView.js';
+import { parseMarkdownTokens } from './MarkdownStream.js';
 import { CommandPalette, type PaletteItem, type PaletteRow } from './CommandPalette.js';
 import { ModelPicker, type ModelPickItem } from './ModelPicker.js';
 import { DiffReviewer } from '../commands/diff.js';
@@ -918,6 +937,17 @@ export const App: React.FC<AppProps> = ({
   if (isBusy) {
     maxHeight -= 3; // Leave space for loader and tips
   }
+  if (showPalette) {
+    const paletteHeight = Math.min(paletteRows.length, 14) + 3;
+    maxHeight -= paletteHeight;
+  }
+  if (picker.open) {
+    const pickerHeight = Math.min(modelItems.length, 12) + 3;
+    maxHeight -= pickerHeight;
+  }
+  maxHeight = Math.max(5, maxHeight);
+
+  const MAX_CODE_LINES = 15;
 
   // If streaming is active and we are at the bottom (scrollOffset === 0), include streaming height
   if (streaming && scrollOffset === 0) {
@@ -928,7 +958,7 @@ export const App: React.FC<AppProps> = ({
       isStreaming: true,
       tools: streaming.tools,
     };
-    currentHeight += estimateMessageHeight(streamingMsg, terminalColumns);
+    currentHeight += estimateMessageHeight(streamingMsg, terminalColumns, MAX_CODE_LINES);
   }
 
   // Go backwards from messages.length - 1 - scrollOffset
@@ -936,9 +966,9 @@ export const App: React.FC<AppProps> = ({
   const messagesToRender: UiMessage[] = [];
 
   for (let i = endIdx - 1; i >= 0; i--) {
-    const msgHeight = estimateMessageHeight(messages[i], terminalColumns);
+    const msgHeight = estimateMessageHeight(messages[i], terminalColumns, MAX_CODE_LINES);
     let nextHeight = currentHeight + msgHeight;
-    
+
     // If we are about to include the first message (welcome text), also add the banner height (6)
     if (i === 0) {
       nextHeight += 6;
@@ -1042,7 +1072,12 @@ export const App: React.FC<AppProps> = ({
         )}
 
         {messagesToRender.map((m: UiMessage) => (
-          <MessageView key={m.id} message={m} />
+          <MessageView
+            key={m.id}
+            message={m}
+            terminalColumns={terminalColumns}
+            maxCodeLines={MAX_CODE_LINES}
+          />
         ))}
 
         {/* Live streaming assistant pane (dynamic, re-renders per token). */}
@@ -1055,6 +1090,8 @@ export const App: React.FC<AppProps> = ({
               isStreaming: true,
               tools: streaming.tools,
             }}
+            terminalColumns={terminalColumns}
+            maxCodeLines={MAX_CODE_LINES}
           />
         )}
 
