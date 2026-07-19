@@ -1,7 +1,17 @@
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { getConfigDirectory } from './locations.js';
 import { SettingsStorage } from './settings-store.js';
+
+/**
+ * Usage tracking is on the hot path: `trackUsage` is called once per agent turn,
+ * potentially hundreds of times per second across 100+ concurrent agents. The
+ * old implementation did a synchronous full-file read + full-file rewrite of
+ * `usage-log.json` on *every* call — that blocks the single Node event loop and
+ * starves every other agent. We now buffer records in memory and flush them to
+ * disk asynchronously (debounced, atomic), so `trackUsage` never touches disk.
+ */
 
 /** A single recorded usage entry for a model call. */
 export interface ModelUsageRecord {
@@ -101,8 +111,14 @@ export class UsageTracker {
    * rewrite would get progressively slower. */
   private static readonly MAX_RECORDS = 5000;
 
-  /** Loads all usage records from the JSON log file. */
-  public static loadUsage(): ModelUsageRecord[] {
+  /** In-memory buffer of not-yet-persisted records. */
+  private static buffer: ModelUsageRecord[] = [];
+  /** Whether a flush is currently scheduled or in flight. */
+  private static flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private static flushing = false;
+
+  /** Loads all usage records from the JSON log file (disk only). */
+  private static loadUsageFromDisk(): ModelUsageRecord[] {
     const filePath = this.getUsageFilePath();
     if (!fs.existsSync(filePath)) {
       return [];
@@ -115,7 +131,73 @@ export class UsageTracker {
     }
   }
 
-  /** Records a new usage event, calculating cost from pricing. */
+  /** Flushes the in-memory buffer to disk asynchronously (atomic tmp+rename). */
+  public static async flush(): Promise<void> {
+    if (this.flushing) return;
+    this.flushing = true;
+    try {
+      if (this.buffer.length === 0) return;
+      const records = this.loadUsageFromDisk().concat(this.buffer);
+      if (records.length > UsageTracker.MAX_RECORDS) {
+        records.splice(0, records.length - UsageTracker.MAX_RECORDS);
+      }
+      const filePath = this.getUsageFilePath();
+      await fsp.mkdir(path.dirname(filePath), { recursive: true });
+      const tmp = `${filePath}.tmp`;
+      await fsp.writeFile(tmp, JSON.stringify(records, null, 2), 'utf-8');
+      await fsp.rename(tmp, filePath);
+      this.buffer = [];
+    } catch (e) {
+      console.error('Failed to flush usage stats:', e);
+    } finally {
+      this.flushing = false;
+    }
+  }
+
+  /** Best-effort flush on process exit so recent records are not lost. */
+  public static shutdown(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    // Synchronous best-effort write (process is going down anyway).
+    try {
+      if (this.buffer.length === 0) return;
+      const records = this.loadUsageFromDisk().concat(this.buffer);
+      if (records.length > UsageTracker.MAX_RECORDS) {
+        records.splice(0, records.length - UsageTracker.MAX_RECORDS);
+      }
+      const filePath = this.getUsageFilePath();
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, JSON.stringify(records, null, 2), 'utf-8');
+      this.buffer = [];
+    } catch {
+      // ignore — process is exiting
+    }
+  }
+
+  private static scheduleFlush(): void {
+    if (this.flushTimer) return;
+    const delay = Math.max(100, parseInt(process.env.SUPERAGENT_USAGE_FLUSH_MS || '', 10) || 1000);
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      void UsageTracker.flush();
+    }, delay);
+    // Don't keep the process alive just for a usage flush.
+    (this.flushTimer as unknown as { unref?: () => void }).unref?.();
+  }
+
+  /** Loads all usage records (disk + buffered). */
+  public static loadUsage(): ModelUsageRecord[] {
+    const merged = this.loadUsageFromDisk().concat(this.buffer);
+    if (merged.length > UsageTracker.MAX_RECORDS) {
+      return merged.slice(merged.length - UsageTracker.MAX_RECORDS);
+    }
+    return merged;
+  }
+
+  /** Records a new usage event, calculating cost from pricing. Buffer-only;
+   * persistence happens asynchronously via `flush()`. */
   public static trackUsage(
     provider: string,
     model: string,
@@ -126,8 +208,6 @@ export class UsageTracker {
     durationMs?: number,
     status?: 'success' | 'failure'
   ): void {
-    const records = this.loadUsage();
-    
     // Determine rates
     let rates = { inputPrice: 0, outputPrice: 0 };
     if (costPer1MPrompt !== undefined && costPer1MCompletion !== undefined) {
@@ -153,19 +233,11 @@ export class UsageTracker {
       status: status || 'success'
     };
 
-    records.push(newRecord);
-
-    // Rolling window: keep only the most recent records so the on-disk log and
-    // the per-call full rewrite stay bounded across long-running sessions.
-    if (records.length > UsageTracker.MAX_RECORDS) {
-      records.splice(0, records.length - UsageTracker.MAX_RECORDS);
+    this.buffer.push(newRecord);
+    if (this.buffer.length > UsageTracker.MAX_RECORDS) {
+      this.buffer.splice(0, this.buffer.length - UsageTracker.MAX_RECORDS);
     }
-
-    try {
-      fs.writeFileSync(this.getUsageFilePath(), JSON.stringify(records, null, 2), 'utf-8');
-    } catch (e) {
-      console.error('Failed to write usage stats:', e);
-    }
+    this.scheduleFlush();
   }
 
   /** Returns aggregated usage summaries grouped by model. */
@@ -214,6 +286,11 @@ export class UsageTracker {
 
   /** Clears all recorded usage history from disk. */
   public static clearUsage(): void {
+    this.buffer = [];
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
     try {
       const filePath = this.getUsageFilePath();
       if (fs.existsSync(filePath)) {
@@ -223,4 +300,10 @@ export class UsageTracker {
       console.error('Failed to clear usage stats:', e);
     }
   }
+}
+
+// Best-effort flush of buffered usage records when the process exits cleanly,
+// so the last <flush-interval of data is not silently dropped.
+if (typeof process !== 'undefined' && typeof process.once === 'function') {
+  process.once('beforeExit', () => UsageTracker.shutdown());
 }

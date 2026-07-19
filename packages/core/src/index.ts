@@ -10,6 +10,7 @@ export * from './providers/gemini.js';
 export * from './providers/custom.js';
 export * from './providers/models.js';
 export * from './providers/provider-meta.js';
+export * from './providers/connection.js';
 export * from './orchestrator/router.js';
 export * from './orchestrator/provider-health.js';
 export * from './orchestrator/task-classifier.js';
@@ -29,6 +30,12 @@ export {
   isCommandAllowed,
   type AgentEventType
 } from './providers/ai-engine.js';
+export {
+  ConcurrencyLimiter,
+  Semaphore,
+  providerLimiter,
+  toolLimiter
+} from './concurrency/limiter.js';
 export * from './tools/media.js';
 export * from './tools/mcp.js';
 export * from './tools/threed.js';

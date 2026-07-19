@@ -224,6 +224,25 @@ export class ModelCapabilityRegistry {
         accessStatus: 'available',
         reasoningEffortLevels: ['low', 'medium', 'high'],
         moderationLevel: 'low'
+      },
+      // OpenRouter — free-tier default model (no-cost entry point).
+      {
+        id: 'tencent/hy3:free',
+        name: 'Tencent Hy3 (free)',
+        provider: 'openrouter',
+        contextWindow: 200000,
+        maxOutputTokens: 4096,
+        supportsVision: false,
+        supportsTools: true,
+        supportsReasoning: false,
+        inputModalities: ['text'],
+        outputModalities: ['text'],
+        specialties: ['cost-efficient', 'coding'],
+        speedTier: 'fast',
+        intelligenceTier: 'mid',
+        accessStatus: 'available',
+        reasoningEffortLevels: [],
+        moderationLevel: 'low'
       }
     ];
 

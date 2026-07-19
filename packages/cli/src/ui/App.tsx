@@ -125,31 +125,6 @@ export const App: React.FC<AppProps> = ({
   sessionRef.current.activeProvider = initialConn.provider;
   sessionRef.current.activeModel = initialConn.model;
 
-  // Register the free model so it appears in /model even when no registry entry
-  // exists for it. It is a real OpenRouter model, so register it under the
-  // `openrouter` provider so key/base-url resolution uses the core-stored
-  // OpenRouter credential.
-  if (!sessionRef.current.capabilityRegistry.getCapability('tencent/hy3:free')) {
-    sessionRef.current.capabilityRegistry.registerCapability({
-      id: 'tencent/hy3:free',
-      name: 'Tencent Hy3 (free)',
-      provider: 'openrouter',
-      contextWindow: 200000,
-      maxOutputTokens: 4096,
-      supportsVision: false,
-      supportsTools: true,
-      supportsReasoning: false,
-      inputModalities: ['text'],
-      outputModalities: ['text'],
-      specialties: ['cost-efficient'],
-      speedTier: 'fast',
-      intelligenceTier: 'mid',
-      accessStatus: 'available',
-      reasoningEffortLevels: [],
-      moderationLevel: 'low',
-    });
-  }
-
   const [router] = useState(() =>
     buildSlashCommandRouter({
       session: sessionRef.current,
@@ -197,7 +172,7 @@ export const App: React.FC<AppProps> = ({
         id: 'sys-nokey',
         role: 'system',
         content:
-          '⚠ No API key found for this connection. Set OPENROUTER_API_KEY (or configure a provider) so the assistant can respond. Run /model to switch models.',
+          '⚠ No API key is configured for this connection. Add one from the CLI itself — e.g. run `/model provider openrouter <your-api-key>` — or configure a provider in the app settings. Run /model to manage connections.',
       });
     }
     setMessages(msgs);

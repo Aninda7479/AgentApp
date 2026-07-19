@@ -123,7 +123,7 @@ export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRou
     {
       description: 'List or switch AI models and providers',
       aliases: ['m'],
-      usage: '/model [list | set <id> | provider <p>]'
+      usage: '/model [list | set <id> | provider <p> [<apiKey> [<baseUrl>]]]'
     }
   );
 

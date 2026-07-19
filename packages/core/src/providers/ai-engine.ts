@@ -180,6 +180,7 @@ import { enforceNetworkAllowed } from '../security/internet-access.js';
 import { createThreeDTool } from '../tools/threed.js';
 import { chunkedCompactMessages, extractTextContent } from '../memory/compactor.js';
 import { UsageTracker } from '../storage/usage-tracker.js';
+import { providerLimiter, toolLimiter } from '../concurrency/limiter.js';
 import { ComputerUse } from '../automation/computer-use.js';
 import { PlaywrightBrowserEngine } from '../automation/browser.js';
 import { BrowserLifecycleService } from '../automation/browser-service.js';
@@ -936,6 +937,11 @@ Key guidelines:
 
     this.history.push({ role: 'system', content: sysPrompt });
     this.contextWindow = config.contextWindow ?? 128000;
+
+    // Register in the global registry so every live agent is supervised
+    // (count / abortAll / enumeration), even those we did not create via
+    // MultiAgentManager.create (best-of-N candidates, subagents, direct `new`).
+    multiAgentManager.register(this);
   }
 
   private estimateTokens(text: string): number {
@@ -1002,6 +1008,8 @@ Key guidelines:
     attachments?: ImageAttachment[] | string[]
   ): Promise<void> {
     this.abortController = new AbortController();
+    // (Re)register so reused/persistent engines stay visible while active.
+    multiAgentManager.register(this);
 
     let mappedAttachments: ImageAttachment[] | undefined = undefined;
     if (attachments && attachments.length > 0) {
@@ -1149,7 +1157,12 @@ Key guidelines:
             result = `Error: Unknown tool "${tc.name}"`;
           } else {
             try {
-              result = await tool.execute(tc.args);
+              // Bound concurrent tool execution so CPU/IO-bound local work
+              // (local models, media gen, compaction) can't monopolize the
+              // shared event loop across 100+ agents.
+              result = await toolLimiter.run('__tools__', () =>
+                Promise.resolve(tool.execute(tc.args))
+              );
             } catch (err: unknown) {
               result = `Tool error: ${(err as Error).message}`;
             }
@@ -1208,6 +1221,10 @@ Key guidelines:
           error: errMsg
         });
       }
+    } finally {
+      // Drop from the global registry once the agent is no longer running so
+      // `count` / `abortAll` / `list` stay accurate under heavy concurrency.
+      multiAgentManager.unregister(this.sessionId);
     }
   }
 
@@ -1221,7 +1238,12 @@ Key guidelines:
     onEvent: (event: AgentEvent) => void,
     signal?: AbortSignal
   ): Promise<{ fullContent: string; toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> }> {
-    return this.streamFromProvider(onEvent, signal ?? this.abortController?.signal ?? new AbortController().signal);
+    multiAgentManager.register(this);
+    try {
+      return await this.streamFromProvider(onEvent, signal ?? this.abortController?.signal ?? new AbortController().signal);
+    } finally {
+      multiAgentManager.unregister(this.sessionId);
+    }
   }
 
   /**
@@ -1453,17 +1475,21 @@ Key guidelines:
 
     const startMs = Date.now();
     try {
-      if (family === 'anthropic') {
-        res = await this.streamAnthropic(onEvent, signal);
-      } else if (family === 'gemini') {
-        res = await this.streamGemini(onEvent, signal);
-      } else if (family === 'ollama') {
-        res = await this.streamOllama(onEvent, signal);
-      } else {
-        // Everything else (OpenAI, DeepSeek, DeepInfra, OpenRouter, Kimi, …)
-        // speaks the OpenAI-compatible Chat Completions protocol.
-        res = await this.streamOpenAI(onEvent, signal);
-      }
+      // Bound concurrent outbound requests per provider so 100+ agents don't
+      // fire a thundering herd at one provider (→ 429 storms, reroutes, collapse).
+      res = await providerLimiter.run(this.config.provider, async () => {
+        if (family === 'anthropic') {
+          return this.streamAnthropic(onEvent, signal);
+        } else if (family === 'gemini') {
+          return this.streamGemini(onEvent, signal);
+        } else if (family === 'ollama') {
+          return this.streamOllama(onEvent, signal);
+        } else {
+          // Everything else (OpenAI, DeepSeek, DeepInfra, OpenRouter, Kimi, …)
+          // speaks the OpenAI-compatible Chat Completions protocol.
+          return this.streamOpenAI(onEvent, signal);
+        }
+      });
       const durationMs = Date.now() - startMs;
 
       // Compute estimated token usage: 1 token ~ 4 characters
@@ -1918,6 +1944,27 @@ export class MultiAgentManager {
     const engine = new AgentEngine(config);
     this.sessions.set(engine.sessionId, engine);
     return engine;
+  }
+
+  /**
+   * Register an already-constructed engine. Called by `AgentEngine`'s
+   * constructor so every live agent (including best-of-N candidates and
+   * subagents) is visible in one global registry — giving hosts a real
+   * `count`, a working `abortAll()`, and the ability to enumerate/supervise
+   * all concurrent agents.
+   */
+  public register(engine: AgentEngine): void {
+    this.sessions.set(engine.sessionId, engine);
+  }
+
+  /** Remove a session from the registry (called when an agent finishes/aborts). */
+  public unregister(sessionId: string): void {
+    this.sessions.delete(sessionId);
+  }
+
+  /** All currently registered engines. */
+  public list(): AgentEngine[] {
+    return Array.from(this.sessions.values());
   }
 
   /** Get a session by ID */

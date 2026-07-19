@@ -127,6 +127,38 @@ export class ModelSwitcher {
       data: { provider: p, model: context.activeModel }
     };
   }
+
+  /**
+   * Persists API credentials for a provider into Core settings. This is how the
+   * CLI provisions keys itself — the user never exports a key into the terminal
+   * environment. Credentials are read back by Core's connection resolver, so the
+   * engine picks them up on the next turn.
+   */
+  public static setProviderCredentials(
+    context: SessionContext,
+    provider: string,
+    apiKey: string,
+    baseUrl?: string
+  ): CLICommandResult {
+    const p = provider.toLowerCase();
+    const saved = SettingsStorage.loadSettings();
+    const providers = saved.providers ? [...saved.providers] : [];
+    const idx = providers.findIndex((x) => x.id === p);
+    const entry: Record<string, string> = { id: p, name: p, type: 'key', apiKey };
+    if (baseUrl) entry.baseUrl = baseUrl;
+    if (idx >= 0) providers[idx] = { ...providers[idx], ...entry } as any;
+    else providers.push(entry as any);
+    SettingsStorage.saveSettings({ providers });
+
+    // Reflect the newly-connected provider into the live session so the next
+    // turn uses it immediately.
+    context.activeProvider = p;
+    return {
+      success: true,
+      message: `Saved credentials for provider '${p}'. The active connection now uses them — start chatting or run /model to verify.`,
+      data: { provider: p }
+    };
+  }
 }
 
 /** Handles `/model` slash command: lists models or switches active model/provider. */
@@ -141,7 +173,17 @@ export function handleModelCommand(args: string[], context: SessionContext): CLI
   const subCommand = args[0].toLowerCase();
 
   if (subCommand === 'provider' && args[1]) {
-    return ModelSwitcher.switchProvider(context, args[1]);
+    // `/model provider <id> [<apiKey> [<baseUrl>]]` — switch provider, and if a
+    // key is supplied, persist it via Core settings (CLI provisions keys itself).
+    const switched = ModelSwitcher.switchProvider(context, args[1]);
+    if (!switched.success) return switched;
+    if (args[2]) {
+      const base =
+        args[3] ||
+        (args[1].toLowerCase() === 'openrouter' ? 'https://openrouter.ai/api/v1' : undefined);
+      return ModelSwitcher.setProviderCredentials(context, args[1], args[2], base);
+    }
+    return switched;
   }
 
   if (subCommand === 'set' && args[1]) {
