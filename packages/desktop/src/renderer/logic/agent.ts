@@ -42,6 +42,28 @@ export class AgentService {
   }
 
   /**
+   * Provider ids whose wire protocol is NOT OpenAI-compatible Chat Completions
+   * and therefore must NOT be collapsed to the generic `custom` provider. These
+   * are connected as `type: 'custom'` (no API key) but the engine has to route
+   * them through a dedicated family (e.g. Ollama's native `/api/chat`). Omitting
+   * an id here makes the engine POST to `<baseUrl>/chat/completions`, which such
+   * servers reject (Ollama replies with the plaintext "404 page not found").
+   */
+  static readonly NON_OPENAI_COMPATIBLE_PROVIDER_IDS = ['ollama', 'ollama-cloud'];
+
+  /**
+   * Resolves the engine-facing provider id for a connection. Env/key providers
+   * keep their real id; non-OpenAI-compatible local providers (Ollama) keep
+   * theirs too so the engine picks the right wire protocol; every other custom
+   * endpoint collapses to the generic OpenAI-compatible `custom` provider.
+   */
+  static resolveEngineProviderId(provider: ProviderConnection): string {
+    if (provider.type === 'env' || provider.type === 'key') return provider.id;
+    if (AgentService.NON_OPENAI_COMPATIBLE_PROVIDER_IDS.includes(provider.id)) return provider.id;
+    return 'custom';
+  }
+
+  /**
    * Strips the `<providerId>-` prefix from a catalog model id to recover the
    * engine-facing model slug (e.g. "google/gemma-4-31b:free").
    */
@@ -277,7 +299,19 @@ export class AgentService {
       const permissionMode = approvalToPermissionMode(composerApproval, unsandboxed);
 
       const agentConfig = {
-        provider: activeProvider.type === 'env' || activeProvider.type === 'key' ? activeProvider.id : 'custom',
+        // Resolve the engine-facing provider id. Cloud providers connected via an
+        // env var / API key keep their real id. Everything else (type 'custom')
+        // normally collapses to the generic 'custom' provider, which the engine
+        // routes through the OpenAI-compatible Chat Completions wire protocol
+        // (POST <baseUrl>/chat/completions).
+        //
+        // Ollama is registered as a type:'custom' connection but does NOT speak
+        // that protocol — its native endpoint is <baseUrl>/api/chat. Collapsing it
+        // to 'custom' made the engine POST to http://localhost:11434/chat/completions,
+        // which Ollama's server rejects with the plaintext "404 page not found".
+        // Preserve the real id for these non-OpenAI-compatible local providers so
+        // the engine dispatches them through the Ollama family instead.
+        provider: AgentService.resolveEngineProviderId(activeProvider),
         apiKey: activeProvider.apiKey,
         baseUrl: activeProvider.baseUrl || undefined,
         model: resolvedModel,
