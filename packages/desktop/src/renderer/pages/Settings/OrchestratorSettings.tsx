@@ -54,6 +54,8 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
   // Live provider-health diagnostics (the resilience signal).
   const [health, setHealth] = useState<Record<string, { status: string; cooldownRemainingMs: number; consecutiveFailures: number }>>({});
   const [healthLoading, setHealthLoading] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResults, setTestResults] = useState<Record<string, { ok: boolean; latencyMs: number; error?: string; status: string }>>({});
   const [searchQuery, setSearchQuery] = useState('');
 
   const refreshHealth = async () => {
@@ -169,6 +171,32 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
       setMessage({ text: `AI Optimization failed: ${e.message}`, type: 'error' });
     } finally {
       setOptimizing(false);
+    }
+  };
+
+  const handleTestConnections = async () => {
+    if (!ipc) return;
+    setTesting(true);
+    setMessage(null);
+    try {
+      const results = await ipc.invoke('provider-test-connection') as Array<{ providerId: string; ok: boolean; latencyMs: number; error?: string; status: string }>;
+      const map: Record<string, { ok: boolean; latencyMs: number; error?: string; status: string }> = {};
+      for (const r of results) map[r.providerId] = r;
+      setTestResults(map);
+      const okCount = results.filter((r) => r.ok).length;
+      if (results.length === 0) {
+        setMessage({ text: 'No configured (free) providers found to test. Add a provider key in Settings → AI Config.', type: 'error' });
+      } else {
+        setMessage({
+          text: `${okCount}/${results.length} connection(s) succeeded.${okCount < results.length ? ' Check the rows below for failures.' : ''}`,
+          type: okCount === results.length ? 'success' : 'error'
+        });
+      }
+      refreshHealth();
+    } catch (e: any) {
+      setMessage({ text: `Connection test failed: ${e.message}`, type: 'error' });
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -511,10 +539,16 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
               Live status of every provider the Orchestrator has contacted. Throttled providers are avoided and rerouted automatically — here's the why.
             </p>
           </div>
-          <Button onClick={refreshHealth} variant="ghost" size="sm" disabled={healthLoading}>
-            <RefreshCw className={`w-3.5 h-3.5 ${healthLoading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={handleTestConnections} variant="ghost" size="sm" disabled={testing}>
+              <Zap className={`w-3.5 h-3.5 ${testing ? 'animate-spin' : ''}`} />
+              <span>{testing ? 'Testing…' : 'Test Connections'}</span>
+            </Button>
+            <Button onClick={refreshHealth} variant="ghost" size="sm" disabled={healthLoading}>
+              <RefreshCw className={`w-3.5 h-3.5 ${healthLoading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </Button>
+          </div>
         </div>
 
         {Object.keys(health).length === 0 ? (
@@ -556,6 +590,31 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {Object.keys(testResults).length > 0 && (
+          <div className="pt-2 border-t border-brand-border/40">
+            <div className="text-[10px] uppercase tracking-wider text-brand-textMuted mb-2">Last Connection Test</div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {Object.entries(testResults).map(([provider, r]) => {
+                const dotColor = r.ok ? 'var(--neon-constructive)' : 'var(--neon-destructive)';
+                return (
+                  <div key={provider} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-brand-border/40 bg-brand-bg/40" title={r.error || ''}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Circle size={9} className="flex-shrink-0" style={{ fill: dotColor, color: dotColor }} />
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold capitalize truncate">{provider}</div>
+                        <div className="text-[10px] text-brand-textMuted truncate">{r.ok ? `Reachable · ${r.latencyMs}ms` : (r.error || 'Failed').slice(0, 80)}</div>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-[11px] font-semibold" style={{ color: dotColor }}>{r.ok ? 'OK' : 'FAIL'}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

@@ -16,6 +16,7 @@ import {
   buildRequest,
   OrchestratorStorage,
   buildRouterPool,
+  isFreeModel,
   PlaywrightBrowserEngine,
   ComputerUse,
   getUserDataDirectory,
@@ -305,33 +306,23 @@ async function autoDetectProviders() {
 async function optimizeInstructionsByAI() {
   const settings = SettingsStorage.loadSettings();
   const orchestratorSettings = settings.orchestrator || settings.modelGov;
+  const freeOnly = !!orchestratorSettings?.freeOnly;
   const govEnabledIds = orchestratorSettings?.enabledModels || [];
-  
-  const activeModels = (settings.models || []).filter(m => 
-    govEnabledIds.includes(m.id) || 
+
+  const activeModels = (settings.models || []).filter(m =>
+    govEnabledIds.includes(m.id) ||
     govEnabledIds.includes(`${m.providerId}-${m.id}`)
   );
 
   const currentInstructions = OrchestratorStorage.loadInstructions();
-  const providers = settings.providers || [];
-  const activeProvider = providers.find(p => p.apiKey);
-  const activeModelSetting = settings.models?.find(m => m.enabled && m.providerId === activeProvider?.id);
 
-  if (!activeProvider || !activeModelSetting) {
-    throw new Error('No active AI provider with configured API key found to perform prompt optimization.');
-  }
+  // Free-aware, enabled pool; route a tool-free completion through the
+  // orchestrator (auto-fallback across healthy providers). Mirrors the desktop
+  // fix: far faster than a full agentic AgentEngine and avoids Gemini's
+  // additionalProperties rejection.
+  const pool = buildRouterPool(settings.models ?? [])
+    .filter((m) => m.enabled && (!freeOnly || isFreeModel(m)));
 
-  const engineConfig = {
-    provider: activeProvider.id as any,
-    apiKey: activeProvider.apiKey,
-    baseUrl: activeProvider.baseUrl,
-    model: activeModelSetting.id.replace(`${activeProvider.id}-`, ''),
-    systemPrompt: 'You are a professional system prompt optimizer specializing in AI model routing and orchestration.',
-    temperature: 0.3
-  };
-
-  const engine = new AgentEngine(engineConfig, `optimize-prompt-${Date.now()}`);
-  
   const optimizationPrompt = `You are a system prompt optimizer. You are optimizing the Orchestrator System Instructions for a Sakana Fugu-class routing conductor.
 
 Here is the current pool of enabled models:
@@ -344,7 +335,7 @@ ${currentInstructions}
 
 Optimization Goal: ${orchestratorSettings?.optimizationGoal || 'balanced'}
 Routing Strategy: ${orchestratorSettings?.routingStrategy || 'router'}
-${orchestratorSettings?.freeOnly ? 'NOTE: Free-Only mode is enabled. The Orchestrator should only utilize free, local, or custom models. Avoid paid options.' : ''}
+${freeOnly ? 'NOTE: Free-Only mode is enabled. The Orchestrator should only utilize free, local, or custom models. Avoid paid options.' : ''}
 
 Please optimize these system instructions to:
 1. Make the categorization boundaries more precise for the specific models in this pool.
@@ -352,12 +343,16 @@ Please optimize these system instructions to:
 3. Keep the output strictly in Markdown format.
 4. Do NOT wrap the output in markdown code blocks (e.g. \`\`\`markdown). Return ONLY the direct markdown text of the system instructions.`;
 
+  const router = new OrchestratorRouter({ reasoningEffort: 'low' });
+  const request = { messages: [{ role: 'user' as const, content: optimizationPrompt }] };
+
   let optimizedContent = '';
-  await engine.run(optimizationPrompt, (event) => {
-    if (event.type === 'token' && event.content) {
-      optimizedContent += event.content;
-    }
-  });
+  try {
+    const res = await router.completeWithFreePool(request, pool, settings.providers ?? []);
+    optimizedContent = res.content || '';
+  } catch (err: unknown) {
+    throw new Error(`AI optimization failed: ${(err as Error).message}`);
+  }
 
   if (!optimizedContent || optimizedContent.trim().length === 0) {
     throw new Error('AI engine returned empty optimization response.');

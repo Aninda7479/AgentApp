@@ -125,6 +125,47 @@ export interface ToolDefinition {
   execute: (args: Record<string, any>, config?: any) => Promise<any>;
 }
 
+/**
+ * Google's Gemini `functionDeclarations[].parameters` accepts only a strict
+ * subset of JSON Schema (a proto-derived Schema type). Standard-JSON-Schema
+ * keywords like `additionalProperties`, `$schema`, `strict`, and `examples`
+ * are rejected outright with HTTP 400
+ * ("Unknown name \"additionalProperties\" ... Cannot find field"), which fails
+ * the entire request and every tool call routed to Gemini.
+ *
+ * This recursively deep-copies a tool schema and drops the unsupported keywords
+ * while preserving everything Gemini does understand (type, properties,
+ * required, enum, description, format, nullable, items). The OpenAI path keeps
+ * `additionalProperties: false` (needed for its `strict: true` mode) — this
+ * sanitizer is ONLY applied on the Gemini branch.
+ */
+const GEMINI_UNSUPPORTED_SCHEMA_KEYS = new Set([
+  'additionalProperties',
+  '$schema',
+  'strict',
+  'examples',
+  'default',
+  '$id',
+  '$ref',
+  'definitions',
+  '$defs'
+]);
+
+export function sanitizeSchemaForGemini(schema: unknown): any {
+  if (Array.isArray(schema)) {
+    return schema.map((item) => sanitizeSchemaForGemini(item));
+  }
+  if (schema && typeof schema === 'object') {
+    const out: Record<string, any> = {};
+    for (const [key, value] of Object.entries(schema as Record<string, unknown>)) {
+      if (GEMINI_UNSUPPORTED_SCHEMA_KEYS.has(key)) continue;
+      out[key] = sanitizeSchemaForGemini(value);
+    }
+    return out;
+  }
+  return schema;
+}
+
 // ─── Built-in Agent Tools ─────────────────────────────────────────────────────
 // Matching the same tools used by OpenCode/Codex (file ops, search, shell)
 
@@ -145,7 +186,7 @@ import { BrowserLifecycleService } from '../automation/browser-service.js';
 import { resolveProviderFamily, resolveBaseUrl } from './provider-meta.js';
 import { capabilityRegistry } from './models.js';
 import { BestOfNStrategy, synthesizeEnsemble } from '../orchestrator/best-of-n.js';
-import { ContentBlock, ImageAttachment, type CompletionRequest, type AIProvider, type ReasoningEffort } from '../types/agent.js';
+import { ContentBlock, ImageAttachment, type CompletionRequest, type AIProvider, type ReasoningEffort, type ToolCall } from '../types/agent.js';
 import { OrchestratorRouter } from '../orchestrator/router.js';
 import type { RouterModel, RerouteEvent } from '../orchestrator/router.js';
 import { BYOKProviderManager } from './byok.js';
@@ -772,6 +813,11 @@ export interface ChatMessage {
   content: string | ContentBlock[];
   toolCallId?: string;
   name?: string;
+  /** For assistant turns that invoked tools: the calls made. Echoed back to the
+   *  provider on the next turn so assistant↔tool messages stay correctly paired
+   *  (OpenAI requires it) and the model can see its own prior action. Without
+   *  this, a weak model re-issues the same call forever (the runaway-loop bug). */
+  toolCalls?: ToolCall[];
 }
 
 // ─── Provider Config ──────────────────────────────────────────────────────────
@@ -1003,6 +1049,12 @@ Key guidelines:
     const MAX_ITERATIONS = 10; // prevent infinite loops
     let autoCompactions = 0;
     const MAX_AUTO_COMPACTIONS = 3;
+    // Runaway-loop guard: detects a model re-issuing the identical tool call
+    // (it can't "see" its own prior action when tool calls aren't persisted, or
+    // simply gets stuck). Breaks early instead of burning calls to MAX_ITERATIONS.
+    let lastToolSig = '';
+    let consecutiveSameToolSig = 0;
+    const MAX_SAME_TOOL_REPEATS = 2; // allow one legit retry, stop on the 3rd identical turn
 
     const emitContext = () => {
       onEvent({
@@ -1043,13 +1095,40 @@ Key guidelines:
           throw streamErr;
         }
 
-        // Append assistant message to history
-        this.history.push({ role: 'assistant', content: fullContent });
+        // Append assistant message to history (including the tool calls it made,
+        // so the next turn can echo them back and the model sees its own action).
+        this.history.push({
+          role: 'assistant',
+          content: fullContent,
+          toolCalls: toolCalls.length > 0
+            ? toolCalls.map((tc) => ({ id: tc.id, toolName: tc.name, args: tc.args ?? {}, status: 'completed' as const }))
+            : undefined
+        });
         emitContext();
 
         // ── No tool calls → done ────────────────────────────────────────
         if (toolCalls.length === 0) {
           onEvent({ type: 'done', sessionId: this.sessionId });
+          return;
+        }
+
+        // ── Runaway-loop guard ──────────────────────────────────────────
+        const toolSig = toolCalls
+          .map((tc) => `${tc.name}:${JSON.stringify(tc.args ?? {})}`)
+          .sort()
+          .join('|');
+        if (toolSig === lastToolSig) {
+          consecutiveSameToolSig++;
+        } else {
+          consecutiveSameToolSig = 0;
+          lastToolSig = toolSig;
+        }
+        if (consecutiveSameToolSig >= MAX_SAME_TOOL_REPEATS) {
+          onEvent({
+            type: 'error',
+            sessionId: this.sessionId,
+            error: 'Agent is repeating the same tool call without making progress. Stopping to avoid an infinite loop.'
+          });
           return;
         }
 
@@ -1650,17 +1729,42 @@ Key guidelines:
     const geminiHost = resolveBaseUrl('google', this.config.baseUrl).replace(/\/+$/, '');
     const url = `${geminiHost}/v1beta/models/${model}:streamGenerateContent?key=${this.config.apiKey}&alt=sse`;
 
-    // Convert to Gemini format
-    const contents = this.history
-      .filter(m => m.role !== 'system')
-      .map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: typeof m.content === 'string'
-          ? [{ text: m.content }]
-          : m.content
-              .filter((b): b is { type: 'text'; text: string } => b.type === 'text')
-              .map(b => ({ text: b.text }))
-      }));
+    // Convert to Gemini format, preserving tool calls (functionCall) and tool
+    // results (functionResponse) so multi-turn tool use stays valid. Gemini
+    // requires a model(functionCall) turn to be followed by a user
+    // (functionResponse) turn — the persisted toolCalls make that possible.
+    const contents: Array<{ role: string; parts: Array<Record<string, unknown>> }> = [];
+    for (const m of this.history) {
+      if (m.role === 'system') continue;
+      if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
+        const parts: Array<Record<string, unknown>> = [];
+        if (typeof m.content === 'string' && m.content) {
+          parts.push({ text: m.content });
+        } else if (Array.isArray(m.content)) {
+          for (const b of m.content) if (b.type === 'text' && b.text) parts.push({ text: b.text });
+        }
+        for (const tc of m.toolCalls) {
+          parts.push({ functionCall: { name: tc.toolName, args: tc.args ?? {} } });
+        }
+        contents.push({ role: 'model', parts });
+      } else if (m.role === 'tool') {
+        const text = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+        contents.push({
+          role: 'user',
+          parts: [{ functionResponse: { name: m.name || 'tool', response: { result: text } } }]
+        });
+      } else {
+        const role = m.role === 'assistant' ? 'model' : 'user';
+        const parts: Array<Record<string, unknown>> = [];
+        if (typeof m.content === 'string') {
+          if (m.content) parts.push({ text: m.content });
+        } else if (Array.isArray(m.content)) {
+          for (const b of m.content) if (b.type === 'text' && b.text) parts.push({ text: b.text });
+        }
+        if (parts.length === 0) parts.push({ text: '' });
+        contents.push({ role, parts });
+      }
+    }
 
     const systemInstruction = this.history.find(m => m.role === 'system')?.content;
 
@@ -1668,7 +1772,9 @@ Key guidelines:
       functionDeclarations: this.tools.map(t => ({
         name: t.name,
         description: t.description,
-        parameters: t.parameters
+        // Gemini rejects standard JSON-Schema keywords like `additionalProperties`
+        // (HTTP 400). Strip them before sending; see sanitizeSchemaForGemini.
+        parameters: sanitizeSchemaForGemini(t.parameters)
       }))
     }];
 

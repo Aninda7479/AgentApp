@@ -63,19 +63,50 @@ export function toAnthropicContent(content: string | ContentBlock[]): string | A
 /** Shape emitted for the OpenAI / OpenAI-compatible Chat Completions API. */
 export interface OpenAIMessage {
   role: string;
-  content: string | ContentBlock[];
+  content: string | ContentBlock[] | null;
   name?: string;
   tool_call_id?: string;
+  tool_calls?: Array<{
+    id: string;
+    type: 'function';
+    function: { name: string; arguments: string };
+  }>;
 }
 
-/** Convert engine history into OpenAI chat messages (arrays pass through). */
+/**
+ * Convert engine history into OpenAI chat messages. Assistant turns that invoked
+ * tools emit their `tool_calls` (so the provider can pair them with the
+ * subsequent `tool` messages); plain turns pass through. This pairing is
+ * mandatory for OpenAI — an unpaired `tool` message is rejected.
+ */
 export function toOpenAIMessages(history: ChatMessage[]): OpenAIMessage[] {
-  return history.map((m) => ({
-    role: m.role,
-    content: m.content,
-    ...(m.name ? { name: m.name } : {}),
-    ...(m.toolCallId ? { tool_call_id: m.toolCallId } : {})
-  }));
+  const out: OpenAIMessage[] = [];
+  for (const m of history) {
+    if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
+      out.push({
+        role: 'assistant',
+        content: typeof m.content === 'string' ? (m.content || null) : m.content,
+        tool_calls: m.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: 'function',
+          function: { name: tc.toolName, arguments: JSON.stringify(tc.args ?? {}) }
+        }))
+      });
+    } else if (m.role === 'tool') {
+      out.push({
+        role: 'tool',
+        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+        tool_call_id: m.toolCallId || 'unknown'
+      });
+    } else {
+      out.push({
+        role: m.role,
+        content: m.content,
+        ...(m.name ? { name: m.name } : {})
+      });
+    }
+  }
+  return out;
 }
 
 /** Shape emitted for the Anthropic Messages API. */
@@ -114,6 +145,21 @@ export function toAnthropicMessages(history: ChatMessage[]): AnthropicConversati
           }
         ]
       });
+    } else if (msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0) {
+      // Assistant turn that invoked tools: text + tool_use blocks. Anthropic
+      // requires the tool_use id to match the later tool_result.
+      const blocks: Array<Record<string, unknown>> = [];
+      const text = typeof msg.content === 'string' ? msg.content : '';
+      if (text) blocks.push({ type: 'text', text });
+      for (const tc of msg.toolCalls) {
+        blocks.push({
+          type: 'tool_use',
+          id: tc.id,
+          name: tc.toolName,
+          input: tc.args ?? {}
+        });
+      }
+      messages.push({ role: 'assistant', content: blocks });
     } else {
       messages.push({
         role: msg.role === 'assistant' ? 'assistant' : 'user',

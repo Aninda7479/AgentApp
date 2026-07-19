@@ -2,7 +2,7 @@ import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, desktopCapt
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber, resolveProviderFamily, resolveBaseUrl } from '@superagent/core';
+import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, isFreeModel, BYOKProviderManager, createProviderAdapter, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber, resolveProviderFamily, resolveBaseUrl } from '@superagent/core';
 
 // Set a custom userData path so all app data lives in <home>/.superagent.
 app.setPath('userData', getUserDataDirectory());
@@ -648,6 +648,7 @@ safeHandle('orchestrator-update-instructions', async () => {
 safeHandle('orchestrator-optimize-instructions-by-ai', async () => {
   const settings = SettingsStorage.loadSettings();
   const orchestratorSettings = settings.orchestrator || settings.modelGov;
+  const freeOnly = !!orchestratorSettings?.freeOnly;
   const govEnabledIds = orchestratorSettings?.enabledModels || [];
 
   const activeModels = (settings.models || []).filter(m =>
@@ -656,25 +657,13 @@ safeHandle('orchestrator-optimize-instructions-by-ai', async () => {
   );
   const currentInstructions = OrchestratorStorage.loadInstructions();
 
-  const providers = settings.providers || [];
-  const activeProvider = providers.find(p => p.apiKey);
-  const activeModelSetting = settings.models?.find(m => m.enabled && m.providerId === activeProvider?.id);
+  // Build the free-aware, enabled pool the optimizer routes across. Routing
+  // through the orchestrator (instead of a single brittle AgentEngine with all
+  // 20+ tools) makes the optimization tool-free, far faster, and resilient to a
+  // rate-limited/failing free provider (it auto-fallbacks to the next healthy).
+  const pool = buildRouterPool(settings.models ?? [])
+    .filter((m) => m.enabled && (!freeOnly || isFreeModel(m)));
 
-  if (!activeProvider || !activeModelSetting) {
-    throw new Error('No active AI provider with configured API key found to perform prompt optimization.');
-  }
-
-  const engineConfig = {
-    provider: activeProvider.id as any,
-    apiKey: activeProvider.apiKey,
-    baseUrl: activeProvider.baseUrl,
-    model: activeModelSetting.id.replace(`${activeProvider.id}-`, ''),
-    systemPrompt: 'You are a professional system prompt optimizer specializing in AI model routing and orchestration.',
-    temperature: 0.3
-  };
-
-  const engine = new AgentEngine(engineConfig, `optimize-prompt-${Date.now()}`);
-  
   const optimizationPrompt = `You are a system prompt optimizer. You are optimizing the Orchestrator System Instructions for a Sakana Fugu-class routing conductor.
 
 Here is the current pool of enabled models:
@@ -687,7 +676,7 @@ ${currentInstructions}
 
 Optimization Goal: ${orchestratorSettings?.optimizationGoal || 'balanced'}
 Routing Strategy: ${orchestratorSettings?.routingStrategy || 'router'}
-${orchestratorSettings?.freeOnly ? 'NOTE: Free-Only mode is enabled. The Orchestrator should only utilize free, local, or custom models. Avoid paid options.' : ''}
+${freeOnly ? 'NOTE: Free-Only mode is enabled. The Orchestrator should only utilize free, local, or custom models. Avoid paid options.' : ''}
 
 Please optimize these system instructions to:
 1. Make the categorization boundaries more precise for the specific models in this pool.
@@ -695,15 +684,21 @@ Please optimize these system instructions to:
 3. Keep the output strictly in Markdown format.
 4. Do NOT wrap the output in markdown code blocks (e.g. \`\`\`markdown). Return ONLY the direct markdown text of the system instructions.`;
 
+  const router = new OrchestratorRouter({ reasoningEffort: 'low' });
+  const request = { messages: [{ role: 'user' as const, content: optimizationPrompt }] };
+
   let optimizedContent = '';
-  await engine.run(optimizationPrompt, (event) => {
-    if (event.type === 'token' && event.content) {
-      optimizedContent += event.content;
-    }
-  });
+  try {
+    const res = await router.completeWithFreePool(request, pool, settings.providers ?? []);
+    optimizedContent = res.content || '';
+  } catch (err: unknown) {
+    throw new Error(`AI optimization failed: ${(err as Error).message}`);
+  }
 
   if (!optimizedContent || optimizedContent.trim().length === 0) {
-    throw new Error('AI engine returned empty optimization response.');
+    throw new Error(
+      'AI engine returned empty optimization response. Verify at least one free provider is reachable (Settings → Orchestrator → Test Connections) and retry.'
+    );
   }
 
   optimizedContent = optimizedContent
@@ -720,6 +715,71 @@ Please optimize these system instructions to:
 // providers are available / locked / throttled and why — rather than a flat label.
 safeHandle('provider-health-diagnostics', () => {
   return providerHealth.getDiagnostics();
+});
+
+/**
+ * Test Connection — pings each (optionally free-only) configured provider with a
+ * single tiny completion and reports pass/fail + latency. Lets the user verify
+ * their free connections are reachable before relying on the Orchestrator, and
+ * refreshes provider-health so a previously throttled provider is re-checked
+ * for real. Reuses the same adapter primitive the router uses.
+ */
+safeHandle('provider-test-connection', async (_event, { providerId }: { providerId?: string } = {}) => {
+  const settings = SettingsStorage.loadSettings();
+  const gov = settings.orchestrator || settings.modelGov;
+  const freeOnly = !!gov?.freeOnly;
+
+  const configured = (settings.providers || []).filter((p) =>
+    p.apiKey || p.id === 'ollama' || p.id === 'custom' || p.type === 'custom'
+  );
+
+  let targets = providerId
+    ? configured.filter((p) => p.id === providerId)
+    : configured;
+
+  // Free-Only mode: only exercise providers that own at least one free, enabled model.
+  if (freeOnly && !providerId) {
+    const freeProviderIds = new Set(
+      buildRouterPool(settings.models ?? [])
+        .filter((m) => m.enabled && isFreeModel(m))
+        .map((m) => m.providerId)
+    );
+    targets = targets.filter((p) => freeProviderIds.has(p.id));
+  }
+
+  const results: Array<{ providerId: string; ok: boolean; latencyMs: number; error?: string; status: string }> = [];
+
+  for (const p of targets) {
+    const cfg = { provider: p.id as any, apiKey: p.apiKey, baseUrl: p.baseUrl, modelName: undefined as string | undefined };
+    const modelSetting =
+      (settings.models || []).find((m) => m.providerId === p.id && m.enabled) ||
+      (settings.models || []).find((m) => m.providerId === p.id);
+    if (modelSetting) cfg.modelName = modelSetting.id.replace(`${p.id}-`, '');
+
+    const startMs = Date.now();
+    try {
+      const adapter = createProviderAdapter(cfg as any);
+      await adapter.complete({
+        messages: [{ role: 'user', content: 'Reply with exactly the word: ok' }],
+        maxTokens: 4
+      });
+      const latencyMs = Date.now() - startMs;
+      providerHealth.recordSuccess(p.id);
+      results.push({ providerId: p.id, ok: true, latencyMs, status: providerHealth.getStatus(p.id) });
+    } catch (err: unknown) {
+      const latencyMs = Date.now() - startMs;
+      providerHealth.recordFailure(p.id, err);
+      results.push({
+        providerId: p.id,
+        ok: false,
+        latencyMs,
+        error: (err as Error).message || String(err),
+        status: providerHealth.getStatus(p.id)
+      });
+    }
+  }
+
+  return results;
 });
 
 safeHandle('browser-navigate', async (_event, { url }) => {

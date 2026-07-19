@@ -11,7 +11,7 @@ import {
 import { classifyTask } from './task-classifier.js';
 import { BYOKProviderManager } from '../providers/byok.js';
 import { createProviderAdapter } from '../providers/models.js';
-import { SettingsStorage } from '../storage/settings-store.js';
+import { SettingsStorage, type ProviderSettings } from '../storage/settings-store.js';
 import { OrchestratorStorage } from './storage.js';
 import { providerHealth, classifyProviderError } from './provider-health.js';
 import { deriveReasoningEffortFromDifficulty, candidateCountForDifficulty } from './reasoning-effort.js';
@@ -25,6 +25,33 @@ import {
   findRouterModel,
   type ModalityBridgePlan
 } from './modality-bridge.js';
+
+/**
+ * Returns true when a model is free to use (no per-token cost). Desktop/web only
+ * have `settings.models` (ModelSettings) at runtime — not the renderer catalog's
+ * `free` flag — so free-ness is derived from pricing: a model is free when both
+ * its input and output per-1M rates are zero/absent, OR when it is a local
+ * provider (ollama/custom) which never bills per token. This mirrors the catalog
+ * `m.free` heuristic the Orchestrator Settings UI uses, so the desktop "Free
+ * Only" toggle and the runtime pool agree.
+ */
+export function isFreeModel(m: {
+  providerId?: string;
+  pricing?: { inputPer1M?: string; outputPer1M?: string };
+  free?: boolean;
+}): boolean {
+  if (m.free === true) return true;
+  const provider = (m.providerId || '').toLowerCase();
+  if (provider === 'ollama' || provider === 'custom') return true;
+  const rate = (v?: string): number => {
+    if (v == null) return 0;
+    const n = parseFloat(String(v).replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const input = rate(m.pricing?.inputPer1M);
+  const output = rate(m.pricing?.outputPer1M);
+  return input === 0 && output === 0;
+}
 
 /** Options for the Orchestrator router. */
 export interface RouterOptions {
@@ -213,6 +240,62 @@ export class OrchestratorRouter {
       options?.reasoningEffort,
       options?.onReroute
     );
+  }
+
+  /**
+   * Tool-free, free-aware completion used for lightweight orchestration tasks
+   * (e.g. AI-optimizing the Orchestrator's own system instructions). Unlike the
+   * agentic `AgentEngine`, this sends NO tools, so:
+   *   - it is far cheaper/faster (no 20+ tool schemas in the payload), and
+   *   - it sidesteps provider-specific schema quirks (Gemini rejects
+   *     `additionalProperties`, which the agentic path otherwise trips on).
+   *
+   * It builds a `BYOKProviderManager` from only the providers that own a model
+   * in `pool` (so a `freeOnly`/`enabled` filtered pool keeps the call within
+   * that scope), routes the request to the best pool model via
+   * {@link routeModelForTask}, then runs it through the health-aware
+   * {@link completeWithFallback} so a rate-limited/failing free provider is
+   * automatically skipped in favour of the next healthy one.
+   *
+   * @throws a clear, actionable error (not an opaque "no provider" message) when
+   *         the pool is empty or no configured provider has an API key.
+   */
+  public async completeWithFreePool(
+    request: CompletionRequest,
+    pool: RouterModel[],
+    providers: ProviderSettings[]
+  ): Promise<CompletionResponse> {
+    if (!pool || pool.length === 0) {
+      throw new Error(
+        'No enabled/free models are configured for the Orchestrator. Enable at least one model in Settings → Orchestrator (or turn off Free Only mode).'
+      );
+    }
+
+    const byok = new BYOKProviderManager();
+    const providerIds = Array.from(new Set(pool.map((m) => m.providerId)));
+    let registered = 0;
+    for (const pid of providerIds) {
+      const p = providers.find((x) => x.id === pid && x.apiKey);
+      if (!p) continue;
+      // Use the first model in the (enabled/free) pool for this provider as its
+      // default; completeWithFallback will prefer the overall best-routed
+      // provider first and fall back to the others by their own model.
+      const best = pool.find((m) => m.providerId === pid);
+      if (!best) continue;
+      const modelId = OrchestratorRouter.stripProviderPrefix(pid, best.id);
+      byok.registerKey({ provider: pid as AIProvider, apiKey: p.apiKey, baseUrl: p.baseUrl, modelName: modelId });
+      registered++;
+    }
+
+    if (registered === 0) {
+      throw new Error(
+        'No API key is configured for any enabled/free provider. Add a provider key in Settings → Providers, then retry (or use Test Connections to verify).'
+      );
+    }
+
+    const routed = OrchestratorRouter.routeModelForTask(lastUserText(request), pool, request);
+    const preferredProvider = (routed?.provider as AIProvider) || undefined;
+    return this.completeWithFallback(request, byok, preferredProvider);
   }
 
   static stripProviderPrefix(providerId: string, id: string): string {
