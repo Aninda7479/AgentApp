@@ -1,119 +1,45 @@
-# SuperAgent — headless `/auto-improve` loop for a VPS
+# SuperAgent Autonomous Auto-Improvement Drivers (`autodev/`)
 
-Drives the skills already in `.claude/skills/` (`auto-improve`, `orchestrator-dev`,
-`art-director`, `ux-critic`) via headless Claude Code on a schedule, committing
-only to a side branch. Merging that branch into `main` stays a manual decision —
-nothing here does it automatically.
+This directory contains the drivers, pre-flight verification tools, and configuration for the SuperAgent autonomous self-improvement system.
 
-## 1. Provision the VPS
+## Documentation & Setup Guides
 
-```bash
-sudo adduser --disabled-password --gecos "" superagent
-sudo apt-get update && sudo apt-get install -y jq git
+Complete guides and documentation have been moved to [`docs/auto-improvement-system/`](../docs/auto-improvement-system/):
 
-# Node 20 (matches this repo's CI)
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs
+- **[Master System Guide](../docs/auto-improvement-system/README.md)** — Architecture, 8 skills, Playwright isolation fix, pause/resume
+- **[Windows Desktop & PC Setup Guide](../docs/auto-improvement-system/windows-desktop-setup.md)** — Windows Task Scheduler, Desktop Agent App, PowerShell setup
+- **[VPS & Linux Setup Guide](../docs/auto-improvement-system/vps-linux-setup.md)** — Headless Linux, systemd service setup
+- **[Branch & PR Review Workflow](../docs/auto-improvement-system/branch-pr-workflow.md)** — How to review auto-generated PRs
+- **[Tools Verification Guide](../docs/auto-improvement-system/tools-verification.md)** — Pre-flight tool check details
 
-# Claude Code CLI
-sudo npm install -g @anthropic-ai/claude-code
+---
+
+## Directory Contents
+
+| File | Purpose |
+|------|---------|
+| `run-auto-improve.ps1` | Windows PowerShell loop driver (Claude Code CLI) |
+| `run-auto-improve.sh` | Linux/Bash loop driver (Claude Code CLI) |
+| `run-auto-improve-superagent.ps1` | Windows PowerShell loop driver (SuperAgent CLI) |
+| `run-auto-improve-superagent.sh` | Linux/Bash loop driver (SuperAgent CLI) |
+| `verify-tools.ps1` | Pre-flight tool verification script (Windows) |
+| `verify-tools.sh` | Pre-flight tool verification script (Linux) |
+| `loop-config.json` | Schedule configuration & branch settings |
+| `superagent-auto-improve.env.example` | Environment variable configuration template |
+| `superagent-auto-improve@.service` | Systemd template service unit (Linux) |
+
+---
+
+## Quick Verification
+
+Before running any driver, run pre-flight verification:
+
+**Windows**:
+```powershell
+.\autodev\verify-tools.ps1
 ```
 
-## 2. Authenticate Claude Code
-
-Either run `claude setup-token` once (interactively, as the `superagent` user)
-and put the resulting token in `CLAUDE_CODE_OAUTH_TOKEN`, or set
-`ANTHROPIC_API_KEY` directly. Both go in `/etc/superagent-auto-improve.env`
-(see `superagent-auto-improve.env.example`) — **not** inside the repo.
-
-This key belongs to Claude Code, the thing doing the editing. It's separate
-from any provider keys you add later inside SuperAgent itself for its own
-users — those live in SuperAgent's own settings store.
-
-## 3. Clone the repo and create the side branch
-
+**Linux**:
 ```bash
-sudo -u superagent git clone https://github.com/Aninda7479/AgentApp.git /opt/superagent/AgentApp
-cd /opt/superagent/AgentApp
-sudo -u superagent git checkout -b side-dev origin/main
-sudo -u superagent git push -u origin side-dev
+./autodev/verify-tools.sh
 ```
-
-> The remote currently has `main` and `agent-development` — no `side-dev` yet.
-> `agent-development`'s recent history already looks like output from these
-> same skills. If that's the branch you've actually been using, set
-> `BRANCH=agent-development` in the env file instead of creating a new one.
-
-## 4. Install the driver
-
-```bash
-sudo cp run-auto-improve.sh /opt/superagent/run-auto-improve.sh
-sudo chmod +x /opt/superagent/run-auto-improve.sh
-sudo chown -R superagent:superagent /opt/superagent
-
-sudo cp superagent-auto-improve.env.example /etc/superagent-auto-improve.env
-sudo chmod 600 /etc/superagent-auto-improve.env
-# edit it: set your token/key, confirm BRANCH
-
-sudo cp superagent-auto-improve@.service /etc/systemd/system/
-sudo cp superagent-auto-improve@*.timer /etc/systemd/system/
-
-sudo mkdir -p /var/log/superagent-auto-improve
-sudo chown superagent:superagent /var/log/superagent-auto-improve
-```
-
-## 5. Test one cycle manually before scheduling anything
-
-```bash
-sudo -u superagent -E env $(cat /etc/superagent-auto-improve.env | xargs) \
-  SKILL=/auto-improve /opt/superagent/run-auto-improve.sh
-
-cat /var/log/superagent-auto-improve/driver.log
-```
-
-Check that it actually committed to `side-dev` (`git log --oneline -5`) and
-that the log's `.claude/auto-improve-log.log` entry looks sane before you
-let it run unattended.
-
-## 6. Enable the schedule
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now superagent-auto-improve@auto-improve.timer
-sudo systemctl enable --now superagent-auto-improve@orchestrator-dev.timer
-sudo systemctl enable --now superagent-auto-improve@art-director.timer
-sudo systemctl enable --now superagent-auto-improve@ux-critic.timer
-
-systemctl list-timers 'superagent-auto-improve@*'
-```
-
-## Operating it
-
-- **Pause instantly**: `touch /opt/superagent/AgentApp/.claude/.auto-improve.pause`
-  (any run in progress finishes; new cycles skip until you `rm` the file).
-- **Watch it work**: `tail -f /var/log/superagent-auto-improve/driver.log`
-- **Per-cycle detail**: JSON files in `/var/log/superagent-auto-improve/`,
-  each with `total_cost_usd`, `num_turns`, `is_error`.
-- **Shared memory across cycles**: `.claude/auto-improve-log.log` in the repo —
-  read its tail to see what the loop thinks it should do next.
-- **Getting changes into `main`**: review `side-dev`'s commits yourself
-  (`git log main..side-dev`) and open a PR when you're happy with a batch.
-  Nothing in this setup merges automatically — deliberately, since your
-  installers auto-update from releases built off `main`.
-- **Spend caps**: `MAX_TURNS` / `MAX_BUDGET_USD` in the env file are the outer
-  guard per cycle; the skill's own context-compaction checkpoints are the
-  inner one. Tune both down while you're first trusting this.
-- **Flags may drift**: `claude -p --help` on your VPS periodically —
-  `--max-budget-usd` and `--permission-mode` are current as of this writing
-  but CLI flags do change between Claude Code releases.
-
-## What this deliberately does NOT do
-
-- Auto-merge to `main`.
-- Let the loop touch its own guardrails — `/opt/superagent/run-auto-improve.sh`
-  and `/etc/superagent-auto-improve.env` live outside `REPO_DIR`, so nothing
-  the agent edits inside the repo can change its own budget, schedule, or kill
-  switch.
-- Give the agent your provider API keys for SuperAgent's own paid models —
-  the skill's own rules already restrict live-testing to already-connected,
-  free-tagged models only.
