@@ -321,6 +321,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     contextLimit?: string; outputLimit?: string;
     description?: string; apiType?: string;
     free?: boolean; pricing?: ModelPricing;
+    inputModalities?: string[]; outputModalities?: string[];
   }, providerId: string): ModelConfig => {
     let isFree = raw.free;
     let ctxLimit = raw.contextLimit;
@@ -388,8 +389,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       description: raw.description,
       contextLimit: ctxLimit ?? raw.contextLimit,
       outputLimit: raw.outputLimit,
-      inputModalities: caps.inputModalities,
-      outputModalities: (caps as any).outputModalities ?? ['text'],
+      // Provider-reported modalities (e.g. OpenRouter's architecture block) are
+      // authoritative; fall back to capability presets / id inference only when absent.
+      inputModalities: raw.inputModalities ?? caps.inputModalities,
+      outputModalities: raw.outputModalities ?? (caps as any).outputModalities ?? ['text'],
       pricing: pricingInfo ?? raw.pricing ?? (caps as any).pricing,
       caching: (caps as any).caching ?? false,
       free: isFree,

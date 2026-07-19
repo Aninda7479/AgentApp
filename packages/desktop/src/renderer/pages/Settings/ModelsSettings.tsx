@@ -36,10 +36,20 @@ interface ModelsListProps {
   modelsCatalog: ModelConfig[];
   modelSearch: string;
   showFreeOnly?: boolean;
+  inputFilter?: string[];
+  outputFilter?: string[];
   onToggleModel: (id: string) => void;
 }
 
-const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatalog, modelSearch, showFreeOnly, onToggleModel }) => {
+// A model passes a modality facet when it advertises every selected modality
+// (AND semantics — "require these capabilities"). An empty selection matches all.
+const matchesModalities = (modelModalities: string[] | undefined, selected: string[] | undefined): boolean => {
+  if (!selected || selected.length === 0) return true;
+  const have = modelModalities ?? [];
+  return selected.every(s => have.includes(s));
+};
+
+const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatalog, modelSearch, showFreeOnly, inputFilter, outputFilter, onToggleModel }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
 
@@ -67,7 +77,9 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
           .filter(m =>
             m.providerId === prov.id &&
             (!modelSearch || m.name.toLowerCase().includes(modelSearch.toLowerCase())) &&
-            (!showFreeOnly || m.free === true)
+            (!showFreeOnly || m.free === true) &&
+            matchesModalities(m.inputModalities, inputFilter) &&
+            matchesModalities(m.outputModalities, outputFilter)
           )
           .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
         if (models.length === 0) return null;
@@ -248,8 +260,14 @@ export const ModelsSettings: React.FC<ModelsSettingsProps> = ({
 }) => {
   const [modelSearch, setModelSearch] = useState('');
   const [showFreeOnly, setShowFreeOnly] = useState(false);
+  const [inputFilter, setInputFilter] = useState<string[]>([]);
+  const [outputFilter, setOutputFilter] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshStatus, setRefreshStatus] = useState('');
+
+  const toggleFilter = (setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) => {
+    setter(prev => (prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]));
+  };
 
   const fmtTokens = (n: number): string => {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
@@ -323,7 +341,16 @@ export const ModelsSettings: React.FC<ModelsSettingsProps> = ({
               return {
                 id: m.id, name: m.name ?? m.id,
                 contextLimit: m.context_length ? fmtTokens(m.context_length) : undefined,
-                description: m.description, free, pricing
+                description: m.description, free, pricing,
+                // Prefer OpenRouter's authoritative architecture block over id-based
+                // inference so multimodal models (e.g. Gemma image/video) aren't
+                // mislabelled as text-only.
+                inputModalities: Array.isArray(m.architecture?.input_modalities) && m.architecture.input_modalities.length > 0
+                  ? m.architecture.input_modalities
+                  : undefined,
+                outputModalities: Array.isArray(m.architecture?.output_modalities) && m.architecture.output_modalities.length > 0
+                  ? m.architecture.output_modalities
+                  : undefined
               };
             });
           }
@@ -410,11 +437,65 @@ export const ModelsSettings: React.FC<ModelsSettingsProps> = ({
         </button>
       </div>
 
+      <div className="mb-6 flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="ui-label mr-1 shrink-0">Input</span>
+          {(['text', 'image', 'audio', 'video'] as const).map(m => {
+            const active = inputFilter.includes(m);
+            return (
+              <button
+                key={m}
+                data-testid={`model-input-filter-${m}`}
+                onClick={() => toggleFilter(setInputFilter, m)}
+                className={`ui-chip capitalize transition-colors ${
+                  active
+                    ? 'bg-(--brand-accent)/15 text-(--brand-accent)'
+                    : 'bg-brand-popover text-brand-textMuted hover:text-brand-textMain'
+                }`}
+              >
+                {m}{active ? ' ✓' : ''}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="ui-label mr-1 shrink-0">Output</span>
+          {(['text', 'image', 'video', 'audio'] as const).map(m => {
+            const active = outputFilter.includes(m);
+            return (
+              <button
+                key={m}
+                data-testid={`model-output-filter-${m}`}
+                onClick={() => toggleFilter(setOutputFilter, m)}
+                className={`ui-chip capitalize transition-colors ${
+                  active
+                    ? 'bg-(--brand-accent)/15 text-(--brand-accent)'
+                    : 'bg-brand-popover text-brand-textMuted hover:text-brand-textMain'
+                }`}
+              >
+                {m}{active ? ' ✓' : ''}
+              </button>
+            );
+          })}
+        </div>
+        {(inputFilter.length > 0 || outputFilter.length > 0) && (
+          <button
+            data-testid="model-filters-clear"
+            onClick={() => { setInputFilter([]); setOutputFilter([]); }}
+            className="self-start text-[11px] text-brand-textMuted underline-offset-2 hover:text-brand-textMain hover:underline"
+          >
+            Clear modality filters
+          </button>
+        )}
+      </div>
+
       <ModelsList
         connectedProviders={connectedProviders}
         modelsCatalog={modelsCatalog}
         modelSearch={modelSearch}
         showFreeOnly={showFreeOnly}
+        inputFilter={inputFilter}
+        outputFilter={outputFilter}
         onToggleModel={onToggleModel}
       />
     </div>
