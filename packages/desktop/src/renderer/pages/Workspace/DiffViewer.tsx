@@ -110,7 +110,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
                 if (item.type === 'add') {
                   return (
                     <div key={idx} className="flex bg-brand-bg/60" style={{ height: '22px' }}>
-                      <span className="w-10 text-right pr-2 text-[#52525b] select-none text-xs leading-5.5">{''}</span>
+                      <span className="w-10 text-right pr-2 text-brand-textMuted/50 select-none text-xs leading-5.5">{''}</span>
                       <span className="flex-1 text-brand-textMuted/30 text-xs leading-5.5 px-2">—</span>
                     </div>
                   );
@@ -119,7 +119,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
                 const color = item.type === 'delete' ? 'text-[color:var(--neon-destructive)]' : 'text-brand-textMain';
                 return (
                   <div key={idx} className={`flex ${bg}`} style={{ height: '22px' }}>
-                    <span className="w-10 text-right pr-2 text-[#52525b] select-none text-xs leading-5.5">{item.origLineNum || ''}</span>
+                    <span className="w-10 text-right pr-2 text-brand-textMuted/50 select-none text-xs leading-5.5">{item.origLineNum || ''}</span>
                     <span className={`flex-1 whitespace-pre-wrap text-xs leading-5.5 px-2 truncate ${color}`}>{item.content}</span>
                   </div>
                 );
@@ -135,7 +135,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
                 if (item.type === 'delete') {
                   return (
                     <div key={idx} className="flex bg-brand-bg/60" style={{ height: '22px' }}>
-                      <span className="w-10 text-right pr-2 text-[#52525b] select-none text-xs leading-5.5">{''}</span>
+                      <span className="w-10 text-right pr-2 text-brand-textMuted/50 select-none text-xs leading-5.5">{''}</span>
                       <span className="flex-1 whitespace-pre-wrap text-brand-textMuted/30 text-xs leading-5.5 px-2">—</span>
                     </div>
                   );
@@ -144,7 +144,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
                 const color = item.type === 'add' ? 'text-[color:var(--neon-constructive)]' : 'text-brand-textMain';
                 return (
                   <div key={idx} className={`flex ${bg}`} style={{ height: '22px' }}>
-                    <span className="w-10 text-right pr-2 text-[#52525b] select-none text-xs leading-5.5">{item.modLineNum || ''}</span>
+                    <span className="w-10 text-right pr-2 text-brand-textMuted/50 select-none text-xs leading-5.5">{item.modLineNum || ''}</span>
                     <span className={`flex-1 whitespace-pre-wrap text-xs leading-5.5 px-2 truncate ${color}`}>{item.content}</span>
                   </div>
                 );
@@ -171,8 +171,8 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
 
               return (
                 <div key={idx} className={`flex ${bg} leading-5.5 px-2`}>
-                  <span className="w-8.75 text-right text-[#52525b] pr-1.5 select-none text-xs">{item.origLineNum || ''}</span>
-                  <span className="w-8.75 text-right text-[#52525b] pr-3 select-none text-xs">{item.modLineNum || ''}</span>
+                  <span className="w-8.75 text-right text-brand-textMuted/50 pr-1.5 select-none text-xs">{item.origLineNum || ''}</span>
+                  <span className="w-8.75 text-right text-brand-textMuted/50 pr-3 select-none text-xs">{item.modLineNum || ''}</span>
                   <span className={`w-5 font-bold text-xs ${color}`}>{prefix}</span>
                   <span className={`whitespace-pre-wrap text-xs ${color} flex-1`}>{item.content}</span>
                 </div>

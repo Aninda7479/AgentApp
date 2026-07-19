@@ -73,3 +73,7 @@ graphify-out/
 
 # Local MCP server config (contains a machine-specific Chromium executable path)
 .mcp.json
+
+.claude\art-direction.md
+.claude\art-director-env.md
+.claude\art-director-state.md

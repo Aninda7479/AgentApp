@@ -207,7 +207,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => onNewChat && onNewChat()}
             className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-3.5 rounded-xl text-brand-highlight-text bg-brand-highlight hover:bg-brand-highlight-hover active:scale-[0.98] transition-all duration-200 text-sm font-semibold mb-3 select-none cursor-pointer border border-brand-highlight-border-subtle`}
           >
-            <Plus className="w-4 h-4 flex-shrink-0 text-white" />
+            <Plus className="w-4 h-4 flex-shrink-0 text-brand-highlight-text" />
             {!collapsed && <span>New chat</span>}
           </button>
 
