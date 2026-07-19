@@ -492,6 +492,48 @@ export const App: React.FC = () => {
     handleSendPrompt(`Initialize template "${templateName}" with cron "${cronExpr}"`, { model: defaultComposerModel, mode: 'plan', attachments: [] });
   };
 
+  // ── Start an autonomous agent session on a Kanban task ─────────────────────
+  const handleStartWorkOnTask = useCallback(
+    async (card: { id: string; title: string; description?: string; labels?: { text: string; color: string }[]; priority?: string; projectScope?: string }) => {
+      // Scope the agent run to the task's project (if any) and open a fresh
+      // draft chat, then jump to the workspace so the run is visible.
+      ConversationService.newChat(ctx, card.projectScope);
+      setActiveTab('trajectory');
+
+      // Build a self-contained task brief for the agent.
+      const labelText = card.labels?.length ? `\nLabels: ${card.labels.map((l) => l.text).join(', ')}` : '';
+      const priorityText = card.priority ? `\nPriority: ${card.priority}` : '';
+      const brief = `Work on this task:\n\nTitle: ${card.title}${card.description ? `\n\nDescription: ${card.description}` : ''}${priorityText}${labelText}\n\nApproach it end-to-end: investigate, implement, verify, and report what you changed.`;
+
+      // Run in autonomous 'auto' mode (always-approve) so the agent works unattended.
+      await handleSendPrompt(brief, { model: defaultComposerModel, mode: 'auto', attachments: [] });
+
+      // Reflect progress on the board: move the card to "In Progress".
+      if (ipc) {
+        try {
+          const result = await ipc.invoke('kanban-load', {
+            scope: card.projectScope ? 'project' : 'global',
+            projectName: card.projectScope
+          });
+          const currentCards: any[] = Array.isArray(result) ? result : [];
+          const updated = currentCards.map((c) =>
+            c.id === card.id ? { ...c, column: 'in-progress' } : c
+          );
+          await ipc.invoke('kanban-save', {
+            scope: card.projectScope ? 'project' : 'global',
+            projectName: card.projectScope,
+            cards: updated
+          });
+        } catch {
+          // Board update is best-effort; the agent session is the primary outcome.
+        }
+      }
+      triggerToast(`Agent started working on "${card.title}"`, 'info');
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ctx, ipc, defaultComposerModel, handleSendPrompt, triggerToast]
+  );
+
   // ── Attachments ────────────────────────────────────────────────────────────
   const handleAttachFiles = async () => {
     if (ipc) {
@@ -1139,7 +1181,7 @@ export const App: React.FC = () => {
           )}
 
           {activeTab === 'tasks' && (
-            <TasksPage activeProject={activeProject} ipc={ipc} triggerToast={triggerToast} />
+            <TasksPage activeProject={activeProject} ipc={ipc} triggerToast={triggerToast} onStartWork={handleStartWorkOnTask} />
           )}
 
           {activeTab === 'project-settings' && (

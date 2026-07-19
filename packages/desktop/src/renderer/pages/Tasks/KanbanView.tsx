@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, X, Calendar, AlertCircle, Trash2, Tag, CheckSquare, Clock } from 'lucide-react';
+import { Plus, X, Calendar, AlertCircle, Trash2, Tag, CheckSquare, Clock, Sparkles } from 'lucide-react';
 
 export interface KanbanCard {
   id: string;
@@ -18,6 +18,7 @@ interface KanbanViewProps {
   onCardsChange: (newCards: KanbanCard[]) => void;
   scope: 'global' | 'project';
   projectName?: string;
+  onStartWork?: (card: KanbanCard) => void;
 }
 
 // Column identity accent — a single 2px top strip, routed through the neon
@@ -78,6 +79,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
   onCardsChange,
   scope,
   projectName,
+  onStartWork,
 }) => {
   // Drag and drop state
   const [draggedCardId, setDraggedCardId] = useState<string | null>(null);
@@ -492,8 +494,20 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
             </div>
           </div>
 
-          {/* Footer controls: Delete Task */}
-          <div className="p-4 border-t border-brand-border/40 flex justify-end">
+          {/* Footer controls: Start Work (Agent) + Delete Task */}
+          <div className="p-4 border-t border-brand-border/40 flex items-center gap-2">
+            <button
+              onClick={() => onStartWork?.(selectedCard)}
+              disabled={!onStartWork}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              style={{ color: 'var(--brand-highlight-text)', backgroundColor: 'var(--brand-highlight)', border: '1px solid var(--brand-highlight-hover)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--brand-highlight-hover)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'var(--brand-highlight)'; }}
+              title="Start an autonomous agent session to work on this task"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Start Work (Agent)
+            </button>
             <button
               onClick={() => handleDeleteCard(selectedCard.id)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
@@ -502,7 +516,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
               onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--neon-destructive) 12%, transparent)'; }}
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Delete Task
+              Delete
             </button>
           </div>
         </div>

@@ -6,12 +6,14 @@ interface TasksPageProps {
   activeProject?: string;
   ipc: any;
   triggerToast?: (message: string, type?: 'info' | 'error') => void;
+  onStartWork?: (card: KanbanCard) => void;
 }
 
 export const TasksPage: React.FC<TasksPageProps> = ({
   activeProject,
   ipc,
   triggerToast,
+  onStartWork,
 }) => {
   const [scope, setScope] = useState<'global' | 'project'>('global');
   const [cards, setCards] = useState<KanbanCard[]>([]);
@@ -180,6 +182,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
           onCardsChange={handleCardsChange}
           scope={scope}
           projectName={activeProject}
+          onStartWork={onStartWork}
         />
       )}
     </div>

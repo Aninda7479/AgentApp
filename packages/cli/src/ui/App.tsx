@@ -141,6 +141,12 @@ export const App: React.FC<AppProps> = ({
         role: 'system',
         content: `↺ Resumed session — ${restored.length} previous message${restored.length === 1 ? '' : 's'} restored.`,
       });
+    } else if (sessionId && sessionId.length > 0) {
+      msgs.push({
+        id: 'sys-resume-empty',
+        role: 'system',
+        content: `↺ No saved history found for session ${sessionId} — starting a new conversation under this id.`,
+      });
     }
     const noModel = !conn.provider || !conn.model;
     const noKey = !!conn.provider && !!conn.model && !conn.apiKey;
