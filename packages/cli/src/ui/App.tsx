@@ -790,6 +790,15 @@ export const App: React.FC<AppProps> = ({
 
   // ── Single global key handler ──
   useInput((char, key) => {
+    // Drop raw terminal escape sequences (e.g. SGR mouse reports
+    // `\x1b[<b;x;yM`) that Ink can't classify and forwards as literal text.
+    // These arrive on the mouse-wheel path and would otherwise be inserted
+    // into the input box as garbage. Scrolling is handled separately by the
+    // raw `stdin` `data` listener in onData().
+    if (char && /^\[<\d+;\d+;\d+[Mm]$/.test(char)) {
+      return;
+    }
+
     // Page scrolling (available anytime, even during generation)
     if (key.pageUp) {
       const step = Math.max(1, Math.floor(maxHeightRef.current / 2));
