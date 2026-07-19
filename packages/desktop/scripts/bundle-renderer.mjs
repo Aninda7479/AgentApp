@@ -38,4 +38,10 @@ await build({
   outfile: 'dist/pet/entry.js',
 });
 
-console.log('[bundle-renderer] renderer + pet bundles built');
+await build({
+  ...common,
+  entryPoints: ['src/renderer/circle-search/entry.tsx'],
+  outfile: 'dist/circle-search/entry.js',
+});
+
+console.log('[bundle-renderer] renderer + pet + circle-search bundles built');

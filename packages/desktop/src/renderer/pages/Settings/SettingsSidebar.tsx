@@ -53,6 +53,7 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
     { id: 'local-model', label: 'Local Model', Icon: HardDrive },
     { id: 'model-gov', label: 'Orchestrator', Icon: Network },
     { id: 'voice', label: 'Voice & Mic', Icon: Mic },
+    { id: 'circle-search', label: 'Circle Search', Icon: Search },
     { id: 'usage', label: 'AI Usage', Icon: SquareTerminal }
   ],
   Integrations: [

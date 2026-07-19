@@ -1,8 +1,8 @@
-import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
+import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, desktopCapturer, screen, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber } from '@superagent/core';
+import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber, resolveProviderFamily, resolveBaseUrl } from '@superagent/core';
 
 // Set a custom userData path so all app data lives in <home>/.superagent.
 app.setPath('userData', getUserDataDirectory());
@@ -16,6 +16,7 @@ import * as whisperLocal from './main/whisper-local';
 import { petWindowManager } from './main/pet-window';
 import { logError, errorMessage, registerErrorToasts, IpcErrorEnvelope } from './main/error-log';
 import { getSystemInfo } from './main/system-info';
+import { voiceDaemon } from './main/voice-daemon';
 
 // Tracks context-window usage so the pet can show "dark circles" when the
 // conversation approaches the model's capacity.
@@ -512,6 +513,51 @@ safeHandle('store-read', (): StoreData => {
   return readStore();
 });
 
+safeHandle('kanban-load', (_event, args: { scope: 'global' | 'project'; projectName?: string }) => {
+  const tasksDir = path.join(getUserDataDirectory(), 'tasks');
+  let filePath = '';
+  if (args.scope === 'project' && args.projectName) {
+    filePath = path.join(tasksDir, 'projects', `${args.projectName.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`);
+  } else {
+    filePath = path.join(tasksDir, 'global.json');
+  }
+
+  try {
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error('Failed to load kanban tasks:', err);
+  }
+  return [];
+});
+
+safeHandle('kanban-save', (_event, args: { scope: 'global' | 'project'; projectName?: string; cards: any[] }) => {
+  const tasksDir = path.join(getUserDataDirectory(), 'tasks');
+  let filePath = '';
+  let dirPath = tasksDir;
+  if (args.scope === 'project' && args.projectName) {
+    dirPath = path.join(tasksDir, 'projects');
+    filePath = path.join(dirPath, `${args.projectName.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`);
+  } else {
+    filePath = path.join(tasksDir, 'global.json');
+  }
+
+  try {
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+    const tempPath = filePath + '.tmp';
+    fs.writeFileSync(tempPath, JSON.stringify(args.cards, null, 2), 'utf8');
+    fs.renameSync(tempPath, filePath);
+    return { success: true };
+  } catch (err: any) {
+    console.error('Failed to save kanban tasks:', err);
+    return { success: false, error: err.message };
+  }
+});
+
 safeHandle('store-write', (_event, data: StoreData): void => {
   writeStore(data);
 });
@@ -533,6 +579,35 @@ safeHandle('settings-write', (_event, settingsPatch) => {
     (oldVoice.localWhisper?.enabled && oldVoice.localWhisper?.size !== newVoice.localWhisper?.size)
   ) {
     void whisperLocal.freePipeline();
+  }
+
+  // Hot-reload Circle-to-Search shortcut
+  const oldCSSettings = oldSettings?.circleSearch || {};
+  const newCSSettings = updatedSettings?.circleSearch || {};
+  if (oldCSSettings.shortcut !== newCSSettings.shortcut || oldCSSettings.enabled !== newCSSettings.enabled) {
+    try {
+      const oldShortcut = oldCSSettings.shortcut || 'CommandOrControl+Shift+Space';
+      globalShortcut.unregister(oldShortcut);
+    } catch {}
+    if (newCSSettings.enabled) {
+      try {
+        const newShortcut = newCSSettings.shortcut || 'CommandOrControl+Shift+Space';
+        globalShortcut.register(newShortcut, () => {
+          showCircleSearch();
+        });
+      } catch (err) {
+        console.error('[circle-search] Failed to hot-register global shortcut:', err);
+      }
+    }
+  }
+
+  // Hot-reload Voice Typing daemon
+  if (oldVoice.typingEnabled !== newVoice.typingEnabled || oldVoice.typingShortcut !== newVoice.typingShortcut) {
+    if (newVoice.typingEnabled) {
+      voiceDaemon.setShortcut(newVoice.typingShortcut || 'CommandOrControl+Super');
+    } else {
+      voiceDaemon.disable();
+    }
   }
 });
 
@@ -1052,6 +1127,63 @@ AudioTranscriber.setLocalBackend(async (options, config) => {
     model: `whisper-${size}`,
     createdAt: Date.now()
   };
+});
+
+ipcMain.on('voice-daemon-audio-captured', async (event, args: { buffer: ArrayBuffer }) => {
+  const settings = SettingsStorage.loadSettings();
+  const voice = settings?.voice || {};
+
+  let audioBuffer: Buffer;
+  if (args.buffer instanceof ArrayBuffer) {
+    audioBuffer = Buffer.from(new Uint8Array(args.buffer));
+  } else if (Buffer.isBuffer(args.buffer)) {
+    audioBuffer = args.buffer;
+  } else {
+    console.error('[voice-daemon] Invalid audio buffer format');
+    return;
+  }
+
+  const mw = BrowserWindow.fromWebContents(event.sender);
+  if (!mw || mw.isDestroyed()) return;
+
+  try {
+    const result = await mediaRouter.executeTask(
+      {
+        taskType: 'audio-transcription',
+        audioTranscribe: {
+          audioBuffer,
+          filename: 'voice-typing.wav',
+          model: voice.localWhisper?.enabled ? `whisper-${voice.localWhisper.size || 'tiny'}` : voice.model || 'whisper-1',
+          language: voice.localWhisper?.enabled && !voice.localWhisper.autoDetect ? voice.localWhisper.language || undefined : voice.language || undefined,
+          local: !!voice.localWhisper?.enabled
+        }
+      },
+      {
+        provider: voice.localWhisper?.enabled ? 'local' : (voice.providerId || 'openai'),
+        apiKey: '',
+        baseUrl: undefined,
+        modelName: voice.localWhisper?.enabled ? `whisper-${voice.localWhisper.size}` : (voice.model || 'whisper-1'),
+        localWhisper: voice.localWhisper
+      } as any
+    );
+
+    const text = (result as any)?.text || '';
+    if (text.trim()) {
+      voiceDaemon.injectText(text);
+      if (!mw.isDestroyed()) {
+        mw.webContents.send('voice-daemon-event', { state: 'done', text });
+      }
+    } else {
+      if (!mw.isDestroyed()) {
+        mw.webContents.send('voice-daemon-event', { state: 'done', text: '', error: 'No speech detected' });
+      }
+    }
+  } catch (err: any) {
+    console.error('[voice-daemon] Transcription failed:', err);
+    if (!mw.isDestroyed()) {
+      mw.webContents.send('voice-daemon-event', { state: 'done', text: '', error: err.message || String(err) });
+    }
+  }
 });
 
 safeHandle('media-transcribe', async (_event, args: {
@@ -1717,6 +1849,310 @@ safeHandle('auto-detect-providers', async () => {
   return ProviderAutoDetector.detect();
 });
 
+// ─── Circle-to-Search Overlay Logic ───────────────────────────────────────────
+
+let circleSearchWin: BrowserWindow | null = null;
+
+function getCircleSearchShortcut(): string {
+  try {
+    const settings = SettingsStorage.loadSettings();
+    return settings.circleSearch?.shortcut || 'CommandOrControl+Shift+Space';
+  } catch {
+    return 'CommandOrControl+Shift+Space';
+  }
+}
+
+function isCircleSearchEnabled(): boolean {
+  try {
+    const settings = SettingsStorage.loadSettings();
+    return !!settings.circleSearch?.enabled;
+  } catch {
+    return false;
+  }
+}
+
+function registerCircleSearchShortcut(): void {
+  if (!isCircleSearchEnabled()) return;
+  try {
+    const shortcut = getCircleSearchShortcut();
+    globalShortcut.register(shortcut, () => {
+      showCircleSearch();
+    });
+  } catch (err) {
+    console.error('[circle-search] Failed to register global shortcut:', err);
+  }
+}
+
+function showCircleSearch(): void {
+  if (!circleSearchWin || circleSearchWin.isDestroyed()) {
+    circleSearchWin = windowManager.createCircleSearchWindow();
+    const htmlPath = path.join(app.getAppPath(), 'dist', 'circle-search.html');
+    circleSearchWin.loadFile(htmlPath);
+  } else {
+    circleSearchWin.show();
+  }
+  circleSearchWin.webContents.send('circle-search-window-shown');
+}
+
+function hideCircleSearch(): void {
+  if (circleSearchWin && !circleSearchWin.isDestroyed()) {
+    circleSearchWin.hide();
+  }
+}
+
+safeHandle('circle-search-get-screen-image', async () => {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.bounds;
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: { width: Math.round(width), height: Math.round(height) }
+  });
+  
+  if (sources.length > 0) {
+    return sources[0].thumbnail.toDataURL();
+  }
+  throw new Error('No screen capture sources found');
+});
+
+// Submit query + image selection to active provider and stream chunks
+ipcMain.on('circle-search-submit', async (event, args: { query: string; image: string }) => {
+  const targetWin = BrowserWindow.fromWebContents(event.sender);
+  if (!targetWin || targetWin.isDestroyed()) return;
+
+  try {
+    await streamVisionQuery(args.query, args.image, (text) => {
+      if (!targetWin.isDestroyed()) {
+        targetWin.webContents.send('circle-search-stream-chunk', { text });
+      }
+    });
+    if (!targetWin.isDestroyed()) {
+      targetWin.webContents.send('circle-search-stream-chunk', { done: true });
+    }
+  } catch (err: any) {
+    console.error('[circle-search] Query failed:', err);
+    if (!targetWin.isDestroyed()) {
+      targetWin.webContents.send('circle-search-stream-chunk', { error: err.message || String(err) });
+    }
+  }
+});
+
+safeOn('circle-search-hide', () => {
+  hideCircleSearch();
+});
+
+// Unified vision streaming query helper for main process
+async function streamVisionQuery(
+  query: string,
+  imageBase64: string,
+  onChunk: (text: string) => void
+): Promise<void> {
+  const settings = SettingsStorage.loadSettings();
+  const providers = settings.providers || [];
+  const activeProvider = providers.find(p => p.apiKey) || providers.find(p => p.id === 'ollama');
+  const activeModelSetting = settings.models?.find(m => m.enabled && m.providerId === activeProvider?.id);
+
+  if (!activeProvider) {
+    throw new Error('No API key configured. Open Settings → Provider and add a key.');
+  }
+
+  const providerId = activeProvider.id;
+  const modelName = activeModelSetting ? activeModelSetting.id.replace(`${providerId}-`, '') : 'gpt-4o';
+  const apiKey = activeProvider.apiKey || '';
+  const baseUrl = activeProvider.baseUrl;
+
+  const family = resolveProviderFamily(providerId);
+
+  let mimeType = 'image/jpeg';
+  let base64Data = imageBase64;
+  if (imageBase64.includes(';base64,')) {
+    const parts = imageBase64.split(';base64,');
+    mimeType = parts[0].replace('data:', '');
+    base64Data = parts[1];
+  }
+
+  if (family === 'gemini') {
+    const host = resolveBaseUrl('google', baseUrl).replace(/\/+$/, '');
+    const targetModel = activeModelSetting?.id.includes('gemini') ? modelName : 'gemini-2.0-flash';
+    const url = `${host}/v1beta/models/${targetModel}:streamGenerateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: query },
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: base64Data
+              }
+            }
+          ]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Gemini API error: ${errText || response.statusText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No body reader');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const cleaned = line.trim();
+        if (cleaned.startsWith('//') || !cleaned) continue;
+        try {
+          let jsonStr = cleaned;
+          if (cleaned.startsWith('[') || cleaned.startsWith(',')) {
+            jsonStr = cleaned.slice(1);
+          }
+          if (jsonStr.endsWith(']')) {
+            jsonStr = jsonStr.slice(0, -1);
+          }
+          const parsed = JSON.parse(jsonStr);
+          const chunkText = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (chunkText) onChunk(chunkText);
+        } catch { /* ignore */ }
+      }
+    }
+  } else if (family === 'anthropic') {
+    const host = resolveBaseUrl('anthropic', baseUrl).replace(/\/v1\/?$/, '');
+    const url = `${host}/v1/messages`;
+    const targetModel = activeModelSetting?.id.includes('claude') ? modelName : 'claude-3-5-sonnet-20241022';
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+        'x-api-key': apiKey
+      },
+      body: JSON.stringify({
+        model: targetModel,
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: mimeType,
+                data: base64Data
+              }
+            },
+            {
+              type: 'text',
+              text: query
+            }
+          ]
+        }],
+        stream: true
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Anthropic API error: ${errText || response.statusText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No body reader');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const cleaned = line.trim();
+        if (cleaned.startsWith('data:')) {
+          const dataStr = cleaned.slice(5).trim();
+          if (dataStr === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(dataStr);
+            if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
+              onChunk(parsed.delta.text);
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    }
+  } else {
+    const host = resolveBaseUrl(providerId, baseUrl);
+    const url = `${host}/chat/completions`;
+    const targetModel = modelName;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: targetModel,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: query },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:${mimeType};base64,${base64Data}`
+              }
+            }
+          ]
+        }],
+        stream: true
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`OpenAI API error: ${errText || response.statusText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No body reader');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const cleaned = line.trim();
+        if (cleaned.startsWith('data:')) {
+          const dataStr = cleaned.slice(5).trim();
+          if (dataStr === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(dataStr);
+            const chunkText = parsed.choices?.[0]?.delta?.content;
+            if (chunkText) onChunk(chunkText);
+          } catch { /* ignore */ }
+        }
+      }
+    }
+  }
+}
+
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 function initApp() {
@@ -1781,6 +2217,8 @@ app.whenReady().then(async () => {
 
   initApp();
   setupDevWatcher();
+  registerCircleSearchShortcut();
+  voiceDaemon.init();
 
   // Warm up local Whisper model if enabled to eliminate cold-start lag
   try {
@@ -1850,5 +2288,6 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  voiceDaemon.dispose();
   void whisperLocal.freePipeline();
 });

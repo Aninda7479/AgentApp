@@ -106,6 +106,11 @@ export const VoiceSettings: React.FC = () => {
   const [localStatus, setLocalStatus] = useState<{ state: string; progress: number; statusText: string } | null>(null);
   const [localBusy, setLocalBusy] = useState(false);
 
+  // Background Voice Typing states
+  const [typingEnabled, setTypingEnabled] = useState<boolean>(false);
+  const [typingShortcut, setTypingShortcut] = useState<string>('CommandOrControl+Super');
+  const [typingTarget, setTypingTarget] = useState<'both' | 'composer' | 'system'>('both');
+
   // Draft inputs for adding dictionary entries.
   const [wordDraft, setWordDraft] = useState('');
   const [corrFrom, setCorrFrom] = useState('');
@@ -135,6 +140,10 @@ export const VoiceSettings: React.FC = () => {
         cfg.engine === 'browser' || cfg.engine === 'model' || cfg.engine === 'local' ? cfg.engine : 'auto'
       );
       setLanguage(typeof cfg.language === 'string' ? cfg.language : '');
+
+      setTypingEnabled(cfg.typingEnabled === true);
+      setTypingShortcut(typeof cfg.typingShortcut === 'string' ? cfg.typingShortcut : 'CommandOrControl+Super');
+      setTypingTarget(cfg.typingTarget === 'composer' || cfg.typingTarget === 'system' ? cfg.typingTarget : 'both');
 
       const dict = cfg.dictionary || {};
       setDictionary({
@@ -206,7 +215,10 @@ export const VoiceSettings: React.FC = () => {
             autoDetect: localWhisper.autoDetect,
             device: localWhisper.device,
             modelDir: localWhisper.modelDir || undefined
-          } : undefined
+          } : undefined,
+          typingEnabled,
+          typingShortcut,
+          typingTarget
         }
       });
       setMessage({ text: 'Voice & mic settings saved.', type: 'success' });
@@ -465,6 +477,75 @@ export const VoiceSettings: React.FC = () => {
               </button>
             );
           })}
+        </div>
+      </section>
+
+      {/* ── Voice Typing Daemon ────────────────────────────────────────── */}
+      <section className="settings-section">
+        <div className="settings-section-title flex items-center gap-2">
+          <Mic size={15} className="text-[var(--brand-accent)]" />
+          <span>Voice Typing (Global PTT Daemon)</span>
+          <span className="settings-pill ml-1">Runs in background</span>
+        </div>
+        
+        <div className="rounded-lg border border-brand-border bg-brand-card p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium text-brand-textMain">Enable Voice Typing</div>
+              <div className="text-xs text-brand-textMuted">
+                Transcribe voice directly into whichever textbox or app is active on your system.
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={typingEnabled}
+              onClick={() => setTypingEnabled(!typingEnabled)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                typingEnabled ? 'bg-[color:var(--neon-constructive)]' : 'bg-brand-bg border border-brand-border'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  typingEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {typingEnabled && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-3 border-t border-brand-border/40 animate-fade-in">
+              <div className="space-y-1.5">
+                <label className="ui-label">Push-to-Talk Shortcut</label>
+                <input
+                  type="text"
+                  value={typingShortcut}
+                  onChange={(e) => setTypingShortcut(e.target.value)}
+                  placeholder="CommandOrControl+Super"
+                  className="ui-input w-full text-sm"
+                />
+                <span className="text-[10px] text-brand-textMuted block">
+                  Hold key to record, release to type. Default: <code className="text-zinc-300">CommandOrControl+Super</code> (Ctrl+Win / Ctrl+Cmd).
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="ui-label">Text Injection Target</label>
+                <select
+                  value={typingTarget}
+                  onChange={(e) => setTypingTarget(e.target.value as any)}
+                  className="ui-input w-full text-sm"
+                >
+                  <option value="both">Both (SuperAgent Composer &amp; System Clipboard)</option>
+                  <option value="composer">SuperAgent Composer Only</option>
+                  <option value="system">System Clipboard / Active Textbox Only</option>
+                </select>
+                <span className="text-[10px] text-brand-textMuted block">
+                  Choose which application textbox receives the typed text on transcription.
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 

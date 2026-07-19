@@ -179,13 +179,21 @@ export interface VoiceSettings {
   dictionary?: VoiceDictionary;
   /** On-device Whisper transcription config (see {@link LocalWhisperSettings}). */
   localWhisper?: LocalWhisperSettings;
+  typingEnabled?: boolean;
+  typingShortcut?: string;
+  typingTarget?: 'both' | 'composer' | 'system';
 }
 
 /** Map of built-in plugin id → whether the user has enabled it. */
 export type PluginsSettings = Record<string, boolean>;
 
-/**
- * Configuration for the self-hosted **Web App** (the web server that the
+/** Configuration for Circle-to-Search overlay. */
+export interface CircleSearchSettings {
+  enabled?: boolean;
+  shortcut?: string;
+}
+
+/** Configuration for the self-hosted **Web App** (the web server that the
  * Desktop app can start from Settings → Web App, and which the CLI can start
  * with `superagent --start-web`). The server itself lives in `@superagent/web`;
  * these fields only persist the user's preferred port / auto-start toggle.
@@ -213,6 +221,7 @@ export interface AppSettings {
   threeD?: ThreeDSettings;
   webApp?: WebAppSettings;
   voice?: VoiceSettings;
+  circleSearch?: CircleSearchSettings;
 }
 
 /** Resolved file system paths for user data and config files. */

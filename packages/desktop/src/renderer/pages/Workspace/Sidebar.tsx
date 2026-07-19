@@ -16,6 +16,7 @@ import {
   MessageSquarePlus,
   PawPrint,
   Box,
+  KanbanSquare,
 } from 'lucide-react';
 
 
@@ -221,6 +222,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
 
           {renderNavItem('scheduled', 'Scheduled', Clock)}
+          {renderNavItem('tasks', 'Tasks', KanbanSquare)}
           {renderNavItem('companion', 'Companion', PawPrint)}
           {/* 3D Studio stays discoverable even when disabled: a "ghost" entry
               (muted + "Off") routes to the 3D settings so first-time users can

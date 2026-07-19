@@ -18,6 +18,7 @@ import { ThreeDSettings } from './ThreeDSettings';
 import { UpdatesSettings } from './UpdatesSettings';
 import { AboutSettings } from './AboutSettings';
 import { WebAppSettings } from './WebAppSettings';
+import { CircleSearchSettings } from './CircleSearchSettings';
 import { browserSafeFetch } from '../../web-fetch.js';
 
 /** Top-level settings page that renders a sidebar and the active settings category panel. */
@@ -546,6 +547,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         )}
         {activeCategory === 'web-app' && (
           <WebAppSettings />
+        )}
+        {activeCategory === 'circle-search' && (
+          <CircleSearchSettings />
         )}
       </div>
     </div>

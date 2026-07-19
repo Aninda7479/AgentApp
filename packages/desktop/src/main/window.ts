@@ -159,6 +159,52 @@ export class WindowManager {
     this.mainWindowId = null;
   }
 
+  /** Creates the fullscreen transparent Circle-to-Search overlay window. */
+  public createCircleSearchWindow(): BrowserWindow {
+    const name = 'circle-search';
+    if (this.windowsByName.has(name)) {
+      const existingId = this.windowsByName.get(name)!;
+      const existingWin = this.windows.get(existingId);
+      if (existingWin && !existingWin.isDestroyed()) {
+        existingWin.show();
+        return existingWin;
+      }
+    }
+
+    const { screen } = require('electron');
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width, height } = primaryDisplay.bounds; // Use full display bounds for overlay
+
+    const win = new BrowserWindow({
+      width,
+      height,
+      x: 0,
+      y: 0,
+      frame: false,
+      transparent: true,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: false,
+      focusable: true,
+      hasShadow: false,
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false
+      }
+    });
+
+    const windowId = win.id;
+    this.windows.set(windowId, win);
+    this.windowsByName.set(name, windowId);
+
+    win.on('closed', () => {
+      this.windows.delete(windowId);
+      this.windowsByName.delete(name);
+    });
+
+    return win;
+  }
+
   private setupIpcHandlers(): void {
     // Only setup IPC if ipcMain is available
     if (typeof ipcMain !== 'undefined' && ipcMain.on) {

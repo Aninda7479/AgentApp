@@ -1,8 +1,8 @@
 import React from 'react';
-import { MessageSquare, Clock, Settings, PawPrint, LucideIcon } from 'lucide-react';
+import { MessageSquare, Clock, Settings, PawPrint, KanbanSquare, LucideIcon } from 'lucide-react';
 
 /** Destination tabs shown in the mobile bottom navigation bar. */
-export type BottomNavTab = 'trajectory' | 'scheduled' | 'settings' | 'partner';
+export type BottomNavTab = 'trajectory' | 'scheduled' | 'tasks' | 'settings' | 'partner';
 
 interface BottomNavProps {
   activeTab: string;
@@ -13,7 +13,8 @@ interface BottomNavProps {
 
 const TABS: { id: BottomNavTab; label: string; Icon: LucideIcon }[] = [
   { id: 'trajectory', label: 'Agent', Icon: MessageSquare },
-  { id: 'scheduled', label: 'Tasks', Icon: Clock },
+  { id: 'tasks', label: 'Tasks', Icon: KanbanSquare },
+  { id: 'scheduled', label: 'Scheduled', Icon: Clock },
   { id: 'partner', label: 'Partner', Icon: PawPrint },
   { id: 'settings', label: 'Settings', Icon: Settings },
 ];

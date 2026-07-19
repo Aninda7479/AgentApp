@@ -10,6 +10,7 @@ import { PermissionDialog } from './pages/Workspace/PermissionDialog';
 import { MCPDashboard, MCPServerInfo } from './pages/Settings/MCPDashboard';
 import { SearchModal } from './components/SearchModal';
 import { ScheduledView } from './pages/Workspace/ScheduledView';
+import { TasksPage } from './pages/Tasks/TasksPage';
 import { SettingsView, ProviderConnection, ModelConfig } from './pages/Settings/SettingsView';
 import type { InternetAccessLevel } from './pages/Settings/types';
 import { CreateProjectModal } from './pages/Workspace/CreateProjectModal';
@@ -17,6 +18,7 @@ import { ConfigureProjectModal } from './pages/Workspace/ConfigureProjectModal';
 import { ChatSettingsModal } from './pages/Workspace/ChatSettingsModal';
 import { TitleBar } from './components/TitleBar';
 import { AppToast } from './components/AppToast';
+import { VoiceIndicator } from './components/VoiceIndicator';
 import { WorkspaceView } from './pages/Workspace/WorkspaceView';
 import { ProjectSettingsPage } from './pages/Workspace/ProjectSettingsPage';
 import { StandaloneChatPage } from './pages/Workspace/StandaloneChatPage';
@@ -1136,6 +1138,10 @@ export const App: React.FC = () => {
             <ScheduledView onCreateTask={handleCreateTaskFromChat} onUseTemplate={handleUseTemplate} />
           )}
 
+          {activeTab === 'tasks' && (
+            <TasksPage activeProject={activeProject} ipc={ipc} triggerToast={triggerToast} />
+          )}
+
           {activeTab === 'project-settings' && (
             <ProjectSettingsPage
               project={projectToConfigure || projects.find((p) => p.name === activeProject) || null}
@@ -1292,6 +1298,7 @@ export const App: React.FC = () => {
       />
 
       <AppToast open={toastOpen} message={toastMessage} type={toastType} onClose={() => setToastOpen(false)} />
+      <VoiceIndicator />
 
       {/* Floating Partner / Pet companion. On the desktop the 3D overlay window
           is the pet; in the web build there is no separate window, so we fall
