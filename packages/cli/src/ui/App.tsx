@@ -663,8 +663,13 @@ export const App: React.FC<AppProps> = ({
 
   return (
     <Box flexDirection="column">
-      {/* Claude-Code-style startup banner. */}
-      <Banner provider={chatRef.current.provider} model={chatRef.current.model} cwd={process.cwd()} />
+      {/* Banner is written ONCE to the top of the scrollback (Static) so it
+          stays fixed at the top and never scrolls with the conversation. */}
+      <Static items={['__banner__']}>
+        {() => (
+          <Banner provider={chatRef.current.provider} model={chatRef.current.model} cwd={process.cwd()} />
+        )}
+      </Static>
 
       {/* Persistent, scrolling conversation log. */}
       <Static items={messages}>

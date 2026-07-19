@@ -179,6 +179,10 @@ import { InternetAccessLevel } from '../storage/settings-store.js';
 import { enforceNetworkAllowed } from '../security/internet-access.js';
 import { createThreeDTool } from '../tools/threed.js';
 import { chunkedCompactMessages, extractTextContent } from '../memory/compactor.js';
+import { MessageHistoryStore } from '../storage/message-history.js';
+
+/** Tag marking AgentEngine's own condensed-history block inside `history`. */
+const SUMMARY_PREFIX = '[COMPACTED CONTEXT SUMMARY]';
 import { UsageTracker } from '../storage/usage-tracker.js';
 import { providerLimiter, toolLimiter } from '../concurrency/limiter.js';
 import { ComputerUse } from '../automation/computer-use.js';
@@ -317,7 +321,20 @@ export function createBuiltinTools(
   /** Resolves the effective internet-access level for this run. When omitted
    *  the global persisted setting is used. Passed into `enforceNetworkAllowed`
    *  so a per-project / per-chat internet policy actually takes effect. */
-  getInternetLevel?: () => InternetAccessLevel | undefined
+  getInternetLevel?: () => InternetAccessLevel | undefined,
+  /** Parent engine connection, used by the `run_subagent` tool to spawn a
+   *  child agent. Omitted for the top-level call outside an engine. */
+  parentConfig?: {
+    provider: string;
+    apiKey: string;
+    baseUrl?: string;
+    model: string;
+    projectRoot?: string;
+    permissionMode?: PermissionMode;
+  },
+  /** When false, the `run_subagent` tool is omitted (used for child agents to
+   *  prevent unbounded recursion). Defaults to true. */
+  allowSubagents: boolean = true
 ): ToolDefinition[] {
   let runner: SandboxRunner;
   let projectRoot: string;
@@ -803,7 +820,68 @@ export function createBuiltinTools(
         await BrowserLifecycleService.closeSharedInstance();
         return 'Browser successfully shut down.';
       }
-    }
+    },
+    // Sub-agent delegation: spawns an independent child AgentEngine that can
+    // use its own tools. This is what makes "run N sub-agents" real — the model
+    // calls this tool (possibly several times in one turn) and each call runs a
+    // full isolated agent that reports back. Children omit run_subagent to
+    // avoid unbounded recursion (see `allowSubagents`).
+    ...(allowSubagents && parentConfig
+      ? [
+          {
+            name: 'run_subagent',
+            description:
+              'Delegate a self-contained task to an independent sub-agent that has its own tools (read files, run shell commands, search, write). Use to parallelize independent work, isolate noisy context, or break a big task into focused pieces. Returns the sub-agent\'s final answer plus the tools it used. Prefer one focused sub-agent per independent task.',
+            parameters: {
+              type: 'object',
+              properties: {
+                name: { type: 'string', description: 'Short label for the sub-agent (e.g. "time-checker")' },
+                task: {
+                  type: 'string',
+                  description:
+                    'The complete, self-contained task for the sub-agent. Include all context it needs — it does not see this conversation.'
+                },
+                run_in_background: {
+                  type: 'boolean',
+                  description: 'Reserved for future async use; the sub-agent still returns before you proceed. (Default false)'
+                }
+              },
+              required: ['task'],
+              additionalProperties: false
+            },
+            execute: async (args: Record<string, any>) => {
+              const { name, task } = args as { name?: string; task?: string };
+              if (!parentConfig) return 'Error: sub-agent parent configuration unavailable.';
+              const child = new AgentEngine({
+                provider: parentConfig.provider,
+                apiKey: parentConfig.apiKey,
+                baseUrl: parentConfig.baseUrl,
+                model: parentConfig.model,
+                projectRoot: parentConfig.projectRoot || process.cwd(),
+                permissionMode: parentConfig.permissionMode || 'auto-approve-edits',
+                allowSubagents: false
+              });
+              let answer = '';
+              const toolLines: string[] = [];
+              try {
+                await child.run(task as string, (ev: any) => {
+                  if (ev.type === 'token' && ev.content) answer += ev.content;
+                  if (ev.type === 'tool_call') {
+                    toolLines.push(`- used ${ev.toolName}(${JSON.stringify(ev.toolArgs ?? {})})`);
+                  }
+                  if (ev.type === 'error') toolLines.push(`- error: ${ev.error}`);
+                });
+              } catch (err: unknown) {
+                return `Sub-agent failed: ${(err as Error).message}`;
+              }
+              const header = name ? `Sub-agent "${name}":\n` : 'Sub-agent:\n';
+              const body = answer.trim() || '(no textual answer)';
+              const toolSummary = toolLines.length > 0 ? `\nTools used:\n${toolLines.join('\n')}` : '';
+              return `${header}${body}${toolSummary}`;
+            }
+          }
+        ]
+      : [])
   ];
 }
 
@@ -853,6 +931,17 @@ export interface AgentEngineConfig {
   internetAccess?: InternetAccessLevel;
   /** Context-window size (in tokens) of the effective model. */
   contextWindow?: number;
+  /** When false, the engine's toolset omits `run_subagent` so a sub-agent
+   *  cannot spawn further sub-agents (prevents unbounded recursion). Defaults
+   *  to true for the top-level agent. */
+  allowSubagents?: boolean;
+  /** Rolling-compaction tuning (see `rollingCompact`, which uses the `/compact`
+   *  primitive). `compactKeepRecent` = how many recent messages to keep verbatim
+   *  after compaction; `0` (default) condenses the WHOLE conversation into one
+   *  summary, matching what `/compact` produces. */
+  compactAtRatio?: number;
+  compactKeepRecent?: number;
+  compactSummaryMaxChars?: number;
 }
 
 /** A single parallel candidate for best-of-N orchestration. Extends the base
@@ -916,7 +1005,16 @@ export class AgentEngine {
         // (via a project/chat override), it governs web-fetch; otherwise the
         // global persisted setting applies. Raw shell `curl`/`wget` are NOT gated
         // by this — documented limitation, scoped separately from the sandbox.
-        () => config.internetAccess
+        () => config.internetAccess,
+        {
+          provider: config.provider,
+          apiKey: config.apiKey,
+          baseUrl: config.baseUrl,
+          model: config.model,
+          projectRoot: effectiveRoot,
+          permissionMode: config.permissionMode,
+        },
+        config.allowSubagents ?? true
       ),
       ...(config.extraTools ?? [])
     ];
@@ -935,7 +1033,7 @@ Key guidelines:
 - Be concise but thorough in explanations
 - When you edit files, mention which files changed and the diff summary`;
 
-    this.history.push({ role: 'system', content: sysPrompt });
+    this.record({ role: 'system', content: sysPrompt });
     this.contextWindow = config.contextWindow ?? 128000;
 
     // Register in the global registry so every live agent is supervised
@@ -962,16 +1060,100 @@ Key guidelines:
     return { used, limit, pct };
   }
 
-  public compactHistory(): { tokensBefore: number; tokensAfter: number } {
+  /**
+   * Records a message into both the in-RAM working set (the model context) and
+   * the disk-backed canonical transcript (`MessageHistoryStore`). The full
+   * transcript lives on disk so it can be scrolled through / resumed later
+   * without occupying RAM; only the compacted working set stays in memory.
+   */
+  private record(message: ChatMessage): void {
+    this.history.push(message);
+    MessageHistoryStore.append(this.sessionId, message);
+  }
+
+  /**
+   * Continuously bounds the in-RAM model context using the SAME compaction
+   * primitive as the `/compact` command (`chunkedCompactMessages`): the whole
+   * conversation is condensed into a single summary block. The model therefore
+   * works from one condensed memory of the entire chat — by default no verbatim
+   * recent window is retained (`compactKeepRecent = 0`), which is exactly what
+   * `/compact` produces. Compaction is a cheap, local heuristic (no model call),
+   * so it can run every turn. The full raw transcript still lives on disk
+   * (`MessageHistoryStore`) for scroll-up / resume, so nothing is truly lost.
+   */
+  private rollingCompact(): { tokensBefore: number; tokensAfter: number } {
     const tokensBefore = this.estimateContextUsage().used;
-    const plain = this.history.map((m) => ({ role: m.role, content: extractTextContent(m.content) }));
-    const res = chunkedCompactMessages(plain, { keepRecentCount: 4 });
+    const ratio = this.config.compactAtRatio ?? 0.6;
+    const budget = Math.floor(this.contextWindow * ratio);
+    const keep = this.config.compactKeepRecent ?? 0;
+
+    const hasSummary = this.history.some(
+      (m) => m.role === 'system' && extractTextContent(m.content).startsWith(SUMMARY_PREFIX)
+    );
+
+    // Short conversations (under budget, no prior summary) are left verbatim —
+    // there is nothing to gain from summarizing three messages.
+    if (tokensBefore <= budget && !hasSummary) {
+      return { tokensBefore, tokensAfter: tokensBefore };
+    }
+
+    // Flatten any existing summary block back into the conversation pool so the
+    // /compact primitive re-summarizes the WHOLE conversation into ONE block
+    // (no duplicate summaries, and when keep=0 no verbatim recent window).
+    const pool: Array<{ role: ChatMessage['role']; content: string }> = [];
+    for (const m of this.history) {
+      const txt = extractTextContent(m.content);
+      if (m.role === 'system' && txt.startsWith(SUMMARY_PREFIX)) {
+        // Feed the prior condensed memory back in as an assistant turn so it is
+        // merged into the new single summary rather than preserved separately.
+        pool.push({ role: 'assistant', content: txt });
+        continue;
+      }
+      pool.push({ role: m.role, content: txt });
+    }
+
+    const res = chunkedCompactMessages(pool, { keepRecentCount: keep });
     if (!res.wasCompacted) {
       return { tokensBefore, tokensAfter: tokensBefore };
     }
-    this.history = res.messages.map((m) => ({ role: m.role, content: m.content })) as ChatMessage[];
+
+    this.history = res.messages.map(
+      (m) => ({ role: m.role, content: m.content }) as ChatMessage
+    );
     const tokensAfter = this.estimateContextUsage().used;
     return { tokensBefore, tokensAfter };
+  }
+
+  public compactHistory(): { tokensBefore: number; tokensAfter: number } {
+    return this.rollingCompact();
+  }
+
+  /**
+   * Rebuild the bounded working set from the on-disk transcript (resume).
+   * Loads the full canonical transcript but immediately compacts it, so RAM
+   * stays bounded regardless of how long the original chat was.
+   */
+  public async rehydrateFromStore(): Promise<void> {
+    const full = await MessageHistoryStore.loadFull(this.sessionId);
+    if (full.length === 0) return;
+    this.history = full;
+    this.rollingCompact();
+  }
+
+  /** Page of the full transcript for UI scroll-up (oldest-first, async). */
+  public async loadHistoryRange(offset: number, limit: number): Promise<ChatMessage[]> {
+    return MessageHistoryStore.loadRange(this.sessionId, offset, limit);
+  }
+
+  /** Total message count in the canonical transcript (for UI paging). */
+  public async historyLength(): Promise<number> {
+    return MessageHistoryStore.count(this.sessionId);
+  }
+
+  /** Drop this session's transcript from disk and memory. */
+  public async clearHistory(): Promise<void> {
+    this.history = [];
+    await MessageHistoryStore.clear(this.sessionId);
   }
 
   public getSandbox(): SandboxRunner {
@@ -980,7 +1162,7 @@ Key guidelines:
 
   /** Add a user message to history (plain text or multimodal content blocks). */
   public addUserMessage(content: string | ContentBlock[]): void {
-    this.history.push({ role: 'user', content });
+    this.record({ role: 'user', content });
   }
 
   /** Stop the current generation */
@@ -1078,6 +1260,11 @@ Key guidelines:
       while (iterations < MAX_ITERATIONS) {
         iterations++;
 
+        // Keep the in-RAM model context bounded every turn (cheap, local). The
+        // full raw transcript is already on disk via `record`, so compacting the
+        // working set here never loses the user's scrollable history.
+        this.rollingCompact();
+
         // ── Stream from provider ────────────────────────────────────────
         let fullContent = '';
         let toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
@@ -1105,7 +1292,7 @@ Key guidelines:
 
         // Append assistant message to history (including the tool calls it made,
         // so the next turn can echo them back and the model sees its own action).
-        this.history.push({
+        this.record({
           role: 'assistant',
           content: fullContent,
           toolCalls: toolCalls.length > 0
@@ -1179,7 +1366,7 @@ Key guidelines:
           });
 
           // Add tool result to history
-          this.history.push({
+          this.record({
             role: 'tool',
             content: resultText,
             toolCallId: tc.id,
