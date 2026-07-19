@@ -1071,23 +1071,7 @@ safeHandle('media-transcribe', async (_event, args: {
     return { ok: false, error: 'No audio was captured. Try holding the mic a bit longer.' };
   }
 
-  // Resolve the provider selected for voice from the connected providers.
-  const providers = settings?.providers || [];
-  const provider = providers.find((p) => p.id === voice.providerId) || providers.find((p) => p.apiKey);
-  if (!provider || !provider.apiKey) {
-    return {
-      ok: false,
-      needsSetup: true,
-      error: 'No transcription model is configured. Open Settings → Voice & Mic and pick a provider + model (e.g. whisper-1).'
-    };
-  }
-
-  const model = voice.model?.trim() || 'whisper-1';
-
-  // Build an optional vocabulary-biasing prompt from the user's custom
-  // dictionary. Whisper-compatible STT APIs accept a `prompt` that nudges the
-  // model toward specific spellings/names and away from gibberish. Preferred
-  // words seed the spelling; correction pairs describe the intended fix.
+  // Parse custom vocabulary/dictionary first as it may be used by the local Whisper branch.
   const dict = voice.dictionary || {};
   const dictWords: string[] = Array.isArray(dict.words)
     ? dict.words.map((w: unknown) => String(w).trim()).filter(Boolean)
@@ -1097,16 +1081,6 @@ safeHandle('media-transcribe', async (_event, args: {
         .map((c: any) => ({ from: String(c?.from ?? '').trim(), to: String(c?.to ?? '').trim() }))
         .filter((c: { from: string; to: string }) => c.from && c.to)
     : [];
-  const promptParts: string[] = [];
-  if (dictWords.length > 0) {
-    promptParts.push(`Use these spellings: ${dictWords.join(', ')}.`);
-  }
-  if (dictCorrections.length > 0) {
-    promptParts.push(
-      dictCorrections.map((c) => `Replace "${c.from}" with "${c.to}".`).join(' ')
-    );
-  }
-  const vocabPrompt = promptParts.join(' ').trim();
 
   // On-device Whisper branch: when the user enabled local STT, transcribe
   // in-process (transformers.js) instead of over HTTP. The custom
@@ -1145,6 +1119,34 @@ safeHandle('media-transcribe', async (_event, args: {
     }
     return { ok: true, text };
   }
+
+  // Resolve the provider selected for voice from the connected providers.
+  const providers = settings?.providers || [];
+  const provider = providers.find((p) => p.id === voice.providerId) || providers.find((p) => p.apiKey);
+  if (!provider || !provider.apiKey) {
+    return {
+      ok: false,
+      needsSetup: true,
+      error: 'No transcription model is configured. Open Settings → Voice & Mic and pick a provider + model (e.g. whisper-1).'
+    };
+  }
+
+  const model = voice.model?.trim() || 'whisper-1';
+
+  // Build an optional vocabulary-biasing prompt from the user's custom
+  // dictionary. Whisper-compatible STT APIs accept a `prompt` that nudges the
+  // model toward specific spellings/names and away from gibberish. Preferred
+  // words seed the spelling; correction pairs describe the intended fix.
+  const promptParts: string[] = [];
+  if (dictWords.length > 0) {
+    promptParts.push(`Use these spellings: ${dictWords.join(', ')}.`);
+  }
+  if (dictCorrections.length > 0) {
+    promptParts.push(
+      dictCorrections.map((c) => `Replace "${c.from}" with "${c.to}".`).join(' ')
+    );
+  }
+  const vocabPrompt = promptParts.join(' ').trim();
 
   const result = await mediaRouter.executeTask(
     {

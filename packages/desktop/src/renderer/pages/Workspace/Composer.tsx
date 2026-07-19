@@ -30,6 +30,44 @@ import { ComposerService } from '../../logic/composer';
 const AUTO_ROUTE_MODEL = 'Orchestrator';
 const AUTO_ROUTE_LABEL = 'Orchestrator';
 
+function writeString(view: DataView, offset: number, str: string) {
+  for (let i = 0; i < str.length; i++) {
+    view.setUint8(offset + i, str.charCodeAt(i));
+  }
+}
+
+function floatTo16BitPCM(output: DataView, offset: number, input: Float32Array) {
+  for (let i = 0; i < input.length; i++, offset += 2) {
+    let s = Math.max(-1, Math.min(1, input[i]));
+    output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+}
+
+function writeWavHeader(samples: Float32Array, sampleRate: number): ArrayBuffer {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // Mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(view, 36, 'data');
+  view.setUint32(40, samples.length * 2, true);
+  floatTo16BitPCM(view, 44, samples);
+  return buffer;
+}
+
+function bufferToWav(buffer: AudioBuffer): ArrayBuffer {
+  const samples = buffer.getChannelData(0);
+  return writeWavHeader(samples, buffer.sampleRate);
+}
+
 
 /** Options returned by the Composer when a prompt is submitted. */
 export interface ComposerOptions {
@@ -152,8 +190,9 @@ export const Composer: React.FC<ComposerProps> = ({
   // Model-based (cloud STT) path state.
   const mediaRecorderRef = useRef<any>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
-  const [voiceEngine, setVoiceEngine] = useState<'auto' | 'browser' | 'model'>('auto');
+  const [voiceEngine, setVoiceEngine] = useState<'auto' | 'browser' | 'model' | 'local'>('auto');
   const [voiceModelAvailable, setVoiceModelAvailable] = useState<boolean | null>(null);
+  const [localWhisperEnabled, setLocalWhisperEnabled] = useState<boolean>(false);
 
   const ipcRenderer = typeof window !== 'undefined' && (window as any).require
     ? (window as any).require('electron').ipcRenderer
@@ -166,7 +205,12 @@ export const Composer: React.FC<ComposerProps> = ({
     ipcRenderer.invoke('settings-read').then((settings: any) => {
       if (!active) return;
       const voice = settings?.voice || {};
-      setVoiceEngine(voice.engine === 'browser' || voice.engine === 'model' ? voice.engine : 'auto');
+      setVoiceEngine(
+        voice.engine === 'browser' || voice.engine === 'model' || voice.engine === 'local'
+          ? voice.engine
+          : 'auto'
+      );
+      setLocalWhisperEnabled(Boolean(voice.localWhisper?.enabled));
       const providers = settings?.providers || [];
       const provider = providers.find((p: any) => p.id === voice.providerId) || providers.find((p: any) => p.apiKey);
       setVoiceModelAvailable(Boolean(provider?.apiKey));
@@ -174,7 +218,10 @@ export const Composer: React.FC<ComposerProps> = ({
     return () => { active = false; };
   }, []);
 
-  const usesModelEngine = voiceEngine === 'model' || (voiceEngine === 'auto' && voiceModelAvailable === true);
+  const usesModelEngine =
+    voiceEngine === 'model' ||
+    voiceEngine === 'local' ||
+    (voiceEngine === 'auto' && (voiceModelAvailable === true || localWhisperEnabled === true));
 
   // Project switcher popover
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
@@ -362,21 +409,49 @@ export const Composer: React.FC<ComposerProps> = ({
         }
         setTranscribing(true);
         try {
-          const buf = new Uint8Array(await blob.arrayBuffer());
+          const arrayBuffer = await blob.arrayBuffer();
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          const audioCtx = new AudioContextClass();
+          let audioBuffer: AudioBuffer;
+          try {
+            audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+          } catch (decodeErr) {
+            await audioCtx.close();
+            throw decodeErr;
+          }
+          await audioCtx.close();
+
+          const OfflineAudioContextClass = window.OfflineAudioContext || (window as any).webkitOfflineAudioContext;
+          const offlineCtx = new OfflineAudioContextClass(
+            1,
+            Math.round(audioBuffer.duration * 16000),
+            16000
+          );
+          const source = offlineCtx.createBufferSource();
+          source.buffer = audioBuffer;
+          source.connect(offlineCtx.destination);
+          source.start();
+          const renderedBuffer = await offlineCtx.startRendering();
+
+          const wavBuffer = bufferToWav(renderedBuffer);
+          const buf = new Uint8Array(wavBuffer);
+
           const res = ipcRenderer
             ? await ipcRenderer.invoke('media-transcribe', {
                 buffer: Array.from(buf),
-                filename: mimeType.includes('webm') ? 'dictation.webm' : 'dictation.bin',
-                mimeType
+                filename: 'dictation.wav',
+                mimeType: 'audio/wav'
               })
             : null;
           if (res?.ok) {
             finalizeTranscription(res.text || '');
           } else {
+            basePromptRef.current = prompt; // Re-sync base on error
             setTranscribing(false);
             onMicNotice?.(res?.error || 'Transcription failed.');
           }
         } catch (err: any) {
+          basePromptRef.current = prompt; // Re-sync base on error
           setTranscribing(false);
           onMicNotice?.(err?.message ? `Transcription failed: ${err.message}` : 'Transcription failed.');
         }
