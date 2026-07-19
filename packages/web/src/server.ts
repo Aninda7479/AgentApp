@@ -741,6 +741,47 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         result = { success: true, folder: PartnerStore.partnerFolderPath(userDataDir, args[0]) };
         break;
 
+      // ─── Web App hosting controls (desktop-only; web build self-reports) ─────
+      // The shared WebAppSettings renderer polls these. On the desktop build the
+      // main process manages a *child* web server (start/stop/status). On the web
+      // build there is no child to manage — the server answering this request IS
+      // the Web App — so report an honest running status and treat start/stop as
+      // no-ops. Without these, the renderer's 3s `web-status` poll 404s forever.
+      case 'web-status': {
+        const port = Number(process.env.PORT) || 3000;
+        const localIp = (() => {
+          const addrs = lanAddresses();
+          return addrs[0] || 'localhost';
+        })();
+        result = {
+          running: true,
+          port,
+          url: `http://localhost:${port}`,
+          lanUrl: `http://${localIp}:${port}`
+        };
+        break;
+      }
+      case 'web-start':
+        // Already running (you're connected to it) — acknowledge without acting.
+        result = { success: true, running: true };
+        break;
+      case 'web-stop':
+        // The Web App cannot stop itself from within the browser it's serving.
+        result = { success: false, error: 'The Web App cannot be stopped from within itself.' };
+        break;
+      case 'web-change-password': {
+        // AuthStore is shared across CLI/Desktop/Web, so this works on the web
+        // build too. Mirrors the desktop `web-change-password` handler.
+        const { current, next } = (args[0] as { current?: string; next?: string }) ?? {};
+        if (!next || next.length < 6) {
+          result = { ok: false, error: 'New password must be at least 6 characters.' };
+          break;
+        }
+        const changed = AuthStore.changePassword(current ?? '', next);
+        result = changed.ok ? { ok: true } : { ok: false, error: changed.error || 'Failed to change password.' };
+        break;
+      }
+
       // ─── Pet (3D desktop companion) — no-op on the web build ─────────────────
       case 'pet-status':
         // No 3D pet window in the web build; report it as disabled so the UI
