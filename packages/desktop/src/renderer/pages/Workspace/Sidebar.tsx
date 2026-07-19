@@ -45,8 +45,8 @@ export interface SidebarProps {
   onProjectSettings?: (project: StoredProject) => void;
   /** Opens the per-chat Sandbox & Internet settings modal for the given chat. */
   onChatSettings?: (chat: StoredChat) => void;
-  /** Opens the Standalone Chat settings page. */
-  onOpenStandaloneChat?: () => void;
+  /** Opens the per-chat settings page for the given standalone (project-less) chat. */
+  onStandaloneChatSettings?: (chat: StoredChat) => void;
   onDeleteChat?: (id: string) => void;
   onSelectChat?: (id: string) => void;
   activeChatId?: string | null;
@@ -80,7 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onConfigureProject,
   onProjectSettings,
   onChatSettings,
-  onOpenStandaloneChat,
+  onStandaloneChatSettings,
   onDeleteChat,
   onSelectChat,
   activeChatId = null,
@@ -457,26 +457,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="ui-eyebrow group-hover:text-brand-textMuted transition-colors">
                 Chats
               </span>
-              <span className="flex items-center gap-1">
-                {onOpenStandaloneChat && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenStandaloneChat();
-                    }}
-                    className="text-brand-textMuted/60 hover:text-brand-textMain p-1 rounded-md hover:bg-[color:var(--brand-hover)] transition-all duration-150 cursor-pointer"
-                    title="Standalone Chat Settings"
-                    aria-label="Standalone Chat Settings"
-                  >
-                    <Settings className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                <span className="text-brand-textMuted/40">
-                  {chatsCollapsed
-                    ? <ChevronRight className="w-3 h-3" />
-                    : <ChevronDown className="w-3 h-3" />
-                  }
-                </span>
+              <span className="text-brand-textMuted/40">
+                {chatsCollapsed
+                  ? <ChevronRight className="w-3 h-3" />
+                  : <ChevronDown className="w-3 h-3" />
+                }
               </span>
             </div>
 
@@ -510,6 +495,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <span className="text-[10px] text-brand-textMuted/40 group-hover:hidden">
                           {isChatRunning ? 'Working...' : chat.timestamp}
                         </span>
+                        {onStandaloneChatSettings && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onStandaloneChatSettings(chat);
+                            }}
+                            className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all cursor-pointer"
+                            title="Chat Settings"
+                          >
+                            <Settings className="w-3 h-3" />
+                          </button>
+                        )}
                         {onDeleteChat && (
                           <button
                             onClick={(e) => {
@@ -531,16 +528,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div className="text-[11px] text-brand-textMuted/40 px-3 py-2 italic">
                     No active chats.
                   </div>
-                )}
-
-                {onOpenStandaloneChat && (
-                  <button
-                    onClick={onOpenStandaloneChat}
-                    className="flex items-center gap-2 px-3 py-2 text-[12px] text-brand-textMuted/70 hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] rounded-lg transition-all cursor-pointer w-full"
-                  >
-                    <Settings className="w-3.5 h-3.5" />
-                    <span>Standalone Chat Settings</span>
-                  </button>
                 )}
               </div>
             )}

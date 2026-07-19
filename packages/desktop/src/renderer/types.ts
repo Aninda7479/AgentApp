@@ -9,6 +9,23 @@ export type InheritableSandbox = 'inherit' | 'sandboxed' | 'full-access';
 export type InheritableApproval = 'inherit' | 'always' | 'ask' | 'never';
 export type InheritableInternet = 'inherit' | 'all' | 'observation' | 'none';
 
+/**
+ * Per-standalone-chat configuration (project-less chats). Mirrors the
+ * project-scope fields on {@link StoredProject}, but scoped to a single chat so
+ * each standalone chat carries its own permissions/skills/memory/instructions
+ * instead of a single cumulative config shared by all standalone chats.
+ */
+export interface StandaloneChatConfig {
+  /** Pre-approved shell commands for this chat. */
+  allowedCommands: string[];
+  /** Chat-only skills enabled for this chat (by id). */
+  allowedSkills: string[];
+  /** Memory surfaced to the agent for this chat. */
+  memory: string;
+  /** Standing instructions prepended to this chat's runs. */
+  instructions: string;
+}
+
 /** Sandbox + internet settings attached to a Project or Chat scope. */
 export interface AgentScopeSettings {
   /** Sandbox on/off. Default 'inherit' (use parent scope). */
@@ -46,6 +63,11 @@ export interface StoredChat {
   projectStorageKey?: string;
   /** Per-scope sandbox + internet overrides for this chat (wins over project/global). */
   settings?: AgentScopeSettings;
+  /**
+   * Per-chat config for standalone (project-less) chats: permissions, chat-only
+   * skills, memory, and instructions. Undefined for project-nested chats.
+   */
+  standaloneConfig?: StandaloneChatConfig;
   isRunning?: boolean;
   startedAt?: number;
   lastError?: string;

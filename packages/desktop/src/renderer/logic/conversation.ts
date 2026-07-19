@@ -173,6 +173,29 @@ export class ConversationService {
   }
 
   /**
+   * Persists a standalone (project-less) chat's own config: permissions,
+   * chat-only skills, memory, instructions, and its sandbox/internet scope.
+   * Each standalone chat carries its own settings instead of a single
+   * cumulative config shared by all of them.
+   */
+  static saveStandaloneChatConfig(
+    ctx: AppContext,
+    chatId: string,
+    config: import('../types').StandaloneChatConfig,
+    settings: import('../types').AgentScopeSettings
+  ): void {
+    ctx.setChats((prev) => {
+      const next = prev.map((c) =>
+        c.id === chatId
+          ? { ...c, standaloneConfig: { ...config }, settings: { ...settings } }
+          : c
+      );
+      ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), next);
+      return next;
+    });
+  }
+
+  /**
    * Opens a blank draft chat, optionally scoped to a project. Clears the
    * trajectory and navigates to the trajectory view.
    */

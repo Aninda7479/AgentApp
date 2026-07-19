@@ -1055,12 +1055,15 @@ export const App: React.FC = () => {
               handleSelectProject(proj.name);
               setActiveTab('project-settings');
             }}
-            onOpenStandaloneChat={() => setActiveTab('standalone-chat')}
             onDeleteChat={handleDeleteChat}
             onSelectChat={handleSelectChat}
             onChatSettings={(chat) => {
               setChatToConfigure(chat);
               setIsChatSettingsOpen(true);
+            }}
+            onStandaloneChatSettings={(chat) => {
+              setChatToConfigure(chat);
+              setActiveTab('standalone-chat');
             }}
           />
         )}
@@ -1154,7 +1157,13 @@ export const App: React.FC = () => {
 
           {activeTab === 'standalone-chat' && (
             <StandaloneChatPage
+              chat={chatToConfigure}
               availableSkills={availableSkills}
+              onSave={(config, settings) => {
+                if (chatToConfigure) {
+                  ConversationService.saveStandaloneChatConfig(ctx, chatToConfigure.id, config, settings);
+                }
+              }}
               onBack={() => setActiveTab('trajectory')}
             />
           )}

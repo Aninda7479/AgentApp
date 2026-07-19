@@ -1,61 +1,138 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Check, Terminal, Trash2, Plus, Boxes, Brain, ClipboardList, MessageSquareDashed } from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  Terminal,
+  Trash2,
+  Plus,
+  Boxes,
+  Brain,
+  ClipboardList,
+  MessageSquareDashed,
+  ShieldCheck,
+  ShieldAlert,
+  Globe
+} from 'lucide-react';
+import {
+  StoredChat,
+  StandaloneChatConfig,
+  AgentScopeSettings,
+  InheritableSandbox,
+  InheritableApproval,
+  InheritableInternet
+} from '../../types';
 
-const STORAGE_KEY = 'superagent.standalone-chat-config';
+/**
+ * Legacy global config key. Before standalone-chat settings became per-chat, a
+ * single record here was shared by every standalone chat. We still read it to
+ * seed a chat that has no per-chat config yet, so existing users don't lose
+ * their previous settings.
+ */
+const LEGACY_STORAGE_KEY = 'superagent.standalone-chat-config';
 
-interface StandaloneConfig {
-  allowedCommands: string[];
-  allowedSkills: string[];
-  memory: string;
-  instructions: string;
+const EMPTY: StandaloneChatConfig = { allowedCommands: [], allowedSkills: [], memory: '', instructions: '' };
+const EMPTY_SCOPE: Required<AgentScopeSettings> = { sandbox: 'inherit', approval: 'inherit', internet: 'inherit' };
+
+/** Reads the legacy global config (if any) to seed an unconfigured chat. */
+function readLegacyConfig(): StandaloneChatConfig | null {
+  try {
+    const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StandaloneChatConfig>;
+    return {
+      allowedCommands: parsed.allowedCommands ?? [],
+      allowedSkills: parsed.allowedSkills ?? [],
+      memory: parsed.memory ?? '',
+      instructions: parsed.instructions ?? ''
+    };
+  } catch {
+    return null;
+  }
 }
 
-const EMPTY: StandaloneConfig = { allowedCommands: [], allowedSkills: [], memory: '', instructions: '' };
+/** Small inline segmented control for the inheritable scope settings. */
+function Segmented<T extends string>(props: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}): React.ReactElement {
+  return (
+    <div className="inline-flex flex-wrap gap-1 bg-brand-bg/40 border border-brand-border/60 rounded-lg p-1">
+      {props.options.map((opt) => {
+        const active = props.value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => props.onChange(opt.value)}
+            className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+              active
+                ? 'bg-[var(--brand-highlight)] text-[color:var(--brand-highlight-text)]'
+                : 'text-brand-textMuted hover:bg-[var(--brand-hover)] hover:text-brand-textMain'
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export interface StandaloneChatPageProps {
+  /** The standalone chat being configured. Null → show an empty-state hint. */
+  chat: StoredChat | null;
   /** Skills discoverable in the workspace, offered as chat-only skills. */
   availableSkills: { id: string; name: string }[];
+  /** Persists this chat's config + sandbox/internet scope. */
+  onSave: (config: StandaloneChatConfig, settings: AgentScopeSettings) => void;
   onBack: () => void;
 }
 
 /**
- * Scoped settings for standalone (project-less) chats: permissions, chat-only
- * skills, memory, and instructions. Persisted locally so it survives reloads
- * without a backend change.
+ * Per-chat settings for a standalone (project-less) chat: permissions,
+ * chat-only skills, memory, instructions, and the sandbox / command-approval /
+ * internet scope. These are scoped to the single selected chat, not shared
+ * across every standalone chat.
  */
-export const StandaloneChatPage: React.FC<StandaloneChatPageProps> = ({ availableSkills, onBack }) => {
+export const StandaloneChatPage: React.FC<StandaloneChatPageProps> = ({ chat, availableSkills, onSave, onBack }) => {
   const [allowedCommands, setAllowedCommands] = useState<string[]>([]);
   const [allowedSkills, setAllowedSkills] = useState<string[]>([]);
   const [memory, setMemory] = useState<string>('');
   const [instructions, setInstructions] = useState<string>('');
+  const [sandbox, setSandbox] = useState<InheritableSandbox>('inherit');
+  const [approval, setApproval] = useState<InheritableApproval>('inherit');
+  const [internet, setInternet] = useState<InheritableInternet>('inherit');
   const [newCommand, setNewCommand] = useState('');
   const [savedFlash, setSavedFlash] = useState(false);
   const commandInputRef = useRef<HTMLInputElement>(null);
 
+  // Load this chat's config. If it has none yet, seed from the legacy global
+  // config so a user's previous (shared) settings become this chat's starting
+  // point — they can then override and save per-chat.
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<StandaloneConfig>;
-        setAllowedCommands(parsed.allowedCommands ?? []);
-        setAllowedSkills(parsed.allowedSkills ?? []);
-        setMemory(parsed.memory ?? '');
-        setInstructions(parsed.instructions ?? '');
-      }
-    } catch {
-      /* ignore corrupt config */
-    }
-  }, []);
+    const cfg = chat?.standaloneConfig ?? readLegacyConfig() ?? EMPTY;
+    setAllowedCommands(cfg.allowedCommands ?? []);
+    setAllowedSkills(cfg.allowedSkills ?? []);
+    setMemory(cfg.memory ?? '');
+    setInstructions(cfg.instructions ?? '');
+    const scope = chat?.settings ?? EMPTY_SCOPE;
+    setSandbox(scope.sandbox ?? 'inherit');
+    setApproval(scope.approval ?? 'inherit');
+    setInternet(scope.internet ?? 'inherit');
+  }, [chat?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const persist = (next: StandaloneConfig) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore quota errors */
-    }
+  const persist = (
+    config: StandaloneChatConfig,
+    scope: AgentScopeSettings = { sandbox, approval, internet }
+  ) => {
+    if (!chat) return;
+    onSave(config, scope);
     setSavedFlash(true);
     setTimeout(() => setSavedFlash(false), 2000);
   };
+
+  const currentConfig = (): StandaloneChatConfig => ({ allowedCommands, allowedSkills, memory, instructions });
 
   const handleAddCommand = () => {
     const cmd = newCommand.trim();
@@ -79,7 +156,38 @@ export const StandaloneChatPage: React.FC<StandaloneChatPageProps> = ({ availabl
     persist({ allowedCommands, allowedSkills: next, memory, instructions });
   };
 
-  const handleSave = () => persist({ allowedCommands, allowedSkills, memory, instructions });
+  const setScope = (partial: Partial<AgentScopeSettings>) => {
+    const nextScope: AgentScopeSettings = { sandbox, approval, internet, ...partial };
+    if (partial.sandbox !== undefined) setSandbox(partial.sandbox);
+    if (partial.approval !== undefined) setApproval(partial.approval);
+    if (partial.internet !== undefined) setInternet(partial.internet);
+    persist(currentConfig(), nextScope);
+  };
+
+  const handleSave = () => persist(currentConfig());
+
+  // No chat selected → guide the user to open one from the sidebar.
+  if (!chat) {
+    return (
+      <div className="flex h-full flex-col bg-brand-bg text-brand-textMain">
+        <div className="flex items-center gap-3 border-b border-brand-border px-4 py-3">
+          <button className="ui-btn flex-shrink-0" onClick={onBack} aria-label="Back">
+            <ArrowLeft size={16} />
+          </button>
+          <h1 className="font-outfit text-lg font-semibold">Standalone Chat Settings</h1>
+        </div>
+        <div className="flex flex-1 items-center justify-center px-6 text-center">
+          <div className="flex max-w-sm flex-col items-center gap-3 text-brand-textMuted">
+            <MessageSquareDashed size={28} className="opacity-60" />
+            <p className="text-sm">
+              Open a standalone chat's settings from the sidebar (hover a chat under <strong>Chats</strong> and click the
+              gear) to configure it. Each standalone chat has its own settings.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col bg-brand-bg text-brand-textMain">
@@ -89,8 +197,8 @@ export const StandaloneChatPage: React.FC<StandaloneChatPageProps> = ({ availabl
             <ArrowLeft size={16} />
           </button>
           <div className="min-w-0">
-            <h1 className="font-outfit text-lg font-semibold truncate">Standalone Chat Settings</h1>
-            <p className="text-xs text-brand-textMuted truncate">Scoped to chats not tied to a project</p>
+            <h1 className="font-outfit text-lg font-semibold truncate">Chat Settings: {chat.title}</h1>
+            <p className="text-xs text-brand-textMuted truncate">Scoped to this standalone chat only</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -104,8 +212,67 @@ export const StandaloneChatPage: React.FC<StandaloneChatPageProps> = ({ availabl
       <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
           <div className="flex items-center gap-2 text-xs text-brand-textMuted">
-            <MessageSquareDashed size={14} /> These settings apply to standalone chats and are stored on this device.
+            <MessageSquareDashed size={14} /> These settings apply to this chat only and are saved with it.
           </div>
+
+          {/* Sandbox & permissions scope */}
+          <section className="flex flex-col gap-4 rounded-xl border border-brand-border/60 bg-brand-bg/40 p-4">
+            <div className="flex flex-col gap-1.5">
+              <span className="ui-label flex items-center gap-1.5">
+                <ShieldCheck size={13} className="text-[color:var(--neon-constructive)]" /> Sandbox
+              </span>
+              <Segmented
+                value={sandbox}
+                onChange={(v) => setScope({ sandbox: v })}
+                options={[
+                  { value: 'inherit', label: 'Inherit (global)' },
+                  { value: 'sandboxed', label: 'Sandboxed' },
+                  { value: 'full-access', label: 'Full access' }
+                ]}
+              />
+              <span className="text-[10px] text-brand-textMuted/60">
+                Full access lets the agent read/write anywhere on disk; Sandboxed confines file access to authorized folders.
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="ui-label flex items-center gap-1.5">
+                <ShieldAlert size={13} className="text-[color:var(--neon-attention)]" /> Command approval
+              </span>
+              <Segmented
+                value={approval}
+                onChange={(v) => setScope({ approval: v })}
+                options={[
+                  { value: 'inherit', label: 'Inherit (global)' },
+                  { value: 'always', label: 'Always approve' },
+                  { value: 'ask', label: 'Ask for approval' },
+                  { value: 'never', label: 'Never approve' }
+                ]}
+              />
+              <span className="text-[10px] text-brand-textMuted/60">
+                Never approve blocks every command unless it is on the pre-approved list below.
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="ui-label flex items-center gap-1.5">
+                <Globe size={13} className="text-[color:var(--neon-live)]" /> Internet access
+              </span>
+              <Segmented
+                value={internet}
+                onChange={(v) => setScope({ internet: v })}
+                options={[
+                  { value: 'inherit', label: 'Inherit (global)' },
+                  { value: 'all', label: 'Full access' },
+                  { value: 'observation', label: 'Observation only' },
+                  { value: 'none', label: 'None' }
+                ]}
+              />
+              <span className="text-[10px] text-brand-textMuted/60">
+                Observation only allows read-only GET requests; None blocks web fetch, search, and uploads.
+              </span>
+            </div>
+          </section>
 
           {/* Permissions */}
           <section className="flex flex-col gap-2">
@@ -180,8 +347,8 @@ export const StandaloneChatPage: React.FC<StandaloneChatPageProps> = ({ availabl
             <textarea
               value={memory}
               onChange={(e) => setMemory(e.target.value)}
-              onBlur={() => persist({ allowedCommands, allowedSkills, memory, instructions })}
-              placeholder="Facts and context the agent should remember for standalone chats…"
+              onBlur={() => persist(currentConfig())}
+              placeholder="Facts and context the agent should remember for this chat…"
               rows={5}
               className="w-full resize-y rounded-xl border border-brand-border bg-brand-bg/40 px-3 py-2.5 text-sm text-brand-textMain placeholder:text-brand-textMuted/50 focus:outline-none focus:border-brand-textMuted leading-relaxed"
             />
@@ -195,8 +362,8 @@ export const StandaloneChatPage: React.FC<StandaloneChatPageProps> = ({ availabl
             <textarea
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
-              onBlur={() => persist({ allowedCommands, allowedSkills, memory, instructions })}
-              placeholder="Standing instructions prepended to standalone chat runs…"
+              onBlur={() => persist(currentConfig())}
+              placeholder="Standing instructions prepended to this chat's runs…"
               rows={5}
               className="w-full resize-y rounded-xl border border-brand-border bg-brand-bg/40 px-3 py-2.5 text-sm text-brand-textMain placeholder:text-brand-textMuted/50 focus:outline-none focus:border-brand-textMuted leading-relaxed"
             />
