@@ -9,6 +9,8 @@ export interface AudioTranscriptionOptions {
   prompt?: string;
   temperature?: number;
   responseFormat?: 'json' | 'text' | 'srt' | 'verbose_json' | 'vtt';
+  /** When true, route through the injected local (on-device) backend. */
+  local?: boolean;
 }
 
 export interface TranscriptionSegment {
@@ -32,10 +34,47 @@ export interface AudioTranscriptionResult {
 }
 
 export class AudioTranscriber {
+  /** Optional local (on-device) transcription backend, injected by the
+   *  desktop layer so Core never takes a WASM/transformers dependency.
+   *  When set, a transcription request with `config.provider === 'local'`
+   *  (or `options.local === true`) delegates to it and returns the same
+   *  `AudioTranscriptionResult` shape — the HTTP cloud path is untouched. */
+  private static localBackend:
+    | ((options: AudioTranscriptionOptions, cfg: BYOKConfig) => Promise<AudioTranscriptionResult>)
+    | null = null;
+
+  /** Register the local transcription backend (called once at startup). */
+  static setLocalBackend(
+    fn: (options: AudioTranscriptionOptions, cfg: BYOKConfig) => Promise<AudioTranscriptionResult>
+  ): void {
+    AudioTranscriber.localBackend = fn;
+  }
+
   async transcribe(options: AudioTranscriptionOptions, config: BYOKConfig): Promise<AudioTranscriptionResult> {
     const taskId = `stt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const model = options.model || config.modelName || 'whisper-1';
     const provider = config.provider || 'openai';
+
+    // Local (on-device) transcription branch.
+    if (AudioTranscriber.localBackend && (String(config.provider) === 'local' || (options as any).local === true)) {
+      try {
+        const res = await AudioTranscriber.localBackend(options, config);
+        res.provider = res.provider || 'local';
+        res.model = res.model || model;
+        return res;
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        return {
+          id: taskId,
+          status: 'failed',
+          text: '',
+          model,
+          provider: 'local',
+          createdAt: Date.now(),
+          error: errorMessage
+        };
+      }
+    }
 
     if (!options.audioBuffer || options.audioBuffer.length === 0) {
       return {

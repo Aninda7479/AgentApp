@@ -152,12 +152,33 @@ export interface VoiceDictionary {
   corrections?: { from: string; to: string }[];
 }
 
+/**
+ * On-device Whisper (transformers.js / WASM ONNX) transcription config.
+ * When `enabled`, the mic transcribes audio in-process instead of via a
+ * cloud STT endpoint. The model is downloaded once to `modelDir`.
+ */
+export interface LocalWhisperSettings {
+  enabled: boolean;
+  /** Whisper size tier — accuracy vs RAM/VRAM + speed. */
+  size: 'tiny' | 'base' | 'small' | 'medium' | 'large';
+  /** ISO-639-1 language hint; ignored when `autoDetect` is true. */
+  language: string;
+  /** When true, drop the language hint and let Whisper auto-detect. */
+  autoDetect: boolean;
+  /** Compute target; `auto` prefers WebGPU when available, else WASM. */
+  device: 'cpu' | 'gpu' | 'auto';
+  /** Where the model is cached (defaults to ~/.superagent/models/whisper). */
+  modelDir: string;
+}
+
 export interface VoiceSettings {
-  engine?: 'auto' | 'browser' | 'model';
+  engine?: 'auto' | 'browser' | 'model' | 'local';
   providerId?: string;
   model?: string;
   language?: string;
   dictionary?: VoiceDictionary;
+  /** On-device Whisper transcription config (see {@link LocalWhisperSettings}). */
+  localWhisper?: LocalWhisperSettings;
 }
 
 /** Map of built-in plugin id → whether the user has enabled it. */

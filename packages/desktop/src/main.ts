@@ -2,7 +2,7 @@ import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, type IpcMai
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter } from '@superagent/core';
+import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber } from '@superagent/core';
 
 // Set a custom userData path so all app data lives in <home>/.superagent.
 app.setPath('userData', getUserDataDirectory());
@@ -12,6 +12,7 @@ import { setupAutoUpdater } from './main/updater';
 import { readStore, writeStore, StoreData } from './main/store';
 import { getChatDirectory } from './main/storage/index.js';
 import * as PartnerStore from './main/partner-store';
+import * as whisperLocal from './main/whisper-local';
 import { petWindowManager } from './main/pet-window';
 import { logError, errorMessage, registerErrorToasts, IpcErrorEnvelope } from './main/error-log';
 import { getSystemInfo } from './main/system-info';
@@ -1012,6 +1013,35 @@ safeHandle('three-d-generate', async (_event, args: { name?: string; prompt?: st
 // Settings → Voice, then route through the core media pipeline.
 const mediaRouter = new MediaPipelineRouter();
 
+// Register the on-device Whisper (transformers.js) transcription backend.
+// When a transcription request carries `provider: 'local'`, Core's
+// AudioTranscriber delegates to this instead of an HTTP endpoint.
+AudioTranscriber.setLocalBackend(async (options, config) => {
+  const lw = (config as any).localWhisper;
+  const size = (lw?.size as any) || 'tiny';
+  const device = (lw?.device as any) || 'auto';
+  const cfg = (config as any) || {};
+  const res = await whisperLocal.transcribe(
+    Buffer.isBuffer(options.audioBuffer) ? options.audioBuffer : Buffer.from(options.audioBuffer as any),
+    {
+      size,
+      language: (lw?.language as string) || (options.language as string) || '',
+      autoDetect: lw?.autoDetect !== false,
+      device,
+      modelDir: (lw?.modelDir as string) || whisperLocal.defaultModelDir(),
+      ...cfg
+    }
+  );
+  return {
+    id: `local_stt_${Date.now()}`,
+    status: 'success' as const,
+    text: res.text || '',
+    provider: 'local',
+    model: `whisper-${size}`,
+    createdAt: Date.now()
+  };
+});
+
 safeHandle('media-transcribe', async (_event, args: {
   buffer?: number[] | ArrayBuffer | Uint8Array;
   filename?: string;
@@ -1078,6 +1108,44 @@ safeHandle('media-transcribe', async (_event, args: {
   }
   const vocabPrompt = promptParts.join(' ').trim();
 
+  // On-device Whisper branch: when the user enabled local STT, transcribe
+  // in-process (transformers.js) instead of over HTTP. The custom
+  // dictionary corrections are applied deterministically to the result
+  // (transformers.js ASR has no OpenAI `prompt` param).
+  if (voice.localWhisper?.enabled) {
+    const lw = voice.localWhisper;
+    const result = await mediaRouter.executeTask(
+      {
+        taskType: 'audio-transcription',
+        audioTranscribe: {
+          audioBuffer,
+          filename: args?.filename || 'dictation.wav',
+          model: `whisper-${lw.size}`,
+          language: lw.autoDetect ? undefined : lw.language?.trim() || undefined,
+          local: true
+        }
+      },
+      {
+        provider: 'local',
+        apiKey: '',
+        baseUrl: undefined,
+        modelName: `whisper-${lw.size}`,
+        localWhisper: lw
+      } as any
+    );
+
+    if (result.status !== 'success' || !result.result) {
+      return { ok: false, error: result.error || 'Local transcription failed.' };
+    }
+    let text = (result.result as { text?: string }).text || '';
+    for (const c of dictCorrections) {
+      if (c.from && c.to) {
+        text = text.split(c.from).join(c.to);
+      }
+    }
+    return { ok: true, text };
+  }
+
   const result = await mediaRouter.executeTask(
     {
       taskType: 'audio-transcription',
@@ -1103,6 +1171,51 @@ safeHandle('media-transcribe', async (_event, args: {
   }
   const text = (result.result as { text?: string }).text || '';
   return { ok: true, text };
+});
+
+// ─── IPC: Local Whisper (transformers.js) management ───────────────
+safeHandle('whisper-local-status', (_event, args: { size?: string; modelDir?: string }) => {
+  try {
+    const size = (args?.size as any) || 'tiny';
+    const dir = args?.modelDir || whisperLocal.defaultModelDir();
+    return { ok: true, status: whisperLocal.getStatus(size, dir) };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? String(err) };
+  }
+});
+
+safeHandle('whisper-local-download', async (event, args: { size?: string; modelDir?: string }) => {
+  try {
+    const size = (args?.size as any) || 'tiny';
+    const dir = args?.modelDir || whisperLocal.defaultModelDir();
+    await whisperLocal.download(size, dir, (progress: number, statusText: string) => {
+      try { event.sender?.send('whisper-local-progress', { size, progress, statusText }); } catch { /* noop */ }
+    });
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? String(err) };
+  }
+});
+
+safeHandle('whisper-local-delete', (_event, args: { size?: string; modelDir?: string }) => {
+  try {
+    const size = (args?.size as any) || 'tiny';
+    const dir = args?.modelDir || whisperLocal.defaultModelDir();
+    whisperLocal.deleteModel(size, dir);
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? String(err) };
+  }
+});
+
+safeHandle('whisper-local-setdir', (_event, args: { dir: string }) => {
+  try {
+    const res = whisperLocal.validateModelDir(args?.dir || '');
+    if (!res.ok) return { ok: false, error: res.error };
+    return { ok: true, modelDir: args.dir };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? String(err) };
+  }
 });
 
 safeHandle('three-d-list-models', async () => {
