@@ -36,9 +36,41 @@ export class ModelSwitcher {
   /** Switches the active model by ID or name, persisting the selection. */
   public static switchModel(context: SessionContext, targetModel: string): CLICommandResult {
     const models = this.listAvailableModels(context);
-    const matched = models.find(
+    let matched = models.find(
       m => m.id.toLowerCase() === targetModel.toLowerCase() || m.name.toLowerCase() === targetModel.toLowerCase()
     );
+
+    // If not matched in static registry, check saved settings catalog (from UI / API discovery)
+    if (!matched) {
+      const saved = SettingsStorage.loadSettings();
+      if (saved.models && saved.models.length > 0) {
+        const found = saved.models.find(
+          m => m.name?.toLowerCase() === targetModel.toLowerCase() || m.id?.toLowerCase() === targetModel.toLowerCase()
+        );
+        if (found && found.id) {
+          let rawId = found.id;
+          const pId = found.providerId || context.activeProvider;
+          if (pId && rawId.toLowerCase().startsWith(`${pId.toLowerCase()}-`)) {
+            rawId = rawId.slice(pId.length + 1);
+          }
+          if (found.providerId) {
+            context.activeProvider = found.providerId;
+          }
+          context.activeModel = rawId;
+          SettingsStorage.saveSettings({
+            lastUsedModel: {
+              model: rawId,
+              provider: context.activeProvider
+            }
+          });
+          return {
+            success: true,
+            message: `Active model switched to '${found.name || rawId}' (${rawId}) [Provider: ${context.activeProvider}].`,
+            data: { model: rawId, provider: context.activeProvider }
+          };
+        }
+      }
+    }
 
     if (matched) {
       context.activeModel = matched.id;
@@ -58,9 +90,13 @@ export class ModelSwitcher {
 
     // Not in the registry. Suggest a close match when the user likely
     // mistyped a known model, then set the raw target as a custom identifier
-    // (preserving the legitimate BYO/custom-model flow from fcd8e09). The
-    // message is explicit that the id was NOT found, so a typo is never
-    // silently reported as a successful switch.
+    // (preserving the legitimate BYO/custom-model flow from fcd8e09). Clean
+    // provider prefix if user passed e.g. "openrouter-tencent/hunyuan-a1".
+    let customModelId = targetModel;
+    if (context.activeProvider && customModelId.toLowerCase().startsWith(`${context.activeProvider.toLowerCase()}-`)) {
+      customModelId = customModelId.slice(context.activeProvider.length + 1);
+    }
+
     const lower = targetModel.toLowerCase();
     const candidates = this.listAvailableModels(context).filter(
       m =>
@@ -75,19 +111,20 @@ export class ModelSwitcher {
       .map(m => m.name);
     const hint = suggestions.length ? ` Did you mean: ${suggestions.join(', ')}?` : '';
     const message =
-      `Model '${targetModel}' not found in registry — set as custom identifier.${hint} ` +
+      `Model '${targetModel}' not found in registry — set as custom identifier (${customModelId}).${hint} ` +
       `Verify its provider with /model provider <provider> (current: ${context.activeProvider}).`;
 
-    context.activeModel = targetModel;
+    context.activeModel = customModelId;
     SettingsStorage.saveSettings({
       lastUsedModel: {
-        model: targetModel
+        model: customModelId,
+        provider: context.activeProvider
       }
     });
     return {
       success: true,
       message,
-      data: { model: targetModel, provider: context.activeProvider }
+      data: { model: customModelId, provider: context.activeProvider }
     };
   }
 

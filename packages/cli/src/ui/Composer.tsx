@@ -16,18 +16,22 @@ export const Composer: React.FC<ComposerProps> = ({
   isBusy = false,
 }) => {
   return (
-    <Box borderStyle="round" borderColor={isBusy ? 'gray' : 'cyan'} paddingX={1}>
-      <Text bold color="cyan">
-        {'❯ '}
-      </Text>
-      {value.length === 0 ? (
-        <Text dimColor color="gray">
-          {placeholder}
+    <Box flexDirection="column" marginTop={1}>
+      {/* Subtle top border line to separate the input area from scrolling logs */}
+      <Box borderStyle="single" borderTop={true} borderBottom={false} borderLeft={false} borderRight={false} borderColor="gray" />
+      <Box flexDirection="row" paddingX={1} marginTop={1}>
+        <Text bold color="cyan">
+          {'❯ '}
         </Text>
-      ) : (
-        <Text>{value}</Text>
-      )}
-      <Text color="cyan">▋</Text>
+        {value.length === 0 ? (
+          <Text dimColor color="gray">
+            {placeholder}
+          </Text>
+        ) : (
+          <Text>{value}</Text>
+        )}
+        <Text color="cyan">▋</Text>
+      </Box>
     </Box>
   );
 };

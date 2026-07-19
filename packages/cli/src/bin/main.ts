@@ -118,16 +118,42 @@ async function handleChat(opts: CliOptions, prompt?: string): Promise<void> {
 
   // Interactive TUI. Ink keeps the process alive until the user quits (/exit).
   const resumeMessages = opts.resume ? loadSession(opts.resume) : null;
-  render(
+  
+  // Enter alternate screen buffer before Ink starts rendering
+  try {
+    process.stdout.write('\x1b[?1049h');
+    process.stdout.write('\x1b[2J\x1b[H');
+  } catch {
+    /* ignore */
+  }
+
+  const sessionId = opts.resume && opts.resume.length > 0 ? opts.resume : (function() {
+    const g = () => Math.random().toString(16).slice(2, 6).padEnd(4, '0').slice(0, 4);
+    return `${g()}-${g()}-${g()}-${g()}`;
+  })();
+
+  const app = render(
     React.createElement(App, {
       provider: opts.provider,
       model: opts.model ?? 'default',
       initialPermission: opts.permission,
       initialVerbose: opts.verbose,
-      sessionId: opts.resume,
+      sessionId: sessionId,
       initialMessages: resumeMessages ?? undefined,
     })
   );
+
+  await app.waitUntilExit();
+
+  // Exit alternate screen buffer after Ink exits
+  try {
+    process.stdout.write('\x1b[?1049l');
+    process.stdout.write(
+      `\nResume this session with:\nsuperagent --resume ${sessionId}\n\n`
+    );
+  } catch {
+    /* ignore */
+  }
 }
 
 const program = createCliProgram((opts, prompt) => handleChat(opts, prompt));

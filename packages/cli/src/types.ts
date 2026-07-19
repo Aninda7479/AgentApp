@@ -1,4 +1,4 @@
-import { BYOKProviderManager, ModelCapabilityRegistry, SkillStore, LearningLoopEngine, AgentMessage, SettingsStorage } from '@superagent/core';
+import { BYOKProviderManager, ModelCapabilityRegistry, SkillStore, LearningLoopEngine, AgentMessage, SettingsStorage, resolveConnection } from '@superagent/core';
 import { BUILTIN_THEMES } from './commands/theme.js';
 
 /** Represents a terminal keyboard input event with key modifiers. */
@@ -26,7 +26,7 @@ export interface Theme {
   backgroundColor: string;
 }
 
-/** Tracks token consumption and cost for the current session. */
+/** Statistics for token consumption in the current session. */
 export interface SessionTokenUsage {
   promptTokens: number;
   completionTokens: number;
@@ -34,7 +34,7 @@ export interface SessionTokenUsage {
   estimatedCost: number;
 }
 
-/** Standard result envelope returned by CLI command handlers. */
+/** Result returned by CLI command handlers. */
 export interface CLICommandResult {
   success: boolean;
   message: string;
@@ -68,8 +68,11 @@ export function createSessionContext(provider: string = 'openai', model: string 
 
   // Load saved settings
   const savedSettings = SettingsStorage.loadSettings();
-  const activeProvider = savedSettings.lastUsedModel?.provider || provider;
-  const activeModel = savedSettings.lastUsedModel?.model || model;
+  const rawProvider = savedSettings.lastUsedModel?.provider || provider;
+  const rawModel = savedSettings.lastUsedModel?.model || model;
+  const conn = resolveConnection(rawProvider, rawModel);
+  const activeProvider = conn.provider || rawProvider;
+  const activeModel = conn.model || rawModel;
 
   // Load saved API keys from settings.json into byokManager
   if (savedSettings.providers) {

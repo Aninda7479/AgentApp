@@ -1,21 +1,155 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Box, Text, useApp, useInput, useStdout } from 'ink';
+import fs from 'fs';
+import path from 'path';
 
-/** Tracks the live terminal height, updating on resize so the pinned layout
- *  always matches the real window (a one-time read of `process.stdout.rows`
- *  drifts after the terminal is resized and causes frames to mis-align). */
-function useTerminalRows(): number {
+function useTerminalDimensions(): { rows: number; columns: number } {
   const { stdout } = useStdout();
-  const [rows, setRows] = useState(() => stdout?.rows || process.stdout.rows || 24);
+  const getDims = () => {
+    const r = stdout?.rows || process.stdout.rows || 24;
+    const c = stdout?.columns || process.stdout.columns || 80;
+    return {
+      rows: r > 0 ? r : 24,
+      columns: c > 0 ? c : 80
+    };
+  };
+  const [dims, setDims] = useState(getDims);
   useEffect(() => {
-    const onResize = () => setRows(stdout?.rows || process.stdout.rows || 24);
+    const onResize = () => setDims(getDims());
     const stream = stdout ?? process.stdout;
     stream.on('resize', onResize);
     return () => {
       stream.off('resize', onResize);
     };
   }, [stdout]);
-  return rows;
+  return dims;
+}
+
+const TIPS = [
+  'Ask SuperAgent to create subagents for specific tasks (e.g. Software Architect, Coder).',
+  'Use shift+tab to cycle through permission modes (auto, ask, deny).',
+  'You can run /diff to review all code modifications made during the session.',
+  'Connect provider API keys or switch active models using the /model command.',
+  'Run commands directly or type a prompt for the autonomous agent to solve.',
+  'Type /help to see all available slash commands and key shortcuts.'
+];
+
+export const Spinner: React.FC = () => {
+  const [frame, setFrame] = useState(0);
+  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setFrame((prev) => (prev + 1) % frames.length);
+    }, 80);
+    return () => clearInterval(timer);
+  }, []);
+  return <Text color="red" bold>{frames[frame]}</Text>;
+};
+
+interface DiffChunk {
+  lines: any[];
+  startLine: number;
+}
+
+function groupDiffIntoChunks(diffLines: any[], contextSize = 3): DiffChunk[] {
+  const chunks: DiffChunk[] = [];
+  let currentChunk: any[] = [];
+  let lastChangeIndex = -1;
+
+  for (let i = 0; i < diffLines.length; i++) {
+    const isChange = diffLines[i].type === 'add' || diffLines[i].type === 'delete';
+    if (isChange) {
+      lastChangeIndex = i;
+    }
+  }
+
+  if (lastChangeIndex === -1) return [];
+
+  let inChunk = false;
+  let chunkStartIndex = 0;
+
+  for (let i = 0; i < diffLines.length; i++) {
+    let nearChange = false;
+    for (let j = Math.max(0, i - contextSize); j <= Math.min(diffLines.length - 1, i + contextSize); j++) {
+      if (diffLines[j].type === 'add' || diffLines[j].type === 'delete') {
+        nearChange = true;
+        break;
+      }
+    }
+
+    if (nearChange) {
+      if (!inChunk) {
+        inChunk = true;
+        chunkStartIndex = i;
+        currentChunk = [];
+      }
+      currentChunk.push(diffLines[i]);
+    } else {
+      if (inChunk) {
+        chunks.push({
+          lines: currentChunk,
+          startLine: chunkStartIndex + 1
+        });
+        currentChunk = [];
+        inChunk = false;
+      }
+    }
+  }
+
+  if (inChunk && currentChunk.length > 0) {
+    chunks.push({
+      lines: currentChunk,
+      startLine: chunkStartIndex + 1
+    });
+  }
+
+  return chunks;
+}
+
+function estimateMessageHeight(m: UiMessage, columns: number): number {
+  const cols = columns && columns > 0 ? columns : 80;
+  let height = 0;
+  if (m.role === 'user') {
+    const text = `❯ ${m.content}`;
+    height += Math.max(1, Math.ceil(text.length / cols));
+    if (m.attachments && m.attachments.length > 0) {
+      height += 1;
+    }
+    height += 1; // marginBottom={1}
+  } else if (m.role === 'system') {
+    height += Math.max(1, Math.ceil(m.content.length / cols));
+    height += 1; // marginBottom={1}
+  } else {
+    // assistant
+    let contentHeight = 0;
+    if (m.tools && m.tools.length > 0) {
+      contentHeight += 1; // summary line
+      for (const t of m.tools) {
+        if (t.name === 'write_file' && t.result && t.originalContent !== undefined) {
+          const diffLines = DiffReviewer.generateDiffLines(t.originalContent, t.args.content as string || '');
+          const chunks = groupDiffIntoChunks(diffLines, 3);
+          if (chunks.length > 0) {
+            contentHeight += 2; // Title + count
+            for (const chunk of chunks) {
+              contentHeight += chunk.lines.length;
+            }
+          }
+        }
+      }
+    }
+    if (m.content.length > 0) {
+      const lines = m.content.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('```')) continue;
+        contentHeight += Math.max(1, Math.ceil(line.length / Math.max(1, cols - 4)));
+      }
+    } else if (m.isStreaming) {
+      contentHeight += 1;
+    }
+    height += contentHeight;
+    height += 1; // marginBottom={1}
+  }
+  return height;
 }
 import { Composer } from './Composer.js';
 import { MessageView, type UiMessage, type ToolCallInfo } from './MessageView.js';
@@ -105,18 +239,7 @@ export const App: React.FC<AppProps> = ({
   // Reuses a provided id when resuming an existing session.
   const sessionIdRef = useRef<string>(sessionId && sessionId.length > 0 ? sessionId : generateSessionId());
 
-  // On unmount (any exit path: /exit, ctrl-c, error) print a resume command.
-  useEffect(() => {
-    return () => {
-      try {
-        process.stdout.write(
-          `\nTo resume this session later, run:\n  superagent --resume ${sessionIdRef.current}\n\n`
-        );
-      } catch {
-        /* ignore write failures (e.g. piped output) */
-      }
-    };
-  }, []);
+
 
   // Resolve the live default connection (honours an Anthropic-compatible proxy
   // configured via env, e.g. OpenRouter through ANTHROPIC_BASE_URL/_AUTH_TOKEN).
@@ -126,6 +249,10 @@ export const App: React.FC<AppProps> = ({
 
   const [permission, setPermission] = useState<PermissionLevel>(initialPermission);
   const [verbose, setVerbose] = useState<boolean>(initialVerbose);
+  const [scrollOffset, setScrollOffset] = useState(0);
+  const [lastActiveFile, setLastActiveFile] = useState<string | null>(null);
+  const [tipIndex, setTipIndex] = useState(0);
+  const [elapsedSecs, setElapsedSecs] = useState(0);
   const [messages, setMessagesState] = useState<UiMessage[]>(() => {
     const conn = initialConn;
     const restored = initialMessages && initialMessages.length > 0 ? initialMessages : [];
@@ -171,6 +298,25 @@ export const App: React.FC<AppProps> = ({
   const [isBusy, setIsBusy] = useState(false);
   const [queuedTurnsCount, setQueuedTurnsCount] = useState(0);
   const [usage, setUsage] = useState<UsageInfo | null>(null);
+
+  useEffect(() => {
+    if (!isBusy) {
+      setTipIndex(0);
+      setElapsedSecs(0);
+      return;
+    }
+    const start = Date.now();
+    const timer = setInterval(() => {
+      setElapsedSecs(Math.round((Date.now() - start) / 1000));
+    }, 1000);
+    const tipTimer = setInterval(() => {
+      setTipIndex((prev) => (prev + 1) % TIPS.length);
+    }, 6000);
+    return () => {
+      clearInterval(timer);
+      clearInterval(tipTimer);
+    };
+  }, [isBusy]);
 
   // ── Refs (read inside the single useInput handler to avoid stale closures) ──
   const messagesRef = useRef<UiMessage[]>(messages);
@@ -434,6 +580,7 @@ export const App: React.FC<AppProps> = ({
 
   const sendChat = useCallback(
     async (text: string) => {
+      setScrollOffset(0);
       const { cleanText, attachments: detected } = await prepareAttachments(text);
       const queued = pendingAttachmentsRef.current.splice(0);
       const attachments = [...queued, ...detected];
@@ -458,10 +605,32 @@ export const App: React.FC<AppProps> = ({
       streamingRef.current = { content: '', tools: [] };
 
       await chatRef.current.send(promptText, attachments, {
-        onToken: (t) => setStreaming((s) => ({ ...s, content: s.content + t })),
+        onToken: (t) => {
+          setScrollOffset(0);
+          setStreaming((s) => ({ ...s, content: s.content + t }));
+        },
         onUsage: (u) => setUsage(u),
-        onToolCall: (name, args) =>
-          setStreaming((s) => ({ ...s, tools: [...s.tools, { name, args }] })),
+        onToolCall: (name, args) => {
+          setScrollOffset(0);
+          let originalContent: string | undefined;
+          if (name === 'write_file' && typeof args.path === 'string') {
+            const filePath = args.path;
+            try {
+              const fullPath = path.resolve(process.cwd(), filePath);
+              if (fs.existsSync(fullPath)) {
+                originalContent = fs.readFileSync(fullPath, 'utf8');
+              } else {
+                originalContent = '';
+              }
+            } catch {
+              originalContent = '';
+            }
+            setLastActiveFile(path.basename(filePath));
+          } else if (name === 'read_file' && typeof args.path === 'string') {
+            setLastActiveFile(path.basename(args.path));
+          }
+          setStreaming((s) => ({ ...s, tools: [...s.tools, { name, args, originalContent }] }));
+        },
         onToolResult: (name, result) =>
           setStreaming((s) => {
             const tools = [...s.tools];
@@ -542,6 +711,16 @@ export const App: React.FC<AppProps> = ({
 
   // ── Single global key handler ──
   useInput((char, key) => {
+    // Page scrolling (available anytime, even during generation)
+    if (key.pageUp) {
+      setScrollOffset((prev) => Math.min(messagesRef.current.length - 1, prev + 1));
+      return;
+    }
+    if (key.pageDown) {
+      setScrollOffset((prev) => Math.max(0, prev - 1));
+      return;
+    }
+
     // Ctrl+C: abort an in-flight generation, else quit.
     if (key.ctrl && (input === 'c' || input === 'C')) {
       if (isBusyRef.current) {
@@ -649,6 +828,14 @@ export const App: React.FC<AppProps> = ({
     }
 
     // Normal editing mode.
+    if (key.pageUp || (key.ctrl && key.upArrow)) {
+      setScrollOffset((prev) => Math.min(messagesRef.current.length - 1, prev + 3));
+      return;
+    }
+    if (key.pageDown || (key.ctrl && key.downArrow)) {
+      setScrollOffset((prev) => Math.max(0, prev - 3));
+      return;
+    }
     if (key.ctrl && (input === 'o' || input === 'O')) {
       setVerbose((v) => !v);
       return;
@@ -719,30 +906,144 @@ export const App: React.FC<AppProps> = ({
     ? ` · ${usage.totalTokens.toLocaleString()} tok (${usage.promptTokens.toLocaleString()}↑/${usage.completionTokens.toLocaleString()}↓)`
     : '';
 
-  // Full terminal height so the conversation + composer can be pinned to the
-  // bottom of the *visible* window instead of scrolling away (the old <Static>
-  // scrollback pushed the input to mid-screen once the log grew past one page).
-  const terminalRows = useTerminalRows();
+  const { rows: terminalRows, columns: terminalColumns } = useTerminalDimensions();
+
+  // Estimate message heights and slice messages to fit the terminal screen responsive viewport
+  let currentHeight = 0;
+  let maxHeight = terminalRows - 6; // Leave space for composer (3) + status (2) + spacing (1)
+
+  if (isBusy) {
+    maxHeight -= 3; // Leave space for loader and tips
+  }
+
+  // If streaming is active and we are at the bottom (scrollOffset === 0), include streaming height
+  if (streaming && scrollOffset === 0) {
+    const streamingMsg: UiMessage = {
+      id: 'streaming',
+      role: 'assistant',
+      content: streaming.content,
+      isStreaming: true,
+      tools: streaming.tools,
+    };
+    currentHeight += estimateMessageHeight(streamingMsg, terminalColumns);
+  }
+
+  // Go backwards from messages.length - 1 - scrollOffset
+  const endIdx = messages.length - scrollOffset;
+  const messagesToRender: UiMessage[] = [];
+
+  for (let i = endIdx - 1; i >= 0; i--) {
+    const msgHeight = estimateMessageHeight(messages[i], terminalColumns);
+    let nextHeight = currentHeight + msgHeight;
+    
+    // If we are about to include the first message (welcome text), also add the banner height (6)
+    if (i === 0) {
+      nextHeight += 6;
+    }
+
+    if (nextHeight > maxHeight) {
+      if (messagesToRender.length === 0) {
+        messagesToRender.unshift(messages[i]);
+        if (i === 0) {
+          currentHeight = nextHeight;
+        }
+      }
+      break;
+    }
+    messagesToRender.unshift(messages[i]);
+    currentHeight = nextHeight;
+  }
+
+  // Mouse click and scroll handlers
+  const handleMouseEvent = useCallback((button: number, x: number, y: number, isRelease: boolean) => {
+    if (isBusyRef.current) return;
+
+    if (button === 64) {
+      // Scroll wheel up
+      setScrollOffset((prev) => Math.min(messagesRef.current.length - 1, prev + 1));
+      return;
+    }
+    if (button === 65) {
+      // Scroll wheel down
+      setScrollOffset((prev) => Math.max(0, prev - 1));
+      return;
+    }
+
+    if (button === 0 && !isRelease) {
+      // Left click
+      const isPaletteOpen = inputRef.current.startsWith('/') && !paletteDismissedRef.current;
+      if (isPaletteOpen) {
+        const paletteHeight = Math.min(paletteRows.length, 14) + 3;
+        const paletteStartY = terminalRows - 5 - paletteHeight;
+        const clickOffset = y - paletteStartY - 1; // -1 for border
+        if (clickOffset >= 0 && clickOffset < Math.min(paletteRows.length, 14)) {
+          const clickedRow = paletteRows[clickOffset];
+          if (clickedRow && clickedRow.kind === 'item') {
+            const itemIdx = paletteCombined.findIndex(c => c.name === clickedRow.item.name);
+            if (itemIdx !== -1) {
+              setPaletteSelected(itemIdx);
+              paletteSelectedRef.current = itemIdx;
+              
+              const sel = paletteCombined[itemIdx];
+              if (sel) {
+                setInput('');
+                inputRef.current = '';
+                resetPalette();
+                if (sel.kind === 'skill') {
+                  const skill = allSkills.find((s) => s.id === sel.name);
+                  if (skill) void sendChat(skill.prompt);
+                } else if (sel.name === 'model') {
+                  openModelPicker();
+                } else {
+                  setInput(`/${sel.name} `);
+                  inputRef.current = `/${sel.name} `;
+                  setPaletteDismissed(true);
+                  paletteDismissedRef.current = true;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (pickerRef.current.open) {
+        const pickerHeight = Math.min(modelItems.length, 12) + 3;
+        const pickerStartY = terminalRows - 5 - pickerHeight;
+        const clickOffset = y - pickerStartY - 1; // -1 for border
+        if (clickOffset >= 0 && clickOffset < Math.min(modelItems.length, 12)) {
+          setPicker((p) => {
+            const next = { ...p, selected: clickOffset };
+            pickerRef.current = next;
+            return next;
+          });
+          confirmModelPicker();
+        }
+      }
+    }
+  }, [paletteRows, paletteCombined, modelItems, terminalRows]);
+
 
   return (
     <Box flexDirection="column" height={terminalRows}>
-      {/* Fixed banner at the very top (rendered once). */}
-      <Banner
-        key="banner"
-        provider={chatRef.current.provider}
-        model={chatRef.current.model}
-        cwd={process.cwd()}
-      />
-
       {/* Conversation log: grows to fill the space and anchors the newest
           content to the bottom so the input line is always at the bottom. */}
       <Box flexGrow={1} flexDirection="column" justifyContent="flex-end">
-        {messages.map((m: UiMessage) => (
+        {/* Render banner scrollable at the top of messages list if the welcome message is visible in the viewport */}
+        {messagesToRender.includes(messages[0]) && (
+          <Banner
+            key="banner"
+            provider={chatRef.current.provider}
+            model={chatRef.current.model}
+            cwd={process.cwd()}
+          />
+        )}
+
+        {messagesToRender.map((m: UiMessage) => (
           <MessageView key={m.id} message={m} />
         ))}
 
         {/* Live streaming assistant pane (dynamic, re-renders per token). */}
-        {streaming && (
+        {streaming && scrollOffset === 0 && (
           <MessageView
             message={{
               id: 'streaming',
@@ -752,6 +1053,22 @@ export const App: React.FC<AppProps> = ({
               tools: streaming.tools,
             }}
           />
+        )}
+
+        {/* Spinning forming loader with tips when agent is thinking */}
+        {isBusy && (
+          <Box flexDirection="column" marginTop={1} paddingLeft={2}>
+            <Box>
+              <Spinner />
+              <Text color="red" bold> Forming... </Text>
+              <Text color="gray">({elapsedSecs}s · thinking with xhigh effort)</Text>
+            </Box>
+            <Box paddingLeft={2} marginTop={0}>
+              <Text color="gray" dimColor>
+                L {TIPS[tipIndex]}
+              </Text>
+            </Box>
+          </Box>
         )}
       </Box>
 
@@ -769,16 +1086,21 @@ export const App: React.FC<AppProps> = ({
       <Composer value={input} isBusy={isBusy} />
 
       {/* Bottom status bar (Claude-Code style). */}
-      <Box marginTop={1}>
-        <Text color={permission === 'auto' ? 'green' : permission === 'deny' ? 'red' : 'yellow'}>
-          {'⏵⏵ '}
+      <Box marginTop={1} paddingX={1}>
+        <Text color={permission === 'auto' ? 'green' : permission === 'deny' ? 'red' : 'yellow'} bold>
+          {'❯❯ '}
         </Text>
-        <Text>{getPermissionLabel(permission)} mode</Text>
+        <Text bold>
+          {permission === 'auto' ? 'auto mode on' : permission === 'deny' ? 'auto mode off (deny)' : 'ask mode'}
+        </Text>
         <Text dimColor color="gray">
-          {isBusy ? ' · working…' : ''}
+          {` (shift+tab to cycle)`}
           {usageText}
-          {' · shift+tab cycle · ctrl+o verbose · ↑/↓ history · / for skills'}
           {queuedTurnsCount > 0 ? ` · queued: ${queuedTurnsCount}` : ''}
+        </Text>
+        <Box flexGrow={1} />
+        <Text dimColor color="gray">
+          📄 In {lastActiveFile || path.basename(process.cwd())}
         </Text>
       </Box>
 

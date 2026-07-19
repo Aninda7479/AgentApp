@@ -47,10 +47,20 @@ export class SettingsService {
   static persistLastUsedModel(ctx: AppContext, modelName: string): void {
     if (!modelName) return;
     ctx.setLastUsedModel(modelName);
-    const modelConfig: ModelConfig | undefined = ctx.getModelsCatalog().find((m) => m.name === modelName);
+    const catalog = ctx.getModelsCatalog();
+    const modelConfig: ModelConfig | undefined =
+      catalog.find((m) => m.name === modelName || m.id === modelName) ||
+      catalog.find((m) => m.name.toLowerCase() === modelName.toLowerCase() || m.id.toLowerCase() === modelName.toLowerCase());
     const providerId = modelConfig?.providerId;
+    let modelId = modelName;
+    if (modelConfig) {
+      modelId = modelConfig.id;
+      if (providerId && modelId.startsWith(`${providerId}-`)) {
+        modelId = modelId.slice(providerId.length + 1);
+      }
+    }
     ctx.ipc?.invoke('settings-write', {
-      lastUsedModel: { provider: providerId, model: modelName }
+      lastUsedModel: { provider: providerId, model: modelId }
     });
   }
 

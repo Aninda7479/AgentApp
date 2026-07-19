@@ -1802,7 +1802,8 @@ Key guidelines:
 
     if (!response.ok) {
       const err = await response.text();
-      throw new Error(`OpenAI API error [${response.status}]: ${err}`);
+      const pName = this.config.provider ? (this.config.provider === 'openrouter' ? 'OpenRouter' : this.config.provider.toUpperCase()) : 'API';
+      throw new Error(`${pName} API error [${response.status}]: ${err}`);
     }
 
     let fullContent = '';

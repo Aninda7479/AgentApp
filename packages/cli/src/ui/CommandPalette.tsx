@@ -44,7 +44,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ rows, selectedIn
   const visible = rows.slice(0, MAX_VISIBLE);
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1} marginY={1}>
+    <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1} marginY={0}>
       <Text bold color="cyan">
         Slash Commands &amp; Skills
       </Text>

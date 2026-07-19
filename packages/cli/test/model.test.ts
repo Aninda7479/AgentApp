@@ -87,4 +87,13 @@ describe('ModelSwitcher.switchModel custom-identifier fallback', () => {
     expect(res.message).not.toMatch(/did you mean/i);
     expect(ctx.activeModel).toBe('my-comfyui-lora-model');
   });
+
+  it('strips provider prefix from custom model identifier', () => {
+    const ctx = makeContext();
+    ctx.activeProvider = 'openrouter';
+    const res = ModelSwitcher.switchModel(ctx, 'openrouter-tencent/hunyuan-a1');
+
+    expect(res.success).toBe(true);
+    expect(ctx.activeModel).toBe('tencent/hunyuan-a1');
+  });
 });

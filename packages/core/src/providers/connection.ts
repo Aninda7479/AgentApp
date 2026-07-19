@@ -86,7 +86,42 @@ export function resolveConnection(provider: string, model: string): ActiveConnec
   const apiKey = keyForProvider(provider);
   const baseUrl =
     saved.providers?.find((x) => x.id === provider)?.baseUrl || resolveBaseUrl(provider);
-  return { provider, model, apiKey, baseUrl };
+
+  let resolvedModel = model;
+
+  // Clean provider prefix if present (e.g. "openrouter-tencent/hunyuan-a1")
+  if (provider && resolvedModel.toLowerCase().startsWith(`${provider.toLowerCase()}-`)) {
+    resolvedModel = resolvedModel.slice(provider.length + 1);
+  }
+
+  // Resolve display name to model ID if a matching model exists in saved models catalog
+  if (saved.models && saved.models.length > 0) {
+    const foundInModels = saved.models.find(
+      (m) =>
+        m.name?.toLowerCase() === resolvedModel.toLowerCase() ||
+        m.id?.toLowerCase() === resolvedModel.toLowerCase()
+    );
+    if (foundInModels && foundInModels.id) {
+      let rawId = foundInModels.id;
+      const provId = foundInModels.providerId || provider;
+      if (provId && rawId.toLowerCase().startsWith(`${provId.toLowerCase()}-`)) {
+        rawId = rawId.slice(provId.length + 1);
+      }
+      resolvedModel = rawId;
+    }
+  }
+
+  // Fallback lookup in capability registry for display names
+  const cap = capabilityRegistry.getAllCapabilities().find(
+    (c) =>
+      c.name.toLowerCase() === resolvedModel.toLowerCase() ||
+      c.id.toLowerCase() === resolvedModel.toLowerCase()
+  );
+  if (cap) {
+    resolvedModel = cap.id;
+  }
+
+  return { provider, model: resolvedModel, apiKey, baseUrl };
 }
 
 /**
