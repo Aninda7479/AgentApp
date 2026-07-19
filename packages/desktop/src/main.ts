@@ -1053,6 +1053,31 @@ safeHandle('media-transcribe', async (_event, args: {
   }
 
   const model = voice.model?.trim() || 'whisper-1';
+
+  // Build an optional vocabulary-biasing prompt from the user's custom
+  // dictionary. Whisper-compatible STT APIs accept a `prompt` that nudges the
+  // model toward specific spellings/names and away from gibberish. Preferred
+  // words seed the spelling; correction pairs describe the intended fix.
+  const dict = voice.dictionary || {};
+  const dictWords: string[] = Array.isArray(dict.words)
+    ? dict.words.map((w: unknown) => String(w).trim()).filter(Boolean)
+    : [];
+  const dictCorrections: { from: string; to: string }[] = Array.isArray(dict.corrections)
+    ? dict.corrections
+        .map((c: any) => ({ from: String(c?.from ?? '').trim(), to: String(c?.to ?? '').trim() }))
+        .filter((c: { from: string; to: string }) => c.from && c.to)
+    : [];
+  const promptParts: string[] = [];
+  if (dictWords.length > 0) {
+    promptParts.push(`Use these spellings: ${dictWords.join(', ')}.`);
+  }
+  if (dictCorrections.length > 0) {
+    promptParts.push(
+      dictCorrections.map((c) => `Replace "${c.from}" with "${c.to}".`).join(' ')
+    );
+  }
+  const vocabPrompt = promptParts.join(' ').trim();
+
   const result = await mediaRouter.executeTask(
     {
       taskType: 'audio-transcription',
@@ -1061,6 +1086,7 @@ safeHandle('media-transcribe', async (_event, args: {
         filename: args?.filename || 'dictation.webm',
         model,
         language: voice.language?.trim() || undefined,
+        prompt: vocabPrompt || undefined,
         responseFormat: 'json'
       }
     },

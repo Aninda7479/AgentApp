@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Mic, Save, RefreshCw, AlertCircle, Info, Languages, Zap, Cloud, Globe, Server, ExternalLink } from 'lucide-react';
+import { Mic, Save, RefreshCw, AlertCircle, Info, Languages, Zap, Cloud, Globe, Server, ExternalLink, BookMarked, Plus, X, ArrowRight } from 'lucide-react';
 import { SearchableSelect, SearchableSelectOption } from '../../components/ui/SearchableSelect';
 import { ModelPricing } from './types';
 
 type Engine = 'auto' | 'browser' | 'model';
+
+interface Correction { from: string; to: string }
+interface VoiceDictionary { words: string[]; corrections: Correction[] }
 
 interface ProviderRef {
   id: string;
@@ -60,6 +63,12 @@ export const VoiceSettings: React.FC = () => {
   // from which the persisted bare model id + providerId are derived on save.
   const [modelKey, setModelKey] = useState('');
   const [language, setLanguage] = useState('');
+  const [dictionary, setDictionary] = useState<VoiceDictionary>({ words: [], corrections: [] });
+
+  // Draft inputs for adding dictionary entries.
+  const [wordDraft, setWordDraft] = useState('');
+  const [corrFrom, setCorrFrom] = useState('');
+  const [corrTo, setCorrTo] = useState('');
 
   const [providers, setProviders] = useState<ProviderRef[]>([]);
   const [models, setModels] = useState<ModelRef[]>([]);
@@ -83,6 +92,16 @@ export const VoiceSettings: React.FC = () => {
       const cfg = settings?.voice || {};
       setEngine(cfg.engine === 'browser' || cfg.engine === 'model' ? cfg.engine : 'auto');
       setLanguage(typeof cfg.language === 'string' ? cfg.language : '');
+
+      const dict = cfg.dictionary || {};
+      setDictionary({
+        words: Array.isArray(dict.words) ? dict.words.map((w: unknown) => String(w)).filter(Boolean) : [],
+        corrections: Array.isArray(dict.corrections)
+          ? dict.corrections
+              .map((c: any) => ({ from: String(c?.from ?? ''), to: String(c?.to ?? '') }))
+              .filter((c: Correction) => c.from && c.to)
+          : []
+      });
 
       const provs: ProviderRef[] = Array.isArray(settings?.providers) ? settings.providers : [];
       const mdls: ModelRef[] = Array.isArray(settings?.models) ? settings.models : [];
@@ -121,7 +140,11 @@ export const VoiceSettings: React.FC = () => {
           engine,
           providerId: sel?.providerId ?? '',
           model: sel ? bareModelId(sel.id, sel.providerId) : '',
-          language: language.trim()
+          language: language.trim(),
+          dictionary: {
+            words: dictionary.words,
+            corrections: dictionary.corrections
+          }
         }
       });
       setMessage({ text: 'Voice & mic settings saved.', type: 'success' });
@@ -135,6 +158,33 @@ export const VoiceSettings: React.FC = () => {
   useEffect(() => {
     loadSettings();
   }, []);
+
+  // ── Dictionary mutators ────────────────────────────────────────────────
+  const addWord = () => {
+    const w = wordDraft.trim();
+    if (!w) return;
+    setDictionary((d) =>
+      d.words.some((x) => x.toLowerCase() === w.toLowerCase()) ? d : { ...d, words: [...d.words, w] }
+    );
+    setWordDraft('');
+  };
+  const removeWord = (w: string) =>
+    setDictionary((d) => ({ ...d, words: d.words.filter((x) => x !== w) }));
+
+  const addCorrection = () => {
+    const from = corrFrom.trim();
+    const to = corrTo.trim();
+    if (!from || !to) return;
+    setDictionary((d) =>
+      d.corrections.some((c) => c.from.toLowerCase() === from.toLowerCase())
+        ? { ...d, corrections: d.corrections.map((c) => (c.from.toLowerCase() === from.toLowerCase() ? { from, to } : c)) }
+        : { ...d, corrections: [...d.corrections, { from, to }] }
+    );
+    setCorrFrom('');
+    setCorrTo('');
+  };
+  const removeCorrection = (from: string) =>
+    setDictionary((d) => ({ ...d, corrections: d.corrections.filter((c) => c.from !== from) }));
 
   const providerName = (id?: string) => providers.find((p) => p.id === id)?.name || id || 'Unknown';
 
@@ -304,6 +354,127 @@ export const VoiceSettings: React.FC = () => {
               placeholder="e.g. en, es, fr — leave blank to auto-detect"
               className="ui-input w-full text-sm disabled:opacity-50"
             />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Custom dictionary ───────────────────────────────────────────── */}
+      <section className={`settings-section transition-opacity ${cloudDisabled ? 'opacity-50' : ''}`}>
+        <div className="settings-section-title flex items-center gap-2">
+          <BookMarked size={15} className="text-[var(--brand-accent)]" />
+          <span>Custom dictionary</span>
+          {cloudDisabled && <span className="settings-pill ml-1">Browser engine — not used</span>}
+        </div>
+        <p className="settings-section-sub -mt-2">
+          Bias the cloud model toward your own words, names, and jargon so dictation stops turning
+          them into gibberish. Applied to the transcription <code>prompt</code>. Only affects the
+          cloud model engine — the browser engine has no vocabulary hook.
+        </p>
+
+        <div className="space-y-6">
+          {/* Preferred words */}
+          <div className="space-y-2">
+            <label className="ui-label">Preferred words &amp; names</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={wordDraft}
+                onChange={(e) => setWordDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addWord(); } }}
+                disabled={cloudDisabled}
+                placeholder="e.g. Claude Code, Anthropic, Kubernetes"
+                className="ui-input w-full text-sm disabled:opacity-50"
+                data-testid="voice-dict-word-input"
+              />
+              <button
+                type="button"
+                onClick={addWord}
+                disabled={cloudDisabled || !wordDraft.trim()}
+                className="ui-btn-ghost shrink-0 text-xs disabled:opacity-40"
+                data-testid="voice-dict-word-add"
+              >
+                <Plus size={13} /> Add
+              </button>
+            </div>
+            {dictionary.words.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {dictionary.words.map((w) => (
+                  <span key={w} className="ui-chip bg-brand-popover text-brand-textMuted">
+                    {w}
+                    <button
+                      type="button"
+                      onClick={() => removeWord(w)}
+                      disabled={cloudDisabled}
+                      className="ml-0.5 -mr-1 rounded p-0.5 hover:text-brand-textMain"
+                      aria-label={`Remove ${w}`}
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] text-brand-textMuted">No words added yet.</p>
+            )}
+          </div>
+
+          {/* Corrections */}
+          <div className="space-y-2">
+            <label className="ui-label">Corrections <span className="font-normal normal-case tracking-normal text-brand-textMuted/70">(heard → written)</span></label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={corrFrom}
+                onChange={(e) => setCorrFrom(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCorrection(); } }}
+                disabled={cloudDisabled}
+                placeholder="clod"
+                className="ui-input w-full text-sm disabled:opacity-50"
+                data-testid="voice-dict-corr-from"
+              />
+              <ArrowRight size={14} className="shrink-0 text-brand-textMuted" />
+              <input
+                type="text"
+                value={corrTo}
+                onChange={(e) => setCorrTo(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCorrection(); } }}
+                disabled={cloudDisabled}
+                placeholder="Claude"
+                className="ui-input w-full text-sm disabled:opacity-50"
+                data-testid="voice-dict-corr-to"
+              />
+              <button
+                type="button"
+                onClick={addCorrection}
+                disabled={cloudDisabled || !corrFrom.trim() || !corrTo.trim()}
+                className="ui-btn-ghost shrink-0 text-xs disabled:opacity-40"
+                data-testid="voice-dict-corr-add"
+              >
+                <Plus size={13} /> Add
+              </button>
+            </div>
+            {dictionary.corrections.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                {dictionary.corrections.map((c) => (
+                  <span key={c.from} className="ui-chip bg-brand-popover text-brand-textMuted">
+                    <span className="text-brand-textMain">{c.from}</span>
+                    <ArrowRight size={10} className="opacity-60" />
+                    <span className="text-brand-textMain">{c.to}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeCorrection(c.from)}
+                      disabled={cloudDisabled}
+                      className="ml-0.5 -mr-1 rounded p-0.5 hover:text-brand-textMain"
+                      aria-label={`Remove correction ${c.from}`}
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] text-brand-textMuted">No corrections added yet.</p>
+            )}
           </div>
         </div>
       </section>

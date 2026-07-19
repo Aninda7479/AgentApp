@@ -140,12 +140,24 @@ export interface ThreeDSettings {
  *   whose API key/base URL is used for model transcription.
  * - `model` — STT model name (e.g. `whisper-1`).
  * - `language` — optional ISO-639-1 hint (e.g. `en`) passed to the model.
+ * - `dictionary` — optional custom vocabulary that biases cloud (Whisper-style)
+ *   transcription toward user-specific words/names and away from gibberish. It
+ *   is turned into the STT `prompt` parameter; it has no effect on the browser
+ *   Web Speech engine, which exposes no vocabulary hook.
  */
+export interface VoiceDictionary {
+  /** Preferred words / names / phrases to bias spelling toward. */
+  words?: string[];
+  /** Explicit `from → to` corrections for repeatable mis-hearings. */
+  corrections?: { from: string; to: string }[];
+}
+
 export interface VoiceSettings {
   engine?: 'auto' | 'browser' | 'model';
   providerId?: string;
   model?: string;
   language?: string;
+  dictionary?: VoiceDictionary;
 }
 
 /** Map of built-in plugin id → whether the user has enabled it. */
