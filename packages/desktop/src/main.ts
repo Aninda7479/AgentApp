@@ -1782,6 +1782,20 @@ app.whenReady().then(async () => {
   initApp();
   setupDevWatcher();
 
+  // Warm up local Whisper model if enabled to eliminate cold-start lag
+  try {
+    const settings = SettingsStorage.loadSettings();
+    if (settings?.voice?.localWhisper?.enabled) {
+      const size = settings.voice.localWhisper.size || 'tiny';
+      const dir = settings.voice.localWhisper.modelDir || whisperLocal.defaultModelDir();
+      void whisperLocal.warmup(size, dir).catch((err) => {
+        console.warn('Whisper worker warmup failed:', err);
+      });
+    }
+  } catch (err) {
+    console.error('Failed to load settings for Whisper warmup:', err);
+  }
+
   // Auto-start the self-hosted Web App if the user enabled it in
   // Settings → Web App. Launched shortly after boot so the main window is up
   // first; failures are logged but never block startup.

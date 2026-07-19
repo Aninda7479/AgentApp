@@ -193,5 +193,24 @@ parentPort.on('message', async (msg) => {
     } catch (err: any) {
       parentPort.postMessage({ type: 'download-error', id, error: err?.message ?? String(err) });
     }
+  } else if (type === 'warmup') {
+    try {
+      const { size, modelDir } = msg;
+      const t = await loadTransformers();
+      const key = cacheKey(size, 'wasm', modelDir);
+      if (!cachedPipeline || cachedKey !== key) {
+        (t.env as any).allowLocalModels = false;
+        (t.env as any).localModelPath = modelDir;
+        (t.env as any).cacheDir = modelDir;
+        const pipe = await t.pipeline('automatic-speech-recognition', modelRepo(size), {
+          device: 'auto'
+        });
+        cachedPipeline = pipe;
+        cachedKey = key;
+      }
+      parentPort.postMessage({ type: 'warmup-success', id });
+    } catch (err: any) {
+      parentPort.postMessage({ type: 'warmup-error', id, error: err?.message ?? String(err) });
+    }
   }
 });

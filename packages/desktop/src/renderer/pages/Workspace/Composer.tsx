@@ -190,6 +190,7 @@ export const Composer: React.FC<ComposerProps> = ({
   // Model-based (cloud STT) path state.
   const mediaRecorderRef = useRef<any>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
+  const isPreTranscribingRef = useRef<boolean>(false);
   const [voiceEngine, setVoiceEngine] = useState<'auto' | 'browser' | 'model' | 'local'>('auto');
   const [voiceModelAvailable, setVoiceModelAvailable] = useState<boolean | null>(null);
   const [localWhisperEnabled, setLocalWhisperEnabled] = useState<boolean>(false);
@@ -396,8 +397,63 @@ export const Composer: React.FC<ComposerProps> = ({
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       mediaRecorderRef.current = recorder;
 
-      recorder.ondataavailable = (e: any) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
+      recorder.ondataavailable = async (e: any) => {
+        if (e.data && e.data.size > 0) {
+          chunks.push(e.data);
+        }
+        
+        // Quietly run accumulative pre-transcription while recording (every 3 seconds)
+        if (recorder.state === 'recording' && !isPreTranscribingRef.current && chunks.length > 0) {
+          isPreTranscribingRef.current = true;
+          try {
+            const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+            const arrayBuffer = await blob.arrayBuffer();
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            const audioCtx = new AudioContextClass();
+            let audioBuffer: AudioBuffer;
+            try {
+              audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            } catch (decodeErr) {
+              await audioCtx.close();
+              throw decodeErr;
+            }
+            await audioCtx.close();
+
+            const OfflineAudioContextClass = window.OfflineAudioContext || (window as any).webkitOfflineAudioContext;
+            const offlineCtx = new OfflineAudioContextClass(
+              1,
+              Math.round(audioBuffer.duration * 16000),
+              16000
+            );
+            const source = offlineCtx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(offlineCtx.destination);
+            source.start();
+            const renderedBuffer = await offlineCtx.startRendering();
+
+            const wavBuffer = bufferToWav(renderedBuffer);
+            const buf = new Uint8Array(wavBuffer);
+
+            const res = ipcRenderer
+              ? await ipcRenderer.invoke('media-transcribe', {
+                  buffer: buf,
+                  filename: 'dictation.wav',
+                  mimeType: 'audio/wav'
+                })
+              : null;
+            if (res?.ok && recorder.state === 'recording') {
+              const base = basePromptRef.current;
+              const trimmed = (res.text || '').trim();
+              if (trimmed) {
+                setPrompt(base + (base && !base.endsWith(' ') ? ' ' : '') + trimmed);
+              }
+            }
+          } catch (err) {
+            console.warn('Pre-transcription chunk error:', err);
+          } finally {
+            isPreTranscribingRef.current = false;
+          }
+        }
       };
       recorder.onstop = async () => {
         stopMicStream();
@@ -457,7 +513,8 @@ export const Composer: React.FC<ComposerProps> = ({
         }
       };
       basePromptRef.current = prompt;
-      recorder.start();
+      isPreTranscribingRef.current = false;
+      recorder.start(3000); // Trigger data chunks every 3 seconds while user speaks
       setListening(true);
     } catch (err: any) {
       stopMicStream();

@@ -83,6 +83,12 @@ function getOrCreateWorker(): Worker {
     } else if (type === 'download-error') {
       pendingJobs.delete(id);
       job.reject(new Error(msg.error));
+    } else if (type === 'warmup-success') {
+      pendingJobs.delete(id);
+      job.resolve();
+    } else if (type === 'warmup-error') {
+      pendingJobs.delete(id);
+      job.reject(new Error(msg.error));
     }
   });
 
@@ -244,4 +250,24 @@ export function validateModelDir(dir: string): { ok: boolean; error?: string } {
     const msg = err instanceof Error ? err.message : String(err);
     return { ok: false, error: `Cannot use that location: ${msg}` };
   }
+}
+
+export async function warmup(
+  size: WhisperSize,
+  modelDir: string = defaultModelDir()
+): Promise<void> {
+  const id = `job_${nextJobId++}`;
+  const w = getOrCreateWorker();
+
+  return new Promise<void>((resolve, reject) => {
+    pendingJobs.set(id, {
+      resolve: () => {
+        cachedKey = cacheKey(size, 'wasm', modelDir);
+        resolve();
+      },
+      reject
+    });
+
+    w.postMessage({ type: 'warmup', id, size, modelDir });
+  });
 }
