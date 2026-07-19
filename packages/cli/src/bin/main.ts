@@ -4,6 +4,7 @@ import { render } from 'ink';
 import { createCliProgram } from './commander.js';
 import { registerExecCommand, executeScript } from './exec.js';
 import { App } from '../ui/App.js';
+import { loadSession } from '../session_store.js';
 import { tryAcquireAutoImproveLock } from '../auto-improve-lock.js';
 import {
   startWebServer,
@@ -116,12 +117,15 @@ async function handleChat(opts: CliOptions, prompt?: string): Promise<void> {
   }
 
   // Interactive TUI. Ink keeps the process alive until the user quits (/exit).
+  const resumeMessages = opts.resume ? loadSession(opts.resume) : null;
   render(
     React.createElement(App, {
       provider: opts.provider,
       model: opts.model ?? 'default',
       initialPermission: opts.permission,
       initialVerbose: opts.verbose,
+      sessionId: opts.resume,
+      initialMessages: resumeMessages ?? undefined,
     })
   );
 }

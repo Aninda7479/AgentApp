@@ -1,5 +1,22 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Box, Text, useApp, useInput } from 'ink';
+import { Box, Text, useApp, useInput, useStdout } from 'ink';
+
+/** Tracks the live terminal height, updating on resize so the pinned layout
+ *  always matches the real window (a one-time read of `process.stdout.rows`
+ *  drifts after the terminal is resized and causes frames to mis-align). */
+function useTerminalRows(): number {
+  const { stdout } = useStdout();
+  const [rows, setRows] = useState(() => stdout?.rows || process.stdout.rows || 24);
+  useEffect(() => {
+    const onResize = () => setRows(stdout?.rows || process.stdout.rows || 24);
+    const stream = stdout ?? process.stdout;
+    stream.on('resize', onResize);
+    return () => {
+      stream.off('resize', onResize);
+    };
+  }, [stdout]);
+  return rows;
+}
 import { Composer } from './Composer.js';
 import { MessageView, type UiMessage, type ToolCallInfo } from './MessageView.js';
 import { CommandPalette, type PaletteItem, type PaletteRow } from './CommandPalette.js';
@@ -21,6 +38,7 @@ import {
 } from '../engine.js';
 import { getRunnableSkills, type RunnableSkill } from '../skills.js';
 import { SettingsStorage, type ImageAttachment } from '@superagent/core';
+import { saveSession } from '../session_store.js';
 
 /** Generates a resume token of the form `XXXX-XXXX-XXXX-XXXX`. */
 function generateSessionId(): string {
@@ -34,6 +52,10 @@ export interface AppProps {
   model?: string;
   initialPermission?: PermissionLevel;
   initialVerbose?: boolean;
+  /** Resume token; reuses a saved session's id instead of generating a new one. */
+  sessionId?: string;
+  /** Messages restored from a previous session (used with `sessionId`). */
+  initialMessages?: UiMessage[];
 }
 
 /** Claude-Code-style startup banner: name/version, active model + effort, cwd. */
@@ -63,8 +85,8 @@ const Banner: React.FC<{ provider: string; model: string; cwd: string }> = ({ pr
 );
 
 /**
- * Main SuperAgent Terminal TUI (Claude-Code style): a persistent, scrolling
- * message log (rendered with `<Static>`), a live streaming assistant pane, a
+ * Main SuperAgent Terminal TUI (Claude-Code style): a pinned, bottom-anchored
+ * message log, a live streaming assistant pane, a
  * slash-command + skills palette on `/` (arrow-navigable), and an arrow-
  * navigable model picker on `/model`. Real multi-turn chat and tool use are
  * driven by `ChatSession` (which wraps the core `AgentEngine`).
@@ -74,11 +96,14 @@ export const App: React.FC<AppProps> = ({
   model = 'default',
   initialPermission = 'auto',
   initialVerbose = false,
+  sessionId,
+  initialMessages,
 }) => {
   const { exit } = useApp();
 
   // Stable resume token printed on exit so the user can reopen this session.
-  const sessionIdRef = useRef<string>(generateSessionId());
+  // Reuses a provided id when resuming an existing session.
+  const sessionIdRef = useRef<string>(sessionId && sessionId.length > 0 ? sessionId : generateSessionId());
 
   // On unmount (any exit path: /exit, ctrl-c, error) print a resume command.
   useEffect(() => {
@@ -101,7 +126,37 @@ export const App: React.FC<AppProps> = ({
 
   const [permission, setPermission] = useState<PermissionLevel>(initialPermission);
   const [verbose, setVerbose] = useState<boolean>(initialVerbose);
-  const [messages, setMessagesState] = useState<UiMessage[]>([]);
+  const [messages, setMessagesState] = useState<UiMessage[]>(() => {
+    const conn = initialConn;
+    const restored = initialMessages && initialMessages.length > 0 ? initialMessages : [];
+    const msgs: UiMessage[] = [...restored];
+    msgs.push({
+      id: 'sys-welcome',
+      role: 'system',
+      content: `Welcome to SuperAgent Terminal — ${conn.provider || 'no model'}/${conn.model || 'selected'}. Type a prompt, or / for skills & commands.`,
+    });
+    if (restored.length > 0) {
+      msgs.push({
+        id: 'sys-resume',
+        role: 'system',
+        content: `↺ Resumed session — ${restored.length} previous message${restored.length === 1 ? '' : 's'} restored.`,
+      });
+    }
+    const noModel = !conn.provider || !conn.model;
+    const noKey = !!conn.provider && !!conn.model && !conn.apiKey;
+    if (noModel || noKey) {
+      const reason = noModel
+        ? 'no model is selected'
+        : `no API key is configured for ${conn.provider}`;
+      msgs.push({
+        id: 'sys-nokey',
+        role: 'system',
+        content:
+          `⚠ ${reason}. The active model is chosen by you, not hardcoded. Run /model to pick a model (or connect a provider with \`/model provider <id> <apiKey>\`). Credentials are stored by the CLI/Core itself — no terminal env needed.`,
+      });
+    }
+    return msgs;
+  });
   const [streaming, setStreamingState] = useState<{ content: string; tools: ToolCallInfo[] } | null>(null);
   const [input, setInput] = useState('');
   const [paletteSelected, setPaletteSelected] = useState(0);
@@ -130,6 +185,7 @@ export const App: React.FC<AppProps> = ({
   const setMessages = useCallback((next: UiMessage[]) => {
     messagesRef.current = next;
     setMessagesState(next);
+    saveSession(sessionIdRef.current, next);
   }, []);
   const appendMessage = useCallback((msg: UiMessage) => {
     setMessages([...messagesRef.current, msg]);
@@ -179,32 +235,6 @@ export const App: React.FC<AppProps> = ({
 
   // ── Chat engine (one persistent session) ──
   const chatRef = useRef<ChatSession>(new ChatSession(initialConn, initialPermission));
-
-  // ── Welcome + connection notice ──
-  useEffect(() => {
-    const conn = initialConn;
-    const welcome: UiMessage = {
-      id: 'sys-welcome',
-      role: 'system',
-      content: `Welcome to SuperAgent Terminal — ${conn.provider || 'no model'}/${conn.model || 'selected'}. Type a prompt, or / for skills & commands.`,
-    };
-    const msgs: UiMessage[] = [welcome];
-    const noModel = !conn.provider || !conn.model;
-    const noKey = !!conn.provider && !!conn.model && !conn.apiKey;
-    if (noModel || noKey) {
-      const reason = noModel
-        ? 'no model is selected'
-        : `no API key is configured for ${conn.provider}`;
-      msgs.push({
-        id: 'sys-nokey',
-        role: 'system',
-        content:
-          `⚠ ${reason}. The active model is chosen by you, not hardcoded. Run /model to pick a model (or connect a provider with \`/model provider <id> <apiKey>\`). Credentials are stored by the CLI/Core itself — no terminal env needed.`,
-      });
-    }
-    setMessages(msgs);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // ── Skills (runnable, discovered + built-in) ──
   const allSkills = useRef<RunnableSkill[]>(getRunnableSkills(process.cwd())).current;
@@ -686,7 +716,7 @@ export const App: React.FC<AppProps> = ({
   // Full terminal height so the conversation + composer can be pinned to the
   // bottom of the *visible* window instead of scrolling away (the old <Static>
   // scrollback pushed the input to mid-screen once the log grew past one page).
-  const terminalRows = process.stdout.rows || 24;
+  const terminalRows = useTerminalRows();
 
   return (
     <Box flexDirection="column" height={terminalRows}>

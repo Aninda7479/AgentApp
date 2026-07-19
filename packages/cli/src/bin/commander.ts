@@ -10,6 +10,7 @@ export interface CliOptions {
   verbose: boolean;
   permission: 'ask' | 'auto' | 'deny';
   interactive: boolean;
+  resume?: string;
 }
 
 /**
@@ -38,6 +39,7 @@ export function createCliProgram(onExecute?: (options: CliOptions, prompt?: stri
     .option('-v, --verbose', 'Enable verbose output', false)
     .option('--permission <level>', 'Execution permission level (ask, auto, deny)', 'ask')
     .option('-i, --interactive', 'Start interactive TUI session', true)
+    .option('--resume <id>', 'Resume a previous session by its id')
     .action((prompt, options) => {
       const savedSettings = SettingsStorage.loadSettings();
       const mergedOptions: CliOptions = {
@@ -47,6 +49,7 @@ export function createCliProgram(onExecute?: (options: CliOptions, prompt?: stri
         verbose: Boolean(options.verbose),
         permission: (options.permission || 'ask') as 'ask' | 'auto' | 'deny',
         interactive: !prompt && Boolean(options.interactive ?? true),
+        resume: options.resume,
       };
 
       // Return the (possibly async) result so `program.parseAsync` awaits it.
