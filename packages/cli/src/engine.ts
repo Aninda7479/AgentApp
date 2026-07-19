@@ -33,17 +33,31 @@ export interface ResolvedConnection {
   baseUrl: string;
 }
 
-/** Resolves an API key for a provider from env, BYOK, then settings. */
+/** Resolves an API key for a provider from env, settings, BYOK, then defaults. */
 export function resolveApiKey(provider: string): string {
   const up = provider.toUpperCase().replace(/-/g, '_');
   const fromEnv = process.env[`${up}_API_KEY`];
   if (fromEnv) return fromEnv;
-  // The Anthropic-compatible proxy (OpenRouter, etc.) is configured via these
-  // env vars in this project's dev environment.
+
+  // OpenRouter (and its models, e.g. tencent/hy3:free) is the canonical free
+  // provider. Prefer the key stored in core's settings/BYOK over the loose
+  // ANTHROPIC_* env vars, which may hold a real Anthropic key that OpenRouter
+  // would reject.
+  if (provider === 'openrouter') {
+    try {
+      const saved = SettingsStorage.loadSettings();
+      const p = saved.providers?.find((x) => x.id === 'openrouter');
+      if (p?.apiKey) return p.apiKey;
+    } catch {
+      /* ignore */
+    }
+  }
+
   if (provider === 'anthropic') {
     if (process.env.ANTHROPIC_AUTH_TOKEN) return process.env.ANTHROPIC_AUTH_TOKEN;
     if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY;
   }
+
   if (process.env.OPENROUTER_API_KEY) return process.env.OPENROUTER_API_KEY;
 
   // Fall back to a saved BYOK key or settings provider entry.
@@ -64,11 +78,23 @@ export function resolveApiKey(provider: string): string {
   return '';
 }
 
-/** Resolves the base URL for a provider from env, then core defaults. */
+/** Resolves the base URL for a provider from env, settings, then core defaults. */
 export function resolveProviderBaseUrl(provider: string): string {
   const up = provider.toUpperCase().replace(/-/g, '_');
   const fromEnv = process.env[`${up}_BASE_URL`];
   if (fromEnv) return fromEnv;
+
+  if (provider === 'openrouter') {
+    try {
+      const saved = SettingsStorage.loadSettings();
+      const p = saved.providers?.find((x) => x.id === 'openrouter');
+      if (p?.baseUrl) return p.baseUrl;
+    } catch {
+      /* ignore */
+    }
+    if (process.env.ANTHROPIC_BASE_URL) return process.env.ANTHROPIC_BASE_URL;
+  }
+
   if (provider === 'anthropic' && process.env.ANTHROPIC_BASE_URL) {
     return process.env.ANTHROPIC_BASE_URL;
   }
@@ -86,15 +112,35 @@ export function resolveConnection(provider: string, model: string): ResolvedConn
 }
 
 /**
- * Detects the best default connection: if an Anthropic-compatible proxy is
- * configured in the environment (this project's dev setup uses OpenRouter via
- * ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN), default to it so the CLI is
- * immediately usable. Otherwise fall back to the caller's provider/model.
+ * Detects the best default connection. Priority:
+ *  1. A configured OpenRouter provider in core settings (the canonical free
+ *     provider; its key/baseUrl are authoritative).
+ *  2. An Anthropic-compatible proxy configured via ANTHROPIC_BASE_URL/_AUTH_TOKEN.
+ *  3. The caller's provider/model.
  */
 export function detectDefaultConnection(
   optsProvider: string,
   optsModel?: string
 ): ResolvedConnection {
+  try {
+    const saved = SettingsStorage.loadSettings();
+    const orProv = saved.providers?.find((p) => p.id === 'openrouter' && p.apiKey);
+    if (orProv) {
+      const model =
+        process.env.ANTHROPIC_MODEL && process.env.ANTHROPIC_MODEL.toLowerCase().includes('tencent')
+          ? process.env.ANTHROPIC_MODEL
+          : 'tencent/hy3:free';
+      return {
+        provider: 'openrouter',
+        model,
+        apiKey: orProv.apiKey,
+        baseUrl: orProv.baseUrl || 'https://openrouter.ai/api/v1',
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+
   const proxyBase = process.env.ANTHROPIC_BASE_URL;
   const proxyKey = process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY;
   if (proxyBase && proxyKey) {

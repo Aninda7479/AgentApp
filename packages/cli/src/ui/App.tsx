@@ -99,13 +99,15 @@ export const App: React.FC<AppProps> = ({
   sessionRef.current.activeProvider = initialConn.provider;
   sessionRef.current.activeModel = initialConn.model;
 
-  // Register the free model so it appears in /model even when no key/registry
-  // entry exists for it (it rides the configured Anthropic-compatible proxy).
+  // Register the free model so it appears in /model even when no registry entry
+  // exists for it. It is a real OpenRouter model, so register it under the
+  // `openrouter` provider so key/base-url resolution uses the core-stored
+  // OpenRouter credential.
   if (!sessionRef.current.capabilityRegistry.getCapability('tencent/hy3:free')) {
     sessionRef.current.capabilityRegistry.registerCapability({
       id: 'tencent/hy3:free',
       name: 'Tencent Hy3 (free)',
-      provider: 'anthropic',
+      provider: 'openrouter',
       contextWindow: 200000,
       maxOutputTokens: 4096,
       supportsVision: false,
