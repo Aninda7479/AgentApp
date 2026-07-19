@@ -1,12 +1,16 @@
 import { SettingsStorage } from '../storage/settings-store.js';
 import { BYOKProviderManager } from './byok.js';
 import { resolveBaseUrl } from './provider-meta.js';
+import { capabilityRegistry } from './models.js';
 
 /**
  * A fully-resolved AI connection the engine can actually talk to. This is the
  * single source of truth for "which provider/model/key/baseUrl is active" — it
  * lives in Core so every surface (CLI, Desktop, Web) resolves connections
- * identically and no UI hardcodes a provider, model, or API key.
+ * identically. **No default is hardcoded**: the active connection is whatever
+ * the user selected, or (only) the single enabled model when exactly one is
+ * enabled. Credentials come from Core's persisted settings/BYOK, never from
+ * terminal env vars.
  */
 export interface ActiveConnection {
   provider: string;
@@ -14,19 +18,6 @@ export interface ActiveConnection {
   apiKey: string;
   baseUrl: string;
 }
-
-/**
- * The application's default connection. Decided ONCE here in Core — UIs must
- * never hardcode a provider, model, or key, nor read terminal env vars for
- * credentials. Keys are sourced from Core's persisted settings/BYOK (set by
- * the app itself), never from the shell.
- */
-export const DEFAULT_CONNECTION: ActiveConnection = {
-  provider: 'openrouter',
-  model: 'tencent/hy3:free',
-  apiKey: '',
-  baseUrl: 'https://openrouter.ai/api/v1',
-};
 
 /** Resolves a stored API key for a provider from settings, then BYOK. */
 function keyForProvider(provider: string): string {
@@ -43,6 +34,52 @@ function keyForProvider(provider: string): string {
   return '';
 }
 
+/** Returns the provider ids that have a stored credential (settings or BYOK). */
+function configuredProviders(): string[] {
+  const saved = SettingsStorage.loadSettings();
+  const ids = new Set<string>();
+  for (const p of saved.providers ?? []) {
+    if (p.apiKey) ids.add(p.id);
+  }
+  try {
+    for (const cfg of new BYOKProviderManager().getAllConfigs()) {
+      if (cfg.apiKey) ids.add(cfg.provider);
+    }
+  } catch {
+    /* ignore uninitialized BYOK */
+  }
+  return Array.from(ids);
+}
+
+/**
+ * The set of model ids the user has enabled. Resolution order:
+ *   1. `orchestrator.enabledModels` (explicit allowlist).
+ *   2. `models` entries whose `enabled` flag is not false.
+ *   3. Fallback: any model in the capability registry whose provider has a
+ *      configured credential (so it is actually usable).
+ * Returns `null` when there is no usable signal (nothing enabled / configured).
+ */
+function enabledModelCandidates(): string[] | null {
+  const saved = SettingsStorage.loadSettings();
+
+  if (saved.orchestrator?.enabledModels && saved.orchestrator.enabledModels.length > 0) {
+    return saved.orchestrator.enabledModels;
+  }
+
+  if (saved.models && saved.models.length > 0) {
+    const enabled = saved.models.filter((m) => m.enabled !== false).map((m) => m.id);
+    if (enabled.length > 0) return enabled;
+  }
+
+  const providers = configuredProviders();
+  if (providers.length === 0) return null;
+  const candidates = capabilityRegistry
+    .getAllCapabilities()
+    .filter((c) => providers.includes(c.provider))
+    .map((c) => c.id);
+  return candidates.length > 0 ? candidates : null;
+}
+
 /** Resolves a connection for an explicit provider/model (used when switching). */
 export function resolveConnection(provider: string, model: string): ActiveConnection {
   const saved = SettingsStorage.loadSettings();
@@ -53,21 +90,33 @@ export function resolveConnection(provider: string, model: string): ActiveConnec
 }
 
 /**
- * Returns the active connection. Resolution order (all inside Core):
- *   1. Explicit `provider`/`model` overrides (e.g. CLI `-p`/`-m` flags).
+ * Returns the active connection, decided entirely by user configuration in
+ * Core (never hardcoded):
+ *   1. Explicit provider/model overrides (e.g. CLI `-p`/`-m` flags).
  *   2. The user's last-used model persisted in settings.
- *   3. The Core default connection.
- * API keys come from persisted settings/BYOK, never from terminal env vars.
+ *   3. The single enabled model — but ONLY when exactly one model is enabled.
+ *   4. Otherwise there is no default: an empty connection is returned and the
+ *      UI must ask the user to choose one (via `/model`).
  */
 export function getActiveConnection(provider?: string, model?: string): ActiveConnection {
+  if (provider && model && model !== 'default') {
+    return resolveConnection(provider, model);
+  }
+
   const saved = SettingsStorage.loadSettings();
   const last = saved.lastUsedModel;
+  if (last?.provider && last?.model) {
+    return resolveConnection(last.provider, last.model);
+  }
 
-  const finalProvider = provider || last?.provider || DEFAULT_CONNECTION.provider;
-  const finalModel =
-    model && model !== 'default'
-      ? model
-      : last?.model || DEFAULT_CONNECTION.model;
+  const candidates = enabledModelCandidates();
+  if (candidates && candidates.length === 1) {
+    const id = candidates[0];
+    const cap = capabilityRegistry.getCapability(id);
+    const prov = cap?.provider || saved.providers?.find((p) => p.id)?.id || '';
+    return resolveConnection(prov, id);
+  }
 
-  return resolveConnection(finalProvider, finalModel);
+  // No default the system is allowed to assume.
+  return { provider: '', model: '', apiKey: '', baseUrl: '' };
 }

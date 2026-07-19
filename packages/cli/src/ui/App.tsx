@@ -164,15 +164,20 @@ export const App: React.FC<AppProps> = ({
     const welcome: UiMessage = {
       id: 'sys-welcome',
       role: 'system',
-      content: `Welcome to SuperAgent Terminal — ${conn.provider}/${conn.model}. Type a prompt, or / for skills & commands.`,
+      content: `Welcome to SuperAgent Terminal — ${conn.provider || 'no model'}/${conn.model || 'selected'}. Type a prompt, or / for skills & commands.`,
     };
     const msgs: UiMessage[] = [welcome];
-    if (!conn.apiKey) {
+    const noModel = !conn.provider || !conn.model;
+    const noKey = !!conn.provider && !!conn.model && !conn.apiKey;
+    if (noModel || noKey) {
+      const reason = noModel
+        ? 'no model is selected'
+        : `no API key is configured for ${conn.provider}`;
       msgs.push({
         id: 'sys-nokey',
         role: 'system',
         content:
-          '⚠ No API key is configured for this connection. Add one from the CLI itself — e.g. run `/model provider openrouter <your-api-key>` — or configure a provider in the app settings. Run /model to manage connections.',
+          `⚠ ${reason}. The active model is chosen by you, not hardcoded. Run /model to pick a model (or connect a provider with \`/model provider <id> <apiKey>\`). Credentials are stored by the CLI/Core itself — no terminal env needed.`,
       });
     }
     setMessages(msgs);
