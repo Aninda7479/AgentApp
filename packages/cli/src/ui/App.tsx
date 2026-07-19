@@ -340,6 +340,63 @@ export const App: React.FC<AppProps> = ({
     };
   }, [isBusy]);
 
+  // Terminal mouse tracking for mouse wheel scrolling Chat History
+  const { stdout } = useStdout();
+  useEffect(() => {
+    const stream = stdout ?? process.stdout;
+    if (stream && (stream as any).isTTY) {
+      try {
+        (stream as any).write('\x1b[?1000h\x1b[?1002h\x1b[?1006h');
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const stdin = process.stdin;
+    if (!stdin || !stdin.isTTY) return;
+
+    const onData = (data: Buffer | string) => {
+      if (isBusyRef.current) return;
+      const str = data.toString();
+      // SGR Mouse format: \x1b[<b;x;yM or \x1b[<b;x;ym
+      const sgrMatch = str.match(/\x1b\[<(\d+);(\d+);(\d+)([Mm])/);
+      if (sgrMatch) {
+        const btn = parseInt(sgrMatch[1], 10);
+        if (btn === 64) {
+          // Scroll Wheel Up -> Scroll Chat History UP
+          setScrollOffset((prev) => Math.min(messagesRef.current.length - 1, prev + 1));
+        } else if (btn === 65) {
+          // Scroll Wheel Down -> Scroll Chat History DOWN
+          setScrollOffset((prev) => Math.max(0, prev - 1));
+        }
+        return;
+      }
+
+      // X10 Mouse format: \x1b[M<cb><cx><cy>
+      if (str.startsWith('\x1b[M') && str.length >= 6) {
+        const cb = str.charCodeAt(3) - 32;
+        if (cb === 64 || cb === 96) {
+          setScrollOffset((prev) => Math.min(messagesRef.current.length - 1, prev + 1));
+        } else if (cb === 65 || cb === 97) {
+          setScrollOffset((prev) => Math.max(0, prev - 1));
+        }
+      }
+    };
+
+    stdin.on('data', onData);
+
+    return () => {
+      stdin.off('data', onData);
+      if (stream && (stream as any).isTTY) {
+        try {
+          (stream as any).write('\x1b[?1000l\x1b[?1002l\x1b[?1006l');
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+  }, [stdout]);
+
   // ── Refs (read inside the single useInput handler to avoid stale closures) ──
   const messagesRef = useRef<UiMessage[]>(messages);
   const streamingRef = useRef<{ content: string; tools: ToolCallInfo[] }>({ content: '', tools: [] });

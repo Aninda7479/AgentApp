@@ -9,11 +9,12 @@ import { App } from '../src/ui/App.js';
 import { loadSession } from '../src/session_store.js';
 
 const id = 'test-resume-e2e-5678';
-const file = path.join(os.homedir(), '.superagent', 'sessions', `${id}.json`);
+const file = path.join(os.homedir(), '.superagent', 'conversation', 'chats', id, 'chat.json');
 
 afterAll(() => {
   try {
     fs.unlinkSync(file);
+    fs.rmdirSync(path.dirname(file));
   } catch {
     /* ignore */
   }

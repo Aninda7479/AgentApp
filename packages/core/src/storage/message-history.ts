@@ -1,27 +1,8 @@
-/**
- * storage/message-history.ts — disk-backed canonical transcript for an agent.
- *
- * Why this exists:
- *   `AgentEngine` needs the *model context* (a bounded, compacted view of the
- *   conversation) in RAM to generate the next turn. It does NOT need the *entire
- *   raw transcript* in RAM — that only serves the human UI (scroll-up to read
- *   earlier messages) and resume-from-disk. Holding the whole transcript in RAM
- *   is what made 100+ long chats expensive.
- *
- *   This store keeps the canonical, full transcript on disk (append-only JSONL,
- *   flushed asynchronously in batches) and exposes `loadRange` for the UI's
- *   "scroll up to auto-load older messages" feature. `AgentEngine` keeps only
- *   its bounded working set in RAM; the full record lives here.
- *
- *   `append` is non-blocking (buffers + schedules an async flush) so recording a
- *   message never stalls the single event loop, even across 100+ concurrent
- *   agents.
- */
-
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { getConfigDirectory } from './locations.js';
+import { getUserDataDirectory } from './locations.js';
+import { getChatJsonPath } from './conversation-paths.js';
 import type { ChatMessage } from '../types/agent.js';
 
 function safeName(sessionId: string): string {
@@ -29,7 +10,7 @@ function safeName(sessionId: string): string {
 }
 
 function filePathFor(sessionId: string): string {
-  return path.join(getConfigDirectory(), 'history', `${safeName(sessionId)}.jsonl`);
+  return getChatJsonPath(getUserDataDirectory(), safeName(sessionId));
 }
 
 export class MessageHistoryStore {
@@ -62,7 +43,7 @@ export class MessageHistoryStore {
     this.timers.set(sessionId, t);
   }
 
-  /** Append buffered messages to the JSONL transcript (append-only, O(buffer)). */
+  /** Append buffered messages to the JSON transcript in ~/.superagent/conversation/chats/<id>/chat.json. */
   public static async flush(sessionId: string): Promise<void> {
     const existing = this.inflight.get(sessionId);
     if (existing) return existing;
@@ -74,8 +55,57 @@ export class MessageHistoryStore {
       try {
         const file = filePathFor(sessionId);
         await fsp.mkdir(path.dirname(file), { recursive: true });
-        const lines = buf.map((m) => JSON.stringify(m)).join('\n') + '\n';
-        await fsp.appendFile(file, lines, 'utf-8');
+
+        let existingSteps: any[] = [];
+        let existingMessages: any[] = [];
+        let title = sessionId;
+        let timestamp = new Date().toISOString();
+
+        if (fs.existsSync(file)) {
+          try {
+            const raw = await fsp.readFile(file, 'utf-8');
+            const parsed = JSON.parse(raw);
+            existingSteps = Array.isArray(parsed.steps) ? parsed.steps : [];
+            existingMessages = Array.isArray(parsed.messages) ? parsed.messages : [];
+            title = parsed.title || sessionId;
+            timestamp = parsed.timestamp || timestamp;
+          } catch {
+            /* ignore parse failure */
+          }
+        }
+
+        const newSteps = buf.map((m, i) => ({
+          id: (m as any).id || `msg-${Date.now()}-${i}`,
+          type: m.role as any,
+          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+          timestamp: new Date().toISOString()
+        }));
+
+        const newMessages = buf.map((m) => ({
+          role: m.role,
+          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+        }));
+
+        const allSteps = existingSteps.concat(newSteps);
+        const allMessages = existingMessages.concat(newMessages);
+
+        if (title === sessionId) {
+          const firstUserMsg = allMessages.find((m: any) => m.role === 'user')?.content;
+          if (firstUserMsg) {
+            title = firstUserMsg.length > 50 ? firstUserMsg.slice(0, 47) + '...' : firstUserMsg;
+          }
+        }
+
+        const chatData = {
+          id: safeName(sessionId),
+          title,
+          project: '',
+          timestamp,
+          steps: allSteps,
+          messages: allMessages
+        };
+
+        await fsp.writeFile(file, JSON.stringify(chatData, null, 2), 'utf-8');
       } catch (e) {
         console.error(`Failed to flush history for ${sessionId}:`, e);
         // Re-queue unsaved messages so they aren't silently lost.
@@ -103,8 +133,13 @@ export class MessageHistoryStore {
     if (!fs.existsSync(file)) return buffered;
     try {
       const data = await fsp.readFile(file, 'utf-8');
-      const lines = data.split('\n').filter((l) => l.trim().length > 0);
-      return lines.length + buffered;
+      const parsed = JSON.parse(data);
+      const count = Array.isArray(parsed.messages)
+        ? parsed.messages.length
+        : Array.isArray(parsed.steps)
+        ? parsed.steps.length
+        : 0;
+      return count + buffered;
     } catch {
       return buffered;
     }
@@ -126,10 +161,15 @@ export class MessageHistoryStore {
     if (fs.existsSync(file)) {
       try {
         const data = await fsp.readFile(file, 'utf-8');
-        persisted = data
-          .split('\n')
-          .filter((l) => l.trim().length > 0)
-          .map((l) => JSON.parse(l) as ChatMessage);
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed.messages)) {
+          persisted = parsed.messages as ChatMessage[];
+        } else if (Array.isArray(parsed.steps)) {
+          persisted = parsed.steps.map((s: any) => ({
+            role: s.type === 'user' ? 'user' : s.type === 'assistant' ? 'assistant' : 'system',
+            content: s.content || ''
+          })) as ChatMessage[];
+        }
       } catch {
         persisted = [];
       }
@@ -155,6 +195,11 @@ export class MessageHistoryStore {
     const file = filePathFor(sessionId);
     try {
       await fsp.unlink(file);
+      const dir = path.dirname(file);
+      const remaining = await fsp.readdir(dir);
+      if (remaining.length === 0) {
+        await fsp.rmdir(dir);
+      }
     } catch {
       // ignore missing file
     }
@@ -171,3 +216,4 @@ export class MessageHistoryStore {
 if (typeof process !== 'undefined' && typeof process.once === 'function') {
   process.once('beforeExit', () => MessageHistoryStore.shutdown());
 }
+
