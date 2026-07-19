@@ -20,18 +20,46 @@ interface KanbanViewProps {
   projectName?: string;
 }
 
-const COLUMNS: { id: KanbanCard['column']; label: string; color: string }[] = [
-  { id: 'backlog', label: 'Backlog', color: 'border-t-2 border-zinc-500' },
-  { id: 'in-progress', label: 'In Progress', color: 'border-t-2 border-sky-500' },
-  { id: 'review', label: 'Review', color: 'border-t-2 border-amber-500' },
-  { id: 'done', label: 'Done', color: 'border-t-2 border-emerald-500' },
+// Column identity accent — a single 2px top strip, routed through the neon
+// state tokens (never raw hues): neutral → live → attention → constructive.
+const COLUMNS: { id: KanbanCard['column']; label: string; accent: string }[] = [
+  { id: 'backlog', label: 'Backlog', accent: 'var(--brand-border-strong)' },
+  { id: 'in-progress', label: 'In Progress', accent: 'var(--neon-live)' },
+  { id: 'review', label: 'Review', accent: 'var(--neon-attention)' },
+  { id: 'done', label: 'Done', accent: 'var(--neon-constructive)' },
 ];
 
-const PRIORITY_META = {
-  low: { label: 'Low', bg: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20' },
-  medium: { label: 'Medium', bg: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
-  high: { label: 'High', bg: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
-  urgent: { label: 'Urgent', bg: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
+// Priority is a stateful escalation — whole-chip tint routed through the neon
+// state tokens: neutral (low) → live (medium) → attention (high) → destructive
+// (urgent). No raw Tailwind hues, so it stays theme-correct in light + dark.
+const PRIORITY_META: Record<
+  KanbanCard['priority'],
+  { label: string; text: string; bg: string; border: string }
+> = {
+  low: {
+    label: 'Low',
+    text: 'var(--brand-text-muted)',
+    bg: 'var(--brand-hover)',
+    border: 'var(--brand-border)',
+  },
+  medium: {
+    label: 'Medium',
+    text: 'var(--neon-live)',
+    bg: 'color-mix(in srgb, var(--neon-live) 12%, transparent)',
+    border: 'color-mix(in srgb, var(--neon-live) 24%, transparent)',
+  },
+  high: {
+    label: 'High',
+    text: 'var(--neon-attention)',
+    bg: 'color-mix(in srgb, var(--neon-attention) 12%, transparent)',
+    border: 'color-mix(in srgb, var(--neon-attention) 24%, transparent)',
+  },
+  urgent: {
+    label: 'Urgent',
+    text: 'var(--neon-destructive)',
+    bg: 'color-mix(in srgb, var(--neon-destructive) 14%, transparent)',
+    border: 'color-mix(in srgb, var(--neon-destructive) 26%, transparent)',
+  },
 };
 
 const LABEL_COLORS = [
@@ -175,7 +203,8 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
               key={col.id}
               className={`flex flex-col rounded-xl bg-brand-sidebar/40 border border-brand-border/40 min-h-[300px] md:min-h-0 ${
                 isOver ? 'border-brand-border-strong bg-brand-hover' : ''
-              } ${col.color} transition-all duration-200`}
+              } transition-all duration-200`}
+              style={{ borderTop: `2px solid ${col.accent}` }}
               onDragOver={(e) => handleDragOver(e, col.id)}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, col.id)}
@@ -209,7 +238,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                       if (e.key === 'Enter') handleAddCard(col.id);
                       if (e.key === 'Escape') setActiveAddCol(null);
                     }}
-                    className="w-full px-3 py-2 rounded-lg bg-brand-popover border border-brand-border text-xs text-brand-textMain placeholder-brand-textMuted/50 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 mb-2"
+                    className="w-full px-3 py-2 rounded-lg bg-brand-popover border border-brand-border text-xs text-brand-textMain placeholder-brand-textMuted/50 focus:outline-none focus:border-[var(--brand-accent-border)] focus:ring-1 focus:ring-[var(--brand-accent)] mb-2"
                     autoFocus
                   />
                   <div className="flex gap-1.5 justify-end">
@@ -232,7 +261,14 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
               {/* Cards Container */}
               <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-2 max-h-[50vh] md:max-h-none custom-scrollbar">
                 {colCards.length === 0 ? (
-                  <div className="flex-1 flex items-center justify-center py-8 text-xs text-brand-textMuted/40 italic">
+                  <div className="flex-1 flex flex-col items-center justify-center gap-2 py-8 text-xs text-brand-textMuted/40 italic select-none">
+                    {/* Quiet-zone atmosphere: contour-mode horizon bands + a single
+                        focal disc — original linework, monochrome, never behind dense cards. */}
+                    <svg width="92" height="52" viewBox="0 0 92 52" fill="none" aria-hidden="true" className="opacity-60">
+                      <circle cx="46" cy="40" r="7" fill="var(--brand-atmo-glow)" stroke="var(--brand-border-strong)" strokeWidth="1" />
+                      <path d="M4 40 C 22 33, 34 47, 46 40 S 70 33, 88 40" stroke="var(--brand-border-strong)" strokeWidth="1" fill="none" />
+                      <path d="M4 47 C 22 41, 34 53, 46 47 S 70 41, 88 47" stroke="var(--brand-border)" strokeWidth="1" fill="none" opacity="0.7" />
+                    </svg>
                     No tasks
                   </div>
                 ) : (
@@ -248,7 +284,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                         onDragEnd={handleDragEnd}
                         onClick={() => setSelectedCard(card)}
                         className={`group relative p-3 rounded-lg bg-brand-card hover:bg-brand-hover border border-brand-border/80 hover:border-brand-border-strong cursor-grab active:cursor-grabbing transition-all duration-150 ${
-                          isDragging ? 'opacity-40 border-dashed border-zinc-700 bg-transparent' : ''
+                          isDragging ? 'opacity-40 border-dashed border-brand-border-strong bg-transparent' : ''
                         }`}
                       >
                         {/* Tags */}
@@ -280,8 +316,11 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
 
                         {/* Card Footer info */}
                         <div className="flex items-center justify-between text-[10px] text-brand-textMuted mt-1">
-                          {/* Priority */}
-                          <span className={`px-1.5 py-0.5 rounded border text-[9px] font-bold ${prio.bg}`}>
+                          {/* Priority — state-coded whole-chip tint (neon tokens) */}
+                          <span
+                            className="px-1.5 py-0.5 rounded border text-[9px] font-bold"
+                            style={{ color: prio.text, backgroundColor: prio.bg, borderColor: prio.border }}
+                          >
                             {prio.label}
                           </span>
 
@@ -328,7 +367,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                 type="text"
                 value={selectedCard.title}
                 onChange={(e) => handleUpdateCardField(selectedCard.id, 'title', e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-brand-card border border-brand-border text-xs text-brand-textMain font-semibold focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="w-full px-3 py-2 rounded-lg bg-brand-card border border-brand-border text-xs text-brand-textMain font-semibold focus:outline-none focus:border-[var(--brand-accent-border)] focus:ring-1 focus:ring-[var(--brand-accent)]"
               />
             </div>
 
@@ -356,7 +395,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                 placeholder="Add a detailed description..."
                 onChange={(e) => handleUpdateCardField(selectedCard.id, 'description', e.target.value)}
                 rows={4}
-                className="w-full px-3 py-2 rounded-lg bg-brand-card border border-brand-border text-xs text-brand-textMain placeholder-brand-textMuted/40 leading-relaxed focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-none"
+                className="w-full px-3 py-2 rounded-lg bg-brand-card border border-brand-border text-xs text-brand-textMain placeholder-brand-textMuted/40 leading-relaxed focus:outline-none focus:border-[var(--brand-accent-border)] focus:ring-1 focus:ring-[var(--brand-accent)] resize-none"
               />
             </div>
 
@@ -443,7 +482,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
                     key={col.hex}
                     onClick={() => setSelectedLabelColor(col.hex)}
                     className={`w-4 h-4 rounded-full border transition-all ${
-                      selectedLabelColor === col.hex ? 'scale-125 border-white ring-1 ring-indigo-500' : 'border-transparent'
+                      selectedLabelColor === col.hex ? 'scale-125 border-[var(--brand-text-main)] ring-1 ring-[var(--brand-accent)]' : 'border-transparent'
                     }`}
                     style={{ backgroundColor: col.hex }}
                     title={col.name}
@@ -457,7 +496,10 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
           <div className="p-4 border-t border-brand-border/40 flex justify-end">
             <button
               onClick={() => handleDeleteCard(selectedCard.id)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-semibold transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              style={{ color: 'var(--neon-destructive)', backgroundColor: 'color-mix(in srgb, var(--neon-destructive) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--neon-destructive) 24%, transparent)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--neon-destructive) 22%, transparent)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--neon-destructive) 12%, transparent)'; }}
             >
               <Trash2 className="w-3.5 h-3.5" />
               Delete Task

@@ -83,9 +83,12 @@ export const TasksPage: React.FC<TasksPageProps> = ({
   return (
     <div className="flex-1 flex flex-col h-full bg-brand-bg min-h-0 relative select-none">
       {/* Header bar */}
-      <div className="flex-shrink-0 flex flex-col sm:flex-row sm:items-center justify-between p-4 border-b border-brand-border/40 gap-4 bg-brand-bg/50 backdrop-blur-md z-10">
+      <div
+        className="flex-shrink-0 flex flex-col sm:flex-row sm:items-center justify-between p-4 border-b border-brand-border/40 gap-4 bg-brand-bg/50 backdrop-blur-md z-10"
+        style={{ backgroundImage: 'radial-gradient(135% 160% at 0% 0%, var(--brand-atmo-glow) 0%, transparent 52%)' }}
+      >
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+          <div className="p-2 rounded-lg bg-[var(--brand-accent-tint)] border border-[var(--brand-accent-border)] text-[var(--brand-accent)]">
             <KanbanSquare className="w-5 h-5" />
           </div>
           <div>
@@ -139,7 +142,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
               placeholder="Search tasks..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full sm:w-48 pl-8 pr-3 py-1.5 rounded-lg bg-brand-sidebar border border-brand-border text-xs text-brand-textMain placeholder-brand-textMuted/45 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              className="w-full sm:w-48 pl-8 pr-3 py-1.5 rounded-lg bg-brand-sidebar border border-brand-border text-xs text-brand-textMain placeholder-brand-textMuted/45 focus:outline-none focus:border-[var(--brand-accent-border)] focus:ring-1 focus:ring-[var(--brand-accent)]"
             />
             {searchQuery && (
               <button
@@ -167,8 +170,8 @@ export const TasksPage: React.FC<TasksPageProps> = ({
 
       {/* Main Kanban Content Area */}
       {loading ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-2">
-          <RefreshCw className="w-6 h-6 text-indigo-400 animate-spin" />
+        <div className="flex-1 flex flex-col items-center justify-center gap-2" style={{ backgroundImage: 'radial-gradient(circle at 50% 42%, var(--brand-atmo-glow) 0%, transparent 60%)' }}>
+          <RefreshCw className="w-6 h-6 text-[var(--brand-text-muted)] animate-spin" />
           <span className="text-xs text-brand-textMuted">Loading task board...</span>
         </div>
       ) : (

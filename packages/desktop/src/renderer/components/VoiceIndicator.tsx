@@ -105,17 +105,17 @@ export const VoiceIndicator: React.FC = () => {
       {state === 'recording' && (
         <>
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--neon-live)] opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--neon-live)]"></span>
           </span>
-          <Mic className="w-3.5 h-3.5 text-rose-400" />
+          <Mic className="w-3.5 h-3.5 text-[var(--neon-live)]" />
           <span className="text-xs font-semibold text-brand-textMain">Voice Typing...</span>
         </>
       )}
 
       {state === 'transcribing' && (
         <>
-          <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+          <RefreshCw className="w-3.5 h-3.5 animate-spin text-[var(--neon-live)]" />
           <span className="text-xs font-semibold text-brand-textMuted">Transcribing...</span>
         </>
       )}
@@ -124,15 +124,15 @@ export const VoiceIndicator: React.FC = () => {
         <>
           {errorMsg ? (
             <>
-              <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
-              <span className="text-xs font-semibold text-rose-400 max-w-[160px] truncate">
+              <AlertCircle className="w-3.5 h-3.5 text-[var(--neon-destructive)]" />
+              <span className="text-xs font-semibold text-[var(--neon-destructive)] max-w-[160px] truncate">
                 {errorMsg}
               </span>
             </>
           ) : (
             <>
-              <Check className="w-3.5 h-3.5 text-emerald-400 animate-bounce" />
-              <span className="text-xs font-semibold text-emerald-400 max-w-[160px] truncate">
+              <Check className="w-3.5 h-3.5 text-[var(--neon-constructive)]" />
+              <span className="text-xs font-semibold text-[var(--neon-constructive)] max-w-[160px] truncate">
                 {successText || 'Typed'}
               </span>
             </>
