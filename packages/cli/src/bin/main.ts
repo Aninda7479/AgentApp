@@ -127,7 +127,8 @@ async function handleChat(opts: CliOptions, prompt?: string): Promise<void> {
     /* ignore */
   }
 
-  const sessionId = opts.resume && opts.resume.length > 0 ? opts.resume : (function() {
+  const isResumeAttempt = Boolean(opts.resume && opts.resume.length > 0);
+  const sessionId = isResumeAttempt ? opts.resume! : (function() {
     const g = () => Math.random().toString(16).slice(2, 6).padEnd(4, '0').slice(0, 4);
     return `${g()}-${g()}-${g()}-${g()}`;
   })();
@@ -139,6 +140,7 @@ async function handleChat(opts: CliOptions, prompt?: string): Promise<void> {
       initialPermission: opts.permission,
       initialVerbose: opts.verbose,
       sessionId: sessionId,
+      isResumeAttempt: isResumeAttempt,
       initialMessages: resumeMessages ?? undefined,
     })
   );

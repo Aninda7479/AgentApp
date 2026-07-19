@@ -188,6 +188,8 @@ export interface AppProps {
   initialVerbose?: boolean;
   /** Resume token; reuses a saved session's id instead of generating a new one. */
   sessionId?: string;
+  /** Indicates whether the user explicitly attempted to resume a session. */
+  isResumeAttempt?: boolean;
   /** Messages restored from a previous session (used with `sessionId`). */
   initialMessages?: UiMessage[];
 }
@@ -231,6 +233,7 @@ export const App: React.FC<AppProps> = ({
   initialPermission = 'auto',
   initialVerbose = false,
   sessionId,
+  isResumeAttempt = false,
   initialMessages,
 }) => {
   const { exit } = useApp();
@@ -268,7 +271,7 @@ export const App: React.FC<AppProps> = ({
         role: 'system',
         content: `↺ Resumed session — ${restored.length} previous message${restored.length === 1 ? '' : 's'} restored.`,
       });
-    } else if (sessionId && sessionId.length > 0) {
+    } else if (isResumeAttempt && sessionId && sessionId.length > 0) {
       msgs.push({
         id: 'sys-resume-empty',
         role: 'system',
