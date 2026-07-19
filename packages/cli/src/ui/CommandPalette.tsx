@@ -1,51 +1,77 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 
-/** A single selectable command shown in the palette. */
+/** A single selectable entry shown in the palette (a skill or a slash command). */
 export interface PaletteItem {
+  /** Command name without slash (e.g. "model") or skill id. */
   name: string;
   description: string;
   aliases?: string[];
+  /** Distinguishes skills from slash commands for rendering + Enter handling. */
+  kind?: 'command' | 'skill';
 }
+
+/** A row rendered by the palette: either a section header or a selectable item. */
+export type PaletteRow =
+  | { kind: 'header'; label: string }
+  | { kind: 'item'; item: PaletteItem };
 
 /** Props for the {@link CommandPalette}. */
 export interface CommandPaletteProps {
-  items: PaletteItem[];
-  selected: number;
-  /** Total matches (may exceed items.length when the list is capped). */
+  rows: PaletteRow[];
+  /** Display index (into `rows`) of the currently highlighted selectable item. */
+  selectedIndex: number;
+  /** Total number of selectable items (may exceed visible when capped). */
   total: number;
 }
 
-const MAX_VISIBLE = 12;
+const MAX_VISIBLE = 14;
 
-/** Renders the arrow-navigable slash-command palette shown when the user types `/`. */
-export const CommandPalette: React.FC<CommandPaletteProps> = ({ items, selected, total }) => {
-  if (items.length === 0) {
+/** Renders the arrow-navigable palette shown when the user types `/`. Lists
+ *  runnable skills and slash commands in sections; arrow keys move the
+ *  highlight across selectable items. */
+export const CommandPalette: React.FC<CommandPaletteProps> = ({ rows, selectedIndex, total }) => {
+  if (rows.length === 0) {
     return (
       <Box borderStyle="round" borderColor="gray" paddingX={1} marginY={1}>
         <Text dimColor color="gray">
-          No matching commands.
+          No matching skills or commands.
         </Text>
       </Box>
     );
   }
 
-  const visible = items.slice(0, MAX_VISIBLE);
-  const start = 0;
+  const visible = rows.slice(0, MAX_VISIBLE);
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1} marginY={1}>
       <Text bold color="cyan">
-        Slash Commands
+        Slash Commands &amp; Skills
       </Text>
-      {visible.map((item, i) => {
-        const isSel = start + i === selected;
-        const aliasText = item.aliases?.length ? ` (${item.aliases.map((a) => `/${a}`).join(', ')})` : '';
+      {visible.map((row, i) => {
+        if (row.kind === 'header') {
+          return (
+            <Box key={`h-${i}`}>
+              <Text bold color="gray">
+                {'  '}
+                {row.label}
+              </Text>
+            </Box>
+          );
+        }
+        const isSel = i === selectedIndex;
+        const item = row.item;
+        const prefix = item.kind === 'skill' ? '✦ ' : '/';
+        const aliasText =
+          item.kind === 'command' && item.aliases?.length
+            ? ` (${item.aliases.map((a) => `/${a}`).join(', ')})`
+            : '';
         return (
           <Box key={item.name}>
             <Text color={isSel ? 'cyan' : 'gray'}>{isSel ? '❯ ' : '  '}</Text>
             <Text bold color={isSel ? 'cyan' : 'white'}>
-              /{item.name}
+              {prefix}
+              {item.name}
             </Text>
             <Text color="gray" dimColor>
               {aliasText}

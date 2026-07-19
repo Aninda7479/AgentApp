@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Box, Text, useApp, useInput, Static } from 'ink';
 import { Composer } from './Composer.js';
 import { MessageView, type UiMessage, type ToolCallInfo } from './MessageView.js';
-import { CommandPalette, type PaletteItem } from './CommandPalette.js';
+import { CommandPalette, type PaletteItem, type PaletteRow } from './CommandPalette.js';
 import { ModelPicker, type ModelPickItem } from './ModelPicker.js';
 import { DiffReviewer } from '../commands/diff.js';
 import { TaskManager } from '../commands/tasks.js';
@@ -17,7 +17,9 @@ import {
   detectDefaultConnection,
   resolveConnection,
   type ResolvedConnection,
+  type UsageInfo,
 } from '../engine.js';
+import { getRunnableSkills, type RunnableSkill } from '../skills.js';
 import { SettingsStorage, type ImageAttachment } from '@superagent/core';
 
 /** Root props for the SuperAgent TUI application. */
@@ -28,12 +30,38 @@ export interface AppProps {
   initialVerbose?: boolean;
 }
 
+/** Claude-Code-style startup banner: name/version, active model + effort, cwd. */
+const Banner: React.FC<{ provider: string; model: string; cwd: string }> = ({ provider, model, cwd }) => (
+  <Box flexDirection="column" marginBottom={1}>
+    <Text bold color="cyan">
+      {'  ▟██████▙  '}
+    </Text>
+    <Text bold color="cyan">
+      {'  ███████  '}
+    </Text>
+    <Text color="cyan">{'  █ SuperAgent Terminal '}</Text>
+    <Text dimColor color="gray">{' v0.1.0'}</Text>
+    <Box>
+      <Text dimColor color="gray">
+        {'  '}
+        {provider}/{model} · effort xhigh
+      </Text>
+    </Box>
+    <Box>
+      <Text dimColor color="gray">
+        {'  '}
+        {cwd}
+      </Text>
+    </Box>
+  </Box>
+);
+
 /**
  * Main SuperAgent Terminal TUI (Claude-Code style): a persistent, scrolling
- * message log (rendered with `<Static>` so the screen never "repeats" old
- * content), a live streaming assistant pane, a slash-command palette on `/`,
- * and an arrow-navigable model picker on `/model`. Real multi-turn chat and
- * tool use are driven by `ChatSession` (which wraps the core `AgentEngine`).
+ * message log (rendered with `<Static>`), a live streaming assistant pane, a
+ * slash-command + skills palette on `/` (arrow-navigable), and an arrow-
+ * navigable model picker on `/model`. Real multi-turn chat and tool use are
+ * driven by `ChatSession` (which wraps the core `AgentEngine`).
  */
 export const App: React.FC<AppProps> = ({
   provider = 'openai',
@@ -51,13 +79,7 @@ export const App: React.FC<AppProps> = ({
 
   const [permission, setPermission] = useState<PermissionLevel>(initialPermission);
   const [verbose, setVerbose] = useState<boolean>(initialVerbose);
-  const [messages, setMessagesState] = useState<UiMessage[]>([
-    {
-      id: 'sys-welcome',
-      role: 'system',
-      content: `Welcome to SuperAgent Terminal (${initialConn.provider} / ${initialConn.model}). Type a prompt, or / for commands.`,
-    },
-  ]);
+  const [messages, setMessagesState] = useState<UiMessage[]>([]);
   const [streaming, setStreamingState] = useState<{ content: string; tools: ToolCallInfo[] } | null>(null);
   const [input, setInput] = useState('');
   const [paletteSelected, setPaletteSelected] = useState(0);
@@ -65,6 +87,7 @@ export const App: React.FC<AppProps> = ({
   const [picker, setPicker] = useState<{ open: boolean; selected: number }>({ open: false, selected: 0 });
   const [isBusy, setIsBusy] = useState(false);
   const [queuedTurnsCount, setQueuedTurnsCount] = useState(0);
+  const [usage, setUsage] = useState<UsageInfo | null>(null);
 
   // ── Refs (read inside the single useInput handler to avoid stale closures) ──
   const messagesRef = useRef<UiMessage[]>(messages);
@@ -78,6 +101,9 @@ export const App: React.FC<AppProps> = ({
   permissionRef.current = permission;
   const pendingAttachmentsRef = useRef<ImageAttachment[]>([]);
   const streamStartRef = useRef(0);
+  const historyRef = useRef<string[]>([]);
+  const historyPosRef = useRef(0);
+  const draftRef = useRef('');
 
   const setMessages = useCallback((next: UiMessage[]) => {
     messagesRef.current = next;
@@ -157,32 +183,99 @@ export const App: React.FC<AppProps> = ({
   // ── Chat engine (one persistent session) ──
   const chatRef = useRef<ChatSession>(new ChatSession(initialConn, initialPermission));
 
+  // ── Welcome + connection notice ──
+  useEffect(() => {
+    const conn = initialConn;
+    const welcome: UiMessage = {
+      id: 'sys-welcome',
+      role: 'system',
+      content: `Welcome to SuperAgent Terminal — ${conn.provider}/${conn.model}. Type a prompt, or / for skills & commands.`,
+    };
+    const msgs: UiMessage[] = [welcome];
+    if (!conn.apiKey) {
+      msgs.push({
+        id: 'sys-nokey',
+        role: 'system',
+        content:
+          '⚠ No API key found for this connection. Set OPENROUTER_API_KEY (or configure a provider) so the assistant can respond. Run /model to switch models.',
+      });
+    }
+    setMessages(msgs);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Skills (runnable, discovered + built-in) ──
+  const allSkills = useRef<RunnableSkill[]>(getRunnableSkills(process.cwd())).current;
+
   // ── Build the slash-command palette list (router + special controls) ──
   const [allCommands] = useState<PaletteItem[]>(() => {
     const fromRouter: PaletteItem[] = router.getCommands().map((def) => ({
       name: def.name,
       description: def.metadata.description || '',
       aliases: def.metadata.aliases,
+      kind: 'command',
     }));
     const extras: PaletteItem[] = [
-      { name: 'help', description: 'Show this command list' },
-      { name: 'clear', description: 'Clear the conversation' },
-      { name: 'exit', description: 'Quit the terminal' },
+      { name: 'help', description: 'Show this command list', kind: 'command' },
+      { name: 'clear', description: 'Clear the conversation', kind: 'command' },
+      { name: 'exit', description: 'Quit the terminal', kind: 'command' },
     ];
     const names = new Set(fromRouter.map((c) => c.name));
     return [...fromRouter, ...extras.filter((e) => !names.has(e.name))];
   });
 
-  const filterCommands = (query: string): PaletteItem[] => {
-    const q = query.replace(/^\//, '').split(/\s+/)[0].toLowerCase();
-    if (!q) return allCommands;
-    return allCommands.filter(
-      (c) =>
+  /** Filters skills + commands by the current `/`-prefixed query. */
+  const getFiltered = useCallback(
+    (query: string): { skills: RunnableSkill[]; commands: PaletteItem[] } => {
+      const q = query.replace(/^\//, '').split(/\s+/)[0].toLowerCase();
+      const matchSkill = (s: RunnableSkill) =>
+        !q || s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
+      const matchCmd = (c: PaletteItem) =>
+        !q ||
         c.name.startsWith(q) ||
         c.name.includes(q) ||
-        (c.aliases || []).some((a) => a.startsWith(q))
-    );
-  };
+        (c.aliases || []).some((a) => a.startsWith(q));
+      return {
+        skills: allSkills.filter(matchSkill),
+        commands: allCommands.filter(matchCmd),
+      };
+    },
+    [allSkills, allCommands]
+  );
+
+  /** Builds the render rows (with section headers) and the selectable index
+   *  mapping for a given filtered set. */
+  const buildPalette = useCallback(
+    (query: string): { rows: PaletteRow[]; combined: PaletteItem[]; selectedRow: number } => {
+      const { skills, commands } = getFiltered(query);
+      const combined: PaletteItem[] = [
+        ...skills.map((s) => ({ name: s.id, description: s.description, kind: 'skill' as const })),
+        ...commands,
+      ];
+      const rows: PaletteRow[] = [];
+      const rowOf = new Map<number, number>();
+      let sel = 0;
+      if (skills.length > 0) {
+        rows.push({ kind: 'header', label: 'Skills' });
+        for (const s of skills) {
+          rowOf.set(sel, rows.length);
+          rows.push({ kind: 'item', item: { name: s.id, description: s.description, kind: 'skill' } });
+          sel++;
+        }
+      }
+      if (commands.length > 0) {
+        rows.push({ kind: 'header', label: 'Commands' });
+        for (const c of commands) {
+          rowOf.set(sel, rows.length);
+          rows.push({ kind: 'item', item: c });
+          sel++;
+        }
+      }
+      const selectedRow = rowOf.get(Math.min(paletteSelectedRef.current, Math.max(0, combined.length - 1))) ?? 0;
+      return { rows, combined, selectedRow };
+    },
+    [getFiltered]
+  );
 
   // ── Model picker items ──
   const buildModelItems = useCallback((): ModelPickItem[] => {
@@ -328,6 +421,7 @@ export const App: React.FC<AppProps> = ({
 
       await chatRef.current.send(promptText, attachments, {
         onToken: (t) => setStreaming((s) => ({ ...s, content: s.content + t })),
+        onUsage: (u) => setUsage(u),
         onToolCall: (name, args) =>
           setStreaming((s) => ({ ...s, tools: [...s.tools, { name, args }] })),
         onToolResult: (name, result) =>
@@ -353,15 +447,24 @@ export const App: React.FC<AppProps> = ({
     [appendMessage, finalizeStreaming, setStreaming, transcriptManager]
   );
 
-  const submit = useCallback(() => {
-    const text = inputRef.current.trim();
-    if (!text) return;
-    setInput('');
-    inputRef.current = '';
+  const resetPalette = useCallback(() => {
     setPaletteDismissed(false);
     paletteDismissedRef.current = false;
     setPaletteSelected(0);
     paletteSelectedRef.current = 0;
+  }, []);
+
+  const submit = useCallback(() => {
+    const text = inputRef.current.trim();
+    if (!text) return;
+    // Record in history for up/down recall.
+    historyRef.current.push(text);
+    historyPosRef.current = historyRef.current.length;
+    draftRef.current = '';
+
+    setInput('');
+    inputRef.current = '';
+    resetPalette();
 
     if (text === '/exit') {
       exit();
@@ -390,7 +493,7 @@ export const App: React.FC<AppProps> = ({
       return;
     }
     void sendChat(text);
-  }, [openModelPicker, runSlashCommand, sendChat, setMessages, showHelp, exit]);
+  }, [openModelPicker, runSlashCommand, sendChat, setMessages, showHelp, exit, resetPalette]);
 
   const queueTurn = useCallback((text: string) => {
     queueManager.enqueue(text);
@@ -440,14 +543,19 @@ export const App: React.FC<AppProps> = ({
     const isPaletteOpen = inputRef.current.startsWith('/') && !paletteDismissedRef.current;
 
     if (isPaletteOpen) {
+      const { combined } = buildPalette(inputRef.current);
+      const maxIdx = Math.max(0, combined.length - 1);
+
       if (key.upArrow) {
-        setPaletteSelected((s) => Math.max(0, s - 1));
-        paletteSelectedRef.current = Math.max(0, paletteSelectedRef.current - 1);
+        const next = Math.max(0, paletteSelectedRef.current - 1);
+        setPaletteSelected(next);
+        paletteSelectedRef.current = next;
         return;
       }
       if (key.downArrow) {
-        setPaletteSelected((s) => s + 1);
-        paletteSelectedRef.current += 1;
+        const next = Math.min(maxIdx, paletteSelectedRef.current + 1);
+        setPaletteSelected(next);
+        paletteSelectedRef.current = next;
         return;
       }
       if (key.escape) {
@@ -460,9 +568,17 @@ export const App: React.FC<AppProps> = ({
         return;
       }
       if (key.return) {
-        const filtered = filterCommands(inputRef.current);
-        const sel = filtered[paletteSelectedRef.current] || filtered[0];
-        if (sel) {
+        const sel = combined[paletteSelectedRef.current];
+        if (!sel) return;
+        setInput('');
+        inputRef.current = '';
+        resetPalette();
+        if (sel.kind === 'skill') {
+          const skill = allSkills.find((s) => s.id === sel.name);
+          if (skill) void sendChat(skill.prompt);
+        } else if (sel.name === 'model') {
+          openModelPicker();
+        } else {
           setInput(`/${sel.name} `);
           inputRef.current = `/${sel.name} `;
           setPaletteDismissed(true);
@@ -515,13 +631,36 @@ export const App: React.FC<AppProps> = ({
       return;
     }
     if (key.backspace || key.delete) {
+      historyPosRef.current = historyRef.current.length;
       const next = inputRef.current.slice(0, -1);
       setInput(next);
       inputRef.current = next;
       return;
     }
-    if (key.upArrow || key.downArrow) return; // reserved for history later
+    // Up/Down arrow input history recall (Claude-Code behaviour).
+    if (key.upArrow) {
+      const hist = historyRef.current;
+      if (hist.length === 0) return;
+      if (historyPosRef.current === hist.length) draftRef.current = inputRef.current;
+      const next = Math.max(0, historyPosRef.current - 1);
+      historyPosRef.current = next;
+      setInput(hist[next]);
+      inputRef.current = hist[next];
+      return;
+    }
+    if (key.downArrow) {
+      const hist = historyRef.current;
+      if (historyPosRef.current >= hist.length) return;
+      const next = historyPosRef.current + 1;
+      historyPosRef.current = next;
+      const val = next === hist.length ? draftRef.current : hist[next];
+      setInput(val);
+      inputRef.current = val;
+      return;
+    }
     if (char && !key.ctrl && !key.meta) {
+      // Any printable key returns us to the "draft" position.
+      historyPosRef.current = historyRef.current.length;
       const next = inputRef.current + char;
       setInput(next);
       inputRef.current = next;
@@ -530,26 +669,22 @@ export const App: React.FC<AppProps> = ({
   });
 
   // Keep palette selected within the filtered range when rendering.
-  const filteredCommands = filterCommands(input);
-  const clampedSelected = Math.min(paletteSelected, Math.max(0, filteredCommands.length - 1));
+  const { rows: paletteRows, combined: paletteCombined, selectedRow } = buildPalette(input);
 
   const modelItems = picker.open ? buildModelItems() : [];
   const clampedModelSelected = Math.min(picker.selected, Math.max(0, modelItems.length - 1));
 
-  const showPalette = input.startsWith('/') && !paletteDismissed && filteredCommands.length > 0;
+  const showPalette =
+    input.startsWith('/') && !paletteDismissed && paletteCombined.length > 0;
+
+  const usageText = usage
+    ? ` · ${usage.totalTokens.toLocaleString()} tok (${usage.promptTokens.toLocaleString()}↑/${usage.completionTokens.toLocaleString()}↓)`
+    : '';
 
   return (
     <Box flexDirection="column">
-      {/* Compact top bar (no noisy double-border; re-renders cheaply). */}
-      <Box marginBottom={1}>
-        <Text bold color="cyan">
-          SuperAgent
-        </Text>
-        <Text dimColor color="gray">
-          {' '}
-          v0.1.0 · {chatRef.current.provider}/{chatRef.current.model} · {process.cwd()}
-        </Text>
-      </Box>
+      {/* Claude-Code-style startup banner. */}
+      <Banner provider={chatRef.current.provider} model={chatRef.current.model} cwd={process.cwd()} />
 
       {/* Persistent, scrolling conversation log. */}
       <Static items={messages}>
@@ -569,9 +704,9 @@ export const App: React.FC<AppProps> = ({
         />
       )}
 
-      {/* Slash-command palette (typing `/`). */}
+      {/* Slash-command + skills palette (typing `/`). */}
       {showPalette && (
-        <CommandPalette items={filteredCommands} selected={clampedSelected} total={filteredCommands.length} />
+        <CommandPalette rows={paletteRows} selectedIndex={selectedRow} total={paletteCombined.length} />
       )}
 
       {/* Model picker (after `/model`). */}
@@ -589,7 +724,9 @@ export const App: React.FC<AppProps> = ({
         </Text>
         <Text>{getPermissionLabel(permission)} mode</Text>
         <Text dimColor color="gray">
-          {isBusy ? ' · working…' : ''} · shift+tab cycle · ctrl+o verbose · / for commands
+          {isBusy ? ' · working…' : ''}
+          {usageText}
+          {' · shift+tab cycle · ctrl+o verbose · ↑/↓ history · / for skills'}
           {queuedTurnsCount > 0 ? ` · queued: ${queuedTurnsCount}` : ''}
         </Text>
       </Box>

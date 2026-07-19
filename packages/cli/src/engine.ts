@@ -162,12 +162,20 @@ function mapPermission(permission: PermissionLevel): PermissionMode {
   return 'full-autonomy';
 }
 
+/** A lightweight token-usage snapshot for the status bar. */
+export interface UsageInfo {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 /** Events emitted to the UI while a turn streams. */
 export interface ChatHandlers {
   onToken: (text: string) => void;
   onThinking?: (thinking: boolean) => void;
   onToolCall?: (name: string, args: Record<string, unknown>) => void;
   onToolResult?: (name: string, result: string) => void;
+  onUsage?: (usage: UsageInfo) => void;
   onError?: (message: string) => void;
   onDone?: (info: { elapsedMs: number }) => void;
 }
@@ -236,10 +244,17 @@ export class ChatSession {
       await engine.run(
         prompt,
         (ev: AgentEvent) => {
-          switch (ev.type) {
-            case 'token':
-              if (ev.content) handlers.onToken(ev.content);
-              break;
+           switch (ev.type) {
+              case 'token':
+                if (ev.content) handlers.onToken(ev.content);
+                if (ev.usage) {
+                  handlers.onUsage?.({
+                    promptTokens: ev.usage.promptTokens,
+                    completionTokens: ev.usage.completionTokens,
+                    totalTokens: ev.usage.totalTokens,
+                  });
+                }
+                break;
             case 'tool_call':
               handlers.onToolCall?.(ev.toolName || '', (ev.toolArgs as Record<string, unknown>) ?? {});
               break;
