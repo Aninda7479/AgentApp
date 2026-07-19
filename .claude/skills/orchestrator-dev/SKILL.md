@@ -1,127 +1,198 @@
 ---
 name: orchestrator-dev
-description: Autonomously develops, tests, and researches the Model Orchestrator — the capability registry, task classifier, routing engine, ensembling logic, and fallback/health-monitoring that let SuperAgent route across multiple connected providers instead of depending on one model. Reads app-structure.log as working memory, shares the code-edit lock with /auto-improve, and logs into the same queue.
+description: Autonomously develops, tests, and researches the Model Orchestrator — capability registry, task classifier, routing engine, ensembling logic, and fallback/health-monitoring. Researches EVERY cycle via 3 mandatory WebSearch/WebFetch calls (provider APIs change frequently). Reads app-structure.log as working memory, shares the lock with /auto-improve, logs into the shared queue. Research is not optional — provider API shapes must be verified, not recalled from memory.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash, WebSearch, WebFetch, TodoWrite
 argument-hint: [optional focus, e.g. "capability-registry", "task-classifier", "ensemble-synthesis", "provider:ollama", "fallback-chains"]
 ---
 
 # /orchestrator-dev — Autonomous Model-Orchestration Builder
 
-## Why this exists
+## Why This Exists
 
-The whole point of SuperAgent is not depending on one smartest model for everything — because that model can be banned, deprecated, rate-limited, or have new guardrails added, and because combining several models can produce better, less biased results than any single one. The orchestrator is the system that makes that real: given a task, it picks the model(s) actually suited to it — by modality (text/image/video/audio/3D in and out), specialty (coding, translation, 3D design, etc.), speed vs. intelligence, adjustable reasoning effort, cost, and current availability (free/paid/local/locked/rate-limited/banned) — routing to one model when that's enough, running several in parallel and merging results when the task calls for it, and rerouting automatically when a provider stops working. This skill's job is to keep building and proving out that system, not just talking about it.
+SuperAgent's whole point is not depending on one model for everything. The orchestrator routes tasks
+to whichever model(s) are actually suited — by modality, specialty, speed, cost, and current
+availability — and reroutes automatically when a provider goes down. This skill keeps building that system.
 
-## Context & memory contract (read first — mechanical, not judged)
+**Provider APIs change constantly.** Model names, endpoint formats, pricing, and capability flags
+shift with every release. Research is mandatory every cycle because memory is always stale.
 
-**Compact at every checkpoint marked `→ COMPACT` below. Do it every time, unconditionally — like a step in the recipe, not a judgment of whether context "feels heavy."** This skill previously told you to *self-police* a ceiling "on a trigger" and to compact "if you sense pressure." That self-judgment is the failure mode: you can't reliably introspect your own token usage, so a soft trigger silently doesn't fire and the run crashes mid-edit. The fix is to stop judging and execute the checkpoint every cycle, mechanically. If you're ever unsure whether to compact: compact anyway — a compact you didn't need costs a little redundant re-reading; a compact you skipped costs the entire run.
+## Context & Memory Contract
 
-This skill shares memory with the others — that's how they stay synchronized:
-- **`.claude/auto-improve-log.log` — the shared queue. Read it with `tail -n 150` only, never whole** (same file and rule as `/auto-improve`, `/ux-critic`, `/art-director`). It grows across runs; loading it wholesale is a slow context leak. Look for entries tagged `[auto-improve]` / `[ux-critic]` / `[art-director]` for orchestrator-relevant open items. If it exceeds ~400 lines, archive older entries to `.claude/auto-improve-log.log.archive`.
-- **`app-structure.log` is different: keep it small enough to read whole.** It's maintained current state, not a growing log. It's your local mirror of what's built — if it's crept past a page or two, prune/consolidate it this cycle rather than paginating through it. Update it in place (Step 8), don't append history to it.
-- Everything else (catalog summaries, test-transcript outcomes, file lists) lives on disk or in the log entry, not in working context.
+**Compact at every `→ COMPACT` checkpoint — unconditionally.**
+Before every compact: save focus + step + commit state to TodoWrite.
 
-**What to do before every compact, always:** save the current focus + step number + commit hash to TodoWrite (or a one-line scratch note). That resume state is the only thing you need after the compact.
+**What must stay on disk, never in context:**
+- Every provider catalog/listing call: write to `.orchestrator/catalogs/<provider>-<date>.json`
+  then extract only what you need with `jq` or `grep`.
+- Every live test run: write transcript to `.orchestrator/test-runs/<focus>-<n>.log`.
+- `.claude/auto-improve-log.log`: `tail -n 150` only, never whole.
+- Source files: `Grep` first, then `Read` with `offset`/`limit`. Never load whole adapter files.
+- `.claude/research-cache/<date>-orchestrator-dev.md`: write research results here, read back only what you need.
 
-### What must live on disk, never in context
-- **Every provider catalog/listing call writes the full raw response to disk**, never into context: `.orchestrator/catalogs/<provider>-<date>.json`. Then extract only what you need (id, modalities, pricing, context length, tags) with `jq`/`grep` into a small working summary. Don't `cat` a full catalog file.
-- **Every live test run writes its transcript to disk**: `.orchestrator/test-runs/<focus>-<n>.log`. Summarize the outcome in a couple of lines in your own working context; don't paste a full model response back into context unless you're actively debugging that specific output.
-- **Source files:** don't `Read` a whole provider/adapter file to orient — `Grep` for the section, then targeted `Read` with `offset`/`limit`. Don't re-read a file you already read this focus.
-- **Hard backstop (not the primary mechanism):** if you've done >~15 heavy tool calls since the last `/compact` (any catalog fetch, large-file Read, build/lint/test run, provider API call), or any single result looks large (a raw catalog slipped in, a 1000+ line read, a full test log), run `/compact` immediately. This only catches a runaway before auto-summarization; the per-focus `→ COMPACT` checkpoints are what actually prevent the crash.
+## Step 0 — Orient
 
-## Step0 — Orient
+- Read `app-structure.log` in full — your primary map of what's built.
+- `tail -n 150 .claude/auto-improve-log.log` — current priority queue and any `/auto-improve` open items.
+- **Acquire the shared lock** (`.claude/.auto-improve.lock`):
+  ```bash
+  LOCK=.claude/.auto-improve.lock
+  if [ -f "$LOCK" ]; then
+    age=$(( $(date +%s) - $(date -r "$LOCK" +%s 2>/dev/null || echo 0) ))
+    if [ "$age" -lt 540 ]; then echo "LOCK_HELD"; exit 2; fi
+  fi
+  printf '{"pid":%d,"started":"%s"}\n' "$$" "$(date -u +%FT%TZ)" > "$LOCK"
+  ```
+  If LOCK_HELD: log cycle skipped for lock contention, stop.
+- Read provider/model registry — which providers are connected, which models are tagged `free` or local.
+- `git status` — if dirty with someone else's work, don't touch those files.
 
-- Read `app-structure.log` in full — this is your primary map of what's already built and how it works. Trust it over re-deriving the codebase from scratch.
-- `tail -n 150 .claude/auto-improve-log.log` for recent cycles and the current priority queue (including anything `/ux-critic` or `/auto-improve` left open that's orchestrator-relevant).
-- **Acquire the shared lock** (`.claude/.auto-improve.lock`) before touching any code — the same lock `/auto-improve` and the background committer use. If it's held, don't wait or spin: log that this cycle was skipped for lock contention and stop.
-- Read the provider/model registry to see which providers are actually connected right now, and which models are tagged `free` or are local (Ollama local counts as zero-cost regardless of tag — see Step 6).
-- `git status` — if the tree is dirty with someone else's uncommitted work, don't touch those files.
+## Step 1 — Pick a Focus
 
-## Step1 — Pick a focus
+Use `$ARGUMENTS` if given. Otherwise from `app-structure.log` gaps or shared queue. Priority order if fresh:
+- Capability registry schema
+- Task classifier
+- Routing engine
+- Modality bridging (vision fallback)
+- Ensemble/synthesis engine
+- Fallback and health monitoring ← highest priority (core mission: "can't be banned out from under you")
+- Reasoning-effort normalization
 
-Use `$ARGUMENTS` if given. Otherwise take it from `app-structure.log`'s noted gaps or the shared queue. Candidate areas, roughly in build order if starting fresh:
+## Step 2 — Online Research (MANDATORY — NON-NEGOTIABLE)
 
-- **Capability registry** — schema and population per connected provider. If one doesn't exist yet, a reasonable starting shape (adapt to whatever's already there, don't replace working code):
-  `{ id, provider, input_modalities[], output_modalities[], specialties[], speed_tier, intelligence_tier, cost_per_1k_tokens, supports_variable_reasoning_effort, reasoning_effort_levels[], context_window, access_status (available/locked/rate_limited/deprecated), is_local, moderation_level }`
-- **Task classifier** — given an incoming request, determine required modality, rough difficulty, domain/specialty, and whether cost or latency should dominate the choice.
-- **Routing engine** — single-best-fit selection for straightforward tasks.
-- **Modality bridging** — auto-insert a vision/transcription model ahead of a model that can't read the input modality directly, and make that handoff visible/logged, not silent.
-- **Ensemble/synthesis engine** — run multiple models in parallel on a task and merge/vote/best-of-n the results, for tasks where quality or bias-resistance matters more than speed.
-- **Fallback and health monitoring** — detect an unavailable, rate-limited, or newly-restricted provider and reroute automatically rather than hard-failing. This is the piece that most directly delivers the "can't be banned out from under you" promise — treat it as high priority.
-- **Reasoning-effort normalization** — providers expose "thinking effort" differently; a consistent internal parameter that maps onto whatever each provider actually supports.
+**You may not proceed to Step 3 (Plan) without completing all 3 searches and writing the log to disk.**
 
-## Step2 — Research (mandatory, real, cited)
+Provider APIs change with every release. Last-known shapes are wrong. Search and fetch — do not recall.
 
-- Each connected provider's actual model-listing/metadata API (OpenRouter, Ollama local/cloud, Nvidia, and any others) — verify current fields rather than assuming last-known shapes; these catalogs change often.
-- Current routing/ensembling approaches: capability-aware and cost-aware routing, model cascades (escalate from small to large only when needed), mixture-of-agents/best-of-n synthesis, semantic caching.
-- How each connected provider currently exposes a reasoning-effort or "thinking" parameter, since this isn't standardized across providers and changes with new model releases.
-- Where relevant, each provider's published moderation/content-policy metadata for its models — this is just one more registry field (alongside cost, speed, locked status) for informed routing, not a focus in itself.
+```bash
+mkdir -p .claude/research-cache
+```
 
-Cross-check at least two sources before committing to an approach. Log every source used with a one-line takeaway. Never invent a provider API shape you haven't verified.
+**Run these 3 searches every cycle:**
 
-## Step3 — Plan
+1. `"<connected provider name> model list API response format $(date +%B\ %Y)"` — verify current catalog schema.
+   WebSearch first, then WebFetch the docs page (limit: first 300 lines only).
+   Write the raw catalog response (if you fetch it) to `.orchestrator/catalogs/<provider>-$(date +%Y%m%d).json`.
+   
+2. `"AI model routing ensemble synthesis technique 2026"` — current orchestration art.
+   What are comparable systems (LangGraph, LiteLLM, DSPy routers) doing differently this month?
+   
+3. `"<provider> rate limit pricing tier changes $(date +%B\ %Y)"` — pricing/availability drift detection.
+   Any model reclassified free→paid, any new free-tier model added?
 
-TodoWrite, 1–6 concrete edits, each tied to which part of the mission it serves (reduces single-provider dependency / improves result quality via ensembling / cuts cost or latency via smarter routing / improves resilience to a provider going down).
+Write results to `.claude/research-cache/$(date +%Y%m%d-%H%M)-orchestrator-dev.md`:
+```
+RESEARCH LOG — [orchestrator-dev] [DATE TIME]
+Focus: <focus area>
+Search 1: "<exact query>" → Source: <url> — Takeaway: <one line — current API shape or change>
+Search 2: "<exact query>" → Source: <url> — Takeaway: <one line — routing technique finding>
+Search 3: "<exact query>" → Source: <url> — Takeaway: <one line — pricing/availability finding>
+Decision: <how this changes the plan — what to build vs. what to update>
+```
 
-## Step4 — Implement
+Cross-check at least 2 sources before committing to an approach. Never invent a provider API shape.
 
-- Extend the existing adapter/provider-interface boundary — never add a code path that only works for one specific provider unless it's genuinely provider-specific glue behind that interface.
-- Additive and backward-compatible by default; note explicitly in the log if something is breaking.
+**→ COMPACT** (write focus + step + research file path to TodoWrite)
+
+## Step 3 — Plan
+
+TodoWrite: 1–6 concrete edits, each tied to which part of the mission it serves:
+- Reduces single-provider dependency
+- Improves result quality via ensembling
+- Cuts cost/latency via smarter routing
+- Improves resilience to a provider going down
+
+## Step 4 — Implement
+
+- Extend existing adapter/provider interface — never add a path that only works for one specific provider.
+- Additive and backward-compatible by default; note explicitly if something is breaking.
 - No unjustified new dependencies.
 
-## Step5 — Verify (static)
+## Step 5 — Verify (Static)
 
-Run the project's real build/lint/typecheck/test commands. For the classifier and router specifically, build out a small suite of synthetic task cases with expected routing outcomes if one doesn't exist yet — this is the most cheaply-testable part of the whole system since it needs no external calls. Don't proceed past a failing check.
+```bash
+npm run build > /tmp/orch-build.log 2>&1
+echo "Exit: $?"
+tail -30 /tmp/orch-build.log
+```
 
-## Step6 — Verify (live)
+For the classifier and router: build a small suite of synthetic task cases with expected routing
+outcomes if one doesn't exist yet. This is the cheapest test to write — needs no external calls.
 
-- **Prefer local models (Ollama local) for live testing** — genuinely zero-cost and zero-risk, safe to exercise as often as you want.
-- **Cloud free-tier models are fair game but use sparingly** — they can share rate limits with the user's paid usage even when tagged free. Never call a paid or unconfigured provider on your own initiative.
-- Concrete tests worth running each cycle where relevant to the focus:
-  - Route an image-input task through the orchestrator and confirm it correctly bridges to a vision-capable free/local model.
-  - Route a deliberately hard/ambiguous task and confirm ensemble logic triggers if it's implemented.
-  - Simulate a provider being unreachable (bad endpoint, forced timeout) and confirm the fallback path reroutes instead of hard-failing — this is the test that actually validates the core "why."
-- Write full transcripts to `.orchestrator/test-runs/`, never fabricate a pass, and log clearly when something was a dry run instead of a live call.
+Do not proceed past a failing check.
+
+## Step 6 — Verify (Live)
+
+- **Prefer local models (Ollama local)** — zero cost, zero risk.
+- **Cloud free-tier models** — use sparingly (may share rate limits with user's paid usage).
+- Never call a paid or unconfigured provider.
+
+Key tests per focus:
+- Route an image-input task → confirm it bridges to a vision-capable free/local model.
+- Route a hard/ambiguous task → confirm ensemble logic triggers if implemented.
+- Simulate a provider being unreachable (bad endpoint, forced timeout) → confirm fallback reroutes.
+
+Write transcript to `.orchestrator/test-runs/<focus>-<timestamp>.log` — never paste into context.
+```bash
+node test-orch.js > .orchestrator/test-runs/$(date +%s).log 2>&1
+tail -15 .orchestrator/test-runs/$(date +%s).log
+```
 
 **→ COMPACT**
 
-## Step7 — Commit (only when everything above passed)
+## Step 7 — Commit
 
-Same gate as `/auto-improve`: only commit if static and live checks passed (or live was honestly logged as not-possible with a reason). Check the diff for API keys/`.env`/tokens before staging. Write a commit message naming what was verified. Push; never force-push. Release the lock after commit (or after logging, if nothing was committed) — always release it before this cycle ends, even on an early exit.
+Same gate as `/auto-improve`: only if static and live checks passed (or live honestly documented).
+Check diff for API keys/tokens. Write commit message citing research + verification.
+Push. Never force-push. Release the lock.
 
-## Step8 — Update `app-structure.log`
-
-Edit the relevant section in place (don't append a new dated entry — this file is current state, not history): which providers are integrated, which orchestration pieces exist and which don't yet, the current registry schema, and known gaps. Keep the whole file concise enough to read in one shot next cycle.
-
-## Step9 — Log the cycle
-
-Append to `.claude/auto-improve-log.log`, same shared format, tagged `[orchestrator-dev]`:
-
+Commit message format:
 ```
-## YYYY-MM-DD — [orchestrator-dev] <focus>
-Researched: <sources + takeaways>
+orchestrator-dev: <what changed> — <mission point>
+
+Research: <source URLs from Step 2>
+Focus: <focus area>
+Static verify: build PASS
+Live test: <PASS against <model> | NOT LIVE-TESTED — reason>
+```
+
+## Step 8 — Update `app-structure.log`
+
+Edit the relevant section in place (not append — this is current state, not history):
+- Which providers are integrated
+- Which orchestration pieces exist vs. don't exist yet
+- Current registry schema
+- Known gaps
+
+Keep the whole file concise enough to read in one shot next cycle.
+
+## Step 9 — Log the Cycle
+
+Append to `.claude/auto-improve-log.log`, tagged `[orchestrator-dev]`:
+```
+## YYYY-MM-DD HH:MM — [orchestrator-dev] <focus>
+Researched: <3 sources + one-line takeaways>
+Research file: .claude/research-cache/<filename>
 Changed: <files / behavior>
-Why: <which mission point this serves>
+Why: <mission point served>
 Static verify: <result>
-Live test: <PASS against <model> / NOT LIVE-TESTED — reason>
-Committed: <hash + pushed, or "not committed — reason">
-Next priority queue: <ordered list for the next run>
-Open questions: <anything needing a human decision>
+Live test: <PASS against <model> | NOT LIVE-TESTED — reason>
+Committed: <hash + pushed | "not committed — reason">
+Next priority queue: <ordered list>
+Open questions: <human decisions needed>
 ```
 
 **→ COMPACT**
 
-## Step10 — Compact, then repeat
+## Step 10 — Compact, Then Repeat
 
-**Run `/compact` now.** After finishing this focus area (post Steps 7–9: committed, logged, `app-structure.log` updated), run `/compact` to shed this focus's context before the next one. This is mandatory, not optional — the same rule `/auto-improve` and `/ux-critic` enforce every cycle. The durable output is the commits, the `.claude/auto-improve-log.log` entry, and `app-structure.log`; everything else in working context (catalog summaries, test transcripts, the catalog files themselves) is discardable once those are written. Never carry a full focus's worth of exploration forward.
-
-If session budget remains and the lock is free, move to the next focus and repeat from Step1.
-
-**If you ever find yourself unsure whether you've compacted enough** — re-reading files you just read, results feeling heavy — stop *between* steps (never mid-edit or mid-commit), run `/compact`, make sure `app-structure.log` and the queue are current, then resume. A compact keeps the run alive; an overshoot stops it. When in doubt, compact — the checkpoints fire, not your intuition.
+Run `/compact` now. After finishing a focus area (committed, logged, app-structure.log updated),
+compact to shed context before the next focus. If session budget remains, move to the next focus.
 
 ## Guardrails
 
-- Never let the orchestrator's own implementation quietly become dependent on one provider being present — that defeats the entire point of building it.
+- Never let the orchestrator itself become dependent on one provider being present — that defeats everything.
 - Never call a paid or unconfigured provider autonomously.
-- Never commit code that failed a check you were able to run, and never commit secrets.
-- Never hold the shared lock longer than necessary, and always release it before the cycle ends.
-- If genuinely blocked on a human decision (e.g. which paid providers to prioritize wiring up first), log it as an open question and stop rather than guessing.
+- Never commit code that failed a check you were able to run.
+- Never commit secrets.
+- Always release the shared lock before this cycle ends, even on early exit.
+- If blocked on a human decision, log it and stop rather than guessing.

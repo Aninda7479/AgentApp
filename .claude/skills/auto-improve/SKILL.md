@@ -1,180 +1,183 @@
 ---
 name: auto-improve
-description: Autonomous research-and-improve loop for SuperAgent — reads the current codebase, researches current best practices online, ships small verified improvements to the model-orchestration layer, capability adapters (3D/image/video/audio/PDF/Office/code), and the React/Electron GUI, live-tests changes against already-connected free-tier models where possible, and commits to GitHub only when every check passes. Use for open-ended "keep improving the project" requests, not narrow single-task requests.
+description: Autonomous research-and-improve loop for SuperAgent — researches online EVERY cycle (3 mandatory searches written to disk before any planning), picks one high-leverage improvement tied to the mission, implements it, verifies statically and live, and commits to a per-cycle dated branch with an auto-PR to agent-development. Use for open-ended "keep improving the project" requests. Research is not optional — a cycle without 3 cited real sources is incomplete.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash, WebSearch, WebFetch, TodoWrite
 argument-hint: [optional focus, e.g. "routing-layer", "video-gen-adapter", "gui-polish", "gui-redesign"]
 ---
 
 # /auto-improve — Autonomous Research → Improve → Test → Commit Loop
 
-Re-read this whole file every time you're invoked, including after `/clear` or `/compact` — it's the only thing guaranteed to survive a fresh context.
+Re-read this whole file every time you're invoked, including after `/clear` or `/compact`.
 
-## Mission (the thing every change must serve)
+## Mission (every change must serve one of these)
 
-SuperAgent is a provider-agnostic AI agent platform — CLI, Electron desktop GUI, and web/VPS GUI — built as an alternative to closed single-vendor tools (ChatGPT Work, Codex, Claude apps). Its selling points, in priority order:
+1. **User controls model/provider and data.** Nothing locked to one vendor.
+2. **Model orchestration, not single-model dependence.** Route tasks to whichever model(s) are good at them.
+3. **One agent surface, many capabilities.** 3D, image, video, audio, PDF, Office, coding — pluggable adapters.
+4. **A GUI that doesn't feel like a hobby project.** Competing visually with polished commercial apps.
 
-1. **User controls the model/provider, and their data.** Nothing is hard-locked to one vendor. Any feature that only works with one provider's proprietary format, without an interchangeable path, works against the mission.
-2. **Model orchestration, not single-model dependence.** Tasks are classified and routed to whichever model(s) are actually good at them — a vision-capable model reads images for a coding model that can't; trivial subtasks go to small/cheap models; hard subtasks can run on multiple strong models in parallel with results merged or best-of-n'd.
-3. **One agent surface, many capabilities.** 3D gen/edit, image gen/edit, video gen/edit, audio gen/edit, PDF read/gen/edit, Office docs (Excel/Word/PowerPoint), and coding — each implemented as a pluggable capability adapter behind a common interface, not bolted on ad hoc.
-4. **A GUI that doesn't feel like a hobby project.** It's competing visually with polished commercial apps, so consistency, hierarchy, and finish matter as much as function.
+## Context & Memory Contract
 
-Every cycle below should visibly serve one of these four.
+**Compact at every `→ COMPACT` checkpoint — unconditionally, like a step in the recipe.**
+If unsure whether to compact: compact anyway. A compact you didn't need wastes a little.
+A compact you skipped costs the entire run.
 
-## Context & memory contract (read first — mechanical, not judged)
+**Before every compact:** write focus + step + commit state to TodoWrite.
 
-`/auto-improve` runs many cycles in one session — research, reads, builds, live calls. Unchecked, that accumulated context (large file reads, full build/test logs, web-fetch dumps, the growing shared log) overshoots the ~250K ceiling and crashes the API call mid-edit. **Compact mechanically at every checkpoint marked `→ COMPACT` below — do it every time, unconditionally, like a step in the recipe rather than a judgment of whether context "feels heavy."** Older versions asked you to *decide* when to compact ("if you sense pressure," "if >15 calls"). That judgment is the failure mode: you can't reliably introspect your own token usage, so a soft trigger silently doesn't fire and the run crashes before reaching a checkpoint. Stop judging — execute the checkpoint every time.
+**Avoid large context sources:**
+- Redirect build/lint/test output to files: `npm run build > /tmp/ai-build.log 2>&1`; read only the tail.
+- `Grep` before `Read` — never load a whole source file to orient.
+- WebFetch: take the one-line takeaway; discard the raw page.
+- `.claude/auto-improve-log.log`: `tail -n 150` only, never whole.
+- Research cache files: write them to disk, read back only what you need.
 
-If you're ever unsure whether to compact: compact anyway. A compact you didn't strictly need costs a little redundant re-reading. A compact you skipped costs the entire run. The trade is never close.
+## Step 0 — Orient
 
-**All four skills share one memory file — this is how they stay synchronized.** Every skill appends to the same append-only `.claude/auto-improve-log.log`, each tagged so it's identifiable: `[auto-improve]`, `[orchestrator-dev]`, `[ux-critic]`, `[art-director]`. Reading its tail each cycle is how one run picks up where another left off. Keep your own durable memory there — not in working context.
-- **`.claude/auto-improve-log.log` — the shared queue. Read it with `tail -n 150` only, never whole.** It grows every cycle; loading it wholesale is a slow context leak. Use its "next priority queue" and "open questions" as your starting point. If it exceeds ~400 lines, archive older entries to `.claude/auto-improve-log.log.archive` (keep only the recent ~150 in the live file) so each read stays cheap.
-- `app-structure.log` is `/orchestrator-dev`'s maintained state map — small, read whole, never appended-to as history.
-- Everything else (research takeaways, test outcomes, file lists) goes into your log entry as you go; don't hold a long mental list in working context.
+**Acquire the lock first (before any edits):**
+```bash
+LOCK=.claude/.auto-improve.lock
+if [ -f "$LOCK" ]; then
+  age=$(( $(date +%s) - $(date -r "$LOCK" +%s 2>/dev/null || echo 0) ))
+  if [ "$age" -lt 540 ]; then echo "LOCK_HELD"; exit 2; fi
+fi
+printf '{"pid":%d,"started":"%s"}\n' "$$" "$(date -u +%FT%TZ)" > "$LOCK"
+```
+If LOCK_HELD: abort. If acquired: release at end with `rm -f "$LOCK"`.
 
-**What to do before every compact, always:** save the current focus + step number + commit hash to TodoWrite (or a one-line scratch note). That resume state is the only thing you need after the compact — don't try to preserve anything else mentally.
+Then:
+- `git log --oneline -20` and `git status` — understand trajectory and dirty state.
+- `tail -n 150 .claude/auto-improve-log.log` — read shared queue and resume state.
+- Read provider/model registry to see which models are tagged `free`.
+- Map current structure briefly (don't re-derive from scratch each cycle — use the log's last "structure note").
 
-**Where the tokens actually come from — avoid regardless of checkpoints:**
-- **Redirect heavy command output to disk.** Build/lint/test/typecheck output can be enormous. Run redirected (`npm run build > /tmp/aibuild.log 2>&1`) and Read back only the tail / error region with `offset`/`limit`. Never let a full build log sit in context. Same for any large file: `Read` with `offset`/`limit`, never the whole file unless you must.
-- **Source files are as dangerous as build logs.** Don't `Read` a whole component/adapter/CSS file to "see what's there" — `Grep` for the section first, then targeted `Read` with `offset`/`limit`. Re-reading a file you already read this cycle is a sign to trust your TodoWrite note instead of re-reading.
-- **Web research in slices.** Never paste whole fetched pages in. Read the takeaway, record the source + one-line takeaway in the log, discard the raw page.
-- **Hard backstop (not the primary mechanism):** if you've done >~15 heavy tool calls since the last `/compact`, or any single result looks large, `/compact` immediately rather than continuing. This exists only to catch a runaway before auto-summarization; the per-step `→ COMPACT` checkpoints are what actually prevent the crash.
+## Step 1 — Pick One Focus
 
-## Step0 — Orient
+Use `$ARGUMENTS` if given. Otherwise take the top item from the log's "next priority queue."
+If queue is empty, find the single highest-leverage gap yourself.
 
-- **Single-flight guard (run this FIRST, before any edits).** `/auto-improve`
-  can be invoked by a cron *and* manually, and two instances sharing one
-  working tree + git index will cross-commit each other's staged files (this
-  happened repeatedly). Before doing anything, acquire the lock atomically:
+- Prefer breadth before depth: touch every subsystem at least once before a second pass.
+- Small, reversible, verifiable increments. A one-line fix is a legitimate cycle.
 
-  ```sh
-  LOCK=.claude/.auto-improve.lock
-  if [ -f "$LOCK" ]; then
-    age=$(( $(date +%s) - $(date -r "$LOCK" +%s 2>/dev/null || echo 0) ))
-    if [ "$age" -lt 540 ]; then echo "LOCK_HELD by another run"; exit 2; fi
-  fi
-  printf '{"pid":%d,"started":"%s"}\n' "$$" "$(date -u +%FT%TZ)" > "$LOCK"
+## Step 2 — Online Research (MANDATORY — NON-NEGOTIABLE)
+
+**This step is never optional. You may not proceed to Step 3 (Plan) without completing it.**
+
+Research prevents you from implementing based on stale memory (API shapes change, best practices
+evolve monthly in AI tooling). Actually search and fetch — do not simulate research from memory.
+
+```bash
+# Create research cache dir
+mkdir -p .claude/research-cache
+```
+
+**Run these 3 searches every cycle:**
+
+1. `"AI agent open source <focus area> improvements $(date +%B\ %Y)"` — what comparable tools are shipping
+2. `"<focus area from Step 1> best practices 2026"` — current art for this specific domain
+3. `"site:github.com/Aninda7479/AgentApp issues OR discussions"` (or WebFetch the Issues tab) — community reports
+
+For each search: use `WebSearch` to get URLs, then `WebFetch` the most relevant result.
+Read only the first 200 lines of any fetched page — never paste full content into context.
+
+Write the research log **to disk** before reading it back:
+```bash
+cat > .claude/research-cache/$(date +%Y%m%d-%H%M)-auto-improve.md << 'EOF'
+RESEARCH LOG — [auto-improve] [DATE TIME]
+Focus: <focus area>
+Search 1: "<exact query>" → Source: <url> — Takeaway: <one line>
+Search 2: "<exact query>" → Source: <url> — Takeaway: <one line>
+Search 3: "<exact query>" → Source: <url> — Takeaway: <one line>
+Decision: <what this research changed about the plan>
+EOF
+```
+
+Cross-check at least 2 independent sources before committing to an approach.
+Never invent a source, API shape, or library capability you haven't verified.
+
+**→ COMPACT** (write focus + step + research file path to TodoWrite first)
+
+## Step 3 — Plan
+
+Write a short numbered plan via TodoWrite — typically 1–6 concrete edits.
+For each item, name which mission point it serves.
+Cite the research file from Step 2 as the basis.
+
+## Step 4 — Implement
+
+- Match existing code conventions.
+- New capability adapters go behind the existing adapter interface.
+- Prefer additive, backward-compatible changes. If breaking, say so explicitly in the log.
+- No unjustified new dependencies — if adding one, log why it won over alternatives.
+
+## Step 5 — Verify (Static)
+
+```bash
+npm run build > /tmp/ai-build.log 2>&1
+echo "Exit: $?"
+tail -30 /tmp/ai-build.log
+```
+
+Run lint and typecheck if available. Fix failures before Step 6. Do not proceed past a failing check.
+
+## Step 6 — Verify (Live)
+
+- **Only use already-connected providers whose models are tagged `free`** in the registry.
+- Never call a paid or unconfigured provider.
+- If no free-tagged model is connected for this test: skip live call, say so explicitly.
+- Redirect live test output to disk:
+  ```bash
+  node test-script.js > /tmp/ai-live-test.log 2>&1
+  tail -20 /tmp/ai-live-test.log
   ```
-
-  - If it prints `LOCK_HELD` (or exits 2), **another live run holds the lock —
-    ABORT this invocation** (exit cleanly, do no work). It retries next tick.
-  - If the lock was written, you hold it. **Release it at the very end** of the
-    run: `rm -f "$LOCK"`. (If the process dies, the 9-min freshness check lets
-    the next run steal a stale lock, so it can't deadlock.)
-  - The CLI binary also self-serializes: a loop driven via `superagent` should
-    set `AUTO_IMPROVE_RUN=<sessionId>` so `bin/main.ts` acquires the same lock
-    and aborts on contention. (A reusable `tryAcquireAutoImproveLock()` helper
-    lives in `packages/cli/src/auto-improve-lock.ts` if you prefer a TS guard.)
-  Rationale: at most one `/auto-improve` may mutate the tree at a time. This is
-  the standing fix for the cross-commit hazard; do not skip it.
-- Read `CLAUDE.md` / `README` / any architecture doc if present.
-- `git log --oneline -20` and `git status` — understand recent trajectory and any uncommitted work before touching anything. If the working tree is dirty with unrelated changes, stop and flag it in the log rather than committing over someone else's in-progress work.
-- Read `.claude/auto-improve-log.log` (create it if it doesn't exist yet) **with `tail -n 150` only, never whole** — see the Context & memory contract above. Treat its "next priority queue" and "open questions" as your starting point.
-- Read the provider/model registry (wherever the project tags providers as connected and models as `free`/paid — e.g. a `providers.json`, `models.config.*`, or settings store). You'll need this in Step 6.
-- Map the current structure: CLI package, Electron app, web app, shared orchestration core, capability adapters. Don't re-derive this every cycle — update your mental map, then move.
-
-## Step1 — Pick one focus
-
-Use `$ARGUMENTS` if given. Recognized focuses include subsystem names (e.g. `routing-layer`, `image-gen-adapter`), `gui-polish` (default small-increment GUI work), and `gui-redesign` (see below). If `$ARGUMENTS` is empty, take the top item off the log's "next priority queue," or, if that's empty, find the single highest-leverage gap yourself.
-
-- Prefer breadth before depth: touch every subsystem (orchestration core, each capability adapter, CLI, desktop GUI, web GUI) at least once before a second deep pass on any one of them.
-- Small, reversible, verifiable increments only, one focus per cycle — *except* under `gui-redesign` mode, see below. A padding fix, a clearer error message, a missing loading/empty state, or a one-line copy improvement is a legitimate cycle on its own. Do not skip these while hunting only for "big" work — the instruction to chase even 1% improvements is explicit and intentional.
-
-### Focus mode: `gui-redesign`
-
-When invoked as `/auto-improve gui-redesign` (or the queue explicitly calls for it), scope expands beyond incremental polish:
-
-- Research current design systems and layout patterns from polished AI/SaaS products more deeply than a normal cycle (typography scale, spacing rhythm, color/theme tokens, component library conventions, motion/microinteractions, information hierarchy).
-- You may touch multiple related components/screens in one session, but still land them as a *sequence* of small atomic commits (Step 7), each individually verified — never one giant unreviewable commit.
-- Explicitly check and note in the log: dark/light theme parity, accessibility (WCAG contrast, keyboard nav, focus states), and visual consistency between the Electron desktop GUI and the web GUI (shared components should stay shared, not fork).
-- Still bound by the mission: a redesign that makes the app prettier but harder to use, slower, or less consistent across desktop/web is a regression, not progress.
-
-## Step2 — Research (mandatory, real, cited — never from memory alone)
-
-Treat anything about external APIs, SDKs, pricing, or UI conventions as possibly stale, even things you're confident about — this space moves fast. Actually search and fetch; don't simulate research.
-
-Depending on the focus:
-
-- **Orchestration/routing layer** — current routing/ensembling approaches (e.g. capability-aware routing, cost-aware model selection, mixture-of-agents / best-of-n patterns, semantic caching), and how comparable CLI agent tools structure multi-model tool-calling and vision fallback.
-- **Capability adapters (3D/image/video/audio/PDF/Office)** — current leading APIs/SDKs for each, their capabilities, auth patterns, and rate/cost characteristics. Verify names and endpoints rather than recalling them.
-- **GUI/UX (React)** — current patterns from polished AI/SaaS products: type scale, spacing rhythm, motion, empty/loading/error states, accessibility. Borrow principles, never a specific brand's proprietary assets or exact visual identity.
-- **Electron desktop** — current packaging, auto-update, and security best practices (context isolation, IPC hardening) for the Electron/Node versions in use.
-
-Rules:
-- Cross-check at least two independent sources before committing to an approach; if they disagree, record the disagreement instead of silently picking one.
-- Log every source actually used, with a one-line takeaway, in this cycle's log entry. Never invent a source, an API shape, or a library capability you haven't verified.
-
-**→ COMPACT** (write focus + step + commit state to TodoWrite first)
-
-## Step3 — Plan
-
-Write a short numbered plan for this cycle via TodoWrite — typically 1–6 concrete edits. For each item, name which of the four mission points it serves.
-
-## Step4 — Implement
-
-- Match the existing code's conventions; don't introduce a second pattern for a problem the codebase already solves once.
-- New capability adapters go behind the existing adapter interface — never hard-code a single vendor as a requirement.
-- Prefer additive, backward-compatible changes. If something is breaking, say so explicitly in the log and the commit message.
-- No unjustified new dependencies — if you add one, note in the log why the researched alternative won.
-
-## Step5 — Verify (static)
-
-- Discover and run the project's real build/lint/typecheck/test commands (from `package.json`, `pyproject.toml`, etc.) — don't guess at them. **Redirect the output to a file** (e.g. `npm run build > /tmp/aibuild.log 2>&1`) and Read back only the relevant region — the tail, or lines around an error — rather than letting a full build log sit in context. Fix failures before moving on. If they don't pass, do not proceed to Step 6 or 7 — loop back to Step 4 or, if genuinely stuck, log the failure as an open question and leave the change uncommitted.
-
-## Step6 — Verify (live, functional) — run the real code path, not just the GUI's idea of it
-
-You cannot drive the Electron app or web GUI directly — you have no browser/UI automation. What you *can* do, and must do for any change touching orchestration or a capability adapter, is call the same script/module/function the GUI would call, directly, from the CLI (`node`, `python`, or however the project invokes it), and observe the real result.
-
-- **Only use already-connected providers whose models are tagged `free`** in the registry read in Step 0. Never call a paid model or an unconfigured provider on your own initiative — that spends the user's money without permission. If no suitable free-tagged model is connected for this test, skip the live call and say so explicitly (don't fabricate a pass).
-- For a multimodal/vision change specifically: generate or reuse a small local test image (create a trivial synthetic PNG in code, or use an existing fixture in the repo — don't fetch an external image over the network for this), then invoke the adapter/orchestration function that would normally receive it from the GUI, using a free-tagged vision-capable connected model. Confirm the full round trip — request built correctly, model call succeeds, response parsed correctly — and capture the real output, latency, and any error. **Redirect the live run's stdout/stderr to a file** (e.g. `node test.js > /tmp/aitest.log 2>&1`) and Read back only the result lines: model/vision output can be large, and image bytes must never be pasted into context.
-- For capabilities with no free tier currently connected (e.g. video/3D/audio may not have one), do a structured dry run instead: validate the function signature, the request payload shape, and error-handling paths without a live call, and clearly label this in the log as "not live-tested — no free model connected" rather than as a pass.
-- Where you did get a live result, also trace (by reading the GUI code, not by running it) how that result would flow into the interface — which loading/error/success state it triggers, how it's rendered — and note that as a **prediction**, explicitly labeled as such, distinct from the confirmed backend result.
-- A cycle that changes orchestration/adapter code but skips this step is incomplete — go back and do it before moving on.
+- Do not fabricate a pass.
 
 **→ COMPACT**
 
-## Step7 — Commit (only when every step above actually passed)
+## Step 7 — Commit
 
-- Only commit if: Step 5 (build/lint/tests) passed, and Step 6 either passed live or was explicitly and honestly logged as "not live-tested" for a documented reason (no free model available) — never commit something that failed a check you were able to run.
-- Before staging, check the diff for anything that shouldn't ship: API keys, `.env` contents, tokens, personal paths, debug artifacts. Respect `.gitignore`; if something sensitive is about to be staged, stop and flag it in the log instead of committing.
-- Stage only the files belonging to this cycle's focus — not unrelated changes sitting in the working tree.
-- Write a real commit message: what changed, why (tie to a mission point), and a one-line note on how it was verified (e.g. "tested end-to-end against <free model name>").
-- Commit, then push to the current branch's remote. If there's no remote configured or the push fails (auth, etc.), log that clearly and leave the commit local rather than stalling the cycle.
-- Never force-push.
+Only commit if Steps 5 and 6 passed (or Step 6 was honestly documented as not-possible with reason).
 
-## Step8 — Log and hand off
+- Check diff for API keys, `.env` contents, tokens, personal paths.
+- Stage only files from this cycle's focus.
+- Write a real commit message:
+  ```
+  auto-improve: <what changed> — <mission point served>
+  
+  Research: <source URLs from Step 2>
+  Static verify: build/lint PASS
+  Live test: <PASS against <model> | NOT LIVE-TESTED — <reason>>
+  ```
+- Commit, then push. Never force-push. Release the lock.
 
-Append a dated entry to `.claude/auto-improve-log.log`:
+## Step 8 — Log and Hand Off
 
+Append to `.claude/auto-improve-log.log`:
 ```
-## YYYY-MM-DD — <focus area>
-Researched: <sources + one-line takeaways>
+## YYYY-MM-DD HH:MM — [auto-improve] <focus area>
+Researched: <3 sources + one-line takeaways>
+Research file: .claude/research-cache/<filename>
 Changed: <files / behavior>
-Why: <which mission point this serves>
+Why: <mission point served>
 Static verify: <build/lint/test result>
-Live test: <PASS against <model name> / NOT LIVE-TESTED — reason>
-Predicted GUI behavior: <if applicable, and labeled as prediction>
-Committed: <commit hash + pushed, or "not committed — reason">
-Next priority queue: <ordered list for the next /auto-improve run>
+Live test: <PASS against <model name> | NOT LIVE-TESTED — reason>
+Committed: <hash + pushed | "not committed — reason">
+Next priority queue: <ordered list for next /auto-improve run>
 Open questions: <anything needing a human decision>
 ```
 
-This log is the entire continuity mechanism. A `/auto-improve` run in a brand-new context must be able to pick up exactly where the last one stopped by reading it — write it with that reader in mind.
+**→ COMPACT** (post Steps 7–8)
 
-**→ COMPACT** (post Steps 7–8: committed + logged)
+## Step 9 — Repeat Within Session
 
-## Step9 — Repeat within the session
-
-If turns/context budget remain and there's no blocking open question, go back to Step 1 with the next queue item. **After each cycle (post Steps 7–8 `→ COMPACT` above), the context is already light. When you're nearing your context limit: stop between cycles (never mid-edit), run `/compact`, make sure the log and queue are current, and close with a short human-readable summary of what changed and what got committed this session.**
-
-## Step10 — Compact the context
-
-`/compact` runs **after every cycle** (see the `→ COMPACT` checkpoints), so by the end of the run the context is already light. Run it once more after the final cycle / when stopping because you're out of budget, to compress whatever remains before handing control back. The `.claude/auto-improve-log.log` is the durable memory — everything else in the working context is discardable once the log and git history are settled.
+If turns/context budget remain and no blocking open question, go back to Step 1 with the next queue item.
+Stop between cycles, never mid-edit.
 
 ## Guardrails
 
-- Never weaken the "user owns their data/keys" architecture to make a feature easier to ship.
-- Never hard-lock a feature to one paid vendor's proprietary format when an interchangeable path is viable.
-- Don't write integration code against a guessed API shape — verify via research or existing adapter code first.
-- Never call a paid or unconfigured provider autonomously — live testing is restricted to already-connected, free-tagged models only.
-- Never commit code that failed a check you were able to run, and never commit secrets.
-- If truly blocked on something only the user can decide (e.g. which paid providers to support first), log it as an open question and move to the next queue item rather than stalling the cycle.
+- Never weaken "user owns their data/keys" to make a feature easier.
+- Never hard-lock a feature to one paid vendor when an interchangeable path is viable.
+- Don't write integration code against a guessed API shape — verify via research first.
+- Never call a paid or unconfigured provider autonomously.
+- Never commit code that failed a check you were able to run.
+- Never commit secrets.
+- If truly blocked on a human decision, log it as an open question and move on.
