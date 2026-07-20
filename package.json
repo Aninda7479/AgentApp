@@ -45,5 +45,8 @@
     "pack:desktop-mac": "npm run pack --workspace=@superagent/desktop -- --mac",
     "pack:desktop-linux": "npm run pack --workspace=@superagent/desktop -- --linux",
     "pack:desktop-all": "npm run pack:desktop-mac && npm run pack:desktop-win && npm run pack:desktop-linux"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.9"
   }
 }
