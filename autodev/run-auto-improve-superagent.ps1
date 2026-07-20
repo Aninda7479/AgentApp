@@ -83,15 +83,32 @@ Set-Location $RepoDir
 New-Item -ItemType Directory -Path ".claude\research-cache" -Force | Out-Null
 New-Item -ItemType Directory -Path ".playwright" -Force | Out-Null
 
-git fetch origin $BaseBranch 2>> $DriverLog
-$remoteExists = git show-ref --verify --quiet "refs/remotes/origin/$BaseBranch" 2>$null
-if ($LASTEXITCODE -eq 0) {
-    git checkout -B $CycleBranch "origin/$BaseBranch"
-} else {
-    git checkout -B $CycleBranch
+# Git helper: runs git without letting PowerShell treat its stderr / non-zero
+# exit as a terminating NativeCommandError under $ErrorActionPreference = "Stop".
+# Pass -StdOut ([ref]$var) to capture stdout (e.g. status / log output).
+function Invoke-Git {
+    param([Parameter(ValueFromRemainingArguments = $true)] [string[]]$GitArgs)
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $out = & git @GitArgs 2>> $DriverLog
+        [PSCustomObject]@{ ExitCode = $LASTEXITCODE; Output = $out }
+    } finally {
+        $ErrorActionPreference = $prevEAP
+    }
 }
 
-$dirty = git status --porcelain
+Invoke-Git fetch origin $BaseBranch | Out-Null
+
+$showRef = Invoke-Git show-ref --verify --quiet "refs/remotes/origin/$BaseBranch"
+if ($showRef.ExitCode -eq 0) {
+    Invoke-Git checkout -B $CycleBranch "origin/$BaseBranch" | Out-Null
+} else {
+    Invoke-Git checkout -B $CycleBranch | Out-Null
+}
+
+$status = Invoke-Git status --porcelain
+$dirty = $status.Output
 if ($dirty) {
     Write-Log "Working tree dirty - skipping cycle"
     exit 0
@@ -108,9 +125,10 @@ if ($saCmd) {
     & claude -p $Skill --allowedTools "Read,Grep,Glob,Edit,Write,Bash,WebSearch,WebFetch,TodoWrite" --permission-mode acceptEdits --output-format json *>&1 | Tee-Object -FilePath $RunLog
 }
 
-$newCommits = git log "origin/$BaseBranch..HEAD" --oneline 2>$null
+$log = Invoke-Git log "origin/$BaseBranch..HEAD" --oneline
+$newCommits = $log.Output
 if ($newCommits) {
-    git push -u origin $CycleBranch
+    Invoke-Git push -u origin $CycleBranch | Out-Null
     Write-Log "Pushed branch: $CycleBranch"
 
     $LatestLog = (Get-Content ".claude\auto-improve-log.log" -Tail 60 -ErrorAction SilentlyContinue) -join "`n"
@@ -152,8 +170,8 @@ $LatestLog
     }
 } else {
     Write-Log "No new commits - cleaning up branch"
-    git checkout $BaseBranch 2>$null
-    git branch -D $CycleBranch 2>$null
+    Invoke-Git checkout $BaseBranch | Out-Null
+    Invoke-Git branch -D $CycleBranch | Out-Null
 }
 
 Write-Log "Cycle complete."

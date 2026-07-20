@@ -117,23 +117,41 @@ New-Item -ItemType Directory -Path ".claude\research-cache" -Force | Out-Null
 New-Item -ItemType Directory -Path ".playwright" -Force | Out-Null
 
 # ---------------------------------------------------------------------------
+# Git helper: runs git without letting PowerShell treat its stderr / non-zero
+# exit as a terminating NativeCommandError under $ErrorActionPreference = "Stop".
+# Pass -StdOut ([ref]$var) to capture stdout (e.g. status / log output).
+# ---------------------------------------------------------------------------
+function Invoke-Git {
+    param([Parameter(ValueFromRemainingArguments = $true)] [string[]]$GitArgs)
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $out = & git @GitArgs 2>> $DriverLog
+        [PSCustomObject]@{ ExitCode = $LASTEXITCODE; Output = $out }
+    } finally {
+        $ErrorActionPreference = $prevEAP
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Fetch and create per-cycle branch from BASE_BRANCH
 # ---------------------------------------------------------------------------
 Write-Log "Fetching origin/$BaseBranch..."
-git fetch origin $BaseBranch 2>> $DriverLog
+Invoke-Git fetch origin $BaseBranch | Out-Null
 
-$remoteExists = git show-ref --verify --quiet "refs/remotes/origin/$BaseBranch" 2>$null
-if ($LASTEXITCODE -eq 0) {
-    git checkout -B $CycleBranch "origin/$BaseBranch"
+$showRef = Invoke-Git show-ref --verify --quiet "refs/remotes/origin/$BaseBranch"
+if ($showRef.ExitCode -eq 0) {
+    Invoke-Git checkout -B $CycleBranch "origin/$BaseBranch" | Out-Null
 } else {
     Write-Log "Base branch $BaseBranch not found on origin - branching from current HEAD"
-    git checkout -B $CycleBranch
+    Invoke-Git checkout -B $CycleBranch | Out-Null
 }
 
 Write-Log "Created cycle branch: $CycleBranch"
 
 # Check for dirty working tree
-$dirty = git status --porcelain
+$status = Invoke-Git status --porcelain
+$dirty = $status.Output
 if ($dirty) {
     Write-Log "Working tree dirty before run - skipping cycle to avoid overwriting local changes"
     exit 0
@@ -182,9 +200,10 @@ Write-Log "exit=$ExitCode is_error=$IsError cost=`$$Cost turns=$Turns log=$RunLo
 # ---------------------------------------------------------------------------
 # Push branch if anything was committed
 # ---------------------------------------------------------------------------
-$newCommits = git log "origin/$BaseBranch..HEAD" --oneline 2>$null
+$log = Invoke-Git log "origin/$BaseBranch..HEAD" --oneline
+$newCommits = $log.Output
 if ($newCommits) {
-    git push -u origin $CycleBranch
+    Invoke-Git push -u origin $CycleBranch | Out-Null
     Write-Log "Pushed branch: $CycleBranch"
 
     # -----------------------------------------------------------------------
@@ -251,8 +270,8 @@ $LatestLog
     }
 } else {
     Write-Log "No new commits on $CycleBranch - cleaning up empty branch"
-    git checkout $BaseBranch 2>$null
-    git branch -D $CycleBranch 2>$null
+    Invoke-Git checkout $BaseBranch | Out-Null
+    Invoke-Git branch -D $CycleBranch | Out-Null
 }
 
 Write-Log "Cycle complete."
