@@ -395,8 +395,19 @@ export class OrchestratorRouter {
     flags: { isCoding: boolean; isReasoning: boolean; isVision: boolean },
     enabledModels: RouterModel[]
   ): RouterModel[] {
+    // Availability pre-filter. A model is selectable only when BOTH its static
+    // catalog `accessStatus` AND the runtime `providerHealth` view agree it is
+    // usable. Historically the fallback loop consulted live health but the
+    // *selection* layer only read the static flag (the catalog stamp was
+    // "opt-in" via `applyHealthToModels`), so a provider that got rate-limited
+    // or banned *after* the pool was built could still be selected as best and
+    // only fail at call time. Selecting the live view directly makes the
+    // "can't be banned out from under you" guarantee hold at selection time too.
+    // `applyHealthToModels` remains available for batch UI stamping but is no
+    // longer required for selection to respect runtime health.
     const isAvailable = (m: RouterModel) =>
-      m.accessStatus === undefined || m.accessStatus === 'available';
+      (m.accessStatus === undefined || m.accessStatus === 'available') &&
+      providerHealth.getStatus(m.providerId) === 'available';
     const live = enabledModels.filter(isAvailable);
     const pool = live.length > 0 ? live : enabledModels;
 
