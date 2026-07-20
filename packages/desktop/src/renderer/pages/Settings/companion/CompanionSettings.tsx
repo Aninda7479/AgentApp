@@ -6,19 +6,11 @@ import { PetControls } from './PetControls';
 import { DEFAULT_PARTNERS } from './defaultPartners';
 import { usePartners } from './library';
 import type { PartnerManifest } from '../../../partner-popup/types';
+import { getIpc, openExternalPath } from '../../../lib/electron';
 
 function openDocs(): void {
   const url = 'https://github.com/Aninda7479/AgentApp/blob/main/docs/Partner-Pet.md';
-  try {
-    const req = (window as any).require;
-    if (req) {
-      req('electron').ipcRenderer.invoke('open-external', url).catch(() => {});
-      return;
-    }
-  } catch {
-    /* fall through */
-  }
-  window.open(url, '_blank', 'noopener');
+  openExternalPath(url).catch(() => window.open(url, '_blank', 'noopener'));
 }
 
 /**
@@ -27,10 +19,9 @@ function openDocs(): void {
  * Returns the chosen path/object URL, or null if cancelled.
  */
 async function windowPickModelFile(): Promise<string | null> {
-  const req = (window as any).require;
-  if (req) {
+  const ipc = getIpc();
+  if (ipc) {
     try {
-      const ipc = req('electron').ipcRenderer;
       const res = await ipc.invoke('partner-pick-model-file');
       if (typeof res === 'string') return res;
     } catch {
@@ -56,10 +47,9 @@ async function windowPickModelFile(): Promise<string | null> {
  * (folder) selection and returns the chosen folder path/object URL, or null.
  */
 async function windowPickModelFolder(): Promise<string | null> {
-  const req = (window as any).require;
-  if (req) {
+  const ipc = getIpc();
+  if (ipc) {
     try {
-      const ipc = req('electron').ipcRenderer;
       const res = await ipc.invoke('partner-pick-model-folder');
       if (typeof res === 'string') return res;
     } catch {

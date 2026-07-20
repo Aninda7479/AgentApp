@@ -29,9 +29,7 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
 }) => {
   const [githubUrl] = useState(REPO_URL);
 
-  const ipc = typeof window !== 'undefined' && (window as any).require
-    ? getIpc()
-    : null;
+  const ipc = getIpc();
 
   const openInBrowser = (url: string) => {
     if (ipc) {

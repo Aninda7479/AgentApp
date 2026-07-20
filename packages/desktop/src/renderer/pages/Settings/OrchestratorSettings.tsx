@@ -72,9 +72,7 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
     }
   };
 
-  const ipc = typeof window !== 'undefined' && (window as any).require
-    ? getIpc()
-    : null;
+  const ipc = getIpc();
 
   const loadSettingsAndInstructions = async () => {
     if (!ipc) return;

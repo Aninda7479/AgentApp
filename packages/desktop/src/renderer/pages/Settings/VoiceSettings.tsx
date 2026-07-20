@@ -124,9 +124,7 @@ export const VoiceSettings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  const ipc = typeof window !== 'undefined' && (window as any).require
-    ? getIpc()
-    : null;
+  const ipc = getIpc();
 
   const loadSettings = async () => {
     if (!ipc) {

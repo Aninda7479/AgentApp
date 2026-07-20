@@ -196,9 +196,7 @@ export const Composer: React.FC<ComposerProps> = ({
   const [voiceModelAvailable, setVoiceModelAvailable] = useState<boolean | null>(null);
   const [localWhisperEnabled, setLocalWhisperEnabled] = useState<boolean>(false);
 
-  const ipcRenderer = typeof window !== 'undefined' && (window as any).require
-    ? getIpc()
-    : null;
+  const ipcRenderer = getIpc();
 
   // Resolve which engine the mic should use, and whether a cloud model is ready.
   useEffect(() => {

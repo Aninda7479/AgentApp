@@ -467,9 +467,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <OrchestratorSettings
             modelsCatalog={modelsCatalog}
             onSaveSettings={(patch) => {
-              const ipc = typeof window !== 'undefined' && (window as any).require
-                ? getIpc()
-                : null;
+              const ipc = getIpc();
               if (ipc) {
                 ipc.invoke('settings-read').then((current: any) => {
                   ipc.invoke('settings-write', { ...current, ...patch });
@@ -496,9 +494,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {activeCategory === 'browser-use' && (
           <BrowserUseSettings
             onSaveSettings={(patch) => {
-              const ipc = typeof window !== 'undefined' && (window as any).require
-                ? getIpc()
-                : null;
+              const ipc = getIpc();
               if (ipc) {
                 ipc.invoke('settings-read').then((current: any) => {
                   ipc.invoke('settings-write', { ...current, ...patch });
@@ -510,9 +506,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {activeCategory === 'computer-use' && (
           <ComputerUseSettings
             onSaveSettings={(patch) => {
-              const ipc = typeof window !== 'undefined' && (window as any).require
-                ? getIpc()
-                : null;
+              const ipc = getIpc();
               if (ipc) {
                 ipc.invoke('settings-read').then((current: any) => {
                   ipc.invoke('settings-write', { ...current, ...patch });

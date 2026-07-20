@@ -72,9 +72,7 @@ export class TrajectoryService {
    * the Electron shell (so the component can show its loading placeholder).
    */
   static readLocalImageBase64(filePath: string): Promise<string | null> {
-    const ipc = typeof window !== 'undefined' && (window as any).require
-      ? getIpc()
-      : null;
+    const ipc = getIpc();
     if (!ipc) return Promise.resolve(null);
     return ipc.invoke('read-file-base64', filePath);
   }

@@ -205,10 +205,7 @@ export const UsageTrackerSettings: React.FC = () => {
   const [customEnd, setCustomEnd] = useState('');
   const [now, setNow] = useState(Date.now());
 
-  const ipc =
-    typeof window !== 'undefined' && (window as any).require
-      ? getIpc()
-      : null;
+  const ipc = getIpc();
 
   const loadStats = async () => {
     if (!ipc) {

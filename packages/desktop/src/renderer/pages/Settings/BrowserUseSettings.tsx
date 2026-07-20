@@ -43,9 +43,7 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ title: string; url: string; screenshotPath: string } | null>(null);
 
-  const ipc = typeof window !== 'undefined' && (window as any).require
-    ? getIpc()
-    : null;
+  const ipc = getIpc();
 
   const loadSettings = async () => {
     if (!ipc) return;

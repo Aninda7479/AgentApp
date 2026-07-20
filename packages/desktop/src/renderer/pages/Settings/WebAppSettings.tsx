@@ -29,10 +29,7 @@ interface PasswordResult {
  * the password is shared with the web login via core's AuthStore.
  */
 export const WebAppSettings: React.FC = () => {
-  const ipc =
-    typeof window !== 'undefined' && (window as any).require
-      ? getIpc()
-      : null;
+  const ipc = getIpc();
 
   const [status, setStatus] = useState<WebStatus | null>(null);
   const [port, setPort] = useState<number>(3000);

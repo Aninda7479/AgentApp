@@ -187,9 +187,7 @@ export const App: React.FC = () => {
   const [skillCatalog, setSkillCatalog] = useState<any[]>([]);
 
   // Resolve ipcRenderer safely
-  const ipc = typeof window !== 'undefined' && (window as any).require
-    ? getIpc()
-    : null;
+  const ipc = getIpc();
   const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '');
 
   // ── Live-state mirror so logic classes can read fresh values ───────────────

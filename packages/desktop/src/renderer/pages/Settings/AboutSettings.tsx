@@ -45,10 +45,7 @@ const LINKS: { icon: LucideIcon; label: string; href: string }[] = [
 
 /** The "About SuperAgent" page — brand voice, layered-atmosphere hero, calm motion. */
 export const AboutSettings: React.FC<AboutSettingsProps> = ({ appVersion }) => {
-  const ipc =
-    typeof window !== 'undefined' && (window as any).require
-      ? getIpc()
-      : null;
+  const ipc = getIpc();
 
   const openInBrowser = (url: string) => {
     if (ipc) {
