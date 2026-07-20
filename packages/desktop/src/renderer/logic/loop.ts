@@ -36,7 +36,7 @@ export async function loadLoopPrompt(workspacePath?: string | (() => string | un
     try {
       // File reads happen in the main process (the renderer has no `fs` under
       // contextIsolation). The bridge routes this to the `loop-read` handler.
-      const { readLoopPrompt } = await import('../lib/electron');
+      const { readLoopPrompt } = await import('../lib/electron.js');
       const prompt = await readLoopPrompt(resolvedPath);
       if (prompt) return prompt.trim();
     } catch {

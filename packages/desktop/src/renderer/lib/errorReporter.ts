@@ -84,6 +84,6 @@ export function installSafeInvoke(): void {
  * error envelope (reports toasts, resolves null on error).
  */
 export async function safeInvoke<T = unknown>(channel: string, ...args: unknown[]): Promise<T | null> {
-  const { invoke } = await import('./electron');
+  const { invoke } = await import('./electron.js');
   return (await invoke(channel, ...args)) as T | null;
 }

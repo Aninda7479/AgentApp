@@ -32,7 +32,7 @@ function loadPreload() {
 describe('preload bridge', () => {
   it('exposes a frozen window.superagent with ipc/shell/loop', async () => {
     const { exposed } = loadPreload();
-    await import('../preload/preload');
+    await import('../preload/preload.js');
     expect(exposed.superagent).toBeDefined();
     expect(typeof exposed.superagent.isElectron).toBe('boolean');
     expect(typeof exposed.superagent.ipc.invoke).toBe('function');
@@ -46,7 +46,7 @@ describe('preload bridge', () => {
 
   it('invoke delegates to ipcRenderer.invoke for allowlisted channels', async () => {
     const { exposed, ipcRenderer } = loadPreload();
-    await import('../preload/preload');
+    await import('../preload/preload.js');
     const res = await exposed.superagent.ipc.invoke('settings-read');
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('settings-read');
     expect(res).toBe('inv:settings-read');
@@ -54,14 +54,14 @@ describe('preload bridge', () => {
 
   it('throws for channels not in the allowlist', async () => {
     const { exposed } = loadPreload();
-    await import('../preload/preload');
+    await import('../preload/preload.js');
     expect(() => exposed.superagent.ipc.invoke('evil-channel')).toThrow(/allowlist/);
     expect(() => exposed.superagent.ipc.send('evil-channel')).toThrow(/allowlist/);
   });
 
   it('on strips the event object and returns an unsubscribe fn', async () => {
     const { exposed, ipcRenderer } = loadPreload();
-    await import('../preload/preload');
+    await import('../preload/preload.js');
     const listener = vi.fn();
     const unsub = exposed.superagent.ipc.on('circle-search-submit', listener);
     // The ipcRenderer.on was registered with a wrapper.
@@ -75,7 +75,7 @@ describe('preload bridge', () => {
 
   it('shell.openPath and loop.read route to main-process handlers', async () => {
     const { exposed, ipcRenderer } = loadPreload();
-    await import('../preload/preload');
+    await import('../preload/preload.js');
     await exposed.superagent.shell.openPath('/tmp/x');
     expect(ipcRenderer.invoke).toHaveBeenCalledWith('shell-open-path', '/tmp/x');
     await exposed.superagent.loop.read('/ws');

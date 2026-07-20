@@ -16,7 +16,7 @@ export class WorkspaceService {
     }
     // `openPath` is routed through the main process (renderer has no `shell`
     // under contextIsolation). On a non-Electron host the bridge no-ops.
-    import('../lib/electron')
+    import('../lib/electron.js')
       .then(({ openExternalPath }) => openExternalPath(mediaPath))
       .catch(() => fallback());
   }

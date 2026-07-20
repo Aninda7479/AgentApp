@@ -2324,7 +2324,7 @@ app.whenReady().then(async () => {
     const headers = { ...details.responseHeaders };
     // Only clamp the top-level document; sub-resources inherit the policy.
     if (details.resourceType === 'mainFrame' || details.resourceType === 'subFrame') {
-      headers['Content-Security-Policy'] = CSP;
+      (headers as Record<string, string | string[]>)['Content-Security-Policy'] = CSP;
     }
     callback({ cancel: false, responseHeaders: headers });
   });

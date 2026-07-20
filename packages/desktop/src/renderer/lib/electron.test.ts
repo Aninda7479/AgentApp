@@ -11,7 +11,7 @@ function makeSuperagent() {
   return {
     isElectron: true,
     ipc: {
-      invoke: vi.fn(async (ch: string, ..._a: any[]) => ({ ok: true, ch })),
+      invoke: vi.fn(async (ch: string, ..._a: any[]) => ({ ok: true, ch })) as any,
       send: vi.fn(),
       on: vi.fn((_ch: string, _fn: any) => () => {}),
       off: vi.fn(),
@@ -36,7 +36,7 @@ describe('renderer/lib/electron bridge', () => {
   it('invokes through the preload superagent API', async () => {
     const sa = makeSuperagent();
     (globalThis as any).window = { superagent: sa } as any;
-    const { invoke } = await import('../lib/electron');
+    const { invoke } = await import('../lib/electron.js');
     const res = await invoke('settings-read', 1, 2);
     expect(sa.ipc.invoke).toHaveBeenCalledWith('settings-read', 1, 2);
     expect(res).toEqual({ ok: true, ch: 'settings-read' });
@@ -46,7 +46,7 @@ describe('renderer/lib/electron bridge', () => {
     const sa = makeSuperagent();
     sa.ipc.invoke = vi.fn(async () => ({ __ipcError: true, error: 'boom', channel: 'x' }));
     (globalThis as any).window = { superagent: sa } as any;
-    const { invoke } = await import('../lib/electron');
+    const { invoke } = await import('../lib/electron.js');
     const res = await invoke('x');
     expect(res).toBeNull();
     expect(consoleError).toHaveBeenCalled();
@@ -56,7 +56,7 @@ describe('renderer/lib/electron bridge', () => {
     const sa = makeSuperagent();
     sa.ipc.invoke = vi.fn(async () => ({ ok: false, error: 'nope' }));
     (globalThis as any).window = { superagent: sa } as any;
-    const { invoke } = await import('../lib/electron');
+    const { invoke } = await import('../lib/electron.js');
     const res = await invoke('y');
     expect(res).toEqual({ ok: false, error: 'nope' });
     expect(consoleError).toHaveBeenCalled();
@@ -68,7 +68,7 @@ describe('renderer/lib/electron bridge', () => {
       throw new Error('kaboom');
     });
     (globalThis as any).window = { superagent: sa } as any;
-    const { invoke } = await import('../lib/electron');
+    const { invoke } = await import('../lib/electron.js');
     expect(await invoke('z')).toBeNull();
     expect(consoleError).toHaveBeenCalled();
   });
@@ -76,7 +76,7 @@ describe('renderer/lib/electron bridge', () => {
   it('send/on/off delegate to the bridge', async () => {
     const sa = makeSuperagent();
     (globalThis as any).window = { superagent: sa } as any;
-    const { send, on, off } = await import('../lib/electron');
+    const { send, on, off } = await import('../lib/electron.js');
     const fn = () => {};
     on('circle-search-submit', fn);
     expect(sa.ipc.on).toHaveBeenCalledWith('circle-search-submit', fn);
@@ -89,7 +89,7 @@ describe('renderer/lib/electron bridge', () => {
   it('openExternalPath / readLoopPrompt route to the bridge', async () => {
     const sa = makeSuperagent();
     (globalThis as any).window = { superagent: sa } as any;
-    const { openExternalPath, readLoopPrompt } = await import('../lib/electron');
+    const { openExternalPath, readLoopPrompt } = await import('../lib/electron.js');
     await openExternalPath('/tmp/x');
     expect(sa.shell.openPath).toHaveBeenCalledWith('/tmp/x');
     await readLoopPrompt('/ws');
@@ -98,7 +98,7 @@ describe('renderer/lib/electron bridge', () => {
 
   it('degrades gracefully when no bridge and no window.require', async () => {
     (globalThis as any).window = {} as any;
-    const { invoke, getIpc } = await import('../lib/electron');
+    const { invoke, getIpc } = await import('../lib/electron.js');
     expect(await invoke('settings-read')).toBeNull();
     expect(getIpc()).toBeNull();
     expect(consoleError).toHaveBeenCalled();
@@ -107,7 +107,7 @@ describe('renderer/lib/electron bridge', () => {
   it('legacy shim falls back to window.require when bridge absent', async () => {
     const fakeIpc = { invoke: vi.fn(async () => 'legacy'), send: vi.fn(), on: vi.fn(), off: vi.fn() };
     (globalThis as any).window = { require: () => ({ ipcRenderer: fakeIpc }) } as any;
-    const { invoke, getIpc } = await import('../lib/electron');
+    const { invoke, getIpc } = await import('../lib/electron.js');
     expect(await invoke('settings-read')).toBe('legacy');
     expect(getIpc()).not.toBeNull();
   });
