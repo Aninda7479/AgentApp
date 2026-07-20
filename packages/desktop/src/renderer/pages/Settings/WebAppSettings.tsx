@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Globe, Play, Square, KeyRound, CheckCircle2, AlertTriangle, ExternalLink, RotateCw } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
+import { getIpc } from '../../lib/electron';
 
 /** Status payload returned by the main-process `web-status` IPC. */
 interface WebStatus {
@@ -30,7 +31,7 @@ interface PasswordResult {
 export const WebAppSettings: React.FC = () => {
   const ipc =
     typeof window !== 'undefined' && (window as any).require
-      ? (window as any).require('electron').ipcRenderer
+      ? getIpc()
       : null;
 
   const [status, setStatus] = useState<WebStatus | null>(null);

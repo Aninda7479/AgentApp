@@ -1,4 +1,5 @@
 import type { TrajectoryStep } from './types';
+import { getIpc } from '../lib/electron';
 
 /**
  * Pure rendering-support transforms and the Electron image-read boundary
@@ -72,7 +73,7 @@ export class TrajectoryService {
    */
   static readLocalImageBase64(filePath: string): Promise<string | null> {
     const ipc = typeof window !== 'undefined' && (window as any).require
-      ? (window as any).require('electron').ipcRenderer
+      ? getIpc()
       : null;
     if (!ipc) return Promise.resolve(null);
     return ipc.invoke('read-file-base64', filePath);

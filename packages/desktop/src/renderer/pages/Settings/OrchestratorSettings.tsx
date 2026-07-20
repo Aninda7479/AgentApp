@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ModelConfig } from './types';
 import { Scale, Save, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award, Sparkles, Coins, Cpu, Layers, Zap, Bot, Brain, Activity, Search, Circle } from 'lucide-react';
 import { Button, Select } from '../../components/ui';
+import { getIpc } from '../../lib/electron';
 
 /** Props for the Orchestrator settings panel. */
 interface OrchestratorSettingsProps {
@@ -72,7 +73,7 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
   };
 
   const ipc = typeof window !== 'undefined' && (window as any).require
-    ? (window as any).require('electron').ipcRenderer
+    ? getIpc()
     : null;
 
   const loadSettingsAndInstructions = async () => {

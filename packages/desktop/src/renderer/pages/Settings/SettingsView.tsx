@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SettingsViewProps, ModelConfig, ModelPricing, UpdateStatus, InternetAccessLevel } from './types';
+import { getIpc } from '../../lib/electron';
 export type { ProviderConnection, ModelConfig } from './types';
 import { SettingsSidebar } from './SettingsSidebar';
 import { GeneralSettings } from './GeneralSettings';
@@ -467,7 +468,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             modelsCatalog={modelsCatalog}
             onSaveSettings={(patch) => {
               const ipc = typeof window !== 'undefined' && (window as any).require
-                ? (window as any).require('electron').ipcRenderer
+                ? getIpc()
                 : null;
               if (ipc) {
                 ipc.invoke('settings-read').then((current: any) => {
@@ -496,7 +497,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <BrowserUseSettings
             onSaveSettings={(patch) => {
               const ipc = typeof window !== 'undefined' && (window as any).require
-                ? (window as any).require('electron').ipcRenderer
+                ? getIpc()
                 : null;
               if (ipc) {
                 ipc.invoke('settings-read').then((current: any) => {
@@ -510,7 +511,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <ComputerUseSettings
             onSaveSettings={(patch) => {
               const ipc = typeof window !== 'undefined' && (window as any).require
-                ? (window as any).require('electron').ipcRenderer
+                ? getIpc()
                 : null;
               if (ipc) {
                 ipc.invoke('settings-read').then((current: any) => {

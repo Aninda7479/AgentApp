@@ -10,13 +10,14 @@ export class WorkspaceService {
    * so `fallback` is invoked instead (e.g. to surface a toast).
    */
   static openMedia(mediaPath: string | undefined, fallback: () => void): void {
-    const electron = typeof window !== 'undefined' && (window as any).require
-      ? (window as any).require('electron')
-      : null;
-    if (electron && mediaPath) {
-      electron.shell.openPath(mediaPath);
-    } else {
+    if (!mediaPath) {
       fallback();
+      return;
     }
+    // `openPath` is routed through the main process (renderer has no `shell`
+    // under contextIsolation). On a non-Electron host the bridge no-ops.
+    import('../lib/electron')
+      .then(({ openExternalPath }) => openExternalPath(mediaPath))
+      .catch(() => fallback());
   }
 }

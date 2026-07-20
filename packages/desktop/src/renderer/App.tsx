@@ -32,6 +32,7 @@ import { resolveScopeSettings } from './logic/scopeSettings';
 import { SessionLoopManager, LoopTask } from './logic/loop';
 import { useThemeMode } from './theme';
 import { getRouteFromLocation, pushRoute, subscribeRouteChange, buildPath } from './urlSync';
+import { getIpc } from './lib/electron';
 
 // ── Logic layer (separated from design; see renderer/logic/*) ────────────────
 import { FormatService } from './logic/format';
@@ -187,7 +188,7 @@ export const App: React.FC = () => {
 
   // Resolve ipcRenderer safely
   const ipc = typeof window !== 'undefined' && (window as any).require
-    ? (window as any).require('electron').ipcRenderer
+    ? getIpc()
     : null;
   const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '');
 
@@ -324,9 +325,11 @@ export const App: React.FC = () => {
         void sendPromptRef.current(task.prompt, { model: activeModel, mode: 'chat', attachments: [] });
       }, getWorkspacePath);
     }
-    const task = loopManagerRef.current.start(interval, prompt);
-    setActiveLoopsList(loopManagerRef.current.getTasks());
-    return task.id;
+    void loopManagerRef.current.start(interval, prompt).then((task) => {
+      setActiveLoopsList(loopManagerRef.current!.getTasks());
+      return task.id;
+    });
+    return ''; // task id is assigned asynchronously; callers that need it await start()
   }, []);
 
   const stopLoop = useCallback((id: string): boolean => {

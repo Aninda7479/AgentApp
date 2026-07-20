@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sparkles, X, CornerDownLeft, RefreshCw, AlertCircle } from 'lucide-react';
+import { getIpc } from '../lib/electron';
 
-const ipc = (window as any).require ? (window as any).require('electron').ipcRenderer : null;
+const ipc = getIpc();
 
 export const CircleSearchOverlay: React.FC = () => {
   const [screenImage, setScreenImage] = useState<string | null>(null);
@@ -22,7 +23,7 @@ export const CircleSearchOverlay: React.FC = () => {
     const fetchScreen = async () => {
       if (!ipc) return;
       try {
-        const dataUrl = await ipc.invoke('circle-search-get-screen-image');
+        const dataUrl = await ipc('circle-search-get-screen-image');
         setScreenImage(dataUrl);
       } catch (err: any) {
         console.error('Failed to get screen capture:', err);
@@ -39,16 +40,16 @@ export const CircleSearchOverlay: React.FC = () => {
       setAiResponse('');
       setErrorMsg('');
       try {
-        const dataUrl = await ipc?.invoke('circle-search-get-screen-image');
+        const dataUrl = await ipc('circle-search-get-screen-image');
         setScreenImage(dataUrl);
       } catch (err) {
         console.error(err);
       }
     };
 
-    ipc?.on('circle-search-window-shown', handleShow);
+    ipc('circle-search-window-shown', handleShow);
     return () => {
-      ipc?.off('circle-search-window-shown', handleShow);
+      ipc('circle-search-window-shown', handleShow);
     };
   }, []);
 
@@ -64,7 +65,7 @@ export const CircleSearchOverlay: React.FC = () => {
   }, []);
 
   const handleDismiss = () => {
-    ipc?.send('circle-search-hide');
+    ipc('circle-search-hide');
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -147,7 +148,7 @@ export const CircleSearchOverlay: React.FC = () => {
       // 2. Invoke main process query stream handler
       if (ipc) {
         // We will receive streaming progress back
-        ipc.send('circle-search-submit', {
+        ipc('circle-search-submit', {
           query: query.trim(),
           image: croppedBase64,
         });
@@ -168,10 +169,10 @@ export const CircleSearchOverlay: React.FC = () => {
         };
 
         const cleanup = () => {
-          ipc.off('circle-search-stream-chunk', handleChunk);
+          ipc('circle-search-stream-chunk', handleChunk);
         };
 
-        ipc.on('circle-search-stream-chunk', handleChunk);
+        ipc('circle-search-stream-chunk', handleChunk);
       } else {
         // Fallback demo mock
         setTimeout(() => {

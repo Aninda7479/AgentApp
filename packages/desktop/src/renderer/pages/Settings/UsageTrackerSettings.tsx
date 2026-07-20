@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { getIpc } from '../../lib/electron';
 import {
   RefreshCw,
   Trash2,
@@ -206,7 +207,7 @@ export const UsageTrackerSettings: React.FC = () => {
 
   const ipc =
     typeof window !== 'undefined' && (window as any).require
-      ? (window as any).require('electron').ipcRenderer
+      ? getIpc()
       : null;
 
   const loadStats = async () => {

@@ -30,27 +30,15 @@ export function parseIntervalToMs(interval: string): number {
   }
 }
 
-export function loadLoopPrompt(workspacePath?: string | (() => string | undefined)): string {
+export async function loadLoopPrompt(workspacePath?: string | (() => string | undefined)): Promise<string> {
   const resolvedPath = typeof workspacePath === 'function' ? workspacePath() : workspacePath;
   if (resolvedPath) {
     try {
-      const electron = typeof window !== 'undefined' && (window as any).require
-        ? (window as any).require('electron')
-        : null;
-      
-      if (electron) {
-        const fs = (window as any).require('fs');
-        const path = (window as any).require('path');
-        
-        const superagentPath = path.join(resolvedPath, '.superagent', 'loop.md');
-        if (fs.existsSync(superagentPath)) {
-          return fs.readFileSync(superagentPath, 'utf-8').trim();
-        }
-        const claudePath = path.join(resolvedPath, '.claude', 'loop.md');
-        if (fs.existsSync(claudePath)) {
-          return fs.readFileSync(claudePath, 'utf-8').trim();
-        }
-      }
+      // File reads happen in the main process (the renderer has no `fs` under
+      // contextIsolation). The bridge routes this to the `loop-read` handler.
+      const { readLoopPrompt } = await import('../lib/electron');
+      const prompt = await readLoopPrompt(resolvedPath);
+      if (prompt) return prompt.trim();
     } catch {
       // Fall through to default
     }
@@ -68,10 +56,10 @@ export class SessionLoopManager {
     this.workspacePath = workspacePath;
   }
 
-  public start(intervalStr?: string, customPrompt?: string): LoopTask {
+  public async start(intervalStr?: string, customPrompt?: string): Promise<LoopTask> {
     const interval = intervalStr || '10m';
     const intervalMs = parseIntervalToMs(interval);
-    const prompt = customPrompt || loadLoopPrompt(this.workspacePath);
+    const prompt = customPrompt || (await loadLoopPrompt(this.workspacePath));
     const id = `loop-${Math.random().toString(36).substring(2, 9)}`;
     const now = new Date();
     

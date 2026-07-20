@@ -1,5 +1,6 @@
 import type { StoredProject } from '../types';
 import { FormatService } from './format';
+import { getIpc } from '../lib/electron';
 
 /**
  * Backend / Electron boundary helpers for project (folder) selection and
@@ -16,7 +17,7 @@ export class ProjectService {
    */
   static async selectProjectFolders(): Promise<string[] | null> {
     const ipc = typeof window !== 'undefined' && (window as any).require
-      ? (window as any).require('electron').ipcRenderer
+      ? getIpc()
       : null;
     if (!ipc) return null;
     try {

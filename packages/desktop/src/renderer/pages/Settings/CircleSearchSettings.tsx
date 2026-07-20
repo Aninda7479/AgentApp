@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Sparkles, Key, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
+import { getIpc } from '../../lib/electron';
 
 export const CircleSearchSettings: React.FC = () => {
   const ipc =
     typeof window !== 'undefined' && (window as any).require
-      ? (window as any).require('electron').ipcRenderer
+      ? getIpc()
       : null;
 
   const [enabled, setEnabled] = useState<boolean>(false);

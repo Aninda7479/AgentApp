@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { MonitorSmartphone, Save, RefreshCw, AlertCircle, Eye, EyeOff, Play, Globe, Network, ShieldAlert, Cpu } from 'lucide-react';
+import { getIpc } from '../../lib/electron';
 
 /** Props for the Browser Use settings panel. */
 interface BrowserUseSettingsProps {
@@ -43,7 +44,7 @@ export const BrowserUseSettings: React.FC<BrowserUseSettingsProps> = ({
   const [testResult, setTestResult] = useState<{ title: string; url: string; screenshotPath: string } | null>(null);
 
   const ipc = typeof window !== 'undefined' && (window as any).require
-    ? (window as any).require('electron').ipcRenderer
+    ? getIpc()
     : null;
 
   const loadSettings = async () => {

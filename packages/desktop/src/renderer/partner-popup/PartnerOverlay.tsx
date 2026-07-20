@@ -2,17 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X, Sparkles } from 'lucide-react';
 import { PetSprite } from './PetSprite';
 import { moodReaction, type PartnerManifest, type PartnerMood } from './types';
-
-function getIpc(): any | null {
-  if (typeof window === 'undefined') return null;
-  const req = (window as any).require;
-  if (!req) return null;
-  try {
-    return req('electron').ipcRenderer;
-  } catch {
-    return null;
-  }
-}
+import { getIpc } from '../lib/electron';
 
 export interface PartnerOverlayProps {
   /** The active Partner to display, or null to hide the creature. */
@@ -80,9 +70,9 @@ export const PartnerOverlay: React.FC<PartnerOverlayProps> = ({
         setLiveMood(null);
       }, 3500);
     };
-    ipc.on('agent-event', onEvent);
+    ipc('agent-event', onEvent);
     return () => {
-      ipc.removeListener('agent-event', onEvent);
+      ipc('agent-event', onEvent);
       if (revertTimer.current) clearTimeout(revertTimer.current);
     };
   }, []);

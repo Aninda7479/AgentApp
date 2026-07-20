@@ -1,3 +1,4 @@
+import { getIpc } from '../lib/electron';
 /**
  * `WindowService` — wraps the Electron window-control IPC calls (minimize /
  * maximize / close) used by the title bar. The design layer just calls
@@ -10,10 +11,10 @@ export class WindowService {
    * nothing, so callers can invoke it unconditionally.
    */
   static control(action: 'minimize' | 'maximize' | 'close'): void {
-    if (typeof window !== 'undefined' && (window as any).require) {
+    const ipc = getIpc();
+    if (ipc) {
       try {
-        const { ipcRenderer } = (window as any).require('electron');
-        ipcRenderer.send(`window-${action}`);
+        ipc(`window-${action}`);
       } catch (e) {
         console.warn(`Window control ${action} failed outside Electron`, e);
       }

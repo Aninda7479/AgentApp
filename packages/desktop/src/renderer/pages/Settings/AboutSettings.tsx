@@ -1,6 +1,7 @@
 import React from 'react';
 import { ExternalLink, BookOpen, Bug, Cpu, Plug, Sparkles, Boxes, FolderGit2, LucideIcon } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
+import { getIpc } from '../../lib/electron';
 
 /** Props for the About settings panel. */
 interface AboutSettingsProps {
@@ -46,7 +47,7 @@ const LINKS: { icon: LucideIcon; label: string; href: string }[] = [
 export const AboutSettings: React.FC<AboutSettingsProps> = ({ appVersion }) => {
   const ipc =
     typeof window !== 'undefined' && (window as any).require
-      ? (window as any).require('electron').ipcRenderer
+      ? getIpc()
       : null;
 
   const openInBrowser = (url: string) => {

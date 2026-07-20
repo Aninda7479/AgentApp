@@ -1,5 +1,6 @@
 import React, { useState, KeyboardEvent, useEffect, useRef, useMemo } from 'react';
 import { Select } from '../../components/ui';
+import { getIpc } from '../../lib/electron';
 import {
   Plus,
   Cpu,
@@ -196,7 +197,7 @@ export const Composer: React.FC<ComposerProps> = ({
   const [localWhisperEnabled, setLocalWhisperEnabled] = useState<boolean>(false);
 
   const ipcRenderer = typeof window !== 'undefined' && (window as any).require
-    ? (window as any).require('electron').ipcRenderer
+    ? getIpc()
     : null;
 
   // Resolve which engine the mic should use, and whether a cloud model is ready.

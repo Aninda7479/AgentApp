@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { getIpc } from '../../lib/electron';
 import {
   Cpu,
   HardDrive,
@@ -99,7 +100,7 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
     try {
       const ipc =
         typeof window !== 'undefined' && (window as any).require
-          ? (window as any).require('electron').ipcRenderer
+          ? getIpc()
           : null;
       const info = (await ipc?.invoke('system-info')) as SystemInfo | null;
       setSystemInfo(info ?? null);

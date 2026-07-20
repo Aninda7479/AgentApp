@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Eye } from 'lucide-react';
 import type { PartnerController } from '../../logic/agentStream';
+import { getIpc } from '../../lib/electron';
 
 import { StageNavigation } from './components/StageNavigation';
 import { ActionPanel } from './components/ActionPanel';
@@ -70,7 +71,7 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
   const [materialMetalness, setMaterialMetalness] = useState(0.1);
 
   const ipc = typeof window !== 'undefined' && (window as any).require
-    ? (window as any).require('electron').ipcRenderer
+    ? getIpc()
     : null;
 
   // Load settings & check active config & list models
