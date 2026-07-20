@@ -76,9 +76,27 @@ import {
 // and forwarded to the renderer as a toast (via the 'app-error' channel) instead
 // of rejecting the IPC call and white-screening the UI.
 
+/**
+ * Sender validation for privileged IPC. Under contextIsolation the renderer is
+ * a separate, unprivileged context loading only our local HTML files, so every
+ * invoke/send we honor must originate from one of those windows. Anything else
+ * (e.g. an unexpected remote/child frame) is rejected before the handler runs.
+ */
+function assertSender(event: IpcMainInvokeEvent | IpcMainEvent): void {
+  const frame = event.senderFrame;
+  const url = frame?.url ?? '';
+  if (!url.startsWith('file://')) {
+    throw new Error('rejected IPC from non-file sender: ' + url);
+  }
+  if (!/(^|\/)(ui|pet|circle-search)\.html($|\?)/.test(url)) {
+    throw new Error('rejected IPC from unexpected local page: ' + url);
+  }
+}
+
 function safeHandle(channel: string, handler: (event: IpcMainInvokeEvent, ...args: any[]) => unknown): void {
   ipcMain.handle(channel, async (event, ...args) => {
     try {
+      assertSender(event);
       return await handler(event, ...args);
     } catch (err: unknown) {
       logError('ipc:' + channel, err);
@@ -90,6 +108,7 @@ function safeHandle(channel: string, handler: (event: IpcMainInvokeEvent, ...arg
 function safeOn(channel: string, handler: (event: IpcMainEvent, ...args: any[]) => void): void {
   ipcMain.on(channel, (event, ...args) => {
     try {
+      assertSender(event);
       handler(event, ...args);
     } catch (err: unknown) {
       logError('ipc:' + channel, err);
@@ -825,6 +844,38 @@ safeHandle('open-external', async (_event, url: string) => {
   } catch (err: unknown) {
     return { ok: false, error: (err as Error).message };
   }
+});
+
+// Renderer-side shell.openPath (media/partner open) is routed here so the
+// sandboxed renderer never needs the `shell` module directly.
+safeHandle('shell-open-path', async (_event, targetPath: string) => {
+  try {
+    return await shell.openPath(targetPath);
+  } catch (err: unknown) {
+    return { ok: false, error: (err as Error).message };
+  }
+});
+
+// Renderer-side .superagent/loop.md (or .claude/loop.md) reads are routed here
+// so the sandboxed renderer never needs `fs`/`path`. Basic containment: only
+// files named loop.md inside a `.superagent`/`.claude` folder of the given
+// workspace path are read.
+safeHandle('loop-read', (_event, workspacePath: string): string | null => {
+  if (!workspacePath || typeof workspacePath !== 'string') return null;
+  const candidates = [
+    path.join(workspacePath, '.superagent', 'loop.md'),
+    path.join(workspacePath, '.claude', 'loop.md'),
+  ];
+  for (const file of candidates) {
+    // Guard against path traversal slipping past the join above.
+    if (!file.startsWith(path.resolve(workspacePath))) continue;
+    try {
+      if (fs.existsSync(file)) return fs.readFileSync(file, 'utf-8').trim();
+    } catch {
+      /* ignore unreadable */
+    }
+  }
+  return null;
 });
 
 /**
