@@ -2,11 +2,14 @@
  * Centralized error reporting for the RENDERER process.
  *
  * `reportError` logs to the console AND notifies subscribers (App.tsx wires a
- * subscriber that shows a red toast). `installSafeInvoke` patches the live
- * `ipcRenderer.invoke` so EVERY `ipc.invoke(...)` call in the renderer — including
- * all the pre-existing ones across components — can never produce an unhandled
- * rejection that white-screens the UI. `safeInvoke` is the explicit equivalent for
- * new code.
+ * subscriber that shows a red toast). `safeInvoke` is a crash-safe IPC invoke
+ * for callers that want an explicit promise (it delegates to the canonical
+ * bridge in `./electron`, which already wraps every `invoke` with the same
+ * error envelope).
+ *
+ * Note: this module no longer patches the live `ipcRenderer.invoke`. Under
+ * `contextIsolation: true` the preload's `contextBridge` object is frozen and
+ * cannot be mutated; the envelope now lives permanently in `./electron`.
  */
 
 export interface IpcErrorEnvelope {
@@ -58,63 +61,29 @@ export function subscribeError(fn: ErrorListener): () => void {
   };
 }
 
-/** Resolves the renderer ipcRenderer the same way the rest of the app does. */
+/** Resolves the renderer ipc surface via the canonical bridge. */
 function getIpc(): any | null {
-  try {
-    return (window as any).require('electron')?.ipcRenderer ?? null;
-  } catch {
-    return null;
-  }
+  // Lazy import avoids a hard dependency cycle at module init.
+  const { getIpc: bridge } = require('./electron') as typeof import('./electron');
+  return bridge();
 }
-
-function wrapInvoke(invoke: (channel: string, ...args: any[]) => Promise<any>) {
-  return async (channel: string, ...args: any[]): Promise<any> => {
-    try {
-      const result = await invoke(channel, ...args);
-      if (result && typeof result === 'object' && (result as IpcErrorEnvelope).__ipcError) {
-        reportError('ipc:' + channel, (result as IpcErrorEnvelope).error);
-        return null;
-      }
-      // The app's handlers universally signal failure with `{ ok: false, error }`
-      // (see safeHandle). Surface those as toasts too — otherwise a failed
-      // operation produces no error and looks like a silent no-op.
-      if (result && typeof result === 'object' && result.ok === false && result.error) {
-        reportError('ipc:' + channel, result.error);
-      }
-      return result;
-    } catch (err) {
-      reportError('ipc:' + channel, err);
-      return null;
-    }
-  };
-}
-
-let patched = false;
 
 /**
- * Patches the live `ipcRenderer.invoke` so all `ipc.invoke(...)` calls anywhere in
- * the renderer become crash-safe (catches rejections, logs them, returns null).
- * Idempotent and safe to call multiple times.
+ * Historically patched the live `ipcRenderer.invoke` so every call in the
+ * renderer was crash-safe. Under `contextIsolation` the preload bridge is
+ * frozen and the envelope is applied permanently in `./electron`, so this is
+ * now a no-op kept for API compatibility.
  */
 export function installSafeInvoke(): void {
-  if (patched) return;
-  const ipc = getIpc();
-  if (!ipc || typeof ipc.invoke !== 'function') return;
-  const original = ipc.invoke.bind(ipc);
-  ipc.invoke = wrapInvoke(original) as typeof ipc.invoke;
-  patched = true;
+  /* envelope is applied in ./electron for every invoke */
 }
 
 /**
  * Explicitly safe IPC invoke for new code. Returns null on failure instead of
- * throwing.
+ * throwing. Delegates to `./electron.invoke`, which already applies the
+ * error envelope (reports toasts, resolves null on error).
  */
 export async function safeInvoke<T = unknown>(channel: string, ...args: unknown[]): Promise<T | null> {
-  installSafeInvoke();
-  const ipc = getIpc();
-  if (!ipc) {
-    reportError('ipc:' + channel, 'ipcRenderer unavailable in renderer');
-    return null;
-  }
-  return (ipc.invoke(channel, ...args) as Promise<T | null>);
+  const { invoke } = await import('./electron');
+  return (await invoke(channel, ...args)) as T | null;
 }
