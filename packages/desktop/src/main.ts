@@ -1,4 +1,4 @@
-import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, desktopCapturer, screen, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
+import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, desktopCapturer, screen, session, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -2305,6 +2305,30 @@ function setupDevWatcher() {
 }
 
 app.whenReady().then(async () => {
+  // Lock down the renderer with a Content-Security-Policy. Because every window
+  // is context-isolated and loads only our bundled, same-origin assets, a strict
+  // policy is safe and meaningfully raises the bar on any XSS that slips through.
+  // `webRequest.onHeadersReceived` lets us attach it to each navigation/document
+  // response (the <meta> approach is ignored once a header is present).
+  const CSP = [
+    "default-src 'self'",
+    "script-src 'self' 'wasm-unsafe-eval'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: blob:",
+    "connect-src 'self' https:",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+  ].join('; ');
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const headers = { ...details.responseHeaders };
+    // Only clamp the top-level document; sub-resources inherit the policy.
+    if (details.resourceType === 'mainFrame' || details.resourceType === 'subFrame') {
+      headers['Content-Security-Policy'] = CSP;
+    }
+    callback({ cancel: false, responseHeaders: headers });
+  });
+
   // Cleanup outdated partner directories to ensure Lily and Waifu are merged
   try {
     const petsDir = path.join(app.getPath('userData'), STORAGE_DIRS.partners);
