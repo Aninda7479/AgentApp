@@ -61,11 +61,31 @@ function writeJson(filePath: string, data: unknown): void {
   fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
   // Keep the previous version as a .bak before replacing it.
   if (fs.existsSync(filePath)) {
-    fs.copyFileSync(filePath, `${filePath}.bak`);
-    fs.rmSync(filePath, { force: true });
+    try {
+      fs.copyFileSync(filePath, `${filePath}.bak`);
+    } catch (e) {
+      console.warn(`Failed to create backup for ${filePath}:`, e);
+    }
   }
-  fs.copyFileSync(tmpPath, filePath);
-  fs.unlinkSync(tmpPath);
+
+  // Try atomic rename first.
+  try {
+    fs.renameSync(tmpPath, filePath);
+  } catch (renameErr) {
+    // Fall back to copy-and-unlink if rename fails (common on Windows if destination is locked or across mount points)
+    try {
+      fs.copyFileSync(tmpPath, filePath);
+      fs.unlinkSync(tmpPath);
+    } catch (copyErr) {
+      console.error(`Failed to write JSON to ${filePath} via backup copy:`, copyErr);
+      if (fs.existsSync(tmpPath)) {
+        try {
+          fs.unlinkSync(tmpPath);
+        } catch {}
+      }
+      throw copyErr;
+    }
+  }
 }
 
 /** Generates a unique storage key by appending a numeric suffix if needed. */
