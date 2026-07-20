@@ -533,8 +533,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         isStreaming={activeSessionId === 'session-main' ? isGenerating : (activeSession?.isGenerating || false)}
         onViewDiff={onViewDiff}
         onUndoStep={onUndoStep}
+        onEditStep={(id, content) => onPromptChange(content)}
         lastError={lastError}
         onRetryLast={onRetryLast}
+        onRegenerate={onRetryLast}
         onActionClick={(action, data) => {
           if (action === 'openMedia') {
             WorkspaceService.openMedia(data?.mediaPath, () =>

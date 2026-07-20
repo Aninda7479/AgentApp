@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronDown, Copy, ThumbsUp, ThumbsDown, FileText, FolderOpen, Check, Eye, RotateCcw } from 'lucide-react';
+import { ChevronRight, ChevronDown, Copy, ThumbsUp, ThumbsDown, FileText, FolderOpen, Check, Eye, RotateCcw, Edit, RefreshCw } from 'lucide-react';
 import { TrajectoryService } from '../../logic/trajectory';
 
 /** A single step in the agent execution trajectory. */
@@ -177,7 +177,33 @@ const FileChangedChip: React.FC<FileChangedChipProps> = ({ count, added, removed
   </div>
 );
 
-const PromptCopyButton: React.FC<{ content: string }> = ({ content }) => {
+// ─── Icon action button (tooltip on hover) ────────────────────────────────────
+interface TrajectoryIconButtonProps {
+  title: string;
+  onClick: () => void;
+  children: React.ReactNode;
+  danger?: boolean;
+}
+
+/** Small icon-only button that reveals its purpose via a native tooltip on hover. */
+const TrajectoryIconButton: React.FC<TrajectoryIconButtonProps> = ({ title, onClick, children, danger }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    title={title}
+    aria-label={title}
+    className={`p-1.5 rounded-md text-brand-textMuted transition-all cursor-pointer border border-transparent hover:bg-[var(--brand-hover)] ${
+      danger
+        ? 'hover:text-[color:var(--neon-destructive)] hover:border-[color:var(--neon-destructive)]/30'
+        : 'hover:text-brand-textMain hover:border-brand-border'
+    }`}
+  >
+    {children}
+  </button>
+);
+
+// ─── Copy (icon-only) ──────────────────────────────────────────────────────────
+const CopyUserButton: React.FC<{ content: string }> = ({ content }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -188,14 +214,9 @@ const PromptCopyButton: React.FC<{ content: string }> = ({ content }) => {
   };
 
   return (
-    <button
-      onClick={handleCopy}
-      title="Copy prompt"
-      className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-[var(--brand-hover)] transition-all cursor-pointer text-[10px]"
-    >
-      {copied ? <Check size={11} className="text-[color:var(--neon-constructive)]" /> : <Copy size={11} />}
-      <span>{copied ? 'Copied' : 'Copy'}</span>
-    </button>
+    <TrajectoryIconButton title={copied ? 'Copied!' : 'Copy message'} onClick={handleCopy}>
+      {copied ? <Check size={13} className="text-[color:var(--neon-constructive)]" /> : <Copy size={13} />}
+    </TrajectoryIconButton>
   );
 };
 
@@ -370,10 +391,14 @@ export interface TrajectoryCanvasProps {
   onViewDiff?: (file: string, original: string, modified: string) => void;
   onActionClick?: (action: string, data: any) => void;
   onUndoStep?: (stepId: string) => void;
+  /** Loads a user message back into the composer so it can be edited and re-sent. */
+  onEditStep?: (stepId: string, content: string) => void;
   /** Last error recorded on the active chat, surfaced in the failed-response card. */
   lastError?: string;
   /** Re-sends the last user prompt (when the response failed). */
   onRetryLast?: () => void;
+  /** Regenerates the agent's response for the current turn. */
+  onRegenerate?: () => void;
   children?: React.ReactNode;
   initialExpanded?: boolean;
 }
@@ -385,8 +410,10 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
   onViewDiff,
   onActionClick,
   onUndoStep,
+  onEditStep,
   lastError,
   onRetryLast,
+  onRegenerate,
   children,
   initialExpanded = false
 }) => {
@@ -465,30 +492,34 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
             onActionClick={onActionClick}
             lastError={lastError}
             onRetryLast={onRetryLast}
+            onRegenerate={onRegenerate}
             initialExpanded={initialExpanded}
           />
         )}
 
         {/* Render turns */}
-        {turns.map((turn, turnIdx) => (
-          <div key={turn.userSteps[0]?.id || `turn-${turnIdx}`} className="flex flex-col gap-0">
-            {/* ── User Prompt Bubble ─────────────────────────────────── */}
-            <div className="flex justify-center mb-5 mt-2">
+        {turns.map((turn, turnIdx) => {
+          const userContent = turn.userSteps.map((s) => s.content).filter(Boolean).join('\n');
+          return (
+          <div
+            key={turn.userSteps[0]?.id || `turn-${turnIdx}`}
+            className="flex flex-col gap-0 items-end"
+          >
+            {/* ── User Prompt Bubble (right-aligned, slim card) ─────── */}
+            <div className="flex justify-end w-full mt-1">
               <div
                 data-testid={`step-user-${turn.userSteps[0]?.id || turnIdx}`}
-                className="relative group bg-brand-card/30 backdrop-blur-sm border border-brand-border/40 rounded-xl px-4 py-2.5 max-w-[80%] text-brand-textMain text-[13px] leading-relaxed shadow-sm hover:border-brand-border/80 transition-all font-sans"
+                className="relative bg-brand-card/40 backdrop-blur-sm border border-brand-border/50 rounded-xl px-3.5 py-2 max-w-[78%] text-right text-brand-textMain text-[13px] leading-relaxed shadow-sm hover:border-brand-border-strong transition-all font-sans"
               >
                 {turn.userSteps.map((step, idx) => (
                   <div key={step.id} className={idx > 0 ? 'mt-2.5' : ''}>
-                    {step.content && (
-                      <div>{step.content}</div>
-                    )}
+                    {step.content && <div>{step.content}</div>}
 
                     {step.metadata?.mediaPath && step.metadata?.mediaType === 'image' && (
                       <LocalImagePreview filePath={step.metadata.mediaPath} />
                     )}
                     {step.metadata?.mediaPath && step.metadata?.mediaType !== 'image' && (
-                      <div className="mt-2.5 p-3 bg-brand-popover/80 border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none">
+                      <div className="mt-2.5 p-3 bg-brand-popover/80 border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none text-left">
                         <div className="flex items-center gap-2">
                           <span className="text-lg">📄</span>
                           <span className="text-xs text-brand-textMain font-medium font-sans">
@@ -505,25 +536,31 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                     )}
                   </div>
                 ))}
-
-                {/* User actions on hover (Copy and Undo) */}
-                <div className="flex items-center gap-1 mt-2.5 pt-2 border-t border-brand-border/30 opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none">
-                  {/* Copy Button */}
-                  <PromptCopyButton content={turn.userSteps.map(step => step.content).filter(Boolean).join('\n')} />
-
-                  {/* Undo Button */}
-                  {onUndoStep && (
-                    <button
-                      onClick={() => onUndoStep(turn.userSteps[0].id)}
-                      title="Undo this prompt and response"
-                      className="flex items-center gap-1 px-2 py-1 rounded-md text-brand-textMuted hover:text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/5 transition-all cursor-pointer text-[10px]"
-                    >
-                      <RotateCcw size={11} />
-                      <span>Undo</span>
-                    </button>
-                  )}
-                </div>
               </div>
+            </div>
+
+            {/* ── User actions (under the card): Copy · Edit · Undo ──── */}
+            <div className="self-end flex items-center gap-0.5 mt-1 mr-0.5 select-none">
+              <CopyUserButton content={userContent} />
+
+              {onEditStep && (
+                <TrajectoryIconButton
+                  title="Edit message"
+                  onClick={() => onEditStep(turn.userSteps[0].id, userContent)}
+                >
+                  <Edit size={13} />
+                </TrajectoryIconButton>
+              )}
+
+              {onUndoStep && (
+                <TrajectoryIconButton
+                  title="Undo this prompt and response"
+                  danger
+                  onClick={() => onUndoStep(turn.userSteps[0].id)}
+                >
+                  <RotateCcw size={13} />
+                </TrajectoryIconButton>
+              )}
             </div>
 
             {/* ── Agent Response Block ───────────────────────────────── */}
@@ -537,11 +574,13 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
                 onActionClick={onActionClick}
                 lastError={lastError}
                 onRetryLast={onRetryLast}
+                onRegenerate={onRegenerate}
                 initialExpanded={initialExpanded}
               />
             )}
           </div>
-        ))}
+          );
+        })}
 
         {/* Streaming dots when agent is thinking but no steps yet in this turn */}
         {isStreaming && turns.length > 0 && turns[turns.length - 1].agentSteps.length === 0 && (
@@ -575,6 +614,8 @@ interface AgentResponseBlockProps {
   lastError?: string;
   /** Re-sends the last user prompt (when the response failed). */
   onRetryLast?: () => void;
+  /** Regenerates the agent's response for the current turn. */
+  onRegenerate?: () => void;
   initialExpanded?: boolean;
 }
 
@@ -587,6 +628,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
   onActionClick,
   lastError,
   onRetryLast,
+  onRegenerate,
   initialExpanded = false
 }) => {
   // Categorize the steps:
@@ -803,9 +845,19 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
 
       {/* Action buttons row */}
       {assistantSteps.length > 0 && !isStreaming && (
-        <MessageActions
-          content={assistantSteps.map(s => s.content).join('\n\n')}
-        />
+        <div className="flex items-center gap-1 mt-1">
+          <MessageActions
+            content={assistantSteps.map(s => s.content).join('\n\n')}
+          />
+          {onRegenerate && (
+            <TrajectoryIconButton
+              title="Regenerate response"
+              onClick={onRegenerate}
+            >
+              <RefreshCw size={13} />
+            </TrajectoryIconButton>
+          )}
+        </div>
       )}
     </div>
   );

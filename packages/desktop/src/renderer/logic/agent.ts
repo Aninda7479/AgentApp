@@ -253,9 +253,14 @@ export class AgentService {
       });
     }
 
-    // Reflect "generating" state. Mirrors original: compares against the ref that
-    // lags the render, so appending to the already-active chat flips it on.
-    ctx.setIsGenerating(ctx.getActiveChatId() === chatId);
+    // Reflect "generating" state. We just made `chatId` the active chat above
+    // (and either created it or appended to it), so a response is always now in
+    // flight for the chat we're sending to. NOTE: we must set `true`
+    // unconditionally here — `ctx.getActiveChatId()` reads `stateRef`, which is
+    // only refreshed in a post-render effect, so during a brand-new chat it still
+    // returns the PREVIOUS id ('draft-chat'), which would wrongly flip generating
+    // OFF and hide the red stop button + thinking animation on the first send.
+    ctx.setIsGenerating(true);
 
     // Remember the chosen model.
     if (options.model) {

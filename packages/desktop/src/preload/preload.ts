@@ -23,6 +23,8 @@ export const ALLOWED_CHANNELS = new Set<string>([
   'settings-write',
   'store-read',
   'store-write',
+  // chat trajectory steps (lazy per-chat disk read)
+  'chat-steps-read',
   // agent engine
   'agent-run',
   'agent-stop',
