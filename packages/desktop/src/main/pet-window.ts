@@ -109,9 +109,15 @@ export class PetWindowManager {
       focusable: false,
       show: false,
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
-        webSecurity: true
+        // The pet stays OUT of the OS sandbox for now: pet/entry.ts still does
+        // require(p.scriptPath) to load user-supplied model scripts from disk,
+        // which the sandbox forbids. It is still context-isolated and has no
+        // Node integration, so an XSS in the pet cannot reach Electron globals.
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: false,
+        webSecurity: true,
+        preload: path.join(__dirname, '..', 'preload', 'preload.js')
       }
     });
 

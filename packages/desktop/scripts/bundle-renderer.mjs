@@ -1,4 +1,5 @@
-// Bundles the two Electron renderer entry points (main UI + 3D pet) with esbuild.
+// Bundles the three Electron renderer entry points (main UI + 3D pet +
+// circle-search) with esbuild.
 //
 // Why this exists: electron-builder only walks the MAIN process (main.js) require
 // graph when deciding which node_modules files to ship. The renderer processes
@@ -8,14 +9,18 @@
 // meshopt_decoder) — get pruned out of the asar and the renderer crashes on load
 // (black screen). Bundling inlines every renderer dependency (react, three, the
 // three addons, lucide-react, app source) into a single self-contained file under
-// dist/, which electron-builder packages automatically. `electron` is kept external
-// because the renderer reaches it only via `(window as any).require('electron')` at
-// runtime (nodeIntegration), never via a static import.
+// dist/, which electron-builder packages automatically. `electron` is kept
+// external because the renderer reaches it only via the preload `contextBridge`,
+// never via a static import.
+//
+// `format: 'iife'` (not 'cjs'): the HTML now loads the bundle with a plain
+// <script src> tag (nodeIntegration is OFF), so there is no `require`/CommonJS
+// host to evaluate a CJS bundle — an IIFE is self-executing.
 import { build } from 'esbuild';
 
 const common = {
   bundle: true,
-  format: 'cjs',
+  format: 'iife',
   platform: 'browser',
   jsx: 'automatic',
   target: 'es2020',
