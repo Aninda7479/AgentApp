@@ -2391,19 +2391,15 @@ app.whenReady().then(async () => {
   registerCircleSearchShortcut();
   voiceDaemon.init();
 
-  // Warm up local Whisper model if enabled to eliminate cold-start lag
-  try {
-    const settings = SettingsStorage.loadSettings();
-    if (settings?.voice?.localWhisper?.enabled) {
-      const size = settings.voice.localWhisper.size || 'tiny';
-      const dir = settings.voice.localWhisper.modelDir || whisperLocal.defaultModelDir();
-      void whisperLocal.warmup(size, dir).catch((err) => {
-        console.warn('Whisper worker warmup failed:', err);
-      });
-    }
-  } catch (err) {
-    console.error('Failed to load settings for Whisper warmup:', err);
-  }
+  // NOTE: we deliberately do NOT warm up the local Whisper model at
+  // startup. `whisperLocal.warmup` loads the ~900 MB ONNX model
+  // into a worker thread unconditionally, so enabling local voice typing
+  // was pinning ~1 GB of RAM from launch — even for users who
+  // never dictate. Transcription already loads the model lazily on the
+  // first `transcribe` call (see `whisper-local.ts`), and the worker
+  // self-unloads after 5 min idle (`IDLE_UNLOAD_MS`), so the
+  // model is "load when needed, offload when done" with zero resident
+  // cost at idle.
 
   // Auto-start the self-hosted Web App if the user enabled it in
   // Settings → Web App. Launched shortly after boot so the main window is up
