@@ -1044,6 +1044,30 @@ Key guidelines:
     multiAgentManager.register(this);
   }
 
+  /**
+   * Updates the engine configuration at runtime WITHOUT resetting the
+   * conversation `history`. The chat-completion path reads `this.config`
+   * live on every `run()` (see `buildInitialHistory` / `runTurn`), so a model /
+   * provider / apiKey / baseUrl change takes effect on the very next turn while
+   * the prior context is preserved — this is what lets a single conversation
+   * switch models mid-stream (e.g. model Y → X → Z) and keep its memory.
+   *
+   * The mutation is performed in-place on the existing `this.config` object (not
+   * replaced) so closures captured at construction that reference `config`
+   * (e.g. the sandbox's `() => config.internetAccess`) keep seeing the live
+   * value. History is intentionally left untouched.
+   */
+  public updateConfig(partial: Partial<AgentEngineConfig>): void {
+    const c = this.config;
+    if (partial.provider !== undefined) c.provider = partial.provider;
+    if (partial.apiKey !== undefined) c.apiKey = partial.apiKey;
+    if (partial.baseUrl !== undefined) c.baseUrl = partial.baseUrl;
+    if (partial.model !== undefined) c.model = partial.model;
+    if (partial.internetAccess !== undefined) (c as { internetAccess?: unknown }).internetAccess = partial.internetAccess;
+    if (partial.permissionMode !== undefined) (c as { permissionMode?: unknown }).permissionMode = partial.permissionMode;
+    if (partial.contextWindow !== undefined) this.contextWindow = partial.contextWindow ?? this.contextWindow;
+  }
+
   private estimateTokens(text: string): number {
     if (!text) return 0;
     return Math.max(1, Math.ceil(text.length / 4));
@@ -1769,6 +1793,46 @@ Key guidelines:
     }
   }
 
+  /**
+   * Fetches a provider endpoint with a *connect* timeout: the request is aborted
+   * if the provider does not return a response within `timeoutMs`, so a dead or
+   * silently-hanging connection fails fast instead of stalling the whole agent
+   * run (the renderer would otherwise spin forever). Once the response starts
+   * streaming the timer is cleared, so long-but-healthy generations are never
+   * cut off. User aborts (`signal`) are honored alongside the timeout.
+   */
+  private async fetchWithConnectTimeout(
+    url: string,
+    init: RequestInit,
+    signal: AbortSignal,
+    timeoutMs = 45_000
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const combined: AbortSignal =
+      typeof AbortSignal.any === 'function'
+        ? AbortSignal.any([signal, controller.signal])
+        : controller.signal;
+    try {
+      return await fetch(url, { ...init, signal: combined });
+    } catch (e) {
+      const err = e as Error | undefined;
+      // Aborted by our connect-timeout (not the user) → surface a clear timeout error
+      // instead of a generic AbortError (which the caller would treat as a user stop).
+      if (err?.name === 'AbortError' && !signal.aborted) {
+        const te = new Error(
+          `Provider did not respond within ${Math.round(timeoutMs / 1000)}s (request timed out). ` +
+            `Check the provider connection, API key, and rate limits, then try again.`
+        );
+        te.name = 'TimeoutError';
+        throw te;
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   // ── OpenAI / Custom (OpenAI-compatible) Streaming ────────────────────────
   private async streamOpenAI(
     onEvent: (event: AgentEvent) => void,
@@ -1790,15 +1854,18 @@ Key guidelines:
       max_tokens: this.config.maxTokens ?? 4096
     };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.config.apiKey}`
+    const response = await this.fetchWithConnectTimeout(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.config.apiKey}`
+        },
+        body: JSON.stringify(payload)
       },
-      body: JSON.stringify(payload),
       signal
-    });
+    );
 
     if (!response.ok) {
       const err = await response.text();
@@ -1903,17 +1970,20 @@ Key guidelines:
       max_tokens: this.config.maxTokens ?? 4096
     };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'x-api-key': this.config.apiKey,
-        'anthropic-beta': 'tools-2024-04-04'
+    const response = await this.fetchWithConnectTimeout(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'anthropic-version': '2023-06-01',
+          'x-api-key': this.config.apiKey,
+          'anthropic-beta': 'tools-2024-04-04'
+        },
+        body: JSON.stringify(payload)
       },
-      body: JSON.stringify(payload),
       signal
-    });
+    );
 
     if (!response.ok) {
       const err = await response.text();
@@ -2042,12 +2112,15 @@ Key guidelines:
       payload.systemInstruction = { parts: [{ text: systemInstruction }] };
     }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+    const response = await this.fetchWithConnectTimeout(
+      url,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      },
       signal
-    });
+    );
 
     if (!response.ok) {
       const err = await response.text();
@@ -2130,12 +2203,15 @@ Key guidelines:
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (this.config.apiKey) headers['Authorization'] = `Bearer ${this.config.apiKey}`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
+    const response = await this.fetchWithConnectTimeout(
+      url,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      },
       signal
-    });
+    );
 
     if (!response.ok) {
       const err = await response.text();

@@ -171,6 +171,23 @@ export class ConversationService {
   }
 
   /**
+   * Updates the model recorded on a chat. The composer seeds its model selector
+   * from the chat's own `model` (so a model chosen mid-conversation stays sticky
+   * per chat), and `sendPrompt` honors the selected model on every turn — this
+   * is what lets one conversation switch models (Y → X → Z) while keeping its
+   * history. Also refreshes the global "last used" model so a fresh chat opens
+   * on the most recent choice.
+   */
+  static setChatModel(ctx: AppContext, chatId: string, model: string): void {
+    if (!model) return;
+    ctx.setChats((prev) => {
+      const next = prev.map((c) => (c.id === chatId ? { ...c, model } : c));
+      ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), next);
+      return next;
+    });
+  }
+
+  /**
    * Persists a standalone (project-less) chat's own config: permissions,
    * chat-only skills, memory, instructions, and its sandbox/internet scope.
    * Each standalone chat carries its own settings instead of a single

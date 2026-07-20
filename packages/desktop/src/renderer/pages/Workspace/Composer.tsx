@@ -218,6 +218,13 @@ export const Composer: React.FC<ComposerProps> = ({
     return () => { active = false; };
   }, []);
 
+  // Keep the model selector in sync with the active chat's model. This makes the
+  // model sticky per chat (switching chats shows that chat's model) and reflects
+  // a model the user just picked for this conversation.
+  useEffect(() => {
+    setSelectedModel(defaultModel);
+  }, [defaultModel]);
+
   const usesModelEngine =
     voiceEngine === 'model' ||
     voiceEngine === 'local' ||

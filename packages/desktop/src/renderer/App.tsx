@@ -45,7 +45,8 @@ import { ProvidersService } from './logic/providers';
 import { McpService } from './logic/mcp';
 import { AttachmentService } from './logic/attachments';
 import { ConversationService } from './logic/conversation';
-import { AgentService, StreamingRefs } from './logic/agent';
+import { AgentService } from './logic/agent';
+import { runManager } from './logic/runManager';
 import { AgentStreamService } from './logic/agentStream';
 import { WindowService } from './logic/window';
 import { AccountService } from './logic/account';
@@ -225,10 +226,6 @@ export const App: React.FC = () => {
   const activeChatIdRef = useRef(activeChatId);
   useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
 
-  const streamingChatIdRef = useRef<string | null>(null);
-  const streamingBufferRef = useRef<string>('');
-  const streamingStepIdRef = useRef<string | null>(null);
-  const streaming: StreamingRefs = { chatIdRef: streamingChatIdRef, bufferRef: streamingBufferRef, stepIdRef: streamingStepIdRef };
   const popoverRef = useRef<HTMLDivElement>(null);
   const sendPromptRef = useRef<(raw: string, options: ComposerOptions) => Promise<void>>(async () => { });
 
@@ -417,10 +414,10 @@ export const App: React.FC = () => {
   );
   const handleSendPrompt = useCallback(
     async (prompt: string, options: ComposerOptions) => {
-      await AgentService.sendPrompt(ctx, prompt, options, streaming, slashDispatch);
+      await AgentService.sendPrompt(ctx, prompt, options, undefined, slashDispatch);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ctx, streaming, slashDispatch]
+    [ctx, slashDispatch]
   );
   sendPromptRef.current = handleSendPrompt;
 
@@ -438,6 +435,26 @@ export const App: React.FC = () => {
     const model = chat?.model || lastUsedModel;
     await handleSendPrompt(prompt, { model: model || undefined, attachments: [] });
   }, [ctx, handleSendPrompt, lastUsedModel]);
+
+  // Regenerate the agent's response for a specific prompt WITHOUT adding a new
+  // user step — it streams an additional alternative tagged with a fresh
+  // regenerationSeq, so the canvas keeps a per-prompt history (arrows + x/n).
+  const handleRegenerate = useCallback(async (turnId: string, content: string) => {
+    const chatId = ctx.getActiveChatId();
+    if (!chatId || chatId === 'draft-chat') return;
+    const chat = ctx.getChats().find((c) => c.id === chatId);
+    if (!chat) return;
+    // Fall back to the prompt's last user step when invoked without content
+    // (e.g. a response that preceded any user message in the initial block).
+    const prompt = content?.trim() || [...chat.steps].reverse().find((s) => s.type === 'user')?.content || '';
+    if (!prompt) return;
+    // Next sequence = (highest regenerationSeq already on this chat) + 1, so
+    // each Regenerate appends a new alternative rather than overwriting.
+    const maxSeq = chat.steps.reduce((m, s) => Math.max(m, s.metadata?.regenerationSeq ?? 0), 0);
+    const nextSeq = maxSeq + 1;
+    const model = chat.model || lastUsedModel;
+    await AgentService.regenerate(ctx, chatId, prompt, { model: model || undefined, mode: 'chat', attachments: [] }, nextSeq);
+  }, [ctx, lastUsedModel]);
 
   // ── Settings toggles (mirror state + persist) ──────────────────────────────
   const handleWorkModeChange = (mode: 'coding' | 'everyday') => {
@@ -953,14 +970,30 @@ export const App: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [profilePopoverOpen]);
 
+  // ── Run manager: how a queued prompt gets started ──
+  // Injected once so `RunManager.onTerminal` can re-enter `sendPrompt` without
+  // this module importing `AgentService` (avoids a circular dependency). Each
+  // queued `QueuedItem` already carries its own prompt / options / attachments.
+  useEffect(() => {
+    runManager.setStarter((item) => {
+      void AgentService.sendPrompt(ctx, item.prompt, item.options, item.attachments, slashDispatch);
+    });
+  }, [ctx, slashDispatch]);
+
   // ── Real AI streaming via agent-event IPC (logic lives in AgentStreamService) ─
   useEffect(() => {
     if (!ipc) return;
-    const handleAgentEvent = AgentStreamService.createHandler(ctx, streaming, partnersRef, setLiveContextUsage);
+    const handleAgentEvent = AgentStreamService.createHandler(
+      ctx,
+      (sessionId: string) => runManager.getStreamRefs(sessionId),
+      partnersRef,
+      setLiveContextUsage,
+      (sessionId: string) => runManager.onTerminal(sessionId)
+    );
     ipc.on('agent-event', handleAgentEvent);
     return () => ipc.removeListener('agent-event', handleAgentEvent);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ipc, ctx, streaming, partnersRef]);
+  }, [ipc, ctx, partnersRef]);
 
   // Reset the live context gauge when switching chats (a new run repopulates it).
   useEffect(() => {
@@ -1169,7 +1202,7 @@ export const App: React.FC = () => {
             <WorkspaceView
               activeProject={activeProject}
               trajectorySteps={trajectorySteps}
-              isGenerating={isGenerating}
+              isGenerating={activeChat?.isRunning ?? false}
               startedAt={activeChat?.startedAt}
               modelsCatalog={modelsCatalog}
               mcpServers={mcpServers}
@@ -1188,7 +1221,11 @@ export const App: React.FC = () => {
               onUndoStep={handleUndoStep}
               activeChatModel={activeChat?.model || lastUsedModel}
               defaultApprovalMode={resolvedDefaultApproval}
-              onModelChange={(model) => SettingsService.persistLastUsedModel(ctx, model)}
+              onModelChange={(model) => {
+                SettingsService.persistLastUsedModel(ctx, model);
+                const active = ctx.getActiveChatId();
+                if (active && active !== 'draft-chat') ConversationService.setChatModel(ctx, active, model);
+              }}
               onAttachClick={handleAttachFiles}
               onAttachPastedFiles={handleAttachPastedFiles}
               composerAttachments={composerAttachments}
@@ -1203,6 +1240,7 @@ export const App: React.FC = () => {
               skills={skills}
               lastError={activeChat?.lastError}
               onRetryLast={handleRetryLast}
+              onRegenerate={handleRegenerate}
               contextUsage={liveContextUsage}
               activeModelContextLimit={
                 modelsCatalog.find((m) => m.name === (activeChat?.model || lastUsedModel))?.contextLimit

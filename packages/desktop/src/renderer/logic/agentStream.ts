@@ -12,6 +12,7 @@ import type { AppContext, TrajectoryStep } from './types';
 import { StoreService } from './store';
 import { FormatService } from './format';
 import type { StreamingRefs } from './agent';
+import { runManager } from './runManager';
 
 /** Shape of an `agent-event` payload emitted by the main process. */
 export interface AgentEvent {
@@ -44,29 +45,25 @@ export class AgentStreamService {
    */
   static createHandler(
     ctx: AppContext,
-    streaming: StreamingRefs,
+    resolveStreaming: (sessionId: string) => StreamingRefs,
     partnersRef: { current: PartnerController },
-    onContext?: (usage: { used: number; limit: number; pct: number }) => void
+    onContext?: (usage: { used: number; limit: number; pct: number }) => void,
+    onTerminal?: (sessionId: string) => void
   ): (event: unknown, agentEvent: AgentEvent) => void {
-    // ── Streaming flush throttle ─────────────────────────────────────────────
-    // The original code called `updateChatSteps` on EVERY token, which
-    // re-allocates the entire `chats` array + the entire `steps` array per
-    // call — thousands of full-array allocations per fast (Ollama) reply.
-    // The `persist: false` flag only skipped the *disk* write; the
-    // in-memory O(n²) churn (and the resulting GC pressure → multi-GB RSS)
-    // still happened on every token. We now buffer deltas in the streaming
-    // refs and commit to React state on a single throttled flush (~100 ms),
-    // so a reply produces a handful of allocations instead of thousands.
+    // ── Streaming flush throttle (per-session) ───────────────────────────────
+    // We buffer token deltas in each chat's OWN StreamingRefs bundle and commit
+    // to React state on a single throttled flush (~100 ms). Because bundles are
+    // per-chat (see `runManager.getStreamRefs`), several chats can stream at
+    // once — each flushes only its own buffer, so concurrent runs never corrupt
+    // each other's tokens / step ids.
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
-    let dirtySinceFlush = false;
+    const dirtyBundles = new Set<StreamingRefs>();
 
-    const flushPending = (): void => {
-      if (!dirtySinceFlush) return;
-      dirtySinceFlush = false;
-      const targetChatId = streaming.chatIdRef.current;
+    const flushBundle = (bundle: StreamingRefs): void => {
+      const targetChatId = bundle.chatIdRef.current;
       if (!targetChatId) return;
-      const buffer = streaming.bufferRef.current;
-      const currentStepId = streaming.stepIdRef.current;
+      const buffer = bundle.bufferRef.current;
+      const currentStepId = bundle.stepIdRef.current;
       // Guard: never synthesize an empty assistant step from a cleared/stale buffer.
       if (!currentStepId && !buffer) return;
       StoreService.updateChatSteps(
@@ -77,13 +74,14 @@ export class AgentStreamService {
             return prev.map((s) => (s.id === currentStepId ? { ...s, content: buffer } : s));
           }
           const newStepId = `stream-assistant-${Date.now()}`;
-          streaming.stepIdRef.current = newStepId;
+          bundle.stepIdRef.current = newStepId;
           const newStep: TrajectoryStep = {
             id: newStepId,
             type: 'assistant',
             content: buffer,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             metadata: {
+              regenerationSeq: bundle.responseSeqRef.current,
               workedDuration: FormatService.formatWorkedDuration(
                 Date.now() - (ctx.getChats().find((c) => c.id === targetChatId)?.startedAt || Date.now())
               )
@@ -95,6 +93,11 @@ export class AgentStreamService {
       );
     };
 
+    const flushPending = (): void => {
+      for (const bundle of dirtyBundles) flushBundle(bundle);
+      dirtyBundles.clear();
+    };
+
     const scheduleFlush = (): void => {
       if (flushTimer) return;
       flushTimer = setTimeout(() => {
@@ -104,12 +107,15 @@ export class AgentStreamService {
     };
 
     return (_event: unknown, agentEvent: AgentEvent) => {
-      const chatId = streaming.chatIdRef.current;
-      if (!chatId) return;
+      const sessionId = agentEvent.sessionId;
+      if (!sessionId) return;
+      // Route every event to the stream-ref bundle for THIS chat, so concurrent
+      // runs stay isolated.
+      const bundle = resolveStreaming(sessionId);
 
       // ── chat-name: update the chat title in state and store ──
       if (agentEvent.type === 'chat-name' && agentEvent.chatName) {
-        StoreService.updateChatRecord(ctx, chatId, (current) => ({
+        StoreService.updateChatRecord(ctx, sessionId, (current) => ({
           ...current,
           title: agentEvent.chatName!
         }));
@@ -120,12 +126,12 @@ export class AgentStreamService {
         onContext(agentEvent.context);
       }
 
-      // ── token: append to the streaming buffer, mark dirty, schedule a
-      // single throttled React-state flush (see flushPending above). The actual
-      // `updateChatSteps` only runs on the ~100ms tick, not per token.
+      // ── token: append to THIS chat's streaming buffer, mark dirty, schedule a
+      // single throttled React-state flush. The actual `updateChatSteps` only
+      // runs on the ~100ms tick, not per token.
       if (agentEvent.type === 'token') {
-        streaming.bufferRef.current += agentEvent.content || '';
-        dirtySinceFlush = true;
+        bundle.bufferRef.current += agentEvent.content || '';
+        dirtyBundles.add(bundle);
         scheduleFlush();
       }
 
@@ -137,15 +143,16 @@ export class AgentStreamService {
           toolName: agentEvent.toolName,
           content: `${agentEvent.toolName}(${JSON.stringify(agentEvent.toolArgs || {})})`,
           status: 'running',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          metadata: { regenerationSeq: bundle.responseSeqRef.current }
         };
-        StoreService.updateChatSteps(ctx, chatId, (prev) => [...prev, toolStep]);
+        StoreService.updateChatSteps(ctx, sessionId, (prev) => [...prev, toolStep]);
       }
 
       // ── tool_result: mark the matching running tool step "success" and, on a
       //    3D-character win, kick off the Partner import ──
       if (agentEvent.type === 'tool_result') {
-        StoreService.updateChatSteps(ctx, chatId, (prev) => {
+        StoreService.updateChatSteps(ctx, sessionId, (prev) => {
           const lastToolCallIdx = [...prev]
             .reverse()
             .findIndex((s) => s.type === 'tool_call' && s.status === 'running');
@@ -155,8 +162,8 @@ export class AgentStreamService {
             i === actualIdx ? { ...s, status: 'success' as const, content: agentEvent.content || s.content } : s
           );
         });
-        streaming.bufferRef.current = '';
-        streaming.stepIdRef.current = null;
+        bundle.bufferRef.current = '';
+        bundle.stepIdRef.current = null;
 
         if (agentEvent.toolName === 'make_3d_character' && agentEvent.toolResult) {
           AgentStreamService.import3DCharacter(ctx, partnersRef, agentEvent.toolResult);
@@ -171,18 +178,25 @@ export class AgentStreamService {
           flushTimer = null;
         }
         flushPending();
-        const chat = ctx.getChats().find((c) => c.id === chatId);
+        const chat = ctx.getChats().find((c) => c.id === sessionId);
         const workedDuration = FormatService.formatWorkedDuration(Date.now() - (chat?.startedAt || Date.now()));
-        StoreService.updateChatRecord(ctx, chatId, (current) => ({
+        StoreService.updateChatRecord(ctx, sessionId, (current) => ({
           ...current,
           isRunning: false,
+          queuedCount: 0,
           lastError: agentEvent.type === 'error' ? (agentEvent.error || 'Unknown error') : undefined,
           steps: FormatService.stampWorkedDuration(current.steps, workedDuration)
         }));
-        streaming.bufferRef.current = '';
-        streaming.stepIdRef.current = null;
-        streaming.chatIdRef.current = null;
-        ctx.setIsGenerating(false);
+        bundle.bufferRef.current = '';
+        bundle.stepIdRef.current = null;
+        bundle.chatIdRef.current = null;
+        // Drain any queued prompts for this chat (see RunManager). This marks the
+        // chat idle and may start the next queued run (which re-marks it running).
+        onTerminal?.(sessionId);
+        // Recompute the global "generating" flag from the live run set AFTER the
+        // drain, so it correctly reflects whether anything is still in flight
+        // (and doesn't get stuck `true` when the last chat finishes).
+        ctx.setIsGenerating(runManager.isAnyGenerating());
         if (agentEvent.type === 'error') {
           ctx.triggerToast(`Agent error: ${agentEvent.error || 'Unknown error'}`);
         }

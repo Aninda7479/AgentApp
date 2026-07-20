@@ -26,8 +26,14 @@ export class StepFactory {
   }
 
   /** Builds an internal "thought" step (the agent narrating its plan). */
-  static thoughtStep(content: string, id?: string, ts?: string): TrajectoryStep {
-    return { id: id ?? StepFactory.id('step-thought'), type: 'thought', content, timestamp: ts ?? StepFactory.timestamp() };
+  static thoughtStep(content: string, id?: string, ts?: string, regenerationSeq?: number): TrajectoryStep {
+    return {
+      id: id ?? StepFactory.id('step-thought'),
+      type: 'thought',
+      content,
+      timestamp: ts ?? StepFactory.timestamp(),
+      metadata: regenerationSeq !== undefined ? { regenerationSeq } : undefined
+    };
   }
 
   /** Builds a tool-call step (running or finished). `status` defaults to running. */
@@ -36,7 +42,8 @@ export class StepFactory {
     content: string,
     status: 'pending' | 'running' | 'success' | 'error' = 'running',
     id?: string,
-    ts?: string
+    ts?: string,
+    regenerationSeq?: number
   ): TrajectoryStep {
     return {
       id: id ?? StepFactory.id(`tool-${toolName}`),
@@ -44,7 +51,8 @@ export class StepFactory {
       toolName,
       content,
       status,
-      timestamp: ts ?? StepFactory.timestamp()
+      timestamp: ts ?? StepFactory.timestamp(),
+      metadata: regenerationSeq !== undefined ? { regenerationSeq } : undefined
     };
   }
 
@@ -66,8 +74,14 @@ export class StepFactory {
   }
 
   /** Builds an assistant message step (the agent's final reply). */
-  static assistantStep(content: string, id?: string, ts?: string): TrajectoryStep {
-    return { id: id ?? StepFactory.id('step-assistant'), type: 'assistant', content, timestamp: ts ?? StepFactory.timestamp() };
+  static assistantStep(content: string, id?: string, ts?: string, regenerationSeq?: number): TrajectoryStep {
+    return {
+      id: id ?? StepFactory.id('step-assistant'),
+      type: 'assistant',
+      content,
+      timestamp: ts ?? StepFactory.timestamp(),
+      metadata: regenerationSeq !== undefined ? { regenerationSeq } : undefined
+    };
   }
 
   /**

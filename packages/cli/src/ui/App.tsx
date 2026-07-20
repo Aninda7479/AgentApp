@@ -574,7 +574,8 @@ export const App: React.FC<AppProps> = ({
   // ── Helpers ──
   const applyModelToChat = useCallback(() => {
     const conn = resolveConnection(sessionRef.current.activeProvider, sessionRef.current.activeModel);
-    chatRef.current.setConnection(conn);
+    // Preserve conversation history across a model switch (see ChatSession.switchModel).
+    chatRef.current.switchModel(conn);
   }, []);
 
   const openModelPicker = useCallback(() => {
@@ -591,7 +592,8 @@ export const App: React.FC<AppProps> = ({
     const sel = items[pickerRef.current.selected] || items[0];
     if (!sel) return;
     const conn = resolveConnection(sel.provider, sel.id);
-    chatRef.current.setConnection(conn);
+    // Switching models mid-conversation keeps the existing history.
+    chatRef.current.switchModel(conn);
     sessionRef.current.activeProvider = sel.provider;
     sessionRef.current.activeModel = sel.id;
     try {
@@ -642,6 +644,10 @@ export const App: React.FC<AppProps> = ({
     appendMessage({ id: `help-${Date.now()}`, role: 'system', content: formatSlashCommandHelp(router) });
   }, [appendMessage, router]);
 
+  // Holds the latest `sendChat` so `finalizeStreaming` can start the next queued
+  // turn without a definition-order cycle (sendChat depends on finalizeStreaming).
+  const sendChatRef = useRef<(text: string) => void>(() => {});
+
   const finalizeStreaming = useCallback(() => {
     const s = streamingRef.current;
     if (s.content.trim().length > 0 || s.tools.length > 0) {
@@ -657,7 +663,16 @@ export const App: React.FC<AppProps> = ({
     setStreamingState(null);
     setIsBusy(false);
     isBusyRef.current = false;
-  }, [appendMessage, setStreamingState]);
+    // Drain the chat queue: if the user typed prompts while this turn was
+    // streaming, run the next one now (once this turn has fully unwound).
+    if (queueManager.count() > 0) {
+      setTimeout(() => {
+        const next = queueManager.dequeue();
+        setQueuedTurnsCount(queueManager.count());
+        if (next) sendChatRef.current(next.prompt);
+      }, 0);
+    }
+  }, [appendMessage, setStreamingState, queueManager]);
 
   const sendChat = useCallback(
     async (text: string) => {
@@ -732,6 +747,9 @@ export const App: React.FC<AppProps> = ({
     },
     [appendMessage, finalizeStreaming, setStreaming, transcriptManager]
   );
+
+  // Keep the ref pointed at the latest sendChat for the queue drainer.
+  sendChatRef.current = sendChat;
 
   const resetPalette = useCallback(() => {
     setPaletteDismissed(false);
@@ -821,8 +839,39 @@ export const App: React.FC<AppProps> = ({
       return;
     }
 
-    // While generating: lock all input except the abort above.
-    if (isBusyRef.current) return;
+    // While generating: allow the user to compose and QUEUE the next prompt so
+    // it runs automatically when the current response ends (chat queue). Enter
+    // or Tab enqueues the current input; typing/backspace edit it. Everything
+    // else stays locked (scrolling is handled by the raw stdin handler above).
+    if (isBusyRef.current) {
+      if (key.return || (key.tab && !key.shift)) {
+        const text = inputRef.current.trim();
+        if (text.length > 0) {
+          queueTurn(text);
+          setInput('');
+          inputRef.current = '';
+        }
+        return;
+      }
+      if (key.backspace || key.delete) {
+        const next = inputRef.current.slice(0, -1);
+        setInput(next);
+        inputRef.current = next;
+        return;
+      }
+      if (
+        char &&
+        !key.ctrl && !key.meta && !key.escape &&
+        !key.upArrow && !key.downArrow && !key.leftArrow && !key.rightArrow &&
+        !key.return && !key.tab
+      ) {
+        const next = inputRef.current + char;
+        setInput(next);
+        inputRef.current = next;
+        return;
+      }
+      return;
+    }
 
     // Model picker navigation.
     if (pickerRef.current.open) {

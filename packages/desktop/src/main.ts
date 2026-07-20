@@ -193,19 +193,27 @@ safeHandle('agent-run', async (event, {
   config: AgentEngineConfig;
   currentAttachments?: string[];
 }) => {
+  // Declared in the handler scope (outside `try`) so the `catch` block can read
+  // them when engine.run() rejects without emitting a terminal agent-event.
+  const win = BrowserWindow.fromWebContents(event.sender);
+  sessionWindows.set(sessionId, win);
+  let terminalEmitted = false;
+  let firstActivity = false;
+  let firstEventTimer: ReturnType<typeof setTimeout> | undefined;
+  let terminalWatchdog: ReturnType<typeof setTimeout> | undefined;
+
   try {
     // Log the outgoing user message on the desktop connection (device-tagged).
     console.log(`[desktop] message SENT — connection device: ${DEVICE_NAME} | session: ${sessionId} | model: ${config.model}`);
 
+    // Load settings once for this session so both orchestrator routing AND
+    // context-window resolution can read models/providers from the same source.
+    const settings = SettingsStorage.loadSettings();
+
     // Reuse or create engine
     let engine = activeSessions.get(sessionId);
-    const win = BrowserWindow.fromWebContents(event.sender);
-    sessionWindows.set(sessionId, win);
     if (!engine) {
       let finalConfig = { ...config };
-      // Load settings once for this session so both orchestrator routing AND
-      // context-window resolution can read models/providers from the same source.
-      const settings = SettingsStorage.loadSettings();
       if (config.model === 'auto' || config.model === 'Orchestrator' || config.model === 'Model Governance') {
         // Apply the Orchestrator's default reasoning effort only when the
         // composer/turn didn't set one (caller preference wins). 'off' means
@@ -307,10 +315,76 @@ safeHandle('agent-run', async (event, {
           console.error('[desktop] Error in chat name generation sequence:', nameErr);
         }
       })();
+    } else {
+      // Engine already exists for this session: honor a concrete model switch on
+      // this turn WITHOUT losing the conversation history the engine holds in RAM.
+      // `updateConfig` mutates the engine's live config in place (read by run() on
+      // every turn) so the next message uses the newly picked model while the
+      // prior context continues. The orchestrator special models
+      // ('auto'/'Orchestrator'/'Model Governance') were resolved to a concrete
+      // model at creation time, so we leave those untouched on reuse.
+      const isOrchestratorModel =
+        config.model === 'Orchestrator' || config.model === 'Model Governance' || config.model === 'auto';
+      if (!isOrchestratorModel) {
+        engine.updateConfig({
+          model: config.model,
+          provider: config.provider,
+          apiKey: config.apiKey,
+          baseUrl: config.baseUrl,
+          contextWindow: resolveContextWindow(config.model, settings?.models)
+        });
+      }
     }
 
     // Run agent; emit each event back to renderer
     let replyLogged = false;
+    // ── Watchdogs ─────────────────────────────────────────────────────────────
+    // The renderer only stops the "thinking" animation and surfaces a reason
+    // once it receives a terminal `agent-event` (done/error/abort). If the run
+    // ends without emitting one — an unhandled rejection from `engine.run`
+    // (e.g. a provider 429 before any token, or a setup throw) or a provider
+    // request that hangs forever — the UI would spin the thinking animation
+    // indefinitely with no reply and no error. These watchdogs emit a terminal
+    // error event if the run stalls, so the user always gets a single-line
+    // explanation instead of a stuck chat.
+    let terminalEmitted = false;
+    let firstActivity = false;
+
+    // First-activity watchdog: fail fast with a clear message if the provider
+    // never starts responding (dead/hanging connection, auth wall, or a rate
+    // limit that holds the socket). The core engine also enforces a 45s connect
+    // timeout on the request itself; this is the backstop for stalls that happen
+    // before/around the network call. 60s is generous for slow models but short
+    // enough that the user isn't left staring at a spinner.
+    const FIRST_EVENT_MS = 60_000;
+    firstEventTimer = setTimeout(() => {
+      if (!terminalEmitted && !firstActivity && win && !win.isDestroyed()) {
+        win.webContents.send('agent-event', {
+          type: 'error',
+          sessionId,
+          error: 'The model did not start responding (request timed out). Check the provider connection, API key, and rate limits, then try again.'
+        });
+      }
+      terminalEmitted = true;
+      clearTimeout(terminalWatchdog);
+    }, FIRST_EVENT_MS);
+
+    // Terminal watchdog: backstop for runs that emit activity but never finish
+    // (e.g. a stream that stalls mid-way). Longer because once output is flowing
+    // a genuine long generation can take a while.
+    const TERMINAL_MS = 120_000;
+    terminalWatchdog = setTimeout(() => {
+      if (!terminalEmitted && win && !win.isDestroyed()) {
+        win.webContents.send('agent-event', {
+          type: 'error',
+          sessionId,
+          error: 'The agent stopped responding before finishing. Check the provider connection and try again.'
+        });
+      }
+      terminalEmitted = true;
+      clearTimeout(firstEventTimer);
+    }, TERMINAL_MS);
+
     await engine.run(prompt, (agentEvent: AgentEvent) => {
       // Log the first reply token on the desktop connection (device-tagged).
       if (agentEvent.type === 'token' && !replyLogged) {
@@ -343,15 +417,44 @@ safeHandle('agent-run', async (event, {
           petWindowManager.say(agentEvent.error);
         }
       }
+
+      // Any sign of life stands the first-activity watchdog down.
+      if (
+        agentEvent.type === 'token' || agentEvent.type === 'thought' ||
+        agentEvent.type === 'tool_call' || agentEvent.type === 'context'
+      ) {
+        firstActivity = true;
+        clearTimeout(firstEventTimer);
+      }
+
+      // Mark terminal events so the watchdogs (and the catch below) know the run
+      // finalized cleanly and no synthetic error should be emitted.
+      if (agentEvent.type === 'done' || agentEvent.type === 'error' || agentEvent.type === 'abort') {
+        terminalEmitted = true;
+        clearTimeout(firstEventTimer);
+        clearTimeout(terminalWatchdog);
+      }
     }, currentAttachments);
 
     // Clean up after done/error/abort
+    clearTimeout(firstEventTimer);
+    clearTimeout(terminalWatchdog);
     activeSessions.delete(sessionId);
     return { success: true };
 
   } catch (err: unknown) {
+    clearTimeout(firstEventTimer);
+    clearTimeout(terminalWatchdog);
     activeSessions.delete(sessionId);
-    return { success: false, error: (err as Error).message };
+    const errMsg = (err as Error).message || String(err);
+    // The renderer only stops the "thinking" animation / shows a no-response
+    // reason once it receives a terminal agent-event. If engine.run() rejected
+    // (e.g. provider 429 before any token, a setup throw) without the engine
+    // emitting its own error event, emit one now so the chat never hangs.
+    if (!terminalEmitted && win && !win.isDestroyed()) {
+      win.webContents.send('agent-event', { type: 'error', sessionId, error: errMsg });
+    }
+    return { success: false, error: errMsg };
   }
 });
 

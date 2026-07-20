@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronDown, Copy, ThumbsUp, ThumbsDown, FileText, FolderOpen, Check, Eye, RotateCcw, Edit, RefreshCw } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronLeft, Copy, FileText, FolderOpen, Check, Eye, RotateCcw, Edit, RefreshCw, Trash2 } from 'lucide-react';
 import { TrajectoryService } from '../../logic/trajectory';
 
 /** A single step in the agent execution trajectory. */
@@ -220,14 +220,12 @@ const CopyUserButton: React.FC<{ content: string }> = ({ content }) => {
   );
 };
 
-// ─── Action buttons (copy, thumbs) ────────────────────────────────────────────
+// ─── Action buttons (copy) ────────────────────────────────────────────────────
 interface MessageActionsProps {
   content: string;
-  onThumbsUp?: () => void;
-  onThumbsDown?: () => void;
 }
 
-const MessageActions: React.FC<MessageActionsProps> = ({ content, onThumbsUp, onThumbsDown }) => {
+const MessageActions: React.FC<MessageActionsProps> = ({ content }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -245,20 +243,6 @@ const MessageActions: React.FC<MessageActionsProps> = ({ content, onThumbsUp, on
         className="p-1.5 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-[var(--brand-hover)] transition-all cursor-pointer"
       >
         {copied ? <Check size={13} className="text-[color:var(--neon-constructive)]" /> : <Copy size={13} />}
-      </button>
-      <button
-        onClick={onThumbsUp}
-        title="Good response"
-        className="p-1.5 rounded-md text-brand-textMuted hover:text-[color:var(--neon-constructive)] hover:bg-[color:var(--neon-constructive)]/5 transition-all cursor-pointer"
-      >
-        <ThumbsUp size={13} />
-      </button>
-      <button
-        onClick={onThumbsDown}
-        title="Bad response"
-        className="p-1.5 rounded-md text-brand-textMuted hover:text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/5 transition-all cursor-pointer"
-      >
-        <ThumbsDown size={13} />
       </button>
     </div>
   );
@@ -382,6 +366,186 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
 };
 
 
+// ─── Response history grouping ────────────────────────────────────────────────
+/**
+ * Splits a turn's flat agent steps into separate responses, grouped by their
+ * `metadata.regenerationSeq` (consecutive runs of the same seq = one response).
+ * The canvas renders only the SELECTED response and offers arrow navigation
+ * between alternatives, with an x/n counter.
+ */
+function splitResponses(steps: TrajectoryStep[]): TrajectoryStep[][] {
+  const groups: TrajectoryStep[][] = [];
+  let lastSeq: number | null = null;
+  for (const s of steps) {
+    const seq = s.metadata?.regenerationSeq ?? 0;
+    if (groups.length === 0 || seq !== lastSeq) {
+      groups.push([]);
+      lastSeq = seq;
+    }
+    groups[groups.length - 1].push(s);
+  }
+  return groups;
+}
+
+
+// ─── Turn block (user card + response history) ────────────────────────────────
+interface AgentTurn {
+  userSteps: TrajectoryStep[];
+  agentSteps: TrajectoryStep[];
+}
+
+interface TurnBlockProps {
+  turn: AgentTurn;
+  turnIdx: number;
+  isStreaming: boolean;
+  isLastTurn: boolean;
+  streamingStepId: string | null;
+  onViewDiff?: (file: string, original: string, modified: string) => void;
+  onActionClick?: (action: string, data: any) => void;
+  onUndoStep?: (stepId: string) => void;
+  onEditStep?: (stepId: string, content: string) => void;
+  onRegenerate?: (turnId: string, content: string) => void;
+  lastError?: string;
+  onRetryLast?: () => void;
+  initialExpanded?: boolean;
+}
+
+const TurnBlock: React.FC<TurnBlockProps> = ({
+  turn,
+  turnIdx,
+  isStreaming,
+  isLastTurn,
+  streamingStepId,
+  onViewDiff,
+  onActionClick,
+  onUndoStep,
+  onEditStep,
+  onRegenerate,
+  lastError,
+  onRetryLast,
+  initialExpanded
+}) => {
+  const userContent = turn.userSteps.map((s) => s.content).filter(Boolean).join('\n');
+  const responses = splitResponses(turn.agentSteps);
+  const [selected, setSelected] = useState(Math.max(0, responses.length - 1));
+
+  // Always surface the newest response (e.g. right after a regeneration).
+  useEffect(() => {
+    setSelected(Math.max(0, responses.length - 1));
+  }, [responses.length]);
+
+  const total = responses.length;
+  const current = responses[selected] || [];
+
+  return (
+    <div className="flex flex-col gap-0 items-end">
+      {/* ── User Prompt Bubble (right-aligned, slim card) ─────── */}
+      <div className="flex justify-end w-full mt-1">
+        <div
+          data-testid={`step-user-${turn.userSteps[0]?.id || turnIdx}`}
+          className="relative bg-brand-card/40 backdrop-blur-sm border border-brand-border/50 rounded-xl px-3.5 py-2 max-w-[78%] text-right text-brand-textMain text-[13px] leading-relaxed shadow-sm hover:border-brand-border-strong transition-all font-sans"
+        >
+          {turn.userSteps.map((step, idx) => (
+            <div key={step.id} className={idx > 0 ? 'mt-2.5' : ''}>
+              {step.content && <div>{step.content}</div>}
+
+              {step.metadata?.mediaPath && step.metadata?.mediaType === 'image' && (
+                <LocalImagePreview filePath={step.metadata.mediaPath} />
+              )}
+              {step.metadata?.mediaPath && step.metadata?.mediaType !== 'image' && (
+                <div className="mt-2.5 p-3 bg-brand-popover/80 border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none text-left">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">📄</span>
+                    <span className="text-xs text-brand-textMain font-medium font-sans">
+                      {step.metadata.mediaType!.toUpperCase()} Document
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
+                    className="bg-[var(--brand-hover)] border border-brand-border hover:bg-[var(--brand-hover-strong)] text-brand-textMain px-3 py-1 rounded-lg cursor-pointer text-xs font-semibold transition-all"
+                  >
+                    Open
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── User actions (under the card): Copy · Edit · Delete ──── */}
+      <div className="self-end flex items-center gap-0.5 mt-1 mr-0.5 select-none">
+        <CopyUserButton content={userContent} />
+
+        {onEditStep && (
+          <TrajectoryIconButton
+            title="Edit message"
+            onClick={() => onEditStep(turn.userSteps[0].id, userContent)}
+          >
+            <Edit size={13} />
+          </TrajectoryIconButton>
+        )}
+
+        {onUndoStep && (
+          <TrajectoryIconButton
+            title="Delete prompt and response"
+            danger
+            onClick={() => onUndoStep(turn.userSteps[0].id)}
+          >
+            <Trash2 size={13} />
+          </TrajectoryIconButton>
+        )}
+      </div>
+
+      {/* ── Agent Response Block (selected regeneration) ──────── */}
+      {(current.length > 0 || (isLastTurn && (lastError || !isStreaming))) && (
+        <AgentResponseBlock
+          steps={current}
+          isLastTurn={isLastTurn}
+          streamingStepId={streamingStepId}
+          isStreaming={isStreaming && selected === total - 1}
+          onViewDiff={onViewDiff}
+          onActionClick={onActionClick}
+          lastError={lastError}
+          onRetryLast={onRetryLast}
+          onRegenerate={onRegenerate ? () => onRegenerate(turn.userSteps[0].id, userContent) : undefined}
+          initialExpanded={initialExpanded}
+        />
+      )}
+
+      {/* ── Regeneration history nav (arrows + x/n) ────────────── */}
+      {total > 1 && (
+        <div className="self-start flex items-center gap-1.5 mt-1.5 px-1 text-brand-textMuted select-none">
+          <button
+            type="button"
+            onClick={() => setSelected((s) => Math.max(0, s - 1))}
+            disabled={selected === 0}
+            title="Previous response"
+            aria-label="Previous response"
+            className="p-1 rounded-md border border-brand-border text-brand-textMuted hover:text-brand-textMain hover:bg-[var(--brand-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+          >
+            <ChevronLeft size={13} />
+          </button>
+          <span className="text-[11px] font-mono text-brand-textMain min-w-[28px] text-center tabular-nums">
+            {selected + 1}/{total}
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelected((s) => Math.min(total - 1, s + 1))}
+            disabled={selected === total - 1}
+            title="Next response"
+            aria-label="Next response"
+            className="p-1 rounded-md border border-brand-border text-brand-textMuted hover:text-brand-textMain hover:bg-[var(--brand-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
+          >
+            <ChevronRight size={13} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+
 // ─── Main TrajectoryCanvas ────────────────────────────────────────────────────
 
 /** Props for the TrajectoryCanvas component. */
@@ -397,8 +561,8 @@ export interface TrajectoryCanvasProps {
   lastError?: string;
   /** Re-sends the last user prompt (when the response failed). */
   onRetryLast?: () => void;
-  /** Regenerates the agent's response for the current turn. */
-  onRegenerate?: () => void;
+  /** Regenerates the agent's response for the current turn (turnId + prompt). */
+  onRegenerate?: (turnId: string, content: string) => void;
   children?: React.ReactNode;
   initialExpanded?: boolean;
 }
@@ -492,95 +656,30 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
             onActionClick={onActionClick}
             lastError={lastError}
             onRetryLast={onRetryLast}
-            onRegenerate={onRegenerate}
+            onRegenerate={onRegenerate ? () => onRegenerate('', '') : undefined}
             initialExpanded={initialExpanded}
           />
         )}
 
         {/* Render turns */}
-        {turns.map((turn, turnIdx) => {
-          const userContent = turn.userSteps.map((s) => s.content).filter(Boolean).join('\n');
-          return (
-          <div
+        {turns.map((turn, turnIdx) => (
+          <TurnBlock
             key={turn.userSteps[0]?.id || `turn-${turnIdx}`}
-            className="flex flex-col gap-0 items-end"
-          >
-            {/* ── User Prompt Bubble (right-aligned, slim card) ─────── */}
-            <div className="flex justify-end w-full mt-1">
-              <div
-                data-testid={`step-user-${turn.userSteps[0]?.id || turnIdx}`}
-                className="relative bg-brand-card/40 backdrop-blur-sm border border-brand-border/50 rounded-xl px-3.5 py-2 max-w-[78%] text-right text-brand-textMain text-[13px] leading-relaxed shadow-sm hover:border-brand-border-strong transition-all font-sans"
-              >
-                {turn.userSteps.map((step, idx) => (
-                  <div key={step.id} className={idx > 0 ? 'mt-2.5' : ''}>
-                    {step.content && <div>{step.content}</div>}
-
-                    {step.metadata?.mediaPath && step.metadata?.mediaType === 'image' && (
-                      <LocalImagePreview filePath={step.metadata.mediaPath} />
-                    )}
-                    {step.metadata?.mediaPath && step.metadata?.mediaType !== 'image' && (
-                      <div className="mt-2.5 p-3 bg-brand-popover/80 border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none text-left">
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">📄</span>
-                          <span className="text-xs text-brand-textMain font-medium font-sans">
-                            {step.metadata.mediaType!.toUpperCase()} Document
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
-                          className="bg-[var(--brand-hover)] border border-brand-border hover:bg-[var(--brand-hover-strong)] text-brand-textMain px-3 py-1 rounded-lg cursor-pointer text-xs font-semibold transition-all"
-                        >
-                          Open
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* ── User actions (under the card): Copy · Edit · Undo ──── */}
-            <div className="self-end flex items-center gap-0.5 mt-1 mr-0.5 select-none">
-              <CopyUserButton content={userContent} />
-
-              {onEditStep && (
-                <TrajectoryIconButton
-                  title="Edit message"
-                  onClick={() => onEditStep(turn.userSteps[0].id, userContent)}
-                >
-                  <Edit size={13} />
-                </TrajectoryIconButton>
-              )}
-
-              {onUndoStep && (
-                <TrajectoryIconButton
-                  title="Undo this prompt and response"
-                  danger
-                  onClick={() => onUndoStep(turn.userSteps[0].id)}
-                >
-                  <RotateCcw size={13} />
-                </TrajectoryIconButton>
-              )}
-            </div>
-
-            {/* ── Agent Response Block ───────────────────────────────── */}
-            {turn.agentSteps.length > 0 && (
-              <AgentResponseBlock
-                steps={turn.agentSteps}
-                isLastTurn={turnIdx === turns.length - 1}
-                streamingStepId={streamingStepId}
-                isStreaming={isStreaming && turnIdx === turns.length - 1}
-                onViewDiff={onViewDiff}
-                onActionClick={onActionClick}
-                lastError={lastError}
-                onRetryLast={onRetryLast}
-                onRegenerate={onRegenerate}
-                initialExpanded={initialExpanded}
-              />
-            )}
-          </div>
-          );
-        })}
+            turn={turn}
+            turnIdx={turnIdx}
+            isStreaming={isStreaming}
+            isLastTurn={turnIdx === turns.length - 1}
+            streamingStepId={streamingStepId}
+            onViewDiff={onViewDiff}
+            onActionClick={onActionClick}
+            onUndoStep={onUndoStep}
+            onEditStep={onEditStep}
+            onRegenerate={onRegenerate}
+            lastError={lastError}
+            onRetryLast={onRetryLast}
+            initialExpanded={initialExpanded}
+          />
+        ))}
 
         {/* Streaming dots when agent is thinking but no steps yet in this turn */}
         {isStreaming && turns.length > 0 && turns[turns.length - 1].agentSteps.length === 0 && (
@@ -796,17 +895,20 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
         );
       })}
 
-      {/* If completed but no assistant reply was rendered, show the response failed card */}
-      {assistantSteps.length === 0 && !isStreaming && (
+      {/* If the run ended (or errored) with no assistant reply, show a single
+          line explaining why this prompt got no response. Surfaces on error OR
+          when the run completed without output, so a terminated/failed agent
+          never leaves the user staring at a blank turn. */}
+      {assistantSteps.length === 0 && (lastError || !isStreaming) && (
         <div className="text-[color:var(--neon-destructive)] bg-[color:var(--neon-destructive)]/10 border border-[color:var(--neon-destructive)]/25 px-4 py-3 rounded-xl text-xs select-none max-w-fit flex flex-col gap-2 mt-1 animate-fade-in font-sans">
           <div className="flex items-center gap-2 font-semibold">
             <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-destructive)] animate-pulse" />
-            <span>Agent Response Failed</span>
+            <span>No response for this prompt</span>
           </div>
           {lastError ? (
             <div className="text-[color:var(--neon-destructive)]/90 leading-relaxed">{lastError}</div>
           ) : (
-            <div className="text-brand-textMuted">The agent didn't return a response. Check the provider connection and try again.</div>
+            <div className="text-brand-textMuted">The agent finished without producing a reply. Check the provider connection and try again.</div>
           )}
           {onRetryLast && (
             <button

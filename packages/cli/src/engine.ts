@@ -102,6 +102,26 @@ export class ChatSession {
     this.engine = null;
   }
 
+  /**
+   * Switches the active model/provider WITHOUT resetting conversation history.
+   * If an engine already exists, its live config is updated in place (the core
+   * engine reads config per turn), so the next message uses the new model while
+   * the prior context continues — this is what lets a single session go model
+   * Y → X → Z and keep its memory. If no engine exists yet, it's created lazily
+   * on the next `send` with the new connection.
+   */
+  switchModel(conn: ResolvedConnection): void {
+    this.conn = conn;
+    if (this.engine) {
+      this.engine.updateConfig({
+        provider: conn.provider,
+        apiKey: conn.apiKey || 'missing-api-key',
+        baseUrl: conn.baseUrl || undefined,
+        model: conn.model,
+      });
+    }
+  }
+
   setPermission(permission: PermissionLevel): void {
     this.permission = permission;
     // Recreate so the new sandbox mode takes effect on the next turn.

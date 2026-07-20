@@ -66,6 +66,8 @@ interface WorkspaceViewProps {
   lastError?: string;
   /** Re-sends the last user prompt when the response failed. */
   onRetryLast?: () => void;
+  /** Regenerates the agent's response for a prompt, building per-prompt history. */
+  onRegenerate?: (turnId: string, content: string) => void;
   /** Live context-window usage from the engine (null → UI estimates from steps). */
   contextUsage?: ContextUsage | null;
   /** Context-window limit of the active model (e.g. "128k", "2M") for the
@@ -284,6 +286,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   skills = [],
   lastError,
   onRetryLast,
+  onRegenerate,
   contextUsage,
   activeModelContextLimit,
   onCompact,
@@ -536,7 +539,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         onEditStep={(id, content) => onPromptChange(content)}
         lastError={lastError}
         onRetryLast={onRetryLast}
-        onRegenerate={onRetryLast}
+        onRegenerate={onRegenerate}
         onActionClick={(action, data) => {
           if (action === 'openMedia') {
             WorkspaceService.openMedia(data?.mediaPath, () =>
