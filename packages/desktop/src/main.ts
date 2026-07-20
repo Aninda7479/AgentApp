@@ -532,6 +532,19 @@ safeHandle('store-read', (): StoreData => {
   return readStore();
 });
 
+/**
+ * Reads ONLY one chat's trajectory `steps` from disk. Lets the renderer
+ * lazy-load a conversation's history when it is actually opened, instead of
+ * holding every chat's full steps in RAM forever. The renderer evicts
+ * (drops from memory) the steps of chats it is not currently showing; the
+ * canonical transcript lives on disk, so nothing is lost.
+ */
+safeHandle('chat-steps-read', (_event, chatId: string): unknown => {
+  if (typeof chatId !== 'string' || !chatId) return [];
+  const chat = (readStore().chats ?? []).find((c) => c.id === chatId);
+  return (chat?.steps as unknown) ?? [];
+});
+
 safeHandle('kanban-load', (_event, args: { scope: 'global' | 'project'; projectName?: string }) => {
   const tasksDir = path.join(getUserDataDirectory(), 'tasks');
   let filePath = '';
@@ -578,7 +591,30 @@ safeHandle('kanban-save', (_event, args: { scope: 'global' | 'project'; projectN
 });
 
 safeHandle('store-write', (_event, data: StoreData): void => {
-  writeStore(data);
+  // The renderer keeps only the ACTIVE chat's full trajectory in RAM and
+  // holds every other (dormant) chat metadata-only (steps: []), lazily
+  // re-reading them from disk on open. If we wrote those [] verbatim
+  // we'd erase dormant transcripts, so merge with the on-disk store:
+  // a chat with non-empty steps wins; an empty-steps chat falls back to
+  // its on-disk steps (if any); a brand-new chat with no disk record
+  // keeps its (empty) steps. This keeps the disk transcript authoritative
+  // and lets the renderer drop chats from RAM without data loss.
+  const onDisk = readStore();
+  const diskStepsById = new Map<string, unknown>();
+  for (const c of (onDisk.chats ?? []) as Array<{ id: string; steps?: unknown }>) {
+    if (c.id) diskStepsById.set(c.id, c.steps as unknown);
+  }
+  const mergedData: StoreData = {
+    ...data,
+    chats: ((data.chats ?? []) as unknown as Array<Record<string, unknown>>).map((c) => {
+      const steps = c.steps;
+      if (Array.isArray(steps) && (steps as unknown[]).length > 0) return c as any;
+      const diskSteps = diskStepsById.get(String(c.id));
+      if (diskSteps) return { ...c, steps: diskSteps } as any;
+      return c as any;
+    })
+  };
+  writeStore(mergedData);
 });
 
 safeHandle('settings-read', () => {

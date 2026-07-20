@@ -14,6 +14,40 @@ import type {
   TrajectoryStep
 } from './types';
 
+/**
+ * Residency (LRU) of chat trajectories in RAM. Only the chats the user is
+ * actually looking at keep their (potentially huge) `steps` array in memory;
+ * every other chat is held metadata-only and its steps are lazy-loaded from
+ * disk (`chat-steps-read`) the moment it is opened, then evicted again when
+ * another chat displaces it. The canonical transcript lives on disk, so
+ * eviction never loses data. `RESIDENT_CAP` bounds peak RAM regardless of
+ * how many conversations exist.
+ */
+const RESIDENT_CAP = 2;
+const residentOrder: string[] = [];
+
+/** Drops a chat id from the residency tracker (e.g. when it is deleted). */
+function forgetResident(chatId: string): void {
+  const idx = residentOrder.indexOf(chatId);
+  if (idx !== -1) residentOrder.splice(idx, 1);
+}
+
+/**
+ * Reads a chat's steps: from resident RAM if still held, otherwise via a
+ * lazy `chat-steps-read` IPC call (disk). Returns [] when nothing is found.
+ */
+async function loadSteps(ctx: AppContext, chatId: string): Promise<TrajectoryStep[]> {
+  const resident = ctx.getChats().find((c) => c.id === chatId);
+  if (resident && resident.steps && resident.steps.length > 0) return resident.steps;
+  if (!ctx.ipc) return [];
+  try {
+    const steps = (await ctx.ipc.invoke('chat-steps-read', chatId)) as TrajectoryStep[] | undefined;
+    return steps && Array.isArray(steps) ? steps : [];
+  } catch {
+    return [];
+  }
+}
+
 export class StoreService {
   /**
    * Reads the persisted store from disk (via IPC) and normalizes it: every chat
@@ -58,33 +92,39 @@ export class StoreService {
     const stored = await StoreService.read(ctx.ipc);
 
     ctx.setProjects(stored.projects);
-    ctx.setChats(stored.chats);
     ctx.setConnectedProviders(stored.connectedProviders);
     ctx.setModelsCatalog(stored.modelsCatalog);
 
-    if (stored.projects.length > 0) {
-      const defaultProject = stored.projects[0].name;
-      ctx.setActiveProject(defaultProject);
-
-      const requestedChatId = ctx.getActiveChatId();
-      const matchingChat = requestedChatId && requestedChatId !== 'draft-chat'
+    // Only the ACTIVE chat's steps stay resident; every other chat is held
+    // metadata-only (its steps are re-read from disk on open via
+    // `openChat`). This keeps RAM bounded no matter how many
+    // conversations exist.
+    const requestedChatId = ctx.getActiveChatId();
+    const activeChat =
+      requestedChatId && requestedChatId !== 'draft-chat'
         ? stored.chats.find((c) => c.id === requestedChatId)
         : null;
+    const defaultProject = stored.projects.length > 0 ? stored.projects[0].name : '';
 
-      if (matchingChat) {
-        ctx.setActiveChatId(matchingChat.id);
-        ctx.setTrajectorySteps(matchingChat.steps);
-      } else {
-        ctx.setActiveChatId('draft-chat');
-        ctx.setDraftProject(defaultProject);
-        ctx.setTrajectorySteps([]);
-      }
+    const metaChats = stored.chats.map((c) =>
+      c.id === activeChat?.id ? c : { ...c, steps: [] }
+    );
+    ctx.setChats(metaChats);
+
+    residentOrder.length = 0;
+    if (activeChat) {
+      ctx.setActiveChatId(activeChat.id);
+      ctx.setActiveProject(defaultProject);
+      ctx.setTrajectorySteps(activeChat.steps);
+      residentOrder.push(activeChat.id);
     } else {
       ctx.setActiveChatId('draft-chat');
-      ctx.setDraftProject('');
+      ctx.setActiveProject(defaultProject);
+      ctx.setDraftProject(defaultProject);
       ctx.setTrajectorySteps([]);
     }
 
+    // Persist the full store as-is so the on-disk transcript stays complete.
     ctx.persistStore(stored.connectedProviders, stored.modelsCatalog, stored.projects, stored.chats);
 
     return {
@@ -93,6 +133,46 @@ export class StoreService {
       finalProjects: stored.projects,
       finalChats: stored.chats
     };
+  }
+
+  /**
+   * Opens a chat for viewing: lazy-loads its trajectory steps from disk (if
+   * not already resident), pushes them to the live canvas, and EVICTS the
+   * least-recently-used resident chat's steps from RAM (it stays on disk).
+   * This is the "load when needed, offload when done" path — the renderer
+   * holds at most `RESIDENT_CAP` chats' full steps at once instead of all
+   * of them forever.
+   */
+  static async openChat(
+    ctx: AppContext,
+    chatId: string,
+    opts?: { setTab?: boolean }
+  ): Promise<void> {
+    const steps = await loadSteps(ctx, chatId);
+
+    const order = residentOrder.filter((id) => id !== chatId);
+    let nextChats = ctx.getChats();
+
+    // Evict the LRU resident chat (oldest) by dropping its steps from the
+    // in-memory chat list. Its transcript remains on disk, so nothing is lost.
+    if (order.length >= RESIDENT_CAP) {
+      const evictId = order.shift() as string;
+      nextChats = nextChats.map((c) => (c.id === evictId ? { ...c, steps: [] } : c));
+    }
+    order.push(chatId);
+    residentOrder.length = 0;
+    residentOrder.push(...order);
+
+    nextChats = nextChats.map((c) => (c.id === chatId ? { ...c, steps } : c));
+
+    ctx.setChats(nextChats);
+    ctx.setTrajectorySteps(steps);
+    ctx.setActiveChatId(chatId);
+    const meta = ctx.getChats().find((c) => c.id === chatId);
+    if (meta?.project) ctx.setActiveProject(meta.project);
+    if (opts?.setTab) ctx.setActiveTab('trajectory');
+    ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), nextChats);
+    return;
   }
 
   /**

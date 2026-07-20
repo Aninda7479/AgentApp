@@ -974,9 +974,26 @@ export const App: React.FC = () => {
       return;
     }
     const chat = chats.find((c) => c.id === activeChatId);
-    if (chat) {
+    // Prefer resident (still-held-in-RAM) steps. Dormant chats now carry
+    // steps: [] in the array (offloaded to disk), so fall back to a lazy
+    // disk read so a chat switched outside openChat() still shows its
+    // history instead of a blank canvas.
+    if (chat && chat.steps && chat.steps.length > 0) {
       setTrajectorySteps(chat.steps);
+      return;
     }
+    let cancelled = false;
+    if (ipc) {
+      ipc
+        .invoke('chat-steps-read', activeChatId)
+        .then((steps: unknown) => {
+          if (!cancelled) setTrajectorySteps(Array.isArray(steps) ? (steps as []) : []);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
   }, [activeChatId]);
 
   // ── Sandbox permission prompts (user-in-the-loop) ───────────────────────

@@ -48,6 +48,61 @@ export class AgentStreamService {
     partnersRef: { current: PartnerController },
     onContext?: (usage: { used: number; limit: number; pct: number }) => void
   ): (event: unknown, agentEvent: AgentEvent) => void {
+    // ── Streaming flush throttle ─────────────────────────────────────────────
+    // The original code called `updateChatSteps` on EVERY token, which
+    // re-allocates the entire `chats` array + the entire `steps` array per
+    // call — thousands of full-array allocations per fast (Ollama) reply.
+    // The `persist: false` flag only skipped the *disk* write; the
+    // in-memory O(n²) churn (and the resulting GC pressure → multi-GB RSS)
+    // still happened on every token. We now buffer deltas in the streaming
+    // refs and commit to React state on a single throttled flush (~100 ms),
+    // so a reply produces a handful of allocations instead of thousands.
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    let dirtySinceFlush = false;
+
+    const flushPending = (): void => {
+      if (!dirtySinceFlush) return;
+      dirtySinceFlush = false;
+      const targetChatId = streaming.chatIdRef.current;
+      if (!targetChatId) return;
+      const buffer = streaming.bufferRef.current;
+      const currentStepId = streaming.stepIdRef.current;
+      // Guard: never synthesize an empty assistant step from a cleared/stale buffer.
+      if (!currentStepId && !buffer) return;
+      StoreService.updateChatSteps(
+        ctx,
+        targetChatId,
+        (prev) => {
+          if (currentStepId) {
+            return prev.map((s) => (s.id === currentStepId ? { ...s, content: buffer } : s));
+          }
+          const newStepId = `stream-assistant-${Date.now()}`;
+          streaming.stepIdRef.current = newStepId;
+          const newStep: TrajectoryStep = {
+            id: newStepId,
+            type: 'assistant',
+            content: buffer,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            metadata: {
+              workedDuration: FormatService.formatWorkedDuration(
+                Date.now() - (ctx.getChats().find((c) => c.id === targetChatId)?.startedAt || Date.now())
+              )
+            }
+          };
+          return [...prev, newStep];
+        },
+        false
+      );
+    };
+
+    const scheduleFlush = (): void => {
+      if (flushTimer) return;
+      flushTimer = setTimeout(() => {
+        flushTimer = null;
+        flushPending();
+      }, 100);
+    };
+
     return (_event: unknown, agentEvent: AgentEvent) => {
       const chatId = streaming.chatIdRef.current;
       if (!chatId) return;
@@ -65,34 +120,13 @@ export class AgentStreamService {
         onContext(agentEvent.context);
       }
 
-      // ── token: append to the streaming buffer, update (or create) the assistant step ──
+      // ── token: append to the streaming buffer, mark dirty, schedule a
+      // single throttled React-state flush (see flushPending above). The actual
+      // `updateChatSteps` only runs on the ~100ms tick, not per token.
       if (agentEvent.type === 'token') {
         streaming.bufferRef.current += agentEvent.content || '';
-        const currentStepId = streaming.stepIdRef.current;
-        // persist=false: update in-memory/live state only. Serializing the whole
-        // store to disk on every token is an O(n²) memory/IO storm (it drove the
-        // renderer to multi-GB RSS on fast local providers like Ollama). The final
-        // steps are flushed once on the terminal done/error/abort event below, and
-        // the canonical transcript is persisted independently in the main process.
-        StoreService.updateChatSteps(ctx, chatId, (prev) => {
-          if (currentStepId) {
-            return prev.map((s) => (s.id === currentStepId ? { ...s, content: streaming.bufferRef.current } : s));
-          }
-          const newStepId = `stream-assistant-${Date.now()}`;
-          streaming.stepIdRef.current = newStepId;
-          const newStep: TrajectoryStep = {
-            id: newStepId,
-            type: 'assistant',
-            content: streaming.bufferRef.current,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            metadata: {
-              workedDuration: FormatService.formatWorkedDuration(
-                Date.now() - (ctx.getChats().find((c) => c.id === chatId)?.startedAt || Date.now())
-              )
-            }
-          };
-          return [...prev, newStep];
-        }, false);
+        dirtySinceFlush = true;
+        scheduleFlush();
       }
 
       // ── tool_call: append a "running" tool step to the trajectory ──
@@ -131,6 +165,12 @@ export class AgentStreamService {
 
       // ── done / error / abort: finalize the chat (worked duration, not-running) ──
       if (agentEvent.type === 'done' || agentEvent.type === 'error' || agentEvent.type === 'abort') {
+        // Commit any pending token flush right now so the final state is exact.
+        if (flushTimer) {
+          clearTimeout(flushTimer);
+          flushTimer = null;
+        }
+        flushPending();
         const chat = ctx.getChats().find((c) => c.id === chatId);
         const workedDuration = FormatService.formatWorkedDuration(Date.now() - (chat?.startedAt || Date.now()));
         StoreService.updateChatRecord(ctx, chatId, (current) => ({
