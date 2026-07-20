@@ -40,6 +40,7 @@ export const ALLOWED_CHANNELS = new Set<string>([
   // media / transcription / whisper
   'media-transcribe',
   'whisper-local-status',
+  'whisper-local-progress',
   'whisper-local-download',
   'whisper-local-delete',
   'whisper-local-setdir',
