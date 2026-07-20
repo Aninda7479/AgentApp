@@ -296,7 +296,12 @@ safeHandle('agent-run', async (event, {
                 fs.mkdirSync(projectDataDir, { recursive: true });
               }
               const configFilePath = path.join(projectDataDir, 'chat_config.json');
-              fs.writeFileSync(configFilePath, JSON.stringify({ chatName }, null, 2), 'utf8');
+              const { apiKey, requestApproval, extraTools, ...safeConfig } = finalConfig;
+              fs.writeFileSync(
+                configFilePath,
+                JSON.stringify({ chatName, ...safeConfig }, null, 2),
+                'utf8'
+              );
               console.log(`[desktop] Saved chat config to ${configFilePath}`);
             } catch (fsErr) {
               console.error('[desktop] Failed to write chat_config.json:', fsErr);
@@ -392,7 +397,7 @@ safeHandle('agent-run', async (event, {
         console.log(`[desktop] message RECEIVED — connection device: ${DEVICE_NAME} | session: ${sessionId}`);
       }
       if (win && !win.isDestroyed()) {
-        win.webContents.send('agent-event', agentEvent);
+        win.webContents.send('agent-event', { ...agentEvent, sessionId });
         // Relay to the free-roaming 3D Partner so it reacts in real time.
         const petMood = petWindowManager.moodFromAgentEvent(agentEvent.type);
         if (petMood) petWindowManager.setMood(petMood);

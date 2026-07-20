@@ -154,15 +154,33 @@ function check(channel: string): string {
   return channel;
 }
 
+const listenersMap = new WeakMap<(...args: any[]) => void, (...args: any[]) => void>();
+
 /**
  * `on` strips the Electron event object before invoking the renderer listener
- * (the raw event exposes `sender`/ipcRenderer, which must never leak) and
- * returns an unsubscribe function for clean teardown.
+ * (the raw event exposes `sender`/ipcRenderer, which must never leak). To maintain
+ * parameter-index compatibility with listeners defined as `(event, payload) => void`,
+ * we pass `null` as the first argument, and then forward the payload.
+ * Returns an unsubscribe function for clean teardown.
  */
 function subscribe(channel: string, listener: (...args: any[]) => void): () => void {
-  const wrapped = (_event: IpcRendererEvent, ...args: any[]) => listener(...args);
+  const wrapped = (_event: IpcRendererEvent, ...args: any[]) => listener(null, ...args);
+  listenersMap.set(listener, wrapped);
   ipcRenderer.on(check(channel), wrapped);
-  return () => ipcRenderer.off(check(channel), wrapped);
+  return () => {
+    ipcRenderer.off(check(channel), wrapped);
+    listenersMap.delete(listener);
+  };
+}
+
+function unsubscribe(channel: string, listener: (...args: any[]) => void): void {
+  const wrapped = listenersMap.get(listener);
+  if (wrapped) {
+    ipcRenderer.off(check(channel), wrapped);
+    listenersMap.delete(listener);
+  } else {
+    ipcRenderer.off(check(channel), listener);
+  }
 }
 
 const api = {
@@ -176,7 +194,7 @@ const api = {
     on: (channel: string, listener: (...args: any[]) => void): (() => void) =>
       subscribe(channel, listener),
     off: (channel: string, listener: (...args: any[]) => void): void => {
-      ipcRenderer.off(check(channel), listener);
+      unsubscribe(channel, listener);
     },
   },
   // Privileged helpers — implemented as IPC handlers in main.ts (sender-validated).
