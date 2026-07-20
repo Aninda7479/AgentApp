@@ -59,7 +59,7 @@ function Write-Log {
 }
 
 if (Test-Path $PauseFile) {
-    Write-Log "paused (found $PauseFile) — skipping cycle"
+    Write-Log "paused (found $PauseFile) - skipping cycle"
     exit 0
 }
 
@@ -77,7 +77,7 @@ if ($LASTEXITCODE -eq 0) {
 
 $dirty = git status --porcelain
 if ($dirty) {
-    Write-Log "Working tree dirty — skipping cycle"
+    Write-Log "Working tree dirty - skipping cycle"
     exit 0
 }
 
@@ -88,7 +88,7 @@ if ($saCmd) {
     Write-Log "Running via SuperAgent CLI (provider=$SaProvider, model=$SaModel)"
     & superagent --provider $SaProvider --model $SaModel -p $Skill *>&1 | Tee-Object -FilePath $RunLog
 } else {
-    Write-Log "superagent CLI not found — falling back to claude CLI"
+    Write-Log "superagent CLI not found - falling back to claude CLI"
     & claude -p $Skill --allowedTools "Read,Grep,Glob,Edit,Write,Bash,WebSearch,WebFetch,TodoWrite" --permission-mode acceptEdits --output-format json *>&1 | Tee-Object -FilePath $RunLog
 }
 
@@ -102,7 +102,7 @@ if ($newCommits) {
     $Commits = $newCommits | Select-Object -First 10 | Out-String
 
     $PrBody = @"
-## [AutoLoop:SA] $SkillName — $(Get-Date -Format 'yyyy-MM-dd')
+## [AutoLoop:SA] $SkillName - $(Get-Date -Format 'yyyy-MM-dd')
 
 > Run by SuperAgent CLI (self-hosting autonomous improvement).
 > Provider: $SaProvider | Model: $SaModel
@@ -121,21 +121,21 @@ $LatestLog
 - [ ] Read diff
 - [ ] Research sources verified
 - [ ] No secrets committed
-- [ ] Merge → ``$BaseBranch`` when satisfied
+- [ ] Merge -&gt; ``$BaseBranch`` when satisfied
 "@
     $PrBodyFile = ".claude\pr-body-latest.md"
     $PrBody | Set-Content -Path $PrBodyFile -Encoding UTF8
 
     if ($AutoCreatePr -and (Get-Command "gh" -ErrorAction SilentlyContinue)) {
         try {
-            gh pr create --draft --base $BaseBranch --head $CycleBranch --title "[AutoLoop:SA] $SkillName — $(Get-Date -Format 'yyyy-MM-dd')" --body-file $PrBodyFile --label "auto-generated" 2>> $DriverLog
-            Write-Log "Draft PR created → $BaseBranch"
+            gh pr create --draft --base $BaseBranch --head $CycleBranch --title "[AutoLoop:SA] $SkillName - $(Get-Date -Format 'yyyy-MM-dd')" --body-file $PrBodyFile --label "auto-generated" 2>> $DriverLog
+            Write-Log "Draft PR created -&gt; $BaseBranch"
         } catch {
-            Write-Log "gh pr create failed — branch pushed"
+            Write-Log "gh pr create failed - branch pushed"
         }
     }
 } else {
-    Write-Log "No new commits — cleaning up branch"
+    Write-Log "No new commits - cleaning up branch"
     git checkout $BaseBranch 2>$null
     git branch -D $CycleBranch 2>$null
 }
