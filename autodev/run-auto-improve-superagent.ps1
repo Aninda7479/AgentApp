@@ -20,9 +20,17 @@ $ErrorActionPreference = "Stop"
 $EnvFile = Join-Path $PSScriptRoot "superagent-auto-improve.env"
 if (Test-Path $EnvFile) {
     Get-Content $EnvFile | ForEach-Object {
-        if ($_ -match '^\s*([^#][^=]+)=(.*)$') {
+        if ($_ -match '^\s*([^#=][^=]*)=(.+)$') {
             $key = $Matches[1].Trim()
-            $val = $Matches[2].Trim().Trim('"').Trim("'")
+            # REPO_DIR is derived from this script's location; ignore any .env value for it
+            if ($key -eq 'REPO_DIR') { return }
+            $val = $Matches[2].Trim()
+            # Strip an inline comment (first '#' outside of quotes)
+            if ($val -notmatch '^[''"]') {
+                $ci = $val.IndexOf('#')
+                if ($ci -ge 0) { $val = $val.Substring(0, $ci) }
+            }
+            $val = $val.Trim().Trim('"').Trim("'")
             if (-not (Test-Path "env:$key")) {
                 [System.Environment]::SetEnvironmentVariable($key, $val, "Process")
             }
@@ -30,7 +38,15 @@ if (Test-Path $EnvFile) {
     }
 }
 
-$RepoDir      = if ($env:REPO_DIR) { $env:REPO_DIR } else { throw "Set REPO_DIR env var to the AgentApp repo path." }
+# REPO_DIR is auto-detected from this script's location (autodev/ -> repo root),
+# so the loop works no matter where the repo is cloned. It only falls back to an
+# explicit $env:REPO_DIR when the script is not run from inside the repo.
+$RepoRoot = Split-Path $PSScriptRoot
+if (Test-Path (Join-Path $RepoRoot ".git")) {
+    $RepoDir = $RepoRoot
+} else {
+    $RepoDir = if ($env:REPO_DIR) { $env:REPO_DIR } else { throw "Run from inside the AgentApp repo, or set the REPO_DIR env var." }
+}
 $BaseBranch   = if ($env:BASE_BRANCH) { $env:BASE_BRANCH } else { "agent-development" }
 $Skill        = if ($env:SKILL) { $env:SKILL } else { "/auto-improve" }
 $BranchPrefix = if ($env:BRANCH_PREFIX) { $env:BRANCH_PREFIX } else { "auto" }
