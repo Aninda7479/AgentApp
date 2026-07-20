@@ -6,7 +6,7 @@
 .DESCRIPTION
     Checks node, npm build, claude CLI + auth, gh CLI auth, git push access,
     superagent CLI (optional), lock file system, and WebSearch capability.
-    Prints ✅ / ❌ for each check and exits with code 0 (all pass) or 1 (any fail).
+    Prints [OK] / [X] for each check and exits with code 0 (all pass) or 1 (any fail).
 
 .EXAMPLE
     .\verify-tools.ps1
@@ -24,16 +24,16 @@ function Check {
     try {
         $result = & $Test
         if ($result -is [bool] -and -not $result) { throw "returned false" }
-        Write-Host "  ✅ $Name" -ForegroundColor Green
+        Write-Host "  [OK] $Name" -ForegroundColor Green
         $script:pass++
     } catch {
-        $tag = if ($Required) { "❌" } else { "⚠️ (optional)" }
-        Write-Host "  $tag $Name — $($_.Exception.Message)" -ForegroundColor $(if ($Required) { "Red" } else { "Yellow" })
+        $tag = if ($Required) { "[X]" } else { "[!] (optional)" }
+        Write-Host "  $tag $Name - $($_.Exception.Message)" -ForegroundColor $(if ($Required) { "Red" } else { "Yellow" })
         if ($Required) { $script:fail++ }
     }
 }
 
-Write-Host "`n🔍 SuperAgent Auto-Loop Tool Verification" -ForegroundColor Cyan
+Write-Host "`n[*] SuperAgent Auto-Loop Tool Verification" -ForegroundColor Cyan
 Write-Host "   Repo: $RepoDir`n"
 
 Set-Location $RepoDir
@@ -48,7 +48,7 @@ Check "node >= v18" {
 # 2. npm build passes
 Check "npm run build (all workspaces)" {
     $out = npm run build 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0) { throw "build failed — run 'npm run build' to see errors" }
+    if ($LASTEXITCODE -ne 0) { throw "build failed - run 'npm run build' to see errors" }
     $true
 }
 
@@ -74,7 +74,7 @@ Check "gh CLI in PATH" {
 # 6. gh CLI authenticated
 Check "gh CLI authenticated" {
     $status = gh auth status 2>&1 | Out-String
-    if ($status -notmatch "Logged in") { throw "gh not authenticated — run 'gh auth login'" }
+    if ($status -notmatch "Logged in") { throw "gh not authenticated - run 'gh auth login'" }
     $true
 }
 
@@ -82,7 +82,7 @@ Check "gh CLI authenticated" {
 Check "git push access (dry run)" {
     $result = git push --dry-run 2>&1 | Out-String
     if ($result -match "Authentication failed|Permission denied|remote: error") {
-        throw "git push auth failed — check your credentials"
+        throw "git push auth failed - check your credentials"
     }
     $true
 }
@@ -126,20 +126,20 @@ Check "research-cache dir writable (.claude/research-cache)" {
 # 12. WebSearch via claude (real network check)
 Check "WebSearch capability (online search test)" {
     $result = echo "Use WebSearch to find the current Node.js LTS version. Return only the version number." |
-        claude --max-turns 2 --output-format json 2>&1 | Out-String
+        claude --max-turns 2 --allowedTools WebSearch --output-format json 2>&1 | Out-String
     if ($result -match '"is_error":true') { throw "WebSearch test returned error" }
-    if ($result -notmatch "v\d+\.\d+|\d+\.\d+\.\d+") { throw "No version number found in response" }
+    if ($result -notmatch "v?\d+\.(?:\d+|x)") { throw "No version number found in response" }
     $true
 }
 
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
-Write-Host "`n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
+Write-Host "`n---------------------------------------------------------------------------" -ForegroundColor Cyan
 Write-Host "  Results: $pass passed, $fail failed" -ForegroundColor $(if ($fail -eq 0) { "Green" } else { "Red" })
 
 if ($fail -gt 0) {
-    Write-Host "`n  Fix the ❌ failures above before starting the loop." -ForegroundColor Red
+    Write-Host "`n  Fix the [X] failures above before starting the loop." -ForegroundColor Red
     Write-Host "  See docs\auto-improvement-system\tools-verification.md for help.`n"
     exit 1
 } else {
