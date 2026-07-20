@@ -76,7 +76,7 @@ export const VoiceIndicator: React.FC = () => {
         const arrayBuffer = await audioBlob.arrayBuffer();
         
         // Ship bytes back to main process for Whisper transcription
-        ipc('voice-daemon-audio-captured', { buffer: arrayBuffer });
+        ipc.send('voice-daemon-audio-captured', { buffer: arrayBuffer });
         
         // Stop all audio track streams
         stream.getTracks().forEach((track) => track.stop());
@@ -89,7 +89,7 @@ export const VoiceIndicator: React.FC = () => {
       setState('done');
       setErrorMsg('Microphone access denied');
       setTimeout(() => setState(null), 1500);
-      ipc('voice-recording-failed', err.message || String(err));
+      ipc.send('voice-recording-failed', err.message || String(err));
     }
   };
 

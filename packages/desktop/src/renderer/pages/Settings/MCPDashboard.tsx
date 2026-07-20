@@ -3,6 +3,7 @@ import { Button, Input, Select, Toggle } from '../../components/ui';
 import { Terminal, Globe, Sparkles, Plus, RefreshCw, Server, Trash2, Search } from 'lucide-react';
 import { McpInstallModal } from './McpInstallModal';
 import { McpService } from '../../logic/mcp';
+import { EmptyState } from '../../components/EmptyState';
 
 /** Information about a connected MCP server. */
 export interface MCPServerInfo {
@@ -367,14 +368,15 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
           </div>
 
           {visibleCatalog.length === 0 ? (
-            <div
-              data-testid="mcp-catalog-empty"
-              className="rounded-xl border border-dashed border-brand-border bg-brand-card px-6 py-8 text-center text-xs text-brand-textMuted"
-            >
-              {catalogQuery.trim()
-                ? `No MCP servers match “${catalogQuery}”.`
-                : 'All listed servers are already installed.'}
-            </div>
+            <EmptyState
+              testid="mcp-catalog-empty"
+              title={catalogQuery.trim() ? 'No matches' : 'All installed'}
+              message={
+                catalogQuery.trim()
+                  ? `No MCP servers match “${catalogQuery}”.`
+                  : 'All listed servers are already installed.'
+              }
+            />
           ) : (
             <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
               {visibleCatalog.map((entry) => (
@@ -404,12 +406,11 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
         {servers.length > 0 && <span className="ui-label ml-auto">{servers.length} configured</span>}
       </div>
       {servers.length === 0 ? (
-        <div
-          data-testid="mcp-empty-state"
-          className="rounded-xl border border-dashed border-brand-border bg-brand-card px-6 py-10 text-center text-xs text-brand-textMuted"
-        >
-          No MCP servers registered yet. Install a popular server above or click "Add Server".
-        </div>
+        <EmptyState
+          testid="mcp-empty-state"
+          title="No servers connected"
+          message="No MCP servers registered yet. Install a popular server above or click “Add Server”."
+        />
       ) : (
         <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
           {servers.map((srv) => (

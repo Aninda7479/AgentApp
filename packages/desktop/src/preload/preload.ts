@@ -123,6 +123,25 @@ export const ALLOWED_CHANNELS = new Set<string>([
   // privileged ops routed through main (see main.ts handlers)
   'shell-open-path',
   'loop-read',
+  // ── main → renderer EVENT channels (renderer subscribes via ipc.on) ──
+  // These are emitted by the main process and received by the renderer; the
+  // allowlist gates `on`/`off` too, so they must be listed or subscriptions
+  // throw and white-screen the UI.
+  'agent-event',
+  'agent-permission-request',
+  'app-error',
+  'circle-search-window-shown',
+  'circle-search-stream-chunk',
+  'pet-running',
+  'pet-behavior',
+  'pet-context',
+  'pet-mood',
+  'pet-partner',
+  'voice-daemon-event',
+  'voice-daemon-inject',
+  // fire-and-forget sends from the renderer with no main-side handler
+  'voice-recording-failed',
+  'circle-search-hide',
 ]);
 
 function check(channel: string): string {

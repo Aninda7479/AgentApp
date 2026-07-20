@@ -175,13 +175,13 @@ if (targetPlatform === 'mac') {
 }
 // NOTE: the three.js addons (OrbitControls, GLTFLoader, RoomEnvironment) are
 // intentionally NOT required here — bundle-renderer.mjs inlines them into
-// dist/renderer/entry.js / dist/pet/entry.js, so they don't need to ship in
-// node_modules (and electron-builder would prune them anyway).
+// dist/renderer/entry.bundle.js / dist/pet/entry.bundle.js, so they don't need
+// to ship in node_modules (and electron-builder would prune them anyway).
 const required = [
   'dist/main.js',
   'dist/ui.html',
-  'dist/renderer/entry.js',
-  'dist/pet/entry.js',
+  'dist/renderer/entry.bundle.js',
+  'dist/pet/entry.bundle.js',
   'dist/index.css',
   'node_modules/react/package.json',
   'node_modules/lucide-react/package.json',

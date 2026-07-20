@@ -88,7 +88,7 @@ function assertSender(event: IpcMainInvokeEvent | IpcMainEvent): void {
   if (!url.startsWith('file://')) {
     throw new Error('rejected IPC from non-file sender: ' + url);
   }
-  if (!/(^|\/)(ui|pet|circle-search)\.html($|\?)/.test(url)) {
+  if (!/(^|\/)(ui|pet|circle-search)\.html([?#].*)?$/.test(url)) {
     throw new Error('rejected IPC from unexpected local page: ' + url);
   }
 }

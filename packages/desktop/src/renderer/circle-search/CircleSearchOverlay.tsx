@@ -65,7 +65,7 @@ export const CircleSearchOverlay: React.FC = () => {
   }, []);
 
   const handleDismiss = () => {
-    ipc('circle-search-hide');
+    ipc.send('circle-search-hide');
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -148,7 +148,7 @@ export const CircleSearchOverlay: React.FC = () => {
       // 2. Invoke main process query stream handler
       if (ipc) {
         // We will receive streaming progress back
-        ipc('circle-search-submit', {
+        ipc.send('circle-search-submit', {
           query: query.trim(),
           image: croppedBase64,
         });

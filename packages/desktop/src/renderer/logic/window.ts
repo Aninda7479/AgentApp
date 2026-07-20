@@ -14,7 +14,7 @@ export class WindowService {
     const ipc = getIpc();
     if (ipc) {
       try {
-        ipc(`window-${action}`);
+        ipc.send(`window-${action}`);
       } catch (e) {
         console.warn(`Window control ${action} failed outside Electron`, e);
       }

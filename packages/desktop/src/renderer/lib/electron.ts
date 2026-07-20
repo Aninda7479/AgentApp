@@ -50,33 +50,62 @@ function legacyRequireShim(): { ipcRenderer: any } | null {
 }
 
 /**
- * Resolves the active IPC surface as an `ipcRenderer`-like object (so existing
- * `ipc.invoke(...)` / `ipc.on(...)` call sites keep working). Prefers the
- * preload bridge; falls back to the legacy `window.require` shape. Returns null
- * when Electron is genuinely unavailable (pure web host).
+ * Resolves the active IPC surface as a DUAL value (so BOTH call-site styles
+ * keep working):
+ *   - callable: `ipc(channel, listenerFn)` registers a listener (on) and returns
+ *     an unsubscribe fn; `await ipc(channel, ...args)` performs an invoke.
+ *     This preserves the legacy `ipcRenderer(channel, ...)` convention still
+ *     used by several components (VoiceIndicator, CircleSearchOverlay,
+ *     PartnerOverlay, PetControls, companion/library, logic/window).
+ *   - object: `ipc.invoke / ipc.send / ipc.on / ipc.off / ipc.removeListener`
+ *     for the newer call sites (App.tsx, etc.).
+ * Prefers the preload bridge; falls back to the legacy `window.require` shape.
+ * Returns null when Electron is genuinely unavailable (pure web host).
  */
 export function getIpc(): any | null {
   const api = superagent();
   if (api) {
-    return {
-      invoke: (ch: string, ...a: any[]) => api.ipc.invoke(ch, ...a),
-      send: (ch: string, ...a: any[]) => api.ipc.send(ch, ...a),
-      on: (ch: string, fn: (...a: any[]) => void) => api.ipc.on(ch, fn),
-      off: (ch: string, fn: (...a: any[]) => void) => api.ipc.off(ch, fn),
-      // Aliases used by some call sites.
-      removeListener: (ch: string, fn: (...a: any[]) => void) => api.ipc.off(ch, fn),
-      removeAllListeners: (_ch?: string) => {
-        /* no-op: renderer can't clear main-side listeners */
-      },
-      // Direct accessors for callers that prefer them.
-      get shell() {
-        return { openPath: (p: string) => api.shell.openPath(p) };
-      },
-    };
+    const bridge = makeIpcBridge(api.ipc, api.shell);
+    return bridge;
   }
   // Legacy path (nodeIntegration still on / web shim).
   const legacy = legacyRequireShim();
-  return legacy ? legacy.ipcRenderer : null;
+  return legacy ? makeIpcBridge(legacy.ipcRenderer) : null;
+}
+
+/**
+ * Builds the dual callable+object IPC bridge around a surface that exposes
+ * `{ invoke, send, on, off }` (the preload `api.ipc` or a raw `ipcRenderer`).
+ */
+function makeIpcBridge(
+  surface: { invoke: (...a: any[]) => any; send: (...a: any[]) => any; on: (...a: any[]) => any; off: (...a: any[]) => any },
+  shell?: { openPath: (targetPath: string) => Promise<string> }
+): any {
+  // Crash-safe invoke (mirrors the wrapper used by the top-level `invoke` export):
+  // IPC errors resolve to null instead of throwing and white-screening the UI.
+  const safeInvoke = wrapInvoke((ch: string, ...a: any[]) => surface.invoke(ch, ...a));
+
+  const bridge: any = (channel: string, ...args: any[]) => {
+    // A function argument means "register a listener" (legacy ipcRenderer.on).
+    const fn = args.find((a) => typeof a === 'function');
+    if (fn) return surface.on(channel, fn);
+    // Otherwise treat it as an invoke (returns a promise).
+    return safeInvoke(channel, ...args);
+  };
+
+  bridge.invoke = safeInvoke;
+  bridge.send = (ch: string, ...a: any[]) => surface.send(ch, ...a);
+  bridge.on = (ch: string, fn: (...a: any[]) => void) => surface.on(ch, fn);
+  bridge.off = (ch: string, fn: (...a: any[]) => void) => surface.off(ch, fn);
+  // Aliases used by some call sites.
+  bridge.removeListener = (ch: string, fn: (...a: any[]) => void) => surface.off(ch, fn);
+  bridge.removeAllListeners = (_ch?: string) => {
+    /* no-op: renderer can't clear main-side listeners */
+  };
+  if (shell) {
+    bridge.shell = shell;
+  }
+  return bridge;
 }
 
 /** True when running inside the Electron shell (preload bridge present). */

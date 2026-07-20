@@ -549,8 +549,41 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
             {/* Glow blob */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[360px] h-[360px] bg-brand-textMuted/5 rounded-full blur-[90px] pointer-events-none" />
 
+            {/* Layered-atmosphere backdrop — echoes the BrandLogo's flat depth bands
+                (Atmosphere mode): the single focal disc floats above calm, deepening
+                silhouettes. Theme-adaptive via the --brand-atmo-* tokens so it reads on
+                both dark and light canvas without harming text contrast. Purely
+                decorative; no layout impact, no motion (calm, reduced-motion safe). */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-[46%] overflow-hidden"
+            >
+              <svg
+                viewBox="0 0 320 120"
+                preserveAspectRatio="none"
+                className="h-full w-full"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                {/* Soft accent glow settling behind the focal disc */}
+                <ellipse cx="160" cy="34" rx="150" ry="58" style={{ fill: 'var(--brand-atmo-glow)' }} />
+                {/* Depth bands, back → front, flat and calm */}
+                <path
+                  d="M0 66 C58 56 112 63 170 57 C228 51 282 60 320 55 L320 120 L0 120 Z"
+                  style={{ fill: 'var(--brand-atmo-1)' }}
+                />
+                <path
+                  d="M0 82 C66 72 124 80 182 74 C240 68 292 78 320 72 L320 120 L0 120 Z"
+                  style={{ fill: 'var(--brand-atmo-2)' }}
+                />
+                <path
+                  d="M0 98 C60 90 122 96 182 92 C246 88 300 96 320 92 L320 120 L0 120 Z"
+                  style={{ fill: 'var(--brand-atmo-3)' }}
+                />
+              </svg>
+            </div>
+
             {/* Brand emblem — the single focal motif of the empty state */}
-            <div className="relative mb-5 flex justify-center">
+            <div className="relative z-10 mb-5 flex justify-center">
               <div className="opacity-95 drop-shadow-[0_8px_24px_rgba(0,0,0,0.22)]">
                 <BrandLogo size={46} variant="glyph" />
               </div>

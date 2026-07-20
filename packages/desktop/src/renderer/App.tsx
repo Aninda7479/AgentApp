@@ -24,6 +24,7 @@ import { ProjectSettingsPage } from './pages/Workspace/ProjectSettingsPage';
 import { StandaloneChatPage } from './pages/Workspace/StandaloneChatPage';
 import { builtinSuggestions, SkillInfo } from './components/slashCommands';
 import { BottomNav } from './components/BottomNav';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { usePartners } from './pages/Settings/companion/library';
 import { PartnerOverlay } from './partner-popup/PartnerOverlay';
 import { ThreeDStudio } from './pages/Studio/ThreeDStudio';
@@ -66,6 +67,21 @@ import type { ContextUsage } from './logic/context';
  * single `AppContext` (the bridge those classes call) and delegates every unit
  * of behavior to them, so the design code stays free of logic.
  */
+/**
+ * Human-readable label per top-level tab, used by the per-page ErrorBoundary so
+ * a crashed page can say which one failed (e.g. "Workspace").
+ */
+const PAGE_LABELS: Record<string, string> = {
+  trajectory: 'Workspace',
+  scheduled: 'Scheduled',
+  tasks: 'Tasks',
+  'project-settings': 'Project Settings',
+  'standalone-chat': 'Standalone Chat',
+  studio: '3D Studio',
+  settings: 'Settings',
+  diff: 'Diff Viewer'
+};
+
 export const App: React.FC = () => {
   // ── All React state is declared first (hooks order is stable) ──────────────
   const { themeMode, setThemeMode } = useThemeMode();
@@ -1128,6 +1144,10 @@ export const App: React.FC = () => {
               <path d="M0 280 C260 254 520 300 760 280 C1020 258 1240 298 1440 278 L1440 320 L0 320 Z" fill="var(--brand-atmo-3)" />
             </svg>
           </div>
+          {/* Per-page error boundary: a crash in any page shows an inline error
+              in this content area only — the title bar and sidebar stay alive.
+              Keyed by activeTab so switching tabs resets a stale error state. */}
+          <ErrorBoundary name={PAGE_LABELS[activeTab] ?? 'this page'} key={activeTab}>
           {activeTab === 'trajectory' && (
             <WorkspaceView
               activeProject={activeProject}
@@ -1285,6 +1305,7 @@ export const App: React.FC = () => {
               onReview={handleReviewDiff}
             />
           )}
+          </ErrorBoundary>
         </main>
       </div>
 
