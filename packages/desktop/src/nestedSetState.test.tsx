@@ -41,6 +41,6 @@ describe('nested setState in updater', () => {
       trigger();
     });
 
-    expect(container.querySelector('#out')!.textContent).toBe('REPLY');
+    expect(container.querySelector('#out')!.textContent).toBe('hi|REPLY');
   });
 });

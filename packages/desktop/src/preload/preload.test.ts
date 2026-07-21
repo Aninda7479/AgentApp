@@ -67,7 +67,7 @@ describe('preload bridge', () => {
     // The ipcRenderer.on was registered with a wrapper.
     const wrapper = ipcRenderer.on.mock.calls[0][1];
     wrapper({ /* IpcRendererEvent */ }, 'payload');
-    expect(listener).toHaveBeenCalledWith('payload');
+    expect(listener).toHaveBeenCalledWith(null, 'payload');
     expect(typeof unsub).toBe('function');
     unsub();
     expect(ipcRenderer.off).toHaveBeenCalled();

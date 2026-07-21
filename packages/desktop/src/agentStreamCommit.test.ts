@@ -16,7 +16,10 @@ function makeCtx(chatId: string) {
     setTrajectorySteps: (steps: any[]) => { state.trajectorySteps = steps; },
     setIsGenerating: (v: boolean) => { state.generating = v; },
     triggerToast: vi.fn(),
-    persistStore: vi.fn()
+    persistStore: vi.fn(),
+    getConnectedProviders: () => [],
+    getModelsCatalog: () => ({}),
+    getProjects: () => []
   };
   return { ctx, state };
 }
