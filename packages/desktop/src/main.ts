@@ -2,10 +2,15 @@ import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, desktopCapt
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, isFreeModel, BYOKProviderManager, createProviderAdapter, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber, resolveProviderFamily, resolveBaseUrl } from '@superagent/core';
+import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, isFreeModel, BYOKProviderManager, createProviderAdapter, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, initializeDirectories, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber, resolveProviderFamily, resolveBaseUrl } from '@superagent/core';
 
-// Set a custom userData path so all app data lives in <home>/.superagent.
-app.setPath('userData', getUserDataDirectory());
+// Keep Electron's cache userData in a standard OS location — NOT inside
+// ~/.superagent, which is the app's own data directory.
+app.setPath('userData', path.join(app.getPath('appData'), 'AgentApp'));
+app.setPath('cache', path.join(app.getPath('temp'), 'agentapp-cache'));
+
+// Create all ~/.superagent subdirectories on startup.
+initializeDirectories();
 
 import { windowManager } from './main/window';
 import { setupAutoUpdater } from './main/updater';
@@ -959,7 +964,7 @@ safeHandle('browser-navigate', async (_event, { url }) => {
 
 safeHandle('browser-screenshot', async (_event, { fullPage }) => {
   const browser = await getMainBrowser();
-  const logsDir = path.join(app.getPath('userData'), STORAGE_DIRS.logs);
+  const logsDir = path.join(getUserDataDirectory(), STORAGE_DIRS.logs);
   fs.mkdirSync(logsDir, { recursive: true });
   const screenshotPath = path.join(logsDir, `browser-screenshot-${Date.now()}.png`);
   await browser.takeScreenshot({ path: screenshotPath, fullPage: !!fullPage });
@@ -1097,7 +1102,7 @@ safeHandle('select-files', async () => {
 });
 
 safeHandle('copy-file-to-chat', async (_event, { sourcePath, chatId, projectName }) => {
-  const targetDir = getChatDirectory(app.getPath('userData'), chatId, projectName || undefined);
+  const targetDir = getChatDirectory(getUserDataDirectory(), chatId, projectName || undefined);
 
   fs.mkdirSync(targetDir, { recursive: true });
   const filename = path.basename(sourcePath);
@@ -1105,7 +1110,7 @@ safeHandle('copy-file-to-chat', async (_event, { sourcePath, chatId, projectName
   fs.copyFileSync(sourcePath, destPath);
   return {
     filename,
-    relativePath: path.relative(app.getPath('userData'), destPath),
+    relativePath: path.relative(getUserDataDirectory(), destPath),
     fullPath: destPath
   };
 });
@@ -1122,7 +1127,7 @@ safeHandle('read-file-base64', async (_event, filePath) => {
   // 64655f9: read_file/list_dir/write_file/grep_search are all scoped). This
   // mirrors the web fix in e38c276 and reuses the desktop engine's allowlist
   // check (resolveWithinAnyRoot / resolveWithinRoot in ai-engine.ts).
-  const userDataDir = app.getPath('userData');
+  const userDataDir = getUserDataDirectory();
   const store = await readStore();
   const projectFolders = (store.projects ?? []).flatMap((p) => p.folders ?? []);
   const resolved = resolveWithinAnyRoot(filePath, [userDataDir, ...projectFolders]);
@@ -1145,14 +1150,14 @@ safeHandle('read-file-base64', async (_event, filePath) => {
 });
 
 safeHandle('save-chat-media-buffer', async (_event, { buffer, filename, chatId, projectName }) => {
-  const targetDir = getChatDirectory(app.getPath('userData'), chatId, projectName || undefined);
+  const targetDir = getChatDirectory(getUserDataDirectory(), chatId, projectName || undefined);
 
   fs.mkdirSync(targetDir, { recursive: true });
   const destPath = path.join(targetDir, filename);
   fs.writeFileSync(destPath, Buffer.from(buffer));
   return {
     filename,
-    relativePath: path.relative(app.getPath('userData'), destPath),
+    relativePath: path.relative(getUserDataDirectory(), destPath),
     fullPath: destPath
   };
 });
@@ -1162,11 +1167,11 @@ safeHandle('save-chat-media-buffer', async (_event, { buffer, filename, chatId, 
 // open: anyone can author a Partner and import it here.
 
 safeHandle('partner-list', () => {
-  return PartnerStore.listPartners(app.getPath('userData'));
+  return PartnerStore.listPartners(getUserDataDirectory());
 });
 
 safeHandle('partner-get', (_event, id: string) => {
-  return PartnerStore.getPartner(app.getPath('userData'), id);
+  return PartnerStore.getPartner(getUserDataDirectory(), id);
 });
 
 safeHandle('partner-install', async () => {
@@ -1179,7 +1184,7 @@ safeHandle('partner-install', async () => {
     if (result.canceled || result.filePaths.length === 0) {
       return null;
     }
-    const installed = PartnerStore.installPartnerFolder(app.getPath('userData'), result.filePaths[0]);
+    const installed = PartnerStore.installPartnerFolder(getUserDataDirectory(), result.filePaths[0]);
     return installed;
   } catch (err: unknown) {
     return { error: (err as Error).message };
@@ -1188,21 +1193,21 @@ safeHandle('partner-install', async () => {
 
 safeHandle('partner-import-json', (_event, json: string) => {
   try {
-    return PartnerStore.importPartnerJson(app.getPath('userData'), json);
+    return PartnerStore.importPartnerJson(getUserDataDirectory(), json);
   } catch (err: unknown) {
     return { error: (err as Error).message };
   }
 });
 
 safeHandle('partner-remove', (_event, id: string) => {
-  PartnerStore.removePartner(app.getPath('userData'), id);
+  PartnerStore.removePartner(getUserDataDirectory(), id);
   return { success: true };
 });
 
 safeHandle('partner-set-active', (_event, id: string | null) => {
-  PartnerStore.setActivePartner(app.getPath('userData'), id);
+  PartnerStore.setActivePartner(getUserDataDirectory(), id);
   // Push the now-active Partner (with its resolved 3D model / VRM/script paths) to the pet.
-  const manifest = id ? PartnerStore.getPartner(app.getPath('userData'), id) : null;
+  const manifest = id ? PartnerStore.getPartner(getUserDataDirectory(), id) : null;
   const modelPath = manifest ? resolvePartnerModelPath(manifest) : null;
   const vrmPath = manifest ? resolvePartnerVrmPath(manifest) : null;
   const scriptPath = manifest ? resolvePartnerScriptPath(manifest) : null;
@@ -1213,12 +1218,12 @@ safeHandle('partner-set-active', (_event, id: string | null) => {
 });
 
 safeHandle('partner-get-active', () => {
-  return PartnerStore.getActivePartner(app.getPath('userData'));
+  return PartnerStore.getActivePartner(getUserDataDirectory());
 });
 
 safeHandle('partner-export', (_event, id: string) => {
   try {
-    const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+    const folder = PartnerStore.partnerFolderPath(getUserDataDirectory(), id);
     if (fs.existsSync(folder)) {
       shell.showItemInFolder(folder);
     }
@@ -1265,7 +1270,7 @@ safeHandle('partner-import-model', async (_event, { id, sourcePath }: { id: stri
       return { error: 'Unsupported model file. Use .vrm, .glb, or .gltf.' };
     }
 
-    const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+    const folder = PartnerStore.partnerFolderPath(getUserDataDirectory(), id);
     // The default `lily` Partner is shipped in-memory and may not have an on-disk
     // folder yet — create it lazily so a freshly imported model has a home.
     fs.mkdirSync(folder, { recursive: true });
@@ -1275,7 +1280,7 @@ safeHandle('partner-import-model', async (_event, { id, sourcePath }: { id: stri
 
     // Read, patch, and rewrite the manifest to point at the imported file.
     const manifestPath = path.join(folder, 'partner.json');
-    const manifest = PartnerStore.getPartner(app.getPath('userData'), id);
+    const manifest = PartnerStore.getPartner(getUserDataDirectory(), id);
     if (!manifest) return { error: 'Partner manifest not found.' };
     const field = ext === 'vrm' ? 'vrm' : 'model';
     manifest[field] = fileName;
@@ -1284,7 +1289,7 @@ safeHandle('partner-import-model', async (_event, { id, sourcePath }: { id: stri
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
 
     // If this is the active Partner, refresh the running pet immediately.
-    const activeId = PartnerStore.getActivePartner(app.getPath('userData'));
+    const activeId = PartnerStore.getActivePartner(getUserDataDirectory());
     if (activeId === id) {
       petWindowManager.setPartner(
         manifest as any,
@@ -1335,7 +1340,7 @@ safeHandle('three-d-generate', async (_event, args: { name?: string; prompt?: st
     const apiKey = cfg.apiKey?.trim() || undefined;
     const provider = cfg.provider === 'meshy' ? 'meshy' : 'tripo';
 
-    const outDir = path.join(app.getPath('userData'), STORAGE_DIRS.threeD);
+    const outDir = path.join(getUserDataDirectory(), STORAGE_DIRS.threeD);
     const res = await generateThreeD({
       name: args?.name || 'character',
       prompt: args?.prompt,
@@ -1624,7 +1629,7 @@ safeHandle('whisper-local-setdir', (_event, args: { dir: string }) => {
 
 safeHandle('three-d-list-models', async () => {
   try {
-    const outDir = path.join(app.getPath('userData'), STORAGE_DIRS.threeD);
+    const outDir = path.join(getUserDataDirectory(), STORAGE_DIRS.threeD);
     if (!fs.existsSync(outDir)) {
       return [];
     }
@@ -1651,7 +1656,7 @@ safeHandle('three-d-list-models', async () => {
 
 safeHandle('three-d-delete-model', async (_event, args: { filePath: string }) => {
   try {
-    const outDir = path.join(app.getPath('userData'), STORAGE_DIRS.threeD);
+    const outDir = path.join(getUserDataDirectory(), STORAGE_DIRS.threeD);
     const targetPath = args.filePath;
     // Basic validation to prevent arbitrary file deletion outside 3d-studio
     if (!targetPath.startsWith(outDir)) {
@@ -1678,7 +1683,7 @@ safeHandle('three-d-import-external-model', async () => {
     if (result.canceled || !result.filePaths.length) return { ok: false, path: null };
     
     const sourcePath = result.filePaths[0];
-    const outDir = path.join(app.getPath('userData'), STORAGE_DIRS.threeD);
+    const outDir = path.join(getUserDataDirectory(), STORAGE_DIRS.threeD);
     fs.mkdirSync(outDir, { recursive: true });
     
     const parsed = path.parse(sourcePath);
@@ -1737,7 +1742,7 @@ safeHandle('partner-import-model-folder', async (_event, { id, sourcePath }: { i
       return { error: 'Folder must contain an index.ts or index.js exporting a Character class.' };
     }
 
-    const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+    const folder = PartnerStore.partnerFolderPath(getUserDataDirectory(), id);
     if (!fs.existsSync(folder)) return { error: 'Partner folder not found.' };
 
     // Sanitize the folder name (basename of the chosen folder) into a safe slug.
@@ -1786,7 +1791,7 @@ safeHandle('partner-import-model-folder', async (_event, { id, sourcePath }: { i
 
     // Read, patch, and rewrite the manifest with the model folder path.
     const manifestPath = path.join(folder, 'partner.json');
-    const manifest = PartnerStore.getPartner(app.getPath('userData'), id);
+    const manifest = PartnerStore.getPartner(getUserDataDirectory(), id);
     if (!manifest) return { error: 'Partner manifest not found.' };
     const modelFolder = `src/${folderName}`;
     manifest.modelFolder = modelFolder;
@@ -1797,7 +1802,7 @@ safeHandle('partner-import-model-folder', async (_event, { id, sourcePath }: { i
     try { delete require.cache[require.resolve(modelFolderPath)]; } catch { /* not cached */ }
 
     // If this is the active Partner, refresh the running pet immediately.
-    const activeId = PartnerStore.getActivePartner(app.getPath('userData'));
+    const activeId = PartnerStore.getActivePartner(getUserDataDirectory());
     if (activeId === id) {
       petWindowManager.setPartner(
         manifest as any,
@@ -1835,7 +1840,7 @@ function resolvePartnerModelPath(manifest: any): string | null {
     const alt = path.join(__dirname, model);
     if (fs.existsSync(alt)) return alt;
   }
-  const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+  const folder = PartnerStore.partnerFolderPath(getUserDataDirectory(), id);
   const full = path.join(folder, model);
   return fs.existsSync(full) ? full : null;
 }
@@ -1846,7 +1851,7 @@ function resolvePartnerVrmPath(manifest: any): string | null {
   if (!vrm) return null;
   const id = manifest && typeof manifest.id === 'string' ? manifest.id : null;
   if (!id) return null;
-  const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+  const folder = PartnerStore.partnerFolderPath(getUserDataDirectory(), id);
   const full = path.join(folder, vrm);
   return fs.existsSync(full) ? full : null;
 }
@@ -1856,7 +1861,7 @@ function resolvePartnerScriptPath(manifest: any): string | null {
   if (!script) return null;
   const id = manifest && typeof manifest.id === 'string' ? manifest.id : null;
   if (!id) return null;
-  const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+  const folder = PartnerStore.partnerFolderPath(getUserDataDirectory(), id);
   const full = path.join(folder, script);
   return fs.existsSync(full) ? full : null;
 }
@@ -1880,7 +1885,7 @@ function resolvePartnerModelFolderPath(manifest: any): string | null {
   if (!modelFolder) return null;
   const id = manifest && typeof manifest.id === 'string' ? manifest.id : null;
   if (!id) return null;
-  const folder = PartnerStore.partnerFolderPath(app.getPath('userData'), id);
+  const folder = PartnerStore.partnerFolderPath(getUserDataDirectory(), id);
   const jsPath = path.join(folder, modelFolder, 'index.js');
   if (fs.existsSync(jsPath)) return jsPath;
   const tsPath = path.join(folder, modelFolder, 'index.ts');
@@ -1945,9 +1950,9 @@ function registerPetQuitShortcut(): void {
 function startPet(): boolean {
   if (!petWindowManager.enabled) return false;
   if (petWindowManager.isRunning()) return true; // only one at a time
-  const activeId = PartnerStore.getActivePartner(app.getPath('userData'));
+  const activeId = PartnerStore.getActivePartner(getUserDataDirectory());
   if (activeId) {
-    const manifest = PartnerStore.getPartner(app.getPath('userData'), activeId);
+    const manifest = PartnerStore.getPartner(getUserDataDirectory(), activeId);
     if (manifest) {
       petWindowManager.setPartner(
         manifest as any,
@@ -2477,7 +2482,7 @@ app.whenReady().then(async () => {
 
   // Cleanup outdated partner directories to ensure Lily and Waifu are merged
   try {
-    const petsDir = path.join(app.getPath('userData'), STORAGE_DIRS.partners);
+    const petsDir = path.join(getUserDataDirectory(), STORAGE_DIRS.partners);
     ['waifu', 'pixel', 'byte', 'nova'].forEach((oldId) => {
       const dir = path.join(petsDir, oldId);
       if (fs.existsSync(dir)) {

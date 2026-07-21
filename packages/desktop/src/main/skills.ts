@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { app } from 'electron';
 import { SkillStore, SkillDefinition, STORAGE_DIRS, getUserDataDirectory } from '@superagent/core';
 
 /** A skill discovered from a `skills/` directory, ready for the renderer. */
@@ -137,7 +136,7 @@ export async function listSkills(dir?: string | string[]): Promise<DiscoveredSki
     }
   }
   try {
-    const userSkills = path.join(app.getPath('userData'), STORAGE_DIRS.skills);
+    const userSkills = path.join(getUserDataDirectory(), STORAGE_DIRS.skills);
     if (fs.existsSync(userSkills)) dirs.push(userSkills);
     // Also surface the app's canonical global skills folder (~/.superagent/skills),
     // which is where global imports land.

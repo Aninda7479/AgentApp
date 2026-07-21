@@ -16,8 +16,12 @@ export const STORAGE_DIRS = {
   config: 'config',
   partners: 'partners',
   conversation: 'conversation',
-  logs: 'logs',
+  models: 'models',
+  tasks: 'tasks',
   skills: 'skills',
+  plugins: 'plugins',
+  connectors: 'connectors',
+  logs: 'logs',
   threeD: '3d-studio'
 } as const;
 
@@ -29,6 +33,25 @@ export function getUserDataDirectory(): string {
   }
 
   return path.join(os.homedir(), APP_DIR_NAME);
+}
+
+/** Returns the global base path (`~/.superagent`). */
+export function getGlobalBasePath(): string {
+  return getUserDataDirectory();
+}
+
+/** Returns the project-local base path (`<projectRoot>/.superagent`). */
+export function getLocalBasePath(projectRoot: string): string {
+  return path.join(projectRoot, APP_DIR_NAME);
+}
+
+/** Creates all global storage directories if they don't already exist. */
+export function initializeDirectories(): void {
+  const base = getGlobalBasePath();
+  for (const dir of Object.values(STORAGE_DIRS)) {
+    const full = path.join(base, dir);
+    if (!fs.existsSync(full)) fs.mkdirSync(full, { recursive: true });
+  }
 }
 
 /** Returns the config directory (`~/.superagent/config`), creating it if needed. */

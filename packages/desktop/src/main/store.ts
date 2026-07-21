@@ -1,4 +1,4 @@
-import { app } from 'electron';
+import { getUserDataDirectory } from '@superagent/core';
 import {
   readConversationStore,
   writeConversationStore
@@ -10,10 +10,10 @@ export * from './storage/conversation-store.js';
 
 /** Reads the full conversation store from the user-data directory. */
 export async function readStore() {
-  return readConversationStore(app.getPath('userData'));
+  return readConversationStore(getUserDataDirectory());
 }
 
 /** Writes the full conversation store to the user-data directory. */
 export async function writeStore(data: Parameters<typeof writeConversationStore>[0]): Promise<void> {
-  await writeConversationStore(data, app.getPath('userData'));
+  await writeConversationStore(data, getUserDataDirectory());
 }

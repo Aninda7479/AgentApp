@@ -6,6 +6,7 @@ import {
   getChatDirectory,
   getChatJsonPath,
   getChatConfigPath,
+  getChatMediaDirectory,
   getConversationRoots,
   getProjectConfigPath,
   getProjectDirectory,
@@ -17,7 +18,10 @@ import type {
   StoreData,
   StoredChat,
   StoredChatConfig,
-  StoredProject
+  StoredProject,
+  StoredChatMessage,
+  ChatConfig,
+  ProjectConfig
 } from './conversation-types.js';
 import { CHAT_FILE_KEYS, CHAT_CONFIG_KEYS } from './conversation-types.js';
 
@@ -40,8 +44,6 @@ async function readJson<T>(filePath: string): Promise<T | null> {
   try {
     return JSON.parse(raw) as T;
   } catch {
-    // Corrupt/truncated file — fall back to the last good backup if present so
-    // user conversation data is not silently lost.
     const bakPath = `${filePath}.bak`;
     try {
       const bakRaw = (await fsp.readFile(bakPath, 'utf-8')).trim();
@@ -62,19 +64,15 @@ async function writeJson(filePath: string, data: unknown): Promise<void> {
   await ensureDirectory(path.dirname(filePath));
   const tmpPath = `${filePath}.tmp`;
   await fsp.writeFile(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
-  // Keep the previous version as a .bak before replacing it.
   try {
     await fsp.copyFile(filePath, `${filePath}.bak`);
   } catch {
     // First write — no existing file to back up.
   }
 
-  // Try atomic rename first.
   try {
     await fsp.rename(tmpPath, filePath);
   } catch {
-    // Fall back to copy-and-unlink if rename fails (common on Windows if
-    // destination is locked or across mount points)
     try {
       await fsp.copyFile(tmpPath, filePath);
       await fsp.unlink(tmpPath);
@@ -86,7 +84,111 @@ async function writeJson(filePath: string, data: unknown): Promise<void> {
   }
 }
 
-/** Generates a unique storage key by appending a numeric suffix if needed. */
+// ---------------------------------------------------------------------------
+// New storage API — works with StoredChatMessage / ChatConfig / ProjectConfig
+// ---------------------------------------------------------------------------
+
+/**
+ * Reads a chat's message history from `chat.json`.
+ * Returns the array of `StoredChatMessage` items, or `[]` if missing.
+ */
+export async function getChatHistory(
+  userDataDir: string,
+  chatId: string,
+  projectKey?: string
+): Promise<StoredChatMessage[]> {
+  const chatJsonPath = getChatJsonPath(userDataDir, chatId, projectKey);
+  const messages = await readJson<StoredChatMessage[]>(chatJsonPath);
+  return messages ?? [];
+}
+
+/**
+ * Appends a single message to a chat's `chat.json` array.
+ * Creates the file (as `[]`) if it doesn't exist yet.
+ */
+export async function saveChatMessage(
+  userDataDir: string,
+  chatId: string,
+  message: StoredChatMessage,
+  projectKey?: string
+): Promise<void> {
+  const chatJsonPath = getChatJsonPath(userDataDir, chatId, projectKey);
+  const existing = await readJson<StoredChatMessage[]>(chatJsonPath);
+  const messages = existing ?? [];
+  messages.push(message);
+  await writeJson(chatJsonPath, messages);
+}
+
+/**
+ * Writes (overwrites) a chat's `config.json`.
+ * Creates the directory if needed.
+ */
+export async function saveChatConfigNew(
+  userDataDir: string,
+  chatId: string,
+  config: ChatConfig,
+  projectKey?: string
+): Promise<void> {
+  const configPath = getChatConfigPath(userDataDir, chatId, projectKey);
+  await ensureDirectory(path.dirname(configPath));
+  await writeJson(configPath, config);
+}
+
+/**
+ * Reads a chat's `config.json`, returning the `ChatConfig` or null if missing.
+ */
+export async function getChatConfigNew(
+  userDataDir: string,
+  chatId: string,
+  projectKey?: string
+): Promise<ChatConfig | null> {
+  const configPath = getChatConfigPath(userDataDir, chatId, projectKey);
+  return readJson<ChatConfig>(configPath);
+}
+
+/**
+ * Writes (overwrites) a project's `config.json` with a `ProjectConfig`.
+ * Creates the directory if needed.
+ */
+export async function saveProjectConfig(
+  userDataDir: string,
+  projectKey: string,
+  config: ProjectConfig
+): Promise<void> {
+  const configPath = getProjectConfigPath(userDataDir, projectKey);
+  await ensureDirectory(path.dirname(configPath));
+  await writeJson(configPath, config);
+}
+
+/**
+ * Reads a project's `config.json`, returning the `ProjectConfig` or null.
+ */
+export async function getProjectConfig(
+  userDataDir: string,
+  projectKey: string
+): Promise<ProjectConfig | null> {
+  const configPath = getProjectConfigPath(userDataDir, projectKey);
+  return readJson<ProjectConfig>(configPath);
+}
+
+/**
+ * Ensures the media directory exists for a chat and returns its path.
+ * Call this before writing any attachment files.
+ */
+export async function ensureChatMediaDirectory(
+  userDataDir: string,
+  chatId: string,
+  projectKey?: string
+): Promise<string> {
+  const mediaDir = getChatMediaDirectory(userDataDir, chatId, projectKey);
+  await ensureDirectory(mediaDir);
+  return mediaDir;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy API — retained for backward compat (StoredChat / StoredProject)
+// ---------------------------------------------------------------------------
+
 function uniqueStorageKey(baseKey: string, usedKeys: Set<string>): string {
   let candidate = baseKey;
   let suffix = 2;
@@ -98,7 +200,6 @@ function uniqueStorageKey(baseKey: string, usedKeys: Set<string>): string {
   return candidate;
 }
 
-/** Reads a project's config.json from its directory, creating a default if missing. */
 async function readProjectRecord(projectDir: string, folderName: string): Promise<ProjectRecord> {
   const configPath = path.join(projectDir, 'project-config.json');
   let folders: string[] = [];
@@ -126,8 +227,6 @@ async function readProjectRecord(projectDir: string, folderName: string): Promis
   };
 }
 
-/** Splits a `StoredChat` into its `chat.json` (transcript) and `config.json`
- *  (session/memory) file payloads, based on the shared key lists. */
 function splitChat(chat: StoredChat): {
   chatFile: Partial<StoredChat>;
   configFile: Partial<StoredChatConfig>;
@@ -139,8 +238,6 @@ function splitChat(chat: StoredChat): {
   return { chatFile: chatFile as Partial<StoredChat>, configFile: configFile as Partial<StoredChatConfig> };
 }
 
-/** Reads and deserializes a single chat into a StoredChat record, merging the
- *  separate `config.json` (model, memory/context, etc.) when present. */
 async function readChatRecord(
   chatJsonPath: string,
   projectName: string,
@@ -163,7 +260,6 @@ async function readChatRecord(
   }
 }
 
-/** Resolves a unique storage key for a project and builds its record. */
 function resolveProjectKey(project: StoredProject, usedKeys: Set<string>): ProjectRecord {
   const baseKey =
     project.storageKey && isValidStorageId(project.storageKey)
@@ -179,7 +275,6 @@ function resolveProjectKey(project: StoredProject, usedKeys: Set<string>): Proje
   };
 }
 
-/** Scans the filesystem to discover all projects and their chats. */
 async function readProjectsAndChats(roots: ConversationRoots): Promise<{ projects: ProjectRecord[]; chats: StoredChat[] }> {
   const projects: ProjectRecord[] = [];
   const chats: StoredChat[] = [];
@@ -252,7 +347,6 @@ async function readProjectsAndChats(roots: ConversationRoots): Promise<{ project
   return { projects, chats };
 }
 
-/** Iterates project directories and returns the first one matching the predicate. */
 async function findProjectRecord(roots: ConversationRoots, matcher: (project: ProjectRecord) => boolean): Promise<ProjectRecord | null> {
   let exists = false;
   try { await fsp.access(roots.projectsDir); exists = true; } catch { /* no */ }
@@ -299,7 +393,6 @@ export async function readConversationStore(userDataDir: string): Promise<StoreD
   };
 }
 
-/** Builds unique project records from a list of projects. */
 function buildProjectRecords(projects: StoredProject[]): ProjectRecord[] {
   const usedKeys = new Set<string>();
   return projects.map((project) => resolveProjectKey(project, usedKeys));
@@ -357,7 +450,6 @@ export async function writeConversationStore(data: StoreData, userDataDir: strin
     activeChatFolders.add(targetProjectKey ? `${targetProjectKey}/${chat.id}` : `standalone/${chat.id}`);
   }
 
-  // Clean up stale project and chat directories no longer in the active set
   try {
     const projectFolders = await fsp.readdir(roots.projectsDir);
     for (const folderName of projectFolders) {
@@ -431,8 +523,7 @@ export async function readChat(userDataDir: string, chatId: string, projectKey?:
   return readChatRecord(chatJsonPath, projectName, projectKey);
 }
 
-/** Saves a chat record to disk, resolving its project association. The
- *  transcript goes to `chat.json`; session/memory state goes to `config.json`. */
+/** Saves a chat record to disk, resolving its project association. */
 export async function saveChat(userDataDir: string, chat: StoredChat): Promise<void> {
   const roots = getConversationRoots(userDataDir);
   const project =
@@ -495,7 +586,7 @@ export async function updateChat(
   return { ...next, projectStorageKey: existing.projectStorageKey };
 }
 
-/** Reads a chat's `config.json` (model, memory/context, etc.). */
+/** Reads a chat's `config.json` (legacy format). */
 export async function readChatConfig(
   userDataDir: string,
   chatId: string,
@@ -505,7 +596,7 @@ export async function readChatConfig(
   return readJson<StoredChatConfig>(configPath);
 }
 
-/** Writes a chat's `config.json`, merging with any existing config. */
+/** Writes a chat's `config.json`, merging with any existing config (legacy format). */
 export async function saveChatConfig(
   userDataDir: string,
   chatId: string,
@@ -520,7 +611,7 @@ export async function saveChatConfig(
   return next;
 }
 
-/** Reads a chat's `config.json`, applies an updater, and saves it. */
+/** Reads a chat's `config.json`, applies an updater, and saves it (legacy format). */
 export async function updateChatConfig(
   userDataDir: string,
   chatId: string,

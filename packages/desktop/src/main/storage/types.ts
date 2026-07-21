@@ -8,5 +8,11 @@ export type {
   StoredProject,
   StoredChat,
   StoreData,
-  ConversationRoots
+  ConversationRoots,
+  StoredChatMessage,
+  ChatConfig,
+  ProjectConfig,
+  UserContent,
+  AIContent,
+  AIStep
 } from '@superagent/core';

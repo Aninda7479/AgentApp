@@ -78,3 +78,12 @@ export function getChatConfigPath(
 ): string {
   return path.join(getChatDirectory(userDataDir, chatId, projectKey), 'config.json');
 }
+
+/** Returns the media directory for a chat (for uploaded images, files, etc.). */
+export function getChatMediaDirectory(
+  userDataDir: string,
+  chatId: string,
+  projectKey?: string
+): string {
+  return path.join(getChatDirectory(userDataDir, chatId, projectKey), 'media');
+}

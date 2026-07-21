@@ -5,5 +5,10 @@ export {
   getProjectDirectory,
   getProjectConfigPath,
   getChatDirectory,
-  getChatJsonPath
+  getChatJsonPath,
+  getChatConfigPath,
+  getChatMediaDirectory,
+  getGlobalBasePath,
+  getLocalBasePath,
+  initializeDirectories
 } from '@superagent/core';

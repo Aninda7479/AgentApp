@@ -13,5 +13,12 @@ export {
   getChatDirectory,
   getChatJsonPath,
   getProjectDirectory,
-  getProjectConfigPath
+  getProjectConfigPath,
+  getChatHistory,
+  saveChatMessage,
+  saveChatConfigNew,
+  getChatConfigNew,
+  saveProjectConfig,
+  getProjectConfig,
+  ensureChatMediaDirectory
 } from '@superagent/core';
