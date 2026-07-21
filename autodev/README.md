@@ -7,7 +7,11 @@ This directory contains the drivers, pre-flight verification tools, and configur
 **Skill index:** [`.claude/skills/README.md`](../.claude/skills/README.md)  
 **Operator guide:** [`Auto-Improve-Guide.md`](../Auto-Improve-Guide.md)
 
-Recommended first skill: `/reliability-gate` (Certainty Register is empty until Phase 0 runs).
+**Recommended loop skill:** `/skill-loop` — thin orchestrator; spawns `/reliability-gate`, `/auto-improve`, etc. as isolated workers (see [`.claude/skills/skill-loop/`](../.claude/skills/skill-loop/)).
+
+```powershell
+.\.claude\skills\skill-loop\run-loop.ps1
+```
 
 ## Documentation & Setup Guides
 

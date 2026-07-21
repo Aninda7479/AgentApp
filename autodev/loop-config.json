@@ -8,6 +8,7 @@
   "pr_label": "auto-generated",
 
   "skill_schedule_minutes": {
+    "skill-loop":          30,
     "auto-improve":        30,
     "orchestrator-dev":   120,
     "art-director":       180,
@@ -15,8 +16,14 @@
     "security-auditor":   360,
     "test-generator":     240,
     "provider-scout":     480,
-    "dependency-guardian": 720
+    "dependency-guardian": 720,
+    "reliability-gate":   60,
+    "agent-parity":       120,
+    "media-capability":   240
   },
+
+  "recommended_loop_skill": "/skill-loop",
+  "skill_loop_notes": "Main session only dispatches; workers run in isolated claude -p via .claude/skills/skill-loop/spawn-worker.ps1. Prefer scheduling skill-loop instead of each worker separately.",
 
   "drivers": {
     "primary":   "claude-code-cli",

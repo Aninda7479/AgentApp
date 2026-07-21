@@ -30,27 +30,33 @@ Copy-Item autodev\superagent-auto-improve.env.example autodev\superagent-auto-im
 # Edit API keys / REPO_DIR / BASE_BRANCH=agent-development
 ```
 
-## Step 3 — Recommended first cycles
+## Step 3 — Recommended: single skill in a loop (`/skill-loop`)
+
+**Do this for unattended improvement.** The main session stays thin; workers run as isolated subprocesses.
 
 ```powershell
-# 1) Make something CERTAIN
+# Infinite outer loop (Ctrl+C to stop). Each iteration:
+#   1) fresh /skill-loop main (picks next worker)
+#   2) spawn-worker.ps1 → isolated /reliability-gate | /auto-improve | ...
+#   3) main reads only .claude/loop/result-*.json
+.\.claude\skills\skill-loop\run-loop.ps1
+
+# Or one orchestrator cycle via autodev (branch + PR machinery):
+$env:SKILL = "/skill-loop"
+.\autodev\run-auto-improve.ps1
+
+# Force a full multi-worker round inside one orchestrator session (still isolated workers):
+# In chat: /skill-loop round
+```
+
+Manual single workers (optional debugging):
+
+```powershell
 $env:SKILL = "/reliability-gate"
-.\autodev\run-auto-improve.ps1
-
-# 2) General backlog (hooks, etc. after Phase 0 starts filling)
-$env:SKILL = "/auto-improve"
-.\autodev\run-auto-improve.ps1
-
-# 3) Coding-agent parity
-$env:SKILL = "/agent-parity"
-.\autodev\run-auto-improve.ps1
-
-# 4) 3D / video
-$env:SKILL = "/media-capability"
 .\autodev\run-auto-improve.ps1
 ```
 
-Or inside SuperAgent / Claude Code: run the same slash commands against this repo.
+Or inside SuperAgent / Claude Code chat: `/skill-loop` (preferred) or a specific worker skill.
 
 ## Step 4 — Schedule (optional)
 

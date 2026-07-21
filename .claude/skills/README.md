@@ -7,14 +7,29 @@ Skills live under `.claude/skills/<name>/SKILL.md` and are used by Claude Code, 
 | File | Role |
 |------|------|
 | [`_shared/RESULTS-CONTRACT.md`](./_shared/RESULTS-CONTRACT.md) | **Why cycles failed before + hard rules for every skill** |
+| [`skill-loop/SKILL.md`](./skill-loop/SKILL.md) | **Put THIS in your outer loop** — spawns workers so main context stays small |
 | [`docs/FUTURE-PLAN.MD`](../../docs/FUTURE-PLAN.MD) | Product north star + Certainty Register |
 | [`plan/improvement-plan.md`](../../plan/improvement-plan.md) | Ordered backlog |
 | [`auto-improve-log.log`](../auto-improve-log.log) | Shared queue + evidence |
+
+## Recommended: one skill in the loop
+
+```powershell
+# Outer loop (fresh main session each iteration)
+.\.claude\skills\skill-loop\run-loop.ps1
+
+# Or:
+$env:SKILL = "/skill-loop"
+.\autodev\run-auto-improve.ps1
+```
+
+`/skill-loop` only dispatches. Workers (`/reliability-gate`, `/auto-improve`, …) run in **isolated** `claude -p` / subagent sessions and write a tiny JSON result. Main chat never loads implementation context.
 
 ## Skill map
 
 | Skill | When to run | Phase |
 |-------|-------------|-------|
+| **`/skill-loop`** | **Outer loop only — orchestrates workers** | all |
 | `/reliability-gate` | Nothing is CERTAIN; need smokes | 0 |
 | `/auto-improve` | General “improve the product” | 0→3 |
 | `/agent-parity` | Hooks, rewind, sessions, skills v2 | 1 |

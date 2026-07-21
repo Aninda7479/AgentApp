@@ -67,7 +67,11 @@ if (Test-Path (Join-Path $RepoRoot ".git")) {
     $RepoDir = if ($env:REPO_DIR) { $env:REPO_DIR } else { throw "Run from inside the AgentApp repo, or set the REPO_DIR env var." }
 }
 $BaseBranch   = if ($env:BASE_BRANCH) { $env:BASE_BRANCH } else { "agent-development" }
-$Skill        = if ($env:SKILL) { $env:SKILL } else { "/auto-improve" }
+$Skill        = if ($env:SKILL) { $env:SKILL } else { "/skill-loop" }
+# Optional args for /skill-loop: once | round | worker-name
+if ($env:SKILL_LOOP_MODE -and $Skill -match 'skill-loop' -and $Skill -notmatch '\s') {
+    $Skill = "$Skill $($env:SKILL_LOOP_MODE)"
+}
 $BranchPrefix = if ($env:BRANCH_PREFIX) { $env:BRANCH_PREFIX } else { "auto" }
 $LogDir       = if ($env:LOG_DIR) { $env:LOG_DIR } else { Join-Path $RepoDir "logs\auto-improve" }
 $PauseFile    = if ($env:PAUSE_FILE) { $env:PAUSE_FILE } else { Join-Path $RepoDir ".claude\.auto-improve.pause" }
