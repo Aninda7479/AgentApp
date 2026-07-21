@@ -12,6 +12,9 @@ import { PlaywrightBrowserEngine } from '../automation/browser.js';
 import { BrowserLifecycleService } from '../automation/browser-service.js';
 import { ToolDefinition } from './ai-engine-types.js';
 import { AgentEngine } from './ai-engine.js';
+import { LearningLoopEngine } from '../memory/learn.js';
+import { UserProfileStore } from '../memory/profile.js';
+import { ProjectInstructionsParser } from '../memory/instructions.js';
 
 const execAsync = promisify(exec);
 
@@ -612,6 +615,164 @@ export function createBuiltinTools(
       execute: async () => {
         await BrowserLifecycleService.closeSharedInstance();
         return 'Browser successfully shut down.';
+      }
+    },
+    // ── Memory retrieval tool ──────────────────────────────────────────────
+    {
+      name: 'memory',
+      description:
+        'Retrieve persistent memory: learned insights, user profile, or project instructions. ' +
+        'Use scope="global" for cross-project memory (learnings, user profile), scope="project" for ' +
+        'project-scoped memory (AGENT.md/CLAUDE.md instructions). Supports search filtering and pagination.',
+      parameters: {
+        type: 'object',
+        properties: {
+          scope: {
+            type: 'string',
+            enum: ['global', 'project'],
+            description:
+              '"global" returns cross-project memory (learned insights, user profile entries). ' +
+              '"project" returns project-scoped memory (instruction files like AGENT.md, CLAUDE.md, .cursorrules).'
+          },
+          type: {
+            type: 'string',
+            enum: ['all', 'learnings', 'profile', 'instructions'],
+            description:
+              'What kind of memory to retrieve. "all" returns everything for the given scope. ' +
+              'Default: "all".'
+          },
+          query: {
+            type: 'string',
+            description: 'Optional search/filter term to narrow results (case-insensitive substring match).'
+          },
+          skip: {
+            type: 'number',
+            description: 'Number of items to skip for pagination (default 0).'
+          },
+          limit: {
+            type: 'number',
+            description: 'Maximum number of items to return (default 20, max 100).'
+          }
+        },
+        required: ['scope'],
+        additionalProperties: false
+      },
+      execute: async (args: Record<string, any>) => {
+        const scope = (args.scope as string) || 'global';
+        const type = (args.type as string) || 'all';
+        const query = (args.query as string) || undefined;
+        const skip = Math.max(0, Number(args.skip) || 0);
+        const limit = Math.min(100, Math.max(1, Number(args.limit) || 20));
+
+        const sections: string[] = [];
+
+        if (scope === 'global') {
+          // ── Global memory: learnings + user profile ─────────────────────
+          if (type === 'all' || type === 'learnings') {
+            try {
+              const engine = new LearningLoopEngine();
+              const insights = await engine.getInsights(query);
+              const paged = insights.slice(skip, skip + limit);
+              if (paged.length > 0) {
+                const lines = paged.map((i) => {
+                  const date = new Date(i.timestamp).toISOString().slice(0, 10);
+                  return `  [${i.category}] ${i.topic} (${date})\n    ${i.lesson}`;
+                });
+                sections.push(
+                  `## Learned Insights (${paged.length} of ${insights.length} total)\n` +
+                  lines.join('\n')
+                );
+              } else {
+                sections.push('## Learned Insights\n  (none found)');
+              }
+            } catch {
+              sections.push('## Learned Insights\n  (unavailable)');
+            }
+          }
+
+          if (type === 'all' || type === 'profile') {
+            try {
+              const store = new UserProfileStore();
+              const entries = query ? await store.search(query) : await store.listAll();
+              const paged = entries.slice(skip, skip + limit);
+              if (paged.length > 0) {
+                const lines = paged.map((e) => {
+                  const val = typeof e.value === 'string' ? e.value : JSON.stringify(e.value);
+                  return `  [${e.category}] ${e.key}: ${val}`;
+                });
+                sections.push(
+                  `## User Profile (${paged.length} of ${entries.length} total)\n` +
+                  lines.join('\n')
+                );
+              } else {
+                sections.push('## User Profile\n  (no entries found)');
+              }
+            } catch {
+              sections.push('## User Profile\n  (unavailable)');
+            }
+          }
+        } else if (scope === 'project') {
+          // ── Project memory: instruction files ──────────────────────────
+          if (type === 'all' || type === 'instructions') {
+            try {
+              const parser = new ProjectInstructionsParser();
+              const instructions = await parser.discoverAndParse(projectRoot);
+              const { combinedPrompt, rules } = parser.mergeInstructions(instructions);
+
+              if (query) {
+                // Filter: only keep instructions whose content matches the query
+                const q = query.toLowerCase();
+                const filtered = instructions.filter(
+                  (i) =>
+                    i.rawContent.toLowerCase().includes(q) ||
+                    i.rules.some((r) => r.toLowerCase().includes(q))
+                );
+                if (filtered.length > 0) {
+                  const { combinedPrompt: filteredPrompt, rules: filteredRules } =
+                    parser.mergeInstructions(filtered);
+                  const truncated =
+                    filteredPrompt.length > 4000
+                      ? filteredPrompt.substring(0, 4000) + '\n\n... (truncated)'
+                      : filteredPrompt;
+                  sections.push(
+                    `## Project Instructions (${filtered.length} file(s) matched)\n` +
+                    truncated +
+                    (filteredRules.length > 0
+                      ? `\n\n### Extracted Rules\n${filteredRules.map((r) => `- ${r}`).join('\n')}`
+                      : '')
+                  );
+                } else {
+                  sections.push('## Project Instructions\n  (no matching instructions found)');
+                }
+              } else {
+                const truncated =
+                  combinedPrompt.length > 4000
+                    ? combinedPrompt.substring(0, 4000) + '\n\n... (truncated)'
+                    : combinedPrompt;
+                if (instructions.length > 0) {
+                  sections.push(
+                    `## Project Instructions (${instructions.length} file(s): ${instructions.map((i) => path.basename(i.filePath)).join(', ')})\n` +
+                    truncated +
+                    (rules.length > 0
+                      ? `\n\n### Extracted Rules\n${rules.map((r) => `- ${r}`).join('\n')}`
+                      : '')
+                  );
+                } else {
+                  sections.push(
+                    '## Project Instructions\n  (no instruction files found in project root — ' +
+                    'create AGENT.md, CLAUDE.md, or .cursorrules to add project-specific instructions)'
+                  );
+                }
+              }
+            } catch {
+              sections.push('## Project Instructions\n  (error reading instruction files)');
+            }
+          }
+        } else {
+          sections.push(`Error: Unknown scope "${scope}". Use "global" or "project".`);
+        }
+
+        return sections.join('\n\n') || '(no memory data)';
       }
     },
     // Sub-agent delegation: spawns an independent child AgentEngine that can

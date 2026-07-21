@@ -81,6 +81,8 @@ import {
 import { createBuiltinTools } from './builtin-tools.js';
 
 const SUMMARY_PREFIX = '[COMPACTED CONTEXT SUMMARY]';
+const MAX_SYSTEM_PROMPT_CHARS = 12000;
+const MAX_TOOL_RESULT_CHARS = 4000;
 
 // ─── Agent Engine ─────────────────────────────────────────────────────────────
 
@@ -131,7 +133,7 @@ export class AgentEngine {
     this.history = [];
 
     // System prompt matching OpenCode's AGENTS.md pattern
-    const sysPrompt = config.systemPrompt || `You are SuperAgent, a powerful autonomous AI coding assistant.
+    const rawPrompt = config.systemPrompt || `You are SuperAgent, a powerful autonomous AI coding assistant.
 
 You have access to tools to read files, list directories, search codebases, run shell commands, and write files.
 Use tools progressively — don't dump the whole codebase; fetch what you need when you need it.
@@ -142,6 +144,12 @@ Key guidelines:
 - Verify changes compile/work after editing
 - Be concise but thorough in explanations
 - When you edit files, mention which files changed and the diff summary`;
+
+    // Truncate excessively long system prompts to prevent context overflow
+    // which causes the model to produce garbled/gibberish output.
+    const sysPrompt = rawPrompt.length > MAX_SYSTEM_PROMPT_CHARS
+      ? rawPrompt.substring(0, MAX_SYSTEM_PROMPT_CHARS) + '\n\n[System prompt truncated due to length]'
+      : rawPrompt;
 
     this.record({ role: 'system', content: sysPrompt });
     this.contextWindow = config.contextWindow ?? 128000;
@@ -254,6 +262,22 @@ Key guidelines:
     this.history = res.messages.map(
       (m) => ({ role: m.role, content: m.content }) as ChatMessage
     );
+
+    // Merge consecutive system messages into one to avoid confusing models
+    // that expect a single system message at the start of the conversation.
+    const merged: ChatMessage[] = [];
+    for (const m of this.history) {
+      if (m.role === 'system' && merged.length > 0 && merged[merged.length - 1].role === 'system') {
+        const prev = merged[merged.length - 1];
+        const prevText = typeof prev.content === 'string' ? prev.content : extractTextContent(prev.content);
+        const curText = typeof m.content === 'string' ? m.content : extractTextContent(m.content);
+        merged[merged.length - 1] = { ...prev, content: prevText + '\n\n' + curText };
+      } else {
+        merged.push(m);
+      }
+    }
+    this.history = merged;
+
     const tokensAfter = this.estimateContextUsage().used;
     return { tokensBefore, tokensAfter };
   }
@@ -542,10 +566,16 @@ Key guidelines:
             content: resultText.slice(0, 200) // truncated for display
           });
 
+          // Truncate large tool results before storing in history to prevent
+          // context window overflow which causes garbled/gibberish model output.
+          const historyResult = resultText.length > MAX_TOOL_RESULT_CHARS
+            ? resultText.substring(0, MAX_TOOL_RESULT_CHARS) + '\n\n... (truncated for context)'
+            : resultText;
+
           // Add tool result to history
           this.record({
             role: 'tool',
-            content: resultText,
+            content: historyResult,
             toolCallId: tc.id,
             name: tc.name
           });
@@ -786,7 +816,7 @@ Key guidelines:
    *  multimodal) shared by every best-of-N candidate. Returns a fresh array so
    *  each candidate engine owns an independent copy (no shared-state mutation). */
   private buildHistory(userPrompt: string, attachments?: ImageAttachment[]): ChatMessage[] {
-    const sysPrompt = this.config.systemPrompt || `You are SuperAgent, a powerful autonomous AI coding assistant.
+    const rawPrompt = this.config.systemPrompt || `You are SuperAgent, a powerful autonomous AI coding assistant.
 
 You have access to tools to read files, list directories, search codebases, run shell commands, and write files.
 Use tools progressively — don't dump the whole codebase; fetch what you need when you need it.
@@ -797,6 +827,9 @@ Key guidelines:
 - Verify changes compile/work after editing
 - Be concise but thorough in explanations
 - When you edit files, mention which files changed and the diff summary`;
+    const sysPrompt = rawPrompt.length > MAX_SYSTEM_PROMPT_CHARS
+      ? rawPrompt.substring(0, MAX_SYSTEM_PROMPT_CHARS) + '\n\n[System prompt truncated due to length]'
+      : rawPrompt;
     const history: ChatMessage[] = [{ role: 'system', content: sysPrompt }];
     if (attachments && attachments.length > 0) {
       const content: ContentBlock[] = [{ type: 'text', text: userPrompt }];
@@ -1163,7 +1196,18 @@ Key guidelines:
       }
     }
 
-    const systemInstruction = this.history.find(m => m.role === 'system')?.content;
+    // Concatenate ALL system messages into a single instruction (not just the
+    // first — rolling compaction can produce a summary as a second system msg).
+    // Flatten multimodal ContentBlock[] to plain text so Gemini never receives
+    // a serialized array where it expects a string.
+    const systemParts: string[] = [];
+    for (const m of this.history) {
+      if (m.role === 'system') {
+        const text = typeof m.content === 'string' ? m.content : extractTextContent(m.content);
+        if (text) systemParts.push(text);
+      }
+    }
+    const systemInstruction = systemParts.length > 0 ? systemParts.join('\n\n') : undefined;
 
     const tools = [{
       functionDeclarations: this.tools.map(t => ({
@@ -1247,14 +1291,30 @@ Key guidelines:
     const baseUrl = (this.config.baseUrl || 'http://localhost:11434').replace(/\/+$/, '');
     const url = `${baseUrl}/api/chat`;
 
-    const messages = this.history.map(m => ({
-      role: m.role,
-      content: m.content
+    // Ollama only supports system, user, assistant roles. Convert multimodal
+    // ContentBlock[] to plain text and remap 'tool' role to 'user' so the
+    // model receives a valid message array instead of raw objects or unknown
+    // roles that cause gibberish output.
+    const messages = this.history
+      .filter(m => m.role !== 'tool')
+      .map(m => ({
+        role: m.role === 'system' ? 'system' : m.role === 'assistant' ? 'assistant' : 'user',
+        content: typeof m.content === 'string' ? m.content : extractTextContent(m.content)
+      }));
+
+    const tools = this.tools.map(t => ({
+      type: 'function' as const,
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters
+      }
     }));
 
     const payload = {
       model: this.config.model || 'llama3.2',
       messages,
+      tools,
       stream: true,
       options: {
         temperature: this.config.temperature ?? 0.4,
@@ -1281,6 +1341,7 @@ Key guidelines:
     }
 
     let fullContent = '';
+    const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
 
     if (response.body) {
       const reader = response.body.getReader();
@@ -1299,6 +1360,16 @@ Key guidelines:
               fullContent += token;
               onEvent({ type: 'token', sessionId: this.sessionId, content: token });
             }
+            // Ollama tool calls come as an array on message.tool_calls
+            if (Array.isArray(event.message?.tool_calls)) {
+              for (const tc of event.message.tool_calls) {
+                toolCalls.push({
+                  id: `ollama-tc-${Date.now()}-${toolCalls.length}`,
+                  name: tc.function?.name || '',
+                  args: tc.function?.arguments || {}
+                });
+              }
+            }
           } catch {
             // ignore
           }
@@ -1306,7 +1377,7 @@ Key guidelines:
       }
     }
 
-    return { fullContent, toolCalls: [] };
+    return { fullContent, toolCalls };
   }
 }
 
