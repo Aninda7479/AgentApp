@@ -1,0 +1,29 @@
+{
+  "skill": "reliability-gate",
+  "status": "success",
+  "committed": "none",
+  "branch": "",
+  "summary": "CERTAIN-1: CLI chat turn + tool call (read_file) promoted to CERTAIN. New smoke test passes; full core suite 227/227 green; SMOKE.md + Certainty Register updated.",
+  "files_changed": [
+    "packages/core/test/cli-chat-tool-smoke.test.ts",
+    "docs/SMOKE.md",
+    "docs/FUTURE-PLAN.MD",
+    "plan/improvement-plan.md",
+    ".claude/auto-improve-log.log"
+  ],
+  "verify": {
+    "build": "PASS",
+    "tests": "PASS",
+    "live": "SKIP"
+  },
+  "certain_promoted": "CLI chat turn + tool call (read_file) on Core + CLI surfaces",
+  "next_queue": [
+    "[P0] /reliability-gate — CERTAIN-2 Core tool-loop error path tests",
+    "[P0] /reliability-gate — CERTAIN-3 Desktop send message (manual/provisional)",
+    "[P0] /reliability-gate — CERTAIN-4 Web send message smoke",
+    "[P0] /reliability-gate — CERTAIN-5 BYOK connect + list models (offline mock)",
+    "[P0] /reliability-gate — CERTAIN-6 MCP list/connect smoke"
+  ],
+  "open_questions": [],
+  "duration_minutes": 8
+}

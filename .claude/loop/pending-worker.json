@@ -1,0 +1,15 @@
+{
+  "orchestrator": "skill-loop",
+  "worker_skill": "/auto-improve",
+  "focus_hint": "Core engine tool-loop failure-path tests from queue item 2",
+  "started_at": "2026-07-21T19:30:00Z",
+  "result_glob": ".claude/loop/result-*.json",
+  "rules": [
+    "Read .claude/skills/_shared/RESULTS-CONTRACT.md",
+    "Read and execute ONLY the worker SKILL.md for worker_skill",
+    "One cycle only — then stop",
+    "Before exit write .claude/loop/result-<unix>.json with the schema below",
+    "Do not spawn skill-loop",
+    "Windows-first shell; logs under .claude/tmp/"
+  ]
+}

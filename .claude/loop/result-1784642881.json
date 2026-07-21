@@ -1,0 +1,31 @@
+{
+  "skill": "auto-improve",
+  "status": "success",
+  "committed": "f0b4803",
+  "branch": "agent-development",
+  "summary": "CERTAIN-2: 10 core engine tool-loop failure-path tests covering unknown tool, tool throw, runaway loop, max iterations, provider error, abort, context overflow recovery, ECONNREFUSED, result truncation, mixed success/failure",
+  "files_changed": [
+    "packages/core/test/ai-engine-toolloop-failure.test.ts",
+    "packages/core/test/cli-chat-tool-smoke.test.ts",
+    "docs/FUTURE-PLAN.MD",
+    "docs/SMOKE.md",
+    "plan/improvement-plan.md"
+  ],
+  "verify": {
+    "build": "PASS",
+    "tests": "PASS (407/407)",
+    "live": "SKIP"
+  },
+  "certain_promoted": "Core engine tool-loop error paths",
+  "next_queue": [
+    "CERTAIN-3 Desktop send message end-to-end",
+    "CERTAIN-4 Web send message smoke",
+    "CERTAIN-5 BYOK provider connect + list models (offline mock)",
+    "CERTAIN-6 MCP list/connect smoke",
+    "Agent-parity hooks MVP PreToolUse/PostToolUse",
+    "Checkpoints + rewind skeleton in core",
+    "Session --continue/--resume"
+  ],
+  "open_questions": [],
+  "duration_minutes": 8
+}
