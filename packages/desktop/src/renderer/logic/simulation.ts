@@ -26,12 +26,20 @@ export class AgentSimulator {
     projectScope: string,
     _selectedModel: string,
     savedAttachments: { filename: string; fullPath: string }[] = [],
-    startTime: number = Date.now()
+    startTime: number = Date.now(),
+    responseSeq: number = 0
   ): void {
     if (ctx.getActiveChatId() === chatId) {
       ctx.setIsGenerating(true);
     }
     let currentSteps = [...initialSteps];
+
+    // Build steps tagged with this response's regeneration sequence so the
+    // canvas can group a turn's responses and offer x/n arrow navigation.
+    const mkThought = (content: string): TrajectoryStep => StepFactory.thoughtStep(content, undefined, undefined, responseSeq);
+    const mkAssistant = (content: string): TrajectoryStep => StepFactory.assistantStep(content, undefined, undefined, responseSeq);
+    const mkToolCall = (toolName: string, content: string, status: 'pending' | 'running' | 'success' | 'error' = 'running'): TrajectoryStep =>
+      StepFactory.toolCallStep(toolName, content, status, undefined, undefined, responseSeq);
 
     // Finalizes the simulation: stamps the worked duration, stops the run, and persists.
     const finalizeSimulation = (nextSteps: TrajectoryStep[]) => {
@@ -78,7 +86,7 @@ export class AgentSimulator {
 
         updateChatSteps([
           ...currentSteps,
-          StepFactory.thoughtStep(
+          mkThought(
             isSummarizeRequest
               ? `Detected document summary request for ${firstFile.filename}. Invoking document reader and layout parser to extract text contents...`
               : `Detected ${savedAttachments.length} uploaded attachment(s): [${fileNamesList}]. Invoking parsing pipeline to inspect file data and structure...`
@@ -89,7 +97,7 @@ export class AgentSimulator {
           const isImage = firstFile.filename.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/);
           updateChatSteps([
             ...currentSteps,
-            StepFactory.toolCallStep(
+            mkToolCall(
               isSummarizeRequest ? 'view_file' : isImage ? 'generate_image' : 'replace_file_content',
               isSummarizeRequest
                 ? `Successfully parsed text contents from ${firstFile.filename}. Extracted 23 pages of text.`
@@ -124,7 +132,7 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
 
             finalizeSimulation([
               ...currentSteps,
-              StepFactory.assistantStep(contentResult)
+              mkAssistant(contentResult)
             ]);
           }, 1200);
         }, 1200);
@@ -132,20 +140,20 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
         // ── Summarize request, no attachment ──
         updateChatSteps([
           ...currentSteps,
-          StepFactory.thoughtStep('No attachments found. Checking active workspace files for text logs or document summaries...')
+          mkThought('No attachments found. Checking active workspace files for text logs or document summaries...')
         ]);
 
         setTimeout(() => {
           finalizeSimulation([
             ...currentSteps,
-            StepFactory.assistantStep('Please attach a document or PDF file for me to read and summarize directly.')
+            mkAssistant('Please attach a document or PDF file for me to read and summarize directly.')
           ]);
         }, 1200);
       } else if (lower.includes('image') || lower.includes('video') || lower.includes('media') || lower.includes('asset')) {
         // ── Multimodal image/video generation branch ──
         updateChatSteps([
           ...currentSteps,
-          StepFactory.thoughtStep(
+          mkThought(
             'Coding Agent analyzed prompt. Invoking local multimodal image rendering pipeline with parameters: aspect_ratio=16:9, steps=30, style=high-contrast.'
           )
         ]);
@@ -153,13 +161,13 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
         setTimeout(() => {
           updateChatSteps([
             ...currentSteps,
-            StepFactory.toolCallStep('generate_image', 'Image successfully generated. Saved to chat context assets.', 'success')
+            mkToolCall('generate_image', 'Image successfully generated. Saved to chat context assets.', 'success')
           ]);
 
           setTimeout(() => {
             finalizeSimulation([
               ...currentSteps,
-              StepFactory.assistantStep(
+              mkAssistant(
                 'This is a demo-mode response. Connect a real AI provider with image generation in **Settings → Providers** to generate and preview actual media assets here.'
               )
             ]);
@@ -169,7 +177,7 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
         // ── Coding agent branch ──
         updateChatSteps([
           ...currentSteps,
-          StepFactory.thoughtStep(
+          mkThought(
             `Scanning file path structure in project workspace [${projectScope || 'Standalone'}]. Locating target files and computing token maps.`
           )
         ]);
@@ -178,7 +186,7 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
           updateChatSteps([
             ...currentSteps,
             {
-              ...StepFactory.toolCallStep(
+              ...mkToolCall(
                 'replace_file_content',
                 'Applied contiguous replacement patch to desktop/src/renderer/App.tsx.',
                 'success'
@@ -194,13 +202,13 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
           setTimeout(() => {
             updateChatSteps([
               ...currentSteps,
-              StepFactory.toolCallStep('run_command', 'npm run build output: tailwindcss compiled successfully. tsc type-checks passed.', 'success')
+              mkToolCall('run_command', 'npm run build output: tailwindcss compiled successfully. tsc type-checks passed.', 'success')
             ]);
 
             setTimeout(() => {
               finalizeSimulation([
                 ...currentSteps,
-                StepFactory.assistantStep(
+                mkAssistant(
                   'I have modified `App.tsx` to automatically redirect the active tab to the trajectory execution screen on startup. Verified compilation succeeds.'
                 )
               ]);
@@ -211,19 +219,19 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
         // ── Memory & profile branch ──
         updateChatSteps([
           ...currentSteps,
-          StepFactory.thoughtStep('Personal preference prompt detected. Querying memory profile via REST endpoint first per priority rule.')
+          mkThought('Personal preference prompt detected. Querying memory profile via REST endpoint first per priority rule.')
         ]);
 
         setTimeout(() => {
           updateChatSteps([
             ...currentSteps,
-            StepFactory.toolCallStep('search_memory', 'No memory blocks found yet. Memory is populated as you interact with a connected AI provider.', 'success')
+            mkToolCall('search_memory', 'No memory blocks found yet. Memory is populated as you interact with a connected AI provider.', 'success')
           ]);
 
           setTimeout(() => {
             finalizeSimulation([
               ...currentSteps,
-              StepFactory.assistantStep(
+              mkAssistant(
                 "I don't have any saved memories about you yet. This is demo mode — connect an AI provider in **Settings → Providers**, and I'll start building a personalized memory profile from your conversations."
               )
             ]);
@@ -233,13 +241,13 @@ Once a provider (OpenAI, Anthropic, Gemini, DeepSeek, or a local Ollama model) i
         // ── Standard chatting branch ──
         updateChatSteps([
           ...currentSteps,
-          StepFactory.thoughtStep('Checking active workspace credentials and connected LLM providers...')
+          mkThought('Checking active workspace credentials and connected LLM providers...')
         ]);
 
         setTimeout(() => {
           finalizeSimulation([
             ...currentSteps,
-            StepFactory.assistantStep(
+            mkAssistant(
               `⚠️ **Demo Mode (Simulation)**
 
 No active AI provider credentials were found. To run the real coding assistant, please set up an API key:

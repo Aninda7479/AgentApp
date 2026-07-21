@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Save, RefreshCw, AlertCircle, Info, Sparkles } from 'lucide-react';
+import { getIpc } from '../../lib/electron';
 
 /** Self-contained 3D model-generation settings panel.
  *
@@ -16,9 +17,7 @@ export const ThreeDSettings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  const ipc = typeof window !== 'undefined' && (window as any).require
-    ? (window as any).require('electron').ipcRenderer
-    : null;
+  const ipc = getIpc();
 
   const loadSettings = async () => {
     if (!ipc) {

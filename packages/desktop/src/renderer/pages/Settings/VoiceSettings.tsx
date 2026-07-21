@@ -3,6 +3,7 @@ import { Mic, Save, RefreshCw, AlertCircle, Info, Languages, Zap, Cloud, Globe, 
 import { SearchableSelect, SearchableSelectOption } from '../../components/ui/SearchableSelect';
 import { ModelPricing } from './types';
 import { errorMessage } from '../../lib/errorReporter';
+import { getIpc } from '../../lib/electron';
 
 type Engine = 'auto' | 'browser' | 'model' | 'local';
 type WhisperSize = 'tiny' | 'base' | 'small' | 'medium' | 'large';
@@ -123,9 +124,7 @@ export const VoiceSettings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  const ipc = typeof window !== 'undefined' && (window as any).require
-    ? (window as any).require('electron').ipcRenderer
-    : null;
+  const ipc = getIpc();
 
   const loadSettings = async () => {
     if (!ipc) {

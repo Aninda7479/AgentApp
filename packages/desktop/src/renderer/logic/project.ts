@@ -1,5 +1,6 @@
 import type { StoredProject } from '../types';
 import { FormatService } from './format';
+import { getIpc } from '../lib/electron';
 
 /**
  * Backend / Electron boundary helpers for project (folder) selection and
@@ -15,9 +16,7 @@ export class ProjectService {
    * An empty array means the picker opened but the user cancelled.
    */
   static async selectProjectFolders(): Promise<string[] | null> {
-    const ipc = typeof window !== 'undefined' && (window as any).require
-      ? (window as any).require('electron').ipcRenderer
-      : null;
+    const ipc = getIpc();
     if (!ipc) return null;
     try {
       const selected: string[] = await ipc.invoke('select-project-folders');

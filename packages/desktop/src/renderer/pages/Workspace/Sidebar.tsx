@@ -376,6 +376,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           projectChats.map((chat) => {
                             const isChatSelected = activeChatId === chat.id && activeTab === 'trajectory';
                             const isChatRunning = Boolean(chat.isRunning);
+                            const queuedCount = chat.queuedCount ?? 0;
                             return (
                               <div
                                 key={chat.id}
@@ -398,6 +399,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 )}
                                 <span className="truncate flex-1 leading-snug">{chat.title}</span>
                                 <div className="flex items-center gap-1 flex-shrink-0">
+                                  {queuedCount > 0 && (
+                                    <span
+                                      className="text-[9px] font-semibold px-1 py-px rounded-full bg-[color:var(--brand-hover)] text-brand-textMuted"
+                                      title={`${queuedCount} prompt${queuedCount > 1 ? 's' : ''} queued`}
+                                    >
+                                      +{queuedCount}
+                                    </span>
+                                  )}
                                   <span className="text-[10px] text-brand-textMuted/40 group-hover:hidden">
                                     {isChatRunning ? 'Working...' : chat.timestamp}
                                   </span>
@@ -472,6 +481,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {standaloneChats.map((chat) => {
                   const isSelected = activeChatId === chat.id && activeTab === 'trajectory';
                   const isChatRunning = Boolean(chat.isRunning);
+                  const queuedCount = chat.queuedCount ?? 0;
                   return (
                     <div
                       key={chat.id}
@@ -494,6 +504,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       )}
                       <span className="truncate flex-1">{chat.title}</span>
                       <div className="flex items-center gap-1 flex-shrink-0">
+                        {queuedCount > 0 && (
+                          <span
+                            className="text-[9px] font-semibold px-1 py-px rounded-full bg-[color:var(--brand-hover)] text-brand-textMuted"
+                            title={`${queuedCount} prompt${queuedCount > 1 ? 's' : ''} queued`}
+                          >
+                            +{queuedCount}
+                          </span>
+                        )}
                         <span className="text-[10px] text-brand-textMuted/40 group-hover:hidden">
                           {isChatRunning ? 'Working...' : chat.timestamp}
                         </span>

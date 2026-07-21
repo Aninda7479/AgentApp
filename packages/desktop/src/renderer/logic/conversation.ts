@@ -71,6 +71,7 @@ export class ConversationService {
    * the active project/chat is reassigned to another project (or cleared).
    */
   static deleteProject(ctx: AppContext, projectName: string): void {
+    let newActiveId: string | null = null;
     ctx.setProjects((prev) => {
       const next = prev.filter((p) => p.name !== projectName);
       ctx.setChats((prevChats) => {
@@ -79,19 +80,8 @@ export class ConversationService {
         if (ctx.getActiveProject() === projectName) {
           if (next.length > 0) {
             const nextProjName = next[0].name;
-            ctx.setActiveProject(nextProjName);
             const matchingChat = nextChats.find((c) => c.project === nextProjName);
-            if (matchingChat) {
-              ctx.setActiveChatId(matchingChat.id);
-              ctx.setTrajectorySteps(matchingChat.steps);
-            } else {
-              ctx.setActiveChatId(null);
-              ctx.setTrajectorySteps([]);
-            }
-          } else {
-            ctx.setActiveProject('');
-            ctx.setActiveChatId(null);
-            ctx.setTrajectorySteps([]);
+            if (matchingChat) newActiveId = matchingChat.id;
           }
         }
         ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), next, nextChats);
@@ -99,6 +89,15 @@ export class ConversationService {
       });
       return next;
     });
+    // Lazy-load the replacement chat (its steps may not be resident).
+    if (newActiveId) {
+      StoreService.openChat(ctx, newActiveId, { setTab: true });
+    } else if (ctx.getActiveProject() === projectName) {
+      const remaining = ctx.getProjects();
+      ctx.setActiveProject(remaining.length > 0 ? remaining[0].name : '');
+      ctx.setActiveChatId(null);
+      ctx.setTrajectorySteps([]);
+    }
   }
 
   /**
@@ -111,8 +110,8 @@ export class ConversationService {
 
     const matchingChat = ctx.getChats().find((c) => c.project === project);
     if (matchingChat) {
-      ctx.setActiveChatId(matchingChat.id);
-      ctx.setTrajectorySteps(matchingChat.steps);
+      // Lazy-load the first chat's trajectory (see StoreService.openChat).
+      StoreService.openChat(ctx, matchingChat.id, { setTab: true });
     } else {
       ctx.setActiveChatId('draft-chat');
       ctx.setDraftProject(project);
@@ -120,15 +119,11 @@ export class ConversationService {
     }
   }
 
-  /** Opens a specific chat, making it active and loading its trajectory. */
+  /** Opens a specific chat, making it active and lazy-loading its trajectory. */
   static selectChat(ctx: AppContext, chatId: string): void {
-    const chat = ctx.getChats().find((c) => c.id === chatId);
-    if (chat) {
-      ctx.setActiveChatId(chatId);
-      ctx.setActiveProject(chat.project);
-      ctx.setTrajectorySteps(chat.steps);
-      ctx.setActiveTab('trajectory');
-    }
+    // Lazy-load: only the opened chat's steps come into RAM; the previously
+    // active chat is evicted (its transcript stays on disk). See StoreService.openChat.
+    StoreService.openChat(ctx, chatId, { setTab: true });
   }
 
   /**
@@ -136,22 +131,25 @@ export class ConversationService {
    * another chat in the same project) or cleared when none remain.
    */
   static deleteChat(ctx: AppContext, chatId: string): void {
+    let newActiveId: string | null = null;
     ctx.setChats((prev) => {
       const next = prev.filter((c) => c.id !== chatId);
       if (ctx.getActiveChatId() === chatId) {
         if (next.length > 0) {
           const nextChat = next.find((c) => c.project === ctx.getActiveProject()) || next[0];
-          ctx.setActiveChatId(nextChat.id);
-          ctx.setActiveProject(nextChat.project);
-          ctx.setTrajectorySteps(nextChat.steps);
-        } else {
-          ctx.setActiveChatId(null);
-          ctx.setTrajectorySteps([]);
+          newActiveId = nextChat.id;
         }
       }
       ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), next);
       return next;
     });
+    // Lazy-load the replacement chat (its steps may not be resident).
+    if (newActiveId) {
+      StoreService.openChat(ctx, newActiveId, { setTab: true });
+    } else {
+      ctx.setActiveChatId(null);
+      ctx.setTrajectorySteps([]);
+    }
   }
 
   /**
@@ -167,6 +165,23 @@ export class ConversationService {
       const next = prev.map((c) =>
         c.id === chatId ? { ...c, settings: { ...settings } } : c
       );
+      ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), next);
+      return next;
+    });
+  }
+
+  /**
+   * Updates the model recorded on a chat. The composer seeds its model selector
+   * from the chat's own `model` (so a model chosen mid-conversation stays sticky
+   * per chat), and `sendPrompt` honors the selected model on every turn — this
+   * is what lets one conversation switch models (Y → X → Z) while keeping its
+   * history. Also refreshes the global "last used" model so a fresh chat opens
+   * on the most recent choice.
+   */
+  static setChatModel(ctx: AppContext, chatId: string, model: string): void {
+    if (!model) return;
+    ctx.setChats((prev) => {
+      const next = prev.map((c) => (c.id === chatId ? { ...c, model } : c));
       ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), next);
       return next;
     });
@@ -251,7 +266,7 @@ export class ConversationService {
   static selectSearchChat(ctx: AppContext, chatTitle: string, projectContext?: string): void {
     const match = ctx.getChats().find((c) => c.title === chatTitle);
     if (match) {
-      ConversationService.selectChat(ctx, match.id);
+      StoreService.openChat(ctx, match.id, { setTab: true });
       return;
     }
     if (projectContext) {

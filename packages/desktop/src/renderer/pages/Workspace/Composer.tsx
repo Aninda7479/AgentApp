@@ -1,5 +1,6 @@
 import React, { useState, KeyboardEvent, useEffect, useRef, useMemo } from 'react';
 import { Select } from '../../components/ui';
+import { getIpc } from '../../lib/electron';
 import {
   Plus,
   Cpu,
@@ -195,9 +196,7 @@ export const Composer: React.FC<ComposerProps> = ({
   const [voiceModelAvailable, setVoiceModelAvailable] = useState<boolean | null>(null);
   const [localWhisperEnabled, setLocalWhisperEnabled] = useState<boolean>(false);
 
-  const ipcRenderer = typeof window !== 'undefined' && (window as any).require
-    ? (window as any).require('electron').ipcRenderer
-    : null;
+  const ipcRenderer = getIpc();
 
   // Resolve which engine the mic should use, and whether a cloud model is ready.
   useEffect(() => {
@@ -218,6 +217,13 @@ export const Composer: React.FC<ComposerProps> = ({
     }).catch(() => { /* leave defaults */ });
     return () => { active = false; };
   }, []);
+
+  // Keep the model selector in sync with the active chat's model. This makes the
+  // model sticky per chat (switching chats shows that chat's model) and reflects
+  // a model the user just picked for this conversation.
+  useEffect(() => {
+    setSelectedModel(defaultModel);
+  }, [defaultModel]);
 
   const usesModelEngine =
     voiceEngine === 'model' ||

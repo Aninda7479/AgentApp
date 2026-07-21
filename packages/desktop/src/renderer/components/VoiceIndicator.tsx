@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { getIpc } from '../lib/electron';
 
-const ipc = (window as any).require ? (window as any).require('electron').ipcRenderer : null;
+const ipc = getIpc();
 
 export const VoiceIndicator: React.FC = () => {
   const [state, setState] = useState<'recording' | 'transcribing' | 'done' | null>(null);
@@ -49,12 +50,12 @@ export const VoiceIndicator: React.FC = () => {
       }
     };
 
-    ipc.on('voice-daemon-event', handleVoiceEvent);
-    ipc.on('voice-daemon-inject', handleInjectText);
+    ipc('voice-daemon-event', handleVoiceEvent);
+    ipc('voice-daemon-inject', handleInjectText);
 
     return () => {
-      ipc.off('voice-daemon-event', handleVoiceEvent);
-      ipc.off('voice-daemon-inject', handleInjectText);
+      ipc('voice-daemon-event', handleVoiceEvent);
+      ipc('voice-daemon-inject', handleInjectText);
     };
   }, []);
 
@@ -75,7 +76,7 @@ export const VoiceIndicator: React.FC = () => {
         const arrayBuffer = await audioBlob.arrayBuffer();
         
         // Ship bytes back to main process for Whisper transcription
-        ipc?.send('voice-daemon-audio-captured', { buffer: arrayBuffer });
+        ipc.send('voice-daemon-audio-captured', { buffer: arrayBuffer });
         
         // Stop all audio track streams
         stream.getTracks().forEach((track) => track.stop());
@@ -88,7 +89,7 @@ export const VoiceIndicator: React.FC = () => {
       setState('done');
       setErrorMsg('Microphone access denied');
       setTimeout(() => setState(null), 1500);
-      ipc?.send('voice-recording-failed', err.message || String(err));
+      ipc.send('voice-recording-failed', err.message || String(err));
     }
   };
 

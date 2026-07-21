@@ -90,7 +90,6 @@ type Pose = { rot: Record<string, Vec3>; pos: Record<string, Vec3>; screen: numb
 // ── Electron IPC ──────────────────────────────────────────────────────────────
 const electron = (window as any).require('electron');
 const ipc = electron.ipcRenderer;
-const nodeUrl = (window as any).require('url');
 
 // ── Error logging for the pet window ────────────────────────────────────────────
 // The pet window has no own toast UI; errors go to its console and (when possible)
@@ -1281,7 +1280,7 @@ class PetApp {
         const vrm = new VRMCharacter(this.accent);
         this.root.add(vrm.object);
         this.character = vrm;
-        await vrm.load(nodeUrl.pathToFileURL(p.vrmPath).href, this.accent);
+        await vrm.load(new URL(p.vrmPath).href, this.accent);
       } catch (e) {
         console.error('Failed to load VRM, falling back to Lily', e);
         const lily = new Lily(this.accent);
@@ -1293,7 +1292,7 @@ class PetApp {
         const glb = new GLBCharacter(this.accent, p.faceOverlay ?? undefined);
         this.root.add(glb.object);
         this.character = glb;
-        await glb.load(nodeUrl.pathToFileURL(p.modelPath).href);
+        await glb.load(new URL(p.modelPath).href);
       } catch (e) {
         console.error('Failed to load GLB, falling back to Lily', e);
         const lily = new Lily(this.accent);

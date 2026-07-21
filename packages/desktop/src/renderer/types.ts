@@ -71,6 +71,9 @@ export interface StoredChat {
   isRunning?: boolean;
   startedAt?: number;
   lastError?: string;
+  /** Number of prompts queued behind the in-flight run for this chat (drained
+   *  automatically when the current response ends). Drives the sidebar badge. */
+  queuedCount?: number;
 }
 
 /** Theme preference: light, dark, or system-managed. */

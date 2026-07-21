@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { RefreshCw, CheckCircle2, AlertTriangle, Info, ExternalLink } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
+import { getIpc } from '../../lib/electron';
 
 /** Status returned by the main-process update check. */
 export interface UpdateStatus {
@@ -28,9 +29,7 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
 }) => {
   const [githubUrl] = useState(REPO_URL);
 
-  const ipc = typeof window !== 'undefined' && (window as any).require
-    ? (window as any).require('electron').ipcRenderer
-    : null;
+  const ipc = getIpc();
 
   const openInBrowser = (url: string) => {
     if (ipc) {

@@ -5,6 +5,7 @@
  * restore bookkeeping lives here.
  */
 import type { AppContext, NavigationSnapshot } from './types';
+import { StoreService } from './store';
 
 export class NavigationService {
   /**
@@ -55,8 +56,10 @@ export class NavigationService {
     ctx.setActiveDiff(snapshot.activeDiff);
 
     if (snapshot.activeChatId) {
-      const chat = ctx.getChats().find((c) => c.id === snapshot.activeChatId);
-      ctx.setTrajectorySteps(chat?.steps || []);
+      // Lazy-load the chat's trajectory (see StoreService.openChat) instead
+      // of reading it from the in-memory array, which no longer holds
+      // dormant chats' steps.
+      StoreService.openChat(ctx, snapshot.activeChatId);
     }
   }
 }

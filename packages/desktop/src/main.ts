@@ -1,4 +1,4 @@
-import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, desktopCapturer, screen, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
+import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, desktopCapturer, screen, session, type IpcMainInvokeEvent, type IpcMainEvent } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -76,9 +76,27 @@ import {
 // and forwarded to the renderer as a toast (via the 'app-error' channel) instead
 // of rejecting the IPC call and white-screening the UI.
 
+/**
+ * Sender validation for privileged IPC. Under contextIsolation the renderer is
+ * a separate, unprivileged context loading only our local HTML files, so every
+ * invoke/send we honor must originate from one of those windows. Anything else
+ * (e.g. an unexpected remote/child frame) is rejected before the handler runs.
+ */
+function assertSender(event: IpcMainInvokeEvent | IpcMainEvent): void {
+  const frame = event.senderFrame;
+  const url = frame?.url ?? '';
+  if (!url.startsWith('file://')) {
+    throw new Error('rejected IPC from non-file sender: ' + url);
+  }
+  if (!/(^|\/)(ui|pet|circle-search)\.html([?#].*)?$/.test(url)) {
+    throw new Error('rejected IPC from unexpected local page: ' + url);
+  }
+}
+
 function safeHandle(channel: string, handler: (event: IpcMainInvokeEvent, ...args: any[]) => unknown): void {
   ipcMain.handle(channel, async (event, ...args) => {
     try {
+      assertSender(event);
       return await handler(event, ...args);
     } catch (err: unknown) {
       logError('ipc:' + channel, err);
@@ -90,6 +108,7 @@ function safeHandle(channel: string, handler: (event: IpcMainInvokeEvent, ...arg
 function safeOn(channel: string, handler: (event: IpcMainEvent, ...args: any[]) => void): void {
   ipcMain.on(channel, (event, ...args) => {
     try {
+      assertSender(event);
       handler(event, ...args);
     } catch (err: unknown) {
       logError('ipc:' + channel, err);
@@ -174,19 +193,27 @@ safeHandle('agent-run', async (event, {
   config: AgentEngineConfig;
   currentAttachments?: string[];
 }) => {
+  // Declared in the handler scope (outside `try`) so the `catch` block can read
+  // them when engine.run() rejects without emitting a terminal agent-event.
+  const win = BrowserWindow.fromWebContents(event.sender);
+  sessionWindows.set(sessionId, win);
+  let terminalEmitted = false;
+  let firstActivity = false;
+  let firstEventTimer: ReturnType<typeof setTimeout> | undefined;
+  let terminalWatchdog: ReturnType<typeof setTimeout> | undefined;
+
   try {
     // Log the outgoing user message on the desktop connection (device-tagged).
     console.log(`[desktop] message SENT — connection device: ${DEVICE_NAME} | session: ${sessionId} | model: ${config.model}`);
 
+    // Load settings once for this session so both orchestrator routing AND
+    // context-window resolution can read models/providers from the same source.
+    const settings = SettingsStorage.loadSettings();
+
     // Reuse or create engine
     let engine = activeSessions.get(sessionId);
-    const win = BrowserWindow.fromWebContents(event.sender);
-    sessionWindows.set(sessionId, win);
     if (!engine) {
       let finalConfig = { ...config };
-      // Load settings once for this session so both orchestrator routing AND
-      // context-window resolution can read models/providers from the same source.
-      const settings = SettingsStorage.loadSettings();
       if (config.model === 'auto' || config.model === 'Orchestrator' || config.model === 'Model Governance') {
         // Apply the Orchestrator's default reasoning effort only when the
         // composer/turn didn't set one (caller preference wins). 'off' means
@@ -269,7 +296,12 @@ safeHandle('agent-run', async (event, {
                 fs.mkdirSync(projectDataDir, { recursive: true });
               }
               const configFilePath = path.join(projectDataDir, 'chat_config.json');
-              fs.writeFileSync(configFilePath, JSON.stringify({ chatName }, null, 2), 'utf8');
+              const { apiKey, requestApproval, extraTools, ...safeConfig } = finalConfig;
+              fs.writeFileSync(
+                configFilePath,
+                JSON.stringify({ chatName, ...safeConfig }, null, 2),
+                'utf8'
+              );
               console.log(`[desktop] Saved chat config to ${configFilePath}`);
             } catch (fsErr) {
               console.error('[desktop] Failed to write chat_config.json:', fsErr);
@@ -288,10 +320,76 @@ safeHandle('agent-run', async (event, {
           console.error('[desktop] Error in chat name generation sequence:', nameErr);
         }
       })();
+    } else {
+      // Engine already exists for this session: honor a concrete model switch on
+      // this turn WITHOUT losing the conversation history the engine holds in RAM.
+      // `updateConfig` mutates the engine's live config in place (read by run() on
+      // every turn) so the next message uses the newly picked model while the
+      // prior context continues. The orchestrator special models
+      // ('auto'/'Orchestrator'/'Model Governance') were resolved to a concrete
+      // model at creation time, so we leave those untouched on reuse.
+      const isOrchestratorModel =
+        config.model === 'Orchestrator' || config.model === 'Model Governance' || config.model === 'auto';
+      if (!isOrchestratorModel) {
+        engine.updateConfig({
+          model: config.model,
+          provider: config.provider,
+          apiKey: config.apiKey,
+          baseUrl: config.baseUrl,
+          contextWindow: resolveContextWindow(config.model, settings?.models)
+        });
+      }
     }
 
     // Run agent; emit each event back to renderer
     let replyLogged = false;
+    // ── Watchdogs ─────────────────────────────────────────────────────────────
+    // The renderer only stops the "thinking" animation and surfaces a reason
+    // once it receives a terminal `agent-event` (done/error/abort). If the run
+    // ends without emitting one — an unhandled rejection from `engine.run`
+    // (e.g. a provider 429 before any token, or a setup throw) or a provider
+    // request that hangs forever — the UI would spin the thinking animation
+    // indefinitely with no reply and no error. These watchdogs emit a terminal
+    // error event if the run stalls, so the user always gets a single-line
+    // explanation instead of a stuck chat.
+    let terminalEmitted = false;
+    let firstActivity = false;
+
+    // First-activity watchdog: fail fast with a clear message if the provider
+    // never starts responding (dead/hanging connection, auth wall, or a rate
+    // limit that holds the socket). The core engine also enforces a 45s connect
+    // timeout on the request itself; this is the backstop for stalls that happen
+    // before/around the network call. 60s is generous for slow models but short
+    // enough that the user isn't left staring at a spinner.
+    const FIRST_EVENT_MS = 60_000;
+    firstEventTimer = setTimeout(() => {
+      if (!terminalEmitted && !firstActivity && win && !win.isDestroyed()) {
+        win.webContents.send('agent-event', {
+          type: 'error',
+          sessionId,
+          error: 'The model did not start responding (request timed out). Check the provider connection, API key, and rate limits, then try again.'
+        });
+      }
+      terminalEmitted = true;
+      clearTimeout(terminalWatchdog);
+    }, FIRST_EVENT_MS);
+
+    // Terminal watchdog: backstop for runs that emit activity but never finish
+    // (e.g. a stream that stalls mid-way). Longer because once output is flowing
+    // a genuine long generation can take a while.
+    const TERMINAL_MS = 120_000;
+    terminalWatchdog = setTimeout(() => {
+      if (!terminalEmitted && win && !win.isDestroyed()) {
+        win.webContents.send('agent-event', {
+          type: 'error',
+          sessionId,
+          error: 'The agent stopped responding before finishing. Check the provider connection and try again.'
+        });
+      }
+      terminalEmitted = true;
+      clearTimeout(firstEventTimer);
+    }, TERMINAL_MS);
+
     await engine.run(prompt, (agentEvent: AgentEvent) => {
       // Log the first reply token on the desktop connection (device-tagged).
       if (agentEvent.type === 'token' && !replyLogged) {
@@ -299,7 +397,7 @@ safeHandle('agent-run', async (event, {
         console.log(`[desktop] message RECEIVED — connection device: ${DEVICE_NAME} | session: ${sessionId}`);
       }
       if (win && !win.isDestroyed()) {
-        win.webContents.send('agent-event', agentEvent);
+        win.webContents.send('agent-event', { ...agentEvent, sessionId });
         // Relay to the free-roaming 3D Partner so it reacts in real time.
         const petMood = petWindowManager.moodFromAgentEvent(agentEvent.type);
         if (petMood) petWindowManager.setMood(petMood);
@@ -324,15 +422,44 @@ safeHandle('agent-run', async (event, {
           petWindowManager.say(agentEvent.error);
         }
       }
+
+      // Any sign of life stands the first-activity watchdog down.
+      if (
+        agentEvent.type === 'token' || agentEvent.type === 'thought' ||
+        agentEvent.type === 'tool_call' || agentEvent.type === 'context'
+      ) {
+        firstActivity = true;
+        clearTimeout(firstEventTimer);
+      }
+
+      // Mark terminal events so the watchdogs (and the catch below) know the run
+      // finalized cleanly and no synthetic error should be emitted.
+      if (agentEvent.type === 'done' || agentEvent.type === 'error' || agentEvent.type === 'abort') {
+        terminalEmitted = true;
+        clearTimeout(firstEventTimer);
+        clearTimeout(terminalWatchdog);
+      }
     }, currentAttachments);
 
     // Clean up after done/error/abort
+    clearTimeout(firstEventTimer);
+    clearTimeout(terminalWatchdog);
     activeSessions.delete(sessionId);
     return { success: true };
 
   } catch (err: unknown) {
+    clearTimeout(firstEventTimer);
+    clearTimeout(terminalWatchdog);
     activeSessions.delete(sessionId);
-    return { success: false, error: (err as Error).message };
+    const errMsg = (err as Error).message || String(err);
+    // The renderer only stops the "thinking" animation / shows a no-response
+    // reason once it receives a terminal agent-event. If engine.run() rejected
+    // (e.g. provider 429 before any token, a setup throw) without the engine
+    // emitting its own error event, emit one now so the chat never hangs.
+    if (!terminalEmitted && win && !win.isDestroyed()) {
+      win.webContents.send('agent-event', { type: 'error', sessionId, error: errMsg });
+    }
+    return { success: false, error: errMsg };
   }
 });
 
@@ -513,6 +640,19 @@ safeHandle('store-read', (): StoreData => {
   return readStore();
 });
 
+/**
+ * Reads ONLY one chat's trajectory `steps` from disk. Lets the renderer
+ * lazy-load a conversation's history when it is actually opened, instead of
+ * holding every chat's full steps in RAM forever. The renderer evicts
+ * (drops from memory) the steps of chats it is not currently showing; the
+ * canonical transcript lives on disk, so nothing is lost.
+ */
+safeHandle('chat-steps-read', (_event, chatId: string): unknown => {
+  if (typeof chatId !== 'string' || !chatId) return [];
+  const chat = (readStore().chats ?? []).find((c) => c.id === chatId);
+  return (chat?.steps as unknown) ?? [];
+});
+
 safeHandle('kanban-load', (_event, args: { scope: 'global' | 'project'; projectName?: string }) => {
   const tasksDir = path.join(getUserDataDirectory(), 'tasks');
   let filePath = '';
@@ -559,7 +699,30 @@ safeHandle('kanban-save', (_event, args: { scope: 'global' | 'project'; projectN
 });
 
 safeHandle('store-write', (_event, data: StoreData): void => {
-  writeStore(data);
+  // The renderer keeps only the ACTIVE chat's full trajectory in RAM and
+  // holds every other (dormant) chat metadata-only (steps: []), lazily
+  // re-reading them from disk on open. If we wrote those [] verbatim
+  // we'd erase dormant transcripts, so merge with the on-disk store:
+  // a chat with non-empty steps wins; an empty-steps chat falls back to
+  // its on-disk steps (if any); a brand-new chat with no disk record
+  // keeps its (empty) steps. This keeps the disk transcript authoritative
+  // and lets the renderer drop chats from RAM without data loss.
+  const onDisk = readStore();
+  const diskStepsById = new Map<string, unknown>();
+  for (const c of (onDisk.chats ?? []) as Array<{ id: string; steps?: unknown }>) {
+    if (c.id) diskStepsById.set(c.id, c.steps as unknown);
+  }
+  const mergedData: StoreData = {
+    ...data,
+    chats: ((data.chats ?? []) as unknown as Array<Record<string, unknown>>).map((c) => {
+      const steps = c.steps;
+      if (Array.isArray(steps) && (steps as unknown[]).length > 0) return c as any;
+      const diskSteps = diskStepsById.get(String(c.id));
+      if (diskSteps) return { ...c, steps: diskSteps } as any;
+      return c as any;
+    })
+  };
+  writeStore(mergedData);
 });
 
 safeHandle('settings-read', () => {
@@ -825,6 +988,38 @@ safeHandle('open-external', async (_event, url: string) => {
   } catch (err: unknown) {
     return { ok: false, error: (err as Error).message };
   }
+});
+
+// Renderer-side shell.openPath (media/partner open) is routed here so the
+// sandboxed renderer never needs the `shell` module directly.
+safeHandle('shell-open-path', async (_event, targetPath: string) => {
+  try {
+    return await shell.openPath(targetPath);
+  } catch (err: unknown) {
+    return { ok: false, error: (err as Error).message };
+  }
+});
+
+// Renderer-side .superagent/loop.md (or .claude/loop.md) reads are routed here
+// so the sandboxed renderer never needs `fs`/`path`. Basic containment: only
+// files named loop.md inside a `.superagent`/`.claude` folder of the given
+// workspace path are read.
+safeHandle('loop-read', (_event, workspacePath: string): string | null => {
+  if (!workspacePath || typeof workspacePath !== 'string') return null;
+  const candidates = [
+    path.join(workspacePath, '.superagent', 'loop.md'),
+    path.join(workspacePath, '.claude', 'loop.md'),
+  ];
+  for (const file of candidates) {
+    // Guard against path traversal slipping past the join above.
+    if (!file.startsWith(path.resolve(workspacePath))) continue;
+    try {
+      if (fs.existsSync(file)) return fs.readFileSync(file, 'utf-8').trim();
+    } catch {
+      /* ignore unreadable */
+    }
+  }
+  return null;
 });
 
 /**
@@ -2254,6 +2449,30 @@ function setupDevWatcher() {
 }
 
 app.whenReady().then(async () => {
+  // Lock down the renderer with a Content-Security-Policy. Because every window
+  // is context-isolated and loads only our bundled, same-origin assets, a strict
+  // policy is safe and meaningfully raises the bar on any XSS that slips through.
+  // `webRequest.onHeadersReceived` lets us attach it to each navigation/document
+  // response (the <meta> approach is ignored once a header is present).
+  const CSP = [
+    "default-src 'self'",
+    "script-src 'self' 'wasm-unsafe-eval'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: blob:",
+    "connect-src 'self' https:",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+  ].join('; ');
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const headers = { ...details.responseHeaders };
+    // Only clamp the top-level document; sub-resources inherit the policy.
+    if (details.resourceType === 'mainFrame' || details.resourceType === 'subFrame') {
+      (headers as Record<string, string | string[]>)['Content-Security-Policy'] = CSP;
+    }
+    callback({ cancel: false, responseHeaders: headers });
+  });
+
   // Cleanup outdated partner directories to ensure Lily and Waifu are merged
   try {
     const petsDir = path.join(app.getPath('userData'), STORAGE_DIRS.partners);
@@ -2280,19 +2499,15 @@ app.whenReady().then(async () => {
   registerCircleSearchShortcut();
   voiceDaemon.init();
 
-  // Warm up local Whisper model if enabled to eliminate cold-start lag
-  try {
-    const settings = SettingsStorage.loadSettings();
-    if (settings?.voice?.localWhisper?.enabled) {
-      const size = settings.voice.localWhisper.size || 'tiny';
-      const dir = settings.voice.localWhisper.modelDir || whisperLocal.defaultModelDir();
-      void whisperLocal.warmup(size, dir).catch((err) => {
-        console.warn('Whisper worker warmup failed:', err);
-      });
-    }
-  } catch (err) {
-    console.error('Failed to load settings for Whisper warmup:', err);
-  }
+  // NOTE: we deliberately do NOT warm up the local Whisper model at
+  // startup. `whisperLocal.warmup` loads the ~900 MB ONNX model
+  // into a worker thread unconditionally, so enabling local voice typing
+  // was pinning ~1 GB of RAM from launch — even for users who
+  // never dictate. Transcription already loads the model lazily on the
+  // first `transcribe` call (see `whisper-local.ts`), and the worker
+  // self-unloads after 5 min idle (`IDLE_UNLOAD_MS`), so the
+  // model is "load when needed, offload when done" with zero resident
+  // cost at idle.
 
   // Auto-start the self-hosted Web App if the user enabled it in
   // Settings → Web App. Launched shortly after boot so the main window is up

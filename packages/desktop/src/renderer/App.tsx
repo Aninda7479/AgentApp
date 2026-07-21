@@ -24,6 +24,7 @@ import { ProjectSettingsPage } from './pages/Workspace/ProjectSettingsPage';
 import { StandaloneChatPage } from './pages/Workspace/StandaloneChatPage';
 import { builtinSuggestions, SkillInfo } from './components/slashCommands';
 import { BottomNav } from './components/BottomNav';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { usePartners } from './pages/Settings/companion/library';
 import { PartnerOverlay } from './partner-popup/PartnerOverlay';
 import { ThreeDStudio } from './pages/Studio/ThreeDStudio';
@@ -32,6 +33,7 @@ import { resolveScopeSettings } from './logic/scopeSettings';
 import { SessionLoopManager, LoopTask } from './logic/loop';
 import { useThemeMode } from './theme';
 import { getRouteFromLocation, pushRoute, subscribeRouteChange, buildPath } from './urlSync';
+import { getIpc } from './lib/electron';
 
 // ── Logic layer (separated from design; see renderer/logic/*) ────────────────
 import { FormatService } from './logic/format';
@@ -43,7 +45,8 @@ import { ProvidersService } from './logic/providers';
 import { McpService } from './logic/mcp';
 import { AttachmentService } from './logic/attachments';
 import { ConversationService } from './logic/conversation';
-import { AgentService, StreamingRefs } from './logic/agent';
+import { AgentService } from './logic/agent';
+import { runManager } from './logic/runManager';
 import { AgentStreamService } from './logic/agentStream';
 import { WindowService } from './logic/window';
 import { AccountService } from './logic/account';
@@ -65,6 +68,21 @@ import type { ContextUsage } from './logic/context';
  * single `AppContext` (the bridge those classes call) and delegates every unit
  * of behavior to them, so the design code stays free of logic.
  */
+/**
+ * Human-readable label per top-level tab, used by the per-page ErrorBoundary so
+ * a crashed page can say which one failed (e.g. "Workspace").
+ */
+const PAGE_LABELS: Record<string, string> = {
+  trajectory: 'Workspace',
+  scheduled: 'Scheduled',
+  tasks: 'Tasks',
+  'project-settings': 'Project Settings',
+  'standalone-chat': 'Standalone Chat',
+  studio: '3D Studio',
+  settings: 'Settings',
+  diff: 'Diff Viewer'
+};
+
 export const App: React.FC = () => {
   // ── All React state is declared first (hooks order is stable) ──────────────
   const { themeMode, setThemeMode } = useThemeMode();
@@ -186,9 +204,7 @@ export const App: React.FC = () => {
   const [skillCatalog, setSkillCatalog] = useState<any[]>([]);
 
   // Resolve ipcRenderer safely
-  const ipc = typeof window !== 'undefined' && (window as any).require
-    ? (window as any).require('electron').ipcRenderer
-    : null;
+  const ipc = getIpc();
   const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '');
 
   // ── Live-state mirror so logic classes can read fresh values ───────────────
@@ -210,10 +226,6 @@ export const App: React.FC = () => {
   const activeChatIdRef = useRef(activeChatId);
   useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
 
-  const streamingChatIdRef = useRef<string | null>(null);
-  const streamingBufferRef = useRef<string>('');
-  const streamingStepIdRef = useRef<string | null>(null);
-  const streaming: StreamingRefs = { chatIdRef: streamingChatIdRef, bufferRef: streamingBufferRef, stepIdRef: streamingStepIdRef };
   const popoverRef = useRef<HTMLDivElement>(null);
   const sendPromptRef = useRef<(raw: string, options: ComposerOptions) => Promise<void>>(async () => { });
 
@@ -324,9 +336,11 @@ export const App: React.FC = () => {
         void sendPromptRef.current(task.prompt, { model: activeModel, mode: 'chat', attachments: [] });
       }, getWorkspacePath);
     }
-    const task = loopManagerRef.current.start(interval, prompt);
-    setActiveLoopsList(loopManagerRef.current.getTasks());
-    return task.id;
+    void loopManagerRef.current.start(interval, prompt).then((task) => {
+      setActiveLoopsList(loopManagerRef.current!.getTasks());
+      return task.id;
+    });
+    return ''; // task id is assigned asynchronously; callers that need it await start()
   }, []);
 
   const stopLoop = useCallback((id: string): boolean => {
@@ -400,10 +414,10 @@ export const App: React.FC = () => {
   );
   const handleSendPrompt = useCallback(
     async (prompt: string, options: ComposerOptions) => {
-      await AgentService.sendPrompt(ctx, prompt, options, streaming, slashDispatch);
+      await AgentService.sendPrompt(ctx, prompt, options, undefined, slashDispatch);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ctx, streaming, slashDispatch]
+    [ctx, slashDispatch]
   );
   sendPromptRef.current = handleSendPrompt;
 
@@ -421,6 +435,26 @@ export const App: React.FC = () => {
     const model = chat?.model || lastUsedModel;
     await handleSendPrompt(prompt, { model: model || undefined, attachments: [] });
   }, [ctx, handleSendPrompt, lastUsedModel]);
+
+  // Regenerate the agent's response for a specific prompt WITHOUT adding a new
+  // user step — it streams an additional alternative tagged with a fresh
+  // regenerationSeq, so the canvas keeps a per-prompt history (arrows + x/n).
+  const handleRegenerate = useCallback(async (turnId: string, content: string) => {
+    const chatId = ctx.getActiveChatId();
+    if (!chatId || chatId === 'draft-chat') return;
+    const chat = ctx.getChats().find((c) => c.id === chatId);
+    if (!chat) return;
+    // Fall back to the prompt's last user step when invoked without content
+    // (e.g. a response that preceded any user message in the initial block).
+    const prompt = content?.trim() || [...chat.steps].reverse().find((s) => s.type === 'user')?.content || '';
+    if (!prompt) return;
+    // Next sequence = (highest regenerationSeq already on this chat) + 1, so
+    // each Regenerate appends a new alternative rather than overwriting.
+    const maxSeq = chat.steps.reduce((m, s) => Math.max(m, s.metadata?.regenerationSeq ?? 0), 0);
+    const nextSeq = maxSeq + 1;
+    const model = chat.model || lastUsedModel;
+    await AgentService.regenerate(ctx, chatId, prompt, { model: model || undefined, mode: 'chat', attachments: [] }, nextSeq);
+  }, [ctx, lastUsedModel]);
 
   // ── Settings toggles (mirror state + persist) ──────────────────────────────
   const handleWorkModeChange = (mode: 'coding' | 'everyday') => {
@@ -936,14 +970,30 @@ export const App: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [profilePopoverOpen]);
 
+  // ── Run manager: how a queued prompt gets started ──
+  // Injected once so `RunManager.onTerminal` can re-enter `sendPrompt` without
+  // this module importing `AgentService` (avoids a circular dependency). Each
+  // queued `QueuedItem` already carries its own prompt / options / attachments.
+  useEffect(() => {
+    runManager.setStarter((item) => {
+      void AgentService.sendPrompt(ctx, item.prompt, item.options, item.attachments, slashDispatch);
+    });
+  }, [ctx, slashDispatch]);
+
   // ── Real AI streaming via agent-event IPC (logic lives in AgentStreamService) ─
   useEffect(() => {
     if (!ipc) return;
-    const handleAgentEvent = AgentStreamService.createHandler(ctx, streaming, partnersRef, setLiveContextUsage);
+    const handleAgentEvent = AgentStreamService.createHandler(
+      ctx,
+      (sessionId: string) => runManager.getStreamRefs(sessionId),
+      partnersRef,
+      setLiveContextUsage,
+      (sessionId: string) => runManager.onTerminal(sessionId)
+    );
     ipc.on('agent-event', handleAgentEvent);
     return () => ipc.removeListener('agent-event', handleAgentEvent);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ipc, ctx, streaming, partnersRef]);
+  }, [ipc, ctx, partnersRef]);
 
   // Reset the live context gauge when switching chats (a new run repopulates it).
   useEffect(() => {
@@ -957,9 +1007,26 @@ export const App: React.FC = () => {
       return;
     }
     const chat = chats.find((c) => c.id === activeChatId);
-    if (chat) {
+    // Prefer resident (still-held-in-RAM) steps. Dormant chats now carry
+    // steps: [] in the array (offloaded to disk), so fall back to a lazy
+    // disk read so a chat switched outside openChat() still shows its
+    // history instead of a blank canvas.
+    if (chat && chat.steps && chat.steps.length > 0) {
       setTrajectorySteps(chat.steps);
+      return;
     }
+    let cancelled = false;
+    if (ipc) {
+      ipc
+        .invoke('chat-steps-read', activeChatId)
+        .then((steps: unknown) => {
+          if (!cancelled) setTrajectorySteps(Array.isArray(steps) ? (steps as []) : []);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
   }, [activeChatId]);
 
   // ── Sandbox permission prompts (user-in-the-loop) ───────────────────────
@@ -1127,11 +1194,15 @@ export const App: React.FC = () => {
               <path d="M0 280 C260 254 520 300 760 280 C1020 258 1240 298 1440 278 L1440 320 L0 320 Z" fill="var(--brand-atmo-3)" />
             </svg>
           </div>
+          {/* Per-page error boundary: a crash in any page shows an inline error
+              in this content area only — the title bar and sidebar stay alive.
+              Keyed by activeTab so switching tabs resets a stale error state. */}
+          <ErrorBoundary name={PAGE_LABELS[activeTab] ?? 'this page'} key={activeTab}>
           {activeTab === 'trajectory' && (
             <WorkspaceView
               activeProject={activeProject}
               trajectorySteps={trajectorySteps}
-              isGenerating={isGenerating}
+              isGenerating={activeChat?.isRunning ?? false}
               startedAt={activeChat?.startedAt}
               modelsCatalog={modelsCatalog}
               mcpServers={mcpServers}
@@ -1150,7 +1221,11 @@ export const App: React.FC = () => {
               onUndoStep={handleUndoStep}
               activeChatModel={activeChat?.model || lastUsedModel}
               defaultApprovalMode={resolvedDefaultApproval}
-              onModelChange={(model) => SettingsService.persistLastUsedModel(ctx, model)}
+              onModelChange={(model) => {
+                SettingsService.persistLastUsedModel(ctx, model);
+                const active = ctx.getActiveChatId();
+                if (active && active !== 'draft-chat') ConversationService.setChatModel(ctx, active, model);
+              }}
               onAttachClick={handleAttachFiles}
               onAttachPastedFiles={handleAttachPastedFiles}
               composerAttachments={composerAttachments}
@@ -1165,6 +1240,7 @@ export const App: React.FC = () => {
               skills={skills}
               lastError={activeChat?.lastError}
               onRetryLast={handleRetryLast}
+              onRegenerate={handleRegenerate}
               contextUsage={liveContextUsage}
               activeModelContextLimit={
                 modelsCatalog.find((m) => m.name === (activeChat?.model || lastUsedModel))?.contextLimit
@@ -1284,6 +1360,7 @@ export const App: React.FC = () => {
               onReview={handleReviewDiff}
             />
           )}
+          </ErrorBoundary>
         </main>
       </div>
 

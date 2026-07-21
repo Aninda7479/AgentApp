@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { MousePointer2, Save, RefreshCw, AlertCircle, Play, Camera } from 'lucide-react';
+import { getIpc } from '../../lib/electron';
 
 /** Props for the Computer Use settings panel. */
 interface ComputerUseSettingsProps {
@@ -28,9 +29,7 @@ export const ComputerUseSettings: React.FC<ComputerUseSettingsProps> = ({
   const [capturing, setCapturing] = useState(false);
   const [capturedPath, setCapturedPath] = useState<string | null>(null);
 
-  const ipc = typeof window !== 'undefined' && (window as any).require
-    ? (window as any).require('electron').ipcRenderer
-    : null;
+  const ipc = getIpc();
 
   const loadSettings = async () => {
     if (!ipc) return;

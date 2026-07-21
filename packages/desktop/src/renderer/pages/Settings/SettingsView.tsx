@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SettingsViewProps, ModelConfig, ModelPricing, UpdateStatus, InternetAccessLevel } from './types';
+import { getIpc } from '../../lib/electron';
 export type { ProviderConnection, ModelConfig } from './types';
 import { SettingsSidebar } from './SettingsSidebar';
 import { GeneralSettings } from './GeneralSettings';
@@ -20,6 +21,31 @@ import { AboutSettings } from './AboutSettings';
 import { WebAppSettings } from './WebAppSettings';
 import { CircleSearchSettings } from './CircleSearchSettings';
 import { browserSafeFetch } from '../../web-fetch.js';
+import { ErrorBoundary } from '../../components/ErrorBoundary';
+
+/** Sidebar label per settings category, used by the per-category ErrorBoundary. */
+const CATEGORY_LABELS: Record<string, string> = {
+  general: 'General',
+  companion: 'Companion',
+  '3d': '3D Model Gen',
+  providers: 'Providers',
+  models: 'Models',
+  'local-model': 'Local Model',
+  'model-gov': 'Orchestrator',
+  voice: 'Voice & Mic',
+  'circle-search': 'Circle Search',
+  usage: 'AI Usage',
+  skills: 'Skills',
+  connectors: 'Connectors',
+  plugins: 'Plugins',
+  'browser-use': 'Browser Use',
+  'computer-use': 'Computer Use',
+  'archived-chats': 'Archived Chats',
+  'archived-projects': 'Archived Projects',
+  'web-app': 'Web App',
+  updates: 'Updates',
+  about: 'About'
+};
 
 /** Top-level settings page that renders a sidebar and the active settings category panel. */
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -412,6 +438,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       />
 
       <div className="settings-content flex-1 h-full min-w-0 overflow-y-auto px-5 py-6 sm:px-8 sm:py-8 md:px-14 md:py-10">
+        {/* Per-category error boundary: a crash in one settings panel (e.g. Voice &
+            Mic) shows an inline error here only — the settings sidebar stays usable
+            so the user can jump to another category. Keyed by activeCategory so
+            switching panels resets a stale error. */}
+        <ErrorBoundary name={CATEGORY_LABELS[activeCategory] ?? 'Settings'} key={activeCategory}>
         {activeCategory === 'general' && (
           <GeneralSettings
             themeMode={themeMode}
@@ -466,9 +497,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <OrchestratorSettings
             modelsCatalog={modelsCatalog}
             onSaveSettings={(patch) => {
-              const ipc = typeof window !== 'undefined' && (window as any).require
-                ? (window as any).require('electron').ipcRenderer
-                : null;
+              const ipc = getIpc();
               if (ipc) {
                 ipc.invoke('settings-read').then((current: any) => {
                   ipc.invoke('settings-write', { ...current, ...patch });
@@ -495,9 +524,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {activeCategory === 'browser-use' && (
           <BrowserUseSettings
             onSaveSettings={(patch) => {
-              const ipc = typeof window !== 'undefined' && (window as any).require
-                ? (window as any).require('electron').ipcRenderer
-                : null;
+              const ipc = getIpc();
               if (ipc) {
                 ipc.invoke('settings-read').then((current: any) => {
                   ipc.invoke('settings-write', { ...current, ...patch });
@@ -509,9 +536,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {activeCategory === 'computer-use' && (
           <ComputerUseSettings
             onSaveSettings={(patch) => {
-              const ipc = typeof window !== 'undefined' && (window as any).require
-                ? (window as any).require('electron').ipcRenderer
-                : null;
+              const ipc = getIpc();
               if (ipc) {
                 ipc.invoke('settings-read').then((current: any) => {
                   ipc.invoke('settings-write', { ...current, ...patch });
@@ -551,6 +576,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {activeCategory === 'circle-search' && (
           <CircleSearchSettings />
         )}
+        </ErrorBoundary>
       </div>
     </div>
   );

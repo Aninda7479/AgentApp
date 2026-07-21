@@ -39,9 +39,11 @@ export class WindowManager {
       titleBarStyle: 'hidden',
       backgroundColor: '#09090b',
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
-        webSecurity: true
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        webSecurity: true,
+        preload: path.join(__dirname, '..', 'preload', 'preload.js')
       },
       ...options,
       isMainWindow: true
@@ -75,8 +77,11 @@ export class WindowManager {
       titleBarStyle: 'hidden',
       icon: appIconPath(),
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        webSecurity: true,
+        preload: path.join(__dirname, '..', 'preload', 'preload.js')
       },
       ...browserOptions
     });
@@ -188,8 +193,11 @@ export class WindowManager {
       focusable: true,
       hasShadow: false,
       webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        webSecurity: true,
+        preload: path.join(__dirname, '..', 'preload', 'preload.js')
       }
     });
 

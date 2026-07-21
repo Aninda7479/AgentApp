@@ -1,5 +1,5 @@
 import { app, globalShortcut, BrowserWindow, clipboard } from 'electron';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { SettingsStorage } from '@superagent/core';
 
 class VoiceDaemon {
@@ -81,21 +81,30 @@ class VoiceDaemon {
   public simulateKeyboardTyping(text: string): void {
     const platform = process.platform;
     if (platform === 'win32') {
-      // Escape special characters for SendKeys: { } [ ] ( ) + ^ % ~
-      const escaped = text.replace(/([%^+~{}()\[\]])/g, '{$1}');
-      const psCommand = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("${escaped.replace(/"/g, '`"')}")`;
-      exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCommand}"`, (err) => {
+      // Escape SendKeys metacharacters ({ } [ ] ( ) + ^ % ~), then embed the
+      // text in a SINGLE-quoted PowerShell literal (doubling any single quotes)
+      // so PowerShell cannot evaluate $(...) subexpressions or backtick escapes.
+      // Args are passed as an array (no cmd.exe shell string) to prevent the
+      // whole command line from being re-parsed for injection.
+      const sendKeysEscaped = text.replace(/([%^+~{}()\[\]])/g, '{$1}');
+      const psLiteral = sendKeysEscaped.replace(/'/g, "''");
+      const psCommand = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${psLiteral}')`;
+      execFile('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psCommand], (err) => {
         if (err) console.error('[voice-daemon] Failed typing via PowerShell:', err);
       });
     } else if (platform === 'darwin') {
+      // Escape " and \ for the AppleScript string literal. execFile passes -e's
+      // value directly to osascript (no /bin/sh), so shell quote-breakout is
+      // impossible and AppleScript literals have no command substitution.
       const escaped = text.replace(/["\\]/g, '\\$&');
       const appleScript = `tell application "System Events" to keystroke "${escaped}"`;
-      exec(`osascript -e '${appleScript}'`, (err) => {
+      execFile('osascript', ['-e', appleScript], (err) => {
         if (err) console.error('[voice-daemon] Failed typing via AppleScript:', err);
       });
     } else {
-      const escaped = text.replace(/["\\]/g, '\\$&');
-      exec(`xdotool type "${escaped}"`, (err) => {
+      // Pass the text as a literal argument (after `--` so leading dashes aren't
+      // parsed as options). No shell is involved, so no escaping is required.
+      execFile('xdotool', ['type', '--', text], (err) => {
         if (err) {
           console.warn('[voice-daemon] xdotool not found, fallback to clipboard paste');
         }
@@ -124,12 +133,12 @@ class VoiceDaemon {
         // Simulate Paste command (Ctrl+V or Cmd+V) to inject text instantly
         const platform = process.platform;
         if (platform === 'win32') {
-          // Paste shortcut
-          exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^v')"`);
+          // Paste shortcut (static command, args passed as array — no shell)
+          execFile('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^v')"]);
         } else if (platform === 'darwin') {
-          exec(`osascript -e 'tell application "System Events" to keystroke "v" using command down'`);
+          execFile('osascript', ['-e', 'tell application "System Events" to keystroke "v" using command down']);
         } else {
-          exec(`xdotool key ctrl+v`);
+          execFile('xdotool', ['key', 'ctrl+v']);
         }
 
         // Restore clipboard after short delay

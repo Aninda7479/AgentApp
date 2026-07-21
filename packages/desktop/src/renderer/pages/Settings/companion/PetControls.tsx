@@ -1,19 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Play, Square, PawPrint } from 'lucide-react';
 import type { PartnerManifest } from '../../../partner-popup/types';
+import { getIpc } from '../../../lib/electron';
 
 /** Lazily resolves the Electron ipcRenderer. */
-function getIpc(): any | null {
-  if (typeof window === 'undefined') return null;
-  const req = (window as any).require;
-  if (!req) return null;
-  try {
-    return req('electron').ipcRenderer;
-  } catch {
-    return null;
-  }
-}
-
 export interface PetControlsProps {
   /** The currently active Partner (used for the preview + label). */
   activePet?: PartnerManifest | null;
@@ -35,18 +25,18 @@ export const PetControls: React.FC<PetControlsProps> = ({ activePet }) => {
   useEffect(() => {
     const ipc = getIpc();
     if (!ipc) return;
-    ipc.invoke('pet-status').then((r: any) => setRunning(!!r?.running)).catch(() => {});
+    ipc('pet-status').then((r: any) => setRunning(!!r?.running)).catch(() => {});
     const onRunning = (_e: unknown, v: boolean) => setRunning(!!v);
-    ipc.on('pet-running', onRunning);
-    return () => ipc.removeListener('pet-running', onRunning);
+    ipc('pet-running', onRunning);
+    return () => ipc('pet-running', onRunning);
   }, []);
 
   const toggle = async () => {
     const ipc = getIpc();
     if (!ipc) return;
     const res = running
-      ? await ipc.invoke('pet-stop')
-      : await ipc.invoke('pet-start');
+      ? await ipc('pet-stop')
+      : await ipc('pet-start');
     setRunning(!!res?.running);
   };
 

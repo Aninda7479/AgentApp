@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Sparkles, Check, Search, Wrench, AlertTriangle, RefreshCw } from 'lucide-react';
+import { EmptyState } from '../../components/EmptyState';
 
 /** Readiness status shared by skills and plugins. */
 export type IntegrationStatus = 'active' | 'under-development' | 'incomplete';
@@ -226,9 +227,15 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
             )}
           </div>
           {skills.length === 0 ? (
-            <div className="ui-card px-6 py-10 text-center text-sm text-brand-textMuted">
-              No skills discovered yet. Skills are read from your project's <code className="rounded bg-brand-bg px-1">skills/</code> folder.
-            </div>
+            <EmptyState
+              testid="integration-skills-empty"
+              title="No skills discovered"
+              message={
+                <>
+                  Skills are read from your project&rsquo;s <code className="rounded bg-brand-bg px-1">skills/</code> folder.
+                </>
+              }
+            />
           ) : (
             <div className="ui-grid-auto">
               {skills.map((skill) => (
@@ -255,9 +262,11 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
           </div>
 
           {filteredPlugins.length === 0 ? (
-            <div className="ui-card px-6 py-10 text-center text-sm text-brand-textMuted">
-              No plugins match “{pluginQuery}”.
-            </div>
+            <EmptyState
+              testid="integration-plugins-empty"
+              title="No plugins match"
+              message={`No plugins match “${pluginQuery}”.`}
+            />
           ) : (
             Object.entries(groupedPlugins).map(([category, items]) => (
               <div key={category} className="flex flex-col">

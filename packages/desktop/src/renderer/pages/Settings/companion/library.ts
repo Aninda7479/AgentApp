@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { getIpc } from '../../../lib/electron';
 import {
   DEFAULT_PARTNERS
 } from './defaultPartners';
@@ -23,17 +24,6 @@ const LS_INSTALLED = 'superagent.partners.installed';
 const LS_ACTIVE = 'superagent.partners.active';
 
 /** Lazily resolves the Electron ipcRenderer, or null outside the desktop shell. */
-function getIpc(): any | null {
-  if (typeof window === 'undefined') return null;
-  const req = (window as any).require;
-  if (!req) return null;
-  try {
-    return req('electron').ipcRenderer;
-  } catch {
-    return null;
-  }
-}
-
 function lsReadInstalled(): PartnerManifest[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -105,7 +95,7 @@ export const PartnerLibrary = {
     const ipc = getIpc();
     if (ipc) {
       try {
-        const res = await ipc.invoke('partner-list');
+        const res = await ipc('partner-list');
         if (Array.isArray(res)) return res.map((p: any) => normalizeManifest(p));
       } catch {
         /* fall through */
@@ -119,7 +109,7 @@ export const PartnerLibrary = {
     const ipc = getIpc();
     if (ipc) {
       try {
-        const res = await ipc.invoke('partner-get-active');
+        const res = await ipc('partner-get-active');
         if (typeof res === 'string' || res === null) return res;
       } catch {
         /* fall through */
@@ -133,7 +123,7 @@ export const PartnerLibrary = {
     const ipc = getIpc();
     if (ipc) {
       try {
-        await ipc.invoke('partner-set-active', id);
+        await ipc('partner-set-active', id);
         return;
       } catch {
         /* fall through */
@@ -146,7 +136,7 @@ export const PartnerLibrary = {
   async installFromFolder(): Promise<PartnerManifest | null> {
     const ipc = getIpc();
     if (!ipc) return null;
-    const res = await ipc.invoke('partner-install');
+    const res = await ipc('partner-install');
     if (res && res.manifest) return normalizeManifest(res.manifest);
     return null;
   },
@@ -165,7 +155,7 @@ export const PartnerLibrary = {
     const ipc = getIpc();
     if (ipc) {
       try {
-        const res = await ipc.invoke('partner-import-json', json);
+        const res = await ipc('partner-import-json', json);
         if (res && res.manifest) return normalizeManifest(res.manifest);
       } catch (e) {
         throw new Error((e as Error).message);
@@ -183,7 +173,7 @@ export const PartnerLibrary = {
     const ipc = getIpc();
     if (ipc) {
       try {
-        await ipc.invoke('partner-remove', id);
+        await ipc('partner-remove', id);
         return;
       } catch {
         /* fall through */
@@ -198,7 +188,7 @@ export const PartnerLibrary = {
     const ipc = getIpc();
     if (ipc) {
       try {
-        await ipc.invoke('partner-export', id);
+        await ipc('partner-export', id);
       } catch {
         /* ignore */
       }
@@ -210,7 +200,7 @@ export const PartnerLibrary = {
     const ipc = getIpc();
     if (!ipc) return null;
     try {
-      const res = await ipc.invoke('partner-pick-model-file');
+      const res = await ipc('partner-pick-model-file');
       if (res && typeof res === 'string') return res;
     } catch {
       /* ignore */
@@ -223,7 +213,7 @@ export const PartnerLibrary = {
     const ipc = getIpc();
     if (!ipc) return null;
     try {
-      const res = await ipc.invoke('partner-pick-model-folder');
+      const res = await ipc('partner-pick-model-folder');
       if (res && typeof res === 'string') return res;
     } catch {
       /* ignore */
@@ -240,7 +230,7 @@ export const PartnerLibrary = {
     const ipc = getIpc();
     if (!ipc) return null;
     try {
-      const res = await ipc.invoke('partner-import-model', { id, sourcePath });
+      const res = await ipc('partner-import-model', { id, sourcePath });
       if (res && res.ok) return res.model;
     } catch {
       /* ignore */
@@ -257,7 +247,7 @@ export const PartnerLibrary = {
     const ipc = getIpc();
     if (!ipc) return null;
     try {
-      const res = await ipc.invoke('partner-import-model-folder', { id, sourcePath });
+      const res = await ipc('partner-import-model-folder', { id, sourcePath });
       if (res && res.ok) return res.modelFolder;
       if (res && res.error) console.error('[partner] import model folder failed:', res.error);
     } catch (e) {
@@ -270,7 +260,7 @@ export const PartnerLibrary = {
   async startPet(): Promise<boolean> {
     const ipc = getIpc();
     if (!ipc) return false;
-    const res = await ipc.invoke('pet-start');
+    const res = await ipc('pet-start');
     return !!res?.running;
   },
 
@@ -278,7 +268,7 @@ export const PartnerLibrary = {
   async stopPet(): Promise<boolean> {
     const ipc = getIpc();
     if (!ipc) return false;
-    const res = await ipc.invoke('pet-stop');
+    const res = await ipc('pet-stop');
     return !!res?.running;
   },
 
@@ -286,7 +276,7 @@ export const PartnerLibrary = {
   async petStatus(): Promise<boolean> {
     const ipc = getIpc();
     if (!ipc) return false;
-    const res = await ipc.invoke('pet-status');
+    const res = await ipc('pet-status');
     return !!res?.running;
   }
 };
@@ -347,10 +337,10 @@ export function usePartners() {
   useEffect(() => {
     const ipc = getIpc();
     if (!ipc) return;
-    ipc.invoke('pet-status').then((r: any) => setPetRunning(!!r?.running)).catch(() => {});
+    ipc('pet-status').then((r: any) => setPetRunning(!!r?.running)).catch(() => {});
     const onRunning = (_e: unknown, running: boolean) => setPetRunning(!!running);
-    ipc.on('pet-running', onRunning);
-    return () => ipc.removeListener('pet-running', onRunning);
+    ipc('pet-running', onRunning);
+    return () => ipc('pet-running', onRunning);
   }, []);
 
   const setActive = useCallback(async (id: string | null) => {
