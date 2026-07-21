@@ -236,7 +236,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({ content }) => {
   };
 
   return (
-    <div className="flex items-center gap-1 mt-3 select-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+    <div className="flex items-center gap-1 select-none">
       <button
         onClick={handleCopy}
         title="Copy"
@@ -1057,7 +1057,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
 
       {/* Action buttons row */}
       {assistantSteps.length > 0 && !isStreaming && (
-        <div className="flex items-center gap-1 mt-1">
+        <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <MessageActions
             content={assistantSteps.map(s => s.content).join('\n\n')}
           />
