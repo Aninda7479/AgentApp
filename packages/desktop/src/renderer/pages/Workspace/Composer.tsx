@@ -911,41 +911,50 @@ export const Composer: React.FC<ComposerProps> = ({
       {/* Under-composer context row: project switcher + sandbox mode */}
       <div data-testid="composer-badges-row" className="flex gap-2 px-1 items-center flex-wrap">
         {/* Project context pill + switcher */}
-        {activeProject && (
-          <div className="relative">
-            <button
-              data-testid="badge-project"
-              onClick={() => projects.length > 0 && setProjectMenuOpen((v) => !v)}
-              className={`bg-brand-card border border-brand-border rounded-full text-brand-textMain px-3 py-1.5 text-[10px] font-semibold flex items-center gap-1 select-none shadow-sm transition-all duration-150 active:scale-[0.98] ${
-                projects.length > 0 ? 'cursor-pointer hover:border-brand-border-strong hover:bg-brand-popover' : 'cursor-default'
-              }`}
-            >
-              <Folder className="w-3 h-3 text-brand-textMuted" />
-              <span className="max-w-30 truncate">{activeProject}</span>
-              {projects.length > 0 && <ChevronDown className="w-2 h-2 text-brand-textMuted" />}
-            </button>
+        <div className="relative">
+          <button
+            data-testid="badge-project"
+            onClick={() => projects.length > 0 && setProjectMenuOpen((v) => !v)}
+            className={`bg-brand-card border border-brand-border rounded-full text-brand-textMain px-3 py-1.5 text-[10px] font-semibold flex items-center gap-1 select-none shadow-sm transition-all duration-150 active:scale-[0.98] ${
+              projects.length > 0 ? 'cursor-pointer hover:border-brand-border-strong hover:bg-brand-popover' : 'cursor-default'
+            }`}
+          >
+            <Folder className="w-3 h-3 text-brand-textMuted" />
+            <span className="max-w-30 truncate">{activeProject || 'No Project'}</span>
+            {projects.length > 0 && <ChevronDown className="w-2 h-2 text-brand-textMuted" />}
+          </button>
 
-            {projectMenuOpen && projects.length > 0 && (
-              <div className="absolute bottom-full left-0 mb-2 ui-popover w-56 p-1.5 z-50 max-h-[50vh] overflow-y-auto">
-                <div className="ui-menu-label">Switch project</div>
-                {projects.map((p) => (
-                  <button
-                    key={p.name}
-                    onClick={() => {
-                      onSelectProject?.(p.name);
-                      setProjectMenuOpen(false);
-                    }}
-                    className={`ui-popover-item ${p.name === activeProject ? 'active' : ''}`}
-                  >
-                    <Folder className="w-3.5 h-3.5 text-brand-textMuted" />
-                    <span className="truncate">{p.name}</span>
-                    {p.name === activeProject && <Check className="w-3.5 h-3.5 ml-auto" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+          {projectMenuOpen && projects.length > 0 && (
+            <div className="absolute bottom-full left-0 mb-2 ui-popover w-56 p-1.5 z-50 max-h-[50vh] overflow-y-auto">
+              <div className="ui-menu-label">Switch project</div>
+              <button
+                onClick={() => {
+                  onSelectProject?.('');
+                  setProjectMenuOpen(false);
+                }}
+                className={`ui-popover-item ${!activeProject ? 'active' : ''}`}
+              >
+                <Folder className="w-3.5 h-3.5 text-brand-textMuted" />
+                <span className="truncate">No Project</span>
+                {!activeProject && <Check className="w-3.5 h-3.5 ml-auto" />}
+              </button>
+              {projects.map((p) => (
+                <button
+                  key={p.name}
+                  onClick={() => {
+                    onSelectProject?.(p.name);
+                    setProjectMenuOpen(false);
+                  }}
+                  className={`ui-popover-item ${p.name === activeProject ? 'active' : ''}`}
+                >
+                  <Folder className="w-3.5 h-3.5 text-brand-textMuted" />
+                  <span className="truncate">{p.name}</span>
+                  {p.name === activeProject && <Check className="w-3.5 h-3.5 ml-auto" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Sandbox / full-access toggle */}
         <button

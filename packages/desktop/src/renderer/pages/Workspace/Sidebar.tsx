@@ -157,7 +157,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         data-testid={`nav-item-${id}`}
         onClick={() => onSelectTab(id)}
         title={locked ? `${label} is off — open Settings to enable it` : undefined}
-        className={`relative w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-lg transition-all duration-200 text-sm font-medium mb-1.5 select-none cursor-pointer ${isActive
+        className={`relative w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2 rounded-lg transition-all duration-200 text-sm font-medium mb-0.5 select-none cursor-pointer ${isActive
             ? 'text-brand-textMain bg-[color:var(--brand-hover)] border border-brand-border/40 shadow-sm'
             : locked
               ? 'text-brand-textMuted/50 bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)]'
@@ -182,7 +182,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <div
       data-testid="sidebar-container"
       style={{ width: collapsed ? '70px' : '260px', maxWidth: '85vw' }}
-      className={`glass-panel flex flex-col p-4 h-full box-border transition-transform duration-200 z-40 pb-[68px] md:pb-4
+      className={`glass-panel flex flex-col h-full box-border transition-transform duration-200 z-40 pb-[68px] md:pb-4
         fixed inset-y-0 left-0 lg:static lg:translate-x-0
         ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}`}
     >
@@ -202,11 +202,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Main scrollable nav list */}
       <div className="flex-1 overflow-y-auto pr-0.5 custom-scrollbar">
         {/* Core action buttons */}
-        <div className="mb-6 space-y-1">
+        <div className="mb-4 space-y-0.5">
           <button
             data-testid="nav-new-chat"
             onClick={() => onNewChat && onNewChat()}
-            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-3.5 rounded-xl text-brand-highlight-text bg-brand-highlight hover:bg-brand-highlight-hover active:scale-[0.98] transition-all duration-200 text-sm font-semibold mb-3 select-none cursor-pointer border border-brand-highlight-border-subtle`}
+            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-xl text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all duration-200 text-sm font-semibold mb-1 select-none cursor-pointer`}
           >
             <Plus className="w-4 h-4 flex-shrink-0 text-brand-highlight-text" />
             {!collapsed && <span>New chat</span>}
@@ -215,7 +215,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             data-testid="nav-search"
             onClick={onOpenSearch}
-            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-lg text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all duration-200 text-sm font-medium mb-1.5 select-none cursor-pointer`}
+            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2 rounded-lg text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all duration-200 text-sm font-medium mb-0.5 select-none cursor-pointer`}
           >
             <Search className="w-4 h-4 flex-shrink-0" />
             {!collapsed && <span>Search</span>}
@@ -448,7 +448,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {projects.length === 0 && (
                 <button
                   onClick={onCreateProjectClick}
-                  className="flex items-center gap-2 px-3 py-2.5 text-xs text-brand-textMuted/60 hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] rounded-lg transition-all cursor-pointer w-full border border-dashed border-brand-border/30 hover:border-brand-border-strong mt-1"
+                  className="flex items-center gap-2 px-3 py-2 text-xs text-brand-textMuted/60 hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] rounded-lg transition-all cursor-pointer w-full border border-dashed border-brand-border/30 hover:border-brand-border-strong mt-1"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Create your first project</span>
@@ -556,14 +556,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Footer: Settings + Collapse toggle */}
-      <div className={`flex ${collapsed ? 'flex-col gap-2.5' : 'flex-row gap-2.5'} items-center border-t border-brand-border/40 pt-4 mt-auto`}>
+      <div className={`flex ${collapsed ? 'flex-col gap-2' : 'flex-row gap-2'} items-center border-t border-brand-border/40 pt-3 mt-auto`}>
         <button
           data-testid="sidebar-settings-btn"
           onClick={() => {
             onSelectTab('settings');
             if (onProfileClick) onProfileClick();
           }}
-          className={`relative flex-1 flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-lg transition-all duration-200 text-sm font-medium cursor-pointer ${activeTab === 'settings'
+          className={`relative flex-1 flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2 rounded-lg transition-all duration-200 text-sm font-medium cursor-pointer ${activeTab === 'settings'
               ? 'text-brand-textMain bg-[color:var(--brand-hover)] border border-brand-border/40 shadow-sm'
               : 'text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover)]'
             }`}
@@ -577,7 +577,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
-            className={`flex items-center justify-center p-2.5 rounded-lg text-brand-textMuted bg-[color:var(--brand-hover)] border border-brand-border/20 hover:text-brand-textMain hover:bg-[color:var(--brand-hover-strong)] hover:border-brand-border/45 transition-all duration-200 cursor-pointer ${collapsed ? 'w-full' : 'w-10 h-10'}`}
+            className={`flex items-center justify-center p-2 rounded-lg text-brand-textMuted bg-[color:var(--brand-hover)] border border-brand-border/20 hover:text-brand-textMain hover:bg-[color:var(--brand-hover-strong)] hover:border-brand-border/45 transition-all duration-200 cursor-pointer ${collapsed ? 'w-full' : 'w-9 h-9'}`}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {collapsed ? <ChevronRight className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}

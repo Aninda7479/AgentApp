@@ -41,10 +41,10 @@
   color-scheme: dark;
 
   /* ── Canvas & tonal elevation steps (deepest → highest) ── */
-  --brand-bg: #0a0a0c;
-  --brand-sidebar: #111114;
-  --brand-card: #17171b;
-  --brand-popover: #1a1a1f;
+  --brand-bg: #181817;
+  --brand-sidebar: #1f1f1e;
+  --brand-card: #242423;
+  --brand-popover: #2a2a29;
 
   /* ── Hairlines (subtle, never structural borders) ── */
   --brand-border: rgba(255, 255, 255, 0.07);
@@ -112,9 +112,9 @@
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --brand-bg: #f3f3f4;
-  --brand-sidebar: #fbfbfc;
-  --brand-card: #ffffff;
+  --brand-bg: #fbfaf9;
+  --brand-sidebar: #ffffff;
+  --brand-card: #f3f2f1;
   --brand-popover: #ffffff;
 
   --brand-border: rgba(0, 0, 0, 0.08);
