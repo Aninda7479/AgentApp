@@ -325,7 +325,7 @@ Key guidelines:
     userDataDir: string,
     chatId: string,
     projectKey?: string
-  ): StoredChatConfig {
+  ): Promise<StoredChatConfig> {
     let contextSummary: string | undefined;
     for (const m of this.history) {
       const txt = extractTextContent(m.content);
@@ -349,11 +349,11 @@ Key guidelines:
   }
 
   /** Load this chat's persisted `config.json` (model, memory/context). */
-  public loadChatConfig(
+  public async loadChatConfig(
     userDataDir: string,
     chatId: string,
     projectKey?: string
-  ): StoredChatConfig | null {
+  ): Promise<StoredChatConfig | null> {
     return readChatConfig(userDataDir, chatId, projectKey);
   }
 

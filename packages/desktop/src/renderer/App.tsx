@@ -230,14 +230,23 @@ export const App: React.FC = () => {
   const sendPromptRef = useRef<(raw: string, options: ComposerOptions) => Promise<void>>(async () => { });
 
   // ── Composite helpers owned by the shell ───────────────────────────────────
+  // Debounced store-write: collapses rapid persistStore calls (tool_call,
+  // tool_result, token flush) into a single IPC round-trip. 300 ms is long
+  // enough to batch adjacent events but short enough that the disk stays
+  // nearly in sync with the live state.
+  const persistDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistStore = useCallback(
     (providers: ProviderConnection[], models: ModelConfig[], currentProjects?: StoredProject[], currentChats?: StoredChat[]) => {
-      ipc?.invoke('store-write', {
-        connectedProviders: providers,
-        modelsCatalog: models,
-        projects: currentProjects ?? stateRef.current.projects,
-        chats: currentChats ?? stateRef.current.chats
-      });
+      if (persistDebounceRef.current) clearTimeout(persistDebounceRef.current);
+      persistDebounceRef.current = setTimeout(() => {
+        persistDebounceRef.current = null;
+        ipc?.invoke('store-write', {
+          connectedProviders: providers,
+          modelsCatalog: models,
+          projects: currentProjects ?? stateRef.current.projects,
+          chats: currentChats ?? stateRef.current.chats
+        });
+      }, 300);
     },
     [ipc]
   );

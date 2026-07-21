@@ -36,8 +36,8 @@ describe('Desktop storage helpers', () => {
     }
   });
 
-  it('stores projects and chats in dedicated folders with safe project keys', () => {
-    writeConversationStore(
+  it('stores projects and chats in dedicated folders with safe project keys', async () => {
+    await writeConversationStore(
       {
         connectedProviders: [
           { id: 'chatgpt', name: 'ChatGPT', type: 'key', apiKey: 'sk-test', baseUrl: 'https://api.openai.com/v1' }
@@ -83,7 +83,7 @@ describe('Desktop storage helpers', () => {
     expect(fs.existsSync(projectChatPath)).toBe(true);
     expect(fs.existsSync(getChatJsonPath(tempRoot, 'chat-2'))).toBe(true);
 
-    const loaded = readConversationStore(tempRoot);
+    const loaded = await readConversationStore(tempRoot);
     expect(loaded.connectedProviders).toHaveLength(1);
     expect(loaded.modelsCatalog).toHaveLength(1);
     expect(loaded.projects).toHaveLength(1);

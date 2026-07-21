@@ -1,4 +1,5 @@
 import fs from 'fs';
+import fsp from 'fs/promises';
 import path from 'path';
 import { SettingsStorage } from './settings-store.js';
 import {
@@ -23,14 +24,18 @@ import { CHAT_FILE_KEYS, CHAT_CONFIG_KEYS } from './conversation-types.js';
 type ProjectRecord = StoredProject & { storageKey: string };
 
 /** Ensures a directory exists, creating it recursively if needed. */
-function ensureDirectory(dir: string): void {
-  fs.mkdirSync(dir, { recursive: true });
+async function ensureDirectory(dir: string): Promise<void> {
+  await fsp.mkdir(dir, { recursive: true });
 }
 
 /** Reads and parses a JSON file, returning null if missing, empty, or corrupt. */
-function readJson<T>(filePath: string): T | null {
-  if (!fs.existsSync(filePath)) return null;
-  const raw = fs.readFileSync(filePath, 'utf-8').trim();
+async function readJson<T>(filePath: string): Promise<T | null> {
+  let raw: string;
+  try {
+    raw = (await fsp.readFile(filePath, 'utf-8')).trim();
+  } catch {
+    return null;
+  }
   if (!raw) return null;
   try {
     return JSON.parse(raw) as T;
@@ -38,16 +43,14 @@ function readJson<T>(filePath: string): T | null {
     // Corrupt/truncated file — fall back to the last good backup if present so
     // user conversation data is not silently lost.
     const bakPath = `${filePath}.bak`;
-    if (fs.existsSync(bakPath)) {
-      try {
-        const bakRaw = fs.readFileSync(bakPath, 'utf-8').trim();
-        if (bakRaw) {
-          console.warn(`Recovered ${filePath} from backup (primary file was corrupt).`);
-          return JSON.parse(bakRaw) as T;
-        }
-      } catch {
-        /* ignore backup parse failure */
+    try {
+      const bakRaw = (await fsp.readFile(bakPath, 'utf-8')).trim();
+      if (bakRaw) {
+        console.warn(`Recovered ${filePath} from backup (primary file was corrupt).`);
+        return JSON.parse(bakRaw) as T;
       }
+    } catch {
+      /* ignore backup parse failure */
     }
     console.error(`Failed to parse JSON at ${filePath}; content dropped.`);
     return null;
@@ -55,34 +58,29 @@ function readJson<T>(filePath: string): T | null {
 }
 
 /** Atomically writes JSON to disk using a temp file + backup strategy. */
-function writeJson(filePath: string, data: unknown): void {
-  ensureDirectory(path.dirname(filePath));
+async function writeJson(filePath: string, data: unknown): Promise<void> {
+  await ensureDirectory(path.dirname(filePath));
   const tmpPath = `${filePath}.tmp`;
-  fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+  await fsp.writeFile(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
   // Keep the previous version as a .bak before replacing it.
-  if (fs.existsSync(filePath)) {
-    try {
-      fs.copyFileSync(filePath, `${filePath}.bak`);
-    } catch (e) {
-      console.warn(`Failed to create backup for ${filePath}:`, e);
-    }
+  try {
+    await fsp.copyFile(filePath, `${filePath}.bak`);
+  } catch {
+    // First write — no existing file to back up.
   }
 
   // Try atomic rename first.
   try {
-    fs.renameSync(tmpPath, filePath);
-  } catch (renameErr) {
-    // Fall back to copy-and-unlink if rename fails (common on Windows if destination is locked or across mount points)
+    await fsp.rename(tmpPath, filePath);
+  } catch {
+    // Fall back to copy-and-unlink if rename fails (common on Windows if
+    // destination is locked or across mount points)
     try {
-      fs.copyFileSync(tmpPath, filePath);
-      fs.unlinkSync(tmpPath);
+      await fsp.copyFile(tmpPath, filePath);
+      await fsp.unlink(tmpPath);
     } catch (copyErr) {
       console.error(`Failed to write JSON to ${filePath} via backup copy:`, copyErr);
-      if (fs.existsSync(tmpPath)) {
-        try {
-          fs.unlinkSync(tmpPath);
-        } catch {}
-      }
+      try { await fsp.unlink(tmpPath); } catch { /* best-effort */ }
       throw copyErr;
     }
   }
@@ -101,20 +99,20 @@ function uniqueStorageKey(baseKey: string, usedKeys: Set<string>): string {
 }
 
 /** Reads a project's config.json from its directory, creating a default if missing. */
-function readProjectRecord(projectDir: string, folderName: string): ProjectRecord | null {
+async function readProjectRecord(projectDir: string, folderName: string): Promise<ProjectRecord> {
   const configPath = path.join(projectDir, 'project-config.json');
   let folders: string[] = [];
   let allowedCommands: string[] = [];
   let displayName = folderName;
 
   try {
-    const config = readJson<{ name?: string; folders?: string[]; allowedCommands?: string[] }>(configPath);
+    const config = await readJson<{ name?: string; folders?: string[]; allowedCommands?: string[] }>(configPath);
     if (config) {
       displayName = config.name?.trim() || folderName;
       folders = config.folders ?? [];
       allowedCommands = config.allowedCommands ?? [];
     } else {
-      writeJson(configPath, { name: displayName, folders: [], allowedCommands: [] });
+      await writeJson(configPath, { name: displayName, folders: [], allowedCommands: [] });
     }
   } catch (e) {
     console.error(`Failed to read project config for ${folderName}:`, e);
@@ -143,16 +141,16 @@ function splitChat(chat: StoredChat): {
 
 /** Reads and deserializes a single chat into a StoredChat record, merging the
  *  separate `config.json` (model, memory/context, etc.) when present. */
-function readChatRecord(
+async function readChatRecord(
   chatJsonPath: string,
   projectName: string,
   projectKey?: string,
   configPath?: string
-): StoredChat | null {
+): Promise<StoredChat | null> {
   try {
-    const chat = readJson<StoredChat>(chatJsonPath);
+    const chat = await readJson<StoredChat>(chatJsonPath);
     if (!chat) return null;
-    const config = configPath ? readJson<StoredChatConfig>(configPath) : null;
+    const config = configPath ? await readJson<StoredChatConfig>(configPath) : null;
     return {
       ...chat,
       ...(config || {}),
@@ -182,32 +180,37 @@ function resolveProjectKey(project: StoredProject, usedKeys: Set<string>): Proje
 }
 
 /** Scans the filesystem to discover all projects and their chats. */
-function readProjectsAndChats(roots: ConversationRoots): { projects: ProjectRecord[]; chats: StoredChat[] } {
+async function readProjectsAndChats(roots: ConversationRoots): Promise<{ projects: ProjectRecord[]; chats: StoredChat[] }> {
   const projects: ProjectRecord[] = [];
   const chats: StoredChat[] = [];
   const seenChats = new Set<string>();
 
-  ensureDirectory(roots.projectsDir);
-  ensureDirectory(roots.chatsDir);
+  await ensureDirectory(roots.projectsDir);
+  await ensureDirectory(roots.chatsDir);
 
   try {
-    for (const folderName of fs.readdirSync(roots.projectsDir)) {
+    const projectFolders = await fsp.readdir(roots.projectsDir);
+    for (const folderName of projectFolders) {
       const projectDir = path.join(roots.projectsDir, folderName);
-      if (!fs.statSync(projectDir).isDirectory()) continue;
+      const stat = await fsp.stat(projectDir);
+      if (!stat.isDirectory()) continue;
 
-      const project = readProjectRecord(projectDir, folderName);
-      if (!project) continue;
+      const project = await readProjectRecord(projectDir, folderName);
       projects.push(project);
 
-      for (const chatFolder of fs.readdirSync(projectDir)) {
+      const chatFolders = await fsp.readdir(projectDir);
+      for (const chatFolder of chatFolders) {
         if (chatFolder === 'project-config.json') continue;
         const chatDir = path.join(projectDir, chatFolder);
-        if (!fs.statSync(chatDir).isDirectory()) continue;
+        const chatDirStat = await fsp.stat(chatDir);
+        if (!chatDirStat.isDirectory()) continue;
 
         const chatJsonPath = path.join(chatDir, 'chat.json');
-        const chat = fs.existsSync(chatJsonPath)
-          ? readChatRecord(chatJsonPath, project.name, project.storageKey, getChatConfigPath(roots.userDataDir, chatFolder, project.storageKey))
-          : null;
+        let chat: StoredChat | null = null;
+        try {
+          await fsp.access(chatJsonPath);
+          chat = await readChatRecord(chatJsonPath, project.name, project.storageKey, getChatConfigPath(roots.userDataDir, chatFolder, project.storageKey));
+        } catch { /* file doesn't exist */ }
         if (chat) {
           const chatKey = `${project.storageKey}/${chat.id}`;
           if (!seenChats.has(chatKey)) {
@@ -222,14 +225,18 @@ function readProjectsAndChats(roots: ConversationRoots): { projects: ProjectReco
   }
 
   try {
-    for (const chatFolder of fs.readdirSync(roots.chatsDir)) {
+    const standaloneFolders = await fsp.readdir(roots.chatsDir);
+    for (const chatFolder of standaloneFolders) {
       const chatDir = path.join(roots.chatsDir, chatFolder);
-      if (!fs.statSync(chatDir).isDirectory()) continue;
+      const stat = await fsp.stat(chatDir);
+      if (!stat.isDirectory()) continue;
 
       const chatJsonPath = path.join(chatDir, 'chat.json');
-      if (!fs.existsSync(chatJsonPath)) continue;
+      let exists = false;
+      try { await fsp.access(chatJsonPath); exists = true; } catch { /* no */ }
+      if (!exists) continue;
 
-      const chat = readChatRecord(chatJsonPath, '', undefined, getChatConfigPath(roots.userDataDir, chatFolder));
+      const chat = await readChatRecord(chatJsonPath, '', undefined, getChatConfigPath(roots.userDataDir, chatFolder));
       if (chat) {
         const chatKey = `standalone/${chat.id}`;
         if (!seenChats.has(chatKey)) {
@@ -246,14 +253,18 @@ function readProjectsAndChats(roots: ConversationRoots): { projects: ProjectReco
 }
 
 /** Iterates project directories and returns the first one matching the predicate. */
-function findProjectRecord(roots: ConversationRoots, matcher: (project: ProjectRecord) => boolean): ProjectRecord | null {
-  if (!fs.existsSync(roots.projectsDir)) return null;
+async function findProjectRecord(roots: ConversationRoots, matcher: (project: ProjectRecord) => boolean): Promise<ProjectRecord | null> {
+  let exists = false;
+  try { await fsp.access(roots.projectsDir); exists = true; } catch { /* no */ }
+  if (!exists) return null;
   try {
-    for (const folderName of fs.readdirSync(roots.projectsDir)) {
+    const folders = await fsp.readdir(roots.projectsDir);
+    for (const folderName of folders) {
       const projectDir = path.join(roots.projectsDir, folderName);
-      if (!fs.statSync(projectDir).isDirectory()) continue;
-      const project = readProjectRecord(projectDir, folderName);
-      if (project && matcher(project)) {
+      const stat = await fsp.stat(projectDir);
+      if (!stat.isDirectory()) continue;
+      const project = await readProjectRecord(projectDir, folderName);
+      if (matcher(project)) {
         return project;
       }
     }
@@ -264,7 +275,7 @@ function findProjectRecord(roots: ConversationRoots, matcher: (project: ProjectR
 }
 
 /** Reads the full conversation store (providers, models, projects, chats) from disk. */
-export function readConversationStore(userDataDir: string): StoreData {
+export async function readConversationStore(userDataDir: string): Promise<StoreData> {
   const roots = getConversationRoots(userDataDir);
 
   let providers = [] as StoreData['connectedProviders'];
@@ -278,7 +289,7 @@ export function readConversationStore(userDataDir: string): StoreData {
     console.error('Failed to read unified settings:', e);
   }
 
-  const { projects, chats } = readProjectsAndChats(roots);
+  const { projects, chats } = await readProjectsAndChats(roots);
 
   return {
     connectedProviders: providers,
@@ -295,10 +306,10 @@ function buildProjectRecords(projects: StoredProject[]): ProjectRecord[] {
 }
 
 /** Writes the full conversation store to disk, cleaning up removed projects/chats. */
-export function writeConversationStore(data: StoreData, userDataDir: string): void {
+export async function writeConversationStore(data: StoreData, userDataDir: string): Promise<void> {
   const roots = getConversationRoots(userDataDir);
-  ensureDirectory(roots.projectsDir);
-  ensureDirectory(roots.chatsDir);
+  await ensureDirectory(roots.projectsDir);
+  await ensureDirectory(roots.chatsDir);
 
   try {
     SettingsStorage.saveSettings({
@@ -317,8 +328,8 @@ export function writeConversationStore(data: StoreData, userDataDir: string): vo
 
   for (const project of projectRecords) {
     const projectDir = getProjectDirectory(userDataDir, project.storageKey);
-    ensureDirectory(projectDir);
-    writeJson(getProjectConfigPath(userDataDir, project.storageKey), {
+    await ensureDirectory(projectDir);
+    await writeJson(getProjectConfigPath(userDataDir, project.storageKey), {
       name: project.name,
       folders: project.folders ?? [],
       allowedCommands: project.allowedCommands ?? []
@@ -332,13 +343,13 @@ export function writeConversationStore(data: StoreData, userDataDir: string): vo
 
     const targetProjectKey = matchedProject?.storageKey;
     const targetChatDir = getChatDirectory(userDataDir, chat.id, targetProjectKey);
-    ensureDirectory(targetChatDir);
+    await ensureDirectory(targetChatDir);
     const { chatFile, configFile } = splitChat(chat);
-    writeJson(getChatJsonPath(userDataDir, chat.id, targetProjectKey), {
+    await writeJson(getChatJsonPath(userDataDir, chat.id, targetProjectKey), {
       ...chatFile,
       projectStorageKey: targetProjectKey
     });
-    writeJson(getChatConfigPath(userDataDir, chat.id, targetProjectKey), {
+    await writeJson(getChatConfigPath(userDataDir, chat.id, targetProjectKey), {
       ...configFile,
       updatedAt: new Date().toISOString()
     });
@@ -348,19 +359,22 @@ export function writeConversationStore(data: StoreData, userDataDir: string): vo
 
   // Clean up stale project and chat directories no longer in the active set
   try {
-    for (const folderName of fs.readdirSync(roots.projectsDir)) {
+    const projectFolders = await fsp.readdir(roots.projectsDir);
+    for (const folderName of projectFolders) {
       const projectDir = getProjectDirectory(userDataDir, folderName);
       if (!activeProjectKeys.has(folderName)) {
-        fs.rmSync(projectDir, { recursive: true, force: true });
+        await fsp.rm(projectDir, { recursive: true, force: true });
         continue;
       }
 
-      for (const chatFolder of fs.readdirSync(projectDir)) {
+      const chatFolders = await fsp.readdir(projectDir);
+      for (const chatFolder of chatFolders) {
         if (chatFolder === 'project-config.json') continue;
         const chatDir = path.join(projectDir, chatFolder);
-        if (!fs.statSync(chatDir).isDirectory()) continue;
+        const stat = await fsp.stat(chatDir);
+        if (!stat.isDirectory()) continue;
         if (!activeChatFolders.has(`${folderName}/${chatFolder}`)) {
-          fs.rmSync(chatDir, { recursive: true, force: true });
+          await fsp.rm(chatDir, { recursive: true, force: true });
         }
       }
     }
@@ -369,11 +383,13 @@ export function writeConversationStore(data: StoreData, userDataDir: string): vo
   }
 
   try {
-    for (const chatFolder of fs.readdirSync(roots.chatsDir)) {
+    const standaloneFolders = await fsp.readdir(roots.chatsDir);
+    for (const chatFolder of standaloneFolders) {
       const chatDir = path.join(roots.chatsDir, chatFolder);
-      if (!fs.statSync(chatDir).isDirectory()) continue;
+      const stat = await fsp.stat(chatDir);
+      if (!stat.isDirectory()) continue;
       if (!activeChatFolders.has(`standalone/${chatFolder}`)) {
-        fs.rmSync(chatDir, { recursive: true, force: true });
+        await fsp.rm(chatDir, { recursive: true, force: true });
       }
     }
   } catch (e) {
@@ -382,19 +398,22 @@ export function writeConversationStore(data: StoreData, userDataDir: string): vo
 }
 
 /** Reads a single project record from disk by its storage key. */
-export function readProject(userDataDir: string, projectKey: string): StoredProject | null {
+export async function readProject(userDataDir: string, projectKey: string): Promise<StoredProject | null> {
   const projectDir = getProjectDirectory(userDataDir, projectKey);
-  if (!fs.existsSync(projectDir) || !fs.statSync(projectDir).isDirectory()) {
+  try {
+    const stat = await fsp.stat(projectDir);
+    if (!stat.isDirectory()) return null;
+  } catch {
     return null;
   }
-  const project = readProjectRecord(projectDir, projectKey);
-  return project ? { name: project.name, folders: project.folders, allowedCommands: project.allowedCommands, storageKey: project.storageKey } : null;
+  const project = await readProjectRecord(projectDir, projectKey);
+  return { name: project.name, folders: project.folders, allowedCommands: project.allowedCommands, storageKey: project.storageKey };
 }
 
 /** Saves a project config to disk, resolving a unique storage key. */
-export function saveProject(userDataDir: string, project: StoredProject): StoredProject {
+export async function saveProject(userDataDir: string, project: StoredProject): Promise<StoredProject> {
   const record = resolveProjectKey(project, new Set<string>());
-  writeJson(getProjectConfigPath(userDataDir, record.storageKey), {
+  await writeJson(getProjectConfigPath(userDataDir, record.storageKey), {
     name: record.name,
     folders: record.folders ?? [],
     allowedCommands: record.allowedCommands ?? []
@@ -403,111 +422,112 @@ export function saveProject(userDataDir: string, project: StoredProject): Stored
 }
 
 /** Reads a single chat record from disk by ID, optionally scoped to a project. */
-export function readChat(userDataDir: string, chatId: string, projectKey?: string): StoredChat | null {
+export async function readChat(userDataDir: string, chatId: string, projectKey?: string): Promise<StoredChat | null> {
   const chatJsonPath = getChatJsonPath(userDataDir, chatId, projectKey);
-  if (!fs.existsSync(chatJsonPath)) return null;
-  const projectName = projectKey ? readProject(userDataDir, projectKey)?.name || projectKey : '';
+  let exists = false;
+  try { await fsp.access(chatJsonPath); exists = true; } catch { /* no */ }
+  if (!exists) return null;
+  const projectName = projectKey ? (await readProject(userDataDir, projectKey))?.name || projectKey : '';
   return readChatRecord(chatJsonPath, projectName, projectKey);
 }
 
 /** Saves a chat record to disk, resolving its project association. The
  *  transcript goes to `chat.json`; session/memory state goes to `config.json`. */
-export function saveChat(userDataDir: string, chat: StoredChat): void {
+export async function saveChat(userDataDir: string, chat: StoredChat): Promise<void> {
   const roots = getConversationRoots(userDataDir);
   const project =
-    (chat.projectStorageKey ? findProjectRecord(roots, (item) => item.storageKey === chat.projectStorageKey) : null) ||
-    (chat.project ? findProjectRecord(roots, (item) => item.name === chat.project) : null);
+    (chat.projectStorageKey ? await findProjectRecord(roots, (item) => item.storageKey === chat.projectStorageKey) : null) ||
+    (chat.project ? await findProjectRecord(roots, (item) => item.name === chat.project) : null);
   const targetProjectKey = project?.storageKey;
   const chatDir = getChatDirectory(userDataDir, chat.id, targetProjectKey);
-  ensureDirectory(chatDir);
+  await ensureDirectory(chatDir);
   const { chatFile, configFile } = splitChat(chat);
-  writeJson(getChatJsonPath(userDataDir, chat.id, targetProjectKey), {
+  await writeJson(getChatJsonPath(userDataDir, chat.id, targetProjectKey), {
     ...chatFile,
     projectStorageKey: targetProjectKey
   });
-  writeJson(getChatConfigPath(userDataDir, chat.id, targetProjectKey), {
+  await writeJson(getChatConfigPath(userDataDir, chat.id, targetProjectKey), {
     ...configFile,
     updatedAt: new Date().toISOString()
   });
 }
 
 /** Deletes a project directory and all its contents from disk. */
-export function deleteProject(userDataDir: string, projectKey: string): void {
+export async function deleteProject(userDataDir: string, projectKey: string): Promise<void> {
   const projectDir = getProjectDirectory(userDataDir, projectKey);
-  if (fs.existsSync(projectDir)) {
-    fs.rmSync(projectDir, { recursive: true, force: true });
-  }
+  try {
+    await fsp.rm(projectDir, { recursive: true, force: true });
+  } catch { /* already gone */ }
 }
 
 /** Deletes a chat directory from disk, optionally scoped to a project. */
-export function deleteChat(userDataDir: string, chatId: string, projectKey?: string): void {
+export async function deleteChat(userDataDir: string, chatId: string, projectKey?: string): Promise<void> {
   const chatDir = getChatDirectory(userDataDir, chatId, projectKey);
-  if (fs.existsSync(chatDir)) {
-    fs.rmSync(chatDir, { recursive: true, force: true });
-  }
+  try {
+    await fsp.rm(chatDir, { recursive: true, force: true });
+  } catch { /* already gone */ }
 }
 
 /** Reads a project, applies an updater function, and saves the result. */
-export function updateProject(
+export async function updateProject(
   userDataDir: string,
   projectKey: string,
   updater: (project: StoredProject) => StoredProject
-): StoredProject | null {
-  const existing = readProject(userDataDir, projectKey);
+): Promise<StoredProject | null> {
+  const existing = await readProject(userDataDir, projectKey);
   if (!existing) return null;
   const next = updater(existing);
-  saveProject(userDataDir, { ...next, storageKey: existing.storageKey });
+  await saveProject(userDataDir, { ...next, storageKey: existing.storageKey });
   return { ...next, storageKey: existing.storageKey };
 }
 
 /** Reads a chat, applies an updater function, and saves the result. */
-export function updateChat(
+export async function updateChat(
   userDataDir: string,
   chatId: string,
   updater: (chat: StoredChat) => StoredChat,
   projectKey?: string
-): StoredChat | null {
-  const existing = readChat(userDataDir, chatId, projectKey);
+): Promise<StoredChat | null> {
+  const existing = await readChat(userDataDir, chatId, projectKey);
   if (!existing) return null;
   const next = updater(existing);
-  saveChat(userDataDir, { ...next, projectStorageKey: existing.projectStorageKey });
+  await saveChat(userDataDir, { ...next, projectStorageKey: existing.projectStorageKey });
   return { ...next, projectStorageKey: existing.projectStorageKey };
 }
 
 /** Reads a chat's `config.json` (model, memory/context, etc.). */
-export function readChatConfig(
+export async function readChatConfig(
   userDataDir: string,
   chatId: string,
   projectKey?: string
-): StoredChatConfig | null {
+): Promise<StoredChatConfig | null> {
   const configPath = getChatConfigPath(userDataDir, chatId, projectKey);
-  if (!fs.existsSync(configPath)) return null;
   return readJson<StoredChatConfig>(configPath);
 }
 
 /** Writes a chat's `config.json`, merging with any existing config. */
-export function saveChatConfig(
+export async function saveChatConfig(
   userDataDir: string,
   chatId: string,
   config: StoredChatConfig,
   projectKey?: string
-): StoredChatConfig {
-  const existing = readChatConfig(userDataDir, chatId, projectKey) ?? {};
+): Promise<StoredChatConfig> {
+  const existing = (await readChatConfig(userDataDir, chatId, projectKey)) ?? {};
   const next: StoredChatConfig = { ...existing, ...config, updatedAt: new Date().toISOString() };
   const configPath = getChatConfigPath(userDataDir, chatId, projectKey);
-  ensureDirectory(path.dirname(configPath));
-  writeJson(configPath, next);
+  await ensureDirectory(path.dirname(configPath));
+  await writeJson(configPath, next);
   return next;
 }
 
 /** Reads a chat's `config.json`, applies an updater, and saves it. */
-export function updateChatConfig(
+export async function updateChatConfig(
   userDataDir: string,
   chatId: string,
   updater: (config: StoredChatConfig) => StoredChatConfig,
   projectKey?: string
-): StoredChatConfig | null {
-  const existing = readChatConfig(userDataDir, chatId, projectKey);
+): Promise<StoredChatConfig | null> {
+  const existing = await readChatConfig(userDataDir, chatId, projectKey);
   if (!existing) return null;
   const next = updater(existing);
   return saveChatConfig(userDataDir, chatId, next, projectKey);

@@ -266,8 +266,14 @@ function readJsonFile<T>(filePath: string): T | null {
 export class SettingsStorage {
   private static cachedSettings: AppSettings | null = null;
 
-  /** Loads settings from disk (primary file, with backup fallback). */
+  /** Loads settings from disk (primary file, with backup fallback).
+   *  Returns the in-memory cache immediately when available, avoiding
+   *  repeated synchronous disk reads during hot paths (agent turns,
+   *  usage tracking, store writes). The cache is cleared by
+   *  `clearCache()` or replaced on a successful disk read. */
   public static loadSettings(): AppSettings {
+    if (this.cachedSettings) return this.cachedSettings;
+
     const { settingsFilePath, backupFilePath } = getSettingsPaths();
 
     try {

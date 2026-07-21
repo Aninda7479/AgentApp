@@ -30,29 +30,29 @@ describe('conversation-store read durability', () => {
     project: ''
   });
 
-  it('saves and reads a chat back', () => {
-    saveChat(dir, chat('c1'));
-    const got = readChat(dir, 'c1');
+  it('saves and reads a chat back', async () => {
+    await saveChat(dir, chat('c1'));
+    const got = await readChat(dir, 'c1');
     expect(got).not.toBeNull();
     expect(got!.id).toBe('c1');
   });
 
-  it('recovers a corrupt chat.json from its .bak backup', () => {
-    saveChat(dir, chat('c1'));
+  it('recovers a corrupt chat.json from its .bak backup', async () => {
+    await saveChat(dir, chat('c1'));
     const chatJsonPath = getChatJsonPath(dir, 'c1');
     // Simulate a crash leaving a truncated/garbage primary file, but a good .bak.
     fs.writeFileSync(chatJsonPath, '{ "id": "c1", "title": "CORRUPT');
     fs.writeFileSync(`${chatJsonPath}.bak`, JSON.stringify(chat('c1')));
 
-    const got = readChat(dir, 'c1');
+    const got = await readChat(dir, 'c1');
     expect(got).not.toBeNull();
     expect(got!.id).toBe('c1');
   });
 
-  it('returns null for a corrupt chat.json with no backup', () => {
+  it('returns null for a corrupt chat.json with no backup', async () => {
     const chatDir = path.join(dir, 'chats', 'c2');
     fs.mkdirSync(chatDir, { recursive: true });
     fs.writeFileSync(path.join(chatDir, 'chat.json'), 'not json at all');
-    expect(readChat(dir, 'c2')).toBeNull();
+    expect(await readChat(dir, 'c2')).toBeNull();
   });
 });

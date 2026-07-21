@@ -512,10 +512,10 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
     // Dispatch IPC channel to the corresponding handler
     switch (channel) {
       case 'store-read':
-        result = readConversationStore(userDataDir);
+        result = await readConversationStore(userDataDir);
         break;
       case 'store-write':
-        writeConversationStore(args[0], userDataDir);
+        await writeConversationStore(args[0], userDataDir);
         result = null;
         break;
       case 'settings-read':

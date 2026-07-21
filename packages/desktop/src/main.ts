@@ -636,8 +636,8 @@ safeHandle('skills-catalog', () => SKILL_CATALOG);
 
 // ─── IPC: Persistent Store ───────────────────────────────────────────────────
 
-safeHandle('store-read', (): StoreData => {
-  return readStore();
+safeHandle('store-read', async (): Promise<StoreData> => {
+  return await readStore();
 });
 
 /**
@@ -647,9 +647,10 @@ safeHandle('store-read', (): StoreData => {
  * (drops from memory) the steps of chats it is not currently showing; the
  * canonical transcript lives on disk, so nothing is lost.
  */
-safeHandle('chat-steps-read', (_event, chatId: string): unknown => {
+safeHandle('chat-steps-read', async (_event, chatId: string): Promise<unknown> => {
   if (typeof chatId !== 'string' || !chatId) return [];
-  const chat = (readStore().chats ?? []).find((c) => c.id === chatId);
+  const store = await readStore();
+  const chat = (store.chats ?? []).find((c) => c.id === chatId);
   return (chat?.steps as unknown) ?? [];
 });
 
@@ -698,7 +699,7 @@ safeHandle('kanban-save', (_event, args: { scope: 'global' | 'project'; projectN
   }
 });
 
-safeHandle('store-write', (_event, data: StoreData): void => {
+safeHandle('store-write', async (_event, data: StoreData): Promise<void> => {
   // The renderer keeps only the ACTIVE chat's full trajectory in RAM and
   // holds every other (dormant) chat metadata-only (steps: []), lazily
   // re-reading them from disk on open. If we wrote those [] verbatim
@@ -707,7 +708,7 @@ safeHandle('store-write', (_event, data: StoreData): void => {
   // its on-disk steps (if any); a brand-new chat with no disk record
   // keeps its (empty) steps. This keeps the disk transcript authoritative
   // and lets the renderer drop chats from RAM without data loss.
-  const onDisk = readStore();
+  const onDisk = await readStore();
   const diskStepsById = new Map<string, unknown>();
   for (const c of (onDisk.chats ?? []) as Array<{ id: string; steps?: unknown }>) {
     if (c.id) diskStepsById.set(c.id, c.steps as unknown);
@@ -722,7 +723,7 @@ safeHandle('store-write', (_event, data: StoreData): void => {
       return c as any;
     })
   };
-  writeStore(mergedData);
+  await writeStore(mergedData);
 });
 
 safeHandle('settings-read', () => {
@@ -1122,7 +1123,8 @@ safeHandle('read-file-base64', async (_event, filePath) => {
   // mirrors the web fix in e38c276 and reuses the desktop engine's allowlist
   // check (resolveWithinAnyRoot / resolveWithinRoot in ai-engine.ts).
   const userDataDir = app.getPath('userData');
-  const projectFolders = (readStore().projects ?? []).flatMap((p) => p.folders ?? []);
+  const store = await readStore();
+  const projectFolders = (store.projects ?? []).flatMap((p) => p.folders ?? []);
   const resolved = resolveWithinAnyRoot(filePath, [userDataDir, ...projectFolders]);
   if (!resolved) {
     console.error(`Refused read-file-base64: ${filePath} is outside the allowed directories.`);
