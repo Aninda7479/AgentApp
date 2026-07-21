@@ -1179,7 +1179,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col relative isolate overflow-hidden bg-brand-bg pb-18 md:pb-0 focus:outline-none">
+        <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col relative isolate overflow-hidden workspace-canvas m-1 rounded-xl pb-18 md:pb-0 focus:outline-none">
           {/* Ambient "layered atmosphere" backdrop — a soft accent glow and three
               calm depth bands, painted behind all content (Atmosphere mode, low
               opacity). Decorative only; never sits behind text contrast. */}

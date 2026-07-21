@@ -629,7 +629,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
   return (
     <div
       data-testid="trajectory-canvas"
-      className="flex-1 overflow-y-auto px-4 sm:px-6 pt-6 pb-8 bg-brand-bg scrollbar-thin relative z-10"
+      className="flex-1 overflow-y-auto px-4 sm:px-6 pt-6 pb-8 workspace-canvas scrollbar-thin relative z-10"
     >
       {/* Content column — max width matches Antigravity style */}
       <div className="max-w-[820px] w-full mx-auto flex flex-col gap-0">
