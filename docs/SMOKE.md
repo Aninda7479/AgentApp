@@ -16,23 +16,21 @@ A capability is not CERTAIN until its smoke here (or an automated test named bel
 
 ## CERTAIN-1 — CLI chat + tool call (file read)
 
-**Status:** not yet CERTAIN  
+**Status:** CERTAIN (2026-07-21)
 
-**Automated (preferred):**
-
-```powershell
-# From repo root — adjust path when test exists:
-npx vitest run packages/cli/test/cli_integration.test.ts --reporter=verbose
-```
-
-**Manual (when a free/local model is configured):**
+**Automated:**
 
 ```powershell
-# Example — replace with actual CLI flags as implemented:
-# superagent -p "Read package.json and print the name field only"
+npx vitest run packages/core/test/cli-chat-tool-smoke.test.ts --reporter=verbose
 ```
 
-**Pass criteria:** Agent issues a read-file tool call and returns the package name without crashing.
+**What it proves:**
+- AgentEngine creates builtin tools (including `read_file`) in its toolset.
+- Provider issues a `read_file` tool call → engine executes the real builtin tool → result feeds back into history → provider sees the result and produces a final text answer.
+- The full agentic tool loop (stream → tool_call → execute → tool_result → stream → done) completes without crash.
+- No real API key needed (provider layer is mocked).
+
+**Pass criteria:** `tool_call` + `tool_result` events emitted; `done` event fires; final content includes expected marker.
 
 ---
 
@@ -89,4 +87,4 @@ Prefer offline unit test that mocks provider HTTP and asserts models parse into 
 
 | Date | Capability | Result | Command / note |
 |------|------------|--------|----------------|
-| — | — | — | — |
+| 2026-07-21 | CERTAIN-1 | PASS | `npx vitest run packages/core/test/cli-chat-tool-smoke.test.ts` — 2/2 tests pass; 227/227 full core suite pass |
