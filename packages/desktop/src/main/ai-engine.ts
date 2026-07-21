@@ -125,11 +125,33 @@ export async function generateChatName(prompt: string, config: any): Promise<str
         max_tokens: 30
       })
     });
-    if (!response.ok) throw new Error(`OpenAI HTTP error ${response.status}`);
+    if (!response.ok) {
+      if (response.status === 404 && provider === 'openrouter' && model !== 'openrouter/free') {
+        console.warn(`[desktop] generateChatName model "${model}" returned 404, retrying with "openrouter/free"`);
+        const fallbackResponse = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: 'openrouter/free',
+            messages: [{ role: 'user', content: summarizePrompt }],
+            temperature: 0.5,
+            max_tokens: 30
+          })
+        });
+        if (fallbackResponse.ok) {
+          const fallbackJson: any = await fallbackResponse.json();
+          return fallbackJson.choices?.[0]?.message?.content?.trim() || defaultTitle;
+        }
+      }
+      throw new Error(`OpenAI HTTP error ${response.status}`);
+    }
     const json: any = await response.json();
     return json.choices?.[0]?.message?.content?.trim() || defaultTitle;
-  } catch (err) {
-    console.error('[desktop] generateChatName error:', err);
+  } catch (err: any) {
+    console.warn(`[desktop] generateChatName failed (falling back to default title): ${err.message || err}`);
     return defaultTitle;
   }
 }
