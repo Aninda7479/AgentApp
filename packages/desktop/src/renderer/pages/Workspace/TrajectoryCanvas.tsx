@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronDown, ChevronLeft, Copy, FileText, FolderOpen, Check, Eye, RotateCcw, Edit, RefreshCw, Trash2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronLeft, Copy, FileText, FolderOpen, Check, Eye, RotateCcw, Edit, RefreshCw, Trash2, Loader2 } from 'lucide-react';
 import { TrajectoryService } from '../../logic/trajectory';
 
 /** A single step in the agent execution trajectory. */
@@ -99,7 +99,7 @@ const WorkedHeader: React.FC<WorkedHeaderProps> = ({
             <span>Thinking... ({duration})</span>
           </span>
         ) : (
-          <span className="font-sans">
+          <span className="font-sans italic text-brand-textMuted/70">
             {expanded ? `Thought for ${duration}` : `Thought for ${duration}`}
           </span>
         )}
@@ -107,7 +107,7 @@ const WorkedHeader: React.FC<WorkedHeaderProps> = ({
 
       {/* Collapsible detail pills styled as a chat stream */}
       {expanded && (
-        <div className="ml-2.5 pl-4 border-l border-brand-border/40 flex flex-col gap-4 animate-fade-in mt-2 w-full">
+        <div className="ml-2.5 pl-4 border-l-2 border-dashed border-brand-border/30 flex flex-col gap-4 animate-fade-in mt-2 w-full">
           {/* Files + Folders explored chip */}
           {(filesExplored !== undefined || foldersExplored !== undefined) && (
             <button className="flex items-center gap-1.5 text-brand-textMuted hover:text-brand-textMain text-[11px] transition-colors w-fit group">
@@ -255,6 +255,131 @@ const StreamingCursor: React.FC = () => (
     style={{ animation: 'blink 0.9s step-end infinite' }}
   />
 );
+
+// ─── Expandable Tool Call Card ────────────────────────────────────────────────
+interface ToolCallCardProps {
+  step: TrajectoryStep;
+  isLast: boolean;
+}
+
+const ToolCallCard: React.FC<ToolCallCardProps> = ({ step, isLast }) => {
+  const [expanded, setExpanded] = useState(false);
+  const isSuccess = step.status === 'success';
+  const isError = step.status === 'error';
+  const isRunning = !isSuccess && !isError;
+
+  const statusColor = isSuccess
+    ? 'text-[color:var(--neon-constructive)]'
+    : isError
+    ? 'text-[color:var(--neon-destructive)]'
+    : 'text-[color:var(--neon-live)]';
+
+  const statusBg = isSuccess
+    ? 'bg-[color:var(--neon-constructive)]/10 border-[color:var(--neon-constructive)]/20'
+    : isError
+    ? 'bg-[color:var(--neon-destructive)]/10 border-[color:var(--neon-destructive)]/20'
+    : 'bg-[color:var(--neon-live)]/10 border-[color:var(--neon-live)]/20';
+
+  return (
+    <div className="relative flex gap-3 animate-fade-in mb-1">
+      {/* Timeline connector line */}
+      <div className="relative flex flex-col items-center flex-shrink-0">
+        {/* Status dot */}
+        <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
+          isSuccess ? 'bg-[color:var(--neon-constructive)]' :
+          isError ? 'bg-[color:var(--neon-destructive)]' :
+          'bg-[color:var(--neon-live)] animate-pulse'
+        }`} />
+        {/* Vertical line */}
+        {!isLast && (
+          <div className="w-px flex-1 bg-brand-border/40 my-1" />
+        )}
+      </div>
+
+      {/* Card content */}
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className={`flex-1 text-left border rounded-lg transition-all cursor-pointer ${
+          expanded ? statusBg : 'bg-brand-card/20 border-brand-border/30 hover:bg-brand-card/30'
+        }`}
+      >
+        {/* Header row */}
+        <div className="flex items-center justify-between gap-2 px-3 py-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {isRunning ? (
+              <Loader2 size={12} className={`${statusColor} animate-spin flex-shrink-0`} />
+            ) : (
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                isSuccess ? 'bg-[color:var(--neon-constructive)]' : 'bg-[color:var(--neon-destructive)]'
+              }`} />
+            )}
+            <span className="font-mono text-[11px] font-semibold text-brand-textMain truncate">
+              {step.toolName || 'tool'}
+            </span>
+            <span className="text-brand-textMuted/30 select-none hidden sm:inline">|</span>
+            <span className="text-brand-textMuted/60 text-[11px] truncate font-mono hidden sm:inline">
+              {TrajectoryService.summarizeToolContent(step)}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className={`text-[9px] font-semibold uppercase tracking-wider ${statusColor}`}>
+              {step.status || 'running'}
+            </span>
+            <ChevronRight
+              size={12}
+              className={`text-brand-textMuted/50 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+            />
+          </div>
+        </div>
+
+        {/* Expanded body: Input/Output JSON */}
+        {expanded && (
+          <div className="border-t border-brand-border/30 px-3 py-2 space-y-2 animate-fade-in">
+            {/* Input section */}
+            {step.metadata?.toolInput && (
+              <div>
+                <div className="text-[9px] font-semibold uppercase tracking-wider text-brand-textMuted/50 mb-1">Input</div>
+                <pre className="text-[10px] font-mono text-brand-textMuted/70 bg-brand-bg/60 rounded p-2 overflow-x-auto max-h-40 overflow-y-auto whitespace-pre-wrap break-all">
+                  {typeof step.metadata.toolInput === 'string'
+                    ? step.metadata.toolInput
+                    : JSON.stringify(step.metadata.toolInput, null, 2)}
+                </pre>
+              </div>
+            )}
+
+            {/* Output section */}
+            {step.content && (
+              <div>
+                <div className="text-[9px] font-semibold uppercase tracking-wider text-brand-textMuted/50 mb-1">Output</div>
+                <pre className="text-[10px] font-mono text-brand-textMuted/70 bg-brand-bg/60 rounded p-2 overflow-x-auto max-h-40 overflow-y-auto whitespace-pre-wrap break-all">
+                  {step.content.slice(0, 2000)}
+                  {step.content.length > 2000 && (
+                    <span className="text-brand-textMuted/40">... ({step.content.length} chars)</span>
+                  )}
+                </pre>
+              </div>
+            )}
+
+            {/* Metadata (filename, lines changed) */}
+            {step.metadata?.filename && (
+              <div className="flex items-center gap-2 text-[10px] text-brand-textMuted/60">
+                <FileText size={10} />
+                <span className="font-mono">{step.metadata.filename}</span>
+                {step.metadata.addedLines !== undefined && (
+                  <span className="text-[color:var(--neon-constructive)]">+{step.metadata.addedLines}</span>
+                )}
+                {step.metadata.removedLines !== undefined && (
+                  <span className="text-[color:var(--neon-destructive)]">-{step.metadata.removedLines}</span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </button>
+    </div>
+  );
+};
 
 // ─── Simple Markdown renderer (lightweight, no deps) ─────────────────────────
 const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ content, streaming }) => {
@@ -438,12 +563,12 @@ const TurnBlock: React.FC<TurnBlockProps> = ({
   const current = responses[selected] || [];
 
   return (
-    <div className="flex flex-col gap-0 items-end">
-      {/* ── User Prompt Bubble (right-aligned, slim card) ─────── */}
+    <div className="flex flex-col gap-0 items-end group/user">
+      {/* ── User Prompt Bubble (right-aligned, distinct card) ─────── */}
       <div className="flex justify-end w-full mt-1">
         <div
           data-testid={`step-user-${turn.userSteps[0]?.id || turnIdx}`}
-          className="relative bg-brand-card/40 backdrop-blur-sm border border-brand-border/50 rounded-xl px-3.5 py-2 max-w-[78%] text-right text-brand-textMain text-[13px] leading-relaxed shadow-sm hover:border-brand-border-strong transition-all font-sans"
+          className="relative bg-brand-card/70 backdrop-blur-sm border border-brand-border/60 rounded-xl px-3.5 py-2 max-w-[78%] text-right text-brand-textMain text-[13px] leading-relaxed shadow-sm hover:border-brand-border-strong transition-all font-sans"
         >
           {turn.userSteps.map((step, idx) => (
             <div key={step.id} className={idx > 0 ? 'mt-2.5' : ''}>
@@ -473,8 +598,8 @@ const TurnBlock: React.FC<TurnBlockProps> = ({
         </div>
       </div>
 
-      {/* ── User actions (under the card): Copy · Edit · Delete ──── */}
-      <div className="self-end flex items-center gap-0.5 mt-1 mr-0.5 select-none">
+      {/* ── User actions (under the card): Copy · Edit · Delete · Regenerate ──── */}
+      <div className="self-end flex items-center gap-0.5 mt-1 mr-0.5 select-none opacity-0 group-hover/user:opacity-100 transition-opacity duration-200">
         <CopyUserButton content={userContent} />
 
         {onEditStep && (
@@ -483,6 +608,15 @@ const TurnBlock: React.FC<TurnBlockProps> = ({
             onClick={() => onEditStep(turn.userSteps[0].id, userContent)}
           >
             <Edit size={13} />
+          </TrajectoryIconButton>
+        )}
+
+        {onRegenerate && (
+          <TrajectoryIconButton
+            title="Regenerate response"
+            onClick={() => onRegenerate(turn.userSteps[0].id, userContent)}
+          >
+            <RefreshCw size={13} />
           </TrajectoryIconButton>
         )}
 
@@ -786,7 +920,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
           isWorking={isStreaming}
         >
           {/* Chronological thinking/tool steps inside the collapsible, styled like a chat thread */}
-          {thinkingSteps.map(step => {
+          {thinkingSteps.map((step, stepIdx) => {
             if (step.type === 'thought' || step.type === 'assistant') {
               return (
                 <div
@@ -800,37 +934,13 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
               );
             }
 
-            // Otherwise, it is a tool_call or tool_result
-            const isSuccess = step.status === 'success';
-            const isError = step.status === 'error';
+            // Tool call or tool result — render as expandable card with timeline
             return (
-              <div
+              <ToolCallCard
                 key={step.id}
-                data-testid={`step-tool-${step.id}`}
-                className="flex flex-col gap-1 items-start max-w-full w-full animate-fade-in mb-1 font-sans"
-              >
-                <div className="bg-brand-card/20 border border-brand-border/30 rounded-lg px-3 py-1.5 flex items-center justify-between gap-3 font-mono text-[10.5px] text-brand-textMuted/80 w-full hover:bg-brand-card/30 transition-colors">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                        isSuccess ? 'bg-[color:var(--neon-constructive)]' :
-                        isError ? 'bg-[color:var(--neon-destructive)]' : 'bg-[color:var(--neon-live)]'
-                      }`}
-                    />
-                    <span className="text-brand-textMain/90 font-medium font-mono shrink-0">{step.toolName || 'tool'}</span>
-                    <span className="text-brand-textMuted/40 select-none">|</span>
-                    <span className="text-brand-textMuted/70 truncate font-mono select-all flex-1">
-                      {TrajectoryService.summarizeToolContent(step)}
-                    </span>
-                  </div>
-                  <span className={`text-[9px] font-semibold uppercase tracking-wider shrink-0 ${
-                    isSuccess ? 'text-[color:var(--neon-constructive)]/80' :
-                    isError ? 'text-[color:var(--neon-destructive)]/80' : 'text-[color:var(--neon-live)]/80'
-                  }`}>
-                    {step.status || 'running'}
-                  </span>
-                </div>
-              </div>
+                step={step}
+                isLast={stepIdx === thinkingSteps.length - 1}
+              />
             );
           })}
         </WorkedHeader>

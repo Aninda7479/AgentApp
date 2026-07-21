@@ -1054,3 +1054,49 @@ body {
   animation: pulse-ring 2s infinite;
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+   Mobile Touch & Keyboard Polish
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Prevent iOS auto-zoom on input focus (font-size must be >= 16px) */
+@media (max-width: 767px) {
+  textarea[data-testid="composer-input"],
+  input[type="text"],
+  input[type="search"],
+  select {
+    font-size: 16px !important;
+  }
+
+  /* Minimum touch target size for all interactive elements */
+  button,
+  a,
+  [role="button"],
+  [role="tab"],
+  [role="switch"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Compose box safe-area padding */
+  .composer-safe-bottom {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  }
+
+  /* Force unified diff view on narrow screens */
+  [data-testid="split-diff-container"] {
+    flex-direction: column !important;
+  }
+}
+
+/* Safe area bottom padding utility */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Compose box mobile: pin to bottom with safe area */
+@media (max-width: 767px) {
+  [data-testid="composer-container"] {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  }
+}
+

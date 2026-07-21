@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Download } from 'lucide-react';
 
 /** A single image entry in the gallery. */
 export interface ImageItem {
@@ -160,6 +161,16 @@ export const ImageGalleryModal: React.FC<ImageGalleryModalProps> = ({
     }
   };
 
+  const handleDownload = () => {
+    if (!currentImage?.url) return;
+    const a = document.createElement('a');
+    a.href = currentImage.url;
+    a.download = currentImage.title || `image-${currentIndex + 1}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const filterStyle = `brightness(${filters.brightness}%) contrast(${filters.contrast}%) saturate(${filters.saturation}%) grayscale(${filters.grayscale}%) sepia(${filters.sepia}%) blur(${filters.blur}px)`;
   const transformStyle = `scale(${transform.zoom}) rotate(${transform.rotation}deg) scaleX(${transform.flipX ? -1 : 1}) scaleY(${transform.flipY ? -1 : 1})`;
 
@@ -174,7 +185,7 @@ export const ImageGalleryModal: React.FC<ImageGalleryModalProps> = ({
               {currentIndex + 1} / {images.length}
             </span>
           </div>
-          <div style={styles.headerActions}>
+            <div style={styles.headerActions}>
             <div style={styles.tabGroup}>
               <button
                 style={{
@@ -195,6 +206,14 @@ export const ImageGalleryModal: React.FC<ImageGalleryModalProps> = ({
                 Edit & Filters
               </button>
             </div>
+            <button
+              onClick={handleDownload}
+              style={{ ...styles.tabBtn, display: 'flex', alignItems: 'center', gap: '4px' }}
+              title="Download image"
+              aria-label="Download image"
+            >
+              <Download size={14} />
+            </button>
             <button style={styles.closeBtn} onClick={onClose} aria-label="Close modal">
               ✕
             </button>

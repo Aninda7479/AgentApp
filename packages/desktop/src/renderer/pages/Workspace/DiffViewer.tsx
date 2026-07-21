@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DiffService, DiffLine } from '../../logic/diff';
+import { Copy, Check } from 'lucide-react';
 
 /** Props for the DiffViewer component. */
 export interface DiffViewerProps {
@@ -26,6 +27,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   const [viewMode, setViewMode] = useState<'split' | 'unified'>(
     typeof window !== 'undefined' && window.innerWidth < 768 ? 'unified' : 'split'
   );
+  const [copiedCode, setCopiedCode] = useState(false);
   // Side-by-side diffs are unreadable on narrow screens — force unified below md.
   const [isNarrow, setIsNarrow] = useState<boolean>(
     typeof window !== 'undefined' ? window.innerWidth < 768 : false
@@ -38,6 +40,13 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   const effectiveViewMode = isNarrow ? 'unified' : viewMode;
 
   const { lines, additions, deletions } = DiffService.computeDiff(originalCode, modifiedCode);
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(modifiedCode).then(() => {
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 1500);
+    });
+  };
 
   const origSplitLines = originalCode.split('\n');
   const modSplitLines = modifiedCode.split('\n');
@@ -52,6 +61,26 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
           <span className="text-xs text-[color:var(--neon-destructive)] font-bold">-{deletions}</span>
         </div>
         <div className="flex items-center gap-2.5">
+          {/* Copy modified code */}
+          <button
+            data-testid="btn-copy-code"
+            onClick={handleCopyCode}
+            className="bg-[var(--brand-hover)] border border-brand-border text-brand-textMuted hover:text-brand-textMain rounded-lg px-3 py-1 text-xs cursor-pointer transition-colors flex items-center gap-1.5"
+            title="Copy modified code"
+          >
+            {copiedCode ? (
+              <>
+                <Check size={12} className="text-[color:var(--neon-constructive)]" />
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy size={12} />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+
           <button
             data-testid="toggle-view-mode"
             onClick={() => setViewMode(viewMode === 'split' ? 'unified' : 'split')}

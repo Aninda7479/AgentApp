@@ -148,7 +148,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const waveformBars = [40, 65, 30, 80, 95, 50, 75, 35, 90, 60, 45, 85, 70, 30, 100, 55, 80, 40, 65, 90];
 
   return (
-    <div style={styles.container} data-testid="audio-player">
+    <div className="w-full max-w-[600px] mx-auto px-2 sm:px-0" data-testid="audio-player">
       <style>{`@keyframes sa-media-spin{to{transform:rotate(360deg)}}.sa-media-spin{animation:sa-media-spin 0.9s linear infinite}`}</style>
       <audio
         ref={audioRef}

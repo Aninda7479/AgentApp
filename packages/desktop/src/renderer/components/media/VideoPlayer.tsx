@@ -171,7 +171,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   return (
     <div
       ref={containerRef}
-      style={styles.container}
+      className="w-full max-w-full sm:max-w-[800px]"
+      style={{
+        backgroundColor: '#000000',
+        borderRadius: '12px',
+        overflow: 'hidden',
+        boxShadow: '0 10px 40px rgba(0,0,0,0.6)',
+        aspectRatio: '16 / 9',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        margin: '0 auto',
+        position: 'relative',
+      }}
       onMouseMove={handleMouseMove}
       data-testid="video-player"
     >

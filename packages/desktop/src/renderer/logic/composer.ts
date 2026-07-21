@@ -1,4 +1,5 @@
 import type { SlashSuggestion } from '../components/slashCommands';
+import type { SelectedTool } from '../pages/Workspace/Composer';
 
 /**
  * Pure logic for the Composer prompt input: building the send payload from the
@@ -14,11 +15,12 @@ export class ComposerService {
   static buildSendOptions(
     model: string,
     approvalMode: 'always' | 'never' | 'ask',
-    attachments: string[]
-  ): { model: string; mode: 'auto' | 'plan' | 'bypass'; attachments: string[] } {
+    attachments: string[],
+    selectedTools?: SelectedTool[]
+  ): { model: string; mode: 'auto' | 'plan' | 'bypass'; attachments: string[]; selectedTools?: SelectedTool[] } {
     const mode: 'auto' | 'plan' | 'bypass' =
       approvalMode === 'always' ? 'auto' : approvalMode === 'never' ? 'bypass' : 'plan';
-    return { model, mode, attachments };
+    return { model, mode, attachments, ...(selectedTools && selectedTools.length > 0 ? { selectedTools } : {}) };
   }
 
   /** Returns the human-readable label for the approval-mode pill. */

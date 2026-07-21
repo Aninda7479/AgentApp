@@ -14,6 +14,10 @@ import {
   ShieldAlert,
   Info,
   Workflow,
+  X,
+  Sparkles,
+  Wrench,
+  Terminal,
 } from 'lucide-react';
 import {
   SlashSuggestion,
@@ -70,11 +74,19 @@ function bufferToWav(buffer: AudioBuffer): ArrayBuffer {
 }
 
 
+/** A skill or tool selected via the slash menu, displayed as a chip. */
+export interface SelectedTool {
+  id: string;
+  name: string;
+  category: 'skill' | 'builtin' | 'mcp';
+}
+
 /** Options returned by the Composer when a prompt is submitted. */
 export interface ComposerOptions {
   model: string;
   mode: 'auto' | 'plan' | 'bypass';
   attachments: string[];
+  selectedTools?: SelectedTool[];
 }
 
 /** A file attachment queued in the composer. */
@@ -247,6 +259,21 @@ export const Composer: React.FC<ComposerProps> = ({
     adjustTextareaHeight();
   }, [prompt]);
 
+  // ── Selected tools/skills (shown as chips above textarea) ──────────────────
+  const [selectedTools, setSelectedTools] = useState<SelectedTool[]>([]);
+
+  const addSelectedTool = (s: SlashSuggestion) => {
+    const tool: SelectedTool = { id: s.name, name: s.label, category: s.category };
+    setSelectedTools(prev => {
+      if (prev.some(t => t.id === tool.id)) return prev;
+      return [...prev, tool];
+    });
+  };
+
+  const removeSelectedTool = (id: string) => {
+    setSelectedTools(prev => prev.filter(t => t.id !== id));
+  };
+
   // ── Slash-command autocomplete ───────────────────────────────────────────────
   const [slashStart, setSlashStart] = useState<number | null>(null);
   const [slashQuery, setSlashQuery] = useState('');
@@ -303,8 +330,18 @@ export const Composer: React.FC<ComposerProps> = ({
     updateSlashFromCaret(el.value, el.selectionStart ?? el.value.length);
   };
 
-  /** Insert a selected suggestion at the caret, replacing the in-progress token. */
+  /** Insert a selected suggestion at the caret, or add as a chip for skills/MCP tools. */
   const acceptSlash = (item: SlashSuggestion) => {
+    // For skills and MCP tools, add as a visual chip instead of text insertion
+    if (item.category === 'skill' || item.category === 'mcp') {
+      addSelectedTool(item);
+      setSlashStart(null);
+      setSlashQuery('');
+      requestAnimationFrame(() => textareaRef.current?.focus());
+      return;
+    }
+
+    // For builtin commands, insert the text at caret
     const el = textareaRef.current;
     const value = prompt;
     const caret = el?.selectionStart ?? value.length;
@@ -604,7 +641,7 @@ export const Composer: React.FC<ComposerProps> = ({
     // still clears instantly for normal sends.
     setPrompt('');
     basePromptRef.current = '';
-    onSend(toSend, ComposerService.buildSendOptions(selectedModel, approvalMode, []));
+    onSend(toSend, ComposerService.buildSendOptions(selectedModel, approvalMode, [], selectedTools));
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -649,6 +686,39 @@ export const Composer: React.FC<ComposerProps> = ({
     >
       {/* The main input composer card */}
       <div className="glass-panel rounded-xl p-3 flex flex-col shadow-sm relative transition-all duration-300 focus-within:border-brand-border-strong focus-within:ring-2 focus-within:ring-brand-hover-strong">
+        {/* Selected Skills/Tools Chips */}
+        {selectedTools.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2 pb-2 border-b border-brand-border/40 select-none animate-fade-in">
+            {selectedTools.map(tool => (
+              <span
+                key={tool.id}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
+                  tool.category === 'skill'
+                    ? 'bg-[color:var(--neon-constructive)]/10 border-[color:var(--neon-constructive)]/25 text-[color:var(--neon-constructive)]'
+                    : 'bg-[color:var(--neon-live)]/10 border-[color:var(--neon-live)]/25 text-[color:var(--neon-live)]'
+                }`}
+              >
+                {tool.category === 'skill' ? (
+                  <Sparkles className="w-2.5 h-2.5" />
+                ) : tool.category === 'mcp' ? (
+                  <Wrench className="w-2.5 h-2.5" />
+                ) : (
+                  <Terminal className="w-2.5 h-2.5" />
+                )}
+                <span>{tool.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeSelectedTool(tool.id)}
+                  className="ml-0.5 hover:opacity-70 transition-opacity cursor-pointer"
+                  aria-label={`Remove ${tool.name}`}
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Composer Attachments Queue Row */}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-3 pb-3 border-b border-brand-border/40 select-none">
@@ -696,6 +766,13 @@ export const Composer: React.FC<ComposerProps> = ({
             <span>
               auto-routing: active across available models
             </span>
+          </div>
+        )}
+
+        {/* Enter/Shift+Enter hint */}
+        {!prompt && hasModels && (
+          <div className="text-[10px] text-brand-textMuted/40 font-mono select-none mb-1">
+            Enter to send · Shift+Enter for new line
           </div>
         )}
 
@@ -853,7 +930,7 @@ export const Composer: React.FC<ComposerProps> = ({
             data-testid="slash-menu"
             className="absolute bottom-full left-0 mb-2 ui-popover w-110 max-w-[90vw] p-1.5 z-50 max-h-80 overflow-y-auto"
           >
-            <div className="ui-menu-label px-2 py-1">Slash commands &amp; tools</div>
+            <div className="ui-menu-label px-2 py-1">Commands, Skills &amp; Tools</div>
             {filtered.length === 0 && (
               <div className="px-3 py-2 text-xs text-brand-textMuted">No matching commands</div>
             )}
@@ -881,6 +958,16 @@ export const Composer: React.FC<ComposerProps> = ({
                     }`}
                   />
                   <span className="font-mono text-xs font-semibold text-brand-textMain truncate">{s.label}</span>
+                  {s.category === 'skill' && (
+                    <span className="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-[color:var(--neon-constructive)]/10 text-[color:var(--neon-constructive)] border border-[color:var(--neon-constructive)]/20 flex-shrink-0">
+                      SKILL
+                    </span>
+                  )}
+                  {s.category === 'mcp' && (
+                    <span className="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-[color:var(--neon-live)]/10 text-[color:var(--neon-live)] border border-[color:var(--neon-live)]/20 flex-shrink-0">
+                      TOOL
+                    </span>
+                  )}
                   {s.usage && (
                     <span className="ml-auto text-[10px] text-brand-textMuted font-mono truncate max-w-50 pl-2">
                       {s.usage}
