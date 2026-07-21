@@ -101,6 +101,11 @@ Write this file to `.playwright/findings-<unix_timestamp>.json`.
 
 After writing, your job is done. Exit cleanly.
 
+## Failure mode (still success for parent)
+
+If the dev server is down or Playwright MCP is unavailable: write findings JSON with
+`"overall": "NOT_CHECKED"` and `"blocker_count": 0` plus a note. Do not hang.
+
 ## What NOT to Do
 
 - Do NOT try to fix code issues you find — that is art-director's job in its main session.
@@ -108,3 +113,4 @@ After writing, your job is done. Exit cleanly.
 - Do NOT try to log to `.claude/auto-improve-log.log` — art-director handles that.
 - Do NOT call more than 5 turns of tools — you will be killed by --max-turns anyway.
 - Do NOT read the findings file back to confirm it — trust that Write succeeded.
+- Parent skills must still commit UI work if build passes and you return NOT_CHECKED.

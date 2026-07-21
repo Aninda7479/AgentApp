@@ -1,183 +1,116 @@
 ---
 name: auto-improve
-description: Autonomous research-and-improve loop for SuperAgent — researches online EVERY cycle (3 mandatory searches written to disk before any planning), picks one high-leverage improvement tied to the mission, implements it, verifies statically and live, and commits to a per-cycle dated branch with an auto-PR to agent-development. Use for open-ended "keep improving the project" requests. Research is not optional — a cycle without 3 cited real sources is incomplete.
+description: Results-first improvement loop for SuperAgent. Picks one item from docs/FUTURE-PLAN.MD / plan/improvement-plan.md, implements it, verifies (build + tests), commits, and logs. Research is optional (max 1 search). Use for open-ended "improve SuperAgent" requests. A cycle without a commit or CERTAIN promotion is a failed cycle.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash, WebSearch, WebFetch, TodoWrite
-argument-hint: [optional focus, e.g. "routing-layer", "video-gen-adapter", "gui-polish", "gui-redesign"]
+argument-hint: [optional focus, e.g. "hooks-mvp", "certain-cli-smoke", "video-adapter", "gui-workspace"]
 ---
 
-# /auto-improve — Autonomous Research → Improve → Test → Commit Loop
+# /auto-improve — Ship one improvement
 
-Re-read this whole file every time you're invoked, including after `/clear` or `/compact`.
+**First read:** `.claude/skills/_shared/RESULTS-CONTRACT.md`  
+**North star:** `docs/FUTURE-PLAN.MD`  
+**Backlog:** `plan/improvement-plan.md`
 
-## Mission (every change must serve one of these)
+## Mission (pick changes that serve these)
 
-1. **User controls model/provider and data.** Nothing locked to one vendor.
-2. **Model orchestration, not single-model dependence.** Route tasks to whichever model(s) are good at them.
-3. **One agent surface, many capabilities.** 3D, image, video, audio, PDF, Office, coding — pluggable adapters.
-4. **A GUI that doesn't feel like a hobby project.** Competing visually with polished commercial apps.
+1. User controls model/provider and data (no single-vendor lock).
+2. Orchestrate models by task — do not depend on one model.
+3. One agent surface: coding + 3D + video + audio + Office — pluggable adapters.
+4. GUI that feels commercial-grade.
+5. **Reliability:** move capabilities into the FUTURE-PLAN Certainty Register.
 
-## Context & Memory Contract
+**Replace targets (from FUTURE-PLAN):** coding agents (Antigravity / Claude / OpenAI), CLIs, Tripo3D-class 3D, HiggsField-class video. Industrial CAD later.
 
-**Compact at every `→ COMPACT` checkpoint — unconditionally, like a step in the recipe.**
-If unsure whether to compact: compact anyway. A compact you didn't need wastes a little.
-A compact you skipped costs the entire run.
+## Cycle (keep it short)
 
-**Before every compact:** write focus + step + commit state to TodoWrite.
+### 0) Orient (5 minutes max)
 
-**Avoid large context sources:**
-- Redirect build/lint/test output to files: `npm run build > /tmp/ai-build.log 2>&1`; read only the tail.
-- `Grep` before `Read` — never load a whole source file to orient.
-- WebFetch: take the one-line takeaway; discard the raw page.
-- `.claude/auto-improve-log.log`: `tail -n 150` only, never whole.
-- Research cache files: write them to disk, read back only what you need.
-
-## Step 0 — Orient
-
-**Acquire the lock first (before any edits):**
-```bash
-LOCK=.claude/.auto-improve.lock
-if [ -f "$LOCK" ]; then
-  age=$(( $(date +%s) - $(date -r "$LOCK" +%s 2>/dev/null || echo 0) ))
-  if [ "$age" -lt 540 ]; then echo "LOCK_HELD"; exit 2; fi
-fi
-printf '{"pid":%d,"started":"%s"}\n' "$$" "$(date -u +%FT%TZ)" > "$LOCK"
-```
-If LOCK_HELD: abort. If acquired: release at end with `rm -f "$LOCK"`.
-
-Then:
-- `git log --oneline -20` and `git status` — understand trajectory and dirty state.
-- `tail -n 150 .claude/auto-improve-log.log` — read shared queue and resume state.
-- Read provider/model registry to see which models are tagged `free`.
-- Map current structure briefly (don't re-derive from scratch each cycle — use the log's last "structure note").
-
-## Step 1 — Pick One Focus
-
-Use `$ARGUMENTS` if given. Otherwise take the top item from the log's "next priority queue."
-If queue is empty, find the single highest-leverage gap yourself.
-
-- Prefer breadth before depth: touch every subsystem at least once before a second pass.
-- Small, reversible, verifiable increments. A one-line fix is a legitimate cycle.
-
-## Step 2 — Online Research (MANDATORY — NON-NEGOTIABLE)
-
-**This step is never optional. You may not proceed to Step 3 (Plan) without completing it.**
-
-Research prevents you from implementing based on stale memory (API shapes change, best practices
-evolve monthly in AI tooling). Actually search and fetch — do not simulate research from memory.
-
-```bash
-# Create research cache dir
-mkdir -p .claude/research-cache
+```powershell
+git status
+git log --oneline -15
+Get-Content .claude/auto-improve-log.log -Tail 80 -ErrorAction SilentlyContinue
 ```
 
-**Run these 3 searches every cycle:**
+Read the top of `docs/FUTURE-PLAN.MD` (honesty gate + active phase) and the first unchecked Phase 0/1 item in `plan/improvement-plan.md`.
 
-1. `"AI agent open source <focus area> improvements $(date +%B\ %Y)"` — what comparable tools are shipping
-2. `"<focus area from Step 1> best practices 2026"` — current art for this specific domain
-3. `"site:github.com/Aninda7479/AgentApp issues OR discussions"` (or WebFetch the Issues tab) — community reports
+Acquire soft lock per RESULTS-CONTRACT (30 min TTL). Set `$SKILL = "auto-improve"`.
 
-For each search: use `WebSearch` to get URLs, then `WebFetch` the most relevant result.
-Read only the first 200 lines of any fetched page — never paste full content into context.
+### 1) Pick ONE deliverable
 
-Write the research log **to disk** before reading it back:
-```bash
-cat > .claude/research-cache/$(date +%Y%m%d-%H%M)-auto-improve.md << 'EOF'
-RESEARCH LOG — [auto-improve] [DATE TIME]
-Focus: <focus area>
-Search 1: "<exact query>" → Source: <url> — Takeaway: <one line>
-Search 2: "<exact query>" → Source: <url> — Takeaway: <one line>
-Search 3: "<exact query>" → Source: <url> — Takeaway: <one line>
-Decision: <what this research changed about the plan>
-EOF
+Order of preference:
+
+1. `$ARGUMENTS` if provided and valid  
+2. Top item in log’s `Next priority queue`  
+3. First unchecked Phase 0 item  
+4. First unchecked Phase 1 item  
+5. Only then Phase 2 media / Phase 3 GUI  
+
+Write the choice to TodoWrite as a single checkbox list (3–6 concrete file edits max).
+
+### 2) Research (OPTIONAL — skip by default)
+
+Only if you need a current external API shape or competitor behavior you will implement **this cycle**:
+
+- At most **one** WebSearch and one WebFetch.
+- Write takeaway to `.claude/research-cache/<yyyyMMdd-HHmm>-auto-improve.md` (3–10 lines).
+- Do **not** block implementation on research theater.
+
+### 3) Implement
+
+- Change core first when logic is shared; faces stay thin.
+- Match existing style; no drive-by refactors.
+- New providers/media go behind existing adapter patterns.
+
+### 4) Verify
+
+```powershell
+New-Item -ItemType Directory -Force -Path .claude/tmp | Out-Null
+npm run build *> .claude/tmp/ai-build.log
+if ($LASTEXITCODE -ne 0) { Get-Content .claude/tmp/ai-build.log -Tail 50; throw "build failed" }
+# Prefer package-scoped tests for speed:
+npx vitest run packages/core/test packages/cli/test --reporter=dot *> .claude/tmp/ai-test.log
+Get-Content .claude/tmp/ai-test.log -Tail 30
 ```
 
-Cross-check at least 2 independent sources before committing to an approach.
-Never invent a source, API shape, or library capability you haven't verified.
+Live LLM: only free/local if already configured; otherwise `Live: SKIP` and still commit if offline verify passed.
 
-**→ COMPACT** (write focus + step + research file path to TodoWrite first)
+### 5) Commit
 
-## Step 3 — Plan
+Only if verify passed.
 
-Write a short numbered plan via TodoWrite — typically 1–6 concrete edits.
-For each item, name which mission point it serves.
-Cite the research file from Step 2 as the basis.
+```text
+auto-improve: <what> — FUTURE-PLAN Phase <N>
 
-## Step 4 — Implement
-
-- Match existing code conventions.
-- New capability adapters go behind the existing adapter interface.
-- Prefer additive, backward-compatible changes. If breaking, say so explicitly in the log.
-- No unjustified new dependencies — if adding one, log why it won over alternatives.
-
-## Step 5 — Verify (Static)
-
-```bash
-npm run build > /tmp/ai-build.log 2>&1
-echo "Exit: $?"
-tail -30 /tmp/ai-build.log
+Why: <mission / replacement target>
+Verify: build PASS; tests PASS|partial; live SKIP|PASS
 ```
 
-Run lint and typecheck if available. Fix failures before Step 6. Do not proceed past a failing check.
+Push if remote configured and policy allows; never force-push. Release lock.
 
-## Step 6 — Verify (Live)
+### 6) Log (always)
 
-- **Only use already-connected providers whose models are tagged `free`** in the registry.
-- Never call a paid or unconfigured provider.
-- If no free-tagged model is connected for this test: skip live call, say so explicitly.
-- Redirect live test output to disk:
-  ```bash
-  node test-script.js > /tmp/ai-live-test.log 2>&1
-  tail -20 /tmp/ai-live-test.log
-  ```
-- Do not fabricate a pass.
+Append to `.claude/auto-improve-log.log` using the RESULTS-CONTRACT template.  
+If you promoted CERTAIN, also edit `docs/FUTURE-PLAN.MD` Certainty Register.
 
-**→ COMPACT**
+Re-seed queue from `plan/improvement-plan.md` if empty.
 
-## Step 7 — Commit
+### 7) Stop or next
 
-Only commit if Steps 5 and 6 passed (or Step 6 was honestly documented as not-possible with reason).
-
-- Check diff for API keys, `.env` contents, tokens, personal paths.
-- Stage only files from this cycle's focus.
-- Write a real commit message:
-  ```
-  auto-improve: <what changed> — <mission point served>
-  
-  Research: <source URLs from Step 2>
-  Static verify: build/lint PASS
-  Live test: <PASS against <model> | NOT LIVE-TESTED — <reason>>
-  ```
-- Commit, then push. Never force-push. Release the lock.
-
-## Step 8 — Log and Hand Off
-
-Append to `.claude/auto-improve-log.log`:
-```
-## YYYY-MM-DD HH:MM — [auto-improve] <focus area>
-Researched: <3 sources + one-line takeaways>
-Research file: .claude/research-cache/<filename>
-Changed: <files / behavior>
-Why: <mission point served>
-Static verify: <build/lint/test result>
-Live test: <PASS against <model name> | NOT LIVE-TESTED — reason>
-Committed: <hash + pushed | "not committed — reason">
-Next priority queue: <ordered list for next /auto-improve run>
-Open questions: <anything needing a human decision>
-```
-
-**→ COMPACT** (post Steps 7–8)
-
-## Step 9 — Repeat Within Session
-
-If turns/context budget remain and no blocking open question, go back to Step 1 with the next queue item.
-Stop between cycles, never mid-edit.
+One solid commit beats three half-cycles. Only start a second focus if the first is committed and context is still healthy.
 
 ## Guardrails
 
-- Never weaken "user owns their data/keys" to make a feature easier.
-- Never hard-lock a feature to one paid vendor when an interchangeable path is viable.
-- Don't write integration code against a guessed API shape — verify via research first.
-- Never call a paid or unconfigured provider autonomously.
-- Never commit code that failed a check you were able to run.
-- Never commit secrets.
-- If truly blocked on a human decision, log it as an open question and move on.
+- Never research-only cycles.
+- Never paid API calls without user keys already present.
+- Never secrets in commits.
+- Never force-push.
+- Never start Phase 4 industrial work unless the user explicitly asks.
+- Windows-first shell; see RESULTS-CONTRACT.
+
+## Anti-patterns (do not do these)
+
+- Three mandatory web searches before coding  
+- Unconditional compact mid-edit  
+- Aborting solely because `.auto-improve.lock` exists for < 30 min without file conflict  
+- “Improve the GUI” with no FUTURE-PLAN item  
+- Large multi-subsystem PRs in one cycle  

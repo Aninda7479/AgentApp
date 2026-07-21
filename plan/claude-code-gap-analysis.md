@@ -1,14 +1,20 @@
 # Claude Code vs SuperAgent — Feature Gap Analysis
 
-**Date:** 2026-07-21
-**Source:** https://code.claude.com/docs/en/overview + full docs index
-**Purpose:** Identify features Claude Code has that SuperAgent lacks, with improvement scope.
+**Date:** 2026-07-21  
+**Source:** https://code.claude.com/docs/en/overview + full docs index  
+**Purpose:** Competitive detail for **coding agent / CLI** parity only (FUTURE-PLAN Pillars A + B).
+
+> **North star:** [`docs/FUTURE-PLAN.MD`](../docs/FUTURE-PLAN.MD)  
+> **Execution order:** [`plan/improvement-plan.md`](./improvement-plan.md)  
+> **Do not use this file alone.** SuperAgent also replaces multi-provider media tools (Tripo3D-class 3D, HiggsField-class video). Industrial CAD/CAE is deferred.  
+> **Reliability first:** if Certainty Register is empty, run `/reliability-gate` before boiling the ocean on sections 5–15 below.  
+> **Implementation skill:** `/agent-parity` for sections 1–4 and subagents/sessions; `/auto-improve` for queue items.
 
 ---
 
 ## Executive Summary
 
-Claude Code is a mature, enterprise-grade agentic coding platform with deep integration into the software development lifecycle. SuperAgent is a multi-provider AI agent with unique strengths (multimedia, 3D pet, multi-provider routing) but significant gaps in developer-tooling depth, session management, and enterprise features. This document catalogs every meaningful gap.
+Claude Code is a mature, enterprise-grade agentic coding platform with deep integration into the software development lifecycle. SuperAgent is a multi-provider AI agent with unique strengths (multimedia, 3D pet, multi-provider routing) but significant gaps in developer-tooling depth, session management, and enterprise features. This document catalogs every meaningful **coding** gap — not the full product roadmap.
 
 ---
 

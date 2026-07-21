@@ -113,6 +113,12 @@ Write the audit findings JSON. This is your ONLY output to the main session:
 
 Write to `.playwright/audit-<unix_timestamp>.json`, then exit.
 
+## Failure mode
+
+If server/MCP unavailable: write `.playwright/audit-<ts>.json` with
+`"flow_completed": false`, `"overall_rating": "0/5"`, and one finding explaining the blocker.
+Parent `/ux-critic` falls back to static review — never invent a walkthrough.
+
 ## What NOT to Do
 
 - Do NOT edit application code.
