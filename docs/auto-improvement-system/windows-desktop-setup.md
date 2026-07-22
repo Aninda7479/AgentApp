@@ -1,7 +1,7 @@
 # Windows Desktop Setup Guide
 
 Run the autonomous self-improvement loop on your Windows PC using:
-- **Claude Code CLI** (primary driver — runs skills as headless `claude -p` sessions)
+- **Claude Code CLI** (primary driver — runs `/skill-loop` as headless `claude -p`, which spawns worker skills in isolated sessions)
 - **SuperAgent Desktop App** (monitor while the loop runs in the background)
 - **Windows Task Scheduler** (trigger one skill per task, staggered by schedule)
 

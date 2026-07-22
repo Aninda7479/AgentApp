@@ -154,6 +154,9 @@ Write `.claude/loop/pending-worker.json` (overwrite each time):
 
 ### Step 4 — Spawn isolated worker (REQUIRED)
 
+Workers must **commit on the current git branch** (outer autodev already created `auto/...`).  
+They must not open nested branches.
+
 Pick **one** spawn method. Prefer A on Windows autodev; B if Task/subagent tool exists; C as fallback.
 
 #### Method A — helper script (recommended, Windows)

@@ -76,8 +76,17 @@ $BranchPrefix = if ($env:BRANCH_PREFIX) { $env:BRANCH_PREFIX } else { "auto" }
 $LogDir       = if ($env:LOG_DIR) { $env:LOG_DIR } else { Join-Path $RepoDir "logs\auto-improve" }
 $PauseFile    = if ($env:PAUSE_FILE) { $env:PAUSE_FILE } else { Join-Path $RepoDir ".claude\.auto-improve.pause" }
 $AutoCreatePr = if ($env:AUTO_CREATE_PR) { $env:AUTO_CREATE_PR -ne "false" } else { $true }
-$AllowedTools = if ($env:ALLOWED_TOOLS) { $env:ALLOWED_TOOLS } else { "Read,Grep,Glob,Edit,Write,Bash,WebSearch,WebFetch,TodoWrite" }
-# No MAX_TURNS or MAX_BUDGET_USD - skills run until naturally complete.
+# skill-loop main session is a dispatcher only — keep tools thin (no Edit/Web*)
+if ($env:ALLOWED_TOOLS) {
+    $AllowedTools = $env:ALLOWED_TOOLS
+} elseif ($Skill -match 'skill-loop') {
+    $AllowedTools = "Read,Grep,Bash,Write,TodoWrite"
+} else {
+    $AllowedTools = "Read,Grep,Glob,Edit,Write,Bash,WebSearch,WebFetch,TodoWrite"
+}
+# Optional turn cap for thin orchestrator (workers have their own sessions)
+$MaxTurns = if ($env:MAX_TURNS) { [int]$env:MAX_TURNS } elseif ($Skill -match 'skill-loop') { 25 } else { 0 }
+# No MAX_BUDGET_USD - skills run until naturally complete.
 
 if ($BaseBranch -eq "main") {
     Write-Error "Refusing to run: BASE_BRANCH is 'main'. Use 'agent-development' or a side branch."
@@ -90,7 +99,8 @@ if ($BaseBranch -eq "main") {
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
 
 $Ts        = (Get-Date -Format "yyyyMMddTHHmmssZ")
-$SkillName = $Skill.TrimStart('/')
+# Sanitize skill name for branch (e.g. "/skill-loop once" -> "skill-loop")
+$SkillName = (($Skill.TrimStart('/') -split '\s+')[0] -replace '[^a-zA-Z0-9_-]', '-')
 $CycleBranch = "$BranchPrefix/$(Get-Date -Format 'yyyy-MM-dd-HHmm')-$SkillName"
 $RunLog    = Join-Path $LogDir "${Ts}_${SkillName}.json"
 $StderrLog = Join-Path $LogDir "${Ts}_${SkillName}.stderr.log"
@@ -118,6 +128,8 @@ Set-Location $RepoDir
 # Create required dirs
 # ---------------------------------------------------------------------------
 New-Item -ItemType Directory -Path ".claude\research-cache" -Force | Out-Null
+New-Item -ItemType Directory -Path ".claude\loop" -Force | Out-Null
+New-Item -ItemType Directory -Path ".claude\tmp" -Force | Out-Null
 New-Item -ItemType Directory -Path ".playwright" -Force | Out-Null
 
 # ---------------------------------------------------------------------------
@@ -177,6 +189,9 @@ $claudeArgs = @(
     "--permission-mode", "acceptEdits",
     "--output-format", "json"
 )
+if ($MaxTurns -gt 0) {
+    $claudeArgs += @("--max-turns", "$MaxTurns")
+}
 
 $proc = Start-Process -FilePath "claude" `
     -ArgumentList $claudeArgs `

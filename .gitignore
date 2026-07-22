@@ -62,6 +62,13 @@ temp/
 graphify-out/
 .superagent/
 .claude/research-cache
+.claude/tmp/
+.claude/loop/
+!.claude/loop/.gitkeep
+logs/auto-improve/
+logs/skill-loop/
+.claude/.auto-improve.lock
+.claude/.auto-improve.pause
 
 # Lily 3D model source assets (large binaries; copied into dist/ at build time).
 # If absent from a fresh clone, the built-in Lily gracefully falls back to the

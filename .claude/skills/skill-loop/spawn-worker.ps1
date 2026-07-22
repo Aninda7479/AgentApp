@@ -90,6 +90,9 @@ if (-not (Test-Path $skillFile)) {
 }
 
 # Prompt is self-contained so the worker session does not need the parent context.
+$currentBranch = (git rev-parse --abbrev-ref HEAD 2>$null)
+if (-not $currentBranch) { $currentBranch = "unknown" }
+
 $prompt = @"
 You are an isolated SuperAgent WORKER subagent. Fresh context. One cycle only.
 
@@ -98,19 +101,21 @@ DISPATCH:
 - focus_hint: $focus
 - result_path: $resultPath
 - pending: .claude/loop/pending-worker.json
+- current_git_branch: $currentBranch
 
 MANDATORY STEPS:
 1. Read .claude/skills/_shared/RESULTS-CONTRACT.md
 2. Read .claude/skills/$workerName/SKILL.md and EXECUTE that skill for ONE full cycle (implement/verify/commit/log as that skill requires).
 3. Prefer focus_hint when choosing the deliverable.
-4. BEFORE you exit, Write the file exactly at:
+4. GIT: Stay on branch '$currentBranch'. Do NOT create a new branch, checkout main, or force-push. Commit on the current branch only (the outer autodev driver owns the branch/PR).
+5. BEFORE you exit, Write the file exactly at:
    $resultPath
    using this JSON shape (valid JSON, no markdown fence):
 {
   "skill": "$workerName",
   "status": "success|failed|skipped",
   "committed": "<hash or none>",
-  "branch": "<branch or empty>",
+  "branch": "$currentBranch",
   "summary": "<one line>",
   "files_changed": [],
   "verify": { "build": "PASS|FAIL|SKIP", "tests": "PASS|FAIL|SKIP", "live": "PASS|SKIP" },
@@ -119,9 +124,9 @@ MANDATORY STEPS:
   "open_questions": [],
   "duration_minutes": 0
 }
-5. status=success only if you committed, promoted CERTAIN, or fixed a P0 security issue.
-6. Do NOT run /skill-loop. Do NOT spawn other top-level skills.
-7. Windows-first: use PowerShell; put build logs under .claude/tmp/
+6. status=success only if you committed, promoted CERTAIN, or fixed a P0 security issue.
+7. Do NOT run /skill-loop. Do NOT spawn other top-level skills.
+8. Windows-first: use PowerShell; put build logs under .claude/tmp/
 "@
 
 $promptFile = Join-Path $LoopDir "prompt-$ts.txt"
