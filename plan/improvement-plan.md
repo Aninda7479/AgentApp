@@ -22,7 +22,7 @@ This plan is ordered for **results**: certainty first, then agent/CLI replacemen
 ### 0.1 Smoke matrix
 - [x] CERTAIN-1: CLI chat turn + one tool call (read file) — mock or free/local model
 - [x] CERTAIN-2: Core engine tool loop unit tests for tool success + tool error
-- [ ] CERTAIN-3: Desktop send message end-to-end (manual script + automated if possible)
+- [x] CERTAIN-3: Desktop send message end-to-end (manual script + automated if possible)
 - [ ] CERTAIN-4: Web send message smoke
 - [ ] CERTAIN-5: BYOK provider connect + list models (no network secret leakage)
 - [ ] CERTAIN-6: MCP list/connect smoke

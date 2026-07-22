@@ -14,7 +14,7 @@ This file is the product roadmap. Skills (`.claude/skills/*`) and `plan/improvem
 | Surface | Claim | Reality (2026-07-21) |
 |---------|--------|----------------------|
 | Core engine | Shared brain for all faces | 2 CERTAIN capabilities (chat+tool, error paths); full E2E matrix still building |
-| Desktop app | Full agent + GUI | Partial — polish and path coverage incomplete |
+| Desktop app | Full agent + GUI | Partial — CERTAIN-3 send message E2E proven; polish and path coverage incomplete |
 | CLI | Claude Code–class terminal agent | Partial — commands exist; depth gaps remain |
 | Web | Same core via browser | Partial — fewer features than desktop |
 
@@ -38,6 +38,7 @@ Until then, list it under **Building** or **Planned**, never under CERTAIN.
 |------------|----------|--------|----------|-----------|
 | CLI chat turn + tool call (read_file) | CLI, Core | CERTAIN | `packages/core/test/cli-chat-tool-smoke.test.ts` (2/2 pass); `npx vitest run packages/core/test` (227/227 pass); smoke: PASS 2026-07-21 | CERTAIN-2 Core tool-loop error path |
 | Core engine tool-loop error paths | Core | CERTAIN | `packages/core/test/ai-engine-toolloop-failure.test.ts` (10/10 pass); `npx vitest run packages/core/test` (407/407 pass); build PASS 2026-07-21 | CERTAIN-3 Desktop send message |
+| Desktop send message end-to-end | Desktop, Core | CERTAIN | `packages/desktop/test/desktop-send-message-e2e.test.ts` (7/7 pass); `npx vitest run packages/desktop/test` pass; build PASS 2026-07-22 | CERTAIN-4 Web send message |
 
 **Priority rule for all auto skills:** move one row from empty/partial → CERTAIN before inventing new product surface area, unless the cycle is explicitly scoped to a replacement pillar (3D/video/CLI parity).
 
