@@ -24,7 +24,7 @@ This plan is ordered for **results**: certainty first, then agent/CLI replacemen
 - [x] CERTAIN-2: Core engine tool loop unit tests for tool success + tool error
 - [x] CERTAIN-3: Desktop send message end-to-end (manual script + automated if possible)
 - [x] CERTAIN-4: Web send message smoke
-- [ ] CERTAIN-5: BYOK provider connect + list models (no network secret leakage)
+- [x] CERTAIN-5: BYOK provider connect + list models (no network secret leakage)
 - [ ] CERTAIN-6: MCP list/connect smoke
 - [ ] Document smoke commands in `docs/DEVELOPMENT.md` or a new `docs/SMOKE.md`
 - [ ] Update FUTURE-PLAN Certainty Register for each pass
