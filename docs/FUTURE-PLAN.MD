@@ -11,9 +11,9 @@ This file is the product roadmap. Skills (`.claude/skills/*`) and `plan/improvem
 
 ### Status today
 
-| Surface | Claim | Reality (2026-07-21) |
+| Surface | Claim | Reality (2026-07-22) |
 |---------|--------|----------------------|
-| Core engine | Shared brain for all faces | 5 CERTAIN capabilities (chat+tool, error paths, desktop send, web send, BYOK provider connect); full E2E matrix still building |
+| Core engine | Shared brain for all faces | 6 CERTAIN capabilities (chat+tool, error paths, desktop send, web send, BYOK provider connect, MCP list/connect); full E2E matrix still building |
 | Desktop app | Full agent + GUI | Partial — CERTAIN-3 send message E2E proven; polish and path coverage incomplete |
 | CLI | Claude Code–class terminal agent | Partial — commands exist; depth gaps remain |
 | Web | Same core via browser | Partial — CERTAIN-4 send message E2E proven; fewer features than desktop |
@@ -41,6 +41,7 @@ Until then, list it under **Building** or **Planned**, never under CERTAIN.
 | Desktop send message end-to-end | Desktop, Core | CERTAIN | `packages/desktop/src/desktop-send-message.test.ts` (22/22 pass); `npx vitest run packages/desktop/src/desktop-send-message.test.ts` pass; build PASS 2026-07-22 | CERTAIN-4 Web send message |
 | Web send message end-to-end | Web, Core | CERTAIN | `packages/web/test/web-send-message-e2e.test.ts` (9/9 pass); `npx vitest run packages/web/test` pass; build PASS 2026-07-22 | CERTAIN-5 BYOK provider connect |
 | BYOK provider connect + list models | Core | CERTAIN | `packages/core/test/certainty-byok-provider-connect.test.ts` (47/47 pass); `npx vitest run packages/core/test` pass; build PASS 2026-07-22 | CERTAIN-6 MCP list/connect smoke |
+| MCP list/connect smoke | Core, CLI | CERTAIN | `packages/core/test/certainty-mcp-list-connect.test.ts` (73/73 pass); `npx vitest run packages/core/test` pass; build PASS 2026-07-22 | Phase 0 exit (6 CERTAIN rows) |
 
 **Priority rule for all auto skills:** move one row from empty/partial → CERTAIN before inventing new product surface area, unless the cycle is explicitly scoped to a replacement pillar (3D/video/CLI parity).
 

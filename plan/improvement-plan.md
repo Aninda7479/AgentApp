@@ -25,8 +25,8 @@ This plan is ordered for **results**: certainty first, then agent/CLI replacemen
 - [x] CERTAIN-3: Desktop send message end-to-end (manual script + automated if possible)
 - [x] CERTAIN-4: Web send message smoke
 - [x] CERTAIN-5: BYOK provider connect + list models (no network secret leakage)
-- [ ] CERTAIN-6: MCP list/connect smoke
-- [ ] Document smoke commands in `docs/DEVELOPMENT.md` or a new `docs/SMOKE.md`
+- [x] CERTAIN-6: MCP list/connect smoke
+- [x] Document smoke commands in `docs/DEVELOPMENT.md` or a new `docs/SMOKE.md`
 - [ ] Update FUTURE-PLAN Certainty Register for each pass
 
 ### 0.2 Cross-surface consistency
@@ -34,7 +34,7 @@ This plan is ordered for **results**: certainty first, then agent/CLI replacemen
 - [ ] Shared error messages for offline / rate-limit / missing key
 - [ ] One “doctor” command/path reports provider + MCP + storage health on all surfaces
 
-**Phase 0 exit:** ≥5 CERTAIN rows; smoke doc exists.
+**Phase 0 exit:** ≥5 CERTAIN rows ✓ (6 now); smoke doc exists ✓ (docs/SMOKE.md updated). **Phase 0 COMPLETE.**
 
 ---
 
