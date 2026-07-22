@@ -100,5 +100,9 @@ export * from './web-server.js';
 /** Cross-process lock coordinating the single web-server instance (port 3000). */
 export * from './web-server-lock.js';
 export * from './providers/system-info.js';
+export * from './artifact/artifactManifest.js';
+export * from './tools/artifactTools.js';
+
+
 
 

@@ -71,8 +71,15 @@ await bundle({
   outfile: 'dist/circle-search/entry.bundle.js',
 });
 
+await bundle({
+  ...common,
+  entryPoints: ['src/renderer/trayCard/TrayCardApp.tsx'],
+  outfile: 'dist/renderer/tray.js',
+});
+
 console.log(
-  `[bundle-renderer] renderer + pet + circle-search bundles built${
+  `[bundle-renderer] renderer + pet + circle-search + tray bundles built${
     WATCH ? ' (watching)' : ''
   }`
 );
+

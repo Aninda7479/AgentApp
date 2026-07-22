@@ -22,6 +22,15 @@ import { petWindowManager } from './main/pet-window';
 import { logError, errorMessage, registerErrorToasts, IpcErrorEnvelope } from './main/error-log';
 import { getSystemInfo } from './main/system-info';
 import { voiceDaemon } from './main/voice-daemon';
+import { ArtifactManager } from './main/artifact/artifactManager';
+import { ArtifactWindowManager } from './main/artifact/artifactWindow';
+import { SystemTrayManager } from './main/tray';
+import { SystemTrayCardWindow } from './main/tray/trayWindow';
+
+const artifactManager = new ArtifactManager();
+const artifactWinManager = new ArtifactWindowManager();
+const systemTrayManager = new SystemTrayManager({ tooltip: 'SuperAgent Artifacts Tray' });
+const systemTrayCardWindow = new SystemTrayCardWindow();
 
 // Tracks context-window usage so the pet can show "dark circles" when the
 // conversation approaches the model's capacity.
@@ -93,10 +102,11 @@ function assertSender(event: IpcMainInvokeEvent | IpcMainEvent): void {
   if (!url.startsWith('file://')) {
     throw new Error('rejected IPC from non-file sender: ' + url);
   }
-  if (!/(^|\/)(ui|pet|circle-search)\.html([?#].*)?$/.test(url)) {
+  if (!/(^|\/)(ui|pet|circle-search|tray)\.html([?#].*)?$/.test(url)) {
     throw new Error('rejected IPC from unexpected local page: ' + url);
   }
 }
+
 
 function safeHandle(channel: string, handler: (event: IpcMainInvokeEvent, ...args: any[]) => unknown): void {
   ipcMain.handle(channel, async (event, ...args) => {
@@ -2558,6 +2568,62 @@ app.whenReady().then(async () => {
     // Ignore settings errors at startup
   }
 
+  // Initialize Artifact Micro-App Engine & System Tray Popover Card
+  void artifactManager.scanArtifacts();
+  if (systemTrayManager.initTray()) {
+    systemTrayManager.on('click', () => {
+      const trayInst = systemTrayManager.getTrayInstance();
+      if (trayInst) {
+        systemTrayCardWindow.toggle(trayInst);
+      }
+    });
+  }
+
+  artifactManager.on('stateChanged', (state) => {
+    const cardWin = systemTrayCardWindow.getOrCreateWindow();
+    if (cardWin && !cardWin.isDestroyed()) {
+      cardWin.webContents.send('artifact:stateChanged', state);
+    }
+  });
+
+  safeHandle('artifact:list', async () => {
+    return await artifactManager.scanArtifacts();
+  });
+
+  safeHandle('artifact:start', async (_, id: string) => {
+    return await artifactManager.startArtifact(id);
+  });
+
+  safeHandle('artifact:stop', async (_, id: string) => {
+    return await artifactManager.stopArtifact(id);
+  });
+
+  safeHandle('artifact:open', async (_, id: string) => {
+    let state = artifactManager.getArtifactState(id);
+    if (!state || state.status !== 'running') {
+      state = await artifactManager.startArtifact(id);
+    }
+    if (!state.url) {
+      throw new Error(`Artifact "${id}" url unavailable`);
+    }
+    artifactWinManager.openArtifactWindow({
+      id: state.id,
+      title: state.manifest.name,
+      url: String(state.url)
+    });
+    return { success: true };
+  });
+
+  safeHandle('artifact:openFolder', async () => {
+    const dir = artifactManager.getStoreDirectory();
+    await shell.openPath(dir);
+    return { success: true };
+  });
+
+  safeHandle('artifact:create', async (_, params: any) => {
+    return await artifactManager.createArtifact(params);
+  });
+
   app.on('activate', () => {
     if (windowManager.getAllWindows().length === 0) initApp();
   });
@@ -2572,4 +2638,9 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   voiceDaemon.dispose();
   void whisperLocal.freePipeline();
+  void artifactManager.destroyAll();
+  artifactWinManager.closeAll();
+  systemTrayCardWindow.destroy();
+  systemTrayManager.destroy();
 });
+

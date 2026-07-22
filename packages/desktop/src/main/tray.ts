@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import path from 'path';
+import fs from 'fs';
 
 /** Item in the system tray context menu. */
 export interface TrayMenuItem {
@@ -57,15 +58,46 @@ export class SystemTrayManager extends EventEmitter {
     }
 
     try {
-      const { Tray, nativeImage } = this.electronProvider;
-      const resolvedIcon =
-        iconPath ||
-        (this.electronProvider.app
-          ? path.join(this.electronProvider.app.getAppPath(), 'assets', 'icon.png')
-          : '');
-      const image = resolvedIcon ? nativeImage.createFromPath(resolvedIcon) : nativeImage.createEmpty();
+      const { Tray, nativeImage, app } = this.electronProvider;
+      const isWin = process.platform === 'win32';
+      const isMac = process.platform === 'darwin';
+      const preferredIconName = isWin ? 'icon.ico' : isMac ? 'icon.png' : 'icon.png';
+
+      const searchPaths: string[] = [];
+      if (iconPath) {
+        searchPaths.push(iconPath);
+      }
+      
+      const appPath = app ? app.getAppPath() : process.cwd();
+      searchPaths.push(
+        path.join(appPath, 'assets', preferredIconName),
+        path.join(appPath, 'assets', 'icon.png'),
+        path.join(__dirname, '..', 'assets', preferredIconName),
+        path.join(__dirname, '..', '..', 'assets', preferredIconName),
+        path.join(__dirname, '..', '..', 'assets', 'icon.png')
+      );
+
+      let chosenPath = '';
+      for (const p of searchPaths) {
+        if (p && fs.existsSync(p)) {
+          chosenPath = p;
+          break;
+        }
+      }
+
+      let image: any;
+      if (chosenPath) {
+        image = nativeImage.createFromPath(chosenPath);
+        if (isWin && typeof image.resize === 'function') {
+          image = image.resize({ width: 16, height: 16 });
+        }
+      } else {
+        image = nativeImage.createEmpty();
+      }
+
       this.trayInstance = new Tray(image);
       this.trayInstance.setToolTip(this.currentTooltip);
+
 
       this.trayInstance.on('click', () => {
         this.emit('click');
@@ -114,6 +146,11 @@ export class SystemTrayManager extends EventEmitter {
   public getTooltip(): string {
     return this.currentTooltip;
   }
+
+  public getTrayInstance(): any {
+    return this.trayInstance;
+  }
+
 
   private updateContextMenu(): void {
     if (!this.trayInstance || !this.electronProvider || !this.electronProvider.Menu) {
