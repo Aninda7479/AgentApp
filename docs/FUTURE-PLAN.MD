@@ -38,7 +38,7 @@ Until then, list it under **Building** or **Planned**, never under CERTAIN.
 |------------|----------|--------|----------|-----------|
 | CLI chat turn + tool call (read_file) | CLI, Core | CERTAIN | `packages/core/test/cli-chat-tool-smoke.test.ts` (2/2 pass); `npx vitest run packages/core/test` (227/227 pass); smoke: PASS 2026-07-21 | CERTAIN-2 Core tool-loop error path |
 | Core engine tool-loop error paths | Core | CERTAIN | `packages/core/test/ai-engine-toolloop-failure.test.ts` (10/10 pass); `npx vitest run packages/core/test` (407/407 pass); build PASS 2026-07-21 | CERTAIN-3 Desktop send message |
-| Desktop send message end-to-end | Desktop, Core | CERTAIN | `packages/desktop/test/desktop-send-message-e2e.test.ts` (7/7 pass); `npx vitest run packages/desktop/test` pass; build PASS 2026-07-22 | CERTAIN-4 Web send message |
+| Desktop send message end-to-end | Desktop, Core | CERTAIN | `packages/desktop/src/desktop-send-message.test.ts` (22/22 pass); `npx vitest run packages/desktop/src/desktop-send-message.test.ts` pass; build PASS 2026-07-22 | CERTAIN-4 Web send message |
 | Web send message end-to-end | Web, Core | CERTAIN | `packages/web/test/web-send-message-e2e.test.ts` (9/9 pass); `npx vitest run packages/web/test` pass; build PASS 2026-07-22 | CERTAIN-5 BYOK provider connect |
 
 **Priority rule for all auto skills:** move one row from empty/partial → CERTAIN before inventing new product surface area, unless the cycle is explicitly scoped to a replacement pillar (3D/video/CLI parity).

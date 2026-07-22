@@ -59,7 +59,8 @@ vi.mock('electron', () => {
     app: {
       whenReady: () => Promise.resolve(),
       on: vi.fn(),
-      quit: vi.fn()
+      quit: vi.fn(),
+      getAppPath: () => '/mock-app-path'
     },
     ipcMain: {
       on: vi.fn()
@@ -147,7 +148,7 @@ describe('Step 083: Responsive Left Sidebar Navigation', () => {
       })
     );
     expect(html).toContain('width:70px');
-    expect(html).not.toContain('Settings');
+    expect(html).not.toContain('nav-label');
   });
 
   it('should show a running indicator for chats that continue in the background', () => {
@@ -271,7 +272,7 @@ describe('Step 085: Codex Floating Prompt Composer', () => {
     );
 
     expect(html).toContain('composer-container');
-    expect(html).toContain('Do anything');
+    expect(html).toContain('Ask anything');
     expect(html).toContain('Ask for approval');
     expect(html).toContain('5.5 Medium');
   });

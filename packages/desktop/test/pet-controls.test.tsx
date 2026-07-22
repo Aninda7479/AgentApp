@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToString } from 'react-dom/server';
-import { PetControls } from '../src/renderer/components/partner/PetControls';
-import { PetsSettings } from '../src/renderer/settings/PetsSettings';
+import { PetControls } from '../src/renderer/pages/Settings/companion/PetControls';
+import { CompanionSettings } from '../src/renderer/pages/Settings/companion/CompanionSettings';
 
 describe('Pet controls UI', () => {
   it('renders the start/stop control with running status', () => {
@@ -19,9 +19,9 @@ describe('Pet controls UI', () => {
     expect(html).toContain('Lily');
   });
 
-  it('renders the redesigned Pets settings page', () => {
-    const html = renderToString(<PetsSettings />);
-    expect(html).toContain('data-testid="pets-settings"');
+  it('renders the redesigned Companion settings page', () => {
+    const html = renderToString(<CompanionSettings />);
+    expect(html).toContain('data-testid="companion-settings"');
     expect(html).toContain('Companion');
     expect(html).toContain('How she behaves');
     expect(html).toContain('Ctrl+Q');

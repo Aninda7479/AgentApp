@@ -30,6 +30,7 @@ interface SuperagentApi {
 }
 
 function superagent(): SuperagentApi | null {
+  if (typeof window === 'undefined') return null;
   return (window as any).superagent ?? null;
 }
 
@@ -40,6 +41,7 @@ function superagent(): SuperagentApi | null {
  * Electron is genuinely unavailable (pure web host).
  */
 function legacyRequireShim(): { ipcRenderer: any } | null {
+  if (typeof window === 'undefined') return null;
   try {
     const electron = (window as any).require?.('electron');
     if (electron?.ipcRenderer) return { ipcRenderer: electron.ipcRenderer };
