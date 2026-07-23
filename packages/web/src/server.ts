@@ -24,6 +24,8 @@ import {
   AuthStore,
   ProviderAutoDetector,
   MCP_CATALOG,
+  MCPCatalogService,
+  TriggerEngine,
   PLUGIN_CATALOG,
   MARKETPLACE_PLUGINS,
   SKILL_CATALOG,
@@ -62,6 +64,11 @@ const wss = new WebSocketServer({ noServer: true });
 app.use(express.json({ limit: '50mb' }));
 
 const userDataDir = getUserDataDirectory();
+
+const triggerEngine = new TriggerEngine({
+  storagePath: path.join(userDataDir, 'config', 'triggers.json')
+});
+triggerEngine.start();
 
 // Web build version, read from the package manifest at startup.
 const WEB_VERSION = (() => {
@@ -710,6 +717,38 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
           description: s.metadata.description,
           instructions: s.instructions
         }));
+        break;
+      }
+
+      // ─── MCP Catalog & Plugin Store ───────────────────────────────────────
+      case 'mcp-catalog':
+        result = MCPCatalogService.getCatalog();
+        break;
+      case 'mcp-catalog-get':
+        result = MCPCatalogService.getItem(args[0]);
+        break;
+
+      // ─── Proactive Background Triggers ─────────────────────────────────────
+      case 'trigger-list':
+        result = triggerEngine.listTriggers();
+        break;
+      case 'trigger-add':
+        result = triggerEngine.addTrigger(args[0]);
+        break;
+      case 'trigger-remove':
+        result = triggerEngine.removeTrigger(args[0]);
+        break;
+      case 'trigger-update':
+        result = triggerEngine.updateTrigger(args[0].id, args[0].updates);
+        break;
+      case 'trigger-execute': {
+        const trig = triggerEngine.getTrigger(args[0]?.id);
+        if (!trig) {
+          result = { error: 'Trigger not found' };
+        } else {
+          await triggerEngine.executeTrigger(trig, args[0]?.payload);
+          result = { success: true, trigger: triggerEngine.getTrigger(args[0]?.id) };
+        }
         break;
       }
 

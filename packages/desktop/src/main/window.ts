@@ -1,6 +1,7 @@
 import { BrowserWindow, BrowserWindowConstructorOptions, app, ipcMain, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import { SettingsStorage } from '@superagent/core';
 
 /** Resolves the packaged brand icon (.ico on Windows, .png elsewhere), or undefined if absent. */
 function appIconPath(): string | undefined {
@@ -104,6 +105,19 @@ export class WindowManager {
 
     if (isMainWindow) {
       this.mainWindowId = windowId;
+      win.on('close', (e) => {
+        if (!(app as any).isQuitting) {
+          try {
+            const settings = SettingsStorage.loadSettings();
+            if (settings.general?.closeToTray !== false) {
+              e.preventDefault();
+              win.hide();
+            }
+          } catch {
+            // Ignore settings errors
+          }
+        }
+      });
     }
 
     win.on('closed', () => {

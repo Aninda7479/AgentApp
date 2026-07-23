@@ -26,11 +26,13 @@ import { ArtifactManager } from './main/artifact/artifactManager';
 import { ArtifactWindowManager } from './main/artifact/artifactWindow';
 import { SystemTrayManager } from './main/tray';
 import { SystemTrayCardWindow } from './main/tray/trayWindow';
+import { HotkeyOverlayManager } from './main/hotkey-overlay';
 
 const artifactManager = new ArtifactManager();
 const artifactWinManager = new ArtifactWindowManager();
 const systemTrayManager = new SystemTrayManager({ tooltip: 'SuperAgent Artifacts Tray' });
 const systemTrayCardWindow = new SystemTrayCardWindow();
+let hotkeyOverlayManager: HotkeyOverlayManager | null = null;
 
 // Tracks context-window usage so the pet can show "dark circles" when the
 // conversation approaches the model's capacity.
@@ -788,6 +790,41 @@ safeHandle('settings-write', (_event, settingsPatch) => {
       voiceDaemon.disable();
     }
   }
+
+  // Sync OS startup / login item settings
+  const oldGeneral = oldSettings?.general || {};
+  const newGeneral = updatedSettings?.general || {};
+  if (oldGeneral.openAtLogin !== newGeneral.openAtLogin && newGeneral.openAtLogin !== undefined) {
+    try {
+      app.setLoginItemSettings({ openAtLogin: !!newGeneral.openAtLogin, openAsHidden: true });
+    } catch (e) {
+      console.warn('[autostart] Failed to update login item settings:', e);
+    }
+  }
+
+  // Hot-reload Hotkey Overlay
+  if (oldGeneral.hotkeyOverlayEnabled !== newGeneral.hotkeyOverlayEnabled || oldGeneral.hotkeyOverlayShortcut !== newGeneral.hotkeyOverlayShortcut) {
+    if (newGeneral.hotkeyOverlayEnabled === false) {
+      hotkeyOverlayManager?.destroy();
+    } else {
+      if (newGeneral.hotkeyOverlayShortcut) {
+        hotkeyOverlayManager?.setShortcut(newGeneral.hotkeyOverlayShortcut);
+      } else {
+        hotkeyOverlayManager?.registerGlobalShortcut();
+      }
+    }
+  }
+});
+
+safeHandle('autostart-get', () => {
+  return app.getLoginItemSettings().openAtLogin;
+});
+
+safeHandle('autostart-set', (_event, { enabled }: { enabled: boolean }) => {
+  app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: true });
+  const settings = SettingsStorage.loadSettings();
+  SettingsStorage.saveSettings({ general: { ...settings.general, openAtLogin: enabled } });
+  return { success: true, openAtLogin: enabled };
 });
 
 // ── Hardware detection for the Local Model (Ollama) manager ────────────────
@@ -2624,6 +2661,25 @@ app.whenReady().then(async () => {
     return await artifactManager.createArtifact(params);
   });
 
+  // Initialize Global Hotkey Overlay Launcher
+  const preloadPath = path.join(__dirname, 'preload', 'preload.js');
+  hotkeyOverlayManager = new HotkeyOverlayManager({ preloadPath });
+  hotkeyOverlayManager.initialize();
+
+  ipcMain.on('overlay-hide', () => {
+    hotkeyOverlayManager?.hideOverlay();
+  });
+
+  safeHandle('overlay-submit-prompt', async (_, { prompt }: { prompt: string }) => {
+    const mainWin = windowManager.getMainWindow();
+    if (mainWin && !mainWin.isDestroyed()) {
+      mainWin.webContents.send('quick-prompt-submit', { prompt });
+      if (mainWin.isMinimized()) mainWin.restore();
+      mainWin.focus();
+    }
+    return { success: true };
+  });
+
   app.on('activate', () => {
     if (windowManager.getAllWindows().length === 0) initApp();
   });
@@ -2636,6 +2692,7 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  hotkeyOverlayManager?.destroy();
   voiceDaemon.dispose();
   void whisperLocal.freePipeline();
   void artifactManager.destroyAll();

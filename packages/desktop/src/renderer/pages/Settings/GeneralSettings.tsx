@@ -1,7 +1,8 @@
-import React from 'react';
-import { Check, Code2, MessageSquare, Moon, Sun, Monitor, Globe, Eye, Ban } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Check, Code2, MessageSquare, Moon, Sun, Monitor, Globe, Eye, Ban, Cpu } from 'lucide-react';
 import { ThemeMode } from '../../types';
 import { InternetAccessLevel } from './types';
+import { getIpc } from '../../lib/electron';
 
 /**
  * Copy for the terminal execution-scope toggle. The old label
@@ -78,6 +79,34 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   internetAccessLevel,
   onInternetAccessLevelChange
 }) => {
+  const [openAtLogin, setOpenAtLogin] = useState(false);
+  const [closeToTray, setCloseToTray] = useState(true);
+  const [hotkeyOverlayEnabled, setHotkeyOverlayEnabled] = useState(true);
+
+  useEffect(() => {
+    const ipc = getIpc();
+    ipc.invoke('settings-read').then((settings: any) => {
+      if (settings?.general) {
+        if (settings.general.openAtLogin !== undefined) setOpenAtLogin(!!settings.general.openAtLogin);
+        if (settings.general.closeToTray !== undefined) setCloseToTray(!!settings.general.closeToTray);
+        if (settings.general.hotkeyOverlayEnabled !== undefined) setHotkeyOverlayEnabled(!!settings.general.hotkeyOverlayEnabled);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const updateGeneralSetting = (key: string, value: boolean) => {
+    if (key === 'openAtLogin') setOpenAtLogin(value);
+    if (key === 'closeToTray') setCloseToTray(value);
+    if (key === 'hotkeyOverlayEnabled') setHotkeyOverlayEnabled(value);
+
+    const ipc = getIpc();
+    ipc.invoke('settings-write', {
+      general: {
+        [key]: value
+      }
+    }).catch((err: any) => console.error(`Failed updating ${key}:`, err));
+  };
+
   const internetAccessOptions: {
     id: InternetAccessLevel;
     label: string;
@@ -125,8 +154,35 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         General
       </h1>
       <p className="mb-7 mt-2 text-sm leading-relaxed text-brand-textMuted sm:text-base">
-        Configure default behaviors, workspace appearance, and sandbox permissions for the agent.
+        Configure default behaviors, workspace appearance, background service mode, and sandbox permissions.
       </p>
+
+      <section className="mb-8">
+        <h3 className="settings-section-title mb-3">Background Service &amp; OS Startup</h3>
+        <p className="settings-section-sub mb-3 text-xs leading-relaxed text-brand-textMuted">
+          Control how SuperAgent runs in the background to continuously serve Voice-to-Text dictation, Circle Search capture, Spotlight overlay, and Artifacts.
+        </p>
+        <div className="settings-section px-5 py-1">
+          <ToggleRow
+            label="Launch on System Startup"
+            description="Automatically launch SuperAgent as a background service when your computer boots up."
+            value={openAtLogin}
+            onChange={(val) => updateGeneralSetting('openAtLogin', val)}
+          />
+          <ToggleRow
+            label="Minimize to System Tray on Close"
+            description="Closing the window keeps background services (Voice typing, Circle Search, Spotlight overlay, and Artifacts) active in the system tray."
+            value={closeToTray}
+            onChange={(val) => updateGeneralSetting('closeToTray', val)}
+          />
+          <ToggleRow
+            label="Global Quick Launcher Overlay (Spotlight)"
+            description="Press Ctrl+Alt+Space anywhere on your OS to open the instant AI quick launcher overlay."
+            value={hotkeyOverlayEnabled}
+            onChange={(val) => updateGeneralSetting('hotkeyOverlayEnabled', val)}
+          />
+        </div>
+      </section>
 
       <section className="mb-8">
         <h3 className="settings-section-title mb-3">Appearance</h3>

@@ -70,6 +70,10 @@ export interface GeneralAppSettings {
   confirmShellCommands?: boolean;
   autoReviewPlan?: boolean;
   unsandboxedActions?: boolean;
+  openAtLogin?: boolean;
+  closeToTray?: boolean;
+  hotkeyOverlayEnabled?: boolean;
+  hotkeyOverlayShortcut?: string;
 }
 
 /** Orchestrator settings: enabled models, routing strategy, optimization goal, and free-only mode. */

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SuperAgent Quick Launcher</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      user-select: none;
+    }
+    .overlay-container {
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 15, 20, 0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      padding: 16px 20px;
+      color: #f4f4f5;
+    }
+    .input-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .sparkle-icon {
+      width: 24px;
+      height: 24px;
+      fill: #8b5cf6;
+      flex-shrink: 0;
+    }
+    .prompt-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #ffffff;
+      font-size: 18px;
+      font-weight: 400;
+    }
+    .prompt-input::placeholder {
+      color: #71717a;
+    }
+    .shortcut-badge {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 11px;
+      color: #a1a1aa;
+      font-family: monospace;
+    }
+    .actions-bar {
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #a1a1aa;
+    }
+    .action-hints {
+      display: flex;
+      gap: 16px;
+    }
+    .hint-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .kbd {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-size: 10px;
+      font-family: monospace;
+      color: #e4e4e7;
+    }
+    .status-text {
+      color: #8b5cf6;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay-container">
+    <div class="input-row">
+      <svg class="sparkle-icon" viewBox="0 0 24 24">
+        <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/>
+      </svg>
+      <input type="text" id="promptInput" class="prompt-input" placeholder="Ask SuperAgent anything or type a command..." autofocus />
+      <span class="shortcut-badge">Ctrl+Alt+Space</span>
+    </div>
+    <div class="actions-bar">
+      <div class="action-hints">
+        <div class="hint-item"><span class="kbd">↵</span> Execute</div>
+        <div class="hint-item"><span class="kbd">Esc</span> Close</div>
+      </div>
+      <div id="statusText" class="status-text">Ready</div>
+    </div>
+  </div>
+
+  <script>
+    const input = document.getElementById('promptInput');
+    const statusText = document.getElementById('statusText');
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (window.electronAPI && window.electronAPI.send) {
+          window.electronAPI.send('overlay-hide');
+        }
+      }
+    });
+
+    input.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter' && input.value.trim()) {
+        const text = input.value.trim();
+        statusText.textContent = 'Processing...';
+        try {
+          if (window.electronAPI && window.electronAPI.invoke) {
+            await window.electronAPI.invoke('overlay-submit-prompt', { prompt: text });
+          }
+          input.value = '';
+          statusText.textContent = 'Task dispatched!';
+          setTimeout(() => {
+            statusText.textContent = 'Ready';
+            if (window.electronAPI && window.electronAPI.send) {
+              window.electronAPI.send('overlay-hide');
+            }
+          }, 600);
+        } catch (err) {
+          statusText.textContent = 'Error executing prompt';
+          console.error(err);
+        }
+      }
+    });
+  </script>
+</body>
+</html>
