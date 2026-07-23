@@ -154,9 +154,20 @@ export function detectRepetitiveLoop(text: string): { isLoop: boolean; cleanText
         }
       }
       if (occurrences >= 3) {
-        const cutoff = text.length - offset - len * occurrences;
-        const cleanText = text.slice(0, Math.max(0, cutoff)).trim();
-        return { isLoop: true, cleanText };
+        const pattern = sub;
+        const triplePattern = pattern + pattern + pattern;
+        const firstIdx = text.indexOf(triplePattern);
+        if (firstIdx !== -1) {
+          if (firstIdx === 0) {
+            return { isLoop: true, cleanText: pattern.trim() };
+          }
+          const cleanText = text.slice(0, firstIdx).trim();
+          return { isLoop: true, cleanText };
+        } else {
+          const cutoff = text.length - offset - (len * occurrences);
+          const cleanText = text.slice(0, Math.max(0, cutoff)).trim();
+          return { isLoop: true, cleanText };
+        }
       }
     }
   }

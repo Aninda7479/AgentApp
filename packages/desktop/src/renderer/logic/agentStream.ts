@@ -73,12 +73,6 @@ export class AgentStreamService {
           if (currentStepId && prev.some((s) => s.id === currentStepId)) {
             return prev.map((s) => (s.id === currentStepId ? { ...s, content: buffer } : s));
           }
-          // If the trailing step is already an assistant step, bind to it instead of creating a duplicate
-          const lastStep = prev[prev.length - 1];
-          if (lastStep && lastStep.type === 'assistant') {
-            bundle.stepIdRef.current = lastStep.id;
-            return prev.map((s, idx) => (idx === prev.length - 1 ? { ...s, content: buffer } : s));
-          }
           const newStepId = `stream-assistant-${Date.now()}`;
           bundle.stepIdRef.current = newStepId;
           const newStep: TrajectoryStep = {
@@ -119,6 +113,12 @@ export class AgentStreamService {
       // runs stay isolated.
       const bundle = resolveStreaming(sessionId);
 
+      // ── start_turn: reset streaming buffer for this new turn ──
+      if (agentEvent.type === 'start_turn') {
+        bundle.bufferRef.current = '';
+        bundle.stepIdRef.current = null;
+      }
+
       // ── chat-name: update the chat title in state and store ──
       if (agentEvent.type === 'chat-name' && agentEvent.chatName) {
         StoreService.updateChatRecord(ctx, sessionId, (current) => ({
@@ -148,6 +148,9 @@ export class AgentStreamService {
       }
 
       // ── tool_call: append a "running" tool step to the trajectory ──
+      // Guard against duplicate tool_call events (e.g. oc/big-pickle emitting
+      // the same tool call hundreds of times in one stream) by skipping if an
+      // identical running step is already present in this turn's steps.
       if (agentEvent.type === 'tool_call') {
         const toolStep: TrajectoryStep = {
           id: `tool-call-${Date.now()}`,
@@ -158,7 +161,17 @@ export class AgentStreamService {
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           metadata: { regenerationSeq: bundle.responseSeqRef.current }
         };
-        StoreService.updateChatSteps(ctx, sessionId, (prev) => [...prev, toolStep]);
+        const incomingContent = `${agentEvent.toolName}(${JSON.stringify(agentEvent.toolArgs || {})})`;
+        StoreService.updateChatSteps(ctx, sessionId, (prev) => {
+          const isDuplicate = prev.some(
+            (s) =>
+              s.type === 'tool_call' &&
+              s.content === incomingContent &&
+              s.metadata?.regenerationSeq === bundle.responseSeqRef.current
+          );
+          if (isDuplicate) return prev;
+          return [...prev, toolStep];
+        });
       }
 
       // ── tool_result: mark the matching running tool step "success" and, on a

@@ -13,6 +13,7 @@ import { InternetAccessLevel } from '../storage/settings-store.js';
 export type AgentEventType =
   | 'token'          // streaming text token
   | 'replace_tokens'  // replace active streaming buffer with sanitized text
+  | 'start_turn'      // turn started, reset buffer
   | 'tool_call'      // agent decided to call a tool
   | 'tool_result'    // tool returned a result
   | 'thought'        // agent reasoning step

@@ -473,6 +473,8 @@ Key guidelines:
         // working set here never loses the user's scrollable history.
         this.rollingCompact();
 
+        onEvent({ type: 'start_turn', sessionId: this.sessionId });
+
         // ── Stream from provider ────────────────────────────────────────
         let fullContent = '';
         let toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
@@ -1048,6 +1050,12 @@ Key guidelines:
 
     let fullContent = '';
     const toolCallAccumulators: Map<number, { id: string; name: string; argsJson: string }> = new Map();
+    // Intra-stream tool call flood guard: tracks how many times identical tool
+    // calls appear within a SINGLE streamed response. Some reasoning proxies
+    // (e.g. oc/big-pickle) emit the same tool call hundreds of times in one
+    // stream instead of once per agentic turn, causing thousands of duplicate
+    // steps. We halt the stream and drop duplicates if any sig fires > 2 times.
+    const intraStreamToolSigs = new Map<string, number>();
 
     if (response.body) {
       const reader = response.body.getReader();
@@ -1108,7 +1116,20 @@ Key guidelines:
                   }
                 }
                 if (tc.function?.arguments) acc.argsJson += tc.function.arguments;
+
+                // Intra-stream flood guard: if same (name+args) fires > 2 times
+                // within this single stream, the model is stuck in a tool loop.
+                // Halt immediately so we don't accumulate thousands of duplicate calls.
+                const streamSig = `${acc.name}:${acc.argsJson}`;
+                const sigCount = (intraStreamToolSigs.get(streamSig) || 0) + 1;
+                intraStreamToolSigs.set(streamSig, sigCount);
+                if (sigCount > 2) {
+                  loopHalted = true;
+                  try { await reader.cancel(); } catch {}
+                  break;
+                }
               }
+              if (loopHalted) break;
             }
           } catch {
             // Ignore
@@ -1117,15 +1138,26 @@ Key guidelines:
       }
     }
 
-    const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
+    const rawToolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
     for (const [, acc] of toolCallAccumulators) {
       try {
         const args = JSON.parse(acc.argsJson || '{}');
-        toolCalls.push({ id: acc.id, name: acc.name, args });
+        rawToolCalls.push({ id: acc.id, name: acc.name, args });
       } catch {
-        toolCalls.push({ id: acc.id, name: acc.name, args: {} });
+        rawToolCalls.push({ id: acc.id, name: acc.name, args: {} });
       }
     }
+
+    // Deduplicate tool calls that are identical (same name + args). Models that
+    // emit the same call multiple times in one stream would otherwise cause
+    // duplicate tool steps and agentic loops.
+    const seenToolSigs = new Set<string>();
+    const toolCalls = rawToolCalls.filter((tc) => {
+      const sig = `${tc.name}:${JSON.stringify(tc.args)}`;
+      if (seenToolSigs.has(sig)) return false;
+      seenToolSigs.add(sig);
+      return true;
+    });
 
     return { fullContent, toolCalls };
   }
