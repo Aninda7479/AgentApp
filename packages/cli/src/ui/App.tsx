@@ -514,7 +514,7 @@ export const App: React.FC<AppProps> = ({
     (query: string): { rows: PaletteRow[]; combined: PaletteItem[]; selectedRow: number } => {
       const { skills, commands } = getFiltered(query);
       const combined: PaletteItem[] = [
-        ...skills.map((s) => ({ name: s.id, description: s.description, kind: 'skill' as const })),
+        ...skills.map((s) => ({ name: s.id, description: s.description, kind: 'skill' as const, origin: s.origin })),
         ...commands,
       ];
       const rows: PaletteRow[] = [];
@@ -524,7 +524,7 @@ export const App: React.FC<AppProps> = ({
         rows.push({ kind: 'header', label: 'Skills' });
         for (const s of skills) {
           rowOf.set(sel, rows.length);
-          rows.push({ kind: 'item', item: { name: s.id, description: s.description, kind: 'skill' } });
+          rows.push({ kind: 'item', item: { name: s.id, description: s.description, kind: 'skill', origin: s.origin } });
           sel++;
         }
       }

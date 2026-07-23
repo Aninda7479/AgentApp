@@ -9,6 +9,8 @@ export interface PaletteItem {
   aliases?: string[];
   /** Distinguishes skills from slash commands for rendering + Enter handling. */
   kind?: 'command' | 'skill';
+  /** Origin location tag for skills (e.g. "local .superagent", "local .claude"). */
+  origin?: string;
 }
 
 /** A row rendered by the palette: either a section header or a selectable item. */
@@ -33,7 +35,7 @@ const MAX_VISIBLE = 14;
 export const CommandPalette: React.FC<CommandPaletteProps> = ({ rows, selectedIndex, total }) => {
   if (rows.length === 0) {
     return (
-      <Box borderStyle="round" borderColor="gray" paddingX={1} marginY={1}>
+      <Box borderStyle="single" borderColor="gray" paddingX={1} marginY={0}>
         <Text dimColor color="gray">
           No matching skills or commands.
         </Text>
@@ -45,27 +47,31 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ rows, selectedIn
 
   return (
     <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1} marginY={0}>
-      <Text bold color="cyan">
-        Slash Commands &amp; Skills
-      </Text>
+      <Box marginBottom={0}>
+        <Text bold color="white">
+          Commands &amp; Skills
+        </Text>
+      </Box>
       {visible.map((row, i) => {
         if (row.kind === 'header') {
           return (
-            <Box key={`h-${i}`}>
+            <Box key={`h-${i}`} marginTop={0}>
               <Text bold color="gray">
                 {'  '}
-                {row.label}
+                {row.label.toUpperCase()}
               </Text>
             </Box>
           );
         }
         const isSel = i === selectedIndex;
         const item = row.item;
-        const prefix = item.kind === 'skill' ? '✦ ' : '/';
+        const prefix = item.kind === 'skill' ? '⚡ ' : '/';
         const aliasText =
           item.kind === 'command' && item.aliases?.length
             ? ` (${item.aliases.map((a) => `/${a}`).join(', ')})`
             : '';
+        const originTag = item.origin ? ` [${item.origin}]` : '';
+
         return (
           <Box key={item.name}>
             <Text color={isSel ? 'cyan' : 'gray'}>{isSel ? '❯ ' : '  '}</Text>
@@ -73,6 +79,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ rows, selectedIn
               {prefix}
               {item.name}
             </Text>
+            {originTag ? (
+              <Text color="gray" dimColor>
+                {originTag}
+              </Text>
+            ) : null}
             <Text color="gray" dimColor>
               {aliasText}
             </Text>
@@ -86,8 +97,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ rows, selectedIn
         </Text>
       )}
       <Text dimColor color="gray">
-        ↑/↓ to navigate · Enter to run · Esc to close
+        ↑/↓ navigate · Enter select · Esc close
       </Text>
     </Box>
   );
 };
+

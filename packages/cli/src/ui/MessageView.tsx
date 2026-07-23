@@ -104,17 +104,17 @@ const FileDiffView: React.FC<{
   const removedCount = diffLines.filter(l => l.type === 'delete').length;
   const chunks = groupDiffIntoChunks(diffLines, 3);
   const isNew = !originalContent;
-  const maxLineLen = Math.max(20, terminalColumns - 10);
+  const maxLineLen = Math.max(20, terminalColumns - 12);
 
   return (
     <Box flexDirection="column" marginY={1}>
-      <Text bold color="cyan">
-        {isNew ? `Create(${filePath})` : `Update(${filePath})`}
+      <Text bold color="white">
+        ⚡ {isNew ? `Created ${filePath}` : `Updated ${filePath}`}
+        <Text color="gray" dimColor>
+          {` (+${addedCount} -${removedCount})`}
+        </Text>
       </Text>
-      <Text color="gray">
-        L Added {addedCount} lines, removed {removedCount} lines
-      </Text>
-      <Box flexDirection="column" paddingLeft={2} marginTop={0}>
+      <Box flexDirection="column" paddingLeft={1} marginTop={0}>
         {chunks.map((chunk, chunkIdx) => (
           <Box key={chunkIdx} flexDirection="column">
             {chunkIdx > 0 && (
@@ -124,25 +124,27 @@ const FileDiffView: React.FC<{
             )}
             {chunk.lines.map((line, lineIdx) => {
               const lineNum = line.type === 'delete' ? line.oldLineNumber : line.newLineNumber;
-              const lineNumStr = String(lineNum).padEnd(5, ' ');
+              const lineNumStr = String(lineNum).padStart(4, ' ');
               const rawContent = line.content || '';
               const content = rawContent.length > maxLineLen ? rawContent.slice(0, Math.max(1, maxLineLen - 3)) + '...' : rawContent;
               if (line.type === 'add') {
                 return (
                   <Text key={lineIdx} color="green">
-                    {lineNumStr}+ {content}
+                    <Text color="gray" dimColor>{lineNumStr} </Text>
+                    + {content}
                   </Text>
                 );
               } else if (line.type === 'delete') {
                 return (
                   <Text key={lineIdx} color="red">
-                    {lineNumStr}- {content}
+                    <Text color="gray" dimColor>{lineNumStr} </Text>
+                    - {content}
                   </Text>
                 );
               } else {
                 return (
                   <Text key={lineIdx} color="gray" dimColor>
-                    {lineNumStr}  {content}
+                    {lineNumStr}   {content}
                   </Text>
                 );
               }
@@ -168,8 +170,8 @@ function getToolSummary(tools: ToolCallInfo[], elapsedMs?: number): string {
   const nameMapping: Record<string, { singular: string; plural: string }> = {
     read_file: { singular: 'read 1 file', plural: 'read {n} files' },
     list_dir: { singular: 'listed 1 directory', plural: 'listed {n} directories' },
-    grep_search: { singular: 'searched the codebase', plural: 'searched the codebase {n} times' },
-    run_command: { singular: 'ran 1 shell command', plural: 'ran {n} shell commands' },
+    grep_search: { singular: 'searched codebase', plural: 'searched codebase {n} times' },
+    run_command: { singular: 'ran 1 command', plural: 'ran {n} commands' },
     write_file: { singular: 'wrote 1 file', plural: 'wrote {n} files' },
     web_fetch: { singular: 'fetched 1 web page', plural: 'fetched {n} web pages' },
     run_subagent: { singular: 'spawned 1 subagent', plural: 'spawned {n} subagents' },
@@ -184,7 +186,7 @@ function getToolSummary(tools: ToolCallInfo[], elapsedMs?: number): string {
         parts.push(mapping.plural.replace('{n}', String(count)));
       }
     } else {
-      parts.push(count === 1 ? `called ${name} 1 time` : `called ${name} ${count} times`);
+      parts.push(count === 1 ? `called ${name}` : `called ${name} (${count}x)`);
     }
   }
 
@@ -192,8 +194,8 @@ function getToolSummary(tools: ToolCallInfo[], elapsedMs?: number): string {
   return parts.join(', ');
 }
 
-/** Renders one chat message in the Claude-Code style: `❯` for user turns, an
- *  indented markdown body for assistant turns, tool-call lines, and a footer. */
+/** Renders chat messages in Grok Build minimal TUI style: clean user prompt,
+ *  concise tool invocation status, sleek diff blocks, and subtle typography. */
 export const MessageView: React.FC<{
   message: UiMessage;
   terminalColumns?: number;
@@ -204,7 +206,7 @@ export const MessageView: React.FC<{
   if (m.role === 'user') {
     return (
       <Box flexDirection="column" marginBottom={1}>
-        <Text color="white" backgroundColor="blue">
+        <Text bold color="cyan">
           {`❯ ${m.content}`}
         </Text>
         {m.attachments && m.attachments.length > 0 && (
@@ -219,8 +221,8 @@ export const MessageView: React.FC<{
   if (m.role === 'system') {
     return (
       <Box flexDirection="column" marginBottom={1}>
-        <Text color="yellow" dimColor>
-          {m.content}
+        <Text color="gray" dimColor>
+          {`ℹ ${m.content}`}
         </Text>
       </Box>
     );
@@ -237,15 +239,15 @@ export const MessageView: React.FC<{
 
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Box paddingLeft={2} flexDirection="column">
+      <Box paddingLeft={1} flexDirection="column">
         {/* Render active tools during streaming */}
         {m.isStreaming && hasTools && (
           <Box flexDirection="column" marginBottom={1}>
             {m.tools!.map((t, i) => (
               <Box key={i} flexDirection="column">
-                <Text color="magenta" dimColor>
-                  {'→ Running: '}
-                  {t.name}
+                <Text color="cyan" dimColor>
+                  {'⠋ Calling tool '}
+                  <Text color="white">{t.name}</Text>
                   {Object.keys(t.args || {}).length > 0 ? `(${formatArgs(t.args)})` : ''}
                 </Text>
               </Box>
@@ -253,12 +255,12 @@ export const MessageView: React.FC<{
           </Box>
         )}
 
-        {/* Render summary line when finished */}
+        {/* Render tool summary line when finished */}
         {showSummary && toolSummaryText.length > 0 && (
           <Box marginBottom={1}>
-            <Text color="gray" dimColor>
-              {'✓ '}
-              {toolSummaryText}
+            <Text color="green">
+              {'✔ '}
+              <Text color="gray" dimColor>{toolSummaryText}</Text>
             </Text>
           </Box>
         )}
@@ -273,8 +275,8 @@ export const MessageView: React.FC<{
           />
         ) : (
           m.isStreaming && !hasTools && (
-            <Text color="blue" dimColor>
-              Thinking…
+            <Text color="cyan" dimColor>
+              ⠋ Thinking…
             </Text>
           )
         )}
@@ -293,3 +295,4 @@ export const MessageView: React.FC<{
     </Box>
   );
 };
+
