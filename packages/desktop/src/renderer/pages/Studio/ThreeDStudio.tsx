@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Eye } from 'lucide-react';
+import { Box, Eye, Smile, ShieldCheck, Sparkles, Printer, Factory, Gamepad2, Wand2 } from 'lucide-react';
 import type { PartnerController } from '../../logic/agentStream';
 import { getIpc } from '../../lib/electron';
 
@@ -15,10 +15,14 @@ interface ThreeDStudioProps {
 }
 
 export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToast }) => {
+  // Dual-Persona UX Mode: Kid vs Pro
+  const [studioMode, setStudioMode] = useState<'kid' | 'pro'>('kid');
+  const [targetOutput, setTargetOutput] = useState<'game_animation' | '3d_printing' | 'factory_manufacturing'>('game_animation');
+
   // Navigation & Active States
   const [activeStage, setActiveStage] = useState(1);
   const [name, setName] = useState('Luna');
-  const [prompt, setPrompt] = useState('A cute chibi-style schoolgirl in A-pose, white shirt, black hair, and pink skirt.');
+  const [prompt, setPrompt] = useState('A cute chibi-style superhero kid with a cape.');
   const [conceptImage, setConceptImage] = useState<string | null>(null);
   const [conceptPreview, setConceptPreview] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -79,10 +83,11 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
     if (ipc) {
       ipc.invoke('settings-read').then((cfg: any) => {
         const threeD = cfg?.threeD || {};
-        if (threeD.enabled) {
-          if (threeD.provider) {
-            triggerToast(`Ready: 3D generation provider is set to ${threeD.provider}.`, 'info');
-          }
+        if (threeD.studioPersona) {
+          setStudioMode(threeD.studioPersona === 'pro' ? 'pro' : 'kid');
+        }
+        if (threeD.enabled && threeD.provider) {
+          triggerToast(`3D Studio Engine active: ${threeD.provider}`, 'info');
         }
       }).catch(() => {});
     }
@@ -97,7 +102,6 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
         console.error('Failed to load saved models', err);
       }
     } else {
-      // Mock data in browser
       setSavedModels([
         { name: 'mock-chibi-princess', path: 'mock/path/princess.glb', format: 'glb', size: 1048576, modified: Date.now() - 3600000 },
         { name: 'mock-cyberpunk-runner', path: 'mock/path/runner.glb', format: 'glb', size: 2048576, modified: Date.now() - 86400000 }
@@ -105,7 +109,6 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
     }
   };
 
-  // Handle Pick Image
   const handlePickImage = async () => {
     if (!ipc) {
       triggerToast('Image picker is only available in the desktop app.', 'error');
@@ -123,7 +126,6 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
     }
   };
 
-  // Handle Generate IPC
   const handleGenerate = async () => {
     if (!ipc) {
       setGenerating(true);
@@ -134,7 +136,7 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
           path: 'offline_mock_gltf.gltf',
           format: 'gltf',
           provider: 'local',
-          message: 'Preview character generated locally (web mode).'
+          message: 'Preview model ready (web mode).'
         };
         setResult(demoResult);
         triggerToast('Preview model ready (web mode).', 'info');
@@ -144,7 +146,7 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
       return;
     }
     if (!name.trim()) {
-      triggerToast('Please provide a character name.', 'error');
+      triggerToast('Please provide an asset name.', 'error');
       return;
     }
     setGenerating(true);
@@ -153,7 +155,9 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
       const res = (await ipc.invoke('three-d-generate', {
         name: name.trim(),
         prompt: prompt.trim() || undefined,
-        imagePath: conceptImage || undefined
+        imagePath: conceptImage || undefined,
+        targetOutput,
+        studioMode
       })) as GeneratedModel;
 
       setResult(res);
@@ -162,7 +166,7 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
         triggerToast('3D Model Gen is disabled in Settings.', 'info');
         setActiveStage(1);
       } else if (res.ok && res.path) {
-        triggerToast('3D Model successfully generated! View step 8 to import it.', 'info');
+        triggerToast('3D asset successfully generated & ready!', 'info');
         setActiveStage(8);
         loadSavedModels();
       } else if (res.message) {
@@ -175,11 +179,10 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
     }
   };
 
-  // Import model into active partner
   const handleImportToPet = async (modelPath?: string) => {
     const importPath = modelPath || result?.path;
     if (!importPath) {
-      triggerToast('Select or generate a character first.', 'error');
+      triggerToast('Select or generate an asset first.', 'error');
       return;
     }
     const activeId = partners.activeId;
@@ -191,14 +194,12 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
       await partners.importModel(activeId, importPath);
       partners.setActive(activeId);
       await partners.startPet();
-      const label = modelPath ? 'model database' : (result?.provider === 'local' ? 'local offline placeholder' : result?.provider || 'cloud');
-      triggerToast(`3D character imported (${label}) — showing in desktop pet window!`, 'info');
+      triggerToast(`3D asset imported into pet desktop window!`, 'info');
     } catch {
       triggerToast('Could not attach the model to the active Partner.', 'error');
     }
   };
 
-  // Delete model
   const handleDeleteModel = async (modelPath: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!window.confirm('Are you sure you want to delete this model?')) return;
@@ -223,7 +224,6 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
     }
   };
 
-  // Import external model file
   const handleImportExternalModel = async () => {
     if (ipc) {
       try {
@@ -242,7 +242,6 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
     }
   };
 
-  // Preset configuration loaders
   const handlePresetSelect = (presetId: string, presetName: string) => {
     setSelectedPresetId(presetId);
     setName(presetName);
@@ -267,22 +266,86 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
 
   return (
     <div className="flex flex-col h-full w-full bg-[var(--brand-bg)] text-white select-none relative overflow-hidden font-sans">
-      {/* Navbar Header */}
-      <header className="h-14 w-full flex items-center justify-between border-b border-[var(--brand-border)]/80 px-6 bg-[var(--brand-bg)]">
+      {/* Top Header Navbar */}
+      <header className="h-14 w-full flex items-center justify-between border-b border-[var(--brand-border)]/80 px-6 bg-[var(--brand-bg)] shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-sky-500 to-blue-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
             <Box size={16} className="text-white" />
           </div>
           <div className="flex flex-col">
-            <span className="text-xs font-bold uppercase tracking-wider text-sky-400">3D Modeling Studio</span>
-            <span className="text-[10px] text-slate-500 font-medium">Model: {name}</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-sky-400">SuperAgent 3DStudio</span>
+            <span className="text-[10px] text-slate-400 font-medium">Asset: {name}</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900 border border-slate-800">
-            <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
-            <span className="text-[10px] text-slate-300 font-medium">27 credits remaining</span>
+        {/* Dual Persona Switcher */}
+        <div className="flex items-center gap-2 p-1 rounded-xl bg-slate-900 border border-slate-800">
+          <button
+            onClick={() => {
+              setStudioMode('kid');
+              triggerToast('Switched to Kid Magic Studio Persona');
+            }}
+            className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+              studioMode === 'kid'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40 shadow'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Smile size={13} className="text-amber-400" />
+            <span>🎈 Kid Studio</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setStudioMode('pro');
+              triggerToast('Switched to Professional Studio Persona');
+            }}
+            className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+              studioMode === 'pro'
+                ? 'bg-sky-500/20 text-sky-300 border border-sky-400/40 shadow'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <ShieldCheck size={13} className="text-sky-400" />
+            <span>🔬 Pro Studio</span>
+          </button>
+        </div>
+
+        {/* Target Output Format Selector */}
+        <div className="hidden lg:flex items-center gap-1 p-1 rounded-xl bg-slate-900 border border-slate-800">
+          <button
+            onClick={() => setTargetOutput('game_animation')}
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all ${
+              targetOutput === 'game_animation' ? 'bg-sky-600 text-white' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Gamepad2 size={12} />
+            <span>PC Game</span>
+          </button>
+          <button
+            onClick={() => setTargetOutput('3d_printing')}
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all ${
+              targetOutput === '3d_printing' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Printer size={12} />
+            <span>3D Print</span>
+          </button>
+          <button
+            onClick={() => setTargetOutput('factory_manufacturing')}
+            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all ${
+              targetOutput === 'factory_manufacturing' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Factory size={12} />
+            <span>Factory CAD</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[10px] text-slate-300 font-medium">SOTA AI Engine Ready</span>
           </div>
           <div className="w-8 h-8 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center cursor-pointer hover:bg-slate-800 transition-all">
             <Eye size={14} className="text-slate-400" />
@@ -290,10 +353,29 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
         </div>
       </header>
 
-      {/* Main layout */}
+      {/* Kid Mode Super3D Buddy Assistant Banner */}
+      {studioMode === 'kid' && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-amber-500/15 border-b border-amber-500/20 px-6 py-2 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2 text-xs text-amber-200">
+            <Sparkles size={14} className="text-amber-400 animate-bounce" />
+            <span className="font-bold">Super3D Buddy:</span>
+            <span>"Hi! Speak or type what toy you want to make, then press 'Make 3D Toy'!"</span>
+          </div>
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1 shadow-lg shadow-amber-500/20"
+          >
+            <Wand2 size={13} />
+            <span>{generating ? 'Making Magic...' : 'Make 3D Toy Magic!'}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Main Studio Viewport & Sidebar Layout */}
       <div className="flex-1 flex relative overflow-hidden min-h-0">
         
-        {/* Left Step nav vertical timeline */}
+        {/* Left Step Nav Vertical Timeline */}
         <StageNavigation
           activeStage={activeStage}
           onStageChange={setActiveStage}
@@ -301,7 +383,7 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
           onShadingModeChange={setShadingMode}
         />
 
-        {/* Left floating action parameter editor card */}
+        {/* Left Floating Action Parameter Editor */}
         <ActionPanel
           activeStage={activeStage}
           onStageChange={setActiveStage}
@@ -338,7 +420,7 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
           triggerToast={triggerToast}
         />
 
-        {/* Middle interactive 3D Viewport canvas view */}
+        {/* Middle Interactive 3D Viewport Canvas View */}
         <ThreeDViewport
           activeStage={activeStage}
           showGrid={showGrid}
@@ -363,7 +445,7 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
           triggerToast={triggerToast}
         />
 
-        {/* Right side library scene transform material tab panels */}
+        {/* Right side Library Scene Transform Material Tab Panels */}
         <RightSidebar
           rightSidebarTab={rightSidebarTab}
           onRightSidebarTabChange={setRightSidebarTab}
