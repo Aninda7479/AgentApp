@@ -79,9 +79,9 @@ export interface OpenAIMessage {
  */
 export function sanitizeRepetitiveContent(text: string): string {
   if (!text || text.length < 30) return text;
-  const window = text.length > 500 ? text.slice(-500) : text;
+  const window = text.length > 1000 ? text.slice(-1000) : text;
 
-  for (let len = 2; len <= 80; len++) {
+  for (let len = 2; len <= 200; len++) {
     for (let offset = 0; offset < len; offset++) {
       const startIdx = window.length - len - offset;
       if (startIdx < 0) continue;
@@ -169,6 +169,9 @@ export interface AnthropicConversation {
  * concatenated into a single `systemPrompt` string; tool messages become
  * `tool_result` blocks (Anthropic requires tools in user turns); images become
  * native image source blocks.
+ *
+ * Assistant turns are automatically sanitized for token repetition loops so
+ * prior corrupted turns do not infect new generation contexts.
  */
 export function toAnthropicMessages(history: ChatMessage[]): AnthropicConversation {
   let systemPrompt: string | undefined;
@@ -193,7 +196,8 @@ export function toAnthropicMessages(history: ChatMessage[]): AnthropicConversati
       // Assistant turn that invoked tools: text + tool_use blocks. Anthropic
       // requires the tool_use id to match the later tool_result.
       const blocks: Array<Record<string, unknown>> = [];
-      const text = typeof msg.content === 'string' ? msg.content : '';
+      const rawText = typeof msg.content === 'string' ? msg.content : '';
+      const text = sanitizeRepetitiveContent(rawText);
       if (text) blocks.push({ type: 'text', text });
       for (const tc of msg.toolCalls) {
         blocks.push({
@@ -205,9 +209,13 @@ export function toAnthropicMessages(history: ChatMessage[]): AnthropicConversati
       }
       messages.push({ role: 'assistant', content: blocks });
     } else {
+      const rawContent = msg.content;
+      const sanitizedContent = (msg.role === 'assistant' && typeof rawContent === 'string')
+        ? sanitizeRepetitiveContent(rawContent)
+        : rawContent;
       messages.push({
         role: msg.role === 'assistant' ? 'assistant' : 'user',
-        content: toAnthropicContent(msg.content)
+        content: toAnthropicContent(sanitizedContent)
       });
     }
   }

@@ -8,6 +8,7 @@ import {
 } from '../types/agent.js';
 import { toAnthropicMessages } from './multimodal.js';
 import { applyReasoningEffort } from '../orchestrator/reasoning-effort.js';
+import { detectRepetitiveLoop } from './ai-engine-helpers.js';
 
 /** Provider adapter for the Anthropic Messages API (Claude). */
 export class AnthropicAdapter implements BaseProviderAdapter {
@@ -74,7 +75,11 @@ export class AnthropicAdapter implements BaseProviderAdapter {
     };
 
     const textBlocks = data.content?.filter(c => c.type === 'text') || [];
-    const content = textBlocks.map(b => b.text || '').join('');
+    let content = textBlocks.map(b => b.text || '').join('');
+    const loopCheck = detectRepetitiveLoop(content);
+    if (loopCheck.isLoop) {
+      content = loopCheck.cleanText;
+    }
 
     return {
       id: data.id || `anthropic-${Date.now()}`,
@@ -146,6 +151,13 @@ export class AnthropicAdapter implements BaseProviderAdapter {
                 if (json.type === 'content_block_delta' && json.delta?.text) {
                   const text = json.delta.text;
                   fullContent += text;
+                  const loopCheck = detectRepetitiveLoop(fullContent);
+                  if (loopCheck.isLoop) {
+                    fullContent = loopCheck.cleanText;
+                    done = true;
+                    try { await reader.cancel(); } catch {}
+                    break;
+                  }
                   onChunk(text);
                 }
               } catch {

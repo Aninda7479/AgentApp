@@ -7,6 +7,7 @@ import {
   AIProvider
 } from '../types/agent.js';
 import { applyReasoningEffort } from '../orchestrator/reasoning-effort.js';
+import { detectRepetitiveLoop } from './ai-engine-helpers.js';
 
 /** Provider adapter for OpenAI-compatible Chat Completions API. */
 export class OpenAIAdapter implements BaseProviderAdapter {
@@ -37,6 +38,8 @@ export class OpenAIAdapter implements BaseProviderAdapter {
       })),
       temperature: request.temperature ?? 0.7,
       max_tokens: request.maxTokens,
+      frequency_penalty: request.frequencyPenalty ?? 0.3,
+      presence_penalty: request.presencePenalty ?? 0.3,
       stream: false
     };
 
@@ -74,7 +77,11 @@ export class OpenAIAdapter implements BaseProviderAdapter {
       };
     };
 
-    const content = data.choices?.[0]?.message?.content || '';
+    let content = data.choices?.[0]?.message?.content || '';
+    const loopCheck = detectRepetitiveLoop(content);
+    if (loopCheck.isLoop) {
+      content = loopCheck.cleanText;
+    }
 
     return {
       id: data.id || `openai-${Date.now()}`,
@@ -103,7 +110,9 @@ export class OpenAIAdapter implements BaseProviderAdapter {
         content: m.content
       })),
       temperature: request.temperature ?? 0.7,
-      stream: true
+      stream: true,
+      frequency_penalty: request.frequencyPenalty ?? 0.3,
+      presence_penalty: request.presencePenalty ?? 0.3
     };
 
     applyReasoningEffort(payload, this.provider, request.reasoningEffort, request.maxTokens);
@@ -141,6 +150,13 @@ export class OpenAIAdapter implements BaseProviderAdapter {
                 const delta = json.choices?.[0]?.delta?.content || '';
                 if (delta) {
                   fullContent += delta;
+                  const loopCheck = detectRepetitiveLoop(fullContent);
+                  if (loopCheck.isLoop) {
+                    fullContent = loopCheck.cleanText;
+                    done = true;
+                    try { await reader.cancel(); } catch {}
+                    break;
+                  }
                   onChunk(delta);
                 }
               } catch {

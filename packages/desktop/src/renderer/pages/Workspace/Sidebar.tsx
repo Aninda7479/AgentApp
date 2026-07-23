@@ -96,13 +96,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [openMenuProject, setOpenMenuProject] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // Maximum initial chats displayed per list section before "Show more"
+  const MAX_INITIAL_CHATS = 5;
+  const [showAllStandaloneChats, setShowAllStandaloneChats] = useState(false);
+  const [expandedProjectChats, setExpandedProjectChats] = useState<Record<string, boolean>>({});
+
   // Sort helper to order chats chronologically (newest first)
   const parseChatTime = (chat: StoredChat): number => {
     if (chat.startedAt) {
       return chat.startedAt;
     }
     if (chat.timestamp) {
-      if (chat.timestamp === 'Just now') {
+      if (chat.timestamp.toLowerCase() === 'just now') {
         return Date.now();
       }
       const dateParsed = Date.parse(chat.timestamp);
@@ -120,6 +125,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return 0;
   };
 
+  /** Converts chat timestamps into compact relative times (e.g. 26m, 2h, 5d, 3w, 2mo, 1y). */
+  const formatRelativeTime = (chat: StoredChat): string => {
+    const timeMs = parseChatTime(chat);
+    if (!timeMs) {
+      return chat.timestamp || '1m';
+    }
+
+    const diffMs = Date.now() - timeMs;
+    if (diffMs <= 0) {
+      return '1m';
+    }
+
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) {
+      return '1m';
+    }
+    if (diffMins < 60) {
+      return `${diffMins}m`;
+    }
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) {
+      return `${diffHours}h`;
+    }
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) {
+      return `${diffDays}d`;
+    }
+    const diffWeeks = Math.floor(diffDays / 7);
+    if (diffWeeks < 4) {
+      return `${diffWeeks}w`;
+    }
+    const diffMonths = Math.floor(diffDays / 30);
+    if (diffMonths < 12) {
+      return `${diffMonths}mo`;
+    }
+    const diffYears = Math.floor(diffDays / 365);
+    return `${diffYears}y`;
+  };
+
   const sortChatsChronologically = (a: StoredChat, b: StoredChat): number => {
     return parseChatTime(b) - parseChatTime(a);
   };
@@ -132,6 +176,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const toggleProjectCollapse = (name: string) => {
     setCollapsedProjects(prev => ({ ...prev, [name]: !prev[name] }));
   };
+
+  // Auto-expand list if active chat is positioned beyond initial 5 items
+  useEffect(() => {
+    if (!activeChatId) return;
+    const standaloneIndex = standaloneChats.findIndex((c) => c.id === activeChatId);
+    if (standaloneIndex >= MAX_INITIAL_CHATS) {
+      setShowAllStandaloneChats(true);
+    }
+    projects.forEach((proj) => {
+      const projChats = chats.filter((c) => c.project === proj.name).sort(sortChatsChronologically);
+      const projIndex = projChats.findIndex((c) => c.id === activeChatId);
+      if (projIndex >= MAX_INITIAL_CHATS) {
+        setExpandedProjectChats((prev) => ({ ...prev, [proj.name]: true }));
+      }
+    });
+  }, [activeChatId, chats, projects]);
 
   // Close dot-menu when clicking outside
   useEffect(() => {
@@ -373,71 +433,98 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             No chats yet
                           </div>
                         ) : (
-                          projectChats.map((chat) => {
-                            const isChatSelected = activeChatId === chat.id && activeTab === 'trajectory';
-                            const isChatRunning = Boolean(chat.isRunning);
-                            const queuedCount = chat.queuedCount ?? 0;
-                            return (
-                              <div
-                                key={chat.id}
-                                onClick={() => {
-                                  if (onSelectProject) onSelectProject(proj.name);
-                                  if (onSelectChat) onSelectChat(chat.id);
-                                  onSelectTab('trajectory');
-                                }}
-                                className={`group relative flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-[12px] transition-all duration-150 cursor-pointer select-none ${
-                                  isChatSelected
-                                    ? 'text-brand-textMain bg-[color:var(--brand-hover)] font-semibold'
-                                    : 'text-brand-textMuted/80 hover:text-brand-textMain hover:bg-[color:var(--brand-hover)]'
-                                }`}
-                              >
-                                {isChatSelected && (
-                                  <span className="absolute left-[-10px] top-2 bottom-2 w-[2px] rounded-r-full bg-brand-textMain" />
-                                )}
-                                {isChatRunning && (
-                                  <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)] shadow-[0_0_6px_var(--neon-live)] animate-pulse flex-shrink-0" />
-                                )}
-                                <span className="truncate flex-1 leading-snug">{chat.title}</span>
-                                <div className="flex items-center gap-1 flex-shrink-0">
-                                  {queuedCount > 0 && (
-                                    <span
-                                      className="text-[9px] font-semibold px-1 py-px rounded-full bg-[color:var(--brand-hover)] text-brand-textMuted"
-                                      title={`${queuedCount} prompt${queuedCount > 1 ? 's' : ''} queued`}
-                                    >
-                                      +{queuedCount}
+                          <>
+                            {(expandedProjectChats[proj.name] ? projectChats : projectChats.slice(0, MAX_INITIAL_CHATS)).map((chat) => {
+                              const isChatSelected = activeChatId === chat.id && activeTab === 'trajectory';
+                              const isChatRunning = Boolean(chat.isRunning);
+                              const queuedCount = chat.queuedCount ?? 0;
+                              return (
+                                <div
+                                  key={chat.id}
+                                  onClick={() => {
+                                    if (onSelectProject) onSelectProject(proj.name);
+                                    if (onSelectChat) onSelectChat(chat.id);
+                                    onSelectTab('trajectory');
+                                  }}
+                                  className={`group relative flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-[12px] transition-all duration-150 cursor-pointer select-none ${
+                                    isChatSelected
+                                      ? 'text-brand-textMain bg-[color:var(--brand-hover)] font-semibold'
+                                      : 'text-brand-textMuted/80 hover:text-brand-textMain hover:bg-[color:var(--brand-hover)]'
+                                  }`}
+                                >
+                                  {isChatSelected && (
+                                    <span className="absolute left-[-10px] top-2 bottom-2 w-[2px] rounded-r-full bg-brand-textMain" />
+                                  )}
+                                  {isChatRunning && (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)] shadow-[0_0_6px_var(--neon-live)] animate-pulse flex-shrink-0" />
+                                  )}
+                                  <span className="truncate flex-1 leading-snug">{chat.title}</span>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    {queuedCount > 0 && (
+                                      <span
+                                        className="text-[9px] font-semibold px-1 py-px rounded-full bg-[color:var(--brand-hover)] text-brand-textMuted"
+                                        title={`${queuedCount} prompt${queuedCount > 1 ? 's' : ''} queued`}
+                                      >
+                                        +{queuedCount}
+                                      </span>
+                                    )}
+                                    <span className="text-[10px] text-brand-textMuted/50 font-medium group-hover:hidden flex-shrink-0 ml-auto">
+                                      {isChatRunning ? 'Working...' : formatRelativeTime(chat)}
                                     </span>
-                                  )}
-                                  <span className="text-[10px] text-brand-textMuted/40 group-hover:hidden">
-                                    {isChatRunning ? 'Working...' : chat.timestamp}
-                                  </span>
-                                  {onChatSettings && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onChatSettings(chat);
-                                      }}
-                                      className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all cursor-pointer"
-                                      title="Chat Settings"
-                                    >
-                                      <Settings className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                  {onDeleteChat && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onDeleteChat(chat.id);
-                                      }}
-                                      className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/10 transition-all cursor-pointer"
-                                      title="Delete Chat"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
-                                  )}
+                                    <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0 ml-auto">
+                                      {onChatSettings && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onChatSettings(chat);
+                                          }}
+                                          className="w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover-strong)] transition-colors cursor-pointer"
+                                          title="Chat Settings"
+                                        >
+                                          <Settings className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                      {onDeleteChat && (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            onDeleteChat(chat.id);
+                                          }}
+                                          className="w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/10 transition-colors cursor-pointer"
+                                          title="Delete Chat"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
-                            );
-                          })
+                              );
+                            })}
+                            {projectChats.length > MAX_INITIAL_CHATS && (
+                              <button
+                                data-testid={`show-more-project-${proj.name}`}
+                                onClick={() =>
+                                  setExpandedProjectChats((prev) => ({
+                                    ...prev,
+                                    [proj.name]: !prev[proj.name],
+                                  }))
+                                }
+                                className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium text-brand-textMuted/70 hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] rounded transition-colors cursor-pointer mt-0.5"
+                              >
+                                <ChevronDown
+                                  className={`w-3 h-3 transition-transform duration-200 ${
+                                    expandedProjectChats[proj.name] ? 'rotate-180' : ''
+                                  }`}
+                                />
+                                <span>
+                                  {expandedProjectChats[proj.name]
+                                    ? 'Show less'
+                                    : `Show ${projectChats.length - MAX_INITIAL_CHATS} more`}
+                                </span>
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
@@ -478,76 +565,98 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {!chatsCollapsed && (
               <div className="flex flex-col gap-0.5">
-                {standaloneChats.map((chat) => {
-                  const isSelected = activeChatId === chat.id && activeTab === 'trajectory';
-                  const isChatRunning = Boolean(chat.isRunning);
-                  const queuedCount = chat.queuedCount ?? 0;
-                  return (
-                    <div
-                      key={chat.id}
-                      data-testid={`chat-item-${chat.title.replace(/\s+/g, '-')}`}
-                      className={`group relative flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-[13px] transition-all duration-150 cursor-pointer select-none ${
-                        isSelected
-                          ? 'text-brand-textMain bg-[color:var(--brand-hover)] font-semibold'
-                          : 'text-brand-textMuted/80 hover:text-brand-textMain hover:bg-[color:var(--brand-hover)]'
-                      }`}
-                      onClick={() => {
-                        if (onSelectChat) onSelectChat(chat.id);
-                        onSelectTab('trajectory');
-                      }}
-                    >
-                      {isSelected && (
-                        <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-brand-textMain" />
-                      )}
-                      {isChatRunning && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)] shadow-[0_0_6px_var(--neon-live)] animate-pulse flex-shrink-0" />
-                      )}
-                      <span className="truncate flex-1">{chat.title}</span>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {queuedCount > 0 && (
-                          <span
-                            className="text-[9px] font-semibold px-1 py-px rounded-full bg-[color:var(--brand-hover)] text-brand-textMuted"
-                            title={`${queuedCount} prompt${queuedCount > 1 ? 's' : ''} queued`}
-                          >
-                            +{queuedCount}
-                          </span>
-                        )}
-                        <span className="text-[10px] text-brand-textMuted/40 group-hover:hidden">
-                          {isChatRunning ? 'Working...' : chat.timestamp}
-                        </span>
-                        {onStandaloneChatSettings && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onStandaloneChatSettings(chat);
-                            }}
-                            className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all cursor-pointer"
-                            title="Chat Settings"
-                          >
-                            <Settings className="w-3 h-3" />
-                          </button>
-                        )}
-                        {onDeleteChat && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteChat(chat.id);
-                            }}
-                            className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-[color:var(--neon-destructive)] hover:bg-[color:var(--brand-hover)] transition-all cursor-pointer"
-                            title="Delete Chat"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {standaloneChats.length === 0 && (
+                {standaloneChats.length === 0 ? (
                   <div className="text-[11px] text-brand-textMuted/40 px-3 py-2 italic">
                     No active chats.
                   </div>
+                ) : (
+                  <>
+                    {(showAllStandaloneChats ? standaloneChats : standaloneChats.slice(0, MAX_INITIAL_CHATS)).map((chat) => {
+                      const isSelected = activeChatId === chat.id && activeTab === 'trajectory';
+                      const isChatRunning = Boolean(chat.isRunning);
+                      const queuedCount = chat.queuedCount ?? 0;
+                      return (
+                        <div
+                          key={chat.id}
+                          data-testid={`chat-item-${chat.title.replace(/\s+/g, '-')}`}
+                          className={`group relative flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-[13px] transition-all duration-150 cursor-pointer select-none ${
+                            isSelected
+                              ? 'text-brand-textMain bg-[color:var(--brand-hover)] font-semibold'
+                              : 'text-brand-textMuted/80 hover:text-brand-textMain hover:bg-[color:var(--brand-hover)]'
+                          }`}
+                          onClick={() => {
+                            if (onSelectChat) onSelectChat(chat.id);
+                            onSelectTab('trajectory');
+                          }}
+                        >
+                          {isSelected && (
+                            <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-md bg-brand-textMain" />
+                          )}
+                          {isChatRunning && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)] shadow-[0_0_6px_var(--neon-live)] animate-pulse flex-shrink-0" />
+                          )}
+                          <span className="truncate flex-1">{chat.title}</span>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {queuedCount > 0 && (
+                              <span
+                                className="text-[9px] font-semibold px-1 py-px rounded-full bg-[color:var(--brand-hover)] text-brand-textMuted"
+                                title={`${queuedCount} prompt${queuedCount > 1 ? 's' : ''} queued`}
+                              >
+                                +{queuedCount}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-brand-textMuted/50 font-medium group-hover:hidden flex-shrink-0 ml-auto">
+                              {isChatRunning ? 'Working...' : formatRelativeTime(chat)}
+                            </span>
+                            <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0 ml-auto">
+                              {onStandaloneChatSettings && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onStandaloneChatSettings(chat);
+                                  }}
+                                  className="w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover-strong)] transition-colors cursor-pointer"
+                                  title="Chat Settings"
+                                >
+                                  <Settings className="w-3 h-3" />
+                                </button>
+                              )}
+                              {onDeleteChat && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDeleteChat(chat.id);
+                                  }}
+                                  className="w-5 h-5 flex items-center justify-center rounded text-brand-textMuted hover:text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/10 transition-colors cursor-pointer"
+                                  title="Delete Chat"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {standaloneChats.length > MAX_INITIAL_CHATS && (
+                      <button
+                        data-testid="show-more-standalone-chats"
+                        onClick={() => setShowAllStandaloneChats((prev) => !prev)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-brand-textMuted/70 hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] rounded-lg transition-colors cursor-pointer mt-0.5"
+                      >
+                        <ChevronDown
+                          className={`w-3 h-3 transition-transform duration-200 ${
+                            showAllStandaloneChats ? 'rotate-180' : ''
+                          }`}
+                        />
+                        <span>
+                          {showAllStandaloneChats
+                            ? 'Show less'
+                            : `Show ${standaloneChats.length - MAX_INITIAL_CHATS} more`}
+                        </span>
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}

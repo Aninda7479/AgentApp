@@ -127,3 +127,40 @@ export function isContextOverflowError(message: string): boolean {
   );
 }
 
+/**
+ * Detects a runaway token-repetition loop in a streaming text buffer or prompt context.
+ * Returns { isLoop: true, cleanText } when >= 3 consecutive exact repetitions
+ * of any substring (2–200 chars) are found in the trailing 1000-char window.
+ */
+export function detectRepetitiveLoop(text: string): { isLoop: boolean; cleanText: string } {
+  if (!text || text.length < 30) return { isLoop: false, cleanText: text };
+  const window = text.length > 1000 ? text.slice(-1000) : text;
+
+  for (let len = 2; len <= 200; len++) {
+    for (let offset = 0; offset < len; offset++) {
+      const startIdx = window.length - len - offset;
+      if (startIdx < 0) continue;
+      const sub = window.slice(startIdx, window.length - offset);
+      if (sub.length < len || !sub.trim()) continue;
+
+      let occurrences = 0;
+      let idx = window.length - offset;
+      while (idx >= len) {
+        if (window.slice(idx - len, idx) === sub) {
+          occurrences++;
+          idx -= len;
+        } else {
+          break;
+        }
+      }
+      if (occurrences >= 3) {
+        const cutoff = text.length - offset - len * occurrences;
+        const cleanText = text.slice(0, Math.max(0, cutoff)).trim();
+        return { isLoop: true, cleanText };
+      }
+    }
+  }
+  return { isLoop: false, cleanText: text };
+}
+
+

@@ -298,6 +298,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
   const handleForceConnect = () => {
     const knownDefaults: Record<string, { id: string; name: string; ctx?: string; free?: boolean }[]> = {
       omniroute: [
+        { id: 'oc/big-pickle', name: 'Big Pickle (OpenCode)', ctx: '200k', free: true },
         { id: 'omniroute-auto', name: 'OmniRoute Auto Router', ctx: '128k', free: true },
         { id: 'llama-3.3-70b', name: 'Llama 3.3 70B', ctx: '128k', free: true }
       ],

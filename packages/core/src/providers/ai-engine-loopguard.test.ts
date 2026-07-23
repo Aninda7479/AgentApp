@@ -108,13 +108,92 @@ describe('sanitizeRepetitiveContent & history sanitization', () => {
     expect(cleaned).toBe("Hi there! I am happy to help.");
   });
 
-  it('sanitizes prior assistant history messages before sending to models', () => {
+  it('sanitizes prior assistant history messages before sending to models (OpenAI & Anthropic)', () => {
     const history = [
       { role: 'user' as const, content: 'hi' },
       { role: 'assistant' as const, content: "Hello! How can I assist? 'm Super'm Super'm Super'm Super'm Super" }
     ];
 
-    const messages = toOpenAIMessages(history as any);
-    expect(messages[1].content).toBe("Hello! How can I assist?");
+    const openAiMessages = toOpenAIMessages(history as any);
+    expect(openAiMessages[1].content).toBe("Hello! How can I assist?");
+
+    const anthropicConversation = toAnthropicMessages(history as any);
+    expect(anthropicConversation.messages[1].content).toBe("Hello! How can I assist?");
   });
 });
+
+import { detectRepetitiveLoop } from './ai-engine-helpers.js';
+
+describe('detectRepetitiveLoop helper', () => {
+  it('detects long pattern repetitions in 1000-char window', () => {
+    const pattern = " This is a simple response manner manner manner manner manner manner manner";
+    const result = detectRepetitiveLoop(pattern);
+    expect(result.isLoop).toBe(true);
+    expect(result.cleanText).toBe("This is a simple response");
+  });
+});
+
+import { toAnthropicMessages } from './multimodal.js';
+
+describe('Provider-agnostic streaming loop guard', () => {
+  it('triggers replace_tokens on Anthropic repetitive streaming tokens', async () => {
+    const anthropicSse =
+      `data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello there! "}}\n` +
+      `data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"user said user said user said user said "}}\n`;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(anthropicSse));
+            controller.close();
+          }
+        });
+        return { ok: true, status: 200, body: stream, async text() { return ''; } } as any;
+      })
+    );
+
+    const engine = new AgentEngine(
+      { provider: 'anthropic', apiKey: 'k', model: 'claude-3-5-sonnet-20241022' },
+      'anthropic-loop-session'
+    );
+    const events: AgentEvent[] = [];
+    await engine.run('hi', (e) => events.push(e));
+
+    expect(events.some((e) => e.type === 'replace_tokens')).toBe(true);
+    const replaceEvent = events.find((e) => e.type === 'replace_tokens');
+    expect(replaceEvent?.content).toBe('Hello there!');
+  });
+
+  it('triggers replace_tokens on Gemini repetitive streaming tokens', async () => {
+    const geminiSse =
+      `data: {"candidates":[{"content":{"parts":[{"text":"Greetings! "}]}}]}\n` +
+      `data: {"candidates":[{"content":{"parts":[{"text":"manner manner manner manner "}]}}]}\n`;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(geminiSse));
+            controller.close();
+          }
+        });
+        return { ok: true, status: 200, body: stream, async text() { return ''; } } as any;
+      })
+    );
+
+    const engine = new AgentEngine(
+      { provider: 'google', apiKey: 'k', model: 'gemini-2.0-flash' },
+      'gemini-loop-session'
+    );
+    const events: AgentEvent[] = [];
+    await engine.run('hi', (e) => events.push(e));
+
+    expect(events.some((e) => e.type === 'replace_tokens')).toBe(true);
+    const replaceEvent = events.find((e) => e.type === 'replace_tokens');
+    expect(replaceEvent?.content).toBe('Greetings!');
+  });
+});
+

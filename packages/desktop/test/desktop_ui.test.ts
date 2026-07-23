@@ -172,6 +172,73 @@ describe('Step 083: Responsive Left Sidebar Navigation', () => {
     expect(html).toContain('Working...');
     expect(html).toContain('animate-pulse');
   });
+
+  it('should format timestamps into relative time labels like 26m, 2h, 5d', () => {
+    const now = Date.now();
+    const html = renderToString(
+      React.createElement(Sidebar, {
+        activeTab: 'trajectory',
+        onSelectTab: () => {},
+        chats: [
+          {
+            id: 'c1',
+            title: 'Chat 26m ago',
+            project: '',
+            model: 'gpt-4',
+            timestamp: '',
+            startedAt: now - 26 * 60 * 1000,
+            steps: []
+          },
+          {
+            id: 'c2',
+            title: 'Chat 2h ago',
+            project: '',
+            model: 'gpt-4',
+            timestamp: '',
+            startedAt: now - 2 * 3600 * 1000,
+            steps: []
+          },
+          {
+            id: 'c3',
+            title: 'Chat 5d ago',
+            project: '',
+            model: 'gpt-4',
+            timestamp: '',
+            startedAt: now - 5 * 86400 * 1000,
+            steps: []
+          }
+        ]
+      })
+    );
+
+    expect(html).toContain('26m');
+    expect(html).toContain('2h');
+    expect(html).toContain('5d');
+  });
+
+  it('should limit chat list to 5 chats and render Show 2 more button when there are 7 chats', () => {
+    const dummyChats = Array.from({ length: 7 }, (_, i) => ({
+      id: `chat-${i}`,
+      title: `Standalone Chat ${i + 1}`,
+      project: '',
+      model: 'gpt-4',
+      timestamp: 'Just now',
+      steps: []
+    }));
+
+    const html = renderToString(
+      React.createElement(Sidebar, {
+        activeTab: 'trajectory',
+        onSelectTab: () => {},
+        chats: dummyChats
+      })
+    );
+
+    expect(html).toContain('Standalone Chat 1');
+    expect(html).toContain('Standalone Chat 5');
+    expect(html).not.toContain('Standalone Chat 6');
+    expect(html).toContain('Show 2 more');
+  });
 });
 
 describe('Step 084: Streaming Chat Trajectory Canvas', () => {

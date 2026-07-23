@@ -70,8 +70,14 @@ export class AgentStreamService {
         ctx,
         targetChatId,
         (prev) => {
-          if (currentStepId) {
+          if (currentStepId && prev.some((s) => s.id === currentStepId)) {
             return prev.map((s) => (s.id === currentStepId ? { ...s, content: buffer } : s));
+          }
+          // If the trailing step is already an assistant step, bind to it instead of creating a duplicate
+          const lastStep = prev[prev.length - 1];
+          if (lastStep && lastStep.type === 'assistant') {
+            bundle.stepIdRef.current = lastStep.id;
+            return prev.map((s, idx) => (idx === prev.length - 1 ? { ...s, content: buffer } : s));
           }
           const newStepId = `stream-assistant-${Date.now()}`;
           bundle.stepIdRef.current = newStepId;

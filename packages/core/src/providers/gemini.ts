@@ -8,6 +8,7 @@ import {
 } from '../types/agent.js';
 import { contentToText } from './multimodal.js';
 import { applyReasoningEffort } from '../orchestrator/reasoning-effort.js';
+import { detectRepetitiveLoop } from './ai-engine-helpers.js';
 
 /** Provider adapter for the Google Gemini Generative Language API. */
 export class GeminiAdapter implements BaseProviderAdapter {
@@ -93,7 +94,11 @@ export class GeminiAdapter implements BaseProviderAdapter {
     };
 
     const parts = data.candidates?.[0]?.content?.parts || [];
-    const content = parts.map(p => p.text || '').join('');
+    let content = parts.map(p => p.text || '').join('');
+    const loopCheck = detectRepetitiveLoop(content);
+    if (loopCheck.isLoop) {
+      content = loopCheck.cleanText;
+    }
 
     return {
       id: `gemini-${Date.now()}`,
@@ -179,6 +184,13 @@ export class GeminiAdapter implements BaseProviderAdapter {
                 const text = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
                 if (text) {
                   fullContent += text;
+                  const loopCheck = detectRepetitiveLoop(fullContent);
+                  if (loopCheck.isLoop) {
+                    fullContent = loopCheck.cleanText;
+                    done = true;
+                    try { await reader.cancel(); } catch {}
+                    break;
+                  }
                   onChunk(text);
                 }
               } catch {

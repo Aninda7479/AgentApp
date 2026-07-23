@@ -8,6 +8,7 @@ import {
 } from '../types/agent.js';
 import { resolveBaseUrl, getProviderMeta } from './provider-meta.js';
 import { applyReasoningEffort } from '../orchestrator/reasoning-effort.js';
+import { detectRepetitiveLoop } from './ai-engine-helpers.js';
 
 /** Generic provider adapter for OpenAI-compatible third-party / self-hosted endpoints. */
 export class CustomAdapter implements BaseProviderAdapter {
@@ -41,15 +42,10 @@ export class CustomAdapter implements BaseProviderAdapter {
         content: m.content
       })),
       temperature: request.temperature ?? 0.7,
-      max_tokens: request.maxTokens
+      max_tokens: request.maxTokens,
+      frequency_penalty: request.frequencyPenalty ?? 0.3,
+      presence_penalty: request.presencePenalty ?? 0.3
     };
-
-    if (request.frequencyPenalty !== undefined || this.provider === 'omniroute' || this.provider === 'custom') {
-      payload.frequency_penalty = request.frequencyPenalty ?? 0.3;
-    }
-    if (request.presencePenalty !== undefined || this.provider === 'omniroute' || this.provider === 'custom') {
-      payload.presence_penalty = request.presencePenalty ?? 0.3;
-    }
 
     applyReasoningEffort(payload, this.provider, request.reasoningEffort, request.maxTokens);
 
@@ -83,7 +79,11 @@ export class CustomAdapter implements BaseProviderAdapter {
     };
 
     const choiceMsg = data.choices?.[0]?.message as any;
-    const content = choiceMsg?.content || choiceMsg?.reasoning || choiceMsg?.reasoning_content || choiceMsg?.thought || '';
+    let content = choiceMsg?.content || choiceMsg?.reasoning || choiceMsg?.reasoning_content || choiceMsg?.thought || '';
+    const loopCheck = detectRepetitiveLoop(content);
+    if (loopCheck.isLoop) {
+      content = loopCheck.cleanText;
+    }
 
     return {
       id: data.id || `${this.provider}-${Date.now()}`,
@@ -119,15 +119,10 @@ export class CustomAdapter implements BaseProviderAdapter {
         content: m.content
       })),
       temperature: request.temperature ?? 0.7,
-      stream: true
+      stream: true,
+      frequency_penalty: request.frequencyPenalty ?? 0.3,
+      presence_penalty: request.presencePenalty ?? 0.3
     };
-
-    if (request.frequencyPenalty !== undefined || this.provider === 'omniroute' || this.provider === 'custom') {
-      payload.frequency_penalty = request.frequencyPenalty ?? 0.3;
-    }
-    if (request.presencePenalty !== undefined || this.provider === 'omniroute' || this.provider === 'custom') {
-      payload.presence_penalty = request.presencePenalty ?? 0.3;
-    }
 
     applyReasoningEffort(payload, this.provider, request.reasoningEffort, request.maxTokens);
 
@@ -143,30 +138,6 @@ export class CustomAdapter implements BaseProviderAdapter {
     }
 
     let fullContent = '';
-    const detectRepetitiveLoop = (text: string): boolean => {
-      if (text.length < 30) return false;
-      const window = text.length > 500 ? text.slice(-500) : text;
-      for (let len = 2; len <= 80; len++) {
-        for (let offset = 0; offset < len; offset++) {
-          const startIdx = window.length - len - offset;
-          if (startIdx < 0) continue;
-          const sub = window.slice(startIdx, window.length - offset);
-          if (sub.length < len || !sub.trim()) continue;
-          let occurrences = 0;
-          let idx = window.length - offset;
-          while (idx >= len) {
-            if (window.slice(idx - len, idx) === sub) {
-              occurrences++;
-              idx -= len;
-            } else {
-              break;
-            }
-          }
-          if (occurrences >= 3) return true;
-        }
-      }
-      return false;
-    };
 
     if (response.body) {
       const reader = response.body.getReader();
@@ -187,7 +158,9 @@ export class CustomAdapter implements BaseProviderAdapter {
                 const chunkText = delta?.content || delta?.reasoning || delta?.reasoning_content || delta?.thought || '';
                 if (chunkText) {
                   fullContent += chunkText;
-                  if (detectRepetitiveLoop(fullContent)) {
+                  const loopCheck = detectRepetitiveLoop(fullContent);
+                  if (loopCheck.isLoop) {
+                    fullContent = loopCheck.cleanText;
                     done = true;
                     try { await reader.cancel(); } catch {}
                     break;

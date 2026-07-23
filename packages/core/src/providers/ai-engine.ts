@@ -55,7 +55,8 @@ export {
   buildBridgeRequest,
   sanitizeSchemaForGemini,
   isCommandAllowed,
-  isContextOverflowError
+  isContextOverflowError,
+  detectRepetitiveLoop
 } from './ai-engine-helpers.js';
 
 // Re-export built-in tools
@@ -75,7 +76,8 @@ import {
   buildRouterPool,
   buildBridgeRequest,
   sanitizeSchemaForGemini,
-  isContextOverflowError
+  isContextOverflowError,
+  detectRepetitiveLoop
 } from './ai-engine-helpers.js';
 
 import { createBuiltinTools } from './builtin-tools.js';
@@ -83,6 +85,11 @@ import { createBuiltinTools } from './builtin-tools.js';
 const SUMMARY_PREFIX = '[COMPACTED CONTEXT SUMMARY]';
 const MAX_SYSTEM_PROMPT_CHARS = 12000;
 const MAX_TOOL_RESULT_CHARS = 4000;
+
+/** Models requiring sanitized minimal payloads (no temperature/max_tokens/stream flags). */
+const STRICT_MINIMAL_PAYLOAD_MODELS = new Set<string>([
+  'oc/big-pickle'
+]);
 
 // ─── Agent Engine ─────────────────────────────────────────────────────────────
 
@@ -956,19 +963,23 @@ Key guidelines:
     const messages = toOpenAIMessages(this.history);
     const toolSchemas = this.getToolSchemas();
 
+    const modelId = this.config.model || '';
+    const isOmniRoute = this.config.provider === 'omniroute';
+    const isStrictModel = STRICT_MINIMAL_PAYLOAD_MODELS.has(modelId) || modelId.startsWith('oc/');
+
     const payload: Record<string, any> = {
-      model: this.config.model,
-      messages,
-      stream: true,
-      temperature: this.config.temperature ?? 0.7,
-      max_tokens: this.config.maxTokens ?? 4096
+      model: modelId,
+      messages
     };
 
-    if (this.config.frequencyPenalty !== undefined || this.config.provider === 'omniroute' || this.config.provider === 'custom') {
+    if (!isStrictModel && !isOmniRoute) {
+      payload.stream = true;
+      payload.temperature = this.config.temperature ?? 0.7;
+      payload.max_tokens = this.config.maxTokens ?? 4096;
       payload.frequency_penalty = this.config.frequencyPenalty ?? 0.3;
-    }
-    if (this.config.presencePenalty !== undefined || this.config.provider === 'omniroute' || this.config.provider === 'custom') {
       payload.presence_penalty = this.config.presencePenalty ?? 0.3;
+    } else if (this.config.maxTokens) {
+      payload.max_completion_tokens = this.config.maxTokens;
     }
 
     if (toolSchemas && toolSchemas.length > 0) {
@@ -983,55 +994,60 @@ Key guidelines:
       headers['Authorization'] = `Bearer ${this.config.apiKey}`;
     }
 
-    const response = await this.fetchWithConnectTimeout(
-      url,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload)
-      },
-      signal
-    );
+    let response: Response | undefined;
+    let attempt = 0;
+    const maxRetries = 3;
 
-    if (!response.ok) {
-      const err = await response.text();
-      const pName = this.config.provider ? (this.config.provider === 'openrouter' ? 'OpenRouter' : this.config.provider.toUpperCase()) : 'API';
-      throw new Error(`${pName} API error [${response.status}]: ${err}`);
+    while (attempt <= maxRetries) {
+      attempt++;
+      response = await this.fetchWithConnectTimeout(
+        url,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        },
+        signal
+      );
+
+      if (!response.ok) {
+        const errText = await response.text();
+
+        // Auto-Adapter: If HTTP 500/400 payload rejection occurs, sanitize payload and record model ID in strict set
+        if ((response.status >= 500 || response.status === 400) && ('temperature' in payload || 'max_tokens' in payload || 'stream' in payload)) {
+          delete payload.temperature;
+          delete payload.max_tokens;
+          delete payload.stream;
+          delete payload.frequency_penalty;
+          delete payload.presence_penalty;
+          if (modelId) {
+            STRICT_MINIMAL_PAYLOAD_MODELS.add(modelId);
+          }
+
+          if (attempt <= maxRetries) {
+            await new Promise((r) => setTimeout(r, 1500 * attempt));
+            continue;
+          }
+        }
+
+        // Retry transient 500 or 429 rate limit errors for OmniRoute or custom provider proxies
+        if ((response.status >= 500 || response.status === 429) && attempt <= maxRetries) {
+          await new Promise((r) => setTimeout(r, 1500 * attempt));
+          continue;
+        }
+
+        const pName = this.config.provider ? (this.config.provider === 'openrouter' ? 'OpenRouter' : this.config.provider.toUpperCase()) : 'API';
+        throw new Error(`${pName} API error [${response.status}]: ${errText}`);
+      }
+      break;
+    }
+
+    if (!response) {
+      throw new Error('No response received from model endpoint');
     }
 
     let fullContent = '';
     const toolCallAccumulators: Map<number, { id: string; name: string; argsJson: string }> = new Map();
-
-    const detectRepetitiveLoop = (text: string): { isLoop: boolean; cleanText: string } => {
-      if (text.length < 30) return { isLoop: false, cleanText: text };
-      const window = text.length > 500 ? text.slice(-500) : text;
-
-      for (let len = 2; len <= 80; len++) {
-        for (let offset = 0; offset < len; offset++) {
-          const startIdx = window.length - len - offset;
-          if (startIdx < 0) continue;
-          const sub = window.slice(startIdx, window.length - offset);
-          if (sub.length < len || !sub.trim()) continue;
-
-          let occurrences = 0;
-          let idx = window.length - offset;
-          while (idx >= len) {
-            if (window.slice(idx - len, idx) === sub) {
-              occurrences++;
-              idx -= len;
-            } else {
-              break;
-            }
-          }
-          if (occurrences >= 3) {
-            const cutoff = text.length - offset - (len * occurrences);
-            const cleanText = text.slice(0, Math.max(0, cutoff)).trim();
-            return { isLoop: true, cleanText };
-          }
-        }
-      }
-      return { isLoop: false, cleanText: text };
-    };
 
     if (response.body) {
       const reader = response.body.getReader();
@@ -1056,9 +1072,15 @@ Key guidelines:
             const delta = json.choices?.[0]?.delta;
             if (!delta) continue;
 
-            const textChunk = delta.content || delta.reasoning || delta.reasoning_content || delta.thought || '';
-            if (textChunk) {
-              fullContent += textChunk;
+            // ── Separate reasoning/thinking tokens from response content ──
+            const reasoningChunk = delta.reasoning || delta.reasoning_content || delta.thought || '';
+            if (reasoningChunk) {
+              onEvent({ type: 'thought', sessionId: this.sessionId, content: reasoningChunk });
+            }
+
+            const contentChunk = delta.content || '';
+            if (contentChunk) {
+              fullContent += contentChunk;
               const loopCheck = detectRepetitiveLoop(fullContent);
               if (loopCheck.isLoop) {
                 fullContent = loopCheck.cleanText;
@@ -1067,7 +1089,7 @@ Key guidelines:
                 try { await reader.cancel(); } catch {}
                 break;
               }
-              onEvent({ type: 'token', sessionId: this.sessionId, content: textChunk });
+              onEvent({ type: 'token', sessionId: this.sessionId, content: contentChunk });
             }
 
             if (delta.tool_calls) {
@@ -1163,8 +1185,9 @@ Key guidelines:
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let loopHalted = false;
 
-      while (true) {
+      while (!loopHalted) {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
@@ -1179,6 +1202,14 @@ Key guidelines:
             if (event.type === 'content_block_delta') {
               if (event.delta?.type === 'text_delta') {
                 fullContent += event.delta.text;
+                const loopCheck = detectRepetitiveLoop(fullContent);
+                if (loopCheck.isLoop) {
+                  fullContent = loopCheck.cleanText;
+                  onEvent({ type: 'replace_tokens', sessionId: this.sessionId, content: loopCheck.cleanText });
+                  loopHalted = true;
+                  try { await reader.cancel(); } catch {}
+                  break;
+                }
                 onEvent({ type: 'token', sessionId: this.sessionId, content: event.delta.text });
               }
               if (event.delta?.type === 'input_json_delta') {
@@ -1302,8 +1333,9 @@ Key guidelines:
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let loopHalted = false;
 
-      while (true) {
+      while (!loopHalted) {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
@@ -1320,6 +1352,14 @@ Key guidelines:
               for (const part of (candidate.content?.parts || [])) {
                 if (part.text) {
                   fullContent += part.text;
+                  const loopCheck = detectRepetitiveLoop(fullContent);
+                  if (loopCheck.isLoop) {
+                    fullContent = loopCheck.cleanText;
+                    onEvent({ type: 'replace_tokens', sessionId: this.sessionId, content: loopCheck.cleanText });
+                    loopHalted = true;
+                    try { await reader.cancel(); } catch {}
+                    break;
+                  }
                   onEvent({ type: 'token', sessionId: this.sessionId, content: part.text });
                 }
                 if (part.functionCall) {
@@ -1330,7 +1370,9 @@ Key guidelines:
                   });
                 }
               }
+              if (loopHalted) break;
             }
+            if (loopHalted) break;
           } catch {
             // ignore
           }
@@ -1403,37 +1445,6 @@ Key guidelines:
 
     let fullContent = '';
     const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
-
-    const detectRepetitiveLoop = (text: string): { isLoop: boolean; cleanText: string } => {
-      if (text.length < 30) return { isLoop: false, cleanText: text };
-      const window = text.length > 500 ? text.slice(-500) : text;
-
-      for (let len = 2; len <= 80; len++) {
-        for (let offset = 0; offset < len; offset++) {
-          const startIdx = window.length - len - offset;
-          if (startIdx < 0) continue;
-          const sub = window.slice(startIdx, window.length - offset);
-          if (sub.length < len || !sub.trim()) continue;
-
-          let occurrences = 0;
-          let idx = window.length - offset;
-          while (idx >= len) {
-            if (window.slice(idx - len, idx) === sub) {
-              occurrences++;
-              idx -= len;
-            } else {
-              break;
-            }
-          }
-          if (occurrences >= 3) {
-            const cutoff = text.length - offset - (len * occurrences);
-            const cleanText = text.slice(0, Math.max(0, cutoff)).trim();
-            return { isLoop: true, cleanText };
-          }
-        }
-      }
-      return { isLoop: false, cleanText: text };
-    };
 
     if (response.body) {
       const reader = response.body.getReader();
