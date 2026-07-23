@@ -83,6 +83,12 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   const [closeToTray, setCloseToTray] = useState(true);
   const [hotkeyOverlayEnabled, setHotkeyOverlayEnabled] = useState(true);
 
+  const [chatTitleMode, setChatTitleMode] = useState<'active_model' | 'custom_model' | 'simple' | 'disabled'>('active_model');
+  const [chatTitleProvider, setChatTitleProvider] = useState<string>('');
+  const [chatTitleModel, setChatTitleModel] = useState<string>('');
+  const [chatTitleMaxWords, setChatTitleMaxWords] = useState<number>(3);
+  const [availableProviders, setAvailableProviders] = useState<any[]>([]);
+
   useEffect(() => {
     const ipc = getIpc();
     ipc.invoke('settings-read').then((settings: any) => {
@@ -90,6 +96,15 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         if (settings.general.openAtLogin !== undefined) setOpenAtLogin(!!settings.general.openAtLogin);
         if (settings.general.closeToTray !== undefined) setCloseToTray(!!settings.general.closeToTray);
         if (settings.general.hotkeyOverlayEnabled !== undefined) setHotkeyOverlayEnabled(!!settings.general.hotkeyOverlayEnabled);
+      }
+      if (settings?.chatTitle) {
+        if (settings.chatTitle.mode) setChatTitleMode(settings.chatTitle.mode);
+        if (settings.chatTitle.providerId) setChatTitleProvider(settings.chatTitle.providerId);
+        if (settings.chatTitle.model) setChatTitleModel(settings.chatTitle.model);
+        if (settings.chatTitle.maxWords) setChatTitleMaxWords(settings.chatTitle.maxWords);
+      }
+      if (Array.isArray(settings?.providers)) {
+        setAvailableProviders(settings.providers);
       }
     }).catch(() => {});
   }, []);
@@ -106,6 +121,54 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
       }
     }).catch((err: any) => console.error(`Failed updating ${key}:`, err));
   };
+
+  const updateChatTitleSetting = (patch: Partial<{ mode: 'active_model' | 'custom_model' | 'simple' | 'disabled'; providerId: string; model: string; maxWords: number }>) => {
+    if (patch.mode !== undefined) setChatTitleMode(patch.mode);
+    if (patch.providerId !== undefined) setChatTitleProvider(patch.providerId);
+    if (patch.model !== undefined) setChatTitleModel(patch.model);
+    if (patch.maxWords !== undefined) setChatTitleMaxWords(patch.maxWords);
+
+    const ipc = getIpc();
+    ipc.invoke('settings-read').then((current: any) => {
+      const updatedChatTitle = {
+        mode: patch.mode ?? chatTitleMode,
+        providerId: patch.providerId ?? chatTitleProvider,
+        model: patch.model ?? chatTitleModel,
+        maxWords: patch.maxWords ?? chatTitleMaxWords
+      };
+      ipc.invoke('settings-write', {
+        ...current,
+        chatTitle: updatedChatTitle
+      }).catch((err: any) => console.error('Failed updating chat title settings:', err));
+    }).catch(() => {});
+  };
+
+  const titleModeOptions: {
+    id: 'active_model' | 'custom_model' | 'simple' | 'disabled';
+    label: string;
+    description: string;
+  }[] = [
+    {
+      id: 'active_model',
+      label: 'Active Chat Model',
+      description: 'Use the session LLM model to generate short titles.'
+    },
+    {
+      id: 'custom_model',
+      label: 'Dedicated Fast Model',
+      description: 'Use a specific fast provider/model (e.g. Gemini Flash, Groq, Ollama) for instant titles.'
+    },
+    {
+      id: 'simple',
+      label: 'Local Truncation (Offline)',
+      description: 'Fastest 0-latency offline title from prompt words. No network calls or API costs.'
+    },
+    {
+      id: 'disabled',
+      label: 'Disabled',
+      description: 'Use basic fallback titles without summary processing.'
+    }
+  ];
 
   const internetAccessOptions: {
     id: InternetAccessLevel;
@@ -288,6 +351,93 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
               </button>
             );
           })}
+        </div>
+      </section>
+
+      <section className="mb-8">
+        <h3 className="settings-section-title mb-3">Chat Title Generation</h3>
+        <p className="settings-section-sub mb-3">
+          Customize how conversation names are automatically generated when starting a new session.
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 mb-4">
+          {titleModeOptions.map(({ id, label, description }) => {
+            const selected = chatTitleMode === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => updateChatTitleSetting({ mode: id })}
+                className={`settings-choice ${selected ? 'selected' : ''}`}
+              >
+                <div className="flex items-center gap-1.5 settings-choice-title font-medium">
+                  {label}
+                  {selected && <Check size={14} className="text-(--brand-accent)" />}
+                </div>
+                <div className="settings-choice-desc text-xs mt-1 text-brand-textMuted">{description}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {chatTitleMode === 'custom_model' && (
+          <div className="settings-section px-5 py-4 mb-4 flex flex-col gap-3">
+            <div className="text-sm font-medium text-brand-textMain">Dedicated Provider &amp; Model</div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-medium text-brand-textMuted mb-1">Provider</label>
+                <select
+                  value={chatTitleProvider}
+                  onChange={(e) => updateChatTitleSetting({ providerId: e.target.value })}
+                  className="w-full rounded-md border border-brand-border bg-brand-bg px-3 py-1.5 text-sm text-brand-textMain focus:outline-none focus:ring-1 focus:ring-brand-accent"
+                >
+                  <option value="">Select Provider...</option>
+                  {availableProviders.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name || p.id}
+                    </option>
+                  ))}
+                  <option value="ollama">Ollama (Local)</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="google">Google Gemini</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="openai">OpenAI</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-brand-textMuted mb-1">Model Name (e.g. gemini-2.0-flash-lite, openrouter/free)</label>
+                <input
+                  type="text"
+                  value={chatTitleModel}
+                  onChange={(e) => updateChatTitleSetting({ model: e.target.value })}
+                  placeholder="e.g. gemini-2.0-flash"
+                  className="w-full rounded-md border border-brand-border bg-brand-bg px-3 py-1.5 text-sm text-brand-textMain focus:outline-none focus:ring-1 focus:ring-brand-accent"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="settings-section px-5 py-3 flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium text-brand-textMain">Maximum Title Words</div>
+            <div className="text-xs text-brand-textMuted">Limit generated or truncated chat title length (default: 3 words).</div>
+          </div>
+          <div className="flex items-center gap-2">
+            {[2, 3, 4, 5].map((count) => (
+              <button
+                key={count}
+                type="button"
+                onClick={() => updateChatTitleSetting({ maxWords: count })}
+                className={`h-7 w-8 rounded-md text-xs font-semibold transition-colors ${
+                  chatTitleMaxWords === count
+                    ? 'bg-(--brand-accent) text-white'
+                    : 'bg-brand-border/40 text-brand-textMuted hover:bg-brand-border'
+                }`}
+              >
+                {count}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
     </div>

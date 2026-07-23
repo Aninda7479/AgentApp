@@ -2,7 +2,7 @@ import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, desktopCapt
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, isFreeModel, BYOKProviderManager, createProviderAdapter, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, initializeDirectories, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber, resolveProviderFamily, resolveBaseUrl } from '@superagent/core';
+import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, isFreeModel, BYOKProviderManager, createProviderAdapter, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, initializeDirectories, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber, resolveProviderFamily, resolveBaseUrl, UserProfileStore, LearningLoopEngine, ProjectInstructionsParser } from '@superagent/core';
 
 // Keep Electron's cache userData in a standard OS location — NOT inside
 // ~/.superagent, which is the app's own data directory.
@@ -301,7 +301,7 @@ safeHandle('agent-run', async (event, {
       // Asynchronously generate chat name for the first message of the session
       (async () => {
         try {
-          const chatName = await generateChatName(prompt, finalConfig);
+          const chatName = await generateChatName(prompt, finalConfig, settings);
           
           // Write to chat config file of that folder (if available)
           if (finalConfig.projectRoot) {
@@ -825,6 +825,79 @@ safeHandle('autostart-set', (_event, { enabled }: { enabled: boolean }) => {
   const settings = SettingsStorage.loadSettings();
   SettingsStorage.saveSettings({ general: { ...settings.general, openAtLogin: enabled } });
   return { success: true, openAtLogin: enabled };
+});
+
+safeHandle('global-memory-read', async (_event, { projectRoot }: { projectRoot?: string } = {}) => {
+  const profileStore = new UserProfileStore();
+  const profileEntries = await profileStore.listAll();
+  
+  const learningEngine = new LearningLoopEngine();
+  const insights = await learningEngine.getInsights();
+  
+  const settings = SettingsStorage.loadSettings();
+  const globalMemoryInstructions = (settings.general as any)?.globalMemory || '';
+
+  const defaultSystemPrompt = `You are SuperAgent, a powerful autonomous AI coding assistant.
+
+You have access to tools to read files, list directories, search codebases, run shell commands, and write files.
+Use tools progressively — don't dump the whole codebase; fetch what you need when you need it.
+
+Key guidelines:
+- Think step by step before acting
+- Read relevant files before making edits
+- Verify changes compile/work after editing
+- Be concise but thorough in explanations
+- When you edit files, mention which files changed and the diff summary`;
+
+  let projectInstructions: any[] = [];
+  const targetPath = projectRoot || process.cwd();
+  if (targetPath) {
+    try {
+      const parser = new ProjectInstructionsParser();
+      projectInstructions = await parser.discoverAndParse(targetPath);
+    } catch {
+      projectInstructions = [];
+    }
+  }
+
+  return {
+    defaultSystemPrompt,
+    globalMemoryInstructions,
+    userProfile: profileEntries,
+    learnedInsights: insights,
+    projectInstructions
+  };
+});
+
+safeHandle('global-memory-add-profile', async (_event, { key, value, category }: { key: string; value: unknown; category?: 'preference' | 'identity' | 'environment' | 'custom' }) => {
+  const profileStore = new UserProfileStore();
+  return await profileStore.set(key, value, category || 'custom');
+});
+
+safeHandle('global-memory-delete-profile', async (_event, { key }: { key: string }) => {
+  const profileStore = new UserProfileStore();
+  return await profileStore.delete(key);
+});
+
+safeHandle('global-memory-add-insight', async (_event, { topic, lesson, category }: { topic: string; lesson: string; category?: 'error_prevention' | 'user_preference' | 'workflow_optimization' }) => {
+  const learningEngine = new LearningLoopEngine();
+  return await learningEngine.saveInsight(topic, lesson, category || 'workflow_optimization');
+});
+
+safeHandle('global-memory-delete-insight', async (_event, { id }: { id: string }) => {
+  const learningEngine = new LearningLoopEngine();
+  const insights = await learningEngine.getInsights();
+  const filtered = insights.filter(i => i.id !== id);
+  (learningEngine as any).insights = filtered;
+  await learningEngine.save();
+  return true;
+});
+
+safeHandle('global-memory-save-instructions', async (_event, { instructions }: { instructions: string }) => {
+  const settings = SettingsStorage.loadSettings();
+  const updatedGeneral = { ...settings.general, globalMemory: instructions };
+  SettingsStorage.saveSettings({ ...settings, general: updatedGeneral });
+  return true;
 });
 
 // ── Hardware detection for the Local Model (Ollama) manager ────────────────

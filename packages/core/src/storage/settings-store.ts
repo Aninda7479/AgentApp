@@ -74,6 +74,7 @@ export interface GeneralAppSettings {
   closeToTray?: boolean;
   hotkeyOverlayEnabled?: boolean;
   hotkeyOverlayShortcut?: string;
+  globalMemory?: string;
 }
 
 /** Orchestrator settings: enabled models, routing strategy, optimization goal, and free-only mode. */
@@ -209,6 +210,25 @@ export interface WebAppSettings {
   autoStart?: boolean;
 }
 
+/** Configuration for automatic Chat Title Generation. */
+export interface ChatTitleSettings {
+  /** Mode of chat name generation:
+   *  - 'active_model': Uses the current active chat session provider/model (default).
+   *  - 'custom_model': Uses a user-specified provider and model (e.g. cheap/fast model).
+   *  - 'simple': Offline local truncation (first N words) — 0 latency, no API calls.
+   *  - 'disabled': Always uses default title (truncated prompt).
+   */
+  mode?: 'active_model' | 'custom_model' | 'simple' | 'disabled';
+  /** Provider ID to use when mode is 'custom_model' */
+  providerId?: string;
+  /** Model ID to use when mode is 'custom_model' */
+  model?: string;
+  /** Custom summary prompt instructions (optional) */
+  customPrompt?: string;
+  /** Maximum word length for title (default: 3) */
+  maxWords?: number;
+}
+
 /** Top-level application settings object persisted to disk. */
 export interface AppSettings {
   theme?: ThemeSettings;
@@ -226,6 +246,7 @@ export interface AppSettings {
   webApp?: WebAppSettings;
   voice?: VoiceSettings;
   circleSearch?: CircleSearchSettings;
+  chatTitle?: ChatTitleSettings;
 }
 
 /** Resolved file system paths for user data and config files. */

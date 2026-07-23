@@ -74,18 +74,58 @@ export interface OpenAIMessage {
 }
 
 /**
+ * Strips repetitive token loops from prior assistant messages in history so
+ * corrupted turns do not infect subsequent LLM turns.
+ */
+export function sanitizeRepetitiveContent(text: string): string {
+  if (!text || text.length < 30) return text;
+  const window = text.length > 500 ? text.slice(-500) : text;
+
+  for (let len = 2; len <= 80; len++) {
+    for (let offset = 0; offset < len; offset++) {
+      const startIdx = window.length - len - offset;
+      if (startIdx < 0) continue;
+      const sub = window.slice(startIdx, window.length - offset);
+      if (sub.length < len || !sub.trim()) continue;
+
+      let occurrences = 0;
+      let idx = window.length - offset;
+      while (idx >= len) {
+        if (window.slice(idx - len, idx) === sub) {
+          occurrences++;
+          idx -= len;
+        } else {
+          break;
+        }
+      }
+      if (occurrences >= 3) {
+        const cutoff = text.length - offset - (len * occurrences);
+        const cleanText = text.slice(0, Math.max(0, cutoff)).trim();
+        return cleanText || text.slice(0, 50);
+      }
+    }
+  }
+  return text;
+}
+
+/**
  * Convert engine history into OpenAI chat messages. Assistant turns that invoked
  * tools emit their `tool_calls` (so the provider can pair them with the
  * subsequent `tool` messages); plain turns pass through. This pairing is
  * mandatory for OpenAI — an unpaired `tool` message is rejected.
+ *
+ * Assistant turns are automatically sanitized for token repetition loops so
+ * prior corrupted turns do not infect new generation contexts.
  */
 export function toOpenAIMessages(history: ChatMessage[]): OpenAIMessage[] {
   const out: OpenAIMessage[] = [];
   for (const m of history) {
     if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
+      const rawContent = typeof m.content === 'string' ? (m.content || null) : m.content;
+      const sanitized = typeof rawContent === 'string' ? sanitizeRepetitiveContent(rawContent) : rawContent;
       out.push({
         role: 'assistant',
-        content: typeof m.content === 'string' ? (m.content || null) : m.content,
+        content: sanitized,
         tool_calls: m.toolCalls.map((tc) => ({
           id: tc.id,
           type: 'function',
@@ -99,9 +139,13 @@ export function toOpenAIMessages(history: ChatMessage[]): OpenAIMessage[] {
         tool_call_id: m.toolCallId || 'unknown'
       });
     } else {
+      const rawContent = m.content;
+      const sanitized = (m.role === 'assistant' && typeof rawContent === 'string')
+        ? sanitizeRepetitiveContent(rawContent)
+        : rawContent;
       out.push({
         role: m.role,
-        content: m.content,
+        content: sanitized,
         ...(m.name ? { name: m.name } : {})
       });
     }

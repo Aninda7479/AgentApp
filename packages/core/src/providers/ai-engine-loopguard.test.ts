@@ -98,3 +98,23 @@ describe('AgentEngine run() — runaway-loop guard', () => {
     expect(events.some((e) => e.type === 'done')).toBe(true);
   });
 });
+
+import { sanitizeRepetitiveContent, toOpenAIMessages } from './multimodal.js';
+
+describe('sanitizeRepetitiveContent & history sanitization', () => {
+  it('strips repetitive token loops from corrupted assistant responses', () => {
+    const corrupted = "Hi there! I am happy to help. HiHiHiHiHiHiHiHiHiHiHiHiHiHiHiHiHi";
+    const cleaned = sanitizeRepetitiveContent(corrupted);
+    expect(cleaned).toBe("Hi there! I am happy to help.");
+  });
+
+  it('sanitizes prior assistant history messages before sending to models', () => {
+    const history = [
+      { role: 'user' as const, content: 'hi' },
+      { role: 'assistant' as const, content: "Hello! How can I assist? 'm Super'm Super'm Super'm Super'm Super" }
+    ];
+
+    const messages = toOpenAIMessages(history as any);
+    expect(messages[1].content).toBe("Hello! How can I assist?");
+  });
+});

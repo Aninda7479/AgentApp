@@ -21,6 +21,12 @@ export const ALLOWED_CHANNELS = new Set<string>([
   // settings / store
   'settings-read',
   'settings-write',
+  'global-memory-read',
+  'global-memory-add-profile',
+  'global-memory-delete-profile',
+  'global-memory-add-insight',
+  'global-memory-delete-insight',
+  'global-memory-save-instructions',
   'store-read',
   'store-write',
   // chat trajectory steps (lazy per-chat disk read)

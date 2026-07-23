@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Box,
   Boxes,
+  Brain,
   HardDrive,
   Search,
   Bot,
@@ -45,7 +46,8 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
   Personal: [
     { id: 'general', label: 'General', Icon: Settings },
     { id: 'companion', label: 'Companion', Icon: PawPrint },
-    { id: '3d', label: '3D Model Gen', Icon: Box }
+    { id: '3d', label: '3D Model Gen', Icon: Box },
+    { id: 'memory', label: 'Memory', Icon: Brain }
   ],
   "AI Config": [
     { id: 'providers', label: 'Providers', Icon: SlidersHorizontal },

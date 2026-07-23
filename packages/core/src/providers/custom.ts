@@ -34,7 +34,7 @@ export class CustomAdapter implements BaseProviderAdapter {
       headers['Authorization'] = `Bearer ${this.apiKey}`;
     }
 
-    const payload = {
+    const payload: Record<string, any> = {
       model,
       messages: request.messages.map(m => ({
         role: m.role,
@@ -43,6 +43,13 @@ export class CustomAdapter implements BaseProviderAdapter {
       temperature: request.temperature ?? 0.7,
       max_tokens: request.maxTokens
     };
+
+    if (request.frequencyPenalty !== undefined || this.provider === 'omniroute' || this.provider === 'custom') {
+      payload.frequency_penalty = request.frequencyPenalty ?? 0.3;
+    }
+    if (request.presencePenalty !== undefined || this.provider === 'omniroute' || this.provider === 'custom') {
+      payload.presence_penalty = request.presencePenalty ?? 0.3;
+    }
 
     applyReasoningEffort(payload, this.provider, request.reasoningEffort, request.maxTokens);
 
@@ -75,7 +82,8 @@ export class CustomAdapter implements BaseProviderAdapter {
       };
     };
 
-    const content = data.choices?.[0]?.message?.content || '';
+    const choiceMsg = data.choices?.[0]?.message as any;
+    const content = choiceMsg?.content || choiceMsg?.reasoning || choiceMsg?.reasoning_content || choiceMsg?.thought || '';
 
     return {
       id: data.id || `${this.provider}-${Date.now()}`,
@@ -104,7 +112,7 @@ export class CustomAdapter implements BaseProviderAdapter {
       headers['Authorization'] = `Bearer ${this.apiKey}`;
     }
 
-    const payload = {
+    const payload: Record<string, any> = {
       model,
       messages: request.messages.map(m => ({
         role: m.role,
@@ -113,6 +121,13 @@ export class CustomAdapter implements BaseProviderAdapter {
       temperature: request.temperature ?? 0.7,
       stream: true
     };
+
+    if (request.frequencyPenalty !== undefined || this.provider === 'omniroute' || this.provider === 'custom') {
+      payload.frequency_penalty = request.frequencyPenalty ?? 0.3;
+    }
+    if (request.presencePenalty !== undefined || this.provider === 'omniroute' || this.provider === 'custom') {
+      payload.presence_penalty = request.presencePenalty ?? 0.3;
+    }
 
     applyReasoningEffort(payload, this.provider, request.reasoningEffort, request.maxTokens);
 
@@ -128,6 +143,31 @@ export class CustomAdapter implements BaseProviderAdapter {
     }
 
     let fullContent = '';
+    const detectRepetitiveLoop = (text: string): boolean => {
+      if (text.length < 30) return false;
+      const window = text.length > 500 ? text.slice(-500) : text;
+      for (let len = 2; len <= 80; len++) {
+        for (let offset = 0; offset < len; offset++) {
+          const startIdx = window.length - len - offset;
+          if (startIdx < 0) continue;
+          const sub = window.slice(startIdx, window.length - offset);
+          if (sub.length < len || !sub.trim()) continue;
+          let occurrences = 0;
+          let idx = window.length - offset;
+          while (idx >= len) {
+            if (window.slice(idx - len, idx) === sub) {
+              occurrences++;
+              idx -= len;
+            } else {
+              break;
+            }
+          }
+          if (occurrences >= 3) return true;
+        }
+      }
+      return false;
+    };
+
     if (response.body) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -143,10 +183,16 @@ export class CustomAdapter implements BaseProviderAdapter {
             if (trimmed.startsWith('data: ') && trimmed !== 'data: [DONE]') {
               try {
                 const json = JSON.parse(trimmed.slice(6));
-                const delta = json.choices?.[0]?.delta?.content || '';
-                if (delta) {
-                  fullContent += delta;
-                  onChunk(delta);
+                const delta = json.choices?.[0]?.delta;
+                const chunkText = delta?.content || delta?.reasoning || delta?.reasoning_content || delta?.thought || '';
+                if (chunkText) {
+                  fullContent += chunkText;
+                  if (detectRepetitiveLoop(fullContent)) {
+                    done = true;
+                    try { await reader.cancel(); } catch {}
+                    break;
+                  }
+                  onChunk(chunkText);
                 }
               } catch {
                 // ignore parse error

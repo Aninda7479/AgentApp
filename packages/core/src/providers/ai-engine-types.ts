@@ -12,6 +12,7 @@ import { InternetAccessLevel } from '../storage/settings-store.js';
 /** Types of events emitted during agent execution. */
 export type AgentEventType =
   | 'token'          // streaming text token
+  | 'replace_tokens'  // replace active streaming buffer with sanitized text
   | 'tool_call'      // agent decided to call a tool
   | 'tool_result'    // tool returned a result
   | 'thought'        // agent reasoning step
@@ -88,6 +89,8 @@ export interface AgentEngineConfig {
   projectRoot?: string;
   maxTokens?: number;
   temperature?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
   /** Per-request reasoning-effort tier, honored by orchestrated (bridge) turns. */
   reasoningEffort?: ReasoningEffort;
   /** Pre-approved shell commands for this project. When non-empty, run_command

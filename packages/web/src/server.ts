@@ -425,7 +425,7 @@ export async function handleProviderProxy(req: Request, res: Response): Promise<
     return;
   }
   try {
-    let upstream: Response;
+    let upstream: any;
     try {
       upstream = await fetch(target.toString(), {
         method: (method || 'GET').toUpperCase(),

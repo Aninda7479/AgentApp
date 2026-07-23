@@ -954,25 +954,40 @@ Key guidelines:
     const url = `${baseUrl}/chat/completions`;
 
     const messages = toOpenAIMessages(this.history);
+    const toolSchemas = this.getToolSchemas();
 
-    const payload = {
+    const payload: Record<string, any> = {
       model: this.config.model,
       messages,
       stream: true,
-      tools: this.getToolSchemas(),
-      tool_choice: 'auto',
-      temperature: this.config.temperature ?? 0.4,
+      temperature: this.config.temperature ?? 0.7,
       max_tokens: this.config.maxTokens ?? 4096
     };
+
+    if (this.config.frequencyPenalty !== undefined || this.config.provider === 'omniroute' || this.config.provider === 'custom') {
+      payload.frequency_penalty = this.config.frequencyPenalty ?? 0.3;
+    }
+    if (this.config.presencePenalty !== undefined || this.config.provider === 'omniroute' || this.config.provider === 'custom') {
+      payload.presence_penalty = this.config.presencePenalty ?? 0.3;
+    }
+
+    if (toolSchemas && toolSchemas.length > 0) {
+      payload.tools = toolSchemas;
+      payload.tool_choice = 'auto';
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    if (this.config.apiKey) {
+      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+    }
 
     const response = await this.fetchWithConnectTimeout(
       url,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`
-        },
+        headers,
         body: JSON.stringify(payload)
       },
       signal
@@ -987,12 +1002,44 @@ Key guidelines:
     let fullContent = '';
     const toolCallAccumulators: Map<number, { id: string; name: string; argsJson: string }> = new Map();
 
+    const detectRepetitiveLoop = (text: string): { isLoop: boolean; cleanText: string } => {
+      if (text.length < 30) return { isLoop: false, cleanText: text };
+      const window = text.length > 500 ? text.slice(-500) : text;
+
+      for (let len = 2; len <= 80; len++) {
+        for (let offset = 0; offset < len; offset++) {
+          const startIdx = window.length - len - offset;
+          if (startIdx < 0) continue;
+          const sub = window.slice(startIdx, window.length - offset);
+          if (sub.length < len || !sub.trim()) continue;
+
+          let occurrences = 0;
+          let idx = window.length - offset;
+          while (idx >= len) {
+            if (window.slice(idx - len, idx) === sub) {
+              occurrences++;
+              idx -= len;
+            } else {
+              break;
+            }
+          }
+          if (occurrences >= 3) {
+            const cutoff = text.length - offset - (len * occurrences);
+            const cleanText = text.slice(0, Math.max(0, cutoff)).trim();
+            return { isLoop: true, cleanText };
+          }
+        }
+      }
+      return { isLoop: false, cleanText: text };
+    };
+
     if (response.body) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let loopHalted = false;
 
-      while (true) {
+      while (!loopHalted) {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
@@ -1009,9 +1056,18 @@ Key guidelines:
             const delta = json.choices?.[0]?.delta;
             if (!delta) continue;
 
-            if (delta.content) {
-              fullContent += delta.content;
-              onEvent({ type: 'token', sessionId: this.sessionId, content: delta.content });
+            const textChunk = delta.content || delta.reasoning || delta.reasoning_content || delta.thought || '';
+            if (textChunk) {
+              fullContent += textChunk;
+              const loopCheck = detectRepetitiveLoop(fullContent);
+              if (loopCheck.isLoop) {
+                fullContent = loopCheck.cleanText;
+                onEvent({ type: 'replace_tokens', sessionId: this.sessionId, content: loopCheck.cleanText });
+                loopHalted = true;
+                try { await reader.cancel(); } catch {}
+                break;
+              }
+              onEvent({ type: 'token', sessionId: this.sessionId, content: textChunk });
             }
 
             if (delta.tool_calls) {
@@ -1320,7 +1376,10 @@ Key guidelines:
       stream: true,
       options: {
         temperature: this.config.temperature ?? 0.4,
-        num_predict: this.config.maxTokens ?? 4096
+        num_predict: this.config.maxTokens ?? 4096,
+        repeat_penalty: 1.1,
+        frequency_penalty: this.config.frequencyPenalty ?? 0.3,
+        presence_penalty: this.config.presencePenalty ?? 0.3
       }
     };
 
@@ -1345,11 +1404,43 @@ Key guidelines:
     let fullContent = '';
     const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
 
+    const detectRepetitiveLoop = (text: string): { isLoop: boolean; cleanText: string } => {
+      if (text.length < 30) return { isLoop: false, cleanText: text };
+      const window = text.length > 500 ? text.slice(-500) : text;
+
+      for (let len = 2; len <= 80; len++) {
+        for (let offset = 0; offset < len; offset++) {
+          const startIdx = window.length - len - offset;
+          if (startIdx < 0) continue;
+          const sub = window.slice(startIdx, window.length - offset);
+          if (sub.length < len || !sub.trim()) continue;
+
+          let occurrences = 0;
+          let idx = window.length - offset;
+          while (idx >= len) {
+            if (window.slice(idx - len, idx) === sub) {
+              occurrences++;
+              idx -= len;
+            } else {
+              break;
+            }
+          }
+          if (occurrences >= 3) {
+            const cutoff = text.length - offset - (len * occurrences);
+            const cleanText = text.slice(0, Math.max(0, cutoff)).trim();
+            return { isLoop: true, cleanText };
+          }
+        }
+      }
+      return { isLoop: false, cleanText: text };
+    };
+
     if (response.body) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let loopHalted = false;
 
-      while (true) {
+      while (!loopHalted) {
         const { value, done } = await reader.read();
         if (done) break;
         const lines = decoder.decode(value, { stream: true }).split('\n');
@@ -1360,6 +1451,14 @@ Key guidelines:
             const token = event.message?.content || '';
             if (token) {
               fullContent += token;
+              const loopCheck = detectRepetitiveLoop(fullContent);
+              if (loopCheck.isLoop) {
+                fullContent = loopCheck.cleanText;
+                onEvent({ type: 'replace_tokens', sessionId: this.sessionId, content: loopCheck.cleanText });
+                loopHalted = true;
+                try { await reader.cancel(); } catch {}
+                break;
+              }
               onEvent({ type: 'token', sessionId: this.sessionId, content: token });
             }
             // Ollama tool calls come as an array on message.tool_calls

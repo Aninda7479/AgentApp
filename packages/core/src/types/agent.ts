@@ -113,6 +113,8 @@ export interface CompletionRequest {
   messages: ChatMessage[];
   model?: string;
   temperature?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
   maxTokens?: number;
   tools?: ToolDefinition[];
   stream?: boolean;

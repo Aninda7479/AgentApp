@@ -135,6 +135,12 @@ export class AgentStreamService {
         scheduleFlush();
       }
 
+      if (agentEvent.type === 'replace_tokens') {
+        bundle.bufferRef.current = agentEvent.content || '';
+        dirtyBundles.add(bundle);
+        scheduleFlush();
+      }
+
       // ── tool_call: append a "running" tool step to the trajectory ──
       if (agentEvent.type === 'tool_call') {
         const toolStep: TrajectoryStep = {

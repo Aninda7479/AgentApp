@@ -20,6 +20,7 @@ import { UpdatesSettings } from './UpdatesSettings';
 import { AboutSettings } from './AboutSettings';
 import { WebAppSettings } from './WebAppSettings';
 import { CircleSearchSettings } from './CircleSearchSettings';
+import { MemorySettings } from './MemorySettings';
 import { browserSafeFetch } from '../../web-fetch.js';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 
@@ -28,6 +29,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   general: 'General',
   companion: 'Companion',
   '3d': '3D Model Gen',
+  memory: 'Memory',
   providers: 'Providers',
   models: 'Models',
   'local-model': 'Local Model',
@@ -464,6 +466,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         )}
         {activeCategory === '3d' && (
           <ThreeDSettings />
+        )}
+        {activeCategory === 'memory' && (
+          <MemorySettings />
         )}
         {activeCategory === 'providers' && (
           <ProvidersSettings
