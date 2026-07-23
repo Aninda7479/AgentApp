@@ -34,6 +34,7 @@ export const ALLOWED_CHANNELS = new Set<string>([
   // providers / orchestrator
   'auto-detect-providers',
   'provider-test-connection',
+  'provider-proxy',
   'provider-health-diagnostics',
   'orchestrator-read-instructions',
   'orchestrator-write-instructions',

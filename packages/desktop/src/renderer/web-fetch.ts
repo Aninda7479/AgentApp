@@ -12,11 +12,42 @@
  * settings screen routes through it (the earlier fix only patched ProvidersSettings'
  * connection-test call sites and missed the model-catalog + NVIDIA catalog fetches).
  */
+import { getIpc } from './lib/electron';
+
 export const IS_ELECTRON_SHELL =
   typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '');
 
 export async function browserSafeFetch(url: string, init: RequestInit = {}): Promise<Response> {
-  if (IS_ELECTRON_SHELL) return window.fetch(url, init);
+  const ipc = getIpc();
+  if (ipc && typeof ipc.invoke === 'function') {
+    try {
+      const payload = await ipc.invoke('provider-proxy', {
+        method: init.method ?? 'GET',
+        url,
+        headers: init.headers ?? {}
+      });
+      if (payload && typeof payload === 'object') {
+        if (payload.error) throw new Error(payload.error);
+        return {
+          ok: payload.ok ?? false,
+          status: payload.status ?? 502,
+          statusText: payload.statusText ?? 'Bad Gateway',
+          json: async () => payload.data,
+        } as unknown as Response;
+      }
+    } catch (ipcErr: any) {
+      /* fallback to window.fetch if IPC failed */
+    }
+  }
+
+  if (IS_ELECTRON_SHELL) {
+    try {
+      return await window.fetch(url, init);
+    } catch {
+      /* fallback to web proxy if window.fetch failed */
+    }
+  }
+
   const res = await window.fetch('/api/provider-proxy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

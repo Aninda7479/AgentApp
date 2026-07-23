@@ -15,7 +15,7 @@ import type { AppContext, ModelConfig, ProviderConnection } from './types';
 export type MediaCapability = 'image' | 'video' | 'audio' | 'pdf' | '3d';
 
 /** Providers that run locally / without a secret key still count as "connected". */
-const KEYLESS_PROVIDER_IDS = new Set(['ollama', 'custom']);
+const KEYLESS_PROVIDER_IDS = new Set(['ollama', 'omniroute', 'custom']);
 
 // Same id patterns the catalog uses to infer a model's media output modality.
 const VIDEO_OUTPUT = /seedance|cogvideox|wanvideo|wan-video|hunyuanvideo|hunyuan-video|ltx-video|mochi|minimax-video|genmo|animatediff|svd|stable-video|videocrafter|kling|hailuo|vidu/;

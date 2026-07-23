@@ -946,7 +946,7 @@ safeHandle('provider-test-connection', async (_event, { providerId }: { provider
   const freeOnly = !!gov?.freeOnly;
 
   const configured = (settings.providers || []).filter((p) =>
-    p.apiKey || p.id === 'ollama' || p.id === 'custom' || p.type === 'custom'
+    p.apiKey || p.id === 'ollama' || p.id === 'omniroute' || p.id === 'custom' || p.type === 'custom'
   );
 
   let targets = providerId
@@ -996,6 +996,36 @@ safeHandle('provider-test-connection', async (_event, { providerId }: { provider
   }
 
   return results;
+});
+
+safeHandle('provider-proxy', async (_event, { method, url, headers }: { method?: string; url: string; headers?: Record<string, string> }) => {
+  let target = url;
+  if (!target) return { ok: false, status: 400, error: 'Missing URL' };
+  try {
+    let response: Response;
+    try {
+      response = await fetch(target, {
+        method: (method || 'GET').toUpperCase(),
+        headers: headers || {}
+      });
+    } catch (firstErr: any) {
+      if (target.includes('localhost')) {
+        const altUrl = target.replace('localhost', '127.0.0.1');
+        response = await fetch(altUrl, {
+          method: (method || 'GET').toUpperCase(),
+          headers: headers || {}
+        });
+      } else {
+        throw firstErr;
+      }
+    }
+    const text = await response.text();
+    let data: any = text;
+    try { data = JSON.parse(text); } catch {}
+    return { ok: response.ok, status: response.status, statusText: response.statusText, data };
+  } catch (err: any) {
+    return { ok: false, status: 502, statusText: 'Bad Gateway', error: err?.message || String(err) };
+  }
 });
 
 safeHandle('browser-navigate', async (_event, { url }) => {
@@ -2275,7 +2305,7 @@ async function streamVisionQuery(
 ): Promise<void> {
   const settings = SettingsStorage.loadSettings();
   const providers = settings.providers || [];
-  const activeProvider = providers.find(p => p.apiKey) || providers.find(p => p.id === 'ollama');
+  const activeProvider = providers.find(p => p.apiKey) || providers.find(p => p.id === 'ollama' || p.id === 'omniroute');
   const activeModelSetting = settings.models?.find(m => m.enabled && m.providerId === activeProvider?.id);
 
   if (!activeProvider) {

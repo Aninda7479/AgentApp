@@ -278,7 +278,7 @@ export class AgentService {
     // Decide whether we have real credentials or a routing configuration to run a live agent.
     const activeProvider = AgentService.resolveActiveProvider(options, ctx.getConnectedProviders(), ctx.getModelsCatalog());
     const isOrchestrator = options.model === 'Orchestrator' || options.model === 'Model Governance' || options.model === 'auto';
-    const isLocalOrCustom = activeProvider && (activeProvider.id === 'ollama' || activeProvider.id === 'custom' || activeProvider.baseUrl);
+    const isLocalOrCustom = activeProvider && (activeProvider.id === 'ollama' || activeProvider.id === 'omniroute' || activeProvider.id === 'custom' || activeProvider.baseUrl);
     const hasRealCredentials = Boolean(activeProvider?.apiKey) || isOrchestrator || isLocalOrCustom;
 
     if (isNew) {
@@ -472,7 +472,7 @@ export class AgentService {
 
     const activeProvider = AgentService.resolveActiveProvider(options, ctx.getConnectedProviders(), ctx.getModelsCatalog());
     const isOrchestrator = options.model === 'Orchestrator' || options.model === 'Model Governance' || options.model === 'auto';
-    const isLocalOrCustom = activeProvider && (activeProvider.id === 'ollama' || activeProvider.id === 'custom' || activeProvider.baseUrl);
+    const isLocalOrCustom = activeProvider && (activeProvider.id === 'ollama' || activeProvider.id === 'omniroute' || activeProvider.id === 'custom' || activeProvider.baseUrl);
     const hasRealCredentials = Boolean(activeProvider?.apiKey) || isOrchestrator || isLocalOrCustom;
 
     if (hasRealCredentials && activeProvider && ctx.ipc) {

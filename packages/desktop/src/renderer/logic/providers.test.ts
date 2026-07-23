@@ -54,16 +54,14 @@ function makeCtx() {
 describe('ProvidersService', () => {
   it('connect() populates the models catalog AND the providers list, and persists both', () => {
     const { ctx, getProviders, getModels, getPersisted } = makeCtx();
-    ProvidersService.connect(ctx, mkProvider('ollama'), [
-      mkModel('ollama-llama', 'ollama', true),
-      mkModel('ollama-mistral', 'ollama', true)
+    ProvidersService.connect(ctx, mkProvider('omniroute'), [
+      mkModel('omniroute-auto', 'omniroute', true),
+      mkModel('omniroute-llama3.3', 'omniroute', true)
     ]);
 
     expect(getProviders()).toHaveLength(1);
     expect(getModels()).toHaveLength(2);
-    // The crucial regression check: the catalog must actually carry the
-    // connected provider's models so the composer can enable.
-    expect(getModels().every((m) => m.providerId === 'ollama')).toBe(true);
+    expect(getModels().every((m) => m.providerId === 'omniroute')).toBe(true);
     const persisted = getPersisted();
     expect(persisted?.providers).toHaveLength(1);
     expect(persisted?.models).toHaveLength(2);

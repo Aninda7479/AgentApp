@@ -15,7 +15,7 @@ export class BYOKProviderManager {
   public registerKey(config: BYOKConfig): void {
     // Local/self-hosted providers (Ollama, custom endpoints, Vertex proxies)
     // may be used without an API key.
-    const keyless = config.provider === 'custom' || config.provider === 'ollama' || config.provider === 'vertex';
+    const keyless = config.provider === 'custom' || config.provider === 'ollama' || config.provider === 'omniroute' || config.provider === 'vertex';
     if (!config.apiKey && !keyless) {
       throw new Error(`API key is required for provider: ${config.provider}`);
     }

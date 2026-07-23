@@ -40,6 +40,7 @@ const ProviderLogo: React.FC<{ providerId: string; org?: string; size?: number }
 };
 
 const POPULAR_PROVIDERS = [
+  { id: 'omniroute', name: 'OmniRoute Local', org: 'omniroute', desc: 'OmniRoute Local LLM proxy endpoint (http://127.0.0.1:20128/v1)', defaultUrl: 'http://127.0.0.1:20128/v1' },
   { id: 'ollama', name: 'Ollama', org: 'ollama', desc: 'Local model interface (Ollama runner instance)', defaultUrl: 'http://localhost:11434' },
   { id: 'ollama-cloud', name: 'Ollama Cloud', org: 'ollama', desc: 'Ollama Cloud hosted model inference API', defaultUrl: 'https://api.ollama.com' },
   { id: 'claude', name: 'Claude', org: 'anthropic', desc: 'Anthropic Claude Developer API platform', defaultUrl: 'https://api.anthropic.com/v1' },
@@ -56,7 +57,7 @@ const POPULAR_PROVIDERS = [
 // Providers that can function without an API key (local / self-hosted). Every
 // other popular/known provider needs a credential, so "Add Without Testing"
 // must not create a provider that can never actually send a request.
-const KEYLESS_PROVIDER_IDS = new Set(['ollama', 'custom']);
+const KEYLESS_PROVIDER_IDS = new Set(['ollama', 'omniroute', 'custom']);
 
 /**
  * Browser-safe fetch for provider connectivity tests. Shared with the other
@@ -237,10 +238,29 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
           setTestingStatus('Connected (no API key — model listing only, chat will fail without a key)');
         }
       } else {
-        const base = url || 'https://api.openai.com/v1';
+        const defaultUrl = POPULAR_PROVIDERS.find(p => p.id === modalProviderId)?.defaultUrl || 'https://api.openai.com/v1';
+        let base = (url || defaultUrl).replace(/\/+$/, '');
         const headers: Record<string, string> = {};
         if (key) headers['Authorization'] = `Bearer ${key}`;
-        const res = await browserSafeFetch(`${base}/models`, { headers });
+
+        let res: Response | null = null;
+        try {
+          res = await browserSafeFetch(`${base}/models`, { headers });
+        } catch (fetchErr: any) {
+          // If localhost failed, automatically try 127.0.0.1 fallback for local servers
+          if (base.includes('localhost')) {
+            const altBase = base.replace('localhost', '127.0.0.1');
+            try {
+              res = await browserSafeFetch(`${altBase}/models`, { headers });
+              base = altBase;
+            } catch {
+              throw new Error(`Could not reach ${connectionName || modalProviderId} on ${base}. Ensure the local server is running, or use "Add Without Testing".`);
+            }
+          } else {
+            throw new Error(`Could not reach ${connectionName || modalProviderId} on ${base}. Ensure the server is online or check your network connection.`);
+          }
+        }
+
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.data ?? []).map((m: any) => ({
@@ -252,26 +272,35 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       if (rawModels.length === 0) throw new Error('Connection succeeded but no models were returned.');
 
       const newConfigs: ModelConfig[] = rawModels.map(m => enrichModel(m, modalProviderId));
+      const defaultUrl = POPULAR_PROVIDERS.find(p => p.id === modalProviderId)?.defaultUrl || '';
 
       onConnectProvider({
         id: modalProviderId,
         name: connectionName || modalProviderId,
         type: key ? 'key' : 'custom',
         apiKey: key,
-        baseUrl: url
+        baseUrl: url || defaultUrl
       }, newConfigs);
 
       notify(`Connected to ${connectionName} — ${rawModels.length} models imported.`);
       setIsModalOpen(false);
     } catch (e: any) {
       console.error(e);
-      setErrorDetails(e.message || String(e));
+      const msg = e.message || String(e);
+      const cleanMsg = msg === 'Failed to fetch' || msg === 'fetch failed'
+        ? `Could not reach ${connectionName || modalProviderId} at ${baseUrl || 'the endpoint'}. Make sure OmniRoute is running locally, or click "Add Without Testing".`
+        : msg;
+      setErrorDetails(cleanMsg);
       setTestingStatus('Connection failed');
     }
   };
 
   const handleForceConnect = () => {
     const knownDefaults: Record<string, { id: string; name: string; ctx?: string; free?: boolean }[]> = {
+      omniroute: [
+        { id: 'omniroute-auto', name: 'OmniRoute Auto Router', ctx: '128k', free: true },
+        { id: 'llama-3.3-70b', name: 'Llama 3.3 70B', ctx: '128k', free: true }
+      ],
       ollama:   [{ id: 'llama3.1:8b', name: 'Llama 3.1 8B' }, { id: 'mistral:7b', name: 'Mistral 7B' }],
       chatgpt:  [{ id: 'gpt-4o', name: 'GPT-4o', ctx: '128k' }, { id: 'gpt-4o-mini', name: 'GPT-4o Mini', ctx: '128k' }, { id: 'o3-mini', name: 'o3-mini', ctx: '200k' }],
       deepseek: [{ id: 'deepseek-chat', name: 'DeepSeek Chat', ctx: '64k' }, { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', ctx: '64k' }],
@@ -310,12 +339,14 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       enrichModel({ id: m.id, name: m.name, contextLimit: m.ctx, free: m.free }, modalProviderId)
     );
 
+    const defaultUrl = POPULAR_PROVIDERS.find(p => p.id === modalProviderId)?.defaultUrl || '';
+
     onConnectProvider({
       id: modalProviderId,
       name: connectionName || modalProviderId,
       type: apiKey ? 'key' : 'custom',
       apiKey,
-      baseUrl
+      baseUrl: baseUrl || defaultUrl
     }, newConfigs);
 
     notify(`Added ${defaults.length} known model(s) for ${connectionName} without testing the connection.`);

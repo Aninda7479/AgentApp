@@ -25,6 +25,7 @@ export type AIProvider =
   | 'perplexity'
   | 'vertex'
   | 'ollama'
+  | 'omniroute'
   | 'custom';
 
 /** Configuration for a Bring-Your-Own-Key provider connection. */

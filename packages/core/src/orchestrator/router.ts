@@ -42,7 +42,7 @@ export function isFreeModel(m: {
 }): boolean {
   if (m.free === true) return true;
   const provider = (m.providerId || '').toLowerCase();
-  if (provider === 'ollama' || provider === 'custom') return true;
+  if (provider === 'ollama' || provider === 'omniroute' || provider === 'custom') return true;
   const rate = (v?: string): number => {
     if (v == null) return 0;
     const n = parseFloat(String(v).replace(/[^0-9.]/g, ''));

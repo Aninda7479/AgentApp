@@ -89,7 +89,7 @@ export class OrchestratorStorage {
     if (id.includes('qwen-2.5-72b') || id.includes('qwen-2.5-coder') || id.includes('qwen')) {
       return { coding: 74.0, reasoning: 71.0, vision: 30.0, costEfficiency: 85 };
     }
-    if (id.includes('ollama') || id.includes('local')) {
+    if (id.includes('ollama') || id.includes('omniroute') || id.includes('local')) {
       return { coding: 58.0, reasoning: 55.0, vision: 20.0, costEfficiency: 100 };
     }
 

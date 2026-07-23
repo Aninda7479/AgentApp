@@ -61,7 +61,7 @@ export function getModelPricing(provider: string, model: string): { inputPrice: 
   const cleanModel = model.toLowerCase();
   const cleanProvider = provider.toLowerCase();
 
-  if (cleanProvider === 'ollama' || cleanModel.includes('local')) {
+  if (cleanProvider === 'ollama' || cleanProvider === 'omniroute' || cleanModel.includes('local')) {
     return { inputPrice: 0, outputPrice: 0 };
   }
 

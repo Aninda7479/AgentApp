@@ -49,6 +49,8 @@ interface EnvProviderSpec {
 export class ProviderAutoDetector {
   /** Default local Ollama endpoint. */
   private static readonly OLLAMA_URL = 'http://localhost:11434';
+  /** Default local OmniRoute endpoint. */
+  private static readonly OMNIROUTE_URL = 'http://127.0.0.1:20128/v1';
   /** Network timeout for detection probes (ms). */
   private static readonly TIMEOUT_MS = 5000;
 
@@ -135,6 +137,20 @@ export class ProviderAutoDetector {
     };
   }
 
+  /** Probes the local OmniRoute instance and returns it as a provider (or null). */
+  private static async detectOmniRoute(): Promise<DetectedProvider | null> {
+    const data = await this.fetchJson(`${this.OMNIROUTE_URL}/models`);
+    if (!data?.data?.length) return null;
+    return {
+      id: 'omniroute',
+      name: 'OmniRoute Local',
+      type: 'custom',
+      apiKey: '',
+      baseUrl: this.OMNIROUTE_URL,
+      models: (data.data as any[]).map((m: any) => ({ id: m.id, name: m.id }))
+    };
+  }
+
   /** Resolves a single env-keyed cloud provider, or null if unavailable. */
   private static async detectEnvProvider(spec: EnvProviderSpec): Promise<DetectedProvider | null> {
     const apiKey = process.env[spec.envKey];
@@ -159,6 +175,7 @@ export class ProviderAutoDetector {
   public static async detect(): Promise<DetectedProvider[]> {
     const probes: Promise<DetectedProvider | null>[] = [
       this.detectOllama(),
+      this.detectOmniRoute(),
       ...this.ENV_PROVIDERS.map((spec) => this.detectEnvProvider(spec))
     ];
     const results = await Promise.all(probes);

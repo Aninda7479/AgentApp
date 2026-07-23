@@ -263,6 +263,12 @@ describe('CERTAIN-5: BYOK provider connect + list models', () => {
       expect(byok.getKey('ollama')).toBeDefined();
     });
 
+    it('omniroute accepted without API key', () => {
+      const byok = new BYOKProviderManager();
+      byok.registerKey({ provider: 'omniroute', apiKey: '', baseUrl: 'http://localhost:20128/v1' });
+      expect(byok.getKey('omniroute')).toBeDefined();
+    });
+
     it('custom accepted without API key', () => {
       const byok = new BYOKProviderManager();
       byok.registerKey({ provider: 'custom', apiKey: '', baseUrl: 'http://localhost:11434/v1' });
@@ -373,6 +379,7 @@ describe('CERTAIN-5: BYOK provider connect + list models', () => {
         ['gemini', 'gemini'],
         ['google', 'gemini'],
         ['ollama', 'ollama'],
+        ['omniroute', 'openai'],
       ];
 
       for (const [id, expected] of cases) {

@@ -600,13 +600,15 @@ Key guidelines:
         // Enrich local connection refusal errors (e.g. Ollama or custom local server not running)
         const cause = (err as any).cause;
         if (cause && (cause.code === 'ECONNREFUSED' || cause.message?.includes('ECONNREFUSED'))) {
-          const baseUrl = this.config.baseUrl || (this.config.provider === 'ollama' ? 'http://localhost:11434' : '');
+          const baseUrl = this.config.baseUrl || (this.config.provider === 'ollama' ? 'http://localhost:11434' : this.config.provider === 'omniroute' ? 'http://localhost:20128/v1' : '');
           if (baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')) {
-            const providerName = this.config.provider === 'ollama' ? 'Ollama (Local)' : 'Local server';
+            const providerName = this.config.provider === 'ollama' ? 'Ollama (Local)' : this.config.provider === 'omniroute' ? 'OmniRoute Local' : 'Local server';
             errMsg = `${providerName} connection refused. Is the local service running on ${baseUrl}?`;
           }
-        } else if (errMsg === 'fetch failed' && this.config.provider === 'ollama') {
-          errMsg = `Ollama connection failed. Is Ollama running on http://localhost:11434?`;
+        } else if (errMsg === 'fetch failed' && (this.config.provider === 'ollama' || this.config.provider === 'omniroute')) {
+          const providerName = this.config.provider === 'omniroute' ? 'OmniRoute Local' : 'Ollama';
+          const defaultUrl = this.config.provider === 'omniroute' ? 'http://localhost:20128/v1' : 'http://localhost:11434';
+          errMsg = `${providerName} connection failed. Is the server running on ${this.config.baseUrl || defaultUrl}?`;
         }
 
         onEvent({

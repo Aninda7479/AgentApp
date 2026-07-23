@@ -48,7 +48,7 @@ export async function generateChatName(prompt: string, config: any): Promise<str
   const rawPrompt = prompt.trim();
   let defaultTitle = rawPrompt.length > 25 ? rawPrompt.slice(0, 25).trim() + '...' : rawPrompt;
   
-  if (!apiKey && provider !== 'ollama') {
+  if (!apiKey && provider !== 'ollama' && provider !== 'omniroute') {
     return defaultTitle;
   }
   

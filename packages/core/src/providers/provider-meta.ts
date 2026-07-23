@@ -58,7 +58,10 @@ const REGISTRY: Record<string, ProviderMeta> = {
 
   // ── Ollama (local) ───────────────────────────────────────────────────────
   ollama:       { id: 'ollama',     name: 'Ollama (Local)',       family: 'ollama', defaultBaseUrl: 'http://localhost:11434' },
-  'ollama-cloud': { id: 'ollama-cloud', name: 'Ollama Cloud',       family: 'ollama', defaultBaseUrl: 'https://api.ollama.com' }
+  'ollama-cloud': { id: 'ollama-cloud', name: 'Ollama Cloud',       family: 'ollama', defaultBaseUrl: 'https://api.ollama.com' },
+
+  // ── OmniRoute (local) ────────────────────────────────────────────────────
+  omniroute:    { id: 'omniroute',  name: 'OmniRoute Local',     family: 'openai', defaultBaseUrl: 'http://127.0.0.1:20128/v1' }
 };
 
 /** All provider ids known to the system. */

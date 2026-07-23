@@ -425,10 +425,24 @@ export async function handleProviderProxy(req: Request, res: Response): Promise<
     return;
   }
   try {
-    const upstream = await fetch(target.toString(), {
-      method: (method || 'GET').toUpperCase(),
-      headers: (headers && typeof headers === 'object' ? headers : {}) as Record<string, string>,
-    } as any);
+    let upstream: Response;
+    try {
+      upstream = await fetch(target.toString(), {
+        method: (method || 'GET').toUpperCase(),
+        headers: (headers && typeof headers === 'object' ? headers : {}) as Record<string, string>,
+      } as any);
+    } catch (firstErr: any) {
+      if (target.hostname === 'localhost') {
+        const altUrl = new URL(target.toString());
+        altUrl.hostname = '127.0.0.1';
+        upstream = await fetch(altUrl.toString(), {
+          method: (method || 'GET').toUpperCase(),
+          headers: (headers && typeof headers === 'object' ? headers : {}) as Record<string, string>,
+        } as any);
+      } else {
+        throw firstErr;
+      }
+    }
     const text = await upstream.text();
     let data: any = text;
     try {

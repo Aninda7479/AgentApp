@@ -99,6 +99,7 @@ export function getReasoningRequestParams(
     }
     case 'openai':
     case 'ollama':
+    case 'omniroute':
       return { reasoning_effort: effort };
     default:
       return null;
