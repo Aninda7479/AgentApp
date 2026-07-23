@@ -43,6 +43,8 @@ interface WorkspaceViewProps {
   onRemoveAttachment?: (index: number) => void;
   /** Model of the currently open chat (used to default the composer selection). */
   activeChatModel?: string;
+  /** Whether AI Orchestrator router is enabled in Settings. */
+  orchestratorEnabled?: boolean;
   /** Approval choice seeded from the active chat/project/global "Sandbox & Internet" default. */
   defaultApprovalMode?: 'always' | 'ask' | 'never';
   /** Called when the user changes the selected model in the composer. */
@@ -274,6 +276,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
   composerAttachments = [],
   onRemoveAttachment,
   activeChatModel,
+  orchestratorEnabled = true,
   onModelChange,
   defaultApprovalMode,
   projects = [],
@@ -679,9 +682,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         }}
         activeProject={activeProject}
         onAttachClick={onAttachClick}
-        availableModels={composerModelsFromCatalog(modelsCatalog)}
+        availableModels={composerModelsFromCatalog(modelsCatalog, orchestratorEnabled)}
         emptyStateMessage={composerEmptyStateMessage(modelsCatalog)}
-        defaultModel={activeChatModel && enabledModels.some(m => m.name === activeChatModel) ? activeChatModel : (enabledModels.length > 1 ? 'Orchestrator' : (enabledModels[0]?.name || ''))}
+        defaultModel={activeChatModel && enabledModels.some(m => m.name === activeChatModel) ? activeChatModel : (enabledModels.length > 1 && orchestratorEnabled ? 'Orchestrator' : (enabledModels[0]?.name || ''))}
         defaultApprovalMode={defaultApprovalMode}
         promptValue={composerPrompt}
         onPromptChange={onPromptChange}
@@ -711,10 +714,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
  * enabled:true in enrichModel, so first-run users still see their connected
  * models — and the per-model toggle is what hides unwanted ones.
  */
-export function composerModelsFromCatalog(modelsCatalog: ModelConfig[]): string[] {
+export function composerModelsFromCatalog(modelsCatalog: ModelConfig[], orchestratorEnabled: boolean = true): string[] {
   const enabled = modelsCatalog.filter((m) => m.enabled);
   if (enabled.length === 0) return [];
-  if (enabled.length === 1) return [enabled[0].name];
+  if (enabled.length === 1 || !orchestratorEnabled) return enabled.map((m) => m.name);
   return ['Orchestrator', ...enabled.map((m) => m.name)];
 }
 

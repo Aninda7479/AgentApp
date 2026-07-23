@@ -79,6 +79,7 @@ export interface GeneralAppSettings {
 
 /** Orchestrator settings: enabled models, routing strategy, optimization goal, and free-only mode. */
 export interface OrchestratorSettings {
+  enabled?: boolean;
   enabledModels?: string[];
   autoUpdateInstructions?: boolean;
   optimizationGoal?: 'quality' | 'cost' | 'balanced';
@@ -254,24 +255,34 @@ export interface SettingsPaths {
   userDataDirectory: string;
   configDirectory: string;
   settingsFilePath: string;
+  modelsFilePath: string;
   backupFilePath: string;
+  modelsBackupFilePath: string;
 }
 
 /** Resolves all relevant file paths from a base directory. */
 export function getSettingsPaths(baseDirectory = getUserDataDirectory()): SettingsPaths {
   const configDirectory = path.join(baseDirectory, STORAGE_DIRS.config);
   const settingsFilePath = path.join(configDirectory, 'settings.json');
+  const modelsFilePath = path.join(configDirectory, 'models.json');
   return {
     userDataDirectory: baseDirectory,
     configDirectory,
     settingsFilePath,
-    backupFilePath: `${settingsFilePath}.bak`
+    modelsFilePath,
+    backupFilePath: `${settingsFilePath}.bak`,
+    modelsBackupFilePath: `${modelsFilePath}.bak`
   };
 }
 
 /** Returns the path to the main settings JSON file. */
 export function getSettingsFilePath(): string {
   return getSettingsPaths().settingsFilePath;
+}
+
+/** Returns the path to the separate models JSON file. */
+export function getModelsFilePath(): string {
+  return getSettingsPaths().modelsFilePath;
 }
 
 function readJsonFile<T>(filePath: string): T | null {
@@ -287,6 +298,18 @@ function readJsonFile<T>(filePath: string): T | null {
   return JSON.parse(raw) as T;
 }
 
+function readModelsFile(filePath: string): ModelSettings[] | null {
+  const content = readJsonFile<ModelSettings[] | { models?: ModelSettings[] }>(filePath);
+  if (!content) return null;
+  if (Array.isArray(content)) {
+    return content;
+  }
+  if (typeof content === 'object' && Array.isArray((content as any).models)) {
+    return (content as any).models;
+  }
+  return null;
+}
+
 /** Reads, writes, and caches the application settings from disk. */
 export class SettingsStorage {
   private static cachedSettings: AppSettings | null = null;
@@ -299,42 +322,67 @@ export class SettingsStorage {
   public static loadSettings(): AppSettings {
     if (this.cachedSettings) return this.cachedSettings;
 
-    const { settingsFilePath, backupFilePath } = getSettingsPaths();
+    const { settingsFilePath, backupFilePath, modelsFilePath, modelsBackupFilePath } = getSettingsPaths();
+
+    let settings: AppSettings = {};
 
     try {
       const primary = readJsonFile<AppSettings>(settingsFilePath);
       if (primary) {
-        this.cachedSettings = primary;
-        return primary;
+        settings = primary;
       }
     } catch (e) {
       console.error('Failed to parse settings.json, trying backup...', e);
     }
 
-    try {
-      const backup = readJsonFile<AppSettings>(backupFilePath);
-      if (backup) {
-        this.cachedSettings = backup;
-        return backup;
+    if (!settings || Object.keys(settings).length === 0) {
+      try {
+        const backup = readJsonFile<AppSettings>(backupFilePath);
+        if (backup) {
+          settings = backup;
+        }
+      } catch (e) {
+        console.error('Failed to parse backup settings.json.bak:', e);
       }
-    } catch (e) {
-      console.error('Failed to parse backup settings.json.bak:', e);
     }
 
-    return this.cachedSettings || {};
+    // Load models from models.json (or backup), falling back to settings.models if missing
+    let models: ModelSettings[] | null = null;
+    try {
+      models = readModelsFile(modelsFilePath);
+    } catch (e) {
+      console.error('Failed to parse models.json, trying backup...', e);
+    }
+
+    if (!models) {
+      try {
+        models = readModelsFile(modelsBackupFilePath);
+      } catch (e) {
+        console.error('Failed to parse backup models.json.bak:', e);
+      }
+    }
+
+    if (models) {
+      settings.models = models;
+    }
+
+    this.cachedSettings = settings;
+    return settings;
   }
 
   /** Persists settings to disk atomically with a backup file. */
   public static saveSettings(settings: AppSettings): void {
     try {
-      const { configDirectory, settingsFilePath, backupFilePath } = getSettingsPaths();
+      const { configDirectory, settingsFilePath, backupFilePath, modelsFilePath, modelsBackupFilePath } = getSettingsPaths();
       fs.mkdirSync(configDirectory, { recursive: true });
 
       const current = this.loadSettings();
+      const newModels = settings.models !== undefined ? (settings.models === null ? undefined : settings.models) : current.models;
+
       const updated: AppSettings = {
         theme: settings.theme !== undefined ? (settings.theme === null ? undefined : { ...current.theme, ...settings.theme }) : current.theme,
         providers: settings.providers !== undefined ? (settings.providers === null ? undefined : settings.providers) : current.providers,
-        models: settings.models !== undefined ? (settings.models === null ? undefined : settings.models) : current.models,
+        models: newModels,
         lastUsedModel: settings.lastUsedModel !== undefined ? (settings.lastUsedModel === null ? undefined : { ...current.lastUsedModel, ...settings.lastUsedModel }) : current.lastUsedModel,
         general: settings.general !== undefined ? (settings.general === null ? undefined : { ...current.general, ...settings.general }) : current.general,
         orchestrator: settings.orchestrator !== undefined ? (settings.orchestrator === null ? undefined : { ...current.orchestrator, ...settings.orchestrator }) : current.orchestrator,
@@ -347,8 +395,12 @@ export class SettingsStorage {
 
       this.cachedSettings = updated;
 
+      // Save settings.json without models array
+      const settingsToWrite: Record<string, any> = { ...updated };
+      delete settingsToWrite.models;
+
       const tmpPath = `${settingsFilePath}.tmp`;
-      fs.writeFileSync(tmpPath, JSON.stringify(updated, null, 2), 'utf-8');
+      fs.writeFileSync(tmpPath, JSON.stringify(settingsToWrite, null, 2), 'utf-8');
 
       if (fs.existsSync(settingsFilePath)) {
         try {
@@ -366,6 +418,31 @@ export class SettingsStorage {
           fs.unlinkSync(tmpPath);
         } catch (copyError) {
           console.error('Failed to replace settings file atomically:', renameError, copyError);
+        }
+      }
+
+      // Save models.json with models array
+      if (newModels !== undefined) {
+        const modelsTmpPath = `${modelsFilePath}.tmp`;
+        fs.writeFileSync(modelsTmpPath, JSON.stringify(newModels, null, 2), 'utf-8');
+
+        if (fs.existsSync(modelsFilePath)) {
+          try {
+            fs.copyFileSync(modelsFilePath, modelsBackupFilePath);
+          } catch {
+            // Preserve best-effort backup only.
+          }
+        }
+
+        try {
+          fs.renameSync(modelsTmpPath, modelsFilePath);
+        } catch (renameError) {
+          try {
+            fs.copyFileSync(modelsTmpPath, modelsFilePath);
+            fs.unlinkSync(modelsTmpPath);
+          } catch (copyError) {
+            console.error('Failed to replace models file atomically:', renameError, copyError);
+          }
         }
       }
     } catch (e) {

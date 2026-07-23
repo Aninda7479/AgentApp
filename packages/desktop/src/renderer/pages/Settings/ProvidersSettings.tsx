@@ -14,44 +14,188 @@ interface ProvidersSettingsProps {
   bootstrapping?: boolean;
 }
 
-const ProviderLogo: React.FC<{ providerId: string; org?: string; size?: number }> = ({ providerId, org, size = 24 }) => {
-  const [error, setError] = useState(false);
+export const ProviderLogo: React.FC<{ providerId: string; org?: string; logoUrl?: string; size?: number; className?: string }> = ({
+  providerId,
+  org,
+  logoUrl,
+  size = 24,
+  className = ''
+}) => {
+  const [imgError, setImgError] = useState(false);
 
-  const match = POPULAR_PROVIDERS.find(p => p.id === providerId || providerId.startsWith(p.id));
-  const targetOrg = org || match?.org;
+  const key = (providerId || '').toLowerCase();
+  const match = POPULAR_PROVIDERS.find(p => key === p.id || key.startsWith(p.id));
+  const targetLogoUrl = logoUrl || match?.logoUrl || (org || match?.org ? `https://github.com/${org || match?.org}.png` : undefined);
 
-  if (error || !targetOrg) {
+  if (!imgError && targetLogoUrl) {
     return (
-      <div style={{ width: size, height: size }} className="flex flex-shrink-0 items-center justify-center rounded-md bg-brand-hover text-[0.6em] font-semibold text-brand-textMuted">
-        ⚙️
-      </div>
+      <img
+        src={targetLogoUrl}
+        alt={providerId}
+        onError={() => setImgError(true)}
+        style={{ width: size, height: size }}
+        className={`flex-shrink-0 rounded-md object-contain p-0.5 bg-brand-popover/80 border border-brand-border/40 shadow-sm ${className}`}
+      />
     );
   }
 
+  const getBadgeStyleAndIcon = () => {
+    if (key.includes('chatgpt') || key.includes('openai')) {
+      return {
+        bg: 'bg-emerald-600/20 text-emerald-400 border-emerald-500/30',
+        svg: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 6v6l4 2"/>
+          </svg>
+        )
+      };
+    }
+    if (key.includes('claude') || key.includes('anthropic')) {
+      return {
+        bg: 'bg-amber-600/20 text-amber-400 border-amber-500/30',
+        svg: (
+          <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
+            <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/>
+          </svg>
+        )
+      };
+    }
+    if (key.includes('google') || key.includes('gemini') || key.includes('vertex')) {
+      return {
+        bg: 'bg-blue-600/20 text-blue-400 border-blue-500/30',
+        svg: (
+          <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
+            <path d="M12 2L15 9L22 12L15 15L12 22L9 15L2 12L9 9L12 2Z"/>
+          </svg>
+        )
+      };
+    }
+    if (key.includes('deepseek')) {
+      return {
+        bg: 'bg-cyan-600/20 text-cyan-400 border-cyan-500/30',
+        svg: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
+            <path d="M2 12h20M12 2a10 10 0 0 1 10 10M12 22a10 10 0 0 1-10-10"/>
+          </svg>
+        )
+      };
+    }
+    if (key.includes('omniroute')) {
+      return {
+        bg: 'bg-indigo-600/20 text-indigo-400 border-indigo-500/30',
+        svg: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 3v18M3 12h18"/>
+          </svg>
+        )
+      };
+    }
+    if (key.includes('ollama')) {
+      return {
+        bg: 'bg-slate-600/20 text-slate-300 border-slate-500/30',
+        svg: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
+            <rect x="4" y="4" width="16" height="16" rx="4"/>
+            <circle cx="9" cy="9" r="1.5" fill="currentColor"/>
+            <circle cx="15" cy="9" r="1.5" fill="currentColor"/>
+            <path d="M8 15h8"/>
+          </svg>
+        )
+      };
+    }
+    if (key.includes('openrouter')) {
+      return {
+        bg: 'bg-purple-600/20 text-purple-400 border-purple-500/30',
+        svg: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
+            <circle cx="6" cy="6" r="3"/>
+            <circle cx="18" cy="18" r="3"/>
+            <path d="M8.5 8.5l7 7M6 9v9h9"/>
+          </svg>
+        )
+      };
+    }
+    if (key.includes('nvidia')) {
+      return {
+        bg: 'bg-emerald-600/20 text-emerald-400 border-emerald-500/30',
+        svg: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <path d="M8 12h8M12 8v8"/>
+          </svg>
+        )
+      };
+    }
+    if (key.includes('kimi') || key.includes('moonshot')) {
+      return {
+        bg: 'bg-fuchsia-600/20 text-fuchsia-400 border-fuchsia-500/30',
+        svg: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        )
+      };
+    }
+    if (key.includes('deepinfra')) {
+      return {
+        bg: 'bg-amber-600/20 text-amber-400 border-amber-500/30',
+        svg: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+        )
+      };
+    }
+    return {
+      bg: 'bg-brand-hover text-brand-textMuted border-brand-border',
+      svg: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
+          <rect x="4" y="4" width="16" height="16" rx="2"/>
+          <rect x="9" y="9" width="6" height="6"/>
+          <line x1="9" y1="1" x2="9" y2="4"/>
+          <line x1="15" y1="1" x2="15" y2="4"/>
+          <line x1="9" y1="20" x2="9" y2="23"/>
+          <line x1="15" y1="20" x2="15" y2="23"/>
+          <line x1="20" y1="9" x2="23" y2="9"/>
+          <line x1="20" y1="15" x2="23" y2="15"/>
+          <line x1="1" y1="9" x2="4" y2="9"/>
+          <line x1="1" y1="15" x2="4" y2="15"/>
+        </svg>
+      )
+    };
+  };
+
+  const badge = getBadgeStyleAndIcon();
+  const iconSize = Math.max(12, Math.round(size * 0.55));
+
   return (
-    <img
-      src={`https://github.com/${targetOrg}.png`}
-      alt={providerId}
-      onError={() => setError(true)}
+    <div
       style={{ width: size, height: size }}
-      className="flex-shrink-0 rounded-md object-cover"
-    />
+      className={`flex flex-shrink-0 items-center justify-center rounded-md border p-1 font-mono text-[10px] font-bold ${badge.bg} ${className}`}
+      title={providerId}
+    >
+      <div style={{ width: iconSize, height: iconSize }} className="flex items-center justify-center">
+        {badge.svg}
+      </div>
+    </div>
   );
 };
 
 const POPULAR_PROVIDERS = [
-  { id: 'omniroute', name: 'OmniRoute Local', org: 'omniroute', desc: 'OmniRoute Local LLM proxy endpoint (http://127.0.0.1:20128/v1)', defaultUrl: 'http://127.0.0.1:20128/v1' },
-  { id: 'ollama', name: 'Ollama', org: 'ollama', desc: 'Local model interface (Ollama runner instance)', defaultUrl: 'http://localhost:11434' },
-  { id: 'ollama-cloud', name: 'Ollama Cloud', org: 'ollama', desc: 'Ollama Cloud hosted model inference API', defaultUrl: 'https://api.ollama.com' },
-  { id: 'claude', name: 'Claude', org: 'anthropic', desc: 'Anthropic Claude Developer API platform', defaultUrl: 'https://api.anthropic.com/v1' },
-  { id: 'chatgpt', name: 'ChatGPT', org: 'openai', desc: 'OpenAI Developer platform API access', defaultUrl: 'https://api.openai.com/v1' },
-  { id: 'google', name: 'Google', org: 'google', desc: 'Google Gemini Developer models', defaultUrl: 'https://generativelanguage.googleapis.com' },
-  { id: 'vertex', name: 'Vertex API', org: 'googlecloudplatform', desc: 'Google Cloud Vertex platform integration endpoint', defaultUrl: '' },
-  { id: 'deepseek', name: 'DeepSeek', org: 'deepseek-ai', desc: 'DeepSeek API endpoints and services', defaultUrl: 'https://api.deepseek.com' },
-  { id: 'kimi', name: 'Kimi', org: 'moonshot-ai', desc: 'Moonshot AI developer platform provider', defaultUrl: 'https://api.moonshot.cn/v1' },
-  { id: 'openrouter', name: 'OpenRouter', org: 'openrouter-ai', desc: 'Unified open router endpoint broker', defaultUrl: 'https://openrouter.ai/api/v1' },
-  { id: 'nvidia', name: 'NVIDIA', org: 'NVIDIA', desc: 'NVIDIA NIM inference microservices (OpenAI-compatible)', defaultUrl: 'https://integrate.api.nvidia.com/v1' },
-  { id: 'deepinfra', name: 'DeepInfra', org: 'deepinfra', desc: 'Low cost serverless inference hosting provider', defaultUrl: 'https://api.deepinfra.com/v1' }
+  { id: 'omniroute', name: 'OmniRoute Local', org: 'omniroute', logoUrl: 'http://127.0.0.1:20128/favicon.ico', desc: 'OmniRoute Local LLM proxy endpoint (http://127.0.0.1:20128/v1)', defaultUrl: 'http://127.0.0.1:20128/v1' },
+  { id: 'ollama', name: 'Ollama', org: 'ollama', logoUrl: 'https://ollama.com/public/ollama.png', desc: 'Local model interface (Ollama runner instance)', defaultUrl: 'http://localhost:11434' },
+  { id: 'ollama-cloud', name: 'Ollama Cloud', org: 'ollama', logoUrl: 'https://ollama.com/public/ollama.png', desc: 'Ollama Cloud hosted model inference API', defaultUrl: 'https://api.ollama.com' },
+  { id: 'claude', name: 'Claude', org: 'anthropic', logoUrl: 'https://www.anthropic.com/favicon.ico', desc: 'Anthropic Claude Developer API platform', defaultUrl: 'https://api.anthropic.com/v1' },
+  { id: 'chatgpt', name: 'ChatGPT', org: 'openai', logoUrl: 'https://openai.com/favicon.ico', desc: 'OpenAI Developer platform API access', defaultUrl: 'https://api.openai.com/v1' },
+  { id: 'google', name: 'Google', org: 'google', logoUrl: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d473d53047313d46bf3b1.svg', desc: 'Google Gemini Developer models', defaultUrl: 'https://generativelanguage.googleapis.com' },
+  { id: 'vertex', name: 'Vertex API', org: 'googlecloudplatform', logoUrl: 'https://cloud.google.com/favicon.ico', desc: 'Google Cloud Vertex platform integration endpoint', defaultUrl: '' },
+  { id: 'deepseek', name: 'DeepSeek', org: 'deepseek-ai', logoUrl: 'https://www.deepseek.com/favicon.ico', desc: 'DeepSeek API endpoints and services', defaultUrl: 'https://api.deepseek.com' },
+  { id: 'kimi', name: 'Kimi', org: 'moonshot-ai', logoUrl: 'https://www.moonshot.cn/favicon.ico', desc: 'Moonshot AI developer platform provider', defaultUrl: 'https://api.moonshot.cn/v1' },
+  { id: 'openrouter', name: 'OpenRouter', org: 'openrouter-ai', logoUrl: 'https://openrouter.ai/favicon.ico', desc: 'Unified open router endpoint broker', defaultUrl: 'https://openrouter.ai/api/v1' },
+  { id: 'nvidia', name: 'NVIDIA', org: 'NVIDIA', logoUrl: 'https://build.nvidia.com/favicon.ico', desc: 'NVIDIA NIM inference microservices (OpenAI-compatible)', defaultUrl: 'https://integrate.api.nvidia.com/v1' },
+  { id: 'deepinfra', name: 'DeepInfra', org: 'deepinfra', logoUrl: 'https://deepinfra.com/favicon.ico', desc: 'Low cost serverless inference hosting provider', defaultUrl: 'https://api.deepinfra.com/v1' }
 ];
 
 // Providers that can function without an API key (local / self-hosted). Every
@@ -475,9 +619,12 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
           onMouseDown={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}
         >
           <div className="ui-modal p-5 sm:p-6">
-            <h3 className="mb-4 text-left font-outfit text-lg font-semibold text-brand-textMain">
-              Connect {connectionName}
-            </h3>
+            <div className="mb-4 flex items-center gap-3 text-left">
+              <ProviderLogo providerId={modalProviderId} size={32} />
+              <h3 className="font-outfit text-lg font-semibold text-brand-textMain">
+                Connect {connectionName}
+              </h3>
+            </div>
 
             <div className="flex flex-col gap-3.5">
               <div className="flex flex-col gap-1 text-left">

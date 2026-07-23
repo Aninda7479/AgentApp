@@ -3,6 +3,7 @@ import { ProviderConnection, ModelConfig } from './types';
 import { RefreshCw, ChevronDown } from 'lucide-react';
 import { ProvidersService } from '../../logic/providers';
 import { browserSafeFetch } from '../../web-fetch.js';
+import { ProviderLogo } from './ProvidersSettings';
 
 // Modality chips are capability categories, not state — keep them monochrome
 // so the only color in the app is reserved for STATE (Monolith rule).
@@ -94,6 +95,7 @@ const ModelsList: React.FC<ModelsListProps> = ({ connectedProviders, modelsCatal
               className="mb-2.5 flex items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-wider text-brand-textMuted transition-colors hover:text-brand-textMain"
             >
               <ChevronDown size={14} className={`transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+              <ProviderLogo providerId={prov.id} size={18} />
               <span>{prov.name}</span>
               <span className="font-normal normal-case tracking-normal text-brand-textMuted/60">
                 {models.length} model{models.length !== 1 ? 's' : ''}

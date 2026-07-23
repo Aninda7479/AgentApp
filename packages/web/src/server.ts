@@ -218,6 +218,10 @@ async function runAgentEngine(
       // Auto-route model if set to 'auto', 'Orchestrator' or 'Model Governance'
       if (config.model === 'auto' || config.model === 'Orchestrator' || config.model === 'Model Governance') {
         const settings = SettingsStorage.loadSettings();
+        const orchestratorCfg = settings.orchestrator || settings.modelGov;
+        if (orchestratorCfg?.enabled === false) {
+          throw new Error('AI Orchestrator is disabled in Settings. Please select a specific model or enable Orchestrator in Settings → Orchestrator.');
+        }
         // Build a proper RouterModel[] pool (providerId + capability/access
         // signals) from the user's configured models. routeModelForTask reads
         // RouterModel fields that raw settings.models don't always carry.

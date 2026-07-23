@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ModelConfig } from './types';
 import { Scale, Save, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award, Sparkles, Coins, Cpu, Layers, Zap, Bot, Brain, Activity, Search, Circle } from 'lucide-react';
-import { Button, Select } from '../../components/ui';
+import { Button, Select, Toggle } from '../../components/ui';
 import { getIpc } from '../../lib/electron';
 
 /** Props for the Orchestrator settings panel. */
@@ -9,6 +9,7 @@ interface OrchestratorSettingsProps {
   modelsCatalog: ModelConfig[];
   onSaveSettings: (patch: {
     orchestrator?: {
+      enabled?: boolean;
       enabledModels: string[];
       autoUpdateInstructions: boolean;
       optimizationGoal: 'quality' | 'cost' | 'balanced';
@@ -18,6 +19,7 @@ interface OrchestratorSettingsProps {
       freeOnly: boolean;
     };
     modelGov?: {
+      enabled?: boolean;
       enabledModels: string[];
       autoUpdateInstructions: boolean;
       optimizationGoal: 'quality' | 'cost' | 'balanced';
@@ -34,6 +36,7 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
   modelsCatalog,
   onSaveSettings
 }) => {
+  const [enabled, setEnabled] = useState(true);
   const [enabledModels, setEnabledModels] = useState<string[]>([]);
   const [autoUpdate, setAutoUpdate] = useState(false);
   const [optimizationGoal, setOptimizationGoal] = useState<'quality' | 'cost' | 'balanced'>('balanced');
@@ -86,6 +89,7 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
       // Default to enabling all available models in the catalog if none are specifically saved
       const savedEnabled = gov.enabledModels || modelsCatalog.map(m => m.id);
       
+      setEnabled(gov.enabled !== undefined ? !!gov.enabled : true);
       setEnabledModels(savedEnabled);
       setAutoUpdate(!!gov.autoUpdateInstructions);
       setOptimizationGoal(gov.optimizationGoal || 'balanced');
@@ -113,6 +117,7 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
     setMessage(null);
     try {
       const patch = {
+        enabled,
         enabledModels,
         autoUpdateInstructions: autoUpdate,
         optimizationGoal,
@@ -307,6 +312,35 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
           <span>{message.text}</span>
         </div>
       )}
+
+      {/* Orchestrator Master On/Off Switch Card */}
+      <div className={`glass-card rounded-xl border p-4 flex items-center justify-between gap-4 transition-all ${
+        enabled ? 'border-brand-highlight/40 bg-brand-highlight/5' : 'border-brand-border/60 bg-brand-popover/40 opacity-75'
+      }`}>
+        <div className="flex items-center gap-3">
+          <div className={`p-2.5 rounded-lg ${enabled ? 'bg-brand-highlight/15 text-brand-highlight' : 'bg-brand-hover text-brand-textMuted'}`}>
+            <Brain className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-brand-textMain">AI Orchestrator Engine</h3>
+              <span className={`ui-badge ${enabled ? 'constructive' : 'muted'}`}>
+                {enabled ? 'Active' : 'Disabled'}
+              </span>
+            </div>
+            <p className="text-xs text-brand-textMuted mt-0.5">
+              {enabled
+                ? 'Orchestrator conductor is active and available in composer options.'
+                : 'Orchestrator is turned off. Auto-routing is disabled and excluded from composer dropdown.'}
+            </p>
+          </div>
+        </div>
+        <Toggle
+          checked={enabled}
+          onChange={(val) => setEnabled(val)}
+          label={enabled ? 'Enabled' : 'Disabled'}
+        />
+      </div>
 
       {/* swarm tuning controls */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

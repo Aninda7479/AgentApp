@@ -232,6 +232,10 @@ safeHandle('agent-run', async (event, {
     if (!engine) {
       let finalConfig = { ...config };
       if (config.model === 'auto' || config.model === 'Orchestrator' || config.model === 'Model Governance') {
+        const orchestratorCfg = settings.orchestrator || settings.modelGov;
+        if (orchestratorCfg?.enabled === false) {
+          throw new Error('AI Orchestrator is disabled in Settings. Please select a specific model or enable Orchestrator in Settings → Orchestrator.');
+        }
         // Apply the Orchestrator's default reasoning effort only when the
         // composer/turn didn't set one (caller preference wins). 'off' means
         // leave the per-turn/cascade logic untouched.

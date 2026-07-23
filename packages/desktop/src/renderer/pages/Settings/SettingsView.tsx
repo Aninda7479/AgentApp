@@ -85,92 +85,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
-  const DEFAULT_NVIDIA_FREE_MODELS = React.useMemo(() => new Set([
-    'glm-5.2',
-    'minimax-m3',
-    'diffusiongemma-26b-a4b-it',
-    'nemotron-3-ultra-550b-a55b',
-    'nemotron-3.5-content-safety',
-    'cosmos3-nano',
-    'cosmos3-nano-reasoner',
-    'step-3.7-flash',
-    'mistral-medium-3.5-128b',
-    'nemotron-3-nano-omni-30b-a3b-reasoning',
-    'deepseek-v4-flash',
-    'deepseek-v4-pro',
-    'nemotron-3-content-safety',
-    'synthetic-video-detector',
-    'active-speaker-detection',
-    'ising-calibration-1-35b-a3b',
-    'minimax-m2.7',
-    'gemma-4-31b-it',
-    'mistral-small-4-119b-2603',
-    'nemotron-voicechat',
-    'nemotron-3-super-120b-a12b',
-    'qwen3.5-122b-a10b',
-    'gliner-pii',
-    'cosmos-transfer2_5-2b',
-    'qwen3.5-397b-a17b',
-    'step-3.5-flash',
-    'nemotron-content-safety-reasoning-4b',
-    'nemotron-3-nano-30b-a3b',
-    'riva-translate-4b-instruct-v1_1',
-    'mistral-large-3-675b-instruct-2512',
-    'ministral-14b-instruct-2512',
-    'streampetr',
-    'nemotron-nano-12b-v2-vl',
-    'llama-3_1-nemotron-safety-guard-8b-v3',
-    'stockmark-2-100b-instruct',
-    'qwen3-next-80b-a3b-instruct',
-    'seed-oss-36b-instruct',
-    'nvidia-nemotron-nano-9b-v2',
-    'gpt-oss-20b',
-    'gpt-oss-120b',
-    'llama-3_3-nemotron-super-49b-v1_5',
-    'sarvam-m',
-    'llama-guard-4-12b',
-    'gemma-3n-e4b-it',
-    'gemma-3n-e2b-it',
-    'cosmos-transfer1-7b',
-    'bnr',
-    'mistral-nemotron',
-    'llama-3.1-nemotron-nano-vl-8b-v1',
-    'magpie-tts-zeroshot',
-    'llama-4-maverick-17b-128e-instruct',
-    'sparsedrive',
-    'bevformer',
-    'llama-3_3-nemotron-super-49b-v1',
-    'llama-3_1-nemotron-nano-8b-v1',
-    'nv-embedcode-7b-v1',
-    'phi-4-mini-instruct',
-    'phi-4-multimodal-instruct',
-    'llama-3_3-70b-instruct',
-    'studiovoice',
-    'llama-3.2-3b-instruct',
-    'llama-3.2-11b-vision-instruct',
-    'llama-3.2-90b-vision-instruct',
-    'llama-3.2-1b-instruct',
-    'dracarys-llama-3_1-70b-instruct',
-    'esm2-650m',
-    'nemotron-mini-4b-instruct',
-    'gemma-2-2b-it',
-    'llama-3_1-70b-instruct',
-    'llama-3_1-8b-instruct',
-    'nv-embed-v1',
-    'solar-10_7b-instruct',
-    'google-paligemma',
-    'rerank-qa-mistral-4b',
-    'esmfold',
-    'mixtral-8x7b-instruct'
-  ]), []);
-
-  const [nvidiaFreeModels, setNvidiaFreeModels] = useState<Set<string>>(() => {
-    const set = new Set<string>();
-    DEFAULT_NVIDIA_FREE_MODELS.forEach(name => {
-      set.add(name.toLowerCase().replace(/[^a-z0-9]/g, ''));
-    });
-    return set;
-  });
+  const [nvidiaFreeModels, setNvidiaFreeModels] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     let active = true;
@@ -259,9 +174,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           collectedNames.forEach(name => {
             newSet.add(name.toLowerCase().replace(/[^a-z0-9]/g, ''));
           });
-          DEFAULT_NVIDIA_FREE_MODELS.forEach(name => {
-            newSet.add(name.toLowerCase().replace(/[^a-z0-9]/g, ''));
-          });
           setNvidiaFreeModels(newSet);
         }
       } catch (err) {
@@ -271,7 +183,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     
     fetchFreeModels();
     return () => { active = false; };
-  }, [DEFAULT_NVIDIA_FREE_MODELS]);
+  }, []);
 
 
   // ─── Public pricing & modality reference (source: official provider docs) ───

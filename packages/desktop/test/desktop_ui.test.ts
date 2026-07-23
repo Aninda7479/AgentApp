@@ -334,14 +334,15 @@ describe('Step 085: Codex Floating Prompt Composer', () => {
     const html = renderToString(
       React.createElement(Composer, {
         onSend: () => {},
-        defaultModel: '5.5 Medium'
+        availableModels: ['gpt-4o'],
+        defaultModel: 'gpt-4o'
       })
     );
 
     expect(html).toContain('composer-container');
     expect(html).toContain('Ask anything');
     expect(html).toContain('Ask for approval');
-    expect(html).toContain('5.5 Medium');
+    expect(html).toContain('gpt-4o');
   });
 
   it('should render stop button during active generation', () => {
