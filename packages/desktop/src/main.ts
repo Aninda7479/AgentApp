@@ -2193,14 +2193,18 @@ function registerCircleSearchShortcut(): void {
 }
 
 function showCircleSearch(): void {
-  if (!circleSearchWin || circleSearchWin.isDestroyed()) {
-    circleSearchWin = windowManager.createCircleSearchWindow();
-    const htmlPath = path.join(app.getAppPath(), 'dist', 'circle-search.html');
-    circleSearchWin.loadFile(htmlPath);
+  if (hotkeyOverlayManager) {
+    void hotkeyOverlayManager.showOverlayWithCapture();
   } else {
-    circleSearchWin.show();
+    if (!circleSearchWin || circleSearchWin.isDestroyed()) {
+      circleSearchWin = windowManager.createCircleSearchWindow();
+      const htmlPath = path.join(app.getAppPath(), 'dist', 'circle-search.html');
+      circleSearchWin.loadFile(htmlPath);
+    } else {
+      circleSearchWin.show();
+    }
+    circleSearchWin.webContents.send('circle-search-window-shown');
   }
-  circleSearchWin.webContents.send('circle-search-window-shown');
 }
 
 function hideCircleSearch(): void {
@@ -2208,6 +2212,20 @@ function hideCircleSearch(): void {
     circleSearchWin.hide();
   }
 }
+
+safeHandle('overlay-capture-screen', async () => {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.bounds;
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: { width: Math.round(width), height: Math.round(height) }
+  });
+  
+  if (sources.length > 0) {
+    return sources[0].thumbnail.toDataURL();
+  }
+  throw new Error('No screen capture sources found');
+});
 
 safeHandle('circle-search-get-screen-image', async () => {
   const primaryDisplay = screen.getPrimaryDisplay();

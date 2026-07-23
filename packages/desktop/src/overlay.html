@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SuperAgent Quick Launcher</title>
+  <title>SuperAgent Spotlight & Screen Capture</title>
   <style>
     * {
       box-sizing: border-box;
@@ -55,6 +55,24 @@
     .prompt-input::placeholder {
       color: #71717a;
     }
+    .capture-btn {
+      background: rgba(139, 92, 246, 0.15);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      color: #c084fc;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .capture-btn:hover {
+      background: rgba(139, 92, 246, 0.3);
+      color: #ffffff;
+    }
     .shortcut-badge {
       background: rgba(255, 255, 255, 0.08);
       border: 1px solid rgba(255, 255, 255, 0.1);
@@ -63,6 +81,36 @@
       font-size: 11px;
       color: #a1a1aa;
       font-family: monospace;
+    }
+    .preview-bar {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .preview-thumb {
+      max-height: 48px;
+      max-width: 90px;
+      border-radius: 6px;
+      object-fit: cover;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .preview-label {
+      font-size: 12px;
+      color: #a1a1aa;
+      flex: 1;
+    }
+    .remove-thumb-btn {
+      background: transparent;
+      border: none;
+      color: #ef4444;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 6px;
     }
     .actions-bar {
       margin-top: 14px;
@@ -103,12 +151,27 @@
       <svg class="sparkle-icon" viewBox="0 0 24 24">
         <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/>
       </svg>
-      <input type="text" id="promptInput" class="prompt-input" placeholder="Ask SuperAgent anything or type a command..." autofocus />
+      <input type="text" id="promptInput" class="prompt-input" placeholder="Ask SuperAgent anything or search screen..." autofocus />
+      <button type="button" id="captureBtn" class="capture-btn" title="Circle Search / Screen Snippet (Ctrl+Shift+S)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+        Screen
+      </button>
       <span class="shortcut-badge">Ctrl+Alt+Space</span>
     </div>
+
+    <div id="previewBar" class="preview-bar">
+      <img id="previewImg" class="preview-thumb" src="" alt="Screen snippet" />
+      <span class="preview-label">Screen snippet attached (Circle Search mode)</span>
+      <button type="button" id="removeThumbBtn" class="remove-thumb-btn" title="Remove screen snippet">✕</button>
+    </div>
+
     <div class="actions-bar">
       <div class="action-hints">
         <div class="hint-item"><span class="kbd">↵</span> Execute</div>
+        <div class="hint-item"><span class="kbd">Ctrl+Shift+S</span> Screen Snippet</div>
         <div class="hint-item"><span class="kbd">Esc</span> Close</div>
       </div>
       <div id="statusText" class="status-text">Ready</div>
@@ -118,24 +181,67 @@
   <script>
     const input = document.getElementById('promptInput');
     const statusText = document.getElementById('statusText');
+    const captureBtn = document.getElementById('captureBtn');
+    const previewBar = document.getElementById('previewBar');
+    const previewImg = document.getElementById('previewImg');
+    const removeThumbBtn = document.getElementById('removeThumbBtn');
+
+    let currentScreenImage = null;
+
+    async function triggerScreenCapture() {
+      statusText.textContent = 'Capturing screen...';
+      try {
+        if (window.electronAPI && window.electronAPI.invoke) {
+          const imgData = await window.electronAPI.invoke('overlay-capture-screen');
+          if (imgData) {
+            currentScreenImage = imgData;
+            previewImg.src = imgData;
+            previewBar.style.display = 'flex';
+            statusText.textContent = 'Screen attached';
+          }
+        }
+      } catch (err) {
+        statusText.textContent = 'Capture failed';
+        console.error(err);
+      }
+    }
+
+    captureBtn.addEventListener('click', triggerScreenCapture);
+    removeThumbBtn.addEventListener('click', () => {
+      currentScreenImage = null;
+      previewImg.src = '';
+      previewBar.style.display = 'none';
+      statusText.textContent = 'Ready';
+    });
+
+    if (window.electronAPI && window.electronAPI.on) {
+      window.electronAPI.on('overlay-trigger-capture', () => {
+        triggerScreenCapture();
+      });
+    }
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (window.electronAPI && window.electronAPI.send) {
           window.electronAPI.send('overlay-hide');
         }
+      } else if (e.ctrlKey && e.shiftKey && (e.key === 'S' || e.key === 's')) {
+        e.preventDefault();
+        triggerScreenCapture();
       }
     });
 
     input.addEventListener('keydown', async (e) => {
-      if (e.key === 'Enter' && input.value.trim()) {
-        const text = input.value.trim();
+      if (e.key === 'Enter' && (input.value.trim() || currentScreenImage)) {
+        const text = input.value.trim() || (currentScreenImage ? 'Analyze this screen snippet' : '');
         statusText.textContent = 'Processing...';
         try {
           if (window.electronAPI && window.electronAPI.invoke) {
-            await window.electronAPI.invoke('overlay-submit-prompt', { prompt: text });
+            await window.electronAPI.invoke('overlay-submit-prompt', { prompt: text, image: currentScreenImage });
           }
           input.value = '';
+          currentScreenImage = null;
+          previewBar.style.display = 'none';
           statusText.textContent = 'Task dispatched!';
           setTimeout(() => {
             statusText.textContent = 'Ready';

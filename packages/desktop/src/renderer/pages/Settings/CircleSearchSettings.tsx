@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Sparkles, Key, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Search, Sparkles, Key, CheckCircle2, AlertTriangle, Camera } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
 import { getIpc } from '../../lib/electron';
 
 export const CircleSearchSettings: React.FC = () => {
   const ipc = getIpc();
 
-  const [enabled, setEnabled] = useState<boolean>(false);
-  const [shortcut, setShortcut] = useState<string>('CommandOrControl+Shift+Space');
+  const [enabled, setEnabled] = useState<boolean>(true);
+  const [shortcut, setShortcut] = useState<string>('CommandOrControl+Shift+S');
   const [saveStatus, setSaveStatus] = useState<{ ok: boolean; message: string } | null>(null);
 
   useEffect(() => {
     if (!ipc) return;
     ipc.invoke('settings-read').then((settings: any) => {
       if (settings?.circleSearch) {
-        setEnabled(Boolean(settings.circleSearch.enabled));
+        if (settings.circleSearch.enabled !== undefined) {
+          setEnabled(Boolean(settings.circleSearch.enabled));
+        }
         if (settings.circleSearch.shortcut) {
           setShortcut(settings.circleSearch.shortcut);
         }
@@ -34,7 +36,7 @@ export const CircleSearchSettings: React.FC = () => {
           shortcut: newShortcut.trim(),
         }
       });
-      setSaveStatus({ ok: true, message: 'Circle Search settings saved successfully.' });
+      setSaveStatus({ ok: true, message: 'Unified Spotlight & Circle Search settings saved.' });
     } catch (err: any) {
       console.error(err);
       setSaveStatus({ ok: false, message: err.message || 'Failed to save settings.' });
@@ -70,9 +72,9 @@ export const CircleSearchSettings: React.FC = () => {
             <BrandLogo size={48} />
           </div>
           <div>
-            <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain">Circle Search</h1>
+            <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain">Spotlight & Circle Search</h1>
             <p className="mt-1 text-sm leading-6 text-brand-textMuted">
-              Samsung-style desktop overlay search. Draw a circle or select a region anywhere on your screen and ask the AI details about it.
+              Circle Search is now merged with Spotlight Quick Launcher! Capture any screen snippet directly into your Spotlight bar or launch instant vision queries.
             </p>
           </div>
         </div>
@@ -80,7 +82,7 @@ export const CircleSearchSettings: React.FC = () => {
 
       {/* Main toggle */}
       <section className="mb-6">
-        <h3 className="mb-3 text-base font-semibold text-brand-textMain">Activation</h3>
+        <h3 className="mb-3 text-base font-semibold text-brand-textMain">Screen Snippet & Vision Search</h3>
         <div className="rounded-lg border border-brand-border bg-brand-card p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -89,14 +91,14 @@ export const CircleSearchSettings: React.FC = () => {
                   ? 'bg-[color:var(--neon-constructive)]/15 text-[color:var(--neon-constructive)]'
                   : 'bg-brand-bg text-brand-textMuted'
               }`}>
-                <Search size={18} />
+                <Camera size={18} />
               </span>
               <div>
                 <div className="text-sm font-medium text-brand-textMain">
-                  Enable Circle Search Overlay
+                  Enable Screen Capture in Spotlight
                 </div>
                 <div className="text-xs text-brand-textMuted">
-                  Runs in background. Use the global shortcut to trigger overlay selection.
+                  Allows capturing screen snippets directly inside the Spotlight overlay bar.
                 </div>
               </div>
             </div>
@@ -123,13 +125,13 @@ export const CircleSearchSettings: React.FC = () => {
       {/* Shortcut Config */}
       <section className="mb-6">
         <h3 className="mb-3 flex items-center gap-2 text-base font-semibold text-brand-textMain">
-          <Key size={16} /> Global Trigger Shortcut
+          <Key size={16} /> Direct Screen Capture Shortcut
         </h3>
         <div className="rounded-lg border border-brand-border bg-brand-card p-4">
           <form onSubmit={handleShortcutSubmit} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-xs font-semibold text-brand-textMuted uppercase tracking-wider">
-                Keyboard Accelerator
+                Direct Capture Accelerator
               </label>
               <div className="flex gap-2">
                 <input
@@ -137,7 +139,7 @@ export const CircleSearchSettings: React.FC = () => {
                   value={shortcut}
                   onChange={handleShortcutChange}
                   className="ui-input flex-1"
-                  placeholder="CommandOrControl+Shift+Space"
+                  placeholder="CommandOrControl+Shift+S"
                 />
                 <button
                   type="submit"
@@ -149,12 +151,11 @@ export const CircleSearchSettings: React.FC = () => {
             </div>
 
             <div className="rounded-lg bg-brand-bg border border-brand-border/40 p-3.5 text-xs text-brand-textMuted space-y-2 leading-relaxed">
-              <span className="font-semibold text-brand-textMain block mb-1">Shortcut Keys Reference:</span>
+              <span className="font-semibold text-brand-textMain block mb-1">Unified Quick Overlay Shortcuts:</span>
               <ul className="list-disc pl-4 space-y-1">
-                <li><code className="text-zinc-300">CommandOrControl</code>: Ctrl on Windows/Linux, Cmd on macOS.</li>
-                <li><code className="text-zinc-300">Shift</code>, <code className="text-zinc-300">Alt</code>, <code className="text-zinc-300">Option</code>: Modifier keys.</li>
-                <li>Examples: <code className="text-zinc-300">CommandOrControl+Shift+Space</code>, <code className="text-zinc-300">Ctrl+Shift+S</code></li>
-                <li><strong className="text-amber-400">Important:</strong> Make sure the hotkey combination doesn't conflict with system or other app shortcuts.</li>
+                <li><code className="text-purple-300 font-mono">Ctrl+Alt+Space</code>: Open Spotlight Quick Launcher bar.</li>
+                <li><code className="text-purple-300 font-mono">{shortcut}</code>: Open Spotlight and attach instant Screen Snippet (Circle Search).</li>
+                <li>Inside Spotlight overlay: Click <strong className="text-zinc-200">"Screen"</strong> camera button to attach/detach screen capture anytime.</li>
               </ul>
             </div>
 

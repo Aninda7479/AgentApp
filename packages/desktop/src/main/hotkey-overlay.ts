@@ -48,13 +48,20 @@ export class HotkeyOverlayManager {
       const primaryDisplay = screen.getPrimaryDisplay();
       const { width: displayWidth, height: displayHeight } = primaryDisplay.workAreaSize;
       const winWidth = 750;
-      const winHeight = 180;
+      const winHeight = 220; // Expanded to accommodate screen snippet preview
       const x = Math.round((displayWidth - winWidth) / 2);
-      const y = Math.round(displayHeight * 0.25); // Position 25% from top like Raycast/Spotlight
+      const y = Math.round(displayHeight * 0.22); // Position 22% from top like Raycast/Spotlight
 
       this.overlayWindow.setPosition(x, y);
       this.overlayWindow.show();
       this.overlayWindow.focus();
+    }
+  }
+
+  public async showOverlayWithCapture(): Promise<void> {
+    this.showOverlay();
+    if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+      this.overlayWindow.webContents.send('overlay-trigger-capture');
     }
   }
 
