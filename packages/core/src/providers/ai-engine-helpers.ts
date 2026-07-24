@@ -134,17 +134,24 @@ export function isContextOverflowError(message: string): boolean {
  */
 export function detectRepetitiveLoop(text: string): { isLoop: boolean; cleanText: string } {
   if (!text || text.length < 30) return { isLoop: false, cleanText: text };
-  const window = text.length > 1000 ? text.slice(-1000) : text;
 
-  for (let len = 2; len <= 200; len++) {
-    for (let offset = 0; offset < len; offset++) {
-      const startIdx = window.length - len - offset;
+  const windowSize = Math.min(4000, text.length);
+  const window = text.slice(-windowSize);
+
+  const maxLen = Math.min(1000, Math.floor(windowSize / 3));
+
+  for (let len = 2; len <= maxLen; len++) {
+    const maxOffset = Math.min(len - 1, 30);
+    for (let offset = 0; offset <= maxOffset; offset++) {
+      const endIdx = window.length - offset;
+      const startIdx = endIdx - len;
       if (startIdx < 0) continue;
-      const sub = window.slice(startIdx, window.length - offset);
-      if (sub.length < len || !sub.trim()) continue;
+
+      const sub = window.slice(startIdx, endIdx);
+      if (!sub.trim()) continue;
 
       let occurrences = 0;
-      let idx = window.length - offset;
+      let idx = endIdx;
       while (idx >= len) {
         if (window.slice(idx - len, idx) === sub) {
           occurrences++;
@@ -153,6 +160,7 @@ export function detectRepetitiveLoop(text: string): { isLoop: boolean; cleanText
           break;
         }
       }
+
       if (occurrences >= 3) {
         const pattern = sub;
         const triplePattern = pattern + pattern + pattern;
@@ -171,6 +179,7 @@ export function detectRepetitiveLoop(text: string): { isLoop: boolean; cleanText
       }
     }
   }
+
   return { isLoop: false, cleanText: text };
 }
 

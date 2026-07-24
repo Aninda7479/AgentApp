@@ -125,11 +125,20 @@ describe('sanitizeRepetitiveContent & history sanitization', () => {
 import { detectRepetitiveLoop } from './ai-engine-helpers.js';
 
 describe('detectRepetitiveLoop helper', () => {
-  it('detects long pattern repetitions in 1000-char window', () => {
+  it('detects long pattern repetitions in window', () => {
     const pattern = " This is a simple response manner manner manner manner manner manner manner";
     const result = detectRepetitiveLoop(pattern);
     expect(result.isLoop).toBe(true);
     expect(result.cleanText).toBe("This is a simple response");
+  });
+
+  it('detects pattern repetitions with long repeating units (> 200 chars)', () => {
+    const longUnit = "Hello! I'm your autonomous AI coding assistant. I can help with tasks like reading files, running commands, searching codebases, browsing the web, and generating 3D characters if enabled. What can I help you with today? ";
+    // longUnit is ~223 chars
+    const text = "Initial greeting. " + longUnit + longUnit + longUnit + longUnit;
+    const result = detectRepetitiveLoop(text);
+    expect(result.isLoop).toBe(true);
+    expect(result.cleanText).toBe("Initial greeting.");
   });
 });
 

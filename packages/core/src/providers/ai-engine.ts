@@ -974,8 +974,11 @@ Key guidelines:
       messages
     };
 
-    if (!isStrictModel && !isOmniRoute) {
+    if (!isStrictModel || isOmniRoute) {
       payload.stream = true;
+    }
+
+    if (!isStrictModel && !isOmniRoute) {
       payload.temperature = this.config.temperature ?? 0.7;
       payload.max_tokens = this.config.maxTokens ?? 4096;
       payload.frequency_penalty = this.config.frequencyPenalty ?? 0.3;

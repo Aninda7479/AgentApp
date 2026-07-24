@@ -63,20 +63,23 @@ export class AgentStreamService {
       const targetChatId = bundle.chatIdRef.current;
       if (!targetChatId) return;
       const buffer = bundle.bufferRef.current;
-      const currentStepId = bundle.stepIdRef.current;
-      // Guard: never synthesize an empty assistant step from a cleared/stale buffer.
-      if (!currentStepId && !buffer) return;
+      
+      let stepId = bundle.stepIdRef.current;
+      if (!stepId) {
+        if (!buffer) return; // Guard: never synthesize an empty assistant step from a cleared/stale buffer.
+        stepId = `stream-assistant-${Date.now()}`;
+        bundle.stepIdRef.current = stepId;
+      }
+
       StoreService.updateChatSteps(
         ctx,
         targetChatId,
         (prev) => {
-          if (currentStepId && prev.some((s) => s.id === currentStepId)) {
-            return prev.map((s) => (s.id === currentStepId ? { ...s, content: buffer } : s));
+          if (prev.some((s) => s.id === stepId)) {
+            return prev.map((s) => (s.id === stepId ? { ...s, content: buffer } : s));
           }
-          const newStepId = `stream-assistant-${Date.now()}`;
-          bundle.stepIdRef.current = newStepId;
           const newStep: TrajectoryStep = {
-            id: newStepId,
+            id: stepId!,
             type: 'assistant',
             content: buffer,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -144,7 +147,7 @@ export class AgentStreamService {
       if (agentEvent.type === 'replace_tokens') {
         bundle.bufferRef.current = agentEvent.content || '';
         dirtyBundles.add(bundle);
-        scheduleFlush();
+        flushBundle(bundle);
       }
 
       // ── tool_call: append a "running" tool step to the trajectory ──
