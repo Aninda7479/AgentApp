@@ -151,4 +151,4 @@ export SKILL=/skill-loop
 - [VPS / Linux](./vps-linux-setup.md)
 - [Branch & PR workflow](./branch-pr-workflow.md)
 - [Tools verification](./tools-verification.md)
-- [Operator guide](../../Auto-Improve-Guide.md)
+- [Operator guide](./auto-improve-guide.md)

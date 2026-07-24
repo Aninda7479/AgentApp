@@ -1,8 +1,6 @@
 # 📦 Publishing & Release Management
 
 How to build, publish, and push updates for SuperAgent's two distribution options.
-For the one-time promotion-site setup and the marketing site, see the root
-[`PUBLISHING.md`](../../PUBLISHING.md).
 
 SuperAgent ships in **two** builds that share the same autonomous core:
 

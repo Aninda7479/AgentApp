@@ -24,8 +24,8 @@
 ### F1 — Agent engine triplicated (the brain lives in the faces) [RESOLVED]
 *   **Resolution:** Consolidated `AgentEngine`, `MultiAgentManager`, tool definitions, context gauge tracking, and auto-compaction logic into [core/src/providers/ai-engine.ts](file:///d:/Projects/OpenSource/AgentApp/packages/core/src/providers/ai-engine.ts).
 *   **Delegates:**
-    *   [desktop/src/main/ai-engine.ts](file:///d:/Projects/OpenSource/AgentApp/packages/desktop/src/main/ai-engine.ts) delegates entirely to Core.
-    *   [web/src/ai-engine.ts](file:///d:/Projects/OpenSource/AgentApp/packages/web/src/ai-engine.ts) delegates entirely to Core.
+*   [desktop/src/main/ai-engine.ts](file:///d:/Projects/OpenSource/AgentApp/packages/desktop/src/main/ai-engine.ts) delegates entirely to Core.
+*   [web/src/ai-engine.ts](file:///d:/Projects/OpenSource/AgentApp/packages/web/src/ai-engine.ts) delegates entirely to Core.
 *   **Impact:** A single unified implementation runs everywhere. Safety guards, sandbox hooks, and token management are updated in one place.
 
 ---

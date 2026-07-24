@@ -72,7 +72,7 @@ Or inside SuperAgent / Claude Code chat: `/skill-loop` (preferred) or a specific
 | `/dependency-guardian` | 12 h | Patch/minor only |
 | `/provider-scout` | 8 h | One provider |
 | `/ux-critic` | 8 h | Findings only |
-| `/art-director` | 8 h | One page |
+| `/art-director` | 8 h | One page visual |
 
 Use Task Scheduler (Windows) or systemd (Linux) as before; set `SKILL` per task.
 
