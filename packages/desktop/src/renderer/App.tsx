@@ -275,6 +275,13 @@ export const App: React.FC = () => {
     providerStore.setLastUsedModel(lastUsedModel);
   }, [connectedProviders, modelsCatalog, lastUsedModel]);
 
+  // Sync trajectorySteps from React state to Zustand chatStore
+  useEffect(() => {
+    if (activeChatId) {
+      chatStore.setSteps(activeChatId, trajectorySteps);
+    }
+  }, [activeChatId, trajectorySteps]);
+
   const activeChatIdRef = useRef(activeChatId);
   useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
 
