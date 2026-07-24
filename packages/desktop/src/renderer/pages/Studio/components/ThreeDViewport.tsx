@@ -149,7 +149,7 @@ export const ThreeDViewport: React.FC<ThreeDViewportProps> = ({
     const height = canvasContainerRef.current.clientHeight;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0a0c);
+    scene.background = new THREE.Color(0x2c2d28);
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);

@@ -41,7 +41,7 @@
   color-scheme: dark;
 
   /* ── Canvas & tonal elevation steps (deepest → highest) ── */
-  --brand-bg: #0a0a0c;
+  --brand-bg: #2c2d28;
   --brand-sidebar: #111114;
   --brand-card: #17171b;
   --brand-popover: #1a1a1f;
@@ -88,7 +88,7 @@
   /* ── Primary action: quiet monochrome (near-white pill, dark ink) ── */
   --brand-highlight: #E6E6EA;
   --brand-highlight-hover: #F4F4F6;
-  --brand-highlight-text: #0a0a0c;
+  --brand-highlight-text: #2c2d28;
   --brand-highlight-bg-subtle: rgba(230, 230, 234, 0.10);
   --brand-highlight-border-subtle: rgba(230, 230, 234, 0.22);
 
@@ -112,7 +112,7 @@
 :root[data-theme='light'] {
   color-scheme: light;
 
-  --brand-bg: #f3f3f4;
+  --brand-bg: #f4eedf;
   --brand-sidebar: #fbfbfc;
   --brand-card: #ffffff;
   --brand-popover: #ffffff;
