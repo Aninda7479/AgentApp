@@ -90,12 +90,12 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = ({
   searchQuery,
   setSearchQuery
 }) => (
-  <aside className="glass-panel flex h-auto lg:h-full w-full lg:w-[264px] flex-shrink-0 lg:min-h-0 flex-col border-b border-brand-border/60 lg:border-b-0 lg:border-r">
-    <div className="flex flex-col gap-3 px-3 lg:px-4 pt-4 lg:pt-6 pb-3">
+  <aside className="bg-brand-bg flex h-auto lg:h-full w-full lg:w-66 shrink-0 lg:min-h-0 flex-col border-b border-brand-border/60 lg:border-b-0 lg:border-r">
+    <div className="flex flex-col gap-3 px-3 lg:px-4 pt-4 lg:pt-6 pb-3 bg-brand-bg">
       <button
         type="button"
         onClick={onBackToApp}
-        className="flex items-center justify-start gap-2 rounded-lg px-2 py-1.5 text-sm text-brand-textMuted transition-colors hover:bg-brand-hover hover:text-brand-textMain w-full"
+        className="flex items-center justify-start gap-2 rounded-lg  text-sm text-brand-textMuted transition-colors hover:bg-brand-hover hover:text-brand-textMain w-full"
         title="Back to app"
       >
         <ArrowLeft size={15} />

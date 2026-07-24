@@ -242,7 +242,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <div
       data-testid="sidebar-container"
       style={{ width: collapsed ? '70px' : '260px', maxWidth: '85vw' }}
-      className={`flex flex-col h-full box-border transition-transform duration-200 z-40 pb-[68px] md:pb-4 bg-brand-bg
+      className={`ml-1 flex flex-col h-full box-border transition-transform duration-200 z-40 pb-[68px] md:pb-4 bg-brand-bg
         fixed inset-y-0 left-0 lg:static lg:translate-x-0
         ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}`}
     >

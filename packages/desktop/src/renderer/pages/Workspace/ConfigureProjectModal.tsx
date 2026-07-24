@@ -103,7 +103,7 @@ export const ConfigureProjectModal: React.FC<ConfigureProjectModalProps> = ({
       }}
     >
       <div
-        className={`bg-brand-sidebar border border-brand-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden text-brand-textMain transition-all duration-150 ${
+        className={`bg-brand-bg border border-brand-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden text-brand-textMain transition-all duration-150 ${
           closing ? 'opacity-0 scale-95 translate-y-1' : 'opacity-100 scale-100 translate-y-0'
         }`}
       >

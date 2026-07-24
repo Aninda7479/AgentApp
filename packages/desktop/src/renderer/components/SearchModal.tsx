@@ -213,7 +213,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
       <div
         ref={modalRef}
         data-testid="search-modal-content"
-        className="w-[600px] max-w-full bg-brand-sidebar border border-brand-border rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[80vh]"
+        className="w-[600px] max-w-full bg-brand-bg border border-brand-border rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[80vh]"
       >
         {/* Search Input */}
         <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-brand-border">
