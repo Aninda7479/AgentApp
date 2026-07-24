@@ -8,7 +8,6 @@ import { useChatStore } from '../stores/chatStore';
 import { MessageCanvas } from './MessageCanvas';
 import { ComposerBar } from './ComposerBar';
 import { AgentOrchestrator } from '../services/AgentOrchestrator';
-import { ChevronRight } from 'lucide-react';
 import type { ComposerOptions, ComposerAttachment } from '../core/types';
 
 interface WorkspaceStageProps {
@@ -38,14 +37,6 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
 
   return (
     <div className="flex-1 flex flex-col h-full min-w-0 bg-slate-950/20 relative">
-      {/* Top Breadcrumb Bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800/40 bg-slate-900/20 select-none">
-        <div className="flex items-center gap-1 text-xs text-slate-400">
-          <span>Workspace</span>
-          <ChevronRight size={12} />
-          <span className="text-slate-200 font-semibold">{activeProject || 'No Project'}</span>
-        </div>
-      </div>
 
       {/* Active Chat Panel */}
       <div className="flex-1 p-3 overflow-hidden flex flex-col min-h-0">

@@ -4,7 +4,7 @@
  */
 
 import React, { useRef, useEffect } from 'react';
-import { Bot, Square, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Bot, Square, Loader2, RefreshCw, AlertTriangle, ChevronRight } from 'lucide-react';
 import { useTrajectory } from '../hooks/useTrajectory';
 import { useAgent } from '../hooks/useAgent';
 import { StepRenderer } from './StepRenderer';
@@ -19,6 +19,7 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({ chatId, onClosePan
   const steps = useTrajectory(chatId);
   const { isRunning, lastError, contextUsage, stopRun } = useAgent(chatId);
   const chat = useChatStore((s) => s.chats.find((c) => c.id === chatId));
+  const activeProject = useChatStore((s) => s.activeProject);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,13 +30,14 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({ chatId, onClosePan
     <div className="flex flex-col h-full bg-slate-950/40 border border-slate-800/60 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-xl">
       {/* Panel Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-slate-900/60 border-b border-slate-800/60 select-none">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-sm shadow-cyan-500/50" />
+        <div className="flex items-center gap-1.5 min-w-0 text-slate-400 text-xs">
+          <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-sm shadow-cyan-500/50 shrink-0 mr-1" />
+          <span className="hover:text-slate-200 transition-colors">Workspace</span>
+          <ChevronRight size={12} className="shrink-0 text-slate-500" />
+          <span className="font-medium text-slate-300 truncate max-w-[150px]">{activeProject || 'No Project'}</span>
+          <ChevronRight size={12} className="shrink-0 text-slate-500" />
           <span className="font-semibold text-sm text-slate-100 truncate">
             {chat?.title || 'Active Session'}
-          </span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-mono">
-            {chat?.model || 'Orchestrator'}
           </span>
         </div>
 
