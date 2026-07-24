@@ -13,7 +13,7 @@ import { ProviderRegistry } from './ProviderRegistry';
 import { StepFactory } from './StepFactory';
 import { ChatRepository } from './ChatRepository';
 import { FormatUtils } from '../util/format';
-import type { ComposerOptions, ComposerAttachment, TrajectoryStep, AgentEvent } from '../core/types';
+import type { ComposerOptions, ComposerAttachment, TrajectoryStep, AgentEvent, StoredChat } from '../core/types';
 
 export class AgentOrchestrator {
   private static streamBuffers: Map<string, SessionStreamBuffer> = new Map();
@@ -37,10 +37,34 @@ export class AgentOrchestrator {
     const trimmedPrompt = promptText.trim();
     if (!trimmedPrompt && attachments.length === 0) return;
 
+    let targetChatId = chatId;
+    if (chatId === 'draft-chat') {
+      const uniqueChatId = FormatUtils.generateStorageId();
+      const defaultModel =
+        providerStore.getState().lastUsedModel ||
+        providerStore.getState().models.find((m) => m.enabled)?.name ||
+        '';
+      const proj = chatStore.getState().activeProject || chatStore.getState().draftProject || '';
+
+      const newChat: StoredChat = {
+        id: uniqueChatId,
+        title: proj ? `Chat in ${proj}` : 'Standalone Chat',
+        project: proj,
+        model: defaultModel,
+        timestamp: 'Just now',
+        steps: [],
+      };
+
+      chatStore.setChats([newChat, ...chatStore.getState().chats]);
+      chatStore.openPanel(uniqueChatId);
+      chatStore.setSteps(uniqueChatId, []);
+      targetChatId = uniqueChatId;
+    }
+
     // Check if session is already running — if so, enqueue prompt
-    if (sessionStore.isRunning(chatId)) {
-      sessionStore.enqueue(chatId, {
-        chatId,
+    if (sessionStore.isRunning(targetChatId)) {
+      sessionStore.enqueue(targetChatId, {
+        chatId: targetChatId,
         prompt: trimmedPrompt,
         options,
         attachments,
@@ -49,9 +73,9 @@ export class AgentOrchestrator {
     }
 
     const startedAt = Date.now();
-    sessionStore.markRunning(chatId, startedAt);
+    sessionStore.markRunning(targetChatId, startedAt);
 
-    const activeChat = chatStore.getState().chats.find((c) => c.id === chatId);
+    const activeChat = chatStore.getState().chats.find((c) => c.id === targetChatId);
     const activeProject = chatStore.getState().projects.find((p) => p.name === activeChat?.project);
 
     // Selected model resolution
@@ -71,20 +95,20 @@ export class AgentOrchestrator {
     );
 
     const nextSteps = [...attachmentSteps, userStep];
-    chatStore.updateSteps(chatId, (prev) => [...prev, ...nextSteps]);
+    chatStore.updateSteps(targetChatId, (prev) => [...prev, ...nextSteps]);
     ChatRepository.persistAll().catch(console.error);
 
     // Prepare Stream Buffer
-    const buffer = AgentOrchestrator.getStreamBuffer(chatId);
+    const buffer = AgentOrchestrator.getStreamBuffer(targetChatId);
     buffer.resetTurn();
     buffer.setStartedAt(startedAt);
 
     // Setup Agent Event Bus listener for this session
-    AgentOrchestrator.setupSessionEventListener(chatId, startedAt);
+    AgentOrchestrator.setupSessionEventListener(targetChatId, startedAt);
 
     // Build IPC Agent Run Configuration payload
     const currentAttachments = chatStore
-      .getSteps(chatId)
+      .getSteps(targetChatId)
       .filter((s) => s.metadata?.mediaPath)
       .map((s) => s.metadata!.mediaPath as string);
 
@@ -101,18 +125,18 @@ export class AgentOrchestrator {
 
     try {
       const result = await IpcBridge.runAgent({
-        sessionId: `session-${chatId}`,
+        sessionId: `session-${targetChatId}`,
         prompt: trimmedPrompt,
         config: runConfig,
         currentAttachments,
       });
 
       if (result && result.success === false) {
-        AgentOrchestrator.handleSessionError(chatId, result.error || 'Failed to start agent session', startedAt);
+        AgentOrchestrator.handleSessionError(targetChatId, result.error || 'Failed to start agent session', startedAt);
       }
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      AgentOrchestrator.handleSessionError(chatId, errorMsg, startedAt);
+      AgentOrchestrator.handleSessionError(targetChatId, errorMsg, startedAt);
     }
   }
 
