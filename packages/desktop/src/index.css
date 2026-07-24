@@ -43,8 +43,9 @@
   /* ── Canvas & tonal elevation steps (deepest → highest) ── */
   --brand-bg: #2c2d28;
   --brand-sidebar: #111114;
-  --brand-card: #17171b;
-  --brand-popover: #1a1a1f;
+  --brand-card: #20211d;
+  --brand-popover: #262722;
+  --brand-inner-bg: #151613;
 
   /* ── Hairlines (subtle, never structural borders) ── */
   --brand-border: rgba(255, 255, 255, 0.07);
@@ -54,9 +55,9 @@
      Faint, theme-adaptive depth bands + a soft accent glow, painted behind
      all content so the canvas reads considered without harming text contrast. */
   --brand-atmo-glow: rgba(165, 180, 252, 0.10);  /* brand-accent violet, low */
-  --brand-atmo-1: rgba(255, 255, 255, 0.035);
-  --brand-atmo-2: rgba(255, 255, 255, 0.055);
-  --brand-atmo-3: rgba(255, 255, 255, 0.085);
+  --brand-atmo-1: rgba(255, 255, 255, 0.02);
+  --brand-atmo-2: rgba(255, 255, 255, 0.035);
+  --brand-atmo-3: rgba(255, 255, 255, 0.05);
 
   /* ── Typography ── */
   --brand-text-main: #ECEDEF;
@@ -115,16 +116,17 @@
   --brand-bg: #f4eedf;
   --brand-sidebar: #fbfbfc;
   --brand-card: #ffffff;
-  --brand-popover: #ffffff;
+  --brand-popover: #faf9f6;
+  --brand-inner-bg: #e6dfcf;
 
   --brand-border: rgba(0, 0, 0, 0.08);
   --brand-border-strong: rgba(0, 0, 0, 0.15);
 
   /* ── App-shell ambient "layered atmosphere" backdrop (Atmosphere mode) ── */
   --brand-atmo-glow: rgba(79, 70, 229, 0.07);
-  --brand-atmo-1: rgba(0, 0, 0, 0.025);
-  --brand-atmo-2: rgba(0, 0, 0, 0.04);
-  --brand-atmo-3: rgba(0, 0, 0, 0.06);
+  --brand-atmo-1: rgba(0, 0, 0, 0.015);
+  --brand-atmo-2: rgba(0, 0, 0, 0.025);
+  --brand-atmo-3: rgba(0, 0, 0, 0.04);
 
   --brand-text-main: #16161a;
   --brand-text-muted: #65656d;
@@ -164,10 +166,10 @@ body {
 
 /* Workspace main page: pure black/white background, independent of theme vars */
 :root[data-theme='dark'] .workspace-canvas {
-  background: #000000;
+  background: var(--brand-inner-bg);
 }
 :root[data-theme='light'] .workspace-canvas {
-  background: #ffffff;
+  background: var(--brand-inner-bg);
 }
 
 /* Mobile / touch polish */

@@ -36,7 +36,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800/90 text-slate-200 border border-slate-700/60 text-xs font-semibold shadow-sm transition-all select-none"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-brand-bg hover:bg-brand-bg/85 text-brand-textMain border border-brand-border text-xs font-semibold shadow-sm transition-all select-none"
       >
         <Cpu size={14} className="text-cyan-400" />
         <span className="truncate max-w-[140px]">{effectiveModel}</span>
@@ -44,13 +44,13 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full mb-2 left-0 w-64 max-h-80 overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl z-50 p-1.5 scrollbar-thin scrollbar-thumb-slate-800">
+        <div className="absolute bottom-full mb-2 left-0 w-64 max-h-80 overflow-y-auto bg-brand-popover border border-brand-border rounded-2xl shadow-2xl z-50 p-1.5 scrollbar-thin scrollbar-thumb-brand-border">
           <div
             onClick={() => {
               onSelectModel('Orchestrator');
               setIsOpen(false);
             }}
-            className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-800/80 cursor-pointer text-xs transition-colors"
+            className="flex items-center justify-between p-2 rounded-xl hover:bg-brand-hover cursor-pointer text-xs transition-colors text-brand-textMain"
           >
             <div className="flex items-center gap-2">
               <Sparkles size={14} className="text-cyan-400" />
@@ -59,11 +59,11 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
             {effectiveModel === 'Orchestrator' && <Check size={14} className="text-cyan-400" />}
           </div>
 
-          <div className="my-1 border-t border-slate-800/80" />
+          <div className="my-1 border-t border-brand-border" />
 
           {groupedModels.map(({ provider, models }) => (
             <div key={provider.id} className="mb-2">
-              <div className="px-2 py-1 text-[10px] font-mono text-slate-500 uppercase tracking-wider">
+              <div className="px-2 py-1 text-[10px] font-mono text-brand-textMuted uppercase tracking-wider">
                 {provider.name}
               </div>
               {models.map((m) => (
@@ -73,8 +73,8 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
                     onSelectModel(m.name);
                     setIsOpen(false);
                   }}
-                  className={`flex items-center justify-between p-2 rounded-xl hover:bg-slate-800/80 cursor-pointer text-xs transition-colors ${
-                    effectiveModel === m.name ? 'text-white font-semibold bg-slate-800/50' : 'text-slate-300'
+                  className={`flex items-center justify-between p-2 rounded-xl hover:bg-brand-hover cursor-pointer text-xs transition-colors ${
+                    effectiveModel === m.name ? 'text-brand-textMain font-semibold bg-brand-hover-strong' : 'text-brand-textMuted'
                   }`}
                 >
                   <span className="truncate">{m.name}</span>
