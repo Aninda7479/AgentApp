@@ -21,6 +21,7 @@ import { AboutSettings } from './AboutSettings';
 import { WebAppSettings } from './WebAppSettings';
 import { CircleSearchSettings } from './CircleSearchSettings';
 import { MemorySettings } from './MemorySettings';
+import { ArtifactSettings } from './ArtifactSettings';
 import { browserSafeFetch } from '../../web-fetch.js';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 
@@ -45,6 +46,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   'archived-chats': 'Archived Chats',
   'archived-projects': 'Archived Projects',
   'web-app': 'Web App',
+  artifacts: 'Storage & Artifacts',
   updates: 'Updates',
   about: 'About'
 };
@@ -493,6 +495,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         )}
         {activeCategory === 'circle-search' && (
           <CircleSearchSettings />
+        )}
+        {activeCategory === 'artifacts' && (
+          <ArtifactSettings />
         )}
         </ErrorBoundary>
       </div>

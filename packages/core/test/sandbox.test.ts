@@ -339,5 +339,18 @@ describe('Sandbox Engine Suite (Steps 009 - 015)', () => {
       expect(res.written).toBe(false);
       expect(fs.existsSync(target)).toBe(false);
     });
+    it('resolves home tilde paths and allows reading/writing inside ~/.superagent', async () => {
+      const runner = new SandboxRunner({
+        projectRoot: tempDir,
+        permissionMode: 'auto-approve-edits'
+      });
+      // 1. Resolve path starting with ~
+      const resolved = runner.resolvePath('~/.superagent/test.txt');
+      expect(resolved).toBe(path.resolve(os.homedir(), '.superagent/test.txt'));
+
+      // 2. Resolve target escaping project root should be blocked if it is not inside ~/.superagent
+      const outside = runner.resolvePath('../outside-file.txt');
+      expect(outside).toBeNull();
+    });
   });
 });

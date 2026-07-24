@@ -24,6 +24,7 @@
  * This is a *policy/permission* sandbox, not an OS container.
  */
 import * as path from 'path';
+import * as os from 'os';
 import { PermissionModeController, ConfirmationHandler, PermissionMode } from './permissions.js';
 import { TerminalShellExecutor, ExecutionResult } from './terminal.js';
 import { TerminalAccessControl } from './access.js';
@@ -64,7 +65,15 @@ function resolveWithinRoot(projectRoot: string, target: string): string | null {
   const normRoot = root.toLowerCase();
   const normResolved = resolved.toLowerCase();
   const inside = normResolved === normRoot || normResolved.startsWith(normRoot + path.sep);
-  return inside ? resolved : null;
+  if (inside) return resolved;
+
+  const superagentDir = path.resolve(os.homedir(), '.superagent').toLowerCase();
+  const insideSuperAgent = normResolved === superagentDir || normResolved.startsWith(superagentDir + path.sep);
+  if (insideSuperAgent) {
+    return resolved;
+  }
+
+  return null;
 }
 
 /**
@@ -164,9 +173,10 @@ export class SandboxRunner {
    * sandboxed mode. File tools MUST call this before touching disk.
    */
   public resolvePath(target: string): string | null {
-    if (this.unsandboxed) return path.resolve(target);
-    if (!this.projectRoot) return path.resolve(target);
-    return resolveWithinRoot(this.projectRoot, target);
+    const resolvedTarget = target.startsWith('~') ? target.replace(/^~/, os.homedir()) : target;
+    if (this.unsandboxed) return path.resolve(resolvedTarget);
+    if (!this.projectRoot) return path.resolve(resolvedTarget);
+    return resolveWithinRoot(this.projectRoot, resolvedTarget);
   }
 
   // ── Command execution ───────────────────────────────────────────────────────

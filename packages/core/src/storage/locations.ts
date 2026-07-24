@@ -22,6 +22,7 @@ export const STORAGE_DIRS = {
   plugins: 'plugins',
   connectors: 'connectors',
   logs: 'logs',
+  artifact: 'artifact',
   threeD: '3d-studio'
 } as const;
 
@@ -76,6 +77,11 @@ export function getConversationDirectory(base: string = getUserDataDirectory()):
 /** Returns the logs directory (`~/.superagent/logs`). */
 export function getLogsDirectory(base: string = getUserDataDirectory()): string {
   return path.join(base, STORAGE_DIRS.logs);
+}
+
+/** Returns the artifacts directory (`~/.superagent/artifact`). */
+export function getArtifactDirectory(base: string = getUserDataDirectory()): string {
+  return path.join(base, STORAGE_DIRS.artifact);
 }
 
 /**

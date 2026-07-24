@@ -15,8 +15,10 @@ import { AgentEngine } from './ai-engine.js';
 import { LearningLoopEngine } from '../memory/learn.js';
 import { UserProfileStore } from '../memory/profile.js';
 import { ProjectInstructionsParser } from '../memory/instructions.js';
+import { ArtifactRunner } from '../artifact/artifactRunner.js';
 
 const execAsync = promisify(exec);
+const artifactRunner = new ArtifactRunner();
 
 async function getBrowser(): Promise<PlaywrightBrowserEngine> {
   return await BrowserLifecycleService.getSharedInstance();
@@ -148,6 +150,162 @@ export function createBuiltinTools(
   }
 
   return [
+    {
+      name: 'propose_artifact',
+      description: 'Propose a new local micro-app / webapp artifact to the user. You must call this before create_artifact.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Unique folder/app identifier, e.g. "todo-list"' },
+          name: { type: 'string', description: 'Display title of the micro-app' },
+          description: { type: 'string', description: 'Short summary of what the app does' },
+          type: { type: 'string', enum: ['static', 'node', 'python'], description: 'Runtime type' },
+          entry: { type: 'string', description: 'Main entry file, e.g. "index.html"' },
+          port: { type: 'number', description: 'Preferred HTTP port' },
+          files: {
+            type: 'object',
+            description: 'Map of relative file paths to string file content'
+          }
+        },
+        required: ['id', 'name', 'description', 'files'],
+        additionalProperties: false
+      },
+      execute: async ({ id, name, description, type = 'static', entry = 'index.html', port = 3080, files }) => {
+        const fileNames = Object.keys(files || {}).join(', ');
+        return `PROPOSAL SUCCESSFUL. I have formatted the proposal for the user. Ask the user: "I want to create an artifact called '${name}' (${description}) with files: [${fileNames}]. Shall I proceed?" and wait for their confirmation.`;
+      }
+    },
+    {
+      name: 'create_artifact',
+      description: 'Creates a custom local micro-app / webapp artifact stored in ~/.superagent/artifact/<id> (Only call this after the user has explicitly confirmed the proposal).',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Unique folder/app identifier, e.g. "todo-list"' },
+          name: { type: 'string', description: 'Display title of the micro-app' },
+          description: { type: 'string', description: 'Short summary of what the app does' },
+          type: { type: 'string', enum: ['static', 'node', 'python'], description: 'Runtime type' },
+          entry: { type: 'string', description: 'Main entry file, e.g. "index.html"' },
+          port: { type: 'number', description: 'Preferred HTTP port' },
+          files: {
+            type: 'object',
+            description: 'Map of relative file paths to string file content'
+          }
+        },
+        required: ['id', 'name', 'description', 'files'],
+        additionalProperties: false
+      },
+      execute: async (params: any) => {
+        try {
+          const state = await artifactRunner.createArtifact(params);
+          return `Artifact "${params.name}" successfully created at ~/.superagent/artifact/${params.id}. You can tell the user it is ready and can be launched.`;
+        } catch (err: any) {
+          return `Error creating artifact: ${err.message}`;
+        }
+      }
+    },
+    {
+      name: 'list_artifacts',
+      description: 'Lists all installed local micro-app artifacts and their current running status.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        additionalProperties: false
+      },
+      execute: async () => {
+        try {
+          const list = await artifactRunner.scanArtifacts();
+          if (list.length === 0) {
+            return 'No local artifacts found.';
+          }
+          const lines = list.map(a => `- ${a.manifest.name} (${a.id}): Status: ${a.status}, Type: ${a.manifest.type}, URL: ${a.url || 'N/A'}`);
+          return `Installed Artifacts:\n${lines.join('\n')}`;
+        } catch (err: any) {
+          return `Error listing artifacts: ${err.message}`;
+        }
+      }
+    },
+    {
+      name: 'start_artifact',
+      description: 'Starts a stopped local micro-app artifact by ID.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Artifact identifier' }
+        },
+        required: ['id'],
+        additionalProperties: false
+      },
+      execute: async ({ id }) => {
+        try {
+          const state = await artifactRunner.startArtifact(id as string);
+          return `Artifact "${id}" started successfully. Serving at ${state.url}`;
+        } catch (err: any) {
+          return `Error starting artifact "${id}": ${err.message}`;
+        }
+      }
+    },
+    {
+      name: 'stop_artifact',
+      description: 'Stops a running local micro-app artifact by ID.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Artifact identifier' }
+        },
+        required: ['id'],
+        additionalProperties: false
+      },
+      execute: async ({ id }) => {
+        try {
+          await artifactRunner.stopArtifact(id as string);
+          return `Artifact "${id}" stopped successfully.`;
+        } catch (err: any) {
+          return `Error stopping artifact "${id}": ${err.message}`;
+        }
+      }
+    },
+    {
+      name: 'delete_artifact',
+      description: 'Deletes a local micro-app artifact and its directory by ID. (Ask the user before calling this).',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Artifact identifier' }
+        },
+        required: ['id'],
+        additionalProperties: false
+      },
+      execute: async ({ id }) => {
+        try {
+          await artifactRunner.deleteArtifact(id as string);
+          return `Artifact "${id}" deleted successfully.`;
+        } catch (err: any) {
+          return `Error deleting artifact "${id}": ${err.message}`;
+        }
+      }
+    },
+    {
+      name: 'get_artifact_logs',
+      description: 'Retrieves execution output log lines for a running or past artifact.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Artifact identifier' },
+          lines: { type: 'number', description: 'Maximum log lines to return (default 50)' }
+        },
+        required: ['id'],
+        additionalProperties: false
+      },
+      execute: async ({ id, lines = 50 }) => {
+        try {
+          const logs = artifactRunner.getArtifactLogs(id as string, lines as number);
+          return logs ? `Logs for "${id}":\n${logs}` : `No logs found for artifact "${id}".`;
+        } catch (err: any) {
+          return `Error getting logs: ${err.message}`;
+        }
+      }
+    },
     {
       name: 'read_file',
       description: 'Read the complete contents of a file at the given path. Use for viewing source code, configs, or text documents.',

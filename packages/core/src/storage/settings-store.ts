@@ -199,6 +199,13 @@ export interface CircleSearchSettings {
   shortcut?: string;
 }
 
+/** Settings for custom local micro-apps / artifacts. */
+export interface ArtifactSettings {
+  defaultPortStart?: number;
+  autoStartOnLaunch?: boolean;
+  storageDir?: string;
+}
+
 /** Configuration for the self-hosted **Web App** (the web server that the
  * Desktop app can start from Settings → Web App, and which the CLI can start
  * with `superagent --start-web`). The server itself lives in `@superagent/web`;
@@ -248,6 +255,7 @@ export interface AppSettings {
   voice?: VoiceSettings;
   circleSearch?: CircleSearchSettings;
   chatTitle?: ChatTitleSettings;
+  artifact?: ArtifactSettings;
 }
 
 /** Resolved file system paths for user data and config files. */
@@ -390,7 +398,11 @@ export class SettingsStorage {
         internetAccess: settings.internetAccess !== undefined ? (settings.internetAccess === null ? undefined : { ...current.internetAccess, ...settings.internetAccess }) : current.internetAccess,
         plugins: settings.plugins !== undefined ? (settings.plugins === null ? undefined : { ...current.plugins, ...settings.plugins }) : current.plugins,
         threeD: settings.threeD !== undefined ? (settings.threeD === null ? undefined : settings.threeD) : current.threeD,
-        voice: settings.voice !== undefined ? (settings.voice === null ? undefined : { ...current.voice, ...settings.voice }) : current.voice
+        voice: settings.voice !== undefined ? (settings.voice === null ? undefined : { ...current.voice, ...settings.voice }) : current.voice,
+        webApp: settings.webApp !== undefined ? (settings.webApp === null ? undefined : { ...current.webApp, ...settings.webApp }) : current.webApp,
+        circleSearch: settings.circleSearch !== undefined ? (settings.circleSearch === null ? undefined : { ...current.circleSearch, ...settings.circleSearch }) : current.circleSearch,
+        chatTitle: settings.chatTitle !== undefined ? (settings.chatTitle === null ? undefined : { ...current.chatTitle, ...settings.chatTitle }) : current.chatTitle,
+        artifact: settings.artifact !== undefined ? (settings.artifact === null ? undefined : { ...current.artifact, ...settings.artifact }) : current.artifact
       };
 
       this.cachedSettings = updated;

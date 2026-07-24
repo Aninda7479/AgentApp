@@ -69,6 +69,9 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
     { id: 'archived-chats', label: 'Archived Chats', Icon: Archive },
     { id: 'archived-projects', label: 'Archived Projects', Icon: FolderArchive }
   ],
+  Storage: [
+    { id: 'artifacts', label: 'Storage & Artifacts', Icon: HardDrive }
+  ],
   Hosting: [
     { id: 'web-app', label: 'Web App', Icon: Globe }
   ],

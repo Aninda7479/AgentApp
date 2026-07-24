@@ -1005,44 +1005,52 @@ Key guidelines:
 
     while (attempt <= maxRetries) {
       attempt++;
-      response = await this.fetchWithConnectTimeout(
-        url,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(payload)
-        },
-        signal
-      );
+      try {
+        response = await this.fetchWithConnectTimeout(
+          url,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload)
+          },
+          signal
+        );
 
-      if (!response.ok) {
-        const errText = await response.text();
+        if (!response.ok) {
+          const errText = await response.text();
 
-        // Auto-Adapter: If HTTP 500/400 payload rejection occurs, sanitize payload and record model ID in strict set
-        if ((response.status >= 500 || response.status === 400) && ('temperature' in payload || 'max_tokens' in payload || 'stream' in payload)) {
-          delete payload.temperature;
-          delete payload.max_tokens;
-          delete payload.stream;
-          delete payload.frequency_penalty;
-          delete payload.presence_penalty;
-          if (modelId) {
-            STRICT_MINIMAL_PAYLOAD_MODELS.add(modelId);
+          // Auto-Adapter: If HTTP 500/400 payload rejection occurs, sanitize payload and record model ID in strict set
+          if ((response.status >= 500 || response.status === 400) && ('temperature' in payload || 'max_tokens' in payload || 'stream' in payload)) {
+            delete payload.temperature;
+            delete payload.max_tokens;
+            delete payload.stream;
+            delete payload.frequency_penalty;
+            delete payload.presence_penalty;
+            if (modelId) {
+              STRICT_MINIMAL_PAYLOAD_MODELS.add(modelId);
+            }
+
+            if (attempt <= maxRetries) {
+              await new Promise((r) => setTimeout(r, 2000 * attempt));
+              continue;
+            }
           }
 
+          // Retry on any API error
           if (attempt <= maxRetries) {
-            await new Promise((r) => setTimeout(r, 1500 * attempt));
+            await new Promise((r) => setTimeout(r, 2000 * attempt));
             continue;
           }
-        }
 
-        // Retry transient 500 or 429 rate limit errors for OmniRoute or custom provider proxies
-        if ((response.status >= 500 || response.status === 429) && attempt <= maxRetries) {
-          await new Promise((r) => setTimeout(r, 1500 * attempt));
+          const pName = this.config.provider ? (this.config.provider === 'openrouter' ? 'OpenRouter' : this.config.provider.toUpperCase()) : 'API';
+          throw new Error(`${pName} API error [${response.status}]: ${errText}`);
+        }
+      } catch (err: unknown) {
+        if (attempt <= maxRetries) {
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
           continue;
         }
-
-        const pName = this.config.provider ? (this.config.provider === 'openrouter' ? 'OpenRouter' : this.config.provider.toUpperCase()) : 'API';
-        throw new Error(`${pName} API error [${response.status}]: ${errText}`);
+        throw err;
       }
       break;
     }
@@ -1235,24 +1243,48 @@ Key guidelines:
       max_tokens: this.config.maxTokens ?? 4096
     };
 
-    const response = await this.fetchWithConnectTimeout(
-      url,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01',
-          'x-api-key': this.config.apiKey,
-          'anthropic-beta': 'tools-2024-04-04'
-        },
-        body: JSON.stringify(payload)
-      },
-      signal
-    );
+    let response: Response | undefined;
+    let attempt = 0;
+    const maxRetries = 3;
 
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Anthropic API error [${response.status}]: ${err}`);
+    while (attempt <= maxRetries) {
+      attempt++;
+      try {
+        response = await this.fetchWithConnectTimeout(
+          url,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'anthropic-version': '2023-06-01',
+              'x-api-key': this.config.apiKey,
+              'anthropic-beta': 'tools-2024-04-04'
+            },
+            body: JSON.stringify(payload)
+          },
+          signal
+        );
+
+        if (!response.ok) {
+          if (attempt <= maxRetries) {
+            await new Promise((r) => setTimeout(r, 2000 * attempt));
+            continue;
+          }
+          const err = await response.text();
+          throw new Error(`Anthropic API error [${response.status}]: ${err}`);
+        }
+      } catch (err: unknown) {
+        if (attempt <= maxRetries) {
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
+          continue;
+        }
+        throw err;
+      }
+      break;
+    }
+
+    if (!response) {
+      throw new Error('No response received from Anthropic endpoint');
     }
 
     let fullContent = '';
@@ -1391,19 +1423,43 @@ Key guidelines:
       payload.systemInstruction = { parts: [{ text: systemInstruction }] };
     }
 
-    const response = await this.fetchWithConnectTimeout(
-      url,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      },
-      signal
-    );
+    let response: Response | undefined;
+    let attempt = 0;
+    const maxRetries = 3;
 
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Gemini API error [${response.status}]: ${err}`);
+    while (attempt <= maxRetries) {
+      attempt++;
+      try {
+        response = await this.fetchWithConnectTimeout(
+          url,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          },
+          signal
+        );
+
+        if (!response.ok) {
+          if (attempt <= maxRetries) {
+            await new Promise((r) => setTimeout(r, 2000 * attempt));
+            continue;
+          }
+          const err = await response.text();
+          throw new Error(`Gemini API error [${response.status}]: ${err}`);
+        }
+      } catch (err: unknown) {
+        if (attempt <= maxRetries) {
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
+          continue;
+        }
+        throw err;
+      }
+      break;
+    }
+
+    if (!response) {
+      throw new Error('No response received from Gemini endpoint');
     }
 
     let fullContent = '';
@@ -1508,19 +1564,43 @@ Key guidelines:
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (this.config.apiKey) headers['Authorization'] = `Bearer ${this.config.apiKey}`;
 
-    const response = await this.fetchWithConnectTimeout(
-      url,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload)
-      },
-      signal
-    );
+    let response: Response | undefined;
+    let attempt = 0;
+    const maxRetries = 3;
 
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Ollama API error [${response.status}]: ${err}`);
+    while (attempt <= maxRetries) {
+      attempt++;
+      try {
+        response = await this.fetchWithConnectTimeout(
+          url,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload)
+          },
+          signal
+        );
+
+        if (!response.ok) {
+          if (attempt <= maxRetries) {
+            await new Promise((r) => setTimeout(r, 2000 * attempt));
+            continue;
+          }
+          const err = await response.text();
+          throw new Error(`Ollama API error [${response.status}]: ${err}`);
+        }
+      } catch (err: unknown) {
+        if (attempt <= maxRetries) {
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
+          continue;
+        }
+        throw err;
+      }
+      break;
+    }
+
+    if (!response) {
+      throw new Error('No response received from Ollama endpoint');
     }
 
     let fullContent = '';

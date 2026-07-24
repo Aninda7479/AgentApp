@@ -102,6 +102,15 @@ export const ALLOWED_CHANNELS = new Set<string>([
   'three-d-generate',
   'three-d-delete-model',
   'three-d-import-external-model',
+  // artifacts
+  'artifact:list',
+  'artifact:start',
+  'artifact:stop',
+  'artifact:open',
+  'artifact:openFolder',
+  'artifact:create',
+  'artifact:delete',
+  'artifact:stateChanged',
   // circle search
   'circle-search-get-screen-image',
   'circle-search-submit',
