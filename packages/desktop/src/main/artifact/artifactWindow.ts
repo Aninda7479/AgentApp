@@ -5,6 +5,9 @@ interface WindowOptions {
   id: string;
   title: string;
   url: string;
+  width?: number;
+  height?: number;
+  resizable?: boolean;
 }
 
 /**
@@ -25,10 +28,11 @@ export class ArtifactWindowManager {
     }
 
     const win = new BrowserWindow({
-      width: 480,
-      height: 640,
+      width: options.width || 480,
+      height: options.height || 640,
       minWidth: 320,
       minHeight: 400,
+      resizable: options.resizable !== false,
       title: options.title,
       autoHideMenuBar: true,
       backgroundColor: '#0f172a',

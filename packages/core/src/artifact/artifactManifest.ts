@@ -32,6 +32,12 @@ export interface ArtifactManifest {
   createdAt: string;
   /** Category or tags */
   tags?: string[];
+  /** Preferred initial window width in pixels */
+  windowWidth?: number;
+  /** Preferred initial window height in pixels */
+  windowHeight?: number;
+  /** Allow window resizing */
+  resizable?: boolean;
 }
 
 export interface ArtifactRuntimeState {
@@ -54,6 +60,11 @@ export interface CreateArtifactParams {
   port?: number;
   files: Record<string, string>;
   logo?: string;
+  autoStart?: boolean;
+  windowWidth?: number;
+  windowHeight?: number;
+  resizable?: boolean;
+  tags?: string[];
 }
 
 /**

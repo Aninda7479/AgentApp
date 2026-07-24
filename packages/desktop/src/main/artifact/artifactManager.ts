@@ -3,7 +3,7 @@ import path from 'path';
 import os from 'os';
 import http from 'http';
 import net from 'net';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, spawnSync, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import {
   ArtifactManifest,
@@ -36,6 +36,27 @@ export class ArtifactManager extends EventEmitter {
       fs.mkdirSync(this.baseDir, { recursive: true });
     }
     return this.baseDir;
+  }
+
+  /**
+   * Helper to locate available Python binary (py launcher, python3, or python).
+   */
+  public findPythonExecutable(): string {
+    const candidates = process.platform === 'win32'
+      ? ['py', 'python', 'python3']
+      : ['python3', 'python'];
+
+    for (const bin of candidates) {
+      try {
+        const res = spawnSync(bin, ['--version'], { encoding: 'utf-8' });
+        if (res.status === 0) {
+          return bin;
+        }
+      } catch {
+        // Continue checking
+      }
+    }
+    throw new Error('Python runtime not found. Please install Python (python, python3, or py launcher).');
   }
 
   /**
@@ -90,10 +111,15 @@ export class ArtifactManager extends EventEmitter {
       }
     }
 
-    // If store was completely empty, populate seed micro-apps
-    if (this.states.size === 0) {
-      await this.ensureSeedArtifacts();
-      return this.scanArtifacts();
+    // Trigger autoStart micro-apps
+    for (const state of this.states.values()) {
+      if (state.manifest.autoStart && state.status === 'stopped') {
+        try {
+          await this.startArtifact(state.id);
+        } catch {
+          // Ignore autoStart failure during background scan
+        }
+      }
     }
 
     const result = Array.from(this.states.values());
@@ -261,6 +287,11 @@ export class ArtifactManager extends EventEmitter {
       entry: params.entry || 'index.html',
       port: params.port || 3080,
       logo: params.logo,
+      autoStart: params.autoStart,
+      windowWidth: params.windowWidth,
+      windowHeight: params.windowHeight,
+      resizable: params.resizable,
+      tags: params.tags,
       createdAt: new Date().toISOString()
     };
 
@@ -282,7 +313,7 @@ export class ArtifactManager extends EventEmitter {
   }
 
   /**
-   * Starts an artifact (HTTP static server or Node process).
+   * Starts an artifact (HTTP static server, Node process, or Python process).
    */
   public async startArtifact(id: string): Promise<ArtifactRuntimeState> {
     const state = this.states.get(id);
@@ -309,28 +340,58 @@ export class ArtifactManager extends EventEmitter {
             reqPath = reqPath.split('?')[0];
           }
 
-          let filePath = path.join(artifactDir, reqPath === '/' ? state.manifest.entry : reqPath);
+          let decodedPath = '/';
+          try {
+            decodedPath = decodeURIComponent(reqPath);
+          } catch {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end('400 Bad Request');
+            return;
+          }
+
+          const safeArtifactDir = path.resolve(artifactDir);
+          let filePath = path.resolve(
+            safeArtifactDir,
+            decodedPath === '/' ? state.manifest.entry : decodedPath.startsWith('/') ? decodedPath.slice(1) : decodedPath
+          );
+
+          // Path containment check to prevent directory traversal attacks
+          if (!filePath.startsWith(safeArtifactDir + path.sep) && filePath !== safeArtifactDir) {
+            res.writeHead(403, { 'Content-Type': 'text/plain' });
+            res.end('403 Forbidden: Access outside artifact directory denied');
+            return;
+          }
 
           if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-            filePath = path.join(artifactDir, state.manifest.entry);
+            filePath = path.join(safeArtifactDir, state.manifest.entry);
           }
 
           const ext = path.extname(filePath).toLowerCase();
           const mimeTypes: Record<string, string> = {
             '.html': 'text/html',
             '.js': 'text/javascript',
+            '.mjs': 'text/javascript',
             '.css': 'text/css',
             '.json': 'application/json',
             '.png': 'image/png',
             '.jpg': 'image/jpeg',
-            '.svg': 'image/svg+xml'
+            '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.svg': 'image/svg+xml',
+            '.webp': 'image/webp',
+            '.wasm': 'application/wasm',
+            '.woff2': 'font/woff2',
+            '.ttf': 'font/ttf'
           };
 
           const contentType = mimeTypes[ext] || 'application/octet-stream';
 
           try {
             const data = fs.readFileSync(filePath);
-            res.writeHead(200, { 'Content-Type': contentType });
+            res.writeHead(200, {
+              'Content-Type': contentType,
+              'Access-Control-Allow-Origin': '*'
+            });
             res.end(data);
           } catch (err) {
             res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -348,19 +409,41 @@ export class ArtifactManager extends EventEmitter {
         state.actualPort = actualPort;
         state.url = `http://127.0.0.1:${actualPort}`;
         state.startedAt = new Date().toISOString();
-      } else if (state.manifest.type === 'node') {
+      } else if (state.manifest.type === 'node' || state.manifest.type === 'python') {
         const entryPath = path.join(artifactDir, state.manifest.entry);
-        const child = spawn(process.execPath, [entryPath], {
+        const bin = state.manifest.type === 'node' ? process.execPath : this.findPythonExecutable();
+        const logPath = path.join(artifactDir, 'app.log');
+        const logStream = fs.createWriteStream(logPath, { flags: 'a' });
+
+        const envVars = {
+          ...process.env,
+          PORT: String(actualPort),
+          ...(state.manifest.type === 'python' ? { PYTHONUNBUFFERED: '1' } : {}),
+          ...(state.manifest.env || {})
+        };
+
+        const child = spawn(bin, [entryPath], {
           cwd: artifactDir,
-          env: { ...process.env, PORT: String(actualPort), ...(state.manifest.env || {}) },
+          env: envVars,
           stdio: ['ignore', 'pipe', 'pipe']
         });
 
-        child.on('exit', () => {
+        child.stdout?.pipe(logStream);
+        child.stderr?.pipe(logStream);
+
+        let stderrBuf = '';
+        child.stderr?.on('data', (chunk) => {
+          stderrBuf += chunk.toString();
+        });
+
+        child.on('exit', (code) => {
           this.runners.delete(id);
           const current = this.states.get(id);
           if (current) {
-            current.status = 'stopped';
+            current.status = code === 0 ? 'stopped' : 'error';
+            if (code !== 0 && stderrBuf) {
+              current.errorMessage = stderrBuf.slice(-300);
+            }
             current.actualPort = undefined;
             current.url = undefined;
             this.emit('stateChanged', current);
@@ -422,6 +505,39 @@ export class ArtifactManager extends EventEmitter {
       },
       status: 'stopped'
     };
+  }
+
+  /**
+   * Deletes an artifact directory and stops any running instance.
+   */
+  public async deleteArtifact(id: string): Promise<boolean> {
+    await this.stopArtifact(id);
+    this.states.delete(id);
+    const storeDir = this.getStoreDirectory();
+    const artifactDir = path.join(storeDir, id);
+    if (fs.existsSync(artifactDir)) {
+      fs.rmSync(artifactDir, { recursive: true, force: true });
+    }
+    this.emit('deleted', id);
+    return true;
+  }
+
+  /**
+   * Returns recent log lines from the app.log file.
+   */
+  public getArtifactLogs(id: string, maxLines = 50): string {
+    const storeDir = this.getStoreDirectory();
+    const logPath = path.join(storeDir, id, 'app.log');
+    if (!fs.existsSync(logPath)) {
+      return '';
+    }
+    try {
+      const content = fs.readFileSync(logPath, 'utf-8');
+      const lines = content.split('\n');
+      return lines.slice(-maxLines).join('\n');
+    } catch {
+      return '';
+    }
   }
 
   public getArtifactState(id: string): ArtifactRuntimeState | undefined {

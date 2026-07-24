@@ -20,12 +20,9 @@ describe('ArtifactManager', () => {
     }
   });
 
-  it('populates seed artifacts if store is empty', async () => {
+  it('returns empty array when store is empty', async () => {
     const list = await manager.scanArtifacts();
-    expect(list.length).toBeGreaterThanOrEqual(2);
-    const calc = list.find((a) => a.id === 'quick-calc');
-    expect(calc).toBeDefined();
-    expect(calc?.manifest.name).toBe('Quick Calculator');
+    expect(list).toEqual([]);
   });
 
   it('creates custom artifact with files and manifest', async () => {
@@ -72,5 +69,53 @@ describe('ArtifactManager', () => {
     const stopped = await manager.stopArtifact('demo-app');
     expect(stopped.status).toBe('stopped');
     expect(stopped.actualPort).toBeUndefined();
+  });
+
+  it('blocks path traversal attempts in static HTTP server', async () => {
+    await manager.createArtifact({
+      id: 'secure-app',
+      name: 'Secure',
+      description: 'Security test app',
+      type: 'static',
+      entry: 'index.html',
+      port: 3960,
+      files: {
+        'index.html': '<div>Safe Content</div>'
+      }
+    });
+
+    const started = await manager.startArtifact('secure-app');
+    expect(started.actualPort).toBeDefined();
+
+    // Perform HTTP request attempting path traversal using URL encoded dots
+    const res = await new Promise<{ statusCode?: number; data: string }>((resolve) => {
+      import('http').then((http) => {
+        http.get(`http://127.0.0.1:${started.actualPort}/%2e%2e%2f%2e%2e%2fpackage.json`, (response) => {
+          let body = '';
+          response.on('data', (chunk) => (body += chunk));
+          response.on('end', () => resolve({ statusCode: response.statusCode, data: body }));
+        });
+      });
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.data).toContain('403 Forbidden');
+  });
+
+  it('deletes an artifact and cleans up store directory', async () => {
+    await manager.createArtifact({
+      id: 'del-app',
+      name: 'Delete Me',
+      description: 'App to delete',
+      type: 'static',
+      entry: 'index.html',
+      port: 3970,
+      files: { 'index.html': '<h1>Delete</h1>' }
+    });
+
+    const success = await manager.deleteArtifact('del-app');
+    expect(success).toBe(true);
+    expect(manager.getArtifactState('del-app')).toBeUndefined();
+    expect(fs.existsSync(path.join(tempDir, 'del-app'))).toBe(false);
   });
 });

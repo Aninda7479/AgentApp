@@ -34,5 +34,50 @@ export const ARTIFACT_TOOLS: ArtifactToolDefinition[] = [
       type: 'object',
       properties: {}
     }
+  },
+  {
+    name: 'start_artifact',
+    description: 'Starts a stopped local micro-app artifact by ID',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Artifact identifier' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'stop_artifact',
+    description: 'Stops a running local micro-app artifact by ID',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Artifact identifier' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'delete_artifact',
+    description: 'Deletes a local micro-app artifact and its directory by ID',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Artifact identifier' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'get_artifact_logs',
+    description: 'Retrieves execution output log lines for a running or past artifact',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Artifact identifier' },
+        lines: { type: 'number', description: 'Maximum log lines to return (default 50)' }
+      },
+      required: ['id']
+    }
   }
 ];
