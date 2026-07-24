@@ -22,6 +22,8 @@ import {
   getActiveConnection,
   resolveConnection as coreResolveConnection,
   type ActiveConnection,
+  sendChatMessageDirect,
+  getUserDataDirectory
 } from '@superagent/core';
 import { PermissionLevel } from './shortcuts/permissions.js';
 
@@ -83,10 +85,12 @@ export class ChatSession {
   private engine: SuperAgentEngine | null = null;
   private conn: ResolvedConnection;
   private permission: PermissionLevel;
+  public readonly sessionId: string;
 
-  constructor(conn: ResolvedConnection, permission: PermissionLevel = 'auto') {
+  constructor(conn: ResolvedConnection, permission: PermissionLevel = 'auto', sessionId?: string) {
     this.conn = conn;
     this.permission = permission;
+    this.sessionId = sessionId || `session-${Date.now()}`;
   }
 
   get provider(): string {
@@ -151,39 +155,22 @@ export class ChatSession {
 
   /** Runs one user turn, streaming output to the supplied handlers. */
   async send(prompt: string, attachments: ImageAttachment[], handlers: ChatHandlers): Promise<void> {
-    const engine = this.ensureEngine();
     const start = Date.now();
     handlers.onThinking?.(true);
     try {
-      await engine.run(
-        prompt,
-        (ev: AgentEvent) => {
-           switch (ev.type) {
-              case 'token':
-                if (ev.content) handlers.onToken(ev.content);
-                if (ev.usage) {
-                  handlers.onUsage?.({
-                    promptTokens: ev.usage.promptTokens,
-                    completionTokens: ev.usage.completionTokens,
-                    totalTokens: ev.usage.totalTokens,
-                  });
-                }
-                break;
-            case 'tool_call':
-              handlers.onToolCall?.(ev.toolName || '', (ev.toolArgs as Record<string, unknown>) ?? {});
-              break;
-            case 'tool_result':
-              handlers.onToolResult?.(ev.toolName || '', ev.toolResult || '');
-              break;
-            case 'error':
-              handlers.onError?.(ev.error || 'Agent error');
-              break;
-            default:
-              break;
-          }
-        },
-        attachments
-      );
+      const config = {
+        provider: this.conn.provider,
+        model: this.conn.model,
+        apiKey: this.conn.apiKey || 'missing-api-key',
+        baseUrl: this.conn.baseUrl || undefined,
+        userDataDir: getUserDataDirectory()
+      };
+
+      const onToken = (token: string) => {
+        handlers.onToken(token);
+      };
+
+      await sendChatMessageDirect(this.sessionId, prompt, config, onToken, attachments);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       handlers.onError?.(msg);

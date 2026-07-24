@@ -105,8 +105,4 @@ export * from './providers/system-info.js';
 export * from './artifact/artifactManifest.js';
 export * from './tools/artifactTools.js';
 export * from './studio/3d/index.js';
-
-
-
-
-
+export * from './providers/simple-chat.js';

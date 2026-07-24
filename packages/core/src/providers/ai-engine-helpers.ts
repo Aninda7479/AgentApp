@@ -133,7 +133,7 @@ export function isContextOverflowError(message: string): boolean {
  * of any substring (2–200 chars) are found in the trailing 1000-char window.
  */
 export function detectRepetitiveLoop(text: string): { isLoop: boolean; cleanText: string } {
-  if (!text || text.length < 30) return { isLoop: false, cleanText: text };
+  if (!text || text.length < 6) return { isLoop: false, cleanText: text };
 
   const windowSize = Math.min(4000, text.length);
   const window = text.slice(-windowSize);

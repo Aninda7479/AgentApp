@@ -35,6 +35,11 @@ import { useThemeMode } from './theme';
 import { getRouteFromLocation, pushRoute, subscribeRouteChange, buildPath } from './urlSync';
 import { getIpc } from './lib/electron';
 
+import { WorkspaceStage } from './workspace/WorkspaceStage';
+import { chatStore } from './stores/chatStore';
+import { providerStore } from './stores/providerStore';
+import { AgentOrchestrator } from './services/AgentOrchestrator';
+
 // ── Logic layer (separated from design; see renderer/logic/*) ────────────────
 import { FormatService } from './logic/format';
 import { NavigationService } from './logic/navigation';
@@ -222,6 +227,51 @@ export const App: React.FC = () => {
       fullAccess, defaultPermissions
     };
   });
+
+  // Bidirectional Synchronization between React State and Zustand Stores
+  useEffect(() => {
+    const unsubChat = chatStore.subscribe(() => {
+      const state = chatStore.getState();
+      setProjects((prev) => (JSON.stringify(prev) === JSON.stringify(state.projects) ? prev : state.projects));
+      setChats((prev) => {
+        // Compare meta arrays to avoid infinite loops, but map resident steps
+        const prevMeta = prev.map(c => ({ id: c.id, title: c.title, model: c.model, stepCount: c.steps?.length || 0 }));
+        const nextMeta = state.chats.map(c => ({ id: c.id, title: c.title, model: c.model, stepCount: c.steps?.length || 0 }));
+        if (JSON.stringify(prevMeta) === JSON.stringify(nextMeta)) return prev;
+        return state.chats;
+      });
+      setActiveChatId((prev) => (prev === state.activeChatId ? prev : state.activeChatId));
+      setActiveProject((prev) => (prev === state.activeProject ? prev : state.activeProject));
+      setDraftProject((prev) => (prev === state.draftProject ? prev : state.draftProject));
+    });
+
+    const unsubProvider = providerStore.subscribe(() => {
+      const state = providerStore.getState();
+      setConnectedProviders((prev) => (JSON.stringify(prev) === JSON.stringify(state.providers) ? prev : state.providers as any));
+      setModelsCatalog((prev) => (JSON.stringify(prev) === JSON.stringify(state.models) ? prev : state.models as any));
+      setLastUsedModel((prev) => (prev === state.lastUsedModel ? prev : state.lastUsedModel));
+    });
+
+    return () => {
+      unsubChat();
+      unsubProvider();
+    };
+  }, []);
+
+  // Sync React state updates to Zustand
+  useEffect(() => {
+    chatStore.setProjects(projects);
+    chatStore.setChats(chats);
+    chatStore.setActiveChatId(activeChatId);
+    chatStore.setActiveProject(activeProject);
+    chatStore.setDraftProject(draftProject);
+  }, [projects, chats, activeChatId, activeProject, draftProject]);
+
+  useEffect(() => {
+    providerStore.setProviders(connectedProviders);
+    providerStore.setModels(modelsCatalog);
+    providerStore.setLastUsedModel(lastUsedModel);
+  }, [connectedProviders, modelsCatalog, lastUsedModel]);
 
   const activeChatIdRef = useRef(activeChatId);
   useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
@@ -423,10 +473,13 @@ export const App: React.FC = () => {
   );
   const handleSendPrompt = useCallback(
     async (prompt: string, options: ComposerOptions) => {
-      await AgentService.sendPrompt(ctx, prompt, options, undefined, slashDispatch);
+      const activeId = activeChatId || 'draft-chat';
+      await AgentOrchestrator.sendPrompt(activeId, prompt, {
+        model: options.model,
+        approvalMode: options.mode === 'auto' ? 'always' : options.mode === 'bypass' ? 'never' : 'ask',
+      });
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ctx, slashDispatch]
+    [activeChatId]
   );
   sendPromptRef.current = handleSendPrompt;
 
@@ -1208,56 +1261,14 @@ export const App: React.FC = () => {
               Keyed by activeTab so switching tabs resets a stale error state. */}
           <ErrorBoundary name={PAGE_LABELS[activeTab] ?? 'this page'} key={activeTab}>
           {activeTab === 'trajectory' && (
-            <WorkspaceView
+            <WorkspaceStage
               activeProject={activeProject}
-              trajectorySteps={trajectorySteps}
-              isGenerating={activeChat?.isRunning ?? false}
-              startedAt={activeChat?.startedAt}
-              modelsCatalog={modelsCatalog}
-              mcpServers={mcpServers}
-              hasCredentials={Boolean(connectedProviders.find((p) => p.apiKey) || byokKeys.openai || byokKeys.gemini)}
-              composerPrompt={composerPrompt}
-              onPromptChange={setComposerPrompt}
-              onSendPrompt={handleSendPrompt}
-              onStop={handleStopActiveRun}
               onViewDiff={handleViewDiff}
-              onOpenMcp={() => { setActiveTab('settings'); setSettingsCategory('connectors'); }}
               onOpenSettings={() => {
                 setActiveTab('settings');
                 setSettingsCategory('general');
               }}
               onToast={triggerToast}
-              onUndoStep={handleUndoStep}
-              activeChatModel={activeChat?.model || lastUsedModel}
-              defaultApprovalMode={resolvedDefaultApproval}
-              onModelChange={(model) => {
-                SettingsService.persistLastUsedModel(ctx, model);
-                const active = ctx.getActiveChatId();
-                if (active && active !== 'draft-chat') ConversationService.setChatModel(ctx, active, model);
-              }}
-              onAttachClick={handleAttachFiles}
-              onAttachPastedFiles={handleAttachPastedFiles}
-              composerAttachments={composerAttachments}
-              onRemoveAttachment={handleRemoveAttachment}
-              projects={projects}
-              onSelectProject={handleSelectProject}
-              unsandboxedActions={fullAccess}
-              onUnsandboxedActionsChange={handleUnsandboxedActionsChange}
-              onMicUnavailable={() => triggerToast('Voice input is not supported in this browser')}
-              onMicNotice={(msg) => triggerToast(msg)}
-              slashCommands={slashCommands}
-              skills={skills}
-              lastError={activeChat?.lastError}
-              onRetryLast={handleRetryLast}
-              onRegenerate={handleRegenerate}
-              contextUsage={liveContextUsage}
-              activeModelContextLimit={
-                modelsCatalog.find((m) => m.name === (activeChat?.model || lastUsedModel))?.contextLimit
-              }
-              onCompact={handleCompactRequest}
-              importableSkills={importableSkills}
-              onImportSkills={handleImportSkills}
-              onScanSkills={handleScanSkills}
             />
           )}
 

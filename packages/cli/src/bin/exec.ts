@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Command } from 'commander';
-import { SuperAgentEngine, SettingsStorage, OrchestratorRouter, buildRouterPool, isFreeModel, BYOKProviderManager, capabilityRegistry, type CompletionRequest, type ProviderSettings, type RouterModel } from '@superagent/core';
+import { SuperAgentEngine, SettingsStorage, OrchestratorRouter, buildRouterPool, isFreeModel, BYOKProviderManager, capabilityRegistry, type CompletionRequest, type ProviderSettings, type RouterModel, sendChatMessageDirect, getUserDataDirectory } from '@superagent/core';
 import { prepareAttachments } from '../attachments.js';
 import { resolveConnection } from '../engine.js';
 
@@ -98,6 +98,8 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
   // the task across the user's enabled pool instead of a single fixed model.
   const useOrchestrator = resolvedModel === 'orchestrator' || resolvedProvider === 'orchestrator';
 
+  let printedDirectly = false;
+
   try {
     if (useOrchestrator) {
       const freeOnly = !!savedSettings.orchestrator?.freeOnly;
@@ -106,12 +108,14 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
       // have stored keys purely in BYOK, so merge those in before routing.
       const providers: ProviderSettings[] = [];
       const seen = new Set<string>();
-      for (const p of savedSettings.providers ?? []) {
-        if (p.apiKey) {
-          providers.push(p);
-          seen.add(p.id);
+      try {
+        for (const p of savedSettings.providers ?? []) {
+          if (p.apiKey) {
+            providers.push(p);
+            seen.add(p.id);
+          }
         }
-      }
+      } catch {}
       try {
         for (const cfg of new BYOKProviderManager().getAllConfigs()) {
           if (cfg.apiKey && !seen.has(cfg.provider)) {
@@ -156,25 +160,30 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
       const res = await router.completeWithFreePool(request, pool, providers);
       resultOutput = res.content || '';
     } else {
-      const chunks: string[] = [];
-      let errOutput = '';
-      const onEvent = (event: { type: string; content?: string; error?: string }): void => {
-        if (event.type === 'token' && event.content) {
-          chunks.push(event.content);
-        } else if (event.type === 'replace_tokens' && event.content) {
-          chunks.length = 0;
-          chunks.push(event.content);
-        } else if (event.type === 'error' && event.error) {
-          errOutput = event.error;
+      const sessionId = `exec-${Date.now()}`;
+      const chatConfig = {
+        provider: resolvedProvider,
+        model: resolvedModel,
+        apiKey,
+        baseUrl: conn.baseUrl || undefined,
+        userDataDir: getUserDataDirectory()
+      };
+      
+      const onToken = (token: string) => {
+        if (!options.silent) {
+          process.stdout.write(token);
         }
       };
-      await engine.run(cleanText, onEvent, attachments);
-      if (chunks.length > 0) {
-        resultOutput = chunks.join('');
-      } else if (errOutput) {
-        resultOutput = `Error: ${errOutput}`;
-      } else if (!resultOutput) {
-        resultOutput = '(No response returned from model)';
+      
+      if (!options.silent) {
+        console.log('\n--- Output ---');
+      }
+      
+      printedDirectly = true;
+      resultOutput = await sendChatMessageDirect(sessionId, cleanText, chatConfig, onToken);
+      
+      if (!options.silent) {
+        console.log(); // Add a trailing newline after streaming is done
       }
     }
   } catch (err) {
@@ -208,8 +217,10 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
     if (options.json) {
       console.log(JSON.stringify(result, null, 2));
     } else {
-      console.log('\n--- Output ---');
-      console.log(resultOutput);
+      if (!printedDirectly) {
+        console.log('\n--- Output ---');
+        console.log(resultOutput);
+      }
       console.log(`---------------\nExecution completed in ${executionTimeMs}ms.`);
     }
   }

@@ -467,7 +467,7 @@ export const App: React.FC<AppProps> = ({
   );
 
   // ── Chat engine (one persistent session) ──
-  const chatRef = useRef<ChatSession>(new ChatSession(initialConn, initialPermission));
+  const chatRef = useRef<ChatSession>(new ChatSession(initialConn, initialPermission, sessionIdRef.current));
 
   // ── Skills (runnable, discovered + built-in) ──
   const allSkills = useRef<RunnableSkill[]>(getRunnableSkills(process.cwd())).current;
