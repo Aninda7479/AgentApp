@@ -375,7 +375,7 @@ export const UsageTrackerSettings: React.FC = () => {
       </div>
 
       {/* Price */}
-      <div className="ui-card p-4">
+      {/* <div className="ui-card p-4">
         <SectionTitle icon={Tag}>Price</SectionTitle>
         {pricing.length > 0 ? (
           <div className="overflow-x-auto">
@@ -406,7 +406,7 @@ export const UsageTrackerSettings: React.FC = () => {
         ) : (
           <p className="text-xs text-brand-textMuted">No priced models yet — rates appear once a model has been used.</p>
         )}
-      </div>
+      </div> */}
 
       {/* Model breakdown table */}
       <div className="ui-card overflow-hidden col-span-1 sm:col-span-2 lg:col-span-3">

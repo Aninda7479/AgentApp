@@ -1156,6 +1156,9 @@ export const App: React.FC = () => {
         themeMode={themeMode}
         onNewChat={() => handleNewChat()}
         onOpenFolder={handleOpenFolder}
+        onOpen3DStudio={() => setActiveTab('studio')}
+        onOpenPartner={() => setActiveTab('partner')}
+        onScheduleTask={() => setActiveTab('scheduled')}
         onOpenSettings={() => {
           setActiveTab('settings');
           setSettingsCategory('general');

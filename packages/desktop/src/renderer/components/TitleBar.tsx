@@ -20,6 +20,9 @@ import {
   BookOpen,
   Keyboard,
   Stethoscope,
+  Box,
+  PersonStanding,
+  Clock,
 } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { ThemeMode } from '../types';
@@ -41,6 +44,9 @@ interface TitleBarProps {
   // ── Real application-menu actions (no filler) ──
   onNewChat?: () => void;
   onOpenFolder?: () => void;
+  onOpen3DStudio?: () => void;
+  onOpenPartner?: () => void;
+  onScheduleTask?: () => void;
   onOpenSettings?: () => void;
   onQuit?: () => void;
   onUndoLastStep?: () => void;
@@ -87,6 +93,9 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onToggleMobileNav,
   onNewChat,
   onOpenFolder,
+  onOpen3DStudio,
+  onOpenPartner,
+  onScheduleTask,
   onOpenSettings,
   onQuit,
   onUndoLastStep,
@@ -137,6 +146,10 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       items: [
         { label: 'New chat', icon: Plus, shortcut: 'Ctrl+N', onClick: () => onNewChat?.() },
         { label: 'Open folder…', icon: FolderOpen, onClick: () => onOpenFolder?.() },
+        'sep',
+        { label: 'Open 3D Studio', icon: Box, onClick: () => onOpen3DStudio?.() },
+        { label: 'Partner', icon: PersonStanding, onClick: () => onOpenPartner?.() },
+        { label: 'Schedule Task', icon: Clock, onClick: () => onScheduleTask?.() },
         'sep',
         { label: 'Settings', icon: Settings, onClick: () => onOpenSettings?.() },
         ...(!isWebMode
