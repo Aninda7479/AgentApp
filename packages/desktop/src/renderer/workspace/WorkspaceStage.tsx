@@ -22,7 +22,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
   activeProject,
   onToast,
 }) => {
-  const activeChatId = useChatStore((s) => s.activeChatId);
+  const activeChatId = useChatStore((s) => s.activeChatId) || 'draft-chat';
 
   const handleSendPrompt = (prompt: string, options: ComposerOptions, attachments: ComposerAttachment[]) => {
     if (activeChatId) {

@@ -283,7 +283,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {renderNavItem('scheduled', 'Scheduled', Clock)}
           {renderNavItem('tasks', 'Tasks', KanbanSquare)}
-          {renderNavItem('companion', 'Companion', PawPrint)}
+          {renderNavItem('partner', 'Partner', PawPrint)}
           {/* 3D Studio stays discoverable even when disabled: a "ghost" entry
               (muted + "Off") routes to the 3D settings so first-time users can
               enable it, instead of the entry vanishing entirely. */}

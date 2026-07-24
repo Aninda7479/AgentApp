@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Box } from 'lucide-react';
 import { Sidebar } from './pages/Workspace/Sidebar';
 import { TrajectoryStep } from './pages/Workspace/TrajectoryCanvas';
 import { ComposerOptions } from './logic/types';
@@ -28,6 +29,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { usePartners } from './pages/Settings/companion/library';
 import { PartnerOverlay } from './partner-popup/PartnerOverlay';
 import { ThreeDStudio } from './pages/Studio/ThreeDStudio';
+import { PartnerPage } from './pages/Partner/PartnerPage';
 import { StoredChat, StoredProject } from './types';
 import { resolveScopeSettings } from './logic/scopeSettings';
 import { SessionLoopManager, LoopTask } from './logic/loop';
@@ -1195,11 +1197,6 @@ export const App: React.FC = () => {
                 // so the user can enable the capability rather than hiding it.
                 setActiveTab('settings');
                 setSettingsCategory('3d');
-              } else if (tab === 'companion') {
-                // "Companion" sidebar entry routes into Settings → Companion
-                // (the merged Partner/Pet page), matching the Pets ghost pattern.
-                setActiveTab('settings');
-                setSettingsCategory('companion');
               } else {
                 setActiveTab(tab);
               }
@@ -1320,6 +1317,31 @@ export const App: React.FC = () => {
             />
           )}
 
+          {activeTab === 'studio' && !showStudio && (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-950/20 text-center">
+              <div className="max-w-md p-6 rounded-2xl bg-brand-popover/40 border border-brand-border/60 backdrop-blur-md shadow-xl">
+                <Box className="w-12 h-12 text-brand-textMuted mx-auto mb-4 animate-pulse" />
+                <h3 className="text-lg font-semibold text-brand-textMain mb-2">3D Studio is Disabled</h3>
+                <p className="text-sm text-brand-textMuted mb-6">
+                  To access the 3D Studio, you need to enable 3D Model Generation features in your Settings.
+                </p>
+                <button
+                  onClick={() => {
+                    setActiveTab('settings');
+                    setSettingsCategory('3d');
+                  }}
+                  className="px-4 py-2 text-sm font-semibold rounded-lg bg-[color:var(--brand-hover-strong)] hover:bg-brand-highlight text-brand-textMain hover:text-brand-highlight-text transition-all duration-200 cursor-pointer"
+                >
+                  Configure Settings
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(activeTab === 'partner' || activeTab === 'companion') && (
+            <PartnerPage onBack={() => setActiveTab('trajectory')} />
+          )}
+
           {activeTab === 'settings' && (
             <SettingsView
               activeCategory={settingsCategory}
@@ -1378,6 +1400,19 @@ export const App: React.FC = () => {
               onReject={() => setActiveTab('trajectory')}
               onClose={() => setActiveTab('trajectory')}
               onReview={handleReviewDiff}
+            />
+          )}
+
+          {/* Fallback to Workspace stage if no other tab matches, ensuring the body is never empty */}
+          {!['trajectory', 'scheduled', 'tasks', 'project-settings', 'standalone-chat', 'studio', 'settings', 'diff', 'partner', 'companion'].includes(activeTab) && (
+            <WorkspaceStage
+              activeProject={activeProject}
+              onViewDiff={handleViewDiff}
+              onOpenSettings={() => {
+                setActiveTab('settings');
+                setSettingsCategory('general');
+              }}
+              onToast={triggerToast}
             />
           )}
           </ErrorBoundary>
