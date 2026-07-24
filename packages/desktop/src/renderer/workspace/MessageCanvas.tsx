@@ -27,7 +27,7 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({ chatId, onClosePan
   }, [steps.length, isRunning]);
 
   return (
-    <div className="flex flex-col h-full bg-slate-950/40 overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Panel Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-slate-900/60 border-b border-slate-800/60 select-none">
         <div className="flex items-center gap-1.5 min-w-0 text-slate-400 text-xs">

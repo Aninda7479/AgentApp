@@ -36,7 +36,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full min-w-0 bg-slate-950/20 relative">
+    <div className="flex-1 flex flex-col h-full min-w-0 relative">
 
       {/* Active Chat Panel */}
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">
