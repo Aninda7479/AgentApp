@@ -39,7 +39,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
     <div className="flex-1 flex flex-col h-full min-w-0 bg-slate-950/20 relative">
 
       {/* Active Chat Panel */}
-      <div className="flex-1 p-3 overflow-hidden flex flex-col min-h-0">
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
         {activeChatId ? (
           <div className="flex-1 flex flex-col min-h-0 relative space-y-2">
             <div className="flex-1 min-h-0">
