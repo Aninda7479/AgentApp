@@ -3,8 +3,8 @@
  * Prompt input composer with slash command autocomplete, file attachments, and send controls.
  */
 
-import React, { useState, KeyboardEvent, useRef } from 'react';
-import { Send, Paperclip, ShieldCheck, X, Sparkles, Terminal } from 'lucide-react';
+import React, { useState, KeyboardEvent, useRef, useEffect } from 'react';
+import { Send, Paperclip, ShieldCheck, X, Sparkles, Terminal, Mic, MicOff } from 'lucide-react';
 import { ModelPicker } from './ModelPicker';
 import { useSlashCommands } from '../hooks/useSlashCommands';
 import type { ComposerOptions, ComposerAttachment } from '../core/types';
@@ -14,14 +14,70 @@ interface ComposerBarProps {
   disabled?: boolean;
 }
 
+// Web Speech API types are not in the standard lib; treat as any.
+const SpeechRecognitionCtor: any =
+  typeof window !== 'undefined'
+    ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    : undefined;
+
 export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) => {
   const [prompt, setPrompt] = useState('');
   const [selectedModel, setSelectedModel] = useState('');
   const [approvalMode, setApprovalMode] = useState<'ask' | 'always' | 'never'>('ask');
+  const [sandbox, setSandbox] = useState(true);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Voice dictation
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const basePromptRef = useRef<string>('');
+
   const { isOpen: isSlashOpen, suggestions: slashSuggestions } = useSlashCommands(prompt);
+
+  const toggleListening = () => {
+    if (!SpeechRecognitionCtor) {
+      alert('Voice input (Speech Recognition) is not supported in this browser/environment.');
+      return;
+    }
+
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const rec = new SpeechRecognitionCtor();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-US';
+    basePromptRef.current = prompt;
+
+    rec.onresult = (event: any) => {
+      let text = '';
+      for (let i = 0; i < event.results.length; i++) {
+        text += event.results[i][0].transcript;
+      }
+      const base = basePromptRef.current;
+      setPrompt(base + (base && !base.endsWith(' ') ? ' ' : '') + text);
+    };
+
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recognitionRef.current = rec;
+
+    try {
+      rec.start();
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop?.();
+    };
+  }, []);
 
   const handleSend = () => {
     const trimmed = prompt.trim();
@@ -33,6 +89,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
       {
         model: selectedModel,
         approvalMode,
+        sandbox,
       },
       attachments
     );
@@ -111,19 +168,36 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
         )}
 
         {/* Text Area Input */}
-        <textarea
-          ref={textareaRef}
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask SuperAgent anything, paste code, or type / for commands..."
-          rows={2}
-          className="w-full bg-transparent text-brand-textMain placeholder-brand-textMuted/60 text-sm resize-none focus:outline-none scrollbar-thin scrollbar-thumb-brand-border"
-        />
+        <div className="relative flex items-center">
+          <textarea
+            ref={textareaRef}
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={listening ? "Listening... Speak clearly." : "Ask SuperAgent anything, paste code, or type / for commands..."}
+            rows={2}
+            className="w-full bg-transparent text-brand-textMain placeholder-brand-textMuted/60 text-sm resize-none focus:outline-none pr-10 scrollbar-thin scrollbar-thumb-brand-border"
+          />
+          {/* Inline Speech dictation button */}
+          {SpeechRecognitionCtor && (
+            <button
+              type="button"
+              onClick={toggleListening}
+              className={`absolute right-2 top-2 p-2 rounded-xl transition-all hover:bg-brand-bg/85 cursor-pointer ${
+                listening
+                  ? 'text-red-500 bg-red-500/10 animate-pulse border border-red-500/25'
+                  : 'text-brand-textMuted hover:text-brand-textMain'
+              }`}
+              title={listening ? "Listening (click to stop)" : "Voice to Text"}
+            >
+              {listening ? <MicOff size={16} /> : <Mic size={16} />}
+            </button>
+          )}
+        </div>
 
         {/* Toolbar Controls */}
         <div className="flex items-center justify-between pt-2 border-t border-brand-border select-none">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <ModelPicker selectedModel={selectedModel} onSelectModel={setSelectedModel} />
 
             <label className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-brand-bg hover:bg-brand-bg/80 text-brand-textMuted hover:text-brand-textMain text-xs cursor-pointer border border-brand-border transition-colors">
@@ -131,6 +205,21 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
               <span>Attach</span>
               <input type="file" multiple onChange={handleFileAttach} className="hidden" />
             </label>
+
+            {/* Sandbox Toggle */}
+            <button
+              type="button"
+              onClick={() => setSandbox(!sandbox)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                sandbox
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                  : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/20'
+              }`}
+              title={sandbox ? 'Sandbox mode active: execution is restricted. Click to request full access.' : 'Full access active: commands run unrestricted. Click to sandbox.'}
+            >
+              <ShieldCheck size={14} />
+              <span>{sandbox ? 'Sandboxed' : 'Full Access'}</span>
+            </button>
 
             {/* Permissions Mode */}
             <select

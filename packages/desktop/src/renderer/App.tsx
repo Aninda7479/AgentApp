@@ -36,6 +36,7 @@ import { SessionLoopManager, LoopTask } from './logic/loop';
 import { useThemeMode } from './theme';
 import { getRouteFromLocation, pushRoute, subscribeRouteChange, buildPath } from './urlSync';
 import { getIpc } from './lib/electron';
+import { BrandLogo } from './BrandLogo';
 
 import { WorkspaceStage } from './workspace/WorkspaceStage';
 import { chatStore } from './stores/chatStore';
@@ -92,7 +93,15 @@ const PAGE_LABELS: Record<string, string> = {
 
 export const App: React.FC = () => {
   // ── All React state is declared first (hooks order is stable) ──────────────
+  const [loading, setLoading] = useState(true);
   const { themeMode, setThemeMode } = useThemeMode();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
   const partners = usePartners();
   // Live mirror of `partners`, typed as the `PartnerController` slice the
   // streaming handler touches, so `AgentStreamService.createHandler` can read
@@ -1125,6 +1134,44 @@ export const App: React.FC = () => {
   };
 
   // ─── Render ─────────────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen w-screen bg-brand-bg text-brand-textMain relative select-none">
+        <style>{`
+          @keyframes loading-bar {
+            0%, 100% { transform: scaleY(0.3); opacity: 0.5; }
+            50% { transform: scaleY(1); opacity: 1; }
+          }
+          .loading-bar-item {
+            animation: loading-bar 1.2s ease-in-out infinite;
+          }
+          .loading-bar-item:nth-child(1) { animation-delay: 0s; }
+          .loading-bar-item:nth-child(2) { animation-delay: 0.15s; }
+          .loading-bar-item:nth-child(3) { animation-delay: 0.3s; }
+          .loading-bar-item:nth-child(4) { animation-delay: 0.45s; }
+          .loading-bar-item:nth-child(5) { animation-delay: 0.6s; }
+        `}</style>
+        <div className="flex flex-col items-center gap-6 animate-fade-in">
+          <BrandLogo size={100} />
+          
+          {/* 5 Bar Loading animation */}
+          <div className="flex items-center gap-1.5 h-10">
+            <div className="w-1.5 h-full rounded-full bg-cyan-500 loading-bar-item origin-center" />
+            <div className="w-1.5 h-full rounded-full bg-cyan-500 loading-bar-item origin-center" />
+            <div className="w-1.5 h-full rounded-full bg-cyan-500 loading-bar-item origin-center" />
+            <div className="w-1.5 h-full rounded-full bg-cyan-500 loading-bar-item origin-center" />
+            <div className="w-1.5 h-full rounded-full bg-cyan-500 loading-bar-item origin-center" />
+          </div>
+        </div>
+        
+        {/* Bottom signature */}
+        <div className="absolute bottom-10 left-0 right-0 text-center text-xs tracking-widest uppercase font-semibold text-brand-textMuted/60">
+          Build by Aninda
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       data-testid="app-container"

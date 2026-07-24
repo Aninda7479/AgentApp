@@ -121,6 +121,7 @@ export class AgentOrchestrator {
       allowedCommands: activeProject?.allowedCommands || [],
       instructions: activeProject?.instructions || '',
       approvalMode: options.approvalMode || 'ask',
+      unsandboxed: options.sandbox === false,
     };
 
     try {
