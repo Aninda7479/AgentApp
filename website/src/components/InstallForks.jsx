@@ -26,7 +26,7 @@ export function CliFork() {
       <h3>The CLI</h3>
       <p>Headless, scriptable, and the full web UI served at localhost. Drop it on a server, into CI, or your own local terminal.</p>
       
-      <div className="shell-selector" style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
+      <div className="shell-selector" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
         <button 
           className={`term-tab ${shell === 'powershell' ? 'active' : ''}`}
           role="tab"

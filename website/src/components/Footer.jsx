@@ -7,7 +7,7 @@ export default function Footer() {
     <footer className="footer">
       <div className="container footer-inner">
         <Link className="brand" to="/">
-          <img className="mark" src="/icon.svg" alt="SuperAgent Logo" width="26" height="26" />
+          <img className="mark" src={`${import.meta.env.BASE_URL}icon.svg`} alt="SuperAgent Logo" width="26" height="26" />
           SuperAgent
         </Link>
         <nav className="footer-links" aria-label="Footer">

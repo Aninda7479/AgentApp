@@ -20,9 +20,9 @@ export default function DesktopPage() {
           <DesktopFork />
         </div>
 
-        <p style={{ marginTop: '32px' }}>
+        <p style={{ marginTop: '32px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           <Link className="btn btn-ghost btn-sm" to="/">← Back to home</Link>
-          <Link className="btn btn-ghost btn-sm" to="/cli" style={{ marginLeft: '8px' }}>Want the CLI instead? →</Link>
+          <Link className="btn btn-ghost btn-sm" to="/cli">Want the CLI instead? →</Link>
         </p>
       </section>
     </div>

@@ -5,7 +5,7 @@ const GH = 'https://github.com/Aninda7479/AgentApp'
 
 function Mark() {
   return (
-    <img className="mark" src="/icon.svg" alt="SuperAgent Logo" width="26" height="26" />
+    <img className="mark" src={`${import.meta.env.BASE_URL}icon.svg`} alt="SuperAgent Logo" width="26" height="26" />
   )
 }
 

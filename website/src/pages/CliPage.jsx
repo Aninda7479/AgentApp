@@ -24,9 +24,9 @@ export default function CliPage() {
           </div>
         </div>
 
-        <p style={{ marginTop: '32px' }}>
+        <p style={{ marginTop: '32px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
           <Link className="btn btn-ghost btn-sm" to="/">← Back to home</Link>
-          <Link className="btn btn-ghost btn-sm" to="/desktop" style={{ marginLeft: '8px' }}>Prefer the desktop app? →</Link>
+          <Link className="btn btn-ghost btn-sm" to="/desktop">Prefer the desktop app? →</Link>
         </p>
       </section>
     </div>

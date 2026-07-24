@@ -1,6 +1,7 @@
 import Terminal from '../components/Terminal.jsx'
 import InstallForks from '../components/InstallForks.jsx'
 import Features from '../components/Features.jsx'
+import Roadmap from '../components/Roadmap.jsx'
 import CtaBand from '../components/CtaBand.jsx'
 import Atmosphere from '../components/Atmosphere.jsx'
 
@@ -41,6 +42,8 @@ export default function Home() {
           <Features />
         </div>
       </section>
+
+      <Roadmap />
 
       <CtaBand />
     </>
