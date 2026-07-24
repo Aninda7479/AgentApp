@@ -485,11 +485,18 @@ export class OrchestratorRouter {
     const govEnabledIds = orchestratorSettings?.enabledModels || [];
     const govOverrides = orchestratorSettings?.categoryOverrides || {};
 
+    const configuredProviders = new Set<string>();
+    for (const p of settings.providers ?? []) {
+      if (p.apiKey || p.id === 'ollama' || p.id === 'omniroute' || p.id === 'custom') {
+        configuredProviders.add(p.id);
+      }
+    }
+
     const pool = allModels.filter((m) =>
-      govEnabledIds.includes(m.id) ||
-      govEnabledIds.includes(`${m.providerId}-${m.id}`)
+      (configuredProviders.size === 0 || configuredProviders.has(m.providerId)) &&
+      (govEnabledIds.length === 0 || govEnabledIds.includes(m.id) || govEnabledIds.includes(`${m.providerId}-${m.id}`))
     );
-    const enabledModels = pool.length > 0 ? pool : allModels;
+    const enabledModels = pool.length > 0 ? pool : allModels.filter((m) => configuredProviders.size === 0 || configuredProviders.has(m.providerId));
 
     const classification = classifyTask(request ?? { messages: [{ role: 'user', content: prompt }] });
     const flags = {

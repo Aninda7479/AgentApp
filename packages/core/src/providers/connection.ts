@@ -61,17 +61,29 @@ function configuredProviders(): string[] {
  */
 function enabledModelCandidates(): string[] | null {
   const saved = SettingsStorage.loadSettings();
+  const providers = configuredProviders();
 
   if (saved.orchestrator?.enabledModels && saved.orchestrator.enabledModels.length > 0) {
-    return saved.orchestrator.enabledModels;
+    const valid = saved.orchestrator.enabledModels.filter((id) => {
+      if (providers.length === 0) return true;
+      const matched = saved.models?.find((m) => m.id === id || `${m.providerId}-${m.id}` === id);
+      if (matched?.providerId) return providers.includes(matched.providerId);
+      const cap = capabilityRegistry.getCapability(id);
+      if (cap) return providers.includes(cap.provider);
+      const dashIdx = id.indexOf('-');
+      if (dashIdx > 0) return providers.includes(id.slice(0, dashIdx));
+      return false;
+    });
+    if (valid.length > 0) return valid;
   }
 
   if (saved.models && saved.models.length > 0) {
-    const enabled = saved.models.filter((m) => m.enabled !== false).map((m) => m.id);
+    const enabled = saved.models
+      .filter((m) => m.enabled !== false && (providers.length === 0 || providers.includes(m.providerId)))
+      .map((m) => m.id);
     if (enabled.length > 0) return enabled;
   }
 
-  const providers = configuredProviders();
   if (providers.length === 0) return null;
   const candidates = capabilityRegistry
     .getAllCapabilities()

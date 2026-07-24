@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { ModelConfig } from './types';
+import { ModelConfig, ProviderConnection } from './types';
 import { Scale, Save, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award, Sparkles, Coins, Cpu, Layers, Zap, Bot, Brain, Activity, Search, Circle } from 'lucide-react';
 import { Button, Select, Toggle } from '../../components/ui';
 import { getIpc } from '../../lib/electron';
 
 /** Props for the Orchestrator settings panel. */
 interface OrchestratorSettingsProps {
+  connectedProviders?: ProviderConnection[];
   modelsCatalog: ModelConfig[];
   onSaveSettings: (patch: {
     orchestrator?: {
@@ -33,9 +34,22 @@ interface OrchestratorSettingsProps {
 
 /** Settings panel for Fugu-based model orchestration, routing strategy, and system instructions. */
 export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
+  connectedProviders,
   modelsCatalog,
   onSaveSettings
 }) => {
+  const connectedSet = new Set<string>();
+  if (connectedProviders && connectedProviders.length > 0) {
+    for (const p of connectedProviders) {
+      if (p.apiKey || p.id === 'ollama' || p.id === 'omniroute' || p.id === 'custom') {
+        connectedSet.add(p.id);
+      }
+    }
+  }
+  const availableCatalog = modelsCatalog.filter(m => {
+    if (connectedSet.size > 0) return connectedSet.has(m.providerId);
+    return m.providerId === 'omniroute' || m.providerId === 'ollama' || m.providerId === 'custom';
+  });
   const [enabled, setEnabled] = useState(true);
   const [enabledModels, setEnabledModels] = useState<string[]>([]);
   const [autoUpdate, setAutoUpdate] = useState(false);
@@ -87,7 +101,7 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
       const gov = settings.orchestrator || settings.modelGov || {};
       
       // Default to enabling all available models in the catalog if none are specifically saved
-      const savedEnabled = gov.enabledModels || modelsCatalog.map(m => m.id);
+      const savedEnabled = gov.enabledModels || availableCatalog.map(m => m.id);
       
       setEnabled(gov.enabled !== undefined ? !!gov.enabled : true);
       setEnabledModels(savedEnabled);
@@ -206,7 +220,7 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
 
   const toggleModelSelection = (modelId: string) => {
     // If Free Only is enabled, do not allow selecting a paid model
-    const m = modelsCatalog.find(model => model.id === modelId);
+    const m = availableCatalog.find(model => model.id === modelId);
     if (freeOnly && m && !m.free) {
       setMessage({ text: 'Cannot enable paid models when "Free Only" mode is active.', type: 'error' });
       return;
@@ -218,9 +232,9 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
 
   const selectAllModels = () => {
     if (freeOnly) {
-      setEnabledModels(modelsCatalog.filter(m => m.free).map(m => m.id));
+      setEnabledModels(availableCatalog.filter(m => m.free).map(m => m.id));
     } else {
-      setEnabledModels(modelsCatalog.map(m => m.id));
+      setEnabledModels(availableCatalog.map(m => m.id));
     }
   };
   const clearAllModels = () => setEnabledModels([]);
@@ -236,7 +250,7 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
     setFreeOnly(checked);
     if (checked) {
       // Auto enable all free models and disable all paid models
-      const freeModelIds = modelsCatalog.filter(m => m.free).map(m => m.id);
+      const freeModelIds = availableCatalog.filter(m => m.free).map(m => m.id);
       setEnabledModels(freeModelIds);
     }
   };
@@ -252,7 +266,7 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
     return () => clearInterval(id);
   }, [ipc]);
 
-  const activeSwarmModels = modelsCatalog.filter(m => enabledModels.includes(m.id));
+  const activeSwarmModels = availableCatalog.filter(m => enabledModels.includes(m.id));
 
   if (loading) {
     return (
@@ -463,7 +477,7 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
             <h2 className="text-xs font-bold text-brand-textMain uppercase tracking-wider flex items-center gap-1.5">
               <CheckSquare size={14} className="text-[var(--brand-accent)]" />
               <span>Orchestrator Model Pool</span>
-              <span className="ui-badge muted">{enabledModels.length}/{modelsCatalog.length}</span>
+              <span className="ui-badge muted">{enabledModels.filter(id => availableCatalog.some(m => m.id === id)).length}/{availableCatalog.length}</span>
             </h2>
             <p className="text-[11px] text-brand-textMuted mt-1">
               Choose which enabled models the Orchestrator can route prompts across. Output quality and pricing rates determine selection.
@@ -479,7 +493,7 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
                 className="w-40 pl-7 pr-2 py-1.5 rounded-md border border-brand-border bg-brand-bg text-xs text-brand-textMain outline-none focus:border-[var(--brand-accent-border)]"
               />
             </div>
-            {modelsCatalog.length > 0 && (
+            {availableCatalog.length > 0 && (
               <>
                 <button
                   onClick={() => handleToggleFreeOnly(!freeOnly)}
@@ -498,9 +512,9 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
           </div>
         </div>
 
-        {modelsCatalog.length > 0 ? (
+        {availableCatalog.length > 0 ? (
           <div className="grid grid-cols-2 gap-2 mt-2">
-            {modelsCatalog
+            {availableCatalog
               .filter((m) => {
                 const q = searchQuery.trim().toLowerCase();
                 if (!q) return true;

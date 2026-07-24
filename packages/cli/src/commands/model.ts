@@ -1,4 +1,4 @@
-import { ModelCapability, ModelCapabilityRegistry, SettingsStorage, getProviderMeta } from '@superagent/core';
+import { ModelCapability, ModelCapabilityRegistry, SettingsStorage, BYOKProviderManager, getProviderMeta } from '@superagent/core';
 import { SessionContext, CLICommandResult } from '../types.js';
 
 /** Static methods for listing and switching AI models and providers. */
@@ -11,8 +11,28 @@ export class ModelSwitcher {
   /** Returns a formatted list of enabled model IDs from user Settings for copy-pasting. */
   public static formatModelIdsList(context?: SessionContext): string {
     const saved = SettingsStorage.loadSettings();
+
+    // Only include providers that are actually connected (have API keys or are keyless local endpoints)
+    const connectedProviders = new Set<string>();
+    for (const p of saved.providers ?? []) {
+      if (p.apiKey || p.id === 'ollama' || p.id === 'omniroute' || p.id === 'custom') {
+        connectedProviders.add(p.id);
+      }
+    }
+    try {
+      for (const cfg of new BYOKProviderManager().getAllConfigs()) {
+        if (cfg.apiKey || cfg.provider === 'ollama' || cfg.provider === 'omniroute' || cfg.provider === 'custom') {
+          connectedProviders.add(cfg.provider);
+        }
+      }
+    } catch {}
+
     const allSettingsModels = saved.models ?? [];
-    const enabledSettingsModels = allSettingsModels.filter(m => m.enabled !== false);
+    const enabledSettingsModels = allSettingsModels.filter(m => {
+      if (m.enabled === false) return false;
+      const pId = m.providerId || 'custom';
+      return connectedProviders.size === 0 || connectedProviders.has(pId);
+    });
 
     const lines: string[] = [];
 

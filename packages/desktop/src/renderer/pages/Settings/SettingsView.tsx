@@ -412,6 +412,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         )}
         {activeCategory === 'model-gov' && (
           <OrchestratorSettings
+            connectedProviders={connectedProviders}
             modelsCatalog={modelsCatalog}
             onSaveSettings={(patch) => {
               const ipc = getIpc();
