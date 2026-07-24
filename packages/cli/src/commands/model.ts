@@ -1,4 +1,4 @@
-import { ModelCapability, SettingsStorage, getProviderMeta } from '@superagent/core';
+import { ModelCapability, ModelCapabilityRegistry, SettingsStorage, getProviderMeta } from '@superagent/core';
 import { SessionContext, CLICommandResult } from '../types.js';
 
 /** Static methods for listing and switching AI models and providers. */
@@ -6,6 +6,71 @@ export class ModelSwitcher {
   /** Returns all registered model capabilities from the context registry. */
   public static listAvailableModels(context: SessionContext): ModelCapability[] {
     return context.capabilityRegistry.getAllCapabilities();
+  }
+
+  /** Returns a formatted list of enabled model IDs from user Settings for copy-pasting. */
+  public static formatModelIdsList(context?: SessionContext): string {
+    const saved = SettingsStorage.loadSettings();
+    const allSettingsModels = saved.models ?? [];
+    const enabledSettingsModels = allSettingsModels.filter(m => m.enabled !== false);
+
+    const lines: string[] = [];
+
+    if (enabledSettingsModels.length > 0) {
+      lines.push('=== Enabled AI Model IDs (from Settings) ===\n');
+
+      const byProvider = new Map<string, Array<{ id: string; name: string }>>();
+      for (const m of enabledSettingsModels) {
+        const pId = m.providerId || 'custom';
+        const list = byProvider.get(pId) || [];
+        let displayId = m.id;
+        if (pId && displayId.toLowerCase().startsWith(`${pId.toLowerCase()}-`)) {
+          displayId = displayId.slice(pId.length + 1);
+        }
+        if (!list.some(x => x.id === displayId)) {
+          list.push({ id: displayId, name: m.name || displayId });
+          byProvider.set(pId, list);
+        }
+      }
+
+      for (const [provider, items] of byProvider.entries()) {
+        lines.push(`[Provider: ${provider}]`);
+        for (const item of items) {
+          lines.push(`  ${item.id.padEnd(36)} (${item.name})`);
+        }
+        lines.push('');
+      }
+    } else {
+      const registry = context?.capabilityRegistry ?? new ModelCapabilityRegistry();
+      const models = registry.getAllCapabilities();
+
+      lines.push('=== Enabled AI Model IDs (Default Pool - No custom settings configured) ===\n');
+
+      const byProvider = new Map<string, Array<{ id: string; name: string }>>();
+      for (const m of models) {
+        const list = byProvider.get(m.provider) || [];
+        if (!list.some(x => x.id === m.id)) {
+          list.push({ id: m.id, name: m.name });
+          byProvider.set(m.provider, list);
+        }
+      }
+
+      for (const [provider, items] of byProvider.entries()) {
+        lines.push(`[Provider: ${provider}]`);
+        for (const item of items) {
+          lines.push(`  ${item.id.padEnd(36)} (${item.name})`);
+        }
+        lines.push('');
+      }
+    }
+
+    lines.push('[Special Routing]');
+    lines.push('  orchestrator                         (Model Orchestrator Pool)\n');
+
+    lines.push('Usage:');
+    lines.push('  npm run start:cli -- --model xxxxxx --chat "Your prompt"');
+
+    return lines.join('\n');
   }
 
   /** Returns a formatted string of all available models with capability badges. */

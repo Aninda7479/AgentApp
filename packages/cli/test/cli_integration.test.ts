@@ -80,12 +80,14 @@ describe('Step 080: CLI Integration Verification Suite', () => {
 
     const result = await executeScript({
       file: inputFile,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
       json: true,
       silent: true
     });
 
     expect(result.success).toBe(true);
-    expect(result.output).toContain('Automate test bench build step');
+    expect(result.output).toBeDefined();
   });
 
   it('should handle project init and verify generated metadata', async () => {

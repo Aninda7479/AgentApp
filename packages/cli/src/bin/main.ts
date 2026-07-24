@@ -14,6 +14,12 @@ import {
   WebServerAlreadyRunningError
 } from '@superagent/core';
 import type { CliOptions } from './commander.js';
+import { ModelSwitcher } from '../commands/model.js';
+
+if (process.argv.includes('--models')) {
+  console.log(ModelSwitcher.formatModelIdsList());
+  process.exit(0);
+}
 
 // `superagent --stop-web` / `--web-status` coordinate the single shared web
 // server across the CLI, Desktop app, and standalone host via a lock file in
@@ -99,6 +105,11 @@ if (process.env.AUTO_IMPROVE_RUN) {
  *  - no prompt -> render the interactive Ink TUI
  */
 async function handleChat(opts: CliOptions, prompt?: string): Promise<void> {
+  if (opts.models) {
+    console.log(ModelSwitcher.formatModelIdsList());
+    return;
+  }
+
   if (prompt && prompt.trim().length > 0) {
     try {
       const result = await executeScript({

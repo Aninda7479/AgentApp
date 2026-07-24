@@ -25,7 +25,7 @@
     "install:all": "npm install && npm install --prefix website",
     "start:app": "npm run start --workspace=@superagent/desktop",
     "start:web": "npm run start --workspace=@superagent/web",
-    "start:cli": "npm run start --workspace=@superagent/cli",
+    "start:cli": "npm run start --workspace=@superagent/cli --",
     "dev:app": "npm run dev --workspace=@superagent/desktop",
     "dev:web": "npm run dev --workspace=@superagent/web",
     "dev:site": "cd website && npm run dev",

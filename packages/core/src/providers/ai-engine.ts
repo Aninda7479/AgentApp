@@ -1073,11 +1073,19 @@ Key guidelines:
 
         for (const line of lines) {
           const trimmed = line.trim();
-          if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+          if (!trimmed || trimmed === 'data: [DONE]') continue;
 
           try {
-            const json = JSON.parse(trimmed.slice(6));
-            const delta = json.choices?.[0]?.delta;
+            let delta: any = null;
+            if (trimmed.startsWith('data: ')) {
+              const json = JSON.parse(trimmed.slice(6));
+              delta = json.choices?.[0]?.delta;
+            } else if (trimmed.startsWith('{')) {
+              const json = JSON.parse(trimmed);
+              const choice = json.choices?.[0];
+              delta = choice?.delta || choice?.message;
+            }
+
             if (!delta) continue;
 
             // ── Separate reasoning/thinking tokens from response content ──
@@ -1086,7 +1094,7 @@ Key guidelines:
               onEvent({ type: 'thought', sessionId: this.sessionId, content: reasoningChunk });
             }
 
-            const contentChunk = delta.content || '';
+            const contentChunk = typeof delta === 'string' ? delta : (delta.content || '');
             if (contentChunk) {
               fullContent += contentChunk;
               const loopCheck = detectRepetitiveLoop(fullContent);
@@ -1115,7 +1123,11 @@ Key guidelines:
                     acc.name += tc.function.name;
                   }
                 }
-                if (tc.function?.arguments) acc.argsJson += tc.function.arguments;
+                if (tc.function?.arguments) {
+                  acc.argsJson += typeof tc.function.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function.arguments);
+                } else if (tc.args) {
+                  acc.argsJson += typeof tc.args === 'string' ? tc.args : JSON.stringify(tc.args);
+                }
 
                 // Intra-stream flood guard: if same (name+args) fires > 2 times
                 // within this single stream, the model is stuck in a tool loop.
@@ -1133,6 +1145,39 @@ Key guidelines:
             }
           } catch {
             // Ignore
+          }
+        }
+      }
+
+      if (buffer.trim() && !fullContent) {
+        const trimmed = buffer.trim();
+        let delta: any = null;
+        if (trimmed.startsWith('data: ') && trimmed !== 'data: [DONE]') {
+          try { delta = JSON.parse(trimmed.slice(6)).choices?.[0]?.delta; } catch {}
+        } else if (trimmed.startsWith('{')) {
+          try {
+            const json = JSON.parse(trimmed);
+            const choice = json.choices?.[0];
+            delta = choice?.delta || choice?.message;
+          } catch {}
+        }
+        if (delta) {
+          const reasoningChunk = delta.reasoning || delta.reasoning_content || delta.thought || '';
+          if (reasoningChunk) {
+            onEvent({ type: 'thought', sessionId: this.sessionId, content: reasoningChunk });
+          }
+          const contentChunk = typeof delta === 'string' ? delta : (delta.content || '');
+          if (contentChunk) {
+            fullContent += contentChunk;
+            onEvent({ type: 'token', sessionId: this.sessionId, content: contentChunk });
+          }
+          if (delta.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0;
+              const name = tc.function?.name || tc.name || '';
+              const argsStr = typeof tc.function?.arguments === 'string' ? tc.function.arguments : (typeof tc.args === 'string' ? tc.args : JSON.stringify(tc.function?.arguments || tc.args || {}));
+              toolCallAccumulators.set(idx, { id: tc.id || '', name, argsJson: argsStr });
+            }
           }
         }
       }

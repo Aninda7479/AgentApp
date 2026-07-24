@@ -97,3 +97,14 @@ describe('ModelSwitcher.switchModel custom-identifier fallback', () => {
     expect(ctx.activeModel).toBe('tencent/hunyuan-a1');
   });
 });
+
+describe('ModelSwitcher.formatModelIdsList', () => {
+  it('formats enabled model IDs for copy-pasting', () => {
+    const ctx = makeContext();
+    const output = ModelSwitcher.formatModelIdsList(ctx);
+
+    expect(output).toMatch(/=== Enabled AI Model IDs/i);
+    expect(output).toMatch(/orchestrator/);
+  });
+});
+

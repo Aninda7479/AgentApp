@@ -83,45 +83,66 @@ function enabledModelCandidates(): string[] | null {
 /** Resolves a connection for an explicit provider/model (used when switching). */
 export function resolveConnection(provider: string, model: string): ActiveConnection {
   const saved = SettingsStorage.loadSettings();
-  const apiKey = keyForProvider(provider);
-  const baseUrl =
-    saved.providers?.find((x) => x.id === provider)?.baseUrl || resolveBaseUrl(provider);
 
-  let resolvedModel = model;
+  let resolvedProvider = provider || '';
+  let resolvedModel = model || '';
 
-  // Clean provider prefix if present (e.g. "openrouter-tencent/hunyuan-a1")
-  if (provider && resolvedModel.toLowerCase().startsWith(`${provider.toLowerCase()}-`)) {
-    resolvedModel = resolvedModel.slice(provider.length + 1);
-  }
-
-  // Resolve display name to model ID if a matching model exists in saved models catalog
-  if (saved.models && saved.models.length > 0) {
+  // 1. Check if input model matches a model ID or name in saved settings models catalog
+  if (saved.models && saved.models.length > 0 && resolvedModel) {
     const foundInModels = saved.models.find(
       (m) =>
+        m.id?.toLowerCase() === resolvedModel.toLowerCase() ||
         m.name?.toLowerCase() === resolvedModel.toLowerCase() ||
-        m.id?.toLowerCase() === resolvedModel.toLowerCase()
+        m.id?.toLowerCase() === `${provider}-${model}`.toLowerCase()
     );
     if (foundInModels && foundInModels.id) {
-      let rawId = foundInModels.id;
-      const provId = foundInModels.providerId || provider;
-      if (provId && rawId.toLowerCase().startsWith(`${provId.toLowerCase()}-`)) {
-        rawId = rawId.slice(provId.length + 1);
+      resolvedModel = foundInModels.id;
+      if (foundInModels.providerId) {
+        resolvedProvider = foundInModels.providerId;
       }
-      resolvedModel = rawId;
     }
   }
 
-  // Fallback lookup in capability registry for display names
-  const cap = capabilityRegistry.getAllCapabilities().find(
-    (c) =>
-      c.name.toLowerCase() === resolvedModel.toLowerCase() ||
-      c.id.toLowerCase() === resolvedModel.toLowerCase()
-  );
-  if (cap) {
-    resolvedModel = cap.id;
+  // 2. Check capability registry if provider not resolved or model matched by display name
+  if (resolvedModel) {
+    const cap = capabilityRegistry.getAllCapabilities().find(
+      (c) =>
+        c.id.toLowerCase() === resolvedModel.toLowerCase() ||
+        c.name.toLowerCase() === resolvedModel.toLowerCase()
+    );
+    if (cap) {
+      resolvedModel = cap.id;
+      if (!resolvedProvider) {
+        resolvedProvider = cap.provider;
+      }
+    }
   }
 
-  return { provider, model: resolvedModel, apiKey, baseUrl };
+  // 3. If provider is still empty and model is provider/model string, try splitting prefix
+  if (!resolvedProvider && resolvedModel.includes('/')) {
+    const slashIdx = resolvedModel.indexOf('/');
+    const prefix = resolvedModel.slice(0, slashIdx);
+    const meta = resolveBaseUrl(prefix);
+    if (meta) {
+      resolvedProvider = prefix;
+      resolvedModel = resolvedModel.slice(slashIdx + 1);
+    }
+  }
+
+  if (!resolvedProvider) {
+    resolvedProvider = 'openai';
+  }
+
+  // Clean provider prefix if present (e.g. "openrouter-tencent/hunyuan-a1")
+  if (resolvedProvider && resolvedModel.toLowerCase().startsWith(`${resolvedProvider.toLowerCase()}-`)) {
+    resolvedModel = resolvedModel.slice(resolvedProvider.length + 1);
+  }
+
+  const apiKey = keyForProvider(resolvedProvider);
+  const baseUrl =
+    saved.providers?.find((x) => x.id === resolvedProvider)?.baseUrl || resolveBaseUrl(resolvedProvider);
+
+  return { provider: resolvedProvider, model: resolvedModel, apiKey, baseUrl };
 }
 
 /**

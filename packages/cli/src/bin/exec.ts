@@ -68,24 +68,13 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
   }
 
   const savedSettings = SettingsStorage.loadSettings();
-  // Resolve provider and model from options, settings, or sensible defaults
-  let provider = options.provider || savedSettings.lastUsedModel?.provider || 'openai';
-  let model = options.model || savedSettings.lastUsedModel?.model || (provider === 'anthropic' ? 'claude-3-5-sonnet-20241022' : provider === 'gemini' ? 'gemini-1.5-pro' : 'gpt-4o');
+  const reqProvider = options.provider || savedSettings.lastUsedModel?.provider || '';
+  const reqModel = options.model || savedSettings.lastUsedModel?.model || 'gpt-4o';
 
-  // A `--model provider/model` value (e.g. openrouter/tencent/hy3:free) encodes
-  // the provider in the model string when --provider isn't given. Split it so
-  // connection resolution can find the right API key.
-  if (!options.provider && model && model.includes('/')) {
-    const slashIdx = model.indexOf('/');
-    provider = model.slice(0, slashIdx);
-    model = model.slice(slashIdx + 1);
-  }
-
-  // Resolve the live connection (real API key / base URL) the same way the TUI
-  // does, instead of the old dummy key, so one-shot mode can actually answer.
-  const conn = resolveConnection(provider, model);
-  const resolvedProvider = conn.provider || provider;
-  const resolvedModel = conn.model || model;
+  // Resolve the live connection (real API key / base URL) through Core connection resolver
+  const conn = resolveConnection(reqProvider, reqModel);
+  const resolvedProvider = conn.provider;
+  const resolvedModel = conn.model;
   const apiKey = options.apiKey || conn.apiKey || 'exec-session-key';
 
   if (!options.silent) {
@@ -99,7 +88,7 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
     projectRoot: process.cwd()
   });
 
-  let resultOutput = `[Execution Output]\nPrompt: "${promptText.substring(0, 50)}${promptText.length > 50 ? '...' : ''}"\nProcessed successfully by SuperAgent CLI (${model}).`;
+  let resultOutput = '';
 
   // Detect image paths (drag-and-drop / typed) and attach them as multimodal content.
   const { cleanText, attachments } = await prepareAttachments(promptText);
@@ -107,7 +96,7 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
   // `--model orchestrator` (or a saved Orchestrator routing strategy) routes the
   // prompt through the real Model Orchestrator, which picks the best model for
   // the task across the user's enabled pool instead of a single fixed model.
-  const useOrchestrator = model === 'orchestrator' || provider === 'orchestrator';
+  const useOrchestrator = resolvedModel === 'orchestrator' || resolvedProvider === 'orchestrator';
 
   try {
     if (useOrchestrator) {
@@ -168,12 +157,24 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
       resultOutput = res.content || '';
     } else {
       const chunks: string[] = [];
-      const onEvent = (event: { type: string; content?: string }): void => {
-        if (event.type === 'token' && event.content) chunks.push(event.content);
+      let errOutput = '';
+      const onEvent = (event: { type: string; content?: string; error?: string }): void => {
+        if (event.type === 'token' && event.content) {
+          chunks.push(event.content);
+        } else if (event.type === 'replace_tokens' && event.content) {
+          chunks.length = 0;
+          chunks.push(event.content);
+        } else if (event.type === 'error' && event.error) {
+          errOutput = event.error;
+        }
       };
       await engine.run(cleanText, onEvent, attachments);
       if (chunks.length > 0) {
         resultOutput = chunks.join('');
+      } else if (errOutput) {
+        resultOutput = `Error: ${errOutput}`;
+      } else if (!resultOutput) {
+        resultOutput = '(No response returned from model)';
       }
     }
   } catch (err) {
@@ -198,8 +199,8 @@ export async function executeScript(options: ExecOptions): Promise<ExecResult> {
   const result: ExecResult = {
     success: true,
     output: resultOutput,
-    model,
-    provider,
+    model: resolvedModel,
+    provider: resolvedProvider,
     executionTimeMs
   };
 
