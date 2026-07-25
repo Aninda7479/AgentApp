@@ -13,12 +13,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="index.css">
   <style>
-    /* * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    } */
-
     body {
       font-family: 'Inter', -apple-system, sans-serif;
       height: 100vh;
@@ -54,6 +48,37 @@
       background: rgba(255, 255, 255, 0.16);
     }
   </style>
+  <script>
+    // Boot error fallback handler: if JS fails to evaluate or mount, render an inline error page instead of a blank screen.
+    window.addEventListener('error', function(e) {
+      var root = document.getElementById('root');
+      if (root && (!root.children || root.children.length === 0)) {
+        var msg = (e.error && e.error.message) ? e.error.message : (e.message || String(e));
+        var stack = (e.error && e.error.stack) ? e.error.stack : '';
+        root.innerHTML = `
+          <div style="min-height: 100vh; width: 100%; display: flex; align-items: center; justify-content: center; background-color: #090a0f; color: #f4f4f5; font-family: sans-serif; padding: 24px; box-sizing: border-box;">
+            <div style="max-width: 540px; width: 100%; background: #12131a; border: 1px solid rgba(239,68,68,0.4); border-radius: 12px; padding: 24px; text-align: left; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);">
+              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                <div style="font-size: 24px; color: #ef4444;">⚠️</div>
+                <div>
+                  <h2 style="margin: 0; font-size: 16px; font-weight: 600; color: #f4f4f5;">SuperAgent Startup Error</h2>
+                  <p style="margin: 2px 0 0 0; font-size: 12px; color: #a1a1aa;">The application encountered an error while starting up.</p>
+                </div>
+              </div>
+              <div style="background: #090a0f; border: 1px solid #27272a; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 11px; color: #f87171; overflow: auto; max-height: 160px; margin-bottom: 16px; word-break: break-word;">
+                ${msg}<br><br>${stack.replace(/</g, '&lt;')}
+              </div>
+              <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button onclick="window.location.reload()" style="background: #ef4444; color: #ffffff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer;">
+                  Reload Window
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    });
+  </script>
 </head>
 <body>
   <div id="root"></div>
