@@ -207,16 +207,31 @@ export const Composer: React.FC<ComposerProps> = ({
   const [voiceEngine, setVoiceEngine] = useState<'auto' | 'browser' | 'model' | 'local'>('auto');
   const [voiceModelAvailable, setVoiceModelAvailable] = useState<boolean | null>(null);
   const [localWhisperEnabled, setLocalWhisperEnabled] = useState<boolean>(false);
+  const [workspaceVoiceEnabled, setWorkspaceVoiceEnabled] = useState<boolean>(true);
 
   const ipcRenderer = getIpc();
 
-  // Resolve which engine the mic should use, and whether a cloud model is ready.
+  // Resolve which engine the mic should use, whether workspace voice is enabled, and whether a cloud model is ready.
   useEffect(() => {
     if (!ipcRenderer) return;
     let active = true;
-    ipcRenderer.invoke('settings-read').then((settings: any) => {
+
+    const applyVoiceSettings = (settings: any) => {
       if (!active) return;
       const voice = settings?.voice || {};
+      const tTarget = voice.typingTarget;
+      const tEnabled = voice.typingEnabled;
+      
+      let enabled = true;
+      if (tTarget !== undefined) {
+        enabled = tTarget === 'both' || tTarget === 'composer';
+      } else if (tEnabled !== undefined) {
+        enabled = Boolean(tEnabled);
+      } else {
+        enabled = true;
+      }
+
+      setWorkspaceVoiceEnabled(enabled);
       setVoiceEngine(
         voice.engine === 'browser' || voice.engine === 'model' || voice.engine === 'local'
           ? voice.engine
@@ -226,9 +241,20 @@ export const Composer: React.FC<ComposerProps> = ({
       const providers = settings?.providers || [];
       const provider = providers.find((p: any) => p.id === voice.providerId) || providers.find((p: any) => p.apiKey);
       setVoiceModelAvailable(Boolean(provider?.apiKey));
-    }).catch(() => { /* leave defaults */ });
-    return () => { active = false; };
-  }, []);
+    };
+
+    ipcRenderer.invoke('settings-read').then(applyVoiceSettings).catch(() => { /* leave defaults */ });
+
+    const onSettingsChanged = (_e: any, settings: any) => {
+      applyVoiceSettings(settings);
+    };
+    ipcRenderer.on('settings-changed', onSettingsChanged);
+
+    return () => {
+      active = false;
+      ipcRenderer.removeListener('settings-changed', onSettingsChanged);
+    };
+  }, [ipcRenderer]);
 
   // Keep the model selector in sync with the active chat's model. This makes the
   // model sticky per chat (switching chats shows that chat's model) and reflects
@@ -865,36 +891,38 @@ export const Composer: React.FC<ComposerProps> = ({
             </div>
 
             {/* Mic / voice dictation */}
-            <button
-              data-testid="composer-mic-btn"
-              data-testid-mic-state={transcribing ? 'transcribing' : listening ? 'listening' : 'idle'}
-              onClick={toggleDictation}
-              title={
-                transcribing
-                  ? 'Transcribing…'
-                  : listening
-                  ? 'Stop dictation'
-                  : usesModelEngine
-                  ? 'Dictate with your voice (cloud model)'
-                  : (SpeechRecognitionCtor ? 'Dictate with your voice' : 'Voice input not supported here')
-              }
-              aria-label={
-                transcribing
-                  ? 'Transcribing'
-                  : listening
-                  ? 'Stop dictation'
-                  : 'Dictate with your voice'
-              }
-              className={`p-2 rounded-lg border transition-colors cursor-pointer ${
-                listening
-                  ? 'bg-[color:var(--neon-destructive)]/15 border-[color:var(--neon-destructive)]/40 text-[color:var(--neon-destructive)]'
-                  : transcribing
-                  ? 'bg-[color:var(--neon-live)]/15 border-[color:var(--neon-live)]/40 text-[color:var(--neon-live)]'
-                  : 'bg-brand-popover/60 hover:bg-brand-popover border-brand-border text-brand-textMuted hover:text-brand-textMain'
-              }`}
-            >
-              <Mic className={`w-4 h-4 ${listening ? 'animate-pulse' : transcribing ? 'animate-pulse' : ''}`} />
-            </button>
+            {workspaceVoiceEnabled && (
+              <button
+                data-testid="composer-mic-btn"
+                data-testid-mic-state={transcribing ? 'transcribing' : listening ? 'listening' : 'idle'}
+                onClick={toggleDictation}
+                title={
+                  transcribing
+                    ? 'Transcribing…'
+                    : listening
+                    ? 'Stop dictation'
+                    : usesModelEngine
+                    ? 'Dictate with your voice (cloud model)'
+                    : (SpeechRecognitionCtor ? 'Dictate with your voice' : 'Voice input not supported here')
+                }
+                aria-label={
+                  transcribing
+                    ? 'Transcribing'
+                    : listening
+                    ? 'Stop dictation'
+                    : 'Dictate with your voice'
+                }
+                className={`p-2 rounded-lg border transition-colors cursor-pointer ${
+                  listening
+                    ? 'bg-[color:var(--neon-destructive)]/15 border-[color:var(--neon-destructive)]/40 text-[color:var(--neon-destructive)]'
+                    : transcribing
+                    ? 'bg-[color:var(--neon-live)]/15 border-[color:var(--neon-live)]/40 text-[color:var(--neon-live)]'
+                    : 'bg-brand-popover/60 hover:bg-brand-popover border-brand-border text-brand-textMuted hover:text-brand-textMain'
+                }`}
+              >
+                <Mic className={`w-4 h-4 ${listening ? 'animate-pulse' : transcribing ? 'animate-pulse' : ''}`} />
+              </button>
+            )}
 
             {/* Submit / Stop */}
             {isGenerating ? (

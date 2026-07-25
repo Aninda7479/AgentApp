@@ -8,6 +8,7 @@ import { Send, Paperclip, ShieldCheck, X, Sparkles, Terminal, Mic, MicOff } from
 import { ModelPicker } from './ModelPicker';
 import { useSlashCommands } from '../hooks/useSlashCommands';
 import type { ComposerOptions, ComposerAttachment } from '../core/types';
+import { getIpc } from '../lib/electron';
 
 interface ComposerBarProps {
   onSend: (prompt: string, options: ComposerOptions, attachments: ComposerAttachment[]) => void;
@@ -28,12 +29,51 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Workspace Voice Typing setting
+  const [workspaceVoiceEnabled, setWorkspaceVoiceEnabled] = useState<boolean>(true);
+
   // Voice dictation
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const basePromptRef = useRef<string>('');
 
   const { isOpen: isSlashOpen, suggestions: slashSuggestions } = useSlashCommands(prompt);
+
+  useEffect(() => {
+    const ipcRenderer = getIpc();
+    if (!ipcRenderer) return;
+    let active = true;
+
+    const applyVoiceSettings = (settings: any) => {
+      if (!active) return;
+      const voice = settings?.voice || {};
+      const tTarget = voice.typingTarget;
+      const tEnabled = voice.typingEnabled;
+      
+      let enabled = true;
+      if (tTarget !== undefined) {
+        enabled = tTarget === 'both' || tTarget === 'composer';
+      } else if (tEnabled !== undefined) {
+        enabled = Boolean(tEnabled);
+      } else {
+        enabled = true;
+      }
+
+      setWorkspaceVoiceEnabled(enabled);
+    };
+
+    ipcRenderer.invoke('settings-read').then(applyVoiceSettings).catch(() => { /* leave defaults */ });
+
+    const onSettingsChanged = (_e: any, settings: any) => {
+      applyVoiceSettings(settings);
+    };
+    ipcRenderer.on('settings-changed', onSettingsChanged);
+
+    return () => {
+      active = false;
+      ipcRenderer.removeListener('settings-changed', onSettingsChanged);
+    };
+  }, []);
 
   const toggleListening = () => {
     if (!SpeechRecognitionCtor) {
@@ -179,7 +219,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
             className="w-full bg-transparent text-brand-textMain placeholder-brand-textMuted/60 text-sm resize-none focus:outline-none pr-10 scrollbar-thin scrollbar-thumb-brand-border"
           />
           {/* Inline Speech dictation button */}
-          {SpeechRecognitionCtor && (
+          {workspaceVoiceEnabled && SpeechRecognitionCtor && (
             <button
               type="button"
               onClick={toggleListening}

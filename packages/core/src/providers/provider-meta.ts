@@ -91,15 +91,31 @@ export function getProviderDefaultBaseUrl(id: string): string {
   return '';
 }
 
+/** Ensures a base URL has a valid http:// or https:// scheme prefix. */
+export function normalizeUrlScheme(url: string): string {
+  if (!url || !url.trim()) return '';
+  let trimmed = url.trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(trimmed)) {
+    if (/^(localhost|127\.0\.0\.1|0\.0\.0\.0|::1)/i.test(trimmed)) {
+      trimmed = `http://${trimmed}`;
+    } else {
+      trimmed = `https://${trimmed}`;
+    }
+  }
+  return trimmed;
+}
+
 /**
  * Resolves the base URL to use for a request:
- *   1. An explicitly provided `baseUrl` wins (trimmed, no trailing slash).
+ *   1. An explicitly provided `baseUrl` wins (trimmed, normalized, no trailing slash).
  *   2. Otherwise the provider's registered default.
  *   3. Otherwise a generic OpenAI endpoint as a last resort.
  */
 export function resolveBaseUrl(id: string, provided?: string): string {
-  if (provided && provided.trim()) return provided.trim().replace(/\/+$/, '');
+  if (provided && provided.trim()) {
+    return normalizeUrlScheme(provided);
+  }
   const def = getProviderDefaultBaseUrl(id);
-  if (def) return def;
+  if (def) return normalizeUrlScheme(def);
   return 'https://api.openai.com/v1';
 }

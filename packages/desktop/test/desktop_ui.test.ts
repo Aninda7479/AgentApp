@@ -356,6 +356,16 @@ describe('Step 085: Codex Floating Prompt Composer', () => {
 
     expect(html).toContain('⏹');
   });
+
+  it('should render mic button when workspace voice is enabled', () => {
+    const html = renderToString(
+      React.createElement(Composer, {
+        onSend: () => {}
+      })
+    );
+
+    expect(html).toContain('composer-mic-btn');
+  });
 });
 
 describe('Step 086: Interactive Side-by-Side GUI Diff Viewer', () => {

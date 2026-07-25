@@ -21,6 +21,7 @@ export const ALLOWED_CHANNELS = new Set<string>([
   // settings / store
   'settings-read',
   'settings-write',
+  'settings-changed',
   'global-memory-read',
   'global-memory-add-profile',
   'global-memory-delete-profile',

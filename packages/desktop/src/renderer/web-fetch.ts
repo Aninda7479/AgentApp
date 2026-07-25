@@ -48,18 +48,37 @@ export async function browserSafeFetch(url: string, init: RequestInit = {}): Pro
     }
   }
 
-  const res = await window.fetch('/api/provider-proxy', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({ method: init.method ?? 'GET', url, headers: init.headers ?? {} }),
-  });
-  const payload = await res.json().catch(() => ({} as any));
-  if (payload.error) throw new Error(payload.error);
-  return {
-    ok: payload.ok ?? false,
-    status: payload.status ?? 502,
-    statusText: payload.statusText ?? 'Bad Gateway',
-    json: async () => payload.data,
-  } as unknown as Response;
+  try {
+    const res = await window.fetch('/api/provider-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ method: init.method ?? 'GET', url, headers: init.headers ?? {} }),
+    });
+    const payload = await res.json().catch(() => ({} as any));
+    if (payload.error) {
+      return {
+        ok: false,
+        status: 502,
+        statusText: payload.error,
+        text: async () => String(payload.error),
+        json: async () => payload
+      } as unknown as Response;
+    }
+    return {
+      ok: payload.ok ?? false,
+      status: payload.status ?? 502,
+      statusText: payload.statusText ?? 'Bad Gateway',
+      text: async () => (typeof payload.data === 'string' ? payload.data : JSON.stringify(payload.data || {})),
+      json: async () => payload.data,
+    } as unknown as Response;
+  } catch (err: any) {
+    return {
+      ok: false,
+      status: 503,
+      statusText: 'Fetch Failed',
+      text: async () => err?.message || 'Fetch failed',
+      json: async () => ({ error: err?.message || 'Fetch failed' })
+    } as unknown as Response;
+  }
 }

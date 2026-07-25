@@ -759,6 +759,13 @@ safeHandle('settings-write', (_event, settingsPatch) => {
   const updatedSettings = SettingsStorage.loadSettings();
   const newVoice = updatedSettings?.voice || {};
 
+  // Broadcast settings change to all renderer windows
+  BrowserWindow.getAllWindows().forEach((w) => {
+    if (!w.isDestroyed()) {
+      w.webContents.send('settings-changed', updatedSettings);
+    }
+  });
+
   if (
     (oldVoice.localWhisper?.enabled && !newVoice.localWhisper?.enabled) ||
     (oldVoice.localWhisper?.enabled && oldVoice.localWhisper?.size !== newVoice.localWhisper?.size)
