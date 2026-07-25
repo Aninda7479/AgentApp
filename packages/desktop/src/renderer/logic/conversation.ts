@@ -35,7 +35,7 @@ export class ConversationService {
         title: `New chat in ${project.name}`,
         project: project.name,
         model: ConversationService.defaultModel(ctx),
-        timestamp: 'Just now',
+        timestamp: new Date().toISOString(),
         steps: [
           StepFactory.assistantStep(
             `New conversation initialized. Project context: \`${project.name}\`. How can I help you today?`

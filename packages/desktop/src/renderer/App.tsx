@@ -246,8 +246,24 @@ export const App: React.FC = () => {
       setProjects((prev) => (JSON.stringify(prev) === JSON.stringify(state.projects) ? prev : state.projects));
       setChats((prev) => {
         // Compare meta arrays to avoid infinite loops, but map resident steps
-        const prevMeta = prev.map(c => ({ id: c.id, title: c.title, model: c.model, stepCount: c.steps?.length || 0 }));
-        const nextMeta = state.chats.map(c => ({ id: c.id, title: c.title, model: c.model, stepCount: c.steps?.length || 0 }));
+        const prevMeta = prev.map(c => ({
+          id: c.id,
+          title: c.title,
+          model: c.model,
+          timestamp: c.timestamp,
+          isRunning: c.isRunning,
+          startedAt: c.startedAt,
+          stepCount: c.steps?.length || 0
+        }));
+        const nextMeta = state.chats.map(c => ({
+          id: c.id,
+          title: c.title,
+          model: c.model,
+          timestamp: c.timestamp,
+          isRunning: c.isRunning,
+          startedAt: c.startedAt,
+          stepCount: c.steps?.length || 0
+        }));
         if (JSON.stringify(prevMeta) === JSON.stringify(nextMeta)) return prev;
         return state.chats;
       });

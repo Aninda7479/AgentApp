@@ -135,6 +135,7 @@ export class AgentService {
           StoreService.updateChatRecord(ctx, args.chatId, (current) => ({
             ...current,
             isRunning: false,
+            timestamp: new Date().toISOString(),
             lastError: res.error || 'Unknown error',
             steps: FormatService.stampWorkedDuration(
               current.steps,
@@ -149,6 +150,7 @@ export class AgentService {
         StoreService.updateChatRecord(ctx, args.chatId, (current) => ({
           ...current,
           isRunning: false,
+          timestamp: new Date().toISOString(),
           lastError: err.message,
           steps: FormatService.stampWorkedDuration(
             current.steps,
@@ -182,6 +184,7 @@ export class AgentService {
     StoreService.updateChatRecord(ctx, activeChatId, (current) => ({
       ...current,
       isRunning: false,
+      timestamp: new Date().toISOString(),
       lastError: 'Stopped by user',
       steps: FormatService.stampWorkedDuration(current.steps, workedDuration)
     }));
@@ -306,7 +309,15 @@ export class AgentService {
       ctx.setChats((prev) => {
         const next = prev.map((c) =>
           c.id === chatId
-            ? { ...c, steps: updatedSteps, model: options.model || c.model, isRunning: true, startedAt: runStartedAt, lastError: undefined }
+            ? {
+                ...c,
+                steps: updatedSteps,
+                model: options.model || c.model,
+                isRunning: true,
+                startedAt: runStartedAt,
+                timestamp: new Date().toISOString(),
+                lastError: undefined
+              }
             : c
         );
         ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), next);

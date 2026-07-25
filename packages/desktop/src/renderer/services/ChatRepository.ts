@@ -86,7 +86,7 @@ export class ChatRepository {
       title: `New chat in ${project.name}`,
       project: project.name,
       model: defaultModel,
-      timestamp: 'Just now',
+      timestamp: new Date().toISOString(),
       steps: [
         StepFactory.assistantStep(
           `New conversation initialized. Project context: \`${project.name}\`. How can I help you today?`
@@ -119,7 +119,7 @@ export class ChatRepository {
       title: proj ? `Chat in ${proj}` : 'Standalone Chat',
       project: proj,
       model: defaultModel,
-      timestamp: 'Just now',
+      timestamp: new Date().toISOString(),
       steps: [],
     };
 

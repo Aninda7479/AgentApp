@@ -212,6 +212,7 @@ export class AgentStreamService {
           ...current,
           isRunning: false,
           queuedCount: 0,
+          timestamp: new Date().toISOString(),
           lastError: agentEvent.type === 'error' ? (agentEvent.error || 'Unknown error') : undefined,
           steps: FormatService.stampWorkedDuration(current.steps, workedDuration)
         }));

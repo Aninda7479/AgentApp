@@ -51,7 +51,7 @@ export class AgentOrchestrator {
         title: proj ? `Chat in ${proj}` : 'Standalone Chat',
         project: proj,
         model: defaultModel,
-        timestamp: 'Just now',
+        timestamp: new Date().toISOString(),
         steps: [],
       };
 
@@ -96,6 +96,18 @@ export class AgentOrchestrator {
 
     const nextSteps = [...attachmentSteps, userStep];
     chatStore.updateSteps(targetChatId, (prev) => [...prev, ...nextSteps]);
+    chatStore.setChats(
+      chatStore.getState().chats.map((c) =>
+        c.id === targetChatId
+          ? {
+              ...c,
+              isRunning: true,
+              startedAt,
+              timestamp: new Date().toISOString(),
+            }
+          : c
+      )
+    );
     ChatRepository.persistAll().catch(console.error);
 
     // Prepare Stream Buffer
@@ -248,6 +260,18 @@ export class AgentOrchestrator {
     }
 
     sessionStore.markIdle(chatId, error);
+    chatStore.setChats(
+      chatStore.getState().chats.map((c) =>
+        c.id === chatId
+          ? {
+              ...c,
+              isRunning: false,
+              timestamp: new Date().toISOString(),
+              lastError: error,
+            }
+          : c
+      )
+    );
     ChatRepository.persistAll().catch(console.error);
 
     // Drain next item in queue for this chat session

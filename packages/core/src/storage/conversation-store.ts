@@ -248,9 +248,21 @@ async function readChatRecord(
     const chat = await readJson<StoredChat>(chatJsonPath);
     if (!chat) return null;
     const config = configPath ? await readJson<StoredChatConfig>(configPath) : null;
+
+    let timestamp = chat.timestamp;
+    if (!timestamp || timestamp.toLowerCase() === 'just now' || isNaN(Date.parse(timestamp))) {
+      try {
+        const stat = await fsp.stat(chatJsonPath);
+        timestamp = stat.mtime.toISOString();
+      } catch {
+        timestamp = new Date().toISOString();
+      }
+    }
+
     return {
       ...chat,
       ...(config || {}),
+      timestamp,
       project: projectName,
       projectStorageKey: projectKey
     };
