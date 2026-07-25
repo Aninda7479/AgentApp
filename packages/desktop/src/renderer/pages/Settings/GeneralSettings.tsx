@@ -65,23 +65,21 @@ const ToggleRow: React.FC<ToggleRowProps> = ({ label, description, value, onChan
 );
 
 /** Renders appearance, work mode, and permission settings for the agent. */
-export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
-  themeMode,
-  onThemeChange,
-  workMode,
-  onWorkModeChange,
-  confirmShellCommands,
-  onConfirmShellCommandsChange,
-  autoReviewPlan,
-  onAutoReviewPlanChange,
-  unsandboxedActions,
-  onUnsandboxedActionsChange,
-  internetAccessLevel,
-  onInternetAccessLevelChange
-}) => {
+export const GeneralSettings: React.FC<GeneralSettingsProps> = (props) => {
+  const {
+    themeMode,
+    onThemeChange,
+    confirmShellCommands,
+    onConfirmShellCommandsChange,
+    autoReviewPlan,
+    onAutoReviewPlanChange,
+    unsandboxedActions,
+    onUnsandboxedActionsChange,
+    internetAccessLevel,
+    onInternetAccessLevelChange
+  } = props;
   const [openAtLogin, setOpenAtLogin] = useState(false);
   const [closeToTray, setCloseToTray] = useState(true);
-  const [hotkeyOverlayEnabled, setHotkeyOverlayEnabled] = useState(true);
 
   const [chatTitleMode, setChatTitleMode] = useState<'active_model' | 'custom_model' | 'simple' | 'disabled'>('active_model');
   const [chatTitleProvider, setChatTitleProvider] = useState<string>('');
@@ -95,7 +93,6 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
       if (settings?.general) {
         if (settings.general.openAtLogin !== undefined) setOpenAtLogin(!!settings.general.openAtLogin);
         if (settings.general.closeToTray !== undefined) setCloseToTray(!!settings.general.closeToTray);
-        if (settings.general.hotkeyOverlayEnabled !== undefined) setHotkeyOverlayEnabled(!!settings.general.hotkeyOverlayEnabled);
       }
       if (settings?.chatTitle) {
         if (settings.chatTitle.mode) setChatTitleMode(settings.chatTitle.mode);
@@ -112,7 +109,6 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   const updateGeneralSetting = (key: string, value: boolean) => {
     if (key === 'openAtLogin') setOpenAtLogin(value);
     if (key === 'closeToTray') setCloseToTray(value);
-    if (key === 'hotkeyOverlayEnabled') setHotkeyOverlayEnabled(value);
 
     const ipc = getIpc();
     ipc.invoke('settings-write', {
@@ -196,20 +192,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
     }
   ];
 
-  const modes = [
-    {
-      id: 'coding' as const,
-      label: 'Coding Mode',
-      description: 'Optimized for software engineering, testing, and debugging.',
-      Icon: Code2
-    },
-    {
-      id: 'everyday' as const,
-      label: 'General Mode',
-      description: 'Balanced for assistance, explanation, and writing.',
-      Icon: MessageSquare
-    }
-  ];
+
 
   return (
     <div className="max-w-170 text-left">
@@ -237,12 +220,6 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
             description="Closing the window keeps background services (Voice typing, Circle Search, Spotlight overlay, and Artifacts) active in the system tray."
             value={closeToTray}
             onChange={(val) => updateGeneralSetting('closeToTray', val)}
-          />
-          <ToggleRow
-            label="Global Quick Launcher Overlay (Spotlight)"
-            description="Press Ctrl+Alt+Space anywhere on your OS to open the instant AI quick launcher overlay."
-            value={hotkeyOverlayEnabled}
-            onChange={(val) => updateGeneralSetting('hotkeyOverlayEnabled', val)}
           />
         </div>
       </section>
@@ -275,34 +252,10 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         </div>
       </section>
 
-      <section className="mb-8">
-        <h3 className="settings-section-title mb-3">Agent Personality &amp; Mode</h3>
-        <span className="hidden">Work mode</span>
-        <span className="hidden">For coding</span>
-        <span className="hidden">Default permissions</span>
-        <div className="settings-section">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {modes.map(({ id, label, description, Icon }) => {
-              const selected = workMode === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => onWorkModeChange(id)}
-                  className={`settings-choice ${selected ? 'selected' : ''}`}
-                >
-                  <Icon size={18} className="settings-choice-icon" />
-                  <div className="settings-choice-title">{label}</div>
-                  <div className="settings-choice-desc">{description}</div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </section>
+
 
       <section className="mb-8">
-        <h3 className="settings-section-title mb-3">Permissions &amp; Verification</h3>
+        <h3 className="settings-section-title mb-3">Permissions &amp; Verification (Under Devlopment 🚧)</h3>
         <div className="settings-section px-5 py-1">
           <ToggleRow
             label="Confirm Shell Commands"

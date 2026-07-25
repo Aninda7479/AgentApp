@@ -8,6 +8,7 @@ export const CircleSearchSettings: React.FC = () => {
 
   const [enabled, setEnabled] = useState<boolean>(true);
   const [shortcut, setShortcut] = useState<string>('CommandOrControl+Shift+S');
+  const [spotlightEnabled, setSpotlightEnabled] = useState<boolean>(true);
   const [saveStatus, setSaveStatus] = useState<{ ok: boolean; message: string } | null>(null);
 
   useEffect(() => {
@@ -21,16 +22,23 @@ export const CircleSearchSettings: React.FC = () => {
           setShortcut(settings.circleSearch.shortcut);
         }
       }
+      if (settings?.general && settings.general.hotkeyOverlayEnabled !== undefined) {
+        setSpotlightEnabled(Boolean(settings.general.hotkeyOverlayEnabled));
+      }
     }).catch(() => {});
   }, []);
 
-  const saveSettings = async (newEnabled: boolean, newShortcut: string) => {
+  const saveSettings = async (newEnabled: boolean, newShortcut: string, newSpotlightEnabled: boolean) => {
     if (!ipc) return;
     setSaveStatus(null);
     try {
       const currentSettings = await ipc.invoke('settings-read');
       await ipc.invoke('settings-write', {
         ...currentSettings,
+        general: {
+          ...(currentSettings?.general || {}),
+          hotkeyOverlayEnabled: newSpotlightEnabled,
+        },
         circleSearch: {
           enabled: newEnabled,
           shortcut: newShortcut.trim(),
@@ -45,7 +53,12 @@ export const CircleSearchSettings: React.FC = () => {
 
   const handleToggle = (val: boolean) => {
     setEnabled(val);
-    saveSettings(val, shortcut);
+    saveSettings(val, shortcut, spotlightEnabled);
+  };
+
+  const handleSpotlightToggle = (val: boolean) => {
+    setSpotlightEnabled(val);
+    saveSettings(enabled, shortcut, val);
   };
 
   const handleShortcutChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,7 +67,7 @@ export const CircleSearchSettings: React.FC = () => {
 
   const handleShortcutSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    saveSettings(enabled, shortcut);
+    saveSettings(enabled, shortcut, spotlightEnabled);
   };
 
   return (
@@ -80,7 +93,49 @@ export const CircleSearchSettings: React.FC = () => {
         </div>
       </div>
 
-      {/* Main toggle */}
+      {/* Spotlight Toggle */}
+      <section className="mb-6">
+        <h3 className="mb-3 text-base font-semibold text-brand-textMain">Quick Launcher Settings</h3>
+        <div className="rounded-lg border border-brand-border bg-brand-card p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                spotlightEnabled
+                  ? 'bg-[color:var(--brand-accent-tint)] text-[color:var(--brand-accent)]'
+                  : 'bg-brand-bg text-brand-textMuted'
+              }`}>
+                <Sparkles size={18} />
+              </span>
+              <div>
+                <div className="text-sm font-medium text-brand-textMain">
+                  Enable Spotlight Quick Launcher
+                </div>
+                <div className="text-xs text-brand-textMuted">
+                  Press Ctrl+Alt+Space anywhere on your OS to open the instant AI quick launcher overlay.
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={spotlightEnabled}
+              onClick={() => handleSpotlightToggle(!spotlightEnabled)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+                spotlightEnabled ? 'bg-[color:var(--brand-accent)]' : 'bg-brand-bg border border-brand-border'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  spotlightEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Circle Search Toggle */}
       <section className="mb-6">
         <h3 className="mb-3 text-base font-semibold text-brand-textMain">Screen Snippet & Vision Search</h3>
         <div className="rounded-lg border border-brand-border bg-brand-card p-4">
@@ -88,14 +143,14 @@ export const CircleSearchSettings: React.FC = () => {
             <div className="flex items-center gap-3">
               <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${
                 enabled
-                  ? 'bg-[color:var(--neon-constructive)]/15 text-[color:var(--neon-constructive)]'
+                  ? 'bg-[color:var(--brand-accent-tint)] text-[color:var(--brand-accent)]'
                   : 'bg-brand-bg text-brand-textMuted'
               }`}>
                 <Camera size={18} />
               </span>
               <div>
                 <div className="text-sm font-medium text-brand-textMain">
-                  Enable Screen Capture in Spotlight
+                  Enable Screen Capture in Spotlight (Circle Search)
                 </div>
                 <div className="text-xs text-brand-textMuted">
                   Allows capturing screen snippets directly inside the Spotlight overlay bar.
@@ -108,8 +163,8 @@ export const CircleSearchSettings: React.FC = () => {
               role="switch"
               aria-checked={enabled}
               onClick={() => handleToggle(!enabled)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                enabled ? 'bg-[color:var(--neon-constructive)]' : 'bg-brand-bg border border-brand-border'
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+                enabled ? 'bg-[color:var(--brand-accent)]' : 'bg-brand-bg border border-brand-border'
               }`}
             >
               <span
