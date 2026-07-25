@@ -2,7 +2,7 @@ import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, desktopCapt
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, isFreeModel, BYOKProviderManager, createProviderAdapter, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, initializeDirectories, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber, resolveProviderFamily, resolveBaseUrl, UserProfileStore, LearningLoopEngine, ProjectInstructionsParser } from '@superagent/core';
+import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, isFreeModel, BYOKProviderManager, createProviderAdapter, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, initializeDirectories, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber, resolveProviderFamily, resolveBaseUrl, UserProfileStore, LearningLoopEngine, ProjectInstructionsParser, DEFAULT_AGENT_SYSTEM_PROMPT, buildOrchestratorOptimizerPrompt } from '@superagent/core';
 
 // Keep Electron's cache userData in a standard OS location — NOT inside
 // ~/.superagent, which is the app's own data directory.
@@ -848,17 +848,8 @@ safeHandle('global-memory-read', async (_event, { projectRoot }: { projectRoot?:
   const settings = SettingsStorage.loadSettings();
   const globalMemoryInstructions = (settings.general as any)?.globalMemory || '';
 
-  const defaultSystemPrompt = `You are SuperAgent, a powerful autonomous AI coding assistant.
+  const defaultSystemPrompt = DEFAULT_AGENT_SYSTEM_PROMPT;
 
-You have access to tools to read files, list directories, search codebases, run shell commands, and write files.
-Use tools progressively — don't dump the whole codebase; fetch what you need when you need it.
-
-Key guidelines:
-- Think step by step before acting
-- Read relevant files before making edits
-- Verify changes compile/work after editing
-- Be concise but thorough in explanations
-- When you edit files, mention which files changed and the diff summary`;
 
   let projectInstructions: any[] = [];
   const targetPath = projectRoot || process.cwd();
@@ -964,25 +955,14 @@ safeHandle('orchestrator-optimize-instructions-by-ai', async () => {
   const pool = buildRouterPool(settings.models ?? [])
     .filter((m) => m.enabled && (!freeOnly || isFreeModel(m)));
 
-  const optimizationPrompt = `You are a system prompt optimizer. You are optimizing the Orchestrator System Instructions for a Sakana Fugu-class routing conductor.
+  const optimizationPrompt = buildOrchestratorOptimizerPrompt({
+    activeModels,
+    currentInstructions,
+    optimizationGoal: orchestratorSettings?.optimizationGoal || 'balanced',
+    routingStrategy: orchestratorSettings?.routingStrategy || 'router',
+    freeOnly
+  });
 
-Here is the current pool of enabled models:
-${activeModels.map(m => `- ${m.name} (${m.providerId}) - Pricing: Input ${m.pricing?.inputPer1M || 'N/A'}, Output ${m.pricing?.outputPer1M || 'N/A'}`).join('\n')}
-
-Here is the current instructions file content:
-\`\`\`markdown
-${currentInstructions}
-\`\`\`
-
-Optimization Goal: ${orchestratorSettings?.optimizationGoal || 'balanced'}
-Routing Strategy: ${orchestratorSettings?.routingStrategy || 'router'}
-${freeOnly ? 'NOTE: Free-Only mode is enabled. The Orchestrator should only utilize free, local, or custom models. Avoid paid options.' : ''}
-
-Please optimize these system instructions to:
-1. Make the categorization boundaries more precise for the specific models in this pool.
-2. Formulate explicit conducting guidelines using the Claude Fable 5 escalation structure.
-3. Keep the output strictly in Markdown format.
-4. Do NOT wrap the output in markdown code blocks (e.g. \`\`\`markdown). Return ONLY the direct markdown text of the system instructions.`;
 
   const router = new OrchestratorRouter({ reasoningEffort: 'low' });
   const request = { messages: [{ role: 'user' as const, content: optimizationPrompt }] };

@@ -1,5 +1,6 @@
 import { ChatTitleSettings, ProviderSettings } from '../storage/settings-store.js';
 import { resolveProviderFamily, resolveBaseUrl } from './provider-meta.js';
+import { buildTitleGeneratorPrompt } from '../prompts/index.js';
 
 export interface GenerateTitleConfig {
   provider?: string;
@@ -75,9 +76,7 @@ async function fetchTitleFromLLM(options: FetchTitleOptions): Promise<string> {
   const family = resolveProviderFamily(provider);
   const effectiveBaseUrl = resolveBaseUrl(provider, baseUrl);
 
-  const systemMessage =
-    customPrompt ||
-    `Generate a short title (maximum ${maxWords} words) summarizing the starting prompt. Return ONLY the title text, without quotes, formatting, or explanation.`;
+  const systemMessage = buildTitleGeneratorPrompt(maxWords, customPrompt);
   const userMessage = `Prompt: "${prompt.slice(0, 500)}"`;
 
   const controller = new AbortController();

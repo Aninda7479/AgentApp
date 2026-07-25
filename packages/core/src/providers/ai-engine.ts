@@ -81,6 +81,7 @@ import {
 } from './ai-engine-helpers.js';
 
 import { createBuiltinTools } from './builtin-tools.js';
+import { DEFAULT_AGENT_SYSTEM_PROMPT } from '../prompts/index.js';
 
 const SUMMARY_PREFIX = '[COMPACTED CONTEXT SUMMARY]';
 const MAX_SYSTEM_PROMPT_CHARS = 12000;
@@ -139,18 +140,11 @@ export class AgentEngine {
     ];
     this.history = [];
 
-    // System prompt matching OpenCode's AGENTS.md pattern
-    const rawPrompt = config.systemPrompt || `You are SuperAgent, a powerful autonomous AI coding assistant.
+    // System prompt — inspired by Anthropic Claude's layered system prompt design.
+    // Covers: identity, tool-use philosophy, operational guidelines, agentic discipline,
+    // and output formatting. Keep well under MAX_SYSTEM_PROMPT_CHARS (12 000 chars).
+    const rawPrompt = config.systemPrompt || DEFAULT_AGENT_SYSTEM_PROMPT;
 
-You have access to tools to read files, list directories, search codebases, run shell commands, and write files.
-Use tools progressively — don't dump the whole codebase; fetch what you need when you need it.
-
-Key guidelines:
-- Think step by step before acting
-- Read relevant files before making edits
-- Verify changes compile/work after editing
-- Be concise but thorough in explanations
-- When you edit files, mention which files changed and the diff summary`;
 
     // Truncate excessively long system prompts to prevent context overflow
     // which causes the model to produce garbled/gibberish output.
@@ -827,17 +821,8 @@ Key guidelines:
    *  multimodal) shared by every best-of-N candidate. Returns a fresh array so
    *  each candidate engine owns an independent copy (no shared-state mutation). */
   private buildHistory(userPrompt: string, attachments?: ImageAttachment[]): ChatMessage[] {
-    const rawPrompt = this.config.systemPrompt || `You are SuperAgent, a powerful autonomous AI coding assistant.
+    const rawPrompt = this.config.systemPrompt || DEFAULT_AGENT_SYSTEM_PROMPT;
 
-You have access to tools to read files, list directories, search codebases, run shell commands, and write files.
-Use tools progressively — don't dump the whole codebase; fetch what you need when you need it.
-
-Key guidelines:
-- Think step by step before acting
-- Read relevant files before making edits
-- Verify changes compile/work after editing
-- Be concise but thorough in explanations
-- When you edit files, mention which files changed and the diff summary`;
     const sysPrompt = rawPrompt.length > MAX_SYSTEM_PROMPT_CHARS
       ? rawPrompt.substring(0, MAX_SYSTEM_PROMPT_CHARS) + '\n\n[System prompt truncated due to length]'
       : rawPrompt;
