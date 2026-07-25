@@ -107,3 +107,5 @@ export * from './artifact/artifactRunner.js';
 export * from './tools/artifactTools.js';
 export * from './studio/3d/index.js';
 export * from './providers/simple-chat.js';
+export * from './providers/title-generator.js';
+

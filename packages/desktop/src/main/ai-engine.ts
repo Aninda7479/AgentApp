@@ -7,7 +7,10 @@ import {
   isCommandAllowed,
   isContextOverflowError,
   resolveProviderFamily,
-  resolveBaseUrl
+  resolveBaseUrl,
+  generateChatName,
+  cleanTitle,
+  formatLocalTruncatedTitle
 } from '@superagent/core';
 
 export {
@@ -16,7 +19,10 @@ export {
   multiAgentManager,
   createBuiltinTools,
   isCommandAllowed,
-  isContextOverflowError
+  isContextOverflowError,
+  generateChatName,
+  cleanTitle,
+  formatLocalTruncatedTitle
 };
 
 export type {
@@ -43,19 +49,3 @@ export function resolveWithinAnyRoot(target: string, allowedRoots: string[]): st
   return null;
 }
 
-export async function generateChatName(prompt: string, config: any, appSettings?: any): Promise<string> {
-  const rawPrompt = prompt.trim();
-  const titleSettings = appSettings?.chatTitle || {};
-  const maxWords = titleSettings.maxWords || 3;
-
-  // Local fallback truncation (instant, offline)
-  const words = rawPrompt.split(/\s+/).filter(Boolean);
-  let defaultTitle = words.slice(0, Math.max(1, maxWords)).join(' ');
-  if (rawPrompt.length > 25 && words.length > maxWords) {
-    defaultTitle += '...';
-  }
-  if (!defaultTitle) defaultTitle = 'New Chat';
-
-  // LLM-based chat title generation is paused
-  return defaultTitle;
-}

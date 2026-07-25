@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Check, Code2, MessageSquare, Moon, Sun, Monitor, Globe, Eye, Ban, Cpu } from 'lucide-react';
 import { ThemeMode } from '../../types';
-import { InternetAccessLevel } from './types';
+import { InternetAccessLevel, ModelConfig, ProviderConnection } from './types';
 import { getIpc } from '../../lib/electron';
+import { SearchableSelect, SearchableSelectOption } from '../../components/ui/SearchableSelect';
 
 /**
  * Copy for the terminal execution-scope toggle. The old label
@@ -31,6 +32,8 @@ interface GeneralSettingsProps {
   onUnsandboxedActionsChange: (val: boolean) => void;
   internetAccessLevel: InternetAccessLevel;
   onInternetAccessLevelChange: (level: InternetAccessLevel) => void;
+  connectedProviders?: ProviderConnection[];
+  modelsCatalog?: ModelConfig[];
 }
 
 /** Props for a labeled boolean toggle row. */
@@ -76,7 +79,9 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = (props) => {
     unsandboxedActions,
     onUnsandboxedActionsChange,
     internetAccessLevel,
-    onInternetAccessLevelChange
+    onInternetAccessLevelChange,
+    connectedProviders,
+    modelsCatalog
   } = props;
   const [openAtLogin, setOpenAtLogin] = useState(false);
   const [closeToTray, setCloseToTray] = useState(true);
@@ -86,6 +91,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = (props) => {
   const [chatTitleModel, setChatTitleModel] = useState<string>('');
   const [chatTitleMaxWords, setChatTitleMaxWords] = useState<number>(3);
   const [availableProviders, setAvailableProviders] = useState<any[]>([]);
+  const [savedModels, setSavedModels] = useState<any[]>([]);
 
   useEffect(() => {
     const ipc = getIpc();
@@ -103,8 +109,113 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = (props) => {
       if (Array.isArray(settings?.providers)) {
         setAvailableProviders(settings.providers);
       }
+      if (Array.isArray(settings?.models)) {
+        setSavedModels(settings.models);
+      }
     }).catch(() => {});
   }, []);
+
+  const modelOptions = useMemo<SearchableSelectOption[]>(() => {
+    const options: SearchableSelectOption[] = [];
+    const seenKeys = new Set<string>();
+
+    if (modelsCatalog && modelsCatalog.length > 0) {
+      for (const m of modelsCatalog) {
+        const pName = connectedProviders?.find((p) => p.id === m.providerId)?.name || m.providerId;
+        const bareId = m.id.startsWith(`${m.providerId}-`) ? m.id.slice(m.providerId.length + 1) : m.id;
+        const key = `${m.providerId}::${bareId}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          options.push({
+            value: key,
+            label: m.name || bareId,
+            description: `Provider: ${pName}`,
+            metadata: m.free ? 'Free' : (m.contextLimit || ''),
+            keywords: `${m.name} ${m.id} ${m.providerId} ${pName}`,
+            raw: { providerId: m.providerId, model: bareId }
+          });
+        }
+      }
+    }
+
+    if (savedModels && savedModels.length > 0) {
+      for (const sm of savedModels) {
+        const pId = sm.providerId || 'openai';
+        const bareId = sm.id.startsWith(`${pId}-`) ? sm.id.slice(pId.length + 1) : sm.id;
+        const key = `${pId}::${bareId}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          options.push({
+            value: key,
+            label: sm.name || bareId,
+            description: `Provider: ${pId}`,
+            keywords: `${sm.name} ${sm.id} ${pId}`,
+            raw: { providerId: pId, model: bareId }
+          });
+        }
+      }
+    }
+
+    const defaultFastModels = [
+      { providerId: 'google', model: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', providerName: 'Google Gemini' },
+      { providerId: 'google', model: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite', providerName: 'Google Gemini' },
+      { providerId: 'openai', model: 'gpt-4o-mini', name: 'GPT-4o Mini', providerName: 'OpenAI' },
+      { providerId: 'anthropic', model: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', providerName: 'Anthropic' },
+      { providerId: 'groq', model: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', providerName: 'Groq' },
+      { providerId: 'deepseek', model: 'deepseek-chat', name: 'DeepSeek Chat (V3)', providerName: 'DeepSeek' },
+      { providerId: 'openrouter', model: 'google/gemini-2.0-flash-lite:free', name: 'Gemini 2.0 Flash Lite (Free)', providerName: 'OpenRouter' },
+      { providerId: 'ollama', model: 'qwen2.5-coder', name: 'Qwen 2.5 Coder', providerName: 'Ollama (Local)' },
+      { providerId: 'ollama', model: 'llama3.2', name: 'Llama 3.2', providerName: 'Ollama (Local)' }
+    ];
+
+    for (const fm of defaultFastModels) {
+      const key = `${fm.providerId}::${fm.model}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        options.push({
+          value: key,
+          label: fm.name,
+          description: `Provider: ${fm.providerName}`,
+          keywords: `${fm.name} ${fm.model} ${fm.providerId} ${fm.providerName}`,
+          raw: { providerId: fm.providerId, model: fm.model }
+        });
+      }
+    }
+
+    return options;
+  }, [modelsCatalog, connectedProviders, savedModels]);
+
+  const selectedModelValue = useMemo(() => {
+    if (!chatTitleModel) return '';
+    const pId = chatTitleProvider || '';
+    if (pId) {
+      const key = `${pId}::${chatTitleModel}`;
+      if (modelOptions.some((o) => o.value === key)) return key;
+    }
+    const match = modelOptions.find(
+      (o) => o.raw?.model === chatTitleModel || o.value.endsWith(`::${chatTitleModel}`)
+    );
+    if (match) return match.value;
+    return pId ? `${pId}::${chatTitleModel}` : chatTitleModel;
+  }, [chatTitleProvider, chatTitleModel, modelOptions]);
+
+  const handleModelSelect = (selectedVal: string) => {
+    let pId = '';
+    let mId = '';
+    const opt = modelOptions.find((o) => o.value === selectedVal);
+    if (opt && opt.raw) {
+      pId = opt.raw.providerId;
+      mId = opt.raw.model;
+    } else if (selectedVal.includes('::')) {
+      const parts = selectedVal.split('::');
+      pId = parts[0];
+      mId = parts[1];
+    } else {
+      pId = chatTitleProvider || 'openai';
+      mId = selectedVal;
+    }
+    updateChatTitleSetting({ providerId: pId, model: mId });
+  };
 
   const updateGeneralSetting = (key: string, value: boolean) => {
     if (key === 'openAtLogin') setOpenAtLogin(value);
@@ -117,7 +228,6 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = (props) => {
       }
     }).catch((err: any) => console.error(`Failed updating ${key}:`, err));
   };
-
   const updateChatTitleSetting = (patch: Partial<{ mode: 'active_model' | 'custom_model' | 'simple' | 'disabled'; providerId: string; model: string; maxWords: number }>) => {
     if (patch.mode !== undefined) setChatTitleMode(patch.mode);
     if (patch.providerId !== undefined) setChatTitleProvider(patch.providerId);
@@ -126,11 +236,10 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = (props) => {
 
     const ipc = getIpc();
     ipc.invoke('settings-read').then((current: any) => {
+      const existing = current?.chatTitle || {};
       const updatedChatTitle = {
-        mode: patch.mode ?? chatTitleMode,
-        providerId: patch.providerId ?? chatTitleProvider,
-        model: patch.model ?? chatTitleModel,
-        maxWords: patch.maxWords ?? chatTitleMaxWords
+        ...existing,
+        ...patch
       };
       ipc.invoke('settings-write', {
         ...current,
@@ -138,6 +247,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = (props) => {
       }).catch((err: any) => console.error('Failed updating chat title settings:', err));
     }).catch(() => {});
   };
+
 
   const titleModeOptions: {
     id: 'active_model' | 'custom_model' | 'simple' | 'disabled';
@@ -334,39 +444,19 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = (props) => {
 
         {chatTitleMode === 'custom_model' && (
           <div className="settings-section px-5 py-4 mb-4 flex flex-col gap-3">
-            <div className="text-sm font-medium text-brand-textMain">Dedicated Provider &amp; Model</div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <label className="block text-xs font-medium text-brand-textMuted mb-1">Provider</label>
-                <select
-                  value={chatTitleProvider}
-                  onChange={(e) => updateChatTitleSetting({ providerId: e.target.value })}
-                  className="w-full rounded-md border border-brand-border bg-brand-bg px-3 py-1.5 text-sm text-brand-textMain focus:outline-none focus:ring-1 focus:ring-brand-accent"
-                >
-                  <option value="">Select Provider...</option>
-                  {availableProviders.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name || p.id}
-                    </option>
-                  ))}
-                  <option value="ollama">Ollama (Local)</option>
-                  <option value="openrouter">OpenRouter</option>
-                  <option value="google">Google Gemini</option>
-                  <option value="anthropic">Anthropic</option>
-                  <option value="openai">OpenAI</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-brand-textMuted mb-1">Model Name (e.g. gemini-2.0-flash-lite, openrouter/free)</label>
-                <input
-                  type="text"
-                  value={chatTitleModel}
-                  onChange={(e) => updateChatTitleSetting({ model: e.target.value })}
-                  placeholder="e.g. gemini-2.0-flash"
-                  className="w-full rounded-md border border-brand-border bg-brand-bg px-3 py-1.5 text-sm text-brand-textMain focus:outline-none focus:ring-1 focus:ring-brand-accent"
-                />
+            <div>
+              <div className="text-sm font-medium text-brand-textMain">Dedicated Fast Model</div>
+              <div className="text-xs text-brand-textMuted mt-0.5">
+                Select a fast model from your connected providers or models list for instant session titles.
               </div>
             </div>
+            <SearchableSelect
+              options={modelOptions}
+              value={selectedModelValue}
+              onChange={handleModelSelect}
+              placeholder="Select fast model from models list..."
+              allowCustom={true}
+            />
           </div>
         )}
 

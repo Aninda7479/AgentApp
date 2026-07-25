@@ -373,6 +373,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             onUnsandboxedActionsChange={onUnsandboxedActionsChange}
             internetAccessLevel={internetAccessLevel}
             onInternetAccessLevelChange={onInternetAccessLevelChange}
+            connectedProviders={connectedProviders}
+            modelsCatalog={modelsCatalog}
           />
         )}
         {activeCategory === 'companion' && (

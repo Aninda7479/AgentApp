@@ -68,3 +68,33 @@ describe('AgentEngine context usage + compaction', () => {
     expect(hist.length).toBe(3);
   });
 });
+
+describe('generateChatName desktop integration', () => {
+  it('generates chat title using local truncation fallback when offline', async () => {
+    const { generateChatName } = await import('./ai-engine.js');
+    const title = await generateChatName(
+      'Create a new component for the header navbar',
+      { provider: 'openai', apiKey: '' },
+      { chatTitle: { mode: 'simple', maxWords: 3 } }
+    );
+    expect(title).toBe('Create a new...');
+  });
+
+  it('respects maximum title words parameter', async () => {
+    const { generateChatName } = await import('./ai-engine.js');
+    const title2 = await generateChatName(
+      'Configure Tailwind CSS styling variables',
+      { provider: 'openai', apiKey: '' },
+      { chatTitle: { mode: 'simple', maxWords: 2 } }
+    );
+    expect(title2).toBe('Configure Tailwind...');
+
+    const title4 = await generateChatName(
+      'Configure Tailwind CSS styling variables in project',
+      { provider: 'openai', apiKey: '' },
+      { chatTitle: { mode: 'simple', maxWords: 4 } }
+    );
+    expect(title4).toBe('Configure Tailwind CSS styling...');
+  });
+});
+
