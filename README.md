@@ -2,7 +2,7 @@
 
 > An open-source autonomous AI agent for modern coding, browser automation, multimodal media generation, and terminal workflows — cross-platform on Desktop and Web, with a responsive UI that works on phones, tablets, and desktops.
 
-[![License: GPL v3 / AGPL v3](https://img.shields.io/badge/License-GPLv3%20%2F%20AGPLv3-blue.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 ---
@@ -179,15 +179,24 @@ npx @superagent/cli
 
 We welcome contributions! Please read our [Developer Guide](docs/DEVELOPMENT.md) and [Contribution Guidelines](CONTRIBUTING.md) to get started.
 
+**Community & governance docs:**
+- [Code of Conduct](./CODE_OF_CONDUCT.md) — expected behavior in this community
+- [Acceptable Use Policy](./ACCEPTABLE_USE.md) — what this project may and may not be used for
+- [Security Policy](./SECURITY.md) — how to privately report a vulnerability (do **not** open a public issue)
+
 ---
 
 ## 📜 License & Attribution
 
-This project is dual-licensed under both the **GNU General Public License v3.0 (GPL-3.0)** and the **GNU Affero General Public License v3.0 (AGPL-3.0)**. Users and developers may choose either license terms at their option.
+SuperAgent is licensed under the [Apache License 2.0](./LICENSE).
 
-**Summary of key terms:**
-- **Free to use**: Anyone can use this software for free.
-- **Copyleft**: Any modifications or derived works must also be released as open-source under GPL-3.0 or AGPL-3.0.
-- **Attribution**: You **must** retain all original copyright notices and credit the original author.
-- **Modification Notice**: If you modify this code, you must clearly state what changes and improvements were made.
-- **No Warranty**: Provided "AS IS" without liability or warranty.
+You are free to use, modify, and redistribute this project, including
+commercially. If you redistribute a modified version (including hosting it
+as a service), you must retain the attribution notices in [NOTICE](./NOTICE)
+— crediting the original SuperAgent project and linking back to
+https://github.com/Aninda7479/AgentApp — as required by License Section 4(d).
+
+**Disclaimer:** This software is provided "AS IS", without warranty of any kind.
+SuperAgent is a general-purpose orchestration tool. You are solely responsible
+for the actions your configured agent takes and for complying with all applicable
+laws in your jurisdiction — see [ACCEPTABLE_USE.md](./ACCEPTABLE_USE.md).

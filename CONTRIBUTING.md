@@ -1,36 +1,52 @@
 # Contributing to SuperAgent
 
-Thank you for your interest in contributing to SuperAgent! We welcome community contributions, bug reports, and feature enhancements.
+Thanks for your interest in contributing. A few things to know before you
+open a pull request.
 
-## 📜 Code of Conduct & Licensing Rules
+## Before your first contribution: sign the CLA
 
-SuperAgent is open-source software licensed under **GNU GPLv3 / AGPLv3**. By contributing to this repository, you agree to the following open-source conditions:
+All contributions require signing our Contributor License Agreement (CLA)
+**before** a pull request can be merged. A bot will automatically comment
+on your first PR with a link to sign — it takes about a minute.
 
-1. **Open Source Guarantee**: All your contributions and modifications will be licensed under the project's copyleft license (GPLv3 / AGPLv3).
-2. **Prominent Modification Notices**: If you modify existing functionality or add new capabilities, you must clearly document what you improved in your Pull Request description and git commit log (Section 5(a) of GPLv3).
-3. **Preserve Copyright & Attribution**: Original author attribution and copyright headers must be preserved at all times.
+**Why a CLA, not just a DCO:** you keep full copyright ownership of your
+contribution. You're granting the project a license broad enough to
+include the ability to relicense the combined project in the future
+(e.g., dual-licensing, commercial exceptions) without having to track
+down and re-contact every individual contributor. The public project
+itself stays Apache 2.0 — the CLA does not change what license *you*
+receive the code under.
 
----
+If you disagree with the CLA terms, please open an issue to discuss before
+submitting code — we'd rather talk it through than merge something you're
+not comfortable with.
 
-## 🚀 How to Contribute
+## How to contribute
 
-### 1. Reporting Bugs & Requesting Features
-- Search existing issues to ensure your topic hasn't already been discussed.
-- Open a new issue with a clear description, reproduction steps, and relevant log output.
+1. Fork the repository and create a branch from `main`.
+2. Make your changes. Keep commits focused and messages descriptive.
+3. Add or update tests for any behavior change.
+4. Run the full build/test suite locally before opening a PR — CI will
+   also run it, but catching failures early saves everyone time.
+5. Open a pull request describing what changed and why.
+6. Sign the CLA when prompted.
+7. A maintainer will review — nothing merges to `main` without manual
+   review, regardless of what automation or agent tooling produced it.
 
-### 2. Submitting Pull Requests (PRs)
-1. **Fork the Repository** and clone your fork locally.
-2. **Create a Feature Branch**:
-   ```bash
-   git checkout -b feature/amazing-feature
-   ```
-3. **Make Your Changes**: Follow the project's coding standards and structure.
-4. **Test Your Changes**: Run unit tests and verify build integrity:
-   ```bash
-   npm test
-   npm run build
-   ```
-5. **Describe What You Improved**: Write a clear PR description detailing your enhancements.
-6. **Submit PR**: Push to your fork and submit a Pull Request against the `main` branch.
+## What we look for in a good PR
 
-Thank you for helping keep SuperAgent free, open, and powerful for everyone!
+- Focused scope — one logical change per PR
+- Tests for new behavior or bug fixes
+- No secrets, API keys, or credentials committed (check your diff!)
+- No unrelated formatting/reformatting mixed into a functional change
+
+## Reporting bugs / requesting features
+
+Please use the issue templates provided — they help us triage faster.
+**Do not** open a public issue for security vulnerabilities — see
+[SECURITY.md](./SECURITY.md) instead.
+
+## Code of Conduct
+
+By participating, you agree to abide by our
+[Code of Conduct](./CODE_OF_CONDUCT.md).
