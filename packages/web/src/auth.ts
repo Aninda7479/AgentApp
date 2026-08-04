@@ -25,7 +25,7 @@
 import crypto from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
 import type { IncomingMessage } from 'http';
-import { AuthStore } from '@superagent/core';
+import { AuthStore, SettingsStorage } from '@superagent/core';
 
 /** Name of the session cookie. */
 const COOKIE_NAME = 'sa_session';
@@ -265,15 +265,19 @@ export function authGate(req: Request, res: Response, next: NextFunction): void 
  * whether to show the login form, the first-run setup form, or the app.
  */
 export function handleStatus(req: Request, res: Response): void {
+  const settings = SettingsStorage.loadSettings();
+  const ownerName = settings.general?.ownerName ?? null;
+
   if (isAuthDisabled()) {
-    res.json({ authenticated: true, authRequired: false, passwordSet: true });
+    res.json({ authenticated: true, authRequired: false, passwordSet: true, ownerName });
     return;
   }
   const user = getAuthenticatedUser(req);
   res.json({
     authenticated: Boolean(user),
     authRequired: true,
-    passwordSet: AuthStore.isPasswordSet()
+    passwordSet: AuthStore.isPasswordSet(),
+    ownerName
   });
 }
 

@@ -133,7 +133,7 @@
     </svg>
   </div>
 
-  <form class="card" id="account-form">
+  <div class="card">
     <header class="head">
       <div class="logo" role="img" aria-label="SuperAgent">
         <svg width="48" height="48" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -165,37 +165,53 @@
       <button type="button" class="linkbtn" id="back">← Back to app</button>
     </header>
     <h1>Account settings</h1>
-    <p class="sub">You're signed in. Keep your sign-in details current.</p>
+    <p class="sub">You're signed in. Keep your settings current.</p>
     <hr />
 
     <div class="msg error" id="error" role="alert" aria-live="assertive"></div>
     <div class="msg ok" id="success" aria-live="polite"></div>
 
-    <div class="field">
-      <label for="currentPassword">Current password</label>
-      <input id="currentPassword" name="currentPassword" type="password" autocomplete="current-password" required />
-    </div>
-    <div class="field">
-      <label for="newPassword">New password</label>
-      <input id="newPassword" name="newPassword" type="password" autocomplete="new-password" required />
-    </div>
-    <div class="field">
-      <label for="confirm">Confirm new password</label>
-      <input id="confirm" name="confirm" type="password" autocomplete="new-password" required />
-    </div>
+    <form id="password-form">
+      <div class="field">
+        <label for="currentPassword">Current password</label>
+        <input id="currentPassword" name="currentPassword" type="password" autocomplete="current-password" required />
+      </div>
+      <div class="field">
+        <label for="newPassword">New password</label>
+        <input id="newPassword" name="newPassword" type="password" autocomplete="new-password" required />
+      </div>
+      <div class="field">
+        <label for="confirm">Confirm new password</label>
+        <input id="confirm" name="confirm" type="password" autocomplete="new-password" required />
+      </div>
 
-    <button type="submit" id="submit">Update password</button>
-    <div class="row">
+      <button type="submit" id="submit">Update password</button>
+    </form>
+
+    <hr style="margin: 24px 0 20px;" />
+
+    <form id="owner-form">
+      <div class="field">
+        <label for="ownerName">Host Owner Name</label>
+        <input id="ownerName" name="ownerName" type="text" placeholder="e.g. John Doe" required />
+        <span style="font-size: 11px; color: var(--muted); margin-top: 4px; display: block;">Displays on the login screen to indicate who owns this host.</span>
+      </div>
+      <button type="submit" id="save-owner">Save owner name</button>
+    </form>
+
+    <div class="row" style="margin-top: 20px;">
       <button type="button" class="linkbtn" id="logout">Log out</button>
     </div>
-  </form>
+  </div>
 
   <script>
     (function () {
-      var form = document.getElementById('account-form');
+      var passwordForm = document.getElementById('password-form');
+      var ownerForm = document.getElementById('owner-form');
       var errorBox = document.getElementById('error');
       var okBox = document.getElementById('success');
       var submitBtn = document.getElementById('submit');
+      var saveOwnerBtn = document.getElementById('save-owner');
 
       function show(box, msg) {
         errorBox.classList.remove('show');
@@ -217,6 +233,22 @@
         })
         .catch(function () {});
 
+      // Fetch and populate owner name
+      fetch('/api/ipc/settings-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ args: [] })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          var settings = res.data;
+          if (settings && settings.general && settings.general.ownerName) {
+            document.getElementById('ownerName').value = settings.general.ownerName;
+          }
+        })
+        .catch(function () {});
+
       document.getElementById('back').addEventListener('click', function () {
         window.location.replace('/');
       });
@@ -227,7 +259,7 @@
           .catch(function () { window.location.replace('/login'); });
       });
 
-      form.addEventListener('submit', function (e) {
+      passwordForm.addEventListener('submit', function (e) {
         e.preventDefault();
         var newPassword = document.getElementById('newPassword').value;
         var confirm = document.getElementById('confirm').value;
@@ -246,9 +278,6 @@
           })
         })
           .then(function (res) {
-            // Read the body as text first so a non-JSON error response (e.g. the
-            // server's default 500 HTML page) can't throw while parsing JSON and
-            // get misreported as a network failure in the catch below.
             return res.text().then(function (text) {
               var data = null;
               try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
@@ -260,11 +289,9 @@
             submitBtn.textContent = 'Update password';
             if (result.ok) {
               show(okBox, 'Your password has been updated.');
-              form.reset();
+              passwordForm.reset();
               return;
             }
-            // The server answered, so this is NOT a network error. Distinguish a
-            // server-side fault (5xx) from a normal auth/validation failure.
             var serverMsg = result.data && result.data.error;
             if (result.status >= 500) {
               show(errorBox, 'The server hit an error. Please try again in a moment.');
@@ -273,11 +300,47 @@
             }
           })
           .catch(function () {
-            // fetch only rejects on a genuine network/connection failure (server
-            // restart, offline) — never on an HTTP error status.
             submitBtn.disabled = false;
             submitBtn.textContent = 'Update password';
             show(errorBox, "We couldn't reach the server. Please try again.");
+          });
+      });
+
+      ownerForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var ownerName = document.getElementById('ownerName').value.trim();
+        saveOwnerBtn.disabled = true;
+        saveOwnerBtn.textContent = 'Saving…';
+
+        fetch('/api/ipc/settings-read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ args: [] })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            var settings = res.data || {};
+            if (!settings.general) settings.general = {};
+            settings.general.ownerName = ownerName;
+
+            return fetch('/api/ipc/settings-write', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ args: [settings] })
+            });
+          })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            saveOwnerBtn.disabled = false;
+            saveOwnerBtn.textContent = 'Save owner name';
+            show(okBox, 'Host owner name has been updated.');
+          })
+          .catch(function () {
+            saveOwnerBtn.disabled = false;
+            saveOwnerBtn.textContent = 'Save owner name';
+            show(errorBox, 'Failed to save host owner name. Please try again.');
           });
       });
     })();

@@ -75,6 +75,7 @@ export interface GeneralAppSettings {
   hotkeyOverlayEnabled?: boolean;
   hotkeyOverlayShortcut?: string;
   globalMemory?: string;
+  ownerName?: string;
 }
 
 /** Orchestrator settings: enabled models, routing strategy, optimization goal, and free-only mode. */
