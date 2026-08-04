@@ -54,22 +54,31 @@ the CLI alone already delivers Core + Web. `superagent --start-web` launches it.
 
 ## 🔢 Managing versions
 
-Before any release, bump **all four** `version` fields to the same value and keep
-the promo-site `VERSION` in sync:
+To keep everything in lockstep, all packages and the promo website must share the same version number.
 
-- `packages/core/package.json`
-- `packages/cli/package.json`
-- `packages/desktop/package.json`
-- `packages/web/package.json`
-- `website/src/config.js` → `export const VERSION = '…'`
+### How to use it:
+To bump the entire codebase to a new version (e.g. `0.2.0`), run the following command from the root folder:
 
 ```bash
-# Quick manual bump across the workspaces, then edit website/src/config.js to match
-npm version patch --workspace=@superagent/core \
-                   --workspace=@superagent/cli \
-                   --workspace=@superagent/desktop \
-                   --workspace=@superagent/web
+npm run version:bump -- 0.2.0
 ```
+
+Then, push the commit and newly created tag:
+
+```bash
+git push && git push --tags
+```
+
+This automated script will:
+- Bump the version in `package.json` (monorepo root).
+- Bump the version in `packages/core/package.json`.
+- Bump the version in `packages/cli/package.json` (and its `@superagent/core` dependency).
+- Bump the version in `packages/web/package.json` (and its `@superagent/core` dependency).
+- Bump the version in `packages/desktop/package.json`.
+- Bump the version in `website/package.json`.
+- Synchronize the `VERSION` constant export in `website/src/config.js`.
+- Run `npm install` at the root and inside the `website/` folder to regenerate lock files.
+- Commit all changes as `chore: release version <new-version>` and tag the commit as `v<new-version>`.
 
 The desktop build emits deterministic artifact names (set in
 `packages/desktop/package.json`), so the download buttons on the promo site always
