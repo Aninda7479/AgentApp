@@ -7,6 +7,7 @@ import { DiscordChannelAdapter } from '../src/gateway/channels/discord';
 import { SlackChannelAdapter } from '../src/gateway/channels/slack';
 import { ReleaseInstallerBuilder } from '../src/builder/installer';
 import { IncomingMessage } from '../src/gateway/channels/types';
+import fs from 'fs';
 
 vi.mock('electron', () => ({}));
 
@@ -37,6 +38,11 @@ describe('Desktop Gateway Suite (Steps 094 - 100)', () => {
     });
 
     it('should handle mock electron tray provider cleanly', () => {
+      const existsSpy = vi.spyOn(fs, 'existsSync').mockImplementation((p) => {
+        if (p === 'test/icon.png') return true;
+        return false;
+      });
+
       const mockTray = {
         setToolTip: vi.fn(),
         setContextMenu: vi.fn(),
@@ -70,6 +76,7 @@ describe('Desktop Gateway Suite (Steps 094 - 100)', () => {
 
       trayManager.destroy();
       expect(mockTray.destroy).toHaveBeenCalled();
+      existsSpy.mockRestore();
     });
   });
 
