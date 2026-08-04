@@ -1,4 +1,4 @@
-import { BrowserWindow, BrowserWindowConstructorOptions, app, ipcMain, shell } from 'electron';
+import { BrowserWindow, BrowserWindowConstructorOptions, app, ipcMain, shell, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { SettingsStorage } from '@superagent/core';
@@ -44,7 +44,8 @@ export class WindowManager {
         contextIsolation: true,
         sandbox: true,
         webSecurity: true,
-        preload: path.join(__dirname, '..', 'preload', 'preload.js')
+        preload: path.join(__dirname, '..', 'preload', 'preload.js'),
+        backgroundThrottling: false
       },
       ...options,
       isMainWindow: true
@@ -82,9 +83,60 @@ export class WindowManager {
         contextIsolation: true,
         sandbox: true,
         webSecurity: true,
-        preload: path.join(__dirname, '..', 'preload', 'preload.js')
+        preload: path.join(__dirname, '..', 'preload', 'preload.js'),
+        backgroundThrottling: false
       },
       ...browserOptions
+    });
+
+    // Handle renderer process crash/termination
+    win.webContents.on('render-process-gone', (event, details) => {
+      console.error(`[window-manager] Window "${name}" renderer process gone. Reason: ${details.reason}, Exit Code: ${details.exitCode}`);
+      
+      if (name === 'main' || isMainWindow) {
+        try {
+          const choice = dialog.showMessageBoxSync(win, {
+            type: 'error',
+            buttons: ['Reload', 'Close'],
+            defaultId: 0,
+            cancelId: 1,
+            title: 'Application Error',
+            message: 'The application renderer process crashed or was terminated.',
+            detail: `Reason: ${details.reason} (exit code: ${details.exitCode})\n\nWould you like to reload the application?`
+          });
+
+          if (choice === 0) {
+            win.reload();
+          } else {
+            win.close();
+          }
+        } catch (dialogErr) {
+          console.error('[window-manager] Failed to show crash dialog, attempting auto-reload', dialogErr);
+          win.reload();
+        }
+      }
+    });
+
+    // Handle window becoming unresponsive
+    win.on('unresponsive', () => {
+      console.warn(`[window-manager] Window "${name}" became unresponsive.`);
+      if (name === 'main' || isMainWindow) {
+        dialog.showMessageBox(win, {
+          type: 'warning',
+          buttons: ['Reload', 'Wait'],
+          defaultId: 0,
+          cancelId: 1,
+          title: 'Application Unresponsive',
+          message: 'The application is not responding.',
+          detail: 'Would you like to reload the application or wait?'
+        }).then(({ response }) => {
+          if (response === 0) {
+            win.reload();
+          }
+        }).catch((err) => {
+          console.error('[window-manager] Failed to show unresponsive dialog', err);
+        });
+      }
     });
 
     // Open external links (http/https) in the OS default browser rather than a
@@ -211,7 +263,8 @@ export class WindowManager {
         contextIsolation: true,
         sandbox: true,
         webSecurity: true,
-        preload: path.join(__dirname, '..', 'preload', 'preload.js')
+        preload: path.join(__dirname, '..', 'preload', 'preload.js'),
+        backgroundThrottling: false
       }
     });
 

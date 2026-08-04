@@ -284,12 +284,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {renderNavItem('scheduled', 'Scheduled', Clock)}
           {renderNavItem('tasks', 'Tasks', KanbanSquare)}
           {renderNavItem('partner', 'Partner', PawPrint)}
-          {/* 3D Studio stays discoverable even when disabled: a "ghost" entry
-              (muted + "Off") routes to the 3D settings so first-time users can
-              enable it, instead of the entry vanishing entirely. */}
-          {renderNavItem(showStudio ? 'studio' : 'studio-settings', '3D Studio', Box, {
-            locked: !showStudio,
-          })}
+
         </div>
 
         {/* ── PROJECTS Section ── */}

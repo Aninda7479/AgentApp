@@ -117,11 +117,24 @@ export class PetWindowManager {
         contextIsolation: true,
         sandbox: false,
         webSecurity: true,
-        preload: path.join(__dirname, '..', 'preload', 'preload.js')
+        preload: path.join(__dirname, '..', 'preload', 'preload.js'),
+        backgroundThrottling: false
       }
     });
 
     this.win.loadFile(this.resolvePetHtml());
+
+    // Handle pet renderer process crash/termination by auto-reloading
+    this.win.webContents.on('render-process-gone', (_e, details) => {
+      console.error('[pet-renderer] process gone:', details);
+      try {
+        if (this.win && !this.win.isDestroyed()) {
+          this.win.reload();
+        }
+      } catch (err) {
+        console.error('[pet-renderer] failed to auto-reload pet window', err);
+      }
+    });
 
     // Debug aid: SUPERAGENT_PET_DEBUG=1 forwards the pet renderer's console and
     // any crash to the main-process log, and opens its devtools. Invaluable when
@@ -129,9 +142,6 @@ export class PetWindowManager {
     if (process.env.SUPERAGENT_PET_DEBUG === '1') {
       this.win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
         console.log(`[pet-renderer:${level}] ${message} (${sourceId}:${line})`);
-      });
-      this.win.webContents.on('render-process-gone', (_e, details) => {
-        console.error('[pet-renderer] process gone:', details);
       });
       this.win.webContents.on('preload-error', (_e, preloadPath, error) => {
         console.error('[pet-renderer] preload error:', preloadPath, error);
