@@ -88,8 +88,11 @@ export class SystemTrayManager extends EventEmitter {
       let image: any;
       if (chosenPath) {
         image = nativeImage.createFromPath(chosenPath);
-        if (isWin && typeof image.resize === 'function') {
-          image = image.resize({ width: 16, height: 16 });
+        if ((isWin || isMac) && typeof image.resize === 'function') {
+          image = image.resize({ width: isMac ? 22 : 16, height: isMac ? 22 : 16 });
+        }
+        if (isMac && typeof image.setTemplateImage === 'function') {
+          image.setTemplateImage(true);
         }
       } else {
         image = nativeImage.createEmpty();

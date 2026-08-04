@@ -67,6 +67,7 @@ interface TitleBarProps {
 }
 
 const isElectron = WindowService.isElectron();
+const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent || navigator.platform || '');
 
 interface MenuItem {
   label: string;
@@ -232,7 +233,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     >
       {/* Left side: Logo, Nav History, and Application Menu */}
       <div
-        className="flex items-center gap-2 sm:gap-3 no-drag-window min-w-0"
+        className={`flex items-center gap-2 sm:gap-3 no-drag-window min-w-0 ${isMac && isElectron ? 'pl-[72px]' : ''}`}
         style={isElectron ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
         ref={menuRef}
       >
@@ -390,7 +391,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         </div>
 
         {/* Custom Window Controls — Electron desktop only, hidden on small screens */}
-        {isElectron && (
+        {isElectron && !isMac && (
           <div className="hidden lg:flex items-center pl-1">
             <button
               data-testid="win-minimize"
