@@ -2714,6 +2714,11 @@ app.whenReady().then(async () => {
         fs.writeFileSync(activeFile, JSON.stringify({ id: 'lily' }), 'utf-8');
       }
     }
+    // Clean up obsolete legacy pets directory (~/.superagent/pets) if it exists
+    const legacyPetsDir = path.join(getUserDataDirectory(), 'pets');
+    if (fs.existsSync(legacyPetsDir)) {
+      fs.rmSync(legacyPetsDir, { recursive: true, force: true });
+    }
   } catch (e) {
     console.error('Failed to cleanup outdated pets:', e);
   }

@@ -125,16 +125,18 @@ export class PetWindowManager {
     this.win.loadFile(this.resolvePetHtml());
 
     // Handle pet renderer process crash/termination by auto-reloading
-    this.win.webContents.on('render-process-gone', (_e, details) => {
-      console.error('[pet-renderer] process gone:', details);
-      try {
-        if (this.win && !this.win.isDestroyed()) {
-          this.win.reload();
+    if (this.win.webContents) {
+      this.win.webContents.on('render-process-gone', (_e, details) => {
+        console.error('[pet-renderer] process gone:', details);
+        try {
+          if (this.win && !this.win.isDestroyed()) {
+            this.win.reload();
+          }
+        } catch (err) {
+          console.error('[pet-renderer] failed to auto-reload pet window', err);
         }
-      } catch (err) {
-        console.error('[pet-renderer] failed to auto-reload pet window', err);
-      }
-    });
+      });
+    }
 
     // Debug aid: SUPERAGENT_PET_DEBUG=1 forwards the pet renderer's console and
     // any crash to the main-process log, and opens its devtools. Invaluable when
