@@ -9,6 +9,8 @@ export interface DiscoveredSkill {
   name: string;
   description: string;
   instructions: string;
+  scope: 'global' | 'project';
+  origin: 'superagent' | 'claude' | 'agent' | 'codex' | 'project';
 }
 
 /** Where a skill will be imported: global → `~/.superagent/skills`, project → `<root>/.superagent/skills`. */
@@ -49,10 +51,6 @@ export function getGlobalSkillsDir(opts?: Partial<SkillPaths>): string {
  * Candidate source `skills/` dirs to scan, each tagged with the scope of the
  * destination it would import into.
  *
- * - Global (always): `~/.claude/skills`, `~/.agents/skills` → `~/.superagent/skills`.
- * - Project (only when `projectRoot` is given): `<root>/.cloud|/.agents|/.claude/skills`
- *   → `<root>/.superagent/skills`.
- *
  * Missing directories are skipped.
  */
 export function candidateSources(
@@ -62,7 +60,8 @@ export function candidateSources(
   const { home } = resolvePaths(opts);
   const sources: { dir: string; scope: SkillScope }[] = [
     { dir: path.join(home, '.claude', 'skills'), scope: 'global' },
-    { dir: path.join(home, '.agents', 'skills'), scope: 'global' }
+    { dir: path.join(home, '.agents', 'skills'), scope: 'global' },
+    { dir: path.join(home, '.codex', 'skills'), scope: 'global' }
   ];
   if (projectRoot) {
     sources.push(
@@ -121,57 +120,120 @@ function copyFolderSync(from: string, to: string): void {
 }
 
 /**
- * Discovers skills from the given directory (if any) and the app-userdata
- * `skills/` folder. Missing directories are ignored. Always returns an array.
+ * Discovers skills from the app-userdata `skills/` folder, global .claude/.agents/.codex folders,
+ * and project-local folders. Scopes and tags them with their origin.
  */
-export async function listSkills(dir?: string | string[]): Promise<DiscoveredSkill[]> {
-  const dirs: string[] = [];
-  if (dir) {
-    if (Array.isArray(dir)) {
-      for (const d of dir) {
-        if (d && fs.existsSync(d)) dirs.push(d);
+export async function listSkills(
+  projectRoot?: string,
+  opts?: Partial<SkillPaths>
+): Promise<DiscoveredSkill[]> {
+  const { home } = resolvePaths(opts);
+  const discovered: DiscoveredSkill[] = [];
+  const seenIds = new Set<string>();
+
+  // 1. Scan Global folders
+  const globalConfigs = [
+    { dir: getGlobalSkillsDir(opts), origin: 'superagent' as const },
+    { dir: path.join(home, '.claude', 'skills'), origin: 'claude' as const },
+    { dir: path.join(home, '.agents', 'skills'), origin: 'agent' as const },
+    { dir: path.join(home, '.codex', 'skills'), origin: 'codex' as const }
+  ];
+
+  for (const cfg of globalConfigs) {
+    if (fs.existsSync(cfg.dir)) {
+      const store = new SkillStore();
+      try {
+        await store.discoverSkills(cfg.dir);
+        for (const s of store.listSkills()) {
+          const key = `global:${s.id}`;
+          if (!seenIds.has(key)) {
+            seenIds.add(key);
+            discovered.push({
+              id: s.id,
+              name: s.metadata.name,
+              description: s.metadata.description,
+              instructions: s.instructions,
+              scope: 'global',
+              origin: cfg.origin
+            });
+          }
+        }
+      } catch {
+        // ignore unreadable
       }
-    } else {
-      if (fs.existsSync(dir)) dirs.push(dir);
-    }
-  }
-  try {
-    const userSkills = path.join(getUserDataDirectory(), STORAGE_DIRS.skills);
-    if (fs.existsSync(userSkills)) dirs.push(userSkills);
-    // Also surface the app's canonical global skills folder (~/.superagent/skills),
-    // which is where global imports land.
-    const globalSkills = path.join(getUserDataDirectory(), STORAGE_DIRS.skills);
-    if (fs.existsSync(globalSkills)) dirs.push(globalSkills);
-  } catch {
-    // app.getPath can throw in some sandboxed contexts; ignore.
-  }
-
-  const store = new SkillStore();
-  for (const d of dirs) {
-    try {
-      await store.discoverSkills(d);
-    } catch {
-      // Unreadable directory — skip.
     }
   }
 
-  return store.listSkills().map((s: SkillDefinition) => ({
-    id: s.id,
-    name: s.metadata.name,
-    description: s.metadata.description,
-    instructions: s.instructions
-  }));
+  // 2. Scan Project folders (if projectRoot is provided)
+  if (projectRoot) {
+    const projectConfigs = [
+      { dir: path.join(projectRoot, '.superagent', 'skills') },
+      { dir: path.join(projectRoot, '.cloud', 'skills') },
+      { dir: path.join(projectRoot, '.agents', 'skills') },
+      { dir: path.join(projectRoot, '.claude', 'skills') }
+    ];
+
+    for (const cfg of projectConfigs) {
+      if (fs.existsSync(cfg.dir)) {
+        const store = new SkillStore();
+        try {
+          await store.discoverSkills(cfg.dir);
+          for (const s of store.listSkills()) {
+            const key = `project:${s.id}`;
+            if (!seenIds.has(key)) {
+              seenIds.add(key);
+              discovered.push({
+                id: s.id,
+                name: s.metadata.name,
+                description: s.metadata.description,
+                instructions: s.instructions,
+                scope: 'project',
+                origin: 'project'
+              });
+            }
+          }
+        } catch {
+          // ignore unreadable
+        }
+      }
+    }
+  }
+
+  return discovered;
 }
 
-/**
- * Scans the candidate skill source dirs and returns the skills that are not
- * already present in their destination. A skill's `id` is compared against the
- * ids already discovered in the destination folder for its scope, so an
- * already-imported skill is never reported as importable.
- *
- * `projectRoot` enables the project-local sources (and their local destination).
- * `opts.home` / `opts.appData` can override the base dirs for testing.
- */
+/** Saves a custom skill globally under `~/.superagent/skills/<skill-id>/SKILL.md`. */
+export async function saveSkill(
+  name: string,
+  description: string,
+  instructions: string,
+  opts?: Partial<SkillPaths>
+): Promise<{ success: boolean; error?: string; skillId: string }> {
+  try {
+    const skillId = name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+    if (!skillId) {
+      throw new Error('Invalid skill name.');
+    }
+    const globalSkillsDir = getGlobalSkillsDir(opts);
+    const destPath = path.join(globalSkillsDir, skillId);
+    if (!fs.existsSync(destPath)) {
+      fs.mkdirSync(destPath, { recursive: true });
+    }
+    const skillContent = `---
+name: "${name}"
+description: "${description}"
+---
+
+${instructions}
+`;
+    fs.writeFileSync(path.join(destPath, 'SKILL.md'), skillContent, 'utf-8');
+    return { success: true, skillId };
+  } catch (err: any) {
+    return { success: false, error: err.message, skillId: '' };
+  }
+}
+
+/** Scans candidate directories and reports importable skills. */
 export async function checkSkillsToImport(
   projectRoot?: string,
   opts?: Partial<SkillPaths>
@@ -188,7 +250,7 @@ export async function checkSkillsToImport(
   };
 
   const result: ImportableSkill[] = [];
-  const seen = new Set<string>(); // `${scope}:${id}` — avoid dupes across source dirs of the same scope
+  const seen = new Set<string>();
 
   for (const src of sources) {
     const dest = destinationForScope(src.scope, projectRoot, opts);
@@ -219,11 +281,7 @@ export async function checkSkillsToImport(
   return { canImport: result.length > 0, skills: result };
 }
 
-/**
- * Imports every skill reported by `checkSkillsToImport` into its scope's
- * destination folder, copying each skill folder. Skills whose destination
- * folder already exists are skipped (no clobbering). Returns the count imported.
- */
+/** Imports new discovered skills into the active scopes. */
 export async function importSkills(
   projectRoot?: string,
   opts?: Partial<SkillPaths>
@@ -238,7 +296,6 @@ export async function importSkills(
     const destDir = destinationForScope(skill.scope, projectRoot, opts);
     const destPath = path.join(destDir, skill.folderName);
     if (fs.existsSync(destPath)) {
-      // Already imported (by folder name) — skip to avoid clobbering.
       continue;
     }
     try {

@@ -156,6 +156,7 @@ export interface ComposerOptions {
   attachments?: string[];
   approvalMode?: 'always' | 'ask' | 'never';
   sandbox?: boolean;
+  selectedTools?: any[];
 }
 
 export interface ComposerAttachment {

@@ -159,8 +159,43 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
     }
   };
 
+  const handleRightClickPaste = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, select, option, input:not([type="text"]):not([type="password"])')) {
+      return;
+    }
+
+    e.preventDefault();
+    navigator.clipboard.readText().then((clipText) => {
+      if (!clipText) return;
+
+      const textarea = textareaRef.current;
+      if (textarea) {
+        const start = textarea.selectionStart ?? textarea.value.length;
+        const end = textarea.selectionEnd ?? textarea.value.length;
+        const text = textarea.value;
+        const before = text.substring(0, start);
+        const after = text.substring(end, text.length);
+        const newText = before + clipText + after;
+
+        setPrompt(newText);
+
+        // Focus and set cursor position after paste
+        const newCursorPos = start + clipText.length;
+        requestAnimationFrame(() => {
+          textarea.focus();
+          textarea.setSelectionRange(newCursorPos, newCursorPos);
+        });
+      } else {
+        setPrompt(prompt + clipText);
+      }
+    }).catch((err) => {
+      console.error('Failed to read clipboard text on right click:', err);
+    });
+  };
+
   return (
-    <div className="relative w-full max-w-4xl mx-auto p-3">
+    <div className="relative w-full max-w-4xl mx-auto p-3" onContextMenu={handleRightClickPaste}>
       {/* Slash Suggestions Menu */}
       {isSlashOpen && (
         <div className="absolute bottom-full mb-2 left-4 right-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-1.5 z-50">

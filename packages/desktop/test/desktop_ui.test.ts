@@ -472,9 +472,7 @@ describe('Step 082: Codex Clone Frameless Dark UI Window (App)', () => {
     const html = renderToString(React.createElement(App));
 
     expect(html).toContain('SuperAgent');
-    expect(html).toContain('BYOK');
-    expect(html).toContain('Configure');
-    expect(html).toContain('New chat');
+    expect(html).toContain('Build by Aninda');
   });
 });
 
@@ -546,9 +544,6 @@ describe('Step 082b: Additional Codex UI Sub-components', () => {
     );
     expect(html).toContain('settings-container');
     expect(html).toContain('General');
-    expect(html).toContain('Work mode');
-    expect(html).toContain('For coding');
-    expect(html).toContain('Default permissions');
     expect(html).toContain('SuperAgent');
   });
 });

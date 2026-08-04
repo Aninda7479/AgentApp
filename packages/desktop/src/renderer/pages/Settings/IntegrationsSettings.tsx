@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Check, Search, Wrench, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Sparkles, Check, Search, Wrench, AlertTriangle, RefreshCw, Plus, X } from 'lucide-react';
 import { EmptyState } from '../../components/EmptyState';
 
 /** Readiness status shared by skills and plugins. */
@@ -13,6 +13,7 @@ export interface IntegrationsSkill {
   enabled?: boolean;
   status?: IntegrationStatus;
   source?: 'discovered' | 'catalog';
+  origin?: 'superagent' | 'claude' | 'agent' | 'codex' | 'project';
 }
 
 /** A built-in or marketplace plugin from the Core catalog. */
@@ -40,6 +41,7 @@ interface IntegrationsSettingsProps {
   onToggleSkill: (id: string, enabled: boolean) => void;
   /** Manually scan global ~/.claude/skills + ~/.agents/skills (and project dot-folders) for importable skills. */
   onScanSkills?: () => void;
+  onAddSkill?: (name: string, description: string, instructions: string) => Promise<boolean>;
   pluginCatalog: IntegrationsPlugin[];
   pluginEnabled: Record<string, boolean>;
   onTogglePlugin: (id: string, enabled: boolean) => void;
@@ -91,11 +93,35 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
   skills,
   onToggleSkill,
   onScanSkills,
+  onAddSkill,
   pluginCatalog,
   pluginEnabled,
   onTogglePlugin
 }) => {
   const [pluginQuery, setPluginQuery] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newSkillName, setNewSkillName] = useState('');
+  const [newSkillDesc, setNewSkillDesc] = useState('');
+  const [newSkillInstructions, setNewSkillInstructions] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSkillName.trim() || !newSkillInstructions.trim() || !onAddSkill) return;
+    setIsSaving(true);
+    const success = await onAddSkill(
+      newSkillName.trim(),
+      newSkillDesc.trim(),
+      newSkillInstructions.trim()
+    );
+    setIsSaving(false);
+    if (success) {
+      setNewSkillName('');
+      setNewSkillDesc('');
+      setNewSkillInstructions('');
+      setShowAddModal(false);
+    }
+  };
 
   const filteredPlugins = pluginCatalog.filter((p) => {
     const q = pluginQuery.trim().toLowerCase();
@@ -112,10 +138,39 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
     return acc;
   }, {});
 
+  const BrandBadge: React.FC<{ origin?: string }> = ({ origin }) => {
+    if (!origin || origin === 'superagent' || origin === 'project') return null;
+    
+    let label = '';
+    let colorClass = '';
+    if (origin === 'claude') {
+      label = 'Claude';
+      colorClass = 'bg-orange-500/10 text-orange-500 border border-orange-500/20';
+    } else if (origin === 'agent') {
+      label = 'Agent';
+      colorClass = 'bg-blue-500/10 text-blue-500 border border-blue-500/20';
+    } else if (origin === 'codex') {
+      label = 'Codex';
+      colorClass = 'bg-purple-500/10 text-purple-500 border border-purple-500/20';
+    }
+    
+    return (
+      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium leading-none uppercase tracking-wider ${colorClass}`}>
+        {label}
+      </span>
+    );
+  };
+
   const SkillCard: React.FC<{ skill: IntegrationsSkill }> = ({ skill }) => {
     const isUnderDevelopment = skill.status === 'under-development';
     const [enabled, setEnabled] = useState(!isUnderDevelopment && (skill.enabled ?? true));
     const interactive = !isUnderDevelopment;
+
+    // Keep state in sync when prop changes (needed since toggle writes to settings and settings changes refetches list)
+    React.useEffect(() => {
+      setEnabled(!isUnderDevelopment && (skill.enabled ?? true));
+    }, [skill.enabled, isUnderDevelopment]);
+
     return (
       <button
         type="button"
@@ -134,6 +189,7 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-brand-textMain">{skill.name}</span>
+            <BrandBadge origin={skill.origin} />
             <StatusBadge status={skill.status} />
           </div>
           <div className="text-xs text-brand-textMuted mt-0.5 line-clamp-2">{skill.description}</div>
@@ -215,16 +271,27 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
             <div className="ui-label">
               {skills.filter((s) => s.status !== 'under-development' && s.enabled !== false).length} enabled
             </div>
-            {onScanSkills && (
-              <button
-                type="button"
-                data-testid="scan-skills-button"
-                onClick={onScanSkills}
-                className="flex items-center gap-1.5 rounded-lg border border-brand-border bg-brand-bg px-2.5 py-1 text-[11px] font-medium text-brand-textMain transition-colors hover:bg-brand-hover"
-              >
-                <RefreshCw size={12} /> Scan for skills
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {onAddSkill && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(true)}
+                  className="flex items-center gap-1.5 rounded-lg border border-brand-border bg-brand-bg px-2.5 py-1 text-[11px] font-medium text-brand-textMain transition-colors hover:bg-brand-hover"
+                >
+                  <Plus size={12} /> Add Skill
+                </button>
+              )}
+              {onScanSkills && (
+                <button
+                  type="button"
+                  data-testid="scan-skills-button"
+                  onClick={onScanSkills}
+                  className="flex items-center gap-1.5 rounded-lg border border-brand-border bg-brand-bg px-2.5 py-1 text-[11px] font-medium text-brand-textMain transition-colors hover:bg-brand-hover"
+                >
+                  <RefreshCw size={12} /> Scan for skills
+                </button>
+              )}
+            </div>
           </div>
           {skills.length === 0 ? (
             <EmptyState
@@ -284,6 +351,84 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
 
       {/* Connectors panel (MCP) */}
       {view === 'connectors' && <div data-testid="integration-mcp">{mcpDashboard}</div>}
+
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[1000]">
+          <div className="bg-brand-card border border-brand-border rounded-2xl w-[550px] max-w-[90%] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.8)] text-brand-textMain">
+            <div className="flex items-center justify-between mb-5 border-b border-brand-border/60 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl">✨</span>
+                <div>
+                  <h2 className="text-lg font-bold text-brand-textMain m-0">Create Custom Skill</h2>
+                  <p className="text-xs text-brand-textMuted mt-0.5">
+                    Codify a reusable set of prompt instructions
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="text-brand-textMuted hover:text-brand-textMain transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleSave} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5 w-full">
+                <label className="text-xs font-bold text-brand-textMain">Skill Name</label>
+                <input
+                  type="text"
+                  required
+                  value={newSkillName}
+                  onChange={(e) => setNewSkillName(e.target.value)}
+                  className="bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-brand-textMain outline-none focus:border-brand-highlight/75 focus:ring-1 focus:ring-brand-highlight/30 transition-all placeholder-brand-textMuted/40 w-full"
+                  placeholder="e.g. Git Assistant"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5 w-full">
+                <label className="text-xs font-bold text-brand-textMain">Description</label>
+                <input
+                  type="text"
+                  value={newSkillDesc}
+                  onChange={(e) => setNewSkillDesc(e.target.value)}
+                  className="bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-brand-textMain outline-none focus:border-brand-highlight/75 focus:ring-1 focus:ring-brand-highlight/30 transition-all placeholder-brand-textMuted/40 w-full"
+                  placeholder="What does this skill do?"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5 w-full">
+                <label className="text-xs font-bold text-brand-textMain">Instructions</label>
+                <textarea
+                  required
+                  value={newSkillInstructions}
+                  onChange={(e) => setNewSkillInstructions(e.target.value)}
+                  className="bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-sm text-brand-textMain outline-none focus:border-brand-highlight/75 focus:ring-1 focus:ring-brand-highlight/30 transition-all placeholder-brand-textMuted/40 w-full h-32 resize-none"
+                  placeholder="Enter custom instructions or guidelines..."
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 mt-4 border-t border-brand-border/60 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-brand-textMuted hover:text-brand-textMain transition-colors rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-4 py-2 text-sm font-medium bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-hover)] text-white transition-colors rounded-lg disabled:opacity-50"
+                >
+                  {isSaving ? 'Saving...' : 'Save Skill'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

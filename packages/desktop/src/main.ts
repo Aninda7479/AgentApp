@@ -2,7 +2,7 @@ import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, desktopCapt
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, isFreeModel, BYOKProviderManager, createProviderAdapter, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, initializeDirectories, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber, resolveProviderFamily, resolveBaseUrl, UserProfileStore, LearningLoopEngine, ProjectInstructionsParser, DEFAULT_AGENT_SYSTEM_PROMPT, buildOrchestratorOptimizerPrompt } from '@superagent/core';
+import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, isFreeModel, BYOKProviderManager, createProviderAdapter, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, initializeDirectories, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber, resolveProviderFamily, resolveBaseUrl, UserProfileStore, LearningLoopEngine, ProjectInstructionsParser, DEFAULT_AGENT_SYSTEM_PROMPT, buildOrchestratorOptimizerPrompt, BUILTIN_SKILLS } from '@superagent/core';
 
 // Keep Electron's cache userData in a standard OS location — NOT inside
 // ~/.superagent, which is the app's own data directory.
@@ -76,7 +76,7 @@ async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
 // via Electron IPC (replaces HTTP SSE in desktop context)
 
 import { AgentEngine, AgentEngineConfig, AgentEvent, resolveWithinAnyRoot, generateChatName } from './main/ai-engine';
-import { listSkills, checkSkillsToImport, importSkills } from './main/skills';
+import { listSkills, checkSkillsToImport, importSkills, saveSkill } from './main/skills';
 import {
   connectServer,
   disconnectServer,
@@ -225,12 +225,62 @@ safeHandle('agent-run', async (event, {
 
     // Load settings once for this session so both orchestrator routing AND
     // context-window resolution can read models/providers from the same source.
-    const settings = SettingsStorage.loadSettings();
+    const settings = SettingsStorage.loadSettings() as any;
 
     // Reuse or create engine
     let engine = activeSessions.get(sessionId);
     if (!engine) {
-      let finalConfig = { ...config };
+      let finalConfig = { ...config } as any;
+      let systemPrompt = finalConfig.systemPrompt || DEFAULT_AGENT_SYSTEM_PROMPT;
+
+      // 1. Append project-specific instructions if present
+      if (finalConfig.instructions) {
+        systemPrompt += `\n\n<project_instructions>\n${finalConfig.instructions}\n</project_instructions>`;
+      }
+
+      // 2. Append active skills (settings + turn-level chips)
+      const activeSkillIds = new Set<string>();
+      if (settings.skills) {
+        for (const [id, enabled] of Object.entries(settings.skills)) {
+          if (enabled === true) {
+            activeSkillIds.add(id);
+          }
+        }
+      }
+      const selectedTools = (finalConfig.selectedTools || []) as Array<{ id: string; category: string }>;
+      for (const t of selectedTools) {
+        if (t.category === 'skill') {
+          activeSkillIds.add(t.id);
+        }
+      }
+
+      if (activeSkillIds.size > 0) {
+        const projectRoot = finalConfig.projectRoot || finalConfig.workspacePath;
+        const discovered = await listSkills(projectRoot);
+        const skillMap = new Map<string, { name: string; instructions: string }>();
+
+        // Seed with built-in skills
+        for (const s of BUILTIN_SKILLS) {
+          skillMap.set(s.id, { name: s.name, instructions: s.instructions });
+        }
+
+        // Merge discovered custom skills (overwriting built-ins if same ID)
+        for (const s of discovered) {
+          skillMap.set(s.id, { name: s.name, instructions: s.instructions });
+        }
+
+        let skillSection = '\n\n<active_skills>\nHere are the instructions for the active skills you must apply for this task:\n';
+        for (const skillId of activeSkillIds) {
+          const resolved = skillMap.get(skillId);
+          if (resolved && resolved.instructions) {
+            skillSection += `\n<skill name="${resolved.name}">\n${resolved.instructions}\n</skill>\n`;
+          }
+        }
+        skillSection += '</active_skills>';
+        systemPrompt += skillSection;
+      }
+
+      finalConfig.systemPrompt = systemPrompt;
       if (config.model === 'auto' || config.model === 'Orchestrator' || config.model === 'Model Governance') {
         const orchestratorCfg = settings.orchestrator || settings.modelGov;
         if (orchestratorCfg?.enabled === false) {
@@ -253,7 +303,7 @@ safeHandle('agent-run', async (event, {
           if (routed && routed.model) {
             finalConfig.provider = routed.provider as any;
             finalConfig.model = routed.model;
-            const byok = settings.providers?.find((p) => p.id === routed.provider);
+            const byok = settings.providers?.find((p: any) => p.id === routed.provider);
             if (byok) {
               finalConfig.apiKey = byok.apiKey;
               finalConfig.baseUrl = byok.baseUrl;
@@ -271,7 +321,7 @@ safeHandle('agent-run', async (event, {
             console.warn(`[desktop] Orchestrator routing failed (${(routeErr as Error).message}); falling back to ${fallback.providerId}/${fallback.id}.`);
             finalConfig.provider = fallback.providerId as any;
             finalConfig.model = OrchestratorRouter.stripProviderPrefix(fallback.providerId, fallback.id);
-            const byok = settings.providers?.find((p) => p.id === fallback.providerId);
+            const byok = settings.providers?.find((p: any) => p.id === fallback.providerId);
             if (byok) {
               finalConfig.apiKey = byok.apiKey;
               finalConfig.baseUrl = byok.baseUrl;
@@ -550,11 +600,19 @@ safeHandle('agent-permission-response', (_event, {
 });
 
 // ─── IPC: Skills discovery (for the Composer slash autocomplete) ──────────────
-safeHandle('skills-list', (_event, { dir }: { dir?: string | string[] }) => {
+safeHandle('skills-list', (_event, { projectRoot }: { projectRoot?: string } = {}) => {
   try {
-    return listSkills(dir);
+    return listSkills(projectRoot);
   } catch {
     return [];
+  }
+});
+
+safeHandle('skills-save', async (_event, { name, description, instructions }: { name: string; description: string; instructions: string }) => {
+  try {
+    return await saveSkill(name, description, instructions);
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
 });
 

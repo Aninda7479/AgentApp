@@ -134,6 +134,7 @@ export class AgentOrchestrator {
       instructions: activeProject?.instructions || '',
       approvalMode: options.approvalMode || 'ask',
       unsandboxed: options.sandbox === false,
+      selectedTools: options.selectedTools,
     };
 
     try {

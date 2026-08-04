@@ -62,6 +62,7 @@ export interface SettingsViewProps {
   onToggleSkill: (id: string, enabled: boolean) => void;
   /** Manually scan global ~/.claude/skills + ~/.agents/skills (and project dot-folders) for importable skills. */
   onScanSkills?: () => void;
+  onAddSkill?: (name: string, description: string, instructions: string) => Promise<boolean>;
   pluginCatalog: import('./IntegrationsSettings').IntegrationsPlugin[];
   pluginEnabled: Record<string, boolean>;
   onTogglePlugin: (id: string, enabled: boolean) => void;

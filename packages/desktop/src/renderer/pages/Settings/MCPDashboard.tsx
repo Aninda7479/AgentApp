@@ -4,6 +4,7 @@ import { Terminal, Globe, Sparkles, Plus, RefreshCw, Server, Trash2, Search } fr
 import { McpInstallModal } from './McpInstallModal';
 import { McpService } from '../../logic/mcp';
 import { EmptyState } from '../../components/EmptyState';
+import { getIpc } from '../../lib/electron';
 
 /** Information about a connected MCP server. */
 export interface MCPServerInfo {
@@ -105,6 +106,8 @@ const ServerLogo: React.FC<{ id?: string; icon?: string; size?: number }> = ({ i
     />
   );
 };
+
+const isUrl = (str: string) => /^https?:\/\//i.test(str.trim());
 
 const getStatusDotClass = (status: MCPServerInfo['status']) => {
   switch (status) {
@@ -208,6 +211,56 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
   const [newTransport, setNewTransport] = useState<'stdio' | 'sse'>('stdio');
   const [newCommandOrUrl, setNewCommandOrUrl] = useState('');
   const [installTarget, setInstallTarget] = useState<CatalogEntry | null>(null);
+
+  const [checkedStatuses, setCheckedStatuses] = useState<Record<string, MCPServerInfo['status']>>({});
+  const [lastCheckedKeys, setLastCheckedKeys] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let active = true;
+    const checkUrls = async () => {
+      const ipc = getIpc();
+      if (!ipc) return;
+
+      const urlServers = servers.filter(
+        (srv) => srv.enabled && isUrl(srv.commandOrUrl)
+      );
+
+      for (const srv of urlServers) {
+        const key = `${srv.id}_${srv.enabled}_${srv.commandOrUrl}`;
+        if (lastCheckedKeys[srv.id] !== key || !checkedStatuses[srv.id]) {
+          if (!active) return;
+          setCheckedStatuses((prev) => ({ ...prev, [srv.id]: 'connecting' }));
+          setLastCheckedKeys((prev) => ({ ...prev, [srv.id]: key }));
+        }
+
+        try {
+          const res = await ipc.invoke('provider-proxy', { url: srv.commandOrUrl });
+          if (!active) return;
+          if (res && res.status !== 502) {
+            setCheckedStatuses((prev) => ({ ...prev, [srv.id]: 'connected' }));
+          } else {
+            setCheckedStatuses((prev) => ({ ...prev, [srv.id]: 'disconnected' }));
+          }
+        } catch {
+          if (!active) return;
+          setCheckedStatuses((prev) => ({ ...prev, [srv.id]: 'disconnected' }));
+        }
+      }
+    };
+
+    checkUrls();
+    return () => {
+      active = false;
+    };
+  }, [servers]);
+
+  const getDisplayStatus = (srv: MCPServerInfo) => {
+    if (!srv.enabled) return 'disconnected';
+    if (isUrl(srv.commandOrUrl)) {
+      return checkedStatuses[srv.id] || 'connecting';
+    }
+    return srv.status;
+  };
 
   // Catalog browsing: search + progressive "Show more" reveal so the UI stays
   // responsive even with the full (hundreds of entries) awesome-mcp catalog.
@@ -425,7 +478,7 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
                 <div className="relative shrink-0">
                   <ServerLogo id={srv.id.replace(/^mcp-catalog-/, '')} size={30} />
                   <span
-                    className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-brand-card ${getStatusDotClass(srv.status)}`}
+                    className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-brand-card ${getStatusDotClass(getDisplayStatus(srv))}`}
                   />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -433,9 +486,9 @@ export const MCPDashboard: React.FC<MCPDashboardProps> = ({
                     <span className="truncate text-[13px] font-semibold text-brand-textMain">{srv.name}</span>
                     <span
                       data-testid={`mcp-status-badge-${srv.id}`}
-                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${getStatusBadgeClass(srv.status)}`}
+                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${getStatusBadgeClass(getDisplayStatus(srv))}`}
                     >
-                      {getStatusLabel(srv.status)}
+                      {getStatusLabel(getDisplayStatus(srv))}
                     </span>
                   </div>
                   <div className="truncate font-mono text-[10px] leading-4 text-brand-textMuted">

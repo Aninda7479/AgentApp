@@ -37,6 +37,7 @@ export interface ComposerOptions {
   model?: string;
   mode?: string;
   attachments?: string[];
+  selectedTools?: any[];
 }
 
 /** A single attachment staged in the composer before a prompt is sent. */

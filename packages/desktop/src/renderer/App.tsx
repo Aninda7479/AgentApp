@@ -218,10 +218,20 @@ export const App: React.FC = () => {
   const [skills, setSkills] = useState<(SkillInfo & { instructions?: string })[]>([]);
   // Curated "under development" skills (Settings → Skills only; never the slash surface).
   const [skillCatalog, setSkillCatalog] = useState<any[]>([]);
-
   // Resolve ipcRenderer safely
   const ipc = getIpc();
   const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '');
+
+  const [enabledSkills, setEnabledSkills] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!ipc) return;
+    ipc.invoke('settings-read')
+      .then((current: any) => {
+        setEnabledSkills(current?.skills || {});
+      })
+      .catch(() => {});
+  }, [ipc]);
 
   // ── Live-state mirror so logic classes can read fresh values ───────────────
   const stateRef = useRef({
@@ -828,20 +838,46 @@ export const App: React.FC = () => {
     if (!ipc) return;
     const proj = projects.find((p) => p.name === activeProject);
     const root = proj?.folders?.[0];
-    const dirs = root ? [
-      `${root}/.superagent/skills`,
-      `${root}/.cloud/skills`,
-      `${root}/.agents/skills`,
-      `${root}/.claude/skills`
-    ] : undefined;
     ipc
-      .invoke('skills-list', { dir: dirs })
+      .invoke('skills-list', { projectRoot: root })
       .then((res: any) => {
         const list = Array.isArray(res) ? res : (res?.skills ?? []);
         setSkills(Array.isArray(list) ? list : []);
       })
       .catch(() => setSkills([]));
   }, [ipc, projects, activeProject]);
+
+  const handleToggleSkill = useCallback((id: string, enabled: boolean) => {
+    if (!ipc) return;
+    ipc.invoke('settings-read').then((current: any) => {
+      const nextSkills = { ...(current?.skills || {}), [id]: enabled };
+      ipc.invoke('settings-write', { ...current, skills: nextSkills }).then(() => {
+        setEnabledSkills(nextSkills);
+      });
+    });
+  }, [ipc]);
+
+  const handleAddSkill = useCallback(async (name: string, description: string, instructions: string) => {
+    if (!ipc) return false;
+    try {
+      const res = await ipc.invoke('skills-save', { name, description, instructions });
+      if (res && res.success) {
+        triggerToast(`Skill "${name}" created successfully!`);
+        const proj = projects.find((p) => p.name === activeProject);
+        const root = proj?.folders?.[0];
+        const listRes = await ipc.invoke('skills-list', { projectRoot: root });
+        const list = Array.isArray(listRes) ? listRes : (listRes?.skills ?? []);
+        setSkills(Array.isArray(list) ? list : []);
+        return true;
+      } else {
+        triggerToast(res?.error || 'Failed to save skill.', 'error');
+        return false;
+      }
+    } catch (err: any) {
+      triggerToast(`Failed to save skill: ${err.message}`, 'error');
+      return false;
+    }
+  }, [ipc, projects, activeProject, triggerToast]);
 
   // Manual "Scan for skills" — scans global ~/.claude/skills + ~/.agents/skills
   // (and the active project's dot-folders) and only surfaces the import prompt
@@ -873,14 +909,8 @@ export const App: React.FC = () => {
         if (res && res.success) {
           triggerToast(`Successfully imported ${res.importedCount} skill(s) into .superagent/skills!`);
           setImportableSkills([]);
-          // Force refresh discovered skills
           ipc
-            .invoke('skills-list', { dir: [
-              `${root}/.superagent/skills`,
-              `${root}/.cloud/skills`,
-              `${root}/.agents/skills`,
-              `${root}/.claude/skills`
-            ]})
+            .invoke('skills-list', { projectRoot: root })
             .then((listRes: any) => {
               const list = Array.isArray(listRes) ? listRes : (listRes?.skills ?? []);
               setSkills(Array.isArray(list) ? list : []);
@@ -907,30 +937,37 @@ export const App: React.FC = () => {
   // Merge discovered + catalog skills for Settings → Skills. Discovered skills are
   // validated: a missing name/description marks them "Incomplete"; otherwise "Active".
   const settingsSkills = useMemo(() => {
-    const discovered = skills.map((s: any) => {
-      const complete =
-        s.name && s.name !== 'Unnamed Skill' &&
-        s.description && s.description !== 'No description provided' &&
-        !!s.instructions?.trim();
+    const discovered = skills
+      .filter((s: any) => s.scope !== 'project')
+      .map((s: any) => {
+        const complete =
+          s.name && s.name !== 'Unnamed Skill' &&
+          s.description && s.description !== 'No description provided' &&
+          !!s.instructions?.trim();
+        const isEnabled = enabledSkills[s.id] !== false; // Default to true
+        return {
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          enabled: isEnabled,
+          status: (complete ? 'active' : 'incomplete') as 'active' | 'incomplete',
+          source: 'discovered' as const,
+          origin: s.origin
+        };
+      });
+    const catalog = skillCatalog.map((s: any) => {
+      const isEnabled = enabledSkills[s.id] !== false; // Default to true
       return {
         id: s.id,
         name: s.name,
         description: s.description,
-        enabled: true,
-        status: (complete ? 'active' : 'incomplete') as 'active' | 'incomplete',
-        source: 'discovered' as const
+        enabled: isEnabled,
+        status: (s.status ?? 'active') as 'active' | 'under-development' | 'incomplete',
+        source: 'catalog' as const
       };
     });
-    const catalog = skillCatalog.map((s: any) => ({
-      id: s.id,
-      name: s.name,
-      description: s.description,
-      enabled: false,
-      status: (s.status ?? 'under-development') as 'active' | 'under-development' | 'incomplete',
-      source: 'catalog' as const
-    }));
     return [...discovered, ...catalog];
-  }, [skills, skillCatalog]);
+  }, [skills, skillCatalog, enabledSkills]);
 
   // Navigation history bookkeeping.
   useEffect(() => {
@@ -1438,8 +1475,9 @@ export const App: React.FC = () => {
               onDisconnectProvider={handleDisconnectProvider}
               onToggleModel={handleToggleModel}
               skills={settingsSkills}
-              onToggleSkill={(skillId, enabled) => console.log(`Toggled skill ${skillId}: ${enabled}`)}
+              onToggleSkill={handleToggleSkill}
               onScanSkills={handleScanSkills}
+              onAddSkill={handleAddSkill}
               pluginCatalog={pluginCatalog}
               pluginEnabled={pluginEnabled}
               onTogglePlugin={handleTogglePlugin}

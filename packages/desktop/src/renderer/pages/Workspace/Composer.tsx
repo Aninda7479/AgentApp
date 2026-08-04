@@ -396,6 +396,41 @@ export const Composer: React.FC<ComposerProps> = ({
     }
   };
 
+  const handleRightClickPaste = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, select, option, input:not([type="text"]):not([type="password"])')) {
+      return;
+    }
+
+    e.preventDefault();
+    navigator.clipboard.readText().then((clipText) => {
+      if (!clipText) return;
+
+      const textarea = textareaRef.current;
+      if (textarea) {
+        const start = textarea.selectionStart ?? textarea.value.length;
+        const end = textarea.selectionEnd ?? textarea.value.length;
+        const text = textarea.value;
+        const before = text.substring(0, start);
+        const after = text.substring(end, text.length);
+        const newText = before + clipText + after;
+
+        setPrompt(newText);
+
+        // Focus and set cursor position after paste
+        const newCursorPos = start + clipText.length;
+        requestAnimationFrame(() => {
+          textarea.focus();
+          textarea.setSelectionRange(newCursorPos, newCursorPos);
+        });
+      } else {
+        setPrompt(prompt + clipText);
+      }
+    }).catch((err) => {
+      console.error('Failed to read clipboard text on right click:', err);
+    });
+  };
+
   const hasModels = availableModels && availableModels.length > 0;
   // "Orchestrator" is the auto-router meta-entry, not a concrete sendable
   // model. Surface a hint when it's selected so the user understands they can
@@ -708,6 +743,7 @@ export const Composer: React.FC<ComposerProps> = ({
   return (
     <div
       data-testid="composer-container"
+      onContextMenu={handleRightClickPaste}
       className="px-4 pt-2 pb-4 max-w-235 w-full mx-auto flex flex-col gap-2 box-border relative z-10"
     >
       {/* The main input composer card */}

@@ -66,6 +66,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onToggleModel,
   skills,
   onToggleSkill,
+  onAddSkill,
   pluginCatalog,
   pluginEnabled,
   onTogglePlugin,
@@ -438,6 +439,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             mcpDashboard={mcpDashboard}
             skills={skills}
             onToggleSkill={onToggleSkill}
+            onAddSkill={onAddSkill}
             pluginCatalog={pluginCatalog}
             pluginEnabled={pluginEnabled}
             onTogglePlugin={onTogglePlugin}
