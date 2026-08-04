@@ -39,7 +39,7 @@ export interface StoredPartner {
   manifest: Record<string, unknown>;
 }
 
-function petsDir(userData: string): string {
+function partnersDir(userData: string): string {
   return path.join(userData, STORAGE_DIRS.partners);
 }
 
@@ -122,7 +122,7 @@ function applyDynamicMetadata(manifest: any, folder: string): void {
 
 /** Lists all installed Partner manifests. */
 export function listPartners(userData: string): Record<string, unknown>[] {
-  const dir = petsDir(userData);
+  const dir = partnersDir(userData);
   const out: Record<string, unknown>[] = [];
 
   // 1. Add built-in Lily partner with dynamic metadata
@@ -161,7 +161,7 @@ export function getPartner(userData: string, id: string): Record<string, unknown
     applyDynamicMetadata(lilyCopy, lilyFolder);
     return lilyCopy;
   }
-  const folder = path.join(petsDir(userData), id);
+  const folder = path.join(partnersDir(userData), id);
   const manifestPath = path.join(folder, 'partner.json');
   const manifest = readJson<Record<string, unknown>>(manifestPath);
   if (manifest && isValidManifest(manifest)) {
@@ -172,7 +172,7 @@ export function getPartner(userData: string, id: string): Record<string, unknown
   return null;
 }
 
-/** Copies a Partner folder (chosen by the user) into the pets directory. */
+/** Copies a Partner folder (chosen by the user) into the partners directory. */
 export function installPartnerFolder(userData: string, sourceFolder: string): { manifest: Record<string, unknown> } {
   if (!fs.existsSync(sourceFolder) || !fs.statSync(sourceFolder).isDirectory()) {
     throw new Error('Selected path is not a folder.');
@@ -183,7 +183,7 @@ export function installPartnerFolder(userData: string, sourceFolder: string): { 
     throw new Error('Folder has no valid partner.json (needs schema: "superagent-partner").');
   }
   const id = String((manifest as any).id);
-  const dest = path.join(petsDir(userData), id);
+  const dest = path.join(partnersDir(userData), id);
   ensureDir(dest);
   fs.cpSync(sourceFolder, dest, { recursive: true });
   return { manifest };
@@ -201,7 +201,7 @@ export function importPartnerJson(userData: string, json: string): { manifest: R
     throw new Error('Not a valid Partner manifest (needs id, name, kind, description, schema).');
   }
   const id = String((parsed as any).id);
-  const dest = path.join(petsDir(userData), id);
+  const dest = path.join(partnersDir(userData), id);
   ensureDir(dest);
   fs.writeFileSync(path.join(dest, 'partner.json'), JSON.stringify(parsed, null, 2), 'utf-8');
   return { manifest: parsed as Record<string, unknown> };
@@ -209,7 +209,7 @@ export function importPartnerJson(userData: string, json: string): { manifest: R
 
 /** Removes an installed Partner folder by id. */
 export function removePartner(userData: string, id: string): void {
-  const dest = path.join(petsDir(userData), id);
+  const dest = path.join(partnersDir(userData), id);
   if (fs.existsSync(dest)) {
     fs.rmSync(dest, { recursive: true, force: true });
   }
@@ -217,18 +217,18 @@ export function removePartner(userData: string, id: string): void {
 
 /** Persists the active Partner id. */
 export function setActivePartner(userData: string, id: string | null): void {
-  const file = path.join(petsDir(userData), ACTIVE_FILE);
-  ensureDir(petsDir(userData));
+  const file = path.join(partnersDir(userData), ACTIVE_FILE);
+  ensureDir(partnersDir(userData));
   fs.writeFileSync(file, JSON.stringify({ id }), 'utf-8');
 }
 
 /** Reads the active Partner id (or null). */
 export function getActivePartner(userData: string): string | null {
-  const data = readJson<{ id: string | null }>(path.join(petsDir(userData), ACTIVE_FILE));
+  const data = readJson<{ id: string | null }>(path.join(partnersDir(userData), ACTIVE_FILE));
   return data?.id ?? null;
 }
 
 /** Returns the on-disk folder path for a Partner (used by export / reveal). */
 export function partnerFolderPath(userData: string, id: string): string {
-  return path.join(petsDir(userData), id);
+  return path.join(partnersDir(userData), id);
 }

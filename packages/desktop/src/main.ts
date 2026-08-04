@@ -2699,15 +2699,15 @@ app.whenReady().then(async () => {
 
   // Cleanup outdated partner directories to ensure Lily and Waifu are merged
   try {
-    const petsDir = path.join(getUserDataDirectory(), STORAGE_DIRS.partners);
+    const partnersDir = path.join(getUserDataDirectory(), STORAGE_DIRS.partners);
     ['waifu', 'pixel', 'byte', 'nova'].forEach((oldId) => {
-      const dir = path.join(petsDir, oldId);
+      const dir = path.join(partnersDir, oldId);
       if (fs.existsSync(dir)) {
         fs.rmSync(dir, { recursive: true, force: true });
       }
     });
     // Also reset active partner if it was one of the outdated ones
-    const activeFile = path.join(petsDir, 'active.json');
+    const activeFile = path.join(partnersDir, 'active.json');
     if (fs.existsSync(activeFile)) {
       const activeData = JSON.parse(fs.readFileSync(activeFile, 'utf-8'));
       if (activeData && (activeData.id === 'waifu' || activeData.id === 'pixel' || activeData.id === 'byte' || activeData.id === 'nova')) {
