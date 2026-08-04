@@ -41,6 +41,9 @@ export const WebAppSettings: React.FC = () => {
   const [confirm, setConfirm] = useState('');
   const [pwResult, setPwResult] = useState<PasswordResult | null>(null);
 
+  const [ownerName, setOwnerName] = useState<string>('');
+  const [saveResult, setSaveResult] = useState<{ ok: boolean; error?: string } | null>(null);
+
   const refreshStatus = async () => {
     if (!ipc) return;
     try {
@@ -63,6 +66,9 @@ export const WebAppSettings: React.FC = () => {
           if (settings.webApp.port) setPort(settings.webApp.port);
           setAutoStart(Boolean(settings.webApp.autoStart));
         }
+        if (settings?.general?.ownerName) {
+          setOwnerName(settings.general.ownerName);
+        }
       })
       .catch(() => {
         /* ignore */
@@ -71,6 +77,24 @@ export const WebAppSettings: React.FC = () => {
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const saveOwnerName = async () => {
+    setSaveResult(null);
+    if (!ipc) {
+      setSaveResult({ ok: false, error: 'Settings unavailable outside the desktop app.' });
+      return;
+    }
+    try {
+      await ipc.invoke('settings-write', {
+        general: {
+          ownerName: ownerName.trim()
+        }
+      });
+      setSaveResult({ ok: true });
+    } catch (err: any) {
+      setSaveResult({ ok: false, error: err?.message || 'Failed to save owner name.' });
+    }
+  };
 
   const doStart = async () => {
     if (!ipc) return;
@@ -275,6 +299,50 @@ export const WebAppSettings: React.FC = () => {
               />
             </button>
             <p className="mt-1 text-xs text-brand-textMuted">Launch the Web App automatically when SuperAgent starts.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Host Owner Name */}
+      <section className="mb-8">
+        <h3 className="mb-3 flex items-center gap-2 text-base font-semibold text-brand-textMain">
+          Host Ownership
+        </h3>
+        <div className="rounded-lg border border-brand-border bg-brand-card p-4">
+          <p className="mb-4 text-sm text-brand-textMuted">
+            Configure the owner's name shown on the login screen to indicate that this host is private and for you only.
+          </p>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-brand-textMuted">Host Owner Name</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={ownerName}
+                onChange={(e) => setOwnerName(e.target.value)}
+                className="ui-input flex-1"
+                placeholder="e.g. John Doe"
+              />
+              <button
+                type="button"
+                onClick={saveOwnerName}
+                className="ui-btn ui-btn-primary"
+              >
+                Save
+              </button>
+            </div>
+            {saveResult && (
+              <div
+                className={`mt-2 flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs ${
+                  saveResult.ok
+                    ? 'border-[color:var(--neon-constructive)]/40 bg-[color:var(--neon-constructive)]/10 text-[color:var(--neon-constructive)]'
+                    : 'border-[color:var(--neon-destructive)]/40 bg-[color:var(--neon-destructive)]/10 text-[color:var(--neon-destructive)]'
+                }`}
+              >
+                {saveResult.ok ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+                {saveResult.ok ? 'Owner name updated.' : saveResult.error}
+              </div>
+            )}
           </div>
         </div>
       </section>
