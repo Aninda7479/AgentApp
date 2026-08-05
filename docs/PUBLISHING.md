@@ -139,10 +139,18 @@ configured in `packages/desktop/package.json`:
 "publish": [{ "provider": "github", "owner": "Aninda7479", "repo": "AgentApp" }]
 ```
 
-New releases flow straight to **Settings → Updates → Check for Updates** (and
-download silently, installing on quit). The `latest*.yml` manifest that
-`release.yml` uploads is exactly what the updater consumes — that's the whole
-contract. To disable auto-update entirely, set `SUPERAGENT_DISABLE_UPDATER=1`.
+#### Release Channels (Stable vs Beta):
+The user can select their preferred update stream in the UI under **Settings → Updates**:
+- **Stable (Release):** Queries `latest*.yml` manifests (default).
+- **Beta (Pre-release):** Queries `beta*.yml` manifests, matching pre-releases published on GitHub.
+
+Under the hood, switching channels dynamically re-configures `autoUpdater.channel` to `'latest'` or `'beta'`.
+
+#### Visual Feedback & Restart:
+- Rather than silent background downloads, the updates panel streams live download progress details (percent, size ratio, and transfer speed).
+- Once the update download completes, a **"Restart and Install"** button becomes active, allowing users to apply the update immediately (triggering `autoUpdater.quitAndInstall()`).
+
+To disable auto-update entirely, set `SUPERAGENT_DISABLE_UPDATER=1`.
 
 ### Option 1 — CLI (npm self-update)
 
