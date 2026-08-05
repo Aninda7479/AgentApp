@@ -159,6 +159,7 @@ export const ALLOWED_CHANNELS = new Set<string>([
   'pet-partner',
   'voice-daemon-event',
   'voice-daemon-inject',
+  'update-status-changed',
   // fire-and-forget sends from the renderer with no main-side handler
   'voice-recording-failed',
   'circle-search-hide',

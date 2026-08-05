@@ -19,7 +19,12 @@ export async function setupAutoUpdater(): Promise<void> {
 
   try {
     // @ts-ignore - optional dependency, present only in packaged builds
-    const { autoUpdater } = await import('electron-updater');
+    const updaterModule = await import('electron-updater');
+    const autoUpdater = updaterModule.autoUpdater || updaterModule.default?.autoUpdater;
+
+    if (!autoUpdater) {
+      throw new Error('autoUpdater is not defined in electron-updater module');
+    }
 
     autoUpdater.logger = console;
     autoUpdater.autoDownload = true;
