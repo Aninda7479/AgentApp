@@ -1,13 +1,16 @@
-import React, { useState } from 'react';
-import { RefreshCw, CheckCircle2, AlertTriangle, Info, ExternalLink } from 'lucide-react';
-import { BrandLogo } from '../../BrandLogo';
-import { getIpc } from '../../lib/electron';
+import { useEffect } from 'react';
 
 /** Status returned by the main-process update check. */
 export interface UpdateStatus {
-  status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error';
+  status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error' | 'downloading' | 'downloaded';
   version?: string;
   message?: string;
+  progress?: {
+    percent: number;
+    bytesPerSecond: number;
+    transferred: number;
+    total: number;
+  };
 }
 
 /** Props for the updates/about settings panel. */
@@ -21,6 +24,10 @@ interface UpdatesSettingsProps {
 const REPO_URL = 'https://github.com/Aninda7479/AgentApp';
 
 /** Renders the current version and a "Check for updates" action. */
+import React, { useState } from 'react';
+import { RefreshCw, CheckCircle2, AlertTriangle, Info, ExternalLink } from 'lucide-react';
+import { BrandLogo } from '../../BrandLogo';
+import { getIpc } from '../../lib/electron';
 export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
   appVersion,
   updateStatus,
@@ -28,8 +35,41 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
   checking
 }) => {
   const [githubUrl] = useState(REPO_URL);
+  const [releaseChannel, setReleaseChannel] = useState<'stable' | 'beta'>('stable');
 
   const ipc = getIpc();
+
+  useEffect(() => {
+    if (ipc) {
+      ipc.invoke('settings-read').then((settings: any) => {
+        if (settings?.general?.releaseChannel) {
+          setReleaseChannel(settings.general.releaseChannel);
+        }
+      }).catch(() => {});
+    }
+  }, [ipc]);
+
+  const handleChannelChange = async (val: 'stable' | 'beta') => {
+    setReleaseChannel(val);
+    if (ipc) {
+      try {
+        const settings = await ipc.invoke('settings-read');
+        await ipc.invoke('settings-write', {
+          ...settings,
+          general: {
+            ...settings?.general,
+            releaseChannel: val
+          }
+        });
+      } catch (err) {
+        console.error('Failed to save release channel:', err);
+      }
+    }
+  };
+
+  const handleRestart = () => {
+    if (ipc) ipc.invoke('quit-and-install');
+  };
 
   const openInBrowser = (url: string) => {
     if (ipc) {
@@ -46,14 +86,50 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
       available: { Icon: AlertTriangle, cls: 'border-[color:var(--neon-attention)]/40 bg-[color:var(--neon-attention)]/10 text-[color:var(--neon-attention)]', spin: false },
       'not-available': { Icon: CheckCircle2, cls: 'border-[color:var(--neon-constructive)]/40 bg-[color:var(--neon-constructive)]/10 text-[color:var(--neon-constructive)]', spin: false },
       unsupported: { Icon: Info, cls: 'border-brand-border bg-brand-bg text-brand-textMuted', spin: false },
-      error: { Icon: AlertTriangle, cls: 'border-[color:var(--neon-destructive)]/40 bg-[color:var(--neon-destructive)]/10 text-[color:var(--neon-destructive)]', spin: false }
+      error: { Icon: AlertTriangle, cls: 'border-[color:var(--neon-destructive)]/40 bg-[color:var(--neon-destructive)]/10 text-[color:var(--neon-destructive)]', spin: false },
+      downloading: { Icon: RefreshCw, cls: 'border-[color:var(--neon-live)]/40 bg-[color:var(--neon-live)]/10 text-[color:var(--neon-live)]', spin: true },
+      downloaded: { Icon: CheckCircle2, cls: 'border-[color:var(--neon-constructive)]/40 bg-[color:var(--neon-constructive)]/10 text-[color:var(--neon-constructive)]', spin: false }
     } as const;
     const cfg = map[updateStatus.status];
     const { Icon } = cfg;
     return (
-      <div className={`mt-4 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${cfg.cls}`}>
-        <Icon size={16} className={`mt-0.5 flex-shrink-0 ${cfg.spin ? 'animate-spin' : ''}`} />
-        <span>{updateStatus.message || 'Checking for updates…'}</span>
+      <div className={`mt-4 flex flex-col gap-3 rounded-lg border px-4 py-3 text-sm ${cfg.cls}`}>
+        <div className="flex items-start gap-2">
+          <Icon size={16} className={`mt-0.5 flex-shrink-0 ${cfg.spin ? 'animate-spin' : ''}`} />
+          <div className="flex-1">
+            <span>{updateStatus.message || 'Checking for updates…'}</span>
+            {updateStatus.status === 'downloading' && updateStatus.progress && (
+              <div className="mt-2.5">
+                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-[color:var(--neon-live)] transition-all duration-300"
+                    style={{ width: `${updateStatus.progress.percent}%` }}
+                  />
+                </div>
+                {updateStatus.progress.total > 0 && (
+                  <div className="mt-1 flex items-center justify-between text-[11px] text-brand-textMuted font-mono">
+                    <span>
+                      {((updateStatus.progress.transferred || 0) / (1024 * 1024)).toFixed(1)} MB / 
+                      {((updateStatus.progress.total || 0) / (1024 * 1024)).toFixed(1)} MB
+                    </span>
+                    <span>{updateStatus.progress.percent}%</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        {updateStatus.status === 'downloaded' && (
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={handleRestart}
+              className="ui-btn ui-btn-primary btn-sm flex items-center gap-1.5"
+            >
+              <RefreshCw size={12} /> Restart and Install
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -113,21 +189,36 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
 
       <section className="mb-8">
         <h3 className="mb-3 text-base font-semibold text-brand-textMain">Release Channel</h3>
-        <div className="rounded-lg border border-brand-border bg-brand-card p-4 text-sm text-brand-textMuted">
-          Stable releases are published to{' '}
-          <a
-            href={githubUrl}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => {
-              e.preventDefault();
-              openInBrowser(githubUrl);
-            }}
-            className="inline-flex cursor-pointer items-center gap-1 text-[var(--brand-accent)] hover:underline"
-          >
-            <ExternalLink size={14} /> GitHub Releases
-          </a>
-          . To disable auto-updates entirely, set <code className="rounded bg-brand-bg px-1 py-0.5">SUPERAGENT_DISABLE_UPDATER=1</code>.
+        <div className="rounded-lg border border-brand-border bg-brand-card p-4">
+          <p className="mb-4 text-sm text-brand-textMuted">
+            Choose which release updates you want to pull. Beta updates may contain experimental features.
+          </p>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="w-full sm:max-w-[240px]">
+              <select
+                value={releaseChannel}
+                onChange={(e) => handleChannelChange(e.target.value as 'stable' | 'beta')}
+                className="ui-input w-full"
+              >
+                <option value="stable">Stable (Release)</option>
+                <option value="beta">Beta (Pre-release)</option>
+              </select>
+            </div>
+            <div className="text-xs text-brand-textMuted">
+              Stable updates are published on <a
+                href={githubUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  openInBrowser(githubUrl);
+                }}
+                className="inline-flex cursor-pointer items-center gap-0.5 text-[var(--brand-accent)] hover:underline"
+              >
+                <ExternalLink size={12} /> GitHub Releases
+              </a>.
+            </div>
+          </div>
         </div>
       </section>
     </div>

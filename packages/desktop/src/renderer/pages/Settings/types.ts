@@ -6,9 +6,15 @@ export type InternetAccessLevel = 'all' | 'observation' | 'none';
 
 /** Status returned by the main-process update check. */
 export interface UpdateStatus {
-  status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error';
+  status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error' | 'downloading' | 'downloaded';
   version?: string;
   message?: string;
+  progress?: {
+    percent: number;
+    bytesPerSecond: number;
+    transferred: number;
+    total: number;
+  };
 }
 
 /** Persisted AI provider connection with API key and base URL. */

@@ -1245,6 +1245,10 @@ safeHandle('check-for-updates', async (): Promise<{
     // @ts-ignore - optional dependency, present only in packaged builds
     const { autoUpdater } = await import('electron-updater');
 
+    const settings = SettingsStorage.loadSettings();
+    const releaseChannel = settings?.general?.releaseChannel || 'stable';
+    autoUpdater.channel = releaseChannel === 'beta' ? 'beta' : 'latest';
+
     const result = await autoUpdater.checkForUpdates();
     if (!result) {
       return { status: 'unsupported', message: 'Update feed is unavailable.' };
@@ -1270,6 +1274,17 @@ safeHandle('check-for-updates', async (): Promise<{
       return { status: 'unsupported', message: 'No update feed configured (this is normal in dev).' };
     }
     return { status: 'error', message };
+  }
+});
+
+safeHandle('quit-and-install', async () => {
+  if (process.env.SUPERAGENT_DISABLE_UPDATER === '1') return;
+  try {
+    // @ts-ignore - optional dependency
+    const { autoUpdater } = await import('electron-updater');
+    autoUpdater.quitAndInstall();
+  } catch (err: any) {
+    console.error('Failed to quit and install update:', err);
   }
 });
 

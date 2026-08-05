@@ -119,9 +119,15 @@ export const App: React.FC = () => {
   const [internetAccessLevel, setInternetAccessLevel] = useState<InternetAccessLevel>('all');
   const [appVersion, setAppVersion] = useState<string>('');
   const [updateStatus, setUpdateStatus] = useState<{
-    status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error';
+    status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error' | 'downloading' | 'downloaded';
     version?: string;
     message?: string;
+    progress?: {
+      percent: number;
+      bytesPerSecond: number;
+      transferred: number;
+      total: number;
+    };
   } | null>(null);
 
   // URL-driven initial route (web: history path, desktop: file:// hash).
@@ -1185,6 +1191,18 @@ export const App: React.FC = () => {
     }).catch(() => {});
     setPendingPermission(null);
   };
+
+  // ── Auto-updater status listener ─────────────────────────────────────────
+  useEffect(() => {
+    if (!ipc) return;
+    const handleUpdateStatusChanged = (_e: unknown, payload: any) => {
+      if (payload) {
+        setUpdateStatus(payload);
+      }
+    };
+    ipc.on('update-status-changed', handleUpdateStatusChanged);
+    return () => ipc.removeListener('update-status-changed', handleUpdateStatusChanged);
+  }, [ipc]);
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   if (loading) {

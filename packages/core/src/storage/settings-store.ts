@@ -76,6 +76,7 @@ export interface GeneralAppSettings {
   hotkeyOverlayShortcut?: string;
   globalMemory?: string;
   ownerName?: string;
+  releaseChannel?: 'stable' | 'beta';
 }
 
 /** Orchestrator settings: enabled models, routing strategy, optimization goal, and free-only mode. */

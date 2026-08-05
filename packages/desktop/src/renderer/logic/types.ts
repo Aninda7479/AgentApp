@@ -58,9 +58,15 @@ export interface NavigationSnapshot {
 
 /** Status payload for the Settings → Updates panel. */
 export interface UpdateStatus {
-  status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error';
+  status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error' | 'downloading' | 'downloaded';
   version?: string;
   message?: string;
+  progress?: {
+    percent: number;
+    bytesPerSecond: number;
+    transferred: number;
+    total: number;
+  };
 }
 
 /**
