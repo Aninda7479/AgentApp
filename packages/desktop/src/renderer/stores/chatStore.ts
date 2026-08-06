@@ -61,10 +61,8 @@ class ChatStoreManager {
   }
 
   public setActiveChatId(activeChatId: string | null): void {
-    this.setState((prev) => {
-      const activePanels = activeChatId && !prev.activePanels.includes(activeChatId)
-        ? [...prev.activePanels, activeChatId]
-        : prev.activePanels;
+    this.setState(() => {
+      const activePanels = activeChatId ? [activeChatId] : [];
       return { activeChatId, activePanels };
     });
   }

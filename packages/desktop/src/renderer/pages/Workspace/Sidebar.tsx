@@ -437,7 +437,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 <div
                                   key={chat.id}
                                   onClick={() => {
-                                    if (onSelectProject) onSelectProject(proj.name);
                                     if (onSelectChat) onSelectChat(chat.id);
                                     onSelectTab('trajectory');
                                   }}
@@ -543,19 +542,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* ── CHATS Section (standalone chats) ── */}
         {!collapsed && (
           <div className="mb-6">
-            <div
-              className="flex items-center justify-between px-1 py-2 mb-1 select-none cursor-pointer group"
-              onClick={() => setChatsCollapsed(!chatsCollapsed)}
-            >
-              <span className="ui-eyebrow group-hover:text-brand-textMuted transition-colors">
+            <div className="flex items-center justify-between px-1 py-2 mb-1 select-none group">
+              <span
+                className="ui-eyebrow group-hover:text-brand-textMuted transition-colors cursor-pointer flex-1"
+                onClick={() => setChatsCollapsed(!chatsCollapsed)}
+              >
                 Chats
               </span>
-              <span className="text-brand-textMuted/40">
-                {chatsCollapsed
-                  ? <ChevronRight className="w-3 h-3" />
-                  : <ChevronDown className="w-3 h-3" />
-                }
-              </span>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {onNewChatInProject && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNewChatInProject('');
+                    }}
+                    className="p-1 rounded-md text-brand-textMuted/60 hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all cursor-pointer"
+                    title="New standalone chat"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <span
+                  className="text-brand-textMuted/40 cursor-pointer p-0.5"
+                  onClick={() => setChatsCollapsed(!chatsCollapsed)}
+                >
+                  {chatsCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </span>
+              </div>
             </div>
 
             {!chatsCollapsed && (

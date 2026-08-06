@@ -152,7 +152,8 @@ export class AgentEngine {
       ? rawPrompt.substring(0, MAX_SYSTEM_PROMPT_CHARS) + '\n\n[System prompt truncated due to length]'
       : rawPrompt;
 
-    this.record({ role: 'system', content: sysPrompt });
+    const rootHint = `\n\n<workspace>\nProject root: ${effectiveRoot}\nWhen using file/directory tools, use "." to refer to the project root, or paths relative to it.\n</workspace>`;
+    this.record({ role: 'system', content: sysPrompt + rootHint });
     this.contextWindow = config.contextWindow ?? 128000;
 
     // Register in the global registry so every live agent is supervised
@@ -513,6 +514,10 @@ export class AgentEngine {
 
         // ── No tool calls → done ────────────────────────────────────────
         if (toolCalls.length === 0) {
+          if (!fullContent.trim()) {
+            const fallbackText = 'I received an error or no further response from the tool execution.';
+            onEvent({ type: 'token', content: fallbackText, sessionId: this.sessionId });
+          }
           onEvent({ type: 'done', sessionId: this.sessionId });
           return;
         }

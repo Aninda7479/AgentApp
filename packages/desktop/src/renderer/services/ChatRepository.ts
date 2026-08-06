@@ -62,9 +62,8 @@ export class ChatRepository {
     }
 
     const chat = chatStore.getState().chats.find((c) => c.id === chatId);
-    if (chat?.project) {
-      chatStore.setActiveProject(chat.project);
-    }
+    chatStore.setActiveProject(chat?.project || '');
+    chatStore.setDraftProject(chat?.project || '');
 
     await ChatRepository.persistAll();
   }

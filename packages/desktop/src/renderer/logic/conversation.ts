@@ -10,6 +10,7 @@ import type { AppContext, StoredChat, StoredProject } from './types';
 import { StepFactory } from './steps';
 import { StoreService } from './store';
 import { FormatService } from './format';
+import { chatStore } from '../stores/chatStore';
 
 export class ConversationService {
   /** Computes the default composer model (last-used, else first enabled). */
@@ -220,6 +221,8 @@ export class ConversationService {
     ctx.setDraftProject(targetProject || '');
     ctx.setActiveChatId('draft-chat');
     ctx.setTrajectorySteps([]);
+    chatStore.setSteps('draft-chat', []);
+    chatStore.setState(() => ({ activePanels: ['draft-chat'] }));
     ctx.setActiveTab('trajectory');
   }
 

@@ -169,7 +169,8 @@ export class StoreService {
     ctx.setTrajectorySteps(steps);
     ctx.setActiveChatId(chatId);
     const meta = ctx.getChats().find((c) => c.id === chatId);
-    if (meta?.project) ctx.setActiveProject(meta.project);
+    ctx.setActiveProject(meta?.project || '');
+    ctx.setDraftProject(meta?.project || '');
     if (opts?.setTab) ctx.setActiveTab('trajectory');
     ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), nextChats);
     return;
