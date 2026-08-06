@@ -271,7 +271,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     let ctxLimit = raw.contextLimit;
     let pricingInfo = raw.pricing;
 
-    if (providerId === 'nvidia' || providerId === 'deepinfra' || providerId === 'openrouter' || providerId === 'ollama' || providerId === 'ollama-cloud') {
+    if (providerId === 'groq' || providerId === 'nvidia' || providerId === 'deepinfra' || providerId === 'openrouter' || providerId === 'ollama' || providerId === 'ollama-cloud') {
       if (providerId === 'ollama' || providerId === 'ollama-cloud') {
         isFree = true;
       } else if (providerId === 'nvidia') {

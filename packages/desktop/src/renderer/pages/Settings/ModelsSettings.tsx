@@ -326,6 +326,9 @@ export const ModelsSettings: React.FC<ModelsSettingsProps> = ({
         } else if (prov.id === 'kimi') {
           const res = await browserSafeFetch(`${url || 'https://api.moonshot.cn/v1'}/models`, { headers: { Authorization: `Bearer ${key}` } });
           if (res.ok) { const d = await res.json(); rawModels = (d.data ?? []).map((m: any) => ({ id: m.id, name: m.id })); }
+        } else if (prov.id === 'groq') {
+          const res = await browserSafeFetch(`${url || 'https://api.groq.com/openai/v1'}/models`, { headers: { Authorization: `Bearer ${key}` } });
+          if (res.ok) { const d = await res.json(); rawModels = (d.data ?? []).map((m: any) => ({ id: m.id, name: m.id, contextLimit: m.context_window ? fmtTokens(m.context_window) : undefined })); }
         } else if (prov.id === 'openrouter') {
           const res = await browserSafeFetch('https://openrouter.ai/api/v1/models', { headers: { Authorization: `Bearer ${key}` } });
           if (res.ok) {

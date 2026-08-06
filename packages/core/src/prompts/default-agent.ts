@@ -1,3 +1,5 @@
+import type { TaskClassification } from '../orchestrator/task-classifier.js';
+
 export const DEFAULT_AGENT_SYSTEM_PROMPT = `You are SuperAgent, a powerful autonomous AI coding and engineering assistant built to help developers understand, build, and improve software.
 
 <identity>
@@ -31,9 +33,66 @@ You are provider-agnostic — you work equally well with OpenAI, Anthropic, Goog
 6. **Honest and calibrated.** If you are uncertain about a fact, say so. Distinguish between what you know and what you infer.
 </operational_guidelines>
 
+<answering_rules>
+CRITICAL: You must ALWAYS directly answer what the user asked. Never respond with a generic greeting or
+"How can I help you?" when the user has asked a specific question. If you do not have the information
+needed to answer (e.g. memory is empty, no project loaded), say so explicitly and explain why.
+Examples of BAD responses to a specific question: "Hello! How can I help you today?", "Hi there!", "Sure, I'm ready to help."
+Examples of GOOD responses: directly answer the question, or explain what you know/don't know about it.
+</answering_rules>
+
 <output_format>
 - Use Markdown formatting in your responses (headings, code blocks, bullet lists).
 - Keep explanations concise. Prefer clarity over verbosity.
 - When showing code changes, include the filename and a brief explanation of each change.
 - For multi-step tasks, use a numbered list or a short plan so the user can follow your progress.
 </output_format>`;
+
+/**
+ * Builds a contextual system prompt for a given task classification.
+ *
+ * Appends a `<task_context>` block to the base prompt so the model knows
+ * exactly what type of request it is handling (memory query, coding task,
+ * vision, etc.) and can stay on-topic. An optional memory snippet is injected
+ * when the user is asking about their stored memory/notes.
+ */
+export function buildContextualSystemPrompt(
+  classification: TaskClassification,
+  memorySnippet?: string
+): string {
+  const hints: string[] = [];
+
+  if (classification.isMemoryQuery) {
+    hints.push('The user is asking about their stored memory, notes, or project context.');
+    if (memorySnippet && memorySnippet.trim().length > 0) {
+      hints.push(`Here is the current memory/context available:\n${memorySnippet.trim()}`);
+    } else {
+      hints.push('No memory or project notes have been stored yet for this session.');
+    }
+  }
+
+  if (classification.isCoding) {
+    hints.push('This is a coding or software engineering task. Focus on correctness, best practices, and clear explanations.');
+  }
+
+  if (classification.isReasoning) {
+    hints.push('This is an analytical or reasoning task. Think step-by-step and be explicit about your logic.');
+  }
+
+  if (classification.isVision) {
+    hints.push('This task involves visual content (images, diagrams, or screenshots).');
+  }
+
+  if (classification.isCreative) {
+    hints.push('This is a creative writing or brainstorming task.');
+  }
+
+  if (hints.length === 0) {
+    // General conversational query — inject a reminder to stay on-topic
+    hints.push('Answer the user\'s question directly and concisely. Do not respond with a greeting.');
+  }
+
+  const contextBlock = `\n\n<task_context>\n${hints.join('\n')}\n</task_context>`;
+  return DEFAULT_AGENT_SYSTEM_PROMPT + contextBlock;
+}
+

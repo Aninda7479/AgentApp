@@ -33,6 +33,8 @@ export interface TaskClassification {
   isCreative: boolean;
   isAudio: boolean;
   is3D: boolean;
+  /** True when the user is asking about stored memory, recall, context, or project notes. */
+  isMemoryQuery: boolean;
   difficulty: TaskDifficulty;
   /** Optional optimization preference read from the text; never forced onto scoring. */
   goalHint?: TaskGoalHint;
@@ -47,6 +49,7 @@ const VISION_RE = /\b(image|picture|photo|video|frame|canvas|screenshot|png|jpe?
 const CREATIVE_RE = /\b(poem|story|song|lyrics|novel|fiction|haiku|sonnet|brainstorm|tagline|marketing copy|creative writing|come up with ideas|name ideas|script for a)\b/i;
 const AUDIO_RE = /\b(audio|mp3|wav|voice|speech|podcast|transcri|spoken|voice ?memo|sound clip)\b/i;
 const THREE_D_RE = /\b(3d|three[- ]?dimensional|stl|obj file|blender|mesh|3d model|cad|render a model)\b/i;
+const MEMORY_RE = /\b(memory|remember|recall|what do you know|what'?s in my|my notes|project notes|stored|context|what have you|what did i|history|whats in my|what is in my)\b/i;
 
 const QUALITY_RE = /\b(best|carefully|thorough|detailed|high quality|expert|accurate|precise|comprehensive|in[- ]?depth)\b/i;
 const LATENCY_RE = /\b(quick|fast|asap|immediately|brief|short answer|tl;dr|speed)\b/i;
@@ -86,6 +89,7 @@ export function classifyTask(request: CompletionRequest): TaskClassification {
   const isVision = VISION_RE.test(text) || requiredModalities.some((m) => m === 'image' || m === 'video');
   const isAudio = AUDIO_RE.test(text) || requiredModalities.some((m) => m === 'audio');
   const is3D = THREE_D_RE.test(text);
+  const isMemoryQuery = MEMORY_RE.test(text);
 
   let goalHint: TaskGoalHint | undefined;
   if (QUALITY_RE.test(text)) goalHint = 'quality';
@@ -102,6 +106,7 @@ export function classifyTask(request: CompletionRequest): TaskClassification {
     isCreative,
     isAudio,
     is3D,
+    isMemoryQuery,
     difficulty,
     goalHint
   };

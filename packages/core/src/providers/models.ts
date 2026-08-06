@@ -225,6 +225,61 @@ export class ModelCapabilityRegistry {
         reasoningEffortLevels: ['low', 'medium', 'high'],
         moderationLevel: 'low'
       },
+      // Groq
+      {
+        id: 'llama-3.3-70b-versatile',
+        name: 'Llama 3.3 70B Versatile (Groq)',
+        provider: 'groq',
+        contextWindow: 128000,
+        maxOutputTokens: 32768,
+        supportsVision: false,
+        supportsTools: true,
+        supportsReasoning: false,
+        inputModalities: ['text'],
+        outputModalities: ['text'],
+        specialties: ['coding', 'general', 'fast-inference'],
+        speedTier: 'fast',
+        intelligenceTier: 'high',
+        accessStatus: 'available',
+        reasoningEffortLevels: [],
+        moderationLevel: 'standard'
+      },
+      {
+        id: 'llama-3.1-8b-instant',
+        name: 'Llama 3.1 8B Instant (Groq)',
+        provider: 'groq',
+        contextWindow: 128000,
+        maxOutputTokens: 8192,
+        supportsVision: false,
+        supportsTools: true,
+        supportsReasoning: false,
+        inputModalities: ['text'],
+        outputModalities: ['text'],
+        specialties: ['cost-efficient', 'fast-inference'],
+        speedTier: 'fast',
+        intelligenceTier: 'mid',
+        accessStatus: 'available',
+        reasoningEffortLevels: [],
+        moderationLevel: 'standard'
+      },
+      {
+        id: 'deepseek-r1-distill-llama-70b',
+        name: 'DeepSeek R1 Distill Llama 70B (Groq)',
+        provider: 'groq',
+        contextWindow: 128000,
+        maxOutputTokens: 16384,
+        supportsVision: false,
+        supportsTools: true,
+        supportsReasoning: true,
+        inputModalities: ['text'],
+        outputModalities: ['text'],
+        specialties: ['reasoning', 'math', 'coding'],
+        speedTier: 'fast',
+        intelligenceTier: 'high',
+        accessStatus: 'available',
+        reasoningEffortLevels: ['low', 'medium', 'high'],
+        moderationLevel: 'standard'
+      },
       // OpenRouter — free-tier default models (no-cost entry points).
       // The free roster rotates constantly; these IDs were verified against
       // https://openrouter.ai/collections/free-models on 2026-07-20.

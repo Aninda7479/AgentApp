@@ -18,6 +18,7 @@ export type AIProvider =
   | 'deepseek'
   | 'deepinfra'
   | 'openrouter'
+  | 'groq'
   | 'kimi'
   | 'moonshot'
   | 'mistral'

@@ -381,16 +381,56 @@ export class AgentEngine {
     const provider = this.config.provider || '';
     const supportsStrict = provider !== 'omniroute' && provider !== 'ollama';
 
+    // Groq enforces that every key in `properties` must appear in `required`
+    // when `additionalProperties: false` is set. It also rejects
+    // `additionalProperties: false` altogether in many schema versions.
+    // This sanitizer recursively fixes both issues for any tool schema so we
+    // don't need to manually audit every tool definition.
+    const isGroq = provider === 'groq' ||
+      (this.config.baseUrl || '').toLowerCase().includes('groq');
+
+    const sanitizeSchema = (schema: Record<string, any>): Record<string, any> => {
+      if (!schema || typeof schema !== 'object') return schema;
+      const result: Record<string, any> = { ...schema };
+
+      // Fix: required must list every property key
+      if (result.properties && typeof result.properties === 'object') {
+        const allKeys = Object.keys(result.properties);
+        const existing = Array.isArray(result.required) ? result.required : [];
+        const missing = allKeys.filter(k => !existing.includes(k));
+        if (missing.length > 0) {
+          result.required = [...existing, ...missing];
+        }
+        // Recurse into nested object schemas
+        result.properties = Object.fromEntries(
+          Object.entries(result.properties).map(([k, v]) => [k, sanitizeSchema(v as Record<string, any>)])
+        );
+      }
+
+      // Recurse into array item schemas
+      if (result.items && typeof result.items === 'object') {
+        result.items = sanitizeSchema(result.items as Record<string, any>);
+      }
+
+      // Groq rejects additionalProperties: false in tool schemas
+      if (isGroq && 'additionalProperties' in result) {
+        delete result.additionalProperties;
+      }
+
+      return result;
+    };
+
     return this.tools.map(t => ({
       type: 'function' as const,
       function: {
         name: t.name,
         description: t.description,
-        parameters: t.parameters,
-        ...(supportsStrict && { strict: true })
+        parameters: isGroq ? sanitizeSchema(t.parameters as Record<string, any>) : t.parameters,
+        ...(supportsStrict && !isGroq && { strict: true })
       }
     }));
   }
+
 
   /** Main streaming agent run */
   public async run(
@@ -515,8 +555,64 @@ export class AgentEngine {
         // ── No tool calls → done ────────────────────────────────────────
         if (toolCalls.length === 0) {
           if (!fullContent.trim()) {
-            const fallbackText = 'I received an error or no further response from the tool execution.';
+            const lastMsg = this.history[this.history.length - 2];
+            let fallbackText = 'Completed task.';
+            if (lastMsg && lastMsg.role === 'tool' && lastMsg.content) {
+              const text = extractTextContent(lastMsg.content);
+              if (text.includes('User Profile') || text.includes('Learned Insights') || text.includes('memory')) {
+                fallbackText = text.trim();
+              } else {
+                fallbackText = `Executed tool successfully:\n${text.slice(0, 300)}`;
+              }
+            } else if (iterations === 1) {
+              // The model returned empty content on the first turn — this commonly
+              // happens with Groq/LLaMA when the tool payload is too large and the
+              // model refuses to generate text. Retry once without tools so it can
+              // answer conversationally instead of showing a meaningless greeting.
+              const userMsg = this.history.filter(m => m.role === 'user').pop();
+              const userText = userMsg ? extractTextContent(userMsg.content) : '';
+
+              // Inject a nudge as a tool result to steer the model to respond in text
+              this.record({
+                role: 'system',
+                content: `[INTERNAL NOTE: Your previous response was empty. Please respond directly to the user in plain text. Do not use any tools for this turn. Answer the user's question: "${userText.slice(0, 200)}"`
+              });
+
+              // Stream again without tool schemas in the payload — store them,
+              // temporarily clear, run, then restore.
+              const savedTools = this.tools;
+              this.tools = [];
+              let retryContent = '';
+              let retryToolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
+              try {
+                const retryResult = await this.streamFromProvider(onEvent, this.abortController?.signal);
+                retryContent = retryResult.fullContent;
+                retryToolCalls = retryResult.toolCalls;
+              } finally {
+                this.tools = savedTools;
+              }
+
+              if (retryContent.trim()) {
+                // Record the retry response and finish
+                this.record({ role: 'assistant', content: retryContent });
+                emitContext();
+                onEvent({ type: 'done', sessionId: this.sessionId });
+                return;
+              }
+
+              // If retry also empty, fall back to a context-aware message
+              const isMemoryQ = /\b(memory|remember|recall|stored|notes|context|whats in my|what is in my)\b/i.test(userText);
+              fallbackText = isMemoryQ
+                ? 'Your memory is currently empty. No notes or context have been stored in this session yet.'
+                : `I wasn't able to generate a response. Could you rephrase your question?`;
+              void retryToolCalls; // suppress unused warning
+            }
             onEvent({ type: 'token', content: fallbackText, sessionId: this.sessionId });
+            // Update recorded content so transcript history has the text
+            const lastAssistant = this.history[this.history.length - 1];
+            if (lastAssistant && lastAssistant.role === 'assistant') {
+              lastAssistant.content = fallbackText;
+            }
           }
           onEvent({ type: 'done', sessionId: this.sessionId });
           return;

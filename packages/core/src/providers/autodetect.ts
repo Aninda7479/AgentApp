@@ -84,6 +84,14 @@ export class ProviderAutoDetector {
       }
     },
     {
+      id: 'groq',
+      name: 'Groq',
+      envKey: 'GROQ_API_KEY',
+      modelsUrl: 'https://api.groq.com/openai/v1/models',
+      authHeader: (k) => ({ Authorization: `Bearer ${k}` }),
+      parseModels: (d) => (d?.data ?? []).map((m: any) => ({ id: m.id, name: m.id }))
+    },
+    {
       id: 'google',
       name: 'Google Gemini',
       envKey: 'GEMINI_API_KEY',

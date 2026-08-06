@@ -118,9 +118,10 @@ export class AgentService {
     }
   ): void {
     const startedAt = args.runStartedAt;
+    const sessionId = args.chatId.startsWith('session-') ? args.chatId : `session-${args.chatId}`;
     ctx.ipc
       ?.invoke('agent-run', {
-        sessionId: args.sessionId,
+        sessionId,
         prompt: args.prompt,
         config: args.config,
         currentAttachments: args.currentAttachments
@@ -176,8 +177,9 @@ export class AgentService {
     const workedDuration = FormatService.formatWorkedDuration(
       Date.now() - (runningChat?.startedAt || Date.now())
     );
+    const stopSessionId = activeChatId.startsWith('session-') ? activeChatId : `session-${activeChatId}`;
     ctx.ipc
-      ?.invoke('agent-stop', `session-${activeChatId}`)
+      ?.invoke('agent-stop', stopSessionId)
       .catch((err: Error) => {
         console.error('Failed to stop agent session', err);
       });

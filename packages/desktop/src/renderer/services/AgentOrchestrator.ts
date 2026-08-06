@@ -138,8 +138,9 @@ export class AgentOrchestrator {
     };
 
     try {
+      const sessionId = targetChatId.startsWith('session-') ? targetChatId : `session-${targetChatId}`;
       const result = await IpcBridge.runAgent({
-        sessionId: `session-${targetChatId}`,
+        sessionId,
         prompt: trimmedPrompt,
         config: runConfig,
         currentAttachments,
@@ -158,7 +159,8 @@ export class AgentOrchestrator {
     if (!sessionStore.isRunning(chatId)) return;
 
     try {
-      await IpcBridge.stopAgent(`session-${chatId}`);
+      const sessionId = chatId.startsWith('session-') ? chatId : `session-${chatId}`;
+      await IpcBridge.stopAgent(sessionId);
     } catch (err) {
       console.error('[AgentOrchestrator] Error stopping agent:', err);
     }
@@ -171,7 +173,7 @@ export class AgentOrchestrator {
     const existingUnsub = AgentOrchestrator.eventUnsubscribers.get(chatId);
     if (existingUnsub) existingUnsub();
 
-    const sessionId = `session-${chatId}`;
+    const sessionId = chatId.startsWith('session-') ? chatId : `session-${chatId}`;
     const unsub = agentEventBus.subscribe(sessionId, (event: AgentEvent) => {
       const buffer = AgentOrchestrator.getStreamBuffer(chatId);
 

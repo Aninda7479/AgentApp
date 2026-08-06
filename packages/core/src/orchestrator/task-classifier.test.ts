@@ -116,3 +116,40 @@ describe('buildRequest', () => {
     expect(r.messages[0].content).toBe('hello');
   });
 });
+
+describe('classifyTask — isMemoryQuery flag', () => {
+  it('flags "whats in my memory"', () => {
+    const c = classifyTask(req('whats in my memory'));
+    expect(c.isMemoryQuery).toBe(true);
+  });
+
+  it('flags "what is in my memory"', () => {
+    const c = classifyTask(req('what is in my memory'));
+    expect(c.isMemoryQuery).toBe(true);
+  });
+
+  it('flags "what do you remember about me"', () => {
+    const c = classifyTask(req('what do you remember about me'));
+    expect(c.isMemoryQuery).toBe(true);
+  });
+
+  it('flags "show my stored notes"', () => {
+    const c = classifyTask(req('show my stored notes'));
+    expect(c.isMemoryQuery).toBe(true);
+  });
+
+  it('flags "recall our conversation history"', () => {
+    const c = classifyTask(req('recall our conversation history'));
+    expect(c.isMemoryQuery).toBe(true);
+  });
+
+  it('does NOT flag a normal coding question as a memory query', () => {
+    const c = classifyTask(req('write a function to sort an array'));
+    expect(c.isMemoryQuery).toBe(false);
+  });
+
+  it('does NOT flag a greeting as a memory query', () => {
+    const c = classifyTask(req('hello, how are you?'));
+    expect(c.isMemoryQuery).toBe(false);
+  });
+});

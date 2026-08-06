@@ -343,6 +343,7 @@ describe('Phase 1 Core Provider Suite (Steps 001-008)', () => {
     it('createProviderAdapter should support all listed providers without throwing', () => {
       const cases: Array<[string, any]> = [
         ['openrouter', CustomAdapter],
+        ['groq', CustomAdapter],
         ['kimi', CustomAdapter],
         ['deepinfra', CustomAdapter],
         ['chatgpt', OpenAIAdapter],

@@ -974,6 +974,59 @@ export function createBuiltinTools(
         return sections.join('\n\n') || '(no memory data)';
       }
     },
+    // ── Memory storage tool ────────────────────────────────────────────────
+    {
+      name: 'save_memory',
+      description:
+        'Save information to persistent user profile or learned insights memory. ' +
+        'Use type="profile" for user identity, preferences, or environment details (e.g. name, role, preferences). ' +
+        'Use type="learning" for workflow lessons or error prevention insights.',
+      parameters: {
+        type: 'object',
+        properties: {
+          type: {
+            type: 'string',
+            enum: ['profile', 'learning'],
+            description: 'Memory category to store into: "profile" (user facts/preferences) or "learning" (lessons/insights).'
+          },
+          key: {
+            type: 'string',
+            description: 'Key or topic name for the memory item (e.g. "user_name", "preferred_language", "error_resolution").'
+          },
+          value: {
+            type: 'string',
+            description: 'The memory content or value to store (e.g. "Aninda Das").'
+          },
+          category: {
+            type: 'string',
+            enum: ['identity', 'preference', 'environment', 'custom', 'error_prevention', 'workflow_optimization'],
+            description: 'Optional category classification for the entry.'
+          }
+        },
+        required: ['type', 'key', 'value'],
+        additionalProperties: false
+      },
+      execute: async (args: Record<string, any>) => {
+        const type = (args.type as string) || 'profile';
+        const key = (args.key as string) || '';
+        const value = (args.value as string) || '';
+        const category = (args.category as string) || (type === 'profile' ? 'identity' : 'workflow_optimization');
+
+        if (!key || !value) {
+          return 'Error: key and value are required to save memory.';
+        }
+
+        if (type === 'profile') {
+          const store = new UserProfileStore();
+          await store.set(key, value, category as any);
+          return `Successfully saved user profile entry "${key}": "${value}"`;
+        } else {
+          const engine = new LearningLoopEngine();
+          await engine.saveInsight(key, value, category as any);
+          return `Successfully saved learned insight [${key}]: "${value}"`;
+        }
+      }
+    },
     // Sub-agent delegation: spawns an independent child AgentEngine that can
     // use its own tools. This is what makes "run N sub-agents" real — the model
     // calls this tool (possibly several times in one turn) and each call runs a

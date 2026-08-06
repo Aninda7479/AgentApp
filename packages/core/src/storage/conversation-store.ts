@@ -59,28 +59,33 @@ async function readJson<T>(filePath: string): Promise<T | null> {
   }
 }
 
-/** Atomically writes JSON to disk using a temp file + backup strategy. */
+/** Atomically writes JSON to disk using a unique temp file + Windows fallback strategy. */
 async function writeJson(filePath: string, data: unknown): Promise<void> {
   await ensureDirectory(path.dirname(filePath));
-  const tmpPath = `${filePath}.tmp`;
-  await fsp.writeFile(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
-  try {
-    await fsp.copyFile(filePath, `${filePath}.bak`);
-  } catch {
-    // First write — no existing file to back up.
-  }
+  const uniqueId = Math.random().toString(36).substring(2, 8);
+  const tmpPath = `${filePath}.${uniqueId}.tmp`;
+  const content = JSON.stringify(data, null, 2);
 
   try {
-    await fsp.rename(tmpPath, filePath);
-  } catch {
+    await fsp.writeFile(tmpPath, content, 'utf-8');
     try {
-      await fsp.copyFile(tmpPath, filePath);
-      await fsp.unlink(tmpPath);
-    } catch (copyErr) {
-      console.error(`Failed to write JSON to ${filePath} via backup copy:`, copyErr);
-      try { await fsp.unlink(tmpPath); } catch { /* best-effort */ }
-      throw copyErr;
+      await fsp.rename(tmpPath, filePath);
+    } catch {
+      // Windows fallback when atomic rename fails due to file locking: copy and cleanup
+      try {
+        await fsp.copyFile(tmpPath, filePath);
+      } catch (copyErr) {
+        console.error(`Failed to copy JSON to ${filePath}:`, copyErr);
+      } finally {
+        try {
+          await fsp.unlink(tmpPath);
+        } catch {
+          /* best-effort cleanup */
+        }
+      }
     }
+  } catch (writeErr) {
+    console.error(`Failed to write JSON temp file ${tmpPath}:`, writeErr);
   }
 }
 
@@ -334,22 +339,26 @@ async function readProjectsAndChats(roots: ConversationRoots): Promise<{ project
   try {
     const standaloneFolders = await fsp.readdir(roots.chatsDir);
     for (const chatFolder of standaloneFolders) {
-      const chatDir = path.join(roots.chatsDir, chatFolder);
-      const stat = await fsp.stat(chatDir);
-      if (!stat.isDirectory()) continue;
+      try {
+        const chatDir = path.join(roots.chatsDir, chatFolder);
+        const stat = await fsp.stat(chatDir);
+        if (!stat.isDirectory()) continue;
 
-      const chatJsonPath = path.join(chatDir, 'chat.json');
-      let exists = false;
-      try { await fsp.access(chatJsonPath); exists = true; } catch { /* no */ }
-      if (!exists) continue;
+        const chatJsonPath = path.join(chatDir, 'chat.json');
+        let exists = false;
+        try { await fsp.access(chatJsonPath); exists = true; } catch { /* no */ }
+        if (!exists) continue;
 
-      const chat = await readChatRecord(chatJsonPath, '', undefined, getChatConfigPath(roots.userDataDir, chatFolder));
-      if (chat) {
-        const chatKey = `standalone/${chat.id}`;
-        if (!seenChats.has(chatKey)) {
-          seenChats.add(chatKey);
-          chats.push({ ...chat, project: '' });
+        const chat = await readChatRecord(chatJsonPath, '', undefined, getChatConfigPath(roots.userDataDir, chatFolder));
+        if (chat) {
+          const chatKey = `standalone/${chat.id}`;
+          if (!seenChats.has(chatKey)) {
+            seenChats.add(chatKey);
+            chats.push({ ...chat, project: '' });
+          }
         }
+      } catch {
+        /* ignore individual missing or corrupted chat folders */
       }
     }
   } catch (e) {

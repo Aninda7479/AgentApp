@@ -117,6 +117,16 @@ export const ProviderLogo: React.FC<{ providerId: string; org?: string; logoUrl?
         )
       };
     }
+    if (key.includes('groq')) {
+      return {
+        bg: 'bg-orange-600/20 text-orange-600 dark:text-orange-400 border-orange-500/30',
+        svg: (
+          <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+          </svg>
+        )
+      };
+    }
     if (key.includes('deepinfra')) {
       return {
         bg: 'bg-amber-600/20 text-amber-600 dark:text-amber-400 border-amber-500/30',
@@ -150,7 +160,7 @@ export const ProviderLogo: React.FC<{ providerId: string; org?: string; logoUrl?
   const iconSize = size - 6;
 
   // Render the vector SVG directly for known providers so it is offline-first and CORS-safe!
-  const knownProviders = new Set(['chatgpt', 'openai', 'claude', 'anthropic', 'google', 'gemini', 'vertex', 'ollama', 'deepseek', 'openrouter', 'nvidia', 'omniroute']);
+  const knownProviders = new Set(['chatgpt', 'openai', 'claude', 'anthropic', 'google', 'gemini', 'vertex', 'ollama', 'deepseek', 'openrouter', 'groq', 'nvidia', 'omniroute']);
   const isKnown = [...knownProviders].some(p => key.includes(p));
 
   if (isKnown) {
@@ -207,6 +217,7 @@ const POPULAR_PROVIDERS = [
   { id: 'deepseek', name: 'DeepSeek', org: 'deepseek-ai', logoUrl: 'https://www.deepseek.com/favicon.ico', desc: 'DeepSeek API endpoints and services', defaultUrl: 'https://api.deepseek.com' },
   { id: 'kimi', name: 'Kimi', org: 'moonshot-ai', logoUrl: 'https://www.moonshot.cn/favicon.ico', desc: 'Moonshot AI developer platform provider', defaultUrl: 'https://api.moonshot.cn/v1' },
   { id: 'openrouter', name: 'OpenRouter', org: 'openrouter-ai', logoUrl: 'https://openrouter.ai/favicon.ico', desc: 'Unified open router endpoint broker', defaultUrl: 'https://openrouter.ai/api/v1' },
+  { id: 'groq', name: 'Groq', org: 'groq', logoUrl: 'https://groq.com/favicon.ico', desc: 'Groq LPU Inference Engine (ultra-fast LLM inference)', defaultUrl: 'https://api.groq.com/openai/v1' },
   { id: 'nvidia', name: 'NVIDIA', org: 'NVIDIA', logoUrl: 'https://build.nvidia.com/favicon.ico', desc: 'NVIDIA NIM inference microservices (OpenAI-compatible)', defaultUrl: 'https://integrate.api.nvidia.com/v1' },
   { id: 'deepinfra', name: 'DeepInfra', org: 'deepinfra', logoUrl: 'https://deepinfra.com/favicon.ico', desc: 'Low cost serverless inference hosting provider', defaultUrl: 'https://api.deepinfra.com/v1' }
 ];
@@ -373,6 +384,15 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
           description: m.description,
           free: ProvidersService.detectFree(m.id, m.name ?? m.id, m.pricing)
         }));
+      } else if (modalProviderId === 'groq') {
+        const base = url || 'https://api.groq.com/openai/v1';
+        const res = await browserSafeFetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        const data = await res.json();
+        rawModels = (data.data ?? []).map((m: any) => ({
+          id: m.id, name: m.id,
+          contextLimit: m.context_window ? fmtTokens(m.context_window) : undefined
+        }));
       } else if (modalProviderId === 'ollama-cloud') {
         const base = url.replace(/\/+$/, '');
         const authHeaders: Record<string, string> = {};
@@ -466,6 +486,12 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       claude:   [{ id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', ctx: '200k' }, { id: 'claude-haiku-3-5', name: 'Claude Haiku 3.5', ctx: '200k' }],
       kimi:     [{ id: 'moonshot-v1-128k', name: 'Moonshot v1 128k', ctx: '128k' }, { id: 'moonshot-v1-32k', name: 'Moonshot v1 32k', ctx: '32k' }],
       openrouter: [{ id: 'openrouter/auto', name: 'Auto Router' }],
+      groq: [
+        { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Versatile', ctx: '128k' },
+        { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', ctx: '128k' },
+        { id: 'deepseek-r1-distill-llama-70b', name: 'DeepSeek R1 Distill Llama 70B', ctx: '128k' },
+        { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7b', ctx: '32k' }
+      ],
       nvidia: [
         { id: 'llama-3.1-nemotron-70b-instruct', name: 'Llama 3.1 Nemotron 70B Instruct', ctx: '128k', free: true },
         { id: 'llama-3.3-nemotron-super-49b-v1', name: 'Llama 3.3 Nemotron Super 49B', ctx: '128k', free: true },

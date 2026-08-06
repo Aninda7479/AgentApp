@@ -39,6 +39,7 @@ const REGISTRY: Record<string, ProviderMeta> = {
   deepseek:   { id: 'deepseek',   name: 'DeepSeek',             family: 'openai', defaultBaseUrl: 'https://api.deepseek.com/v1' },
   deepinfra:  { id: 'deepinfra',  name: 'DeepInfra',            family: 'openai', defaultBaseUrl: 'https://api.deepinfra.com/v1/openai' },
   openrouter: { id: 'openrouter', name: 'OpenRouter',           family: 'openai', defaultBaseUrl: 'https://openrouter.ai/api/v1' },
+  groq:       { id: 'groq',       name: 'Groq',                 family: 'openai', defaultBaseUrl: 'https://api.groq.com/openai/v1' },
   kimi:       { id: 'kimi',       name: 'Kimi (Moonshot)',      family: 'openai', defaultBaseUrl: 'https://api.moonshot.cn/v1' },
   moonshot:   { id: 'moonshot',   name: 'Moonshot AI',          family: 'openai', defaultBaseUrl: 'https://api.moonshot.cn/v1' },
   mistral:    { id: 'mistral',    name: 'Mistral AI',           family: 'openai', defaultBaseUrl: 'https://api.mistral.ai/v1' },

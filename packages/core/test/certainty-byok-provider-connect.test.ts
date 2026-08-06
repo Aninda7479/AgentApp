@@ -325,6 +325,7 @@ describe('CERTAIN-5: BYOK provider connect + list models', () => {
       ['deepseek', CustomAdapter],
       ['deepinfra', CustomAdapter],
       ['openrouter', CustomAdapter],
+      ['groq', CustomAdapter],
       ['kimi', CustomAdapter],
       ['moonshot', CustomAdapter],
       ['mistral', CustomAdapter],
