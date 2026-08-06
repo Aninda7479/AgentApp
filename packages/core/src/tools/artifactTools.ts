@@ -20,8 +20,17 @@ export const ARTIFACT_TOOLS: ArtifactToolDefinition[] = [
         entry: { type: 'string', description: 'Main entry file, e.g. "index.html"' },
         port: { type: 'number', description: 'Preferred HTTP port' },
         files: {
-          type: 'object',
-          description: 'Map of relative file paths to string file content, e.g. {"index.html": "<html>..."}'
+          type: 'array',
+          description: 'List of files to create, each with a relative path and text content',
+          items: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: 'Relative path of the file, e.g. "index.html" or "src/style.css"' },
+              content: { type: 'string', description: 'Complete file text content' }
+            },
+            required: ['path', 'content'],
+            additionalProperties: false
+          }
         }
       },
       required: ['id', 'name', 'description', 'files']

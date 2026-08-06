@@ -163,15 +163,34 @@ export function createBuiltinTools(
           entry: { type: 'string', description: 'Main entry file, e.g. "index.html"' },
           port: { type: 'number', description: 'Preferred HTTP port' },
           files: {
-            type: 'object',
-            description: 'Map of relative file paths to string file content'
+            type: 'array',
+            description: 'List of files to create, each with a relative path and text content',
+            items: {
+              type: 'object',
+              properties: {
+                path: { type: 'string', description: 'Relative path of the file, e.g. "index.html" or "src/style.css"' },
+                content: { type: 'string', description: 'Complete file text content' }
+              },
+              required: ['path', 'content'],
+              additionalProperties: false
+            }
           }
         },
         required: ['id', 'name', 'description', 'files'],
         additionalProperties: false
       },
       execute: async ({ id, name, description, type = 'static', entry = 'index.html', port = 3080, files }) => {
-        const fileNames = Object.keys(files || {}).join(', ');
+        const filesMap: Record<string, string> = {};
+        if (Array.isArray(files)) {
+          for (const file of files) {
+            if (file && typeof file === 'object' && typeof file.path === 'string') {
+              filesMap[file.path] = file.content || '';
+            }
+          }
+        } else if (files && typeof files === 'object') {
+          Object.assign(filesMap, files);
+        }
+        const fileNames = Object.keys(filesMap).join(', ');
         return `PROPOSAL SUCCESSFUL. I have formatted the proposal for the user. Ask the user: "I want to create an artifact called '${name}' (${description}) with files: [${fileNames}]. Shall I proceed?" and wait for their confirmation.`;
       }
     },
@@ -188,8 +207,17 @@ export function createBuiltinTools(
           entry: { type: 'string', description: 'Main entry file, e.g. "index.html"' },
           port: { type: 'number', description: 'Preferred HTTP port' },
           files: {
-            type: 'object',
-            description: 'Map of relative file paths to string file content'
+            type: 'array',
+            description: 'List of files to create, each with a relative path and text content',
+            items: {
+              type: 'object',
+              properties: {
+                path: { type: 'string', description: 'Relative path of the file, e.g. "index.html" or "src/style.css"' },
+                content: { type: 'string', description: 'Complete file text content' }
+              },
+              required: ['path', 'content'],
+              additionalProperties: false
+            }
           }
         },
         required: ['id', 'name', 'description', 'files'],
@@ -197,7 +225,20 @@ export function createBuiltinTools(
       },
       execute: async (params: any) => {
         try {
-          const state = await artifactRunner.createArtifact(params);
+          const filesMap: Record<string, string> = {};
+          if (Array.isArray(params.files)) {
+            for (const file of params.files) {
+              if (file && typeof file === 'object' && typeof file.path === 'string') {
+                filesMap[file.path] = file.content || '';
+              }
+            }
+          } else if (params.files && typeof params.files === 'object') {
+            Object.assign(filesMap, params.files);
+          }
+          const state = await artifactRunner.createArtifact({
+            ...params,
+            files: filesMap
+          });
           return `Artifact "${params.name}" successfully created at ~/.superagent/artifact/${params.id}. You can tell the user it is ready and can be launched.`;
         } catch (err: any) {
           return `Error creating artifact: ${err.message}`;

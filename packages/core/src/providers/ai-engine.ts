@@ -374,13 +374,19 @@ export class AgentEngine {
 
   /** Get tool definitions in OpenAI JSON Schema format */
   private getToolSchemas() {
+    // Local/proxy providers (omniroute, ollama) don't support the strict schema
+    // contract and return HTTP 400 when strict: true is sent. Cloud providers
+    // like OpenAI still get strict enforcement for guaranteed JSON adherence.
+    const provider = this.config.provider || '';
+    const supportsStrict = provider !== 'omniroute' && provider !== 'ollama';
+
     return this.tools.map(t => ({
       type: 'function' as const,
       function: {
         name: t.name,
         description: t.description,
         parameters: t.parameters,
-        strict: true
+        ...(supportsStrict && { strict: true })
       }
     }));
   }

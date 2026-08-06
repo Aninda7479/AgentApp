@@ -158,7 +158,8 @@ async function fetchTitleFromLLM(options: FetchTitleOptions): Promise<string> {
             { role: 'user', content: userMessage }
           ],
           max_tokens: 30,
-          temperature: 0.4
+          temperature: 0.4,
+          stream: false
         })
       });
       if (!res.ok) throw new Error(`OpenAI status ${res.status}`);
