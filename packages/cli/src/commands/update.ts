@@ -3,8 +3,16 @@ import { createRequire } from 'module';
 
 // Resolve the *running* CLI's own package.json so `current` reflects the
 // installed version (works identically after tsc compiles into dist/).
-const require = createRequire(import.meta.url);
-const pkg = require('../../package.json') as { name: string; version: string };
+const getPkg = () => {
+  try {
+    if (typeof require !== 'undefined') {
+      return require('../../package.json');
+    }
+  } catch {}
+  const requireFn = createRequire(import.meta.url);
+  return requireFn('../../package.json');
+};
+const pkg = getPkg() as { name: string; version: string };
 
 /** The published packages that make up the "Core + CLI + Web" install (Option 1). */
 const CORE_CLI_WEB = ['@superagent/cli', '@superagent/web'];

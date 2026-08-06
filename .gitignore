@@ -15,7 +15,7 @@ jspm_packages/
 dist/
 dist-release/
 dist-release-app/
-
+packages/cli/dist-release-cli/
 
 build/
 out/
