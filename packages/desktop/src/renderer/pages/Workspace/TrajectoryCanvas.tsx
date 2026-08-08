@@ -719,7 +719,7 @@ export const TrajectoryCanvas: React.FC<TrajectoryCanvasProps> = ({
 
   // Auto-scroll to bottom when new steps arrive or streaming
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    bottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
   }, [steps.length, isStreaming]);
 
   // Group consecutive non-user steps into "agent turns"

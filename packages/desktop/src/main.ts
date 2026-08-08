@@ -255,7 +255,7 @@ safeHandle('agent-run', async (event, {
       }
 
       if (activeSkillIds.size > 0) {
-        const projectRoot = finalConfig.projectRoot || finalConfig.workspacePath;
+        const projectRoot = (finalConfig.projectRoot && finalConfig.projectRoot.trim() !== '') ? finalConfig.projectRoot : undefined;
         const discovered = await listSkills(projectRoot);
         const skillMap = new Map<string, { name: string; instructions: string }>();
 
@@ -910,11 +910,10 @@ safeHandle('global-memory-read', async (_event, { projectRoot }: { projectRoot?:
 
 
   let projectInstructions: any[] = [];
-  const targetPath = projectRoot || process.cwd();
-  if (targetPath) {
+  if (projectRoot && projectRoot.trim() !== '') {
     try {
       const parser = new ProjectInstructionsParser();
-      projectInstructions = await parser.discoverAndParse(targetPath);
+      projectInstructions = await parser.discoverAndParse(projectRoot);
     } catch {
       projectInstructions = [];
     }

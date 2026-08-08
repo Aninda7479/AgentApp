@@ -21,6 +21,7 @@ import { MessageHistoryStore } from '../storage/message-history.js';
 import { saveChatConfig, readChatConfig } from '../storage/conversation-store.js';
 import type { StoredChatConfig } from '../storage/conversation-types.js';
 import { UsageTracker } from '../storage/usage-tracker.js';
+import { getStandaloneWorkspace } from '../storage/locations.js';
 import { providerLimiter, toolLimiter } from '../concurrency/limiter.js';
 import { resolveProviderFamily, resolveBaseUrl } from './provider-meta.js';
 import { capabilityRegistry } from './models.js';
@@ -107,7 +108,8 @@ export class AgentEngine {
     this.config = config;
     this.sessionId = sessionId || `session-${Date.now()}`;
 
-    const effectiveRoot = config.projectRoot || process.cwd();
+    const hasExplicitProject = typeof config.projectRoot === 'string' && config.projectRoot.trim() !== '';
+    const effectiveRoot = hasExplicitProject ? config.projectRoot! : getStandaloneWorkspace(this.sessionId);
 
     this.sandbox = new SandboxRunner({
       projectRoot: effectiveRoot,
@@ -131,7 +133,7 @@ export class AgentEngine {
           apiKey: config.apiKey,
           baseUrl: config.baseUrl,
           model: config.model,
-          projectRoot: effectiveRoot,
+          projectRoot: hasExplicitProject ? config.projectRoot : undefined,
           permissionMode: config.permissionMode,
         },
         config.allowSubagents ?? true
@@ -152,7 +154,9 @@ export class AgentEngine {
       ? rawPrompt.substring(0, MAX_SYSTEM_PROMPT_CHARS) + '\n\n[System prompt truncated due to length]'
       : rawPrompt;
 
-    const rootHint = `\n\n<workspace>\nProject root: ${effectiveRoot}\nWhen using file/directory tools, use "." to refer to the project root, or paths relative to it.\n</workspace>`;
+    const rootHint = hasExplicitProject
+      ? `\n\n<workspace>\nProject root: ${effectiveRoot}\nWhen using file/directory tools, use "." to refer to the project root, or paths relative to it.\n</workspace>`
+      : `\n\n<workspace>\nStandalone Mode: No host project folder is attached to this chat. Your workspace directory is an isolated sandbox: ${effectiveRoot}\nFile and terminal operations are confined to this isolated directory.\n</workspace>`;
     this.record({ role: 'system', content: sysPrompt + rootHint });
     this.contextWindow = config.contextWindow ?? 128000;
 

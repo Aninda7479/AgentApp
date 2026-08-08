@@ -197,13 +197,14 @@ export class StoreService {
     updater: (prevSteps: TrajectoryStep[]) => TrajectoryStep[],
     persist: boolean = true
   ): void {
+    let activeStepsToSync: TrajectoryStep[] | null = null;
     ctx.setChats((prevChats) => {
       const chat = prevChats.find((c) => c.id === targetChatId);
       if (!chat) return prevChats;
 
       const nextSteps = updater(chat.steps || []);
       if (targetChatId === ctx.getActiveChatId()) {
-        ctx.setTrajectorySteps(nextSteps);
+        activeStepsToSync = nextSteps;
       }
 
       const nextChats = prevChats.map((c) =>
@@ -214,6 +215,10 @@ export class StoreService {
       }
       return nextChats;
     });
+
+    if (activeStepsToSync) {
+      ctx.setTrajectorySteps(activeStepsToSync);
+    }
   }
 
   /**

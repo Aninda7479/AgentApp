@@ -12,7 +12,7 @@ export class SessionStreamBuffer {
   public buffer: string = '';
   public stepId: string | null = null;
   public responseSeq: number = 0;
-  private rafId: number | null = null;
+  private timerId: ReturnType<typeof setTimeout> | null = null;
   private startedAt: number = Date.now();
 
   constructor(chatId: string) {
@@ -43,16 +43,12 @@ export class SessionStreamBuffer {
   }
 
   public scheduleFlush(): void {
-    if (this.rafId !== null) return;
+    if (this.timerId !== null) return;
 
-    if (typeof requestAnimationFrame !== 'undefined') {
-      this.rafId = requestAnimationFrame(() => {
-        this.rafId = null;
-        this.flush();
-      });
-    } else {
-      setImmediate(() => this.flush());
-    }
+    this.timerId = setTimeout(() => {
+      this.timerId = null;
+      this.flush();
+    }, 100);
   }
 
   public flush(): void {
@@ -90,9 +86,9 @@ export class SessionStreamBuffer {
   }
 
   public clear(): void {
-    if (this.rafId !== null) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = null;
+    if (this.timerId !== null) {
+      clearTimeout(this.timerId);
+      this.timerId = null;
     }
     this.buffer = '';
     this.stepId = null;

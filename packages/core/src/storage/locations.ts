@@ -23,8 +23,19 @@ export const STORAGE_DIRS = {
   connectors: 'connectors',
   logs: 'logs',
   artifact: 'artifact',
-  threeD: '3d-studio'
+  threeD: '3d-studio',
+  standalone: 'standalone'
 } as const;
+
+/** Dedicated isolated workspace directory for standalone chats (chats without an assigned project root). */
+export function getStandaloneWorkspace(sessionId?: string, base: string = getUserDataDirectory()): string {
+  const safeSession = sessionId ? sessionId.replace(/[^a-zA-Z0-9_-]/g, '_') : 'default';
+  const standaloneDir = path.join(base, STORAGE_DIRS.standalone, safeSession);
+  if (!fs.existsSync(standaloneDir)) {
+    fs.mkdirSync(standaloneDir, { recursive: true });
+  }
+  return standaloneDir;
+}
 
 /** Returns the OS-agnostic base data directory: `<home>/.superagent`. */
 export function getUserDataDirectory(): string {

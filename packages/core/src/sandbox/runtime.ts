@@ -31,6 +31,7 @@ import { TerminalAccessControl } from './access.js';
 import { EnvironmentSanitizer } from './sanitizer.js';
 import { FileSystemInspector, ReadFileOptions, ReadFileResult, FileInspectResult } from './inspector.js';
 import { AtomicFileWriter } from './writer.js';
+import { getStandaloneWorkspace } from '../storage/locations.js';
 
 /** Options for constructing a SandboxRunner. */
 export interface SandboxRunnerOptions {
@@ -175,8 +176,8 @@ export class SandboxRunner {
   public resolvePath(target: string): string | null {
     const resolvedTarget = target.startsWith('~') ? target.replace(/^~/, os.homedir()) : target;
     if (this.unsandboxed) return path.resolve(resolvedTarget);
-    if (!this.projectRoot) return path.resolve(resolvedTarget);
-    return resolveWithinRoot(this.projectRoot, resolvedTarget);
+    const root = (this.projectRoot && this.projectRoot.trim() !== '') ? this.projectRoot : getStandaloneWorkspace();
+    return resolveWithinRoot(root, resolvedTarget);
   }
 
   // ── Command execution ───────────────────────────────────────────────────────
@@ -233,7 +234,8 @@ export class SandboxRunner {
     }
 
     // 3. Confine the working directory to the project root unless unsandboxed.
-    const cwd = options.cwd ?? (this.unsandboxed ? process.cwd() : this.projectRoot ?? process.cwd());
+    const effectiveRoot = (this.projectRoot && this.projectRoot.trim() !== '') ? this.projectRoot : getStandaloneWorkspace();
+    const cwd = options.cwd ?? (this.unsandboxed ? process.cwd() : effectiveRoot);
 
     try {
       return await this.executor.execute(command, {

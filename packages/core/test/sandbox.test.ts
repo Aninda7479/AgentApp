@@ -352,5 +352,12 @@ describe('Sandbox Engine Suite (Steps 009 - 015)', () => {
       const outside = runner.resolvePath('../outside-file.txt');
       expect(outside).toBeNull();
     });
+
+    it('isolates standalone chats to ~/.superagent/standalone instead of process.cwd()', () => {
+      const runner = new SandboxRunner({}); // no projectRoot provided
+      const resolved = runner.resolvePath('.');
+      expect(resolved).toContain(path.join('standalone', 'default'));
+      expect(resolved).not.toBe(process.cwd());
+    });
   });
 });

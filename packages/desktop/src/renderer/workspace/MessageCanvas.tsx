@@ -23,14 +23,25 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({ chatId, onClosePan
   const draftProject = useChatStore((s) => s.draftProject);
   const displayProject = chatId === 'draft-chat' ? (draftProject || 'No Project') : (chat?.project || 'No Project');
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
 
+  const handleScroll = () => {
+    if (!scrollContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 80;
+    userScrolledUpRef.current = !isAtBottom;
+  };
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [steps.length, isRunning]);
+    if (!userScrolledUpRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
+  }, [steps, isRunning]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -94,7 +105,7 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({ chatId, onClosePan
       </div>
 
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-thin scrollbar-thumb-slate-800">
+      <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-thin scrollbar-thumb-slate-800">
         {steps.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-8 select-none">
             <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 mb-4 shadow-lg shadow-cyan-500/10">

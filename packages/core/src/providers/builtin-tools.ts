@@ -16,6 +16,7 @@ import { LearningLoopEngine } from '../memory/learn.js';
 import { UserProfileStore } from '../memory/profile.js';
 import { ProjectInstructionsParser } from '../memory/instructions.js';
 import { ArtifactRunner } from '../artifact/artifactRunner.js';
+import { getStandaloneWorkspace } from '../storage/locations.js';
 
 const execAsync = promisify(exec);
 const artifactRunner = new ArtifactRunner();
@@ -139,9 +140,12 @@ export function createBuiltinTools(
 
   if (runnerOrRoot instanceof SandboxRunner) {
     runner = runnerOrRoot;
-    projectRoot = typeof allowedCommandsOrRoot === 'string' ? allowedCommandsOrRoot : (runner.getProjectRoot() || process.cwd());
+    const runnerRoot = runner.getProjectRoot();
+    projectRoot = (typeof allowedCommandsOrRoot === 'string' && allowedCommandsOrRoot.trim() !== '')
+      ? allowedCommandsOrRoot
+      : ((runnerRoot && runnerRoot.trim() !== '') ? runnerRoot : getStandaloneWorkspace());
   } else {
-    projectRoot = (runnerOrRoot as string) || process.cwd();
+    projectRoot = (typeof runnerOrRoot === 'string' && runnerOrRoot.trim() !== '') ? runnerOrRoot : getStandaloneWorkspace();
     const allowed = Array.isArray(allowedCommandsOrRoot) ? allowedCommandsOrRoot : undefined;
     runner = new SandboxRunner({
       projectRoot,
@@ -423,7 +427,7 @@ export function createBuiltinTools(
           if (!resolved) return `Error: path is outside the project root: ${directory}`;
           dir = resolved;
         } else {
-          dir = projectRoot ?? process.cwd();
+          dir = (projectRoot && projectRoot.trim() !== '') ? projectRoot : getStandaloneWorkspace();
         }
         return grepSearch(dir, pattern as string, fileGlob as string | undefined);
       }
@@ -914,9 +918,10 @@ export function createBuiltinTools(
           // ── Project memory: instruction files ──────────────────────────
           if (type === 'all' || type === 'instructions') {
             try {
-              const parser = new ProjectInstructionsParser();
-              const instructions = await parser.discoverAndParse(projectRoot);
-              const { combinedPrompt, rules } = parser.mergeInstructions(instructions);
+              if (parentConfig.projectRoot && parentConfig.projectRoot.trim() !== '') {
+                const parser = new ProjectInstructionsParser();
+                const instructions = await parser.discoverAndParse(parentConfig.projectRoot);
+                const { combinedPrompt, rules } = parser.mergeInstructions(instructions);
 
               if (query) {
                 // Filter: only keep instructions whose content matches the query
@@ -963,6 +968,9 @@ export function createBuiltinTools(
                   );
                 }
               }
+            } else {
+              sections.push('## Project Instructions\n  (no project root assigned — standalone chat session)');
+            }
             } catch {
               sections.push('## Project Instructions\n  (error reading instruction files)');
             }
