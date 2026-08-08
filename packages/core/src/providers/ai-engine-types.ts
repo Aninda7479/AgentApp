@@ -124,6 +124,8 @@ export interface AgentEngineConfig {
   compactAtRatio?: number;
   compactKeepRecent?: number;
   compactSummaryMaxChars?: number;
+  /** Maximum run iterations (turns) to prevent runaway loops. Defaults to 30. */
+  maxIterations?: number;
 }
 
 /** A single parallel candidate for best-of-N orchestration. Extends the base

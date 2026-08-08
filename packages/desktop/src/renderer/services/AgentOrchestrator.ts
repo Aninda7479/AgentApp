@@ -18,6 +18,11 @@ import type { ComposerOptions, ComposerAttachment, TrajectoryStep, AgentEvent, S
 export class AgentOrchestrator {
   private static streamBuffers: Map<string, SessionStreamBuffer> = new Map();
   private static eventUnsubscribers: Map<string, () => void> = new Map();
+  public static toastTrigger: ((msg: string, type?: 'info' | 'error') => void) | null = null;
+
+  public static registerToastTrigger(trigger: ((msg: string, type?: 'info' | 'error') => void) | null): void {
+    AgentOrchestrator.toastTrigger = trigger;
+  }
 
   private static getStreamBuffer(chatId: string): SessionStreamBuffer {
     let buffer = AgentOrchestrator.streamBuffers.get(chatId);
@@ -74,8 +79,11 @@ export class AgentOrchestrator {
       return;
     }
 
+    const unsandboxed = options.sandbox === false;
+    const sandboxMode: 'sandboxed' | 'full' = unsandboxed ? 'full' : 'sandboxed';
+
     const startedAt = Date.now();
-    sessionStore.markRunning(targetChatId, startedAt);
+    sessionStore.markRunning(targetChatId, startedAt, sandboxMode);
 
     const activeChat = chatStore.getState().chats.find((c) => c.id === targetChatId);
     const activeProject = chatStore.getState().projects.find((p) => p.name === activeChat?.project);
@@ -91,7 +99,7 @@ export class AgentOrchestrator {
     }
 
     // Step 1: Add User Step & Attachment steps to trajectory
-    const userStep = StepFactory.userStep(trimmedPrompt);
+    const userStep = StepFactory.userStep(trimmedPrompt, undefined, undefined, sandboxMode);
     const attachmentSteps: TrajectoryStep[] = attachments.map((att) =>
       StepFactory.attachmentStep(att.filename, att.fullPath || att.filename)
     );
@@ -115,6 +123,8 @@ export class AgentOrchestrator {
     // Prepare Stream Buffer
     const buffer = AgentOrchestrator.getStreamBuffer(targetChatId);
     buffer.resetTurn();
+    buffer.responseSeq = 0;
+    buffer.sandboxMode = sandboxMode;
     buffer.setStartedAt(startedAt);
 
     // Setup Agent Event Bus listener for this session
@@ -170,6 +180,93 @@ export class AgentOrchestrator {
     AgentOrchestrator.handleSessionTerminal(chatId, 'Stopped by user');
   }
 
+  public static async regenerate(
+    chatId: string,
+    promptText: string,
+    options: ComposerOptions = {},
+    responseSeq: number
+  ): Promise<void> {
+    const activeChat = chatStore.getState().chats.find((c) => c.id === chatId);
+    if (!activeChat) return;
+    const activeProject = chatStore.getState().projects.find((p) => p.name === activeChat?.project);
+
+    // Selected model resolution
+    const selectedModelName = options.model || activeChat?.model || providerStore.getState().lastUsedModel || '';
+    const activeProvider = ProviderRegistry.resolveActiveProvider(selectedModelName);
+    const engineProviderId = activeProvider ? ProviderRegistry.resolveEngineProviderId(activeProvider) : 'custom';
+    const engineModelSlug = ProviderRegistry.resolveModelId(activeProvider, selectedModelName);
+
+    if (selectedModelName) {
+      providerStore.setLastUsedModel(selectedModelName);
+    }
+
+    const unsandboxed = options.sandbox === false;
+    const sandboxMode: 'sandboxed' | 'full' = unsandboxed ? 'full' : 'sandboxed';
+
+    const startedAt = Date.now();
+    sessionStore.markRunning(chatId, startedAt, sandboxMode);
+
+    chatStore.setChats(
+      chatStore.getState().chats.map((c) =>
+        c.id === chatId
+          ? {
+              ...c,
+              isRunning: true,
+              startedAt,
+              timestamp: new Date().toISOString(),
+            }
+          : c
+      )
+    );
+    ChatRepository.persistAll().catch(console.error);
+
+    // Prepare Stream Buffer
+    const buffer = AgentOrchestrator.getStreamBuffer(chatId);
+    buffer.resetTurn();
+    buffer.setStartedAt(startedAt);
+    buffer.responseSeq = responseSeq;
+    buffer.sandboxMode = sandboxMode;
+
+    // Setup Agent Event Bus listener for this session
+    AgentOrchestrator.setupSessionEventListener(chatId, startedAt);
+
+    // Build IPC Agent Run Configuration payload
+    const currentAttachments = chatStore
+      .getSteps(chatId)
+      .filter((s) => s.metadata?.mediaPath)
+      .map((s) => s.metadata!.mediaPath as string);
+
+    const runConfig: Record<string, unknown> = {
+      model: engineModelSlug,
+      provider: engineProviderId,
+      apiKey: activeProvider?.apiKey || '',
+      baseUrl: activeProvider?.baseUrl || '',
+      workspacePath: activeProject?.folders?.[0] || '',
+      allowedCommands: activeProject?.allowedCommands || [],
+      instructions: activeProject?.instructions || '',
+      approvalMode: options.approvalMode || 'ask',
+      unsandboxed: options.sandbox === false,
+      selectedTools: options.selectedTools,
+    };
+
+    try {
+      const sessionId = chatId.startsWith('session-') ? chatId : `session-${chatId}`;
+      const result = await IpcBridge.runAgent({
+        sessionId,
+        prompt: promptText.trim(),
+        config: runConfig,
+        currentAttachments,
+      });
+
+      if (result && result.success === false) {
+        AgentOrchestrator.handleSessionError(chatId, result.error || 'Failed to start agent session', startedAt);
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      AgentOrchestrator.handleSessionError(chatId, errorMsg, startedAt);
+    }
+  }
+
   private static setupSessionEventListener(chatId: string, startedAt: number): void {
     // Unsubscribe existing listener if any
     const existingUnsub = AgentOrchestrator.eventUnsubscribers.get(chatId);
@@ -178,6 +275,8 @@ export class AgentOrchestrator {
     const sessionId = chatId.startsWith('session-') ? chatId : `session-${chatId}`;
     const unsub = agentEventBus.subscribe(sessionId, (event: AgentEvent) => {
       const buffer = AgentOrchestrator.getStreamBuffer(chatId);
+      const session = sessionStore.getState().runningSessions.get(chatId);
+      const sandboxMode = session?.sandboxMode || 'sandboxed';
 
       switch (event.type) {
         case 'start_turn':
@@ -197,7 +296,12 @@ export class AgentOrchestrator {
             const toolStep = StepFactory.toolCallStep(
               event.toolName,
               `${event.toolName}(${JSON.stringify(event.toolArgs || {})})`,
-              'running'
+              'running',
+              undefined,
+              undefined,
+              buffer.responseSeq,
+              sandboxMode,
+              event.toolArgs
             );
             chatStore.updateSteps(chatId, (prev) => [...prev, toolStep]);
             ChatRepository.persistAll().catch(console.error);
@@ -206,9 +310,26 @@ export class AgentOrchestrator {
 
         case 'tool_result':
           if (event.toolName && event.toolResult) {
-            const resultStep = StepFactory.toolResultStep(event.toolName, event.toolResult);
+            const steps = chatStore.getSteps(chatId);
+            const lastToolCall = [...steps]
+              .reverse()
+              .find((s) => s.type === 'tool_call' && s.toolName === event.toolName);
+            const toolArgs = lastToolCall?.metadata?.toolArgs as Record<string, unknown> | undefined;
+
+            const resultStep = StepFactory.toolResultStep(
+              event.toolName,
+              event.toolResult,
+              undefined,
+              undefined,
+              sandboxMode,
+              toolArgs
+            );
             chatStore.updateSteps(chatId, (prev) => [...prev, resultStep]);
             ChatRepository.persistAll().catch(console.error);
+
+            if (event.toolName === 'make_3d_character' && event.toolResult) {
+              AgentOrchestrator.import3DCharacter(event.toolResult);
+            }
           }
           break;
 
@@ -236,6 +357,9 @@ export class AgentOrchestrator {
         case 'abort':
           buffer.flush();
           AgentOrchestrator.handleSessionTerminal(chatId, event.error || 'Agent execution aborted');
+          if (event.type === 'error') {
+            AgentOrchestrator.toastTrigger?.(`Agent error: ${event.error || 'Unknown error'}`, 'error');
+          }
           break;
 
         default:
@@ -244,6 +368,39 @@ export class AgentOrchestrator {
     });
 
     AgentOrchestrator.eventUnsubscribers.set(chatId, unsub);
+  }
+
+  private static async import3DCharacter(toolResult: string): Promise<void> {
+    try {
+      const res = JSON.parse(toolResult) as {
+        ok?: boolean;
+        disabled?: boolean;
+        path?: string;
+        provider?: string;
+        message?: string;
+      };
+      if (res.disabled) {
+        AgentOrchestrator.toastTrigger?.('3D Model Gen is disabled — enable it in Settings → 3D Model Gen.', 'info');
+      } else if (res.ok && res.path) {
+        const activeId = await IpcBridge.invoke<string | null>('partner-get-active');
+        if (!activeId) {
+          AgentOrchestrator.toastTrigger?.('3D character ready, but no active Partner to show it.', 'info');
+        } else {
+          try {
+            await IpcBridge.invoke('partner-import-model', activeId, res.path);
+            await IpcBridge.invoke('partner-set-active', activeId);
+            await IpcBridge.invoke('pet-start');
+            AgentOrchestrator.toastTrigger?.(`3D character saved to ${res.path}`, 'info');
+          } catch (err) {
+            console.error('[AgentOrchestrator] Failed to import 3D character:', err);
+          }
+        }
+      } else if (res.message) {
+        AgentOrchestrator.toastTrigger?.(res.message, 'info');
+      }
+    } catch {
+      /* non-JSON tool result — ignore */
+    }
   }
 
   private static handleSessionError(chatId: string, errorMessage: string, startedAt: number): void {

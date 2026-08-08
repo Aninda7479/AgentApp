@@ -154,10 +154,14 @@ export class AgentEngine {
       ? rawPrompt.substring(0, MAX_SYSTEM_PROMPT_CHARS) + '\n\n[System prompt truncated due to length]'
       : rawPrompt;
 
+    const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const dateHint = `\n\n<current_time>\nToday's date: ${dateStr}\nCurrent time: ${timeStr}\n</current_time>`;
+
     const rootHint = hasExplicitProject
       ? `\n\n<workspace>\nProject root: ${effectiveRoot}\nWhen using file/directory tools, use "." to refer to the project root, or paths relative to it.\n</workspace>`
       : `\n\n<workspace>\nStandalone Mode: No host project folder is attached to this chat. Your workspace directory is an isolated sandbox: ${effectiveRoot}\nFile and terminal operations are confined to this isolated directory.\n</workspace>`;
-    this.record({ role: 'system', content: sysPrompt + rootHint });
+    this.record({ role: 'system', content: sysPrompt + dateHint + rootHint });
     this.contextWindow = config.contextWindow ?? 128000;
 
     // Register in the global registry so every live agent is supervised
@@ -489,7 +493,7 @@ export class AgentEngine {
     }
 
     let iterations = 0;
-    const MAX_ITERATIONS = 10; // prevent infinite loops
+    const MAX_ITERATIONS = this.config.maxIterations ?? 30; // prevent infinite loops, default to 30
     let autoCompactions = 0;
     const MAX_AUTO_COMPACTIONS = 3;
     // Runaway-loop guard: detects a model re-issuing the identical tool call

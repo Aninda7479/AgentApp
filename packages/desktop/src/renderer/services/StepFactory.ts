@@ -10,12 +10,13 @@ export class StepFactory {
     return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   }
 
-  static userStep(content: string, id?: string, ts?: string): TrajectoryStep {
+  static userStep(content: string, id?: string, ts?: string, sandboxMode?: 'sandboxed' | 'full'): TrajectoryStep {
     return {
       id: id || StepFactory.id('step-user'),
       type: 'user',
       content,
       timestamp: ts || FormatUtils.formatTimestamp(),
+      metadata: sandboxMode ? { sandboxMode } : undefined,
     };
   }
 
@@ -35,7 +36,9 @@ export class StepFactory {
     status: 'pending' | 'running' | 'success' | 'error' = 'running',
     id?: string,
     ts?: string,
-    regenerationSeq?: number
+    regenerationSeq?: number,
+    sandboxMode?: 'sandboxed' | 'full',
+    toolArgs?: Record<string, unknown>
   ): TrajectoryStep {
     return {
       id: id || StepFactory.id(`tool-${toolName}`),
@@ -44,11 +47,22 @@ export class StepFactory {
       content,
       status,
       timestamp: ts || FormatUtils.formatTimestamp(),
-      metadata: regenerationSeq !== undefined ? { regenerationSeq } : undefined,
+      metadata: {
+        ...(regenerationSeq !== undefined ? { regenerationSeq } : {}),
+        ...(sandboxMode ? { sandboxMode } : {}),
+        ...(toolArgs ? { toolArgs } : {}),
+      },
     };
   }
 
-  static toolResultStep(toolName: string, content: string, id?: string, ts?: string): TrajectoryStep {
+  static toolResultStep(
+    toolName: string,
+    content: string,
+    id?: string,
+    ts?: string,
+    sandboxMode?: 'sandboxed' | 'full',
+    toolArgs?: Record<string, unknown>
+  ): TrajectoryStep {
     return {
       id: id || StepFactory.id(`tool-result-${toolName}`),
       type: 'tool_result',
@@ -56,16 +70,23 @@ export class StepFactory {
       content,
       status: 'success',
       timestamp: ts || FormatUtils.formatTimestamp(),
+      metadata: {
+        ...(sandboxMode ? { sandboxMode } : {}),
+        ...(toolArgs ? { toolArgs } : {}),
+      },
     };
   }
 
-  static assistantStep(content: string, id?: string, ts?: string, regenerationSeq?: number): TrajectoryStep {
+  static assistantStep(content: string, id?: string, ts?: string, regenerationSeq?: number, sandboxMode?: 'sandboxed' | 'full'): TrajectoryStep {
     return {
       id: id || StepFactory.id('step-assistant'),
       type: 'assistant',
       content,
       timestamp: ts || FormatUtils.formatTimestamp(),
-      metadata: regenerationSeq !== undefined ? { regenerationSeq } : undefined,
+      metadata: {
+        ...(regenerationSeq !== undefined ? { regenerationSeq } : {}),
+        ...(sandboxMode ? { sandboxMode } : {}),
+      },
     };
   }
 

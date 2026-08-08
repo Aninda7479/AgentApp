@@ -12,6 +12,7 @@ export interface ActiveSessionState {
   startedAt: number;
   lastError?: string;
   contextUsage?: ContextUsage | null;
+  sandboxMode?: 'sandboxed' | 'full';
 }
 
 export interface SessionStoreState {
@@ -40,13 +41,14 @@ class SessionStoreManager {
     this.listeners.forEach((fn) => fn());
   }
 
-  public markRunning(chatId: string, startedAt: number = Date.now()): void {
+  public markRunning(chatId: string, startedAt: number = Date.now(), sandboxMode?: 'sandboxed' | 'full'): void {
     const newSessions = new Map(this.state.runningSessions);
     newSessions.set(chatId, {
       chatId,
       isGenerating: true,
       startedAt,
       contextUsage: null,
+      sandboxMode,
     });
     this.state = { ...this.state, runningSessions: newSessions };
     this.emit();

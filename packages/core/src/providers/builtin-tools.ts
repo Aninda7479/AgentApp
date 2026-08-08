@@ -918,7 +918,7 @@ export function createBuiltinTools(
           // ── Project memory: instruction files ──────────────────────────
           if (type === 'all' || type === 'instructions') {
             try {
-              if (parentConfig.projectRoot && parentConfig.projectRoot.trim() !== '') {
+              if (parentConfig && parentConfig.projectRoot && parentConfig.projectRoot.trim() !== '') {
                 const parser = new ProjectInstructionsParser();
                 const instructions = await parser.discoverAndParse(parentConfig.projectRoot);
                 const { combinedPrompt, rules } = parser.mergeInstructions(instructions);

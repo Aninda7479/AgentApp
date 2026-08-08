@@ -12,6 +12,7 @@ export class SessionStreamBuffer {
   public buffer: string = '';
   public stepId: string | null = null;
   public responseSeq: number = 0;
+  public sandboxMode: 'sandboxed' | 'full' = 'sandboxed';
   private timerId: ReturnType<typeof setTimeout> | null = null;
   private startedAt: number = Date.now();
 
@@ -61,6 +62,7 @@ export class SessionStreamBuffer {
     const currentStepId = this.stepId;
     const currentBuffer = this.buffer;
     const currentSeq = this.responseSeq;
+    const currentSandbox = this.sandboxMode;
     const duration = FormatUtils.formatWorkedDuration(Date.now() - this.startedAt);
 
     chatStore.updateSteps(this.chatId, (prev) => {
@@ -79,6 +81,7 @@ export class SessionStreamBuffer {
         metadata: {
           regenerationSeq: currentSeq,
           workedDuration: duration,
+          sandboxMode: currentSandbox,
         },
       };
       return [...prev, newStep];

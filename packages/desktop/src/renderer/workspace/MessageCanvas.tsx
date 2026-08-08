@@ -14,9 +14,16 @@ import { ChatRepository } from '../services/ChatRepository';
 interface MessageCanvasProps {
   chatId: string;
   onClosePanel?: () => void;
+  onUndoStep?: (stepId: string) => void;
+  onEditStep?: (stepId: string, newContent: string) => void;
 }
 
-export const MessageCanvas: React.FC<MessageCanvasProps> = ({ chatId, onClosePanel }) => {
+export const MessageCanvas: React.FC<MessageCanvasProps> = ({
+  chatId,
+  onClosePanel,
+  onUndoStep,
+  onEditStep,
+}) => {
   const steps = useTrajectory(chatId);
   const { isRunning, lastError, contextUsage, stopRun } = useAgent(chatId);
   const chat = useChatStore((s) => s.chats.find((c) => c.id === chatId));
@@ -117,7 +124,15 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({ chatId, onClosePan
             </p>
           </div>
         ) : (
-          steps.map((step) => <StepRenderer key={step.id} step={step} isWorking={isRunning} />)
+          steps.map((step) => (
+            <StepRenderer
+              key={step.id}
+              step={step}
+              isWorking={isRunning}
+              onUndoStep={onUndoStep}
+              onEditStep={onEditStep}
+            />
+          ))
         )}
 
         {isRunning && (

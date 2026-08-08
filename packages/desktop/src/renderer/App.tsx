@@ -42,6 +42,7 @@ import { BrandLogo } from './BrandLogo';
 import { WorkspaceStage } from './workspace/WorkspaceStage';
 import { chatStore } from './stores/chatStore';
 import { providerStore } from './stores/providerStore';
+import { sessionStore } from './stores/sessionStore';
 import { AgentOrchestrator } from './services/AgentOrchestrator';
 
 // ── Logic layer (separated from design; see renderer/logic/*) ────────────────
@@ -54,9 +55,6 @@ import { ProvidersService } from './logic/providers';
 import { McpService } from './logic/mcp';
 import { AttachmentService } from './logic/attachments';
 import { ConversationService } from './logic/conversation';
-import { AgentService } from './logic/agent';
-import { runManager } from './logic/runManager';
-import { AgentStreamService } from './logic/agentStream';
 import { WindowService } from './logic/window';
 import { AccountService } from './logic/account';
 import { PluginService } from './logic/plugin';
@@ -299,9 +297,14 @@ export const App: React.FC = () => {
       setLastUsedModel((prev) => (prev === state.lastUsedModel ? prev : state.lastUsedModel));
     });
 
+    const unsubSession = sessionStore.subscribe(() => {
+      setIsGenerating(sessionStore.isAnyGenerating());
+    });
+
     return () => {
       unsubChat();
       unsubProvider();
+      unsubSession();
     };
   }, []);
 
@@ -531,9 +534,10 @@ export const App: React.FC = () => {
       await AgentOrchestrator.sendPrompt(activeId, prompt, {
         model: options.model,
         approvalMode: options.mode === 'auto' ? 'always' : options.mode === 'bypass' ? 'never' : 'ask',
+        sandbox: options.sandbox !== undefined ? options.sandbox : !fullAccess,
       });
     },
-    [activeChatId]
+    [activeChatId, fullAccess]
   );
   sendPromptRef.current = handleSendPrompt;
 
@@ -569,8 +573,8 @@ export const App: React.FC = () => {
     const maxSeq = chat.steps.reduce((m, s) => Math.max(m, s.metadata?.regenerationSeq ?? 0), 0);
     const nextSeq = maxSeq + 1;
     const model = chat.model || lastUsedModel;
-    await AgentService.regenerate(ctx, chatId, prompt, { model: model || undefined, mode: 'chat', attachments: [] }, nextSeq);
-  }, [ctx, lastUsedModel]);
+    await AgentOrchestrator.regenerate(chatId, prompt, { model: model || undefined, sandbox: !fullAccess }, nextSeq);
+  }, [ctx, lastUsedModel, fullAccess]);
 
   // ── Settings toggles (mirror state + persist) ──────────────────────────────
   const handleWorkModeChange = (mode: 'coding' | 'everyday') => {
@@ -612,7 +616,12 @@ export const App: React.FC = () => {
 
   // ── Window controls / stop / quit (delegate to logic classes) ──────────────
   const handleWindowControl = (action: 'minimize' | 'maximize' | 'close') => WindowService.control(action);
-  const handleStopActiveRun = () => AgentService.stopRun(ctx, ctx.getActiveChatId());
+  const handleStopActiveRun = () => {
+    const activeChatId = ctx.getActiveChatId();
+    if (activeChatId) {
+      void AgentOrchestrator.stopRun(activeChatId);
+    }
+  };
   const handleQuit = () => WindowService.control('close');
   const handleAbout = () => {
     setActiveTab('settings');
@@ -634,6 +643,32 @@ export const App: React.FC = () => {
     }
   };
   const handleUndoStep = (stepId: string) => ConversationService.undoStep(ctx, stepId);
+  const handleEditStep = useCallback(async (stepId: string, newContent: string) => {
+    const activeId = activeChatId;
+    if (!activeId) return;
+    const chat = chats.find((c) => c.id === activeId);
+    if (!chat) return;
+
+    const idx = chat.steps.findIndex((s) => s.id === stepId);
+    if (idx === -1) return;
+
+    const originalStep = chat.steps[idx];
+    const sandboxMode = originalStep.metadata?.sandboxMode || 'sandboxed';
+
+    const nextSteps = chat.steps.slice(0, idx);
+
+    setTrajectorySteps(nextSteps);
+    chatStore.setSteps(activeId, nextSteps);
+
+    const nextChats = chats.map((c) => (c.id === activeId ? { ...c, steps: nextSteps } : c));
+    setChats(nextChats);
+    ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), nextChats);
+
+    await AgentOrchestrator.sendPrompt(activeId, newContent, {
+      model: chat.model,
+      sandbox: sandboxMode === 'sandboxed',
+    });
+  }, [ctx, activeChatId, chats]);
   const handleReviewDiff = (filename: string) => ConversationService.reviewDiff(ctx, filename);
   const handleSelectSearchChat = (chatTitle: string, projectContext?: string) =>
     ConversationService.selectSearchChat(ctx, chatTitle, projectContext);
@@ -1119,35 +1154,13 @@ export const App: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [profilePopoverOpen]);
 
-  // ── Run manager: how a queued prompt gets started ──
-  // Injected once so `RunManager.onTerminal` can re-enter `sendPrompt` without
-  // this module importing `AgentService` (avoids a circular dependency). Each
-  // queued `QueuedItem` already carries its own prompt / options / attachments.
+  // Register Toast Trigger on AgentOrchestrator
   useEffect(() => {
-    runManager.setStarter((item) => {
-      void AgentService.sendPrompt(ctx, item.prompt, item.options, item.attachments, slashDispatch);
-    });
-  }, [ctx, slashDispatch]);
-
-  // ── Real AI streaming via agent-event IPC (logic lives in AgentStreamService) ─
-  useEffect(() => {
-    if (!ipc) return;
-    const handleAgentEvent = AgentStreamService.createHandler(
-      ctx,
-      (sessionId: string) => runManager.getStreamRefs(sessionId),
-      partnersRef,
-      setLiveContextUsage,
-      (sessionId: string) => runManager.onTerminal(sessionId)
-    );
-    ipc.on('agent-event', handleAgentEvent);
-    return () => ipc.removeListener('agent-event', handleAgentEvent);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ipc, ctx, partnersRef]);
-
-  // Reset the live context gauge when switching chats (a new run repopulates it).
-  useEffect(() => {
-    setLiveContextUsage(null);
-  }, [activeChatId]);
+    AgentOrchestrator.registerToastTrigger(triggerToast);
+    return () => {
+      AgentOrchestrator.registerToastTrigger(null);
+    };
+  }, [triggerToast]);
 
   // Sync trajectory steps when activeChatId changes (e.g. via routing / back button)
   useEffect(() => {
@@ -1404,6 +1417,8 @@ export const App: React.FC = () => {
                 setSettingsCategory('general');
               }}
               onToast={triggerToast}
+              onUndoStep={handleUndoStep}
+              onEditStep={handleEditStep}
             />
           )}
 
@@ -1552,6 +1567,8 @@ export const App: React.FC = () => {
                 setSettingsCategory('general');
               }}
               onToast={triggerToast}
+              onUndoStep={handleUndoStep}
+              onEditStep={handleEditStep}
             />
           )}
           </ErrorBoundary>

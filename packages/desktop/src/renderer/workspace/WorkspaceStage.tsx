@@ -15,11 +15,15 @@ interface WorkspaceStageProps {
   onViewDiff: (filename: string, originalCode: string, modifiedCode: string) => void;
   onOpenSettings: () => void;
   onToast: (msg: string) => void;
+  onUndoStep?: (stepId: string) => void;
+  onEditStep?: (stepId: string, newContent: string) => void;
 }
 
 export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
   activeProject,
   onToast,
+  onUndoStep,
+  onEditStep,
 }) => {
   const activeChatId = useChatStore((s) => s.activeChatId) || 'draft-chat';
 
@@ -43,7 +47,11 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
         {activeChatId ? (
           <div className="flex-1 flex flex-col min-h-0 relative space-y-2">
             <div className="flex-1 min-h-0">
-              <MessageCanvas chatId={activeChatId} />
+              <MessageCanvas
+                chatId={activeChatId}
+                onUndoStep={onUndoStep}
+                onEditStep={onEditStep}
+              />
             </div>
             {/* Global composer bar at the bottom */}
             <div className="shrink-0">
