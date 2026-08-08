@@ -44,7 +44,9 @@ export class AgentOrchestrator {
         providerStore.getState().lastUsedModel ||
         providerStore.getState().models.find((m) => m.enabled)?.name ||
         '';
-      const proj = chatStore.getState().activeProject || chatStore.getState().draftProject || '';
+      const proj = chatStore.getState().draftProject !== undefined
+        ? chatStore.getState().draftProject
+        : (chatStore.getState().activeProject || '');
 
       const newChat: StoredChat = {
         id: uniqueChatId,

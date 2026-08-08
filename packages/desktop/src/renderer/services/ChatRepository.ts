@@ -106,7 +106,7 @@ export class ChatRepository {
   }
 
   static async createChat(projectName?: string): Promise<string> {
-    const proj = projectName || chatStore.getState().activeProject || chatStore.getState().projects[0]?.name || '';
+    const proj = typeof projectName === 'string' ? projectName : (chatStore.getState().activeProject || '');
     const newChatId = FormatUtils.generateStorageId();
     const defaultModel =
       providerStore.getState().lastUsedModel ||

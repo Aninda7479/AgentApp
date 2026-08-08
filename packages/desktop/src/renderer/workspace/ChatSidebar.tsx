@@ -46,7 +46,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({ onOpenSettings }) => {
             <span className="font-bold text-sm text-slate-100 tracking-wide">SuperAgent</span>
           </div>
           <button
-            onClick={() => handleNewChat()}
+            onClick={() => handleNewChat('')}
             className="p-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition-colors"
             title="New Standalone Chat"
           >

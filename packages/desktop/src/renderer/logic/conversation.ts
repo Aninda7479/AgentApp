@@ -216,9 +216,11 @@ export class ConversationService {
    * trajectory and navigates to the trajectory view.
    */
   static newChat(ctx: AppContext, forProject?: string): void {
-    const targetProject = forProject !== undefined ? forProject : ctx.getActiveProject();
+    const targetProject = typeof forProject === 'string' ? forProject : ctx.getActiveProject();
     ctx.setActiveProject(targetProject || '');
     ctx.setDraftProject(targetProject || '');
+    chatStore.setActiveProject(targetProject || '');
+    chatStore.setDraftProject(targetProject || '');
     ctx.setActiveChatId('draft-chat');
     ctx.setTrajectorySteps([]);
     chatStore.setSteps('draft-chat', []);

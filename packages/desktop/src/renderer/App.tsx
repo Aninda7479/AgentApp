@@ -17,6 +17,7 @@ import type { InternetAccessLevel } from './pages/Settings/types';
 import { CreateProjectModal } from './pages/Workspace/CreateProjectModal';
 import { ConfigureProjectModal } from './pages/Workspace/ConfigureProjectModal';
 import { ChatSettingsModal } from './pages/Workspace/ChatSettingsModal';
+import { NewChatModal } from './components/NewChatModal';
 import { TitleBar } from './components/TitleBar';
 import { AppToast } from './components/AppToast';
 import { VoiceIndicator } from './components/VoiceIndicator';
@@ -172,6 +173,7 @@ export const App: React.FC = () => {
   const [activeChatId, setActiveChatId] = useState<string | null>(initialRoute.activeChatId);
   const [draftProject, setDraftProject] = useState<string>('');
   const [lastUsedModel, setLastUsedModel] = useState<string>('');
+  const [isNewChatOpen, setIsNewChatOpen] = useState<boolean>(false);
   const [isCreateProjectOpen, setIsCreateProjectOpen] = useState<boolean>(false);
   const [isConfigureProjectOpen, setIsConfigureProjectOpen] = useState<boolean>(false);
   const [projectToConfigure, setProjectToConfigure] = useState<StoredProject | null>(null);
@@ -624,7 +626,13 @@ export const App: React.FC = () => {
   const handleSelectProject = (project: string) => ConversationService.selectProject(ctx, project);
   const handleSelectChat = (chatId: string) => ConversationService.selectChat(ctx, chatId);
   const handleDeleteChat = (chatId: string) => ConversationService.deleteChat(ctx, chatId);
-  const handleNewChat = (forProject?: string) => ConversationService.newChat(ctx, forProject);
+  const handleNewChat = (forProject?: string) => {
+    if (forProject !== undefined) {
+      ConversationService.newChat(ctx, forProject);
+    } else {
+      setIsNewChatOpen(true);
+    }
+  };
   const handleUndoStep = (stepId: string) => ConversationService.undoStep(ctx, stepId);
   const handleReviewDiff = (filename: string) => ConversationService.reviewDiff(ctx, filename);
   const handleSelectSearchChat = (chatTitle: string, projectContext?: string) =>
@@ -1573,6 +1581,15 @@ export const App: React.FC = () => {
           setActiveTab('settings');
           setSettingsCategory('general');
         }}
+      />
+
+      {/* New Chat Destination Modal */}
+      <NewChatModal
+        isOpen={isNewChatOpen}
+        onClose={() => setIsNewChatOpen(false)}
+        projects={projects}
+        activeProject={activeProject}
+        onStartChat={(projectName) => ConversationService.newChat(ctx, projectName)}
       />
 
       {/* Create Project Modal */}
