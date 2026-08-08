@@ -265,6 +265,7 @@ export const App: React.FC = () => {
         const prevMeta = prev.map(c => ({
           id: c.id,
           title: c.title,
+          project: c.project,
           model: c.model,
           timestamp: c.timestamp,
           isRunning: c.isRunning,
@@ -274,6 +275,7 @@ export const App: React.FC = () => {
         const nextMeta = state.chats.map(c => ({
           id: c.id,
           title: c.title,
+          project: c.project,
           model: c.model,
           timestamp: c.timestamp,
           isRunning: c.isRunning,

@@ -118,7 +118,7 @@ export class AgentService {
     }
   ): void {
     const startedAt = args.runStartedAt;
-    const sessionId = args.chatId.startsWith('session-') ? args.chatId : `session-${args.chatId}`;
+    const sessionId = args.sessionId || (args.chatId.startsWith('session-') ? args.chatId : `session-${args.chatId}`);
     ctx.ipc
       ?.invoke('agent-run', {
         sessionId,

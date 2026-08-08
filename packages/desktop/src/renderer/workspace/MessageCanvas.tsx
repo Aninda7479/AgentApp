@@ -3,12 +3,13 @@
  * Displays steps, streaming output, context gauge, and agent controls for a specific chat panel.
  */
 
-import React, { useRef, useEffect } from 'react';
-import { Bot, Square, Loader2, RefreshCw, AlertTriangle, ChevronRight } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { Bot, Square, Loader2, RefreshCw, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react';
 import { useTrajectory } from '../hooks/useTrajectory';
 import { useAgent } from '../hooks/useAgent';
 import { StepRenderer } from './StepRenderer';
-import { useChatStore } from '../stores/chatStore';
+import { chatStore, useChatStore } from '../stores/chatStore';
+import { ChatRepository } from '../services/ChatRepository';
 
 interface MessageCanvasProps {
   chatId: string;
@@ -20,11 +21,28 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({ chatId, onClosePan
   const { isRunning, lastError, contextUsage, stopRun } = useAgent(chatId);
   const chat = useChatStore((s) => s.chats.find((c) => c.id === chatId));
   const activeProject = useChatStore((s) => s.activeProject);
+  const projects = useChatStore((s) => s.projects);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [steps.length, isRunning]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!triggerRef.current?.contains(target) && !popupRef.current?.contains(target)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpen]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -34,7 +52,70 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({ chatId, onClosePan
           <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-sm shadow-cyan-500/50 shrink-0 mr-1" />
           <span className="hover:text-slate-200 transition-colors">Workspace</span>
           <ChevronRight size={12} className="shrink-0 text-slate-500" />
-          <span className="font-medium text-slate-300 truncate max-w-[150px]">{activeProject || 'No Project'}</span>
+          {steps.length === 0 ? (
+            <div className="relative inline-block text-left">
+              <button
+                ref={triggerRef}
+                onClick={() => setMenuOpen(!menuOpen)}
+                className="flex items-center gap-1.5 bg-slate-950/80 hover:bg-slate-900 border border-slate-800/60 hover:border-slate-700/80 text-slate-300 hover:text-slate-100 rounded-md px-2 py-0.5 text-[10px] outline-none transition-all font-medium cursor-pointer"
+              >
+                <span>{chat?.project || 'No Project'}</span>
+                <ChevronDown size={10} className={`text-slate-500 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {menuOpen && (
+                <div
+                  ref={popupRef}
+                  className="absolute left-0 mt-1 w-44 z-[9999] bg-slate-950 border border-slate-800 rounded-xl shadow-xl p-1 duration-100 animate-in fade-in slide-in-from-top-1"
+                >
+                  <div
+                    onClick={() => {
+                      chatStore.setActiveProject('');
+                      chatStore.setState((prev) => ({
+                        chats: prev.chats.map((c) => (c.id === chatId ? { ...c, project: '' } : c)),
+                      }));
+                      setMenuOpen(false);
+                      ChatRepository.persistAll().catch(console.error);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs cursor-pointer font-medium transition-colors ${
+                      !chat?.project
+                        ? 'bg-cyan-500/10 text-cyan-300 font-semibold border border-cyan-500/10'
+                        : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                    }`}
+                  >
+                    No Project
+                  </div>
+                  {projects.map((p) => {
+                    const isSelected = chat?.project === p.name;
+                    return (
+                      <div
+                        key={p.name}
+                        onClick={() => {
+                          chatStore.setActiveProject(p.name);
+                          chatStore.setState((prev) => ({
+                            chats: prev.chats.map((c) => (c.id === chatId ? { ...c, project: p.name } : c)),
+                          }));
+                          setMenuOpen(false);
+                          ChatRepository.persistAll().catch(console.error);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs cursor-pointer font-medium transition-colors ${
+                          isSelected
+                            ? 'bg-cyan-500/10 text-cyan-300 font-semibold border border-cyan-500/10'
+                            : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                        }`}
+                      >
+                        {p.name}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <span className="font-medium text-slate-300 truncate max-w-[150px]">
+              {activeProject || 'No Project'}
+            </span>
+          )}
           <ChevronRight size={12} className="shrink-0 text-slate-500" />
           <span className="font-semibold text-sm text-slate-100 truncate">
             {chat?.title || 'Active Session'}
