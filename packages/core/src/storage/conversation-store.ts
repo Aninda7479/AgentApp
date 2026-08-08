@@ -426,13 +426,26 @@ export async function writeConversationStore(data: StoreData, userDataDir: strin
   await ensureDirectory(roots.chatsDir);
 
   try {
-    SettingsStorage.saveSettings({
-      providers: data.connectedProviders as any,
-      models: data.modelsCatalog as any
-    });
+    // Only write providers/models when the arrays are non-empty.
+    // An empty array most likely means the renderer is still bootstrapping and
+    // hasn't loaded the stored data yet. Passing undefined tells saveSettings
+    // to keep whatever is already on disk, preventing a race-condition wipe.
+    const providersToWrite = Array.isArray(data.connectedProviders) && data.connectedProviders.length > 0
+      ? data.connectedProviders as any
+      : undefined;
+    const modelsToWrite = Array.isArray(data.modelsCatalog) && data.modelsCatalog.length > 0
+      ? data.modelsCatalog as any
+      : undefined;
+    if (providersToWrite !== undefined || modelsToWrite !== undefined) {
+      SettingsStorage.saveSettings({
+        providers: providersToWrite,
+        models: modelsToWrite
+      });
+    }
   } catch (e) {
     console.error('Failed to write unified settings:', e);
   }
+
 
   const projectRecords = buildProjectRecords(data.projects ?? []);
   const activeProjectKeys = new Set(projectRecords.map((project) => project.storageKey));

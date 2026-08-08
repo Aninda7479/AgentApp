@@ -9,6 +9,7 @@ import { ModelPicker } from './ModelPicker';
 import { useSlashCommands } from '../hooks/useSlashCommands';
 import type { ComposerOptions, ComposerAttachment } from '../core/types';
 import { getIpc } from '../lib/electron';
+import { useLastUsedModel, providerStore } from '../stores/providerStore';
 
 interface ComposerBarProps {
   onSend: (prompt: string, options: ComposerOptions, attachments: ComposerAttachment[]) => void;
@@ -23,7 +24,7 @@ const SpeechRecognitionCtor: any =
 
 export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) => {
   const [prompt, setPrompt] = useState('');
-  const [selectedModel, setSelectedModel] = useState('');
+  const lastUsedModel = useLastUsedModel();
   const [approvalMode, setApprovalMode] = useState<'ask' | 'always' | 'never'>('ask');
   const [sandbox, setSandbox] = useState(true);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
@@ -31,6 +32,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
 
   // Workspace Voice Typing setting
   const [workspaceVoiceEnabled, setWorkspaceVoiceEnabled] = useState<boolean>(true);
+  const [orchestratorEnabled, setOrchestratorEnabled] = useState<boolean>(true);
 
   // Voice dictation
   const [listening, setListening] = useState(false);
@@ -44,28 +46,33 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
     if (!ipcRenderer) return;
     let active = true;
 
-    const applyVoiceSettings = (settings: any) => {
+    const applySettings = (settings: any) => {
       if (!active) return;
+      
+      // Voice dictation typing target
       const voice = settings?.voice || {};
       const tTarget = voice.typingTarget;
       const tEnabled = voice.typingEnabled;
-      
-      let enabled = true;
+      let voiceEnabled = true;
       if (tTarget !== undefined) {
-        enabled = tTarget === 'both' || tTarget === 'composer';
+        voiceEnabled = tTarget === 'both' || tTarget === 'composer';
       } else if (tEnabled !== undefined) {
-        enabled = Boolean(tEnabled);
+        voiceEnabled = Boolean(tEnabled);
       } else {
-        enabled = true;
+        voiceEnabled = true;
       }
+      setWorkspaceVoiceEnabled(voiceEnabled);
 
-      setWorkspaceVoiceEnabled(enabled);
+      // Orchestrator enabled status
+      const gov = settings?.orchestrator || settings?.modelGov || {};
+      const orchEnabled = gov.enabled !== undefined ? !!gov.enabled : true;
+      setOrchestratorEnabled(orchEnabled);
     };
 
-    ipcRenderer.invoke('settings-read').then(applyVoiceSettings).catch(() => { /* leave defaults */ });
+    ipcRenderer.invoke('settings-read').then(applySettings).catch(() => { /* leave defaults */ });
 
     const onSettingsChanged = (_e: any, settings: any) => {
-      applyVoiceSettings(settings);
+      applySettings(settings);
     };
     ipcRenderer.on('settings-changed', onSettingsChanged);
 
@@ -127,7 +134,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
     onSend(
       trimmed,
       {
-        model: selectedModel,
+        model: lastUsedModel,
         approvalMode,
         sandbox,
       },
@@ -273,7 +280,11 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
         {/* Toolbar Controls */}
         <div className="flex items-center justify-between pt-2 border-t border-brand-border select-none">
           <div className="flex items-center gap-2 flex-wrap">
-            <ModelPicker selectedModel={selectedModel} onSelectModel={setSelectedModel} />
+            <ModelPicker
+              selectedModel={lastUsedModel}
+              onSelectModel={(model) => providerStore.setLastUsedModel(model)}
+              orchestratorEnabled={orchestratorEnabled}
+            />
 
             <label className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-brand-bg hover:bg-brand-bg/80 text-brand-textMuted hover:text-brand-textMain text-xs cursor-pointer border border-brand-border transition-colors">
               <Paperclip size={14} />

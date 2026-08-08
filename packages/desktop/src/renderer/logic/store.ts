@@ -13,6 +13,7 @@ import type {
   StoredChat,
   TrajectoryStep
 } from './types';
+import { providerStore } from '../stores/providerStore';
 
 /**
  * Residency (LRU) of chat trajectories in RAM. Only the chats the user is
@@ -94,6 +95,13 @@ export class StoreService {
     ctx.setProjects(stored.projects);
     ctx.setConnectedProviders(stored.connectedProviders);
     ctx.setModelsCatalog(stored.modelsCatalog);
+
+    if (stored.connectedProviders.length > 0) {
+      providerStore.setProviders(stored.connectedProviders);
+    }
+    if (stored.modelsCatalog.length > 0) {
+      providerStore.setModels(stored.modelsCatalog);
+    }
 
     // Only the ACTIVE chat's steps stay resident; every other chat is held
     // metadata-only (its steps are re-read from disk on open via

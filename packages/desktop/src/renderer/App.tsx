@@ -292,9 +292,25 @@ export const App: React.FC = () => {
 
     const unsubProvider = providerStore.subscribe(() => {
       const state = providerStore.getState();
-      setConnectedProviders((prev) => (JSON.stringify(prev) === JSON.stringify(state.providers) ? prev : state.providers as any));
-      setModelsCatalog((prev) => (JSON.stringify(prev) === JSON.stringify(state.models) ? prev : state.models as any));
-      setLastUsedModel((prev) => (prev === state.lastUsedModel ? prev : state.lastUsedModel));
+      if (state.providers.length > 0) {
+        setConnectedProviders((prev) => (JSON.stringify(prev) === JSON.stringify(state.providers) ? prev : state.providers as any));
+      }
+      if (state.models.length > 0) {
+        setModelsCatalog((prev) => (JSON.stringify(prev) === JSON.stringify(state.models) ? prev : state.models as any));
+      }
+    });
+
+    const unsubModel = providerStore.subscribeModel(() => {
+      const state = providerStore.getState();
+      if (state.lastUsedModel) {
+        setLastUsedModel((prev) => {
+          if (prev !== state.lastUsedModel) {
+            SettingsService.persistLastUsedModel(ctx, state.lastUsedModel);
+            return state.lastUsedModel;
+          }
+          return prev;
+        });
+      }
     });
 
     const unsubSession = sessionStore.subscribe(() => {
@@ -304,6 +320,7 @@ export const App: React.FC = () => {
     return () => {
       unsubChat();
       unsubProvider();
+      unsubModel();
       unsubSession();
     };
   }, []);
@@ -318,10 +335,22 @@ export const App: React.FC = () => {
   }, [projects, chats, activeChatId, activeProject, draftProject]);
 
   useEffect(() => {
-    providerStore.setProviders(connectedProviders);
-    providerStore.setModels(modelsCatalog);
-    providerStore.setLastUsedModel(lastUsedModel);
-  }, [connectedProviders, modelsCatalog, lastUsedModel]);
+    if (connectedProviders.length > 0) {
+      providerStore.setProviders(connectedProviders);
+    }
+  }, [connectedProviders]);
+
+  useEffect(() => {
+    if (modelsCatalog.length > 0) {
+      providerStore.setModels(modelsCatalog);
+    }
+  }, [modelsCatalog]);
+
+  useEffect(() => {
+    if (lastUsedModel) {
+      providerStore.setLastUsedModel(lastUsedModel);
+    }
+  }, [lastUsedModel]);
 
   // Sync trajectorySteps from React state to Zustand chatStore
   useEffect(() => {
@@ -826,6 +855,38 @@ export const App: React.FC = () => {
     ipc.invoke('app-version').then((v: string) => setAppVersion(v)).catch(() => { });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Listen to settings-changed to update states, and apply Orchestrator fallback if disabled
+  useEffect(() => {
+    if (!ipc) return;
+
+    const applyOrchestratorFallback = (settings: any) => {
+      const gov = settings?.orchestrator || settings?.modelGov || {};
+      const orchEnabled = gov.enabled !== undefined ? !!gov.enabled : true;
+
+      if (!orchEnabled) {
+        const currentModel = providerStore.getState().lastUsedModel;
+        if (currentModel === 'Orchestrator' || currentModel === 'auto' || currentModel === 'Model Governance' || !currentModel) {
+          const firstModel = modelsCatalog.find((m) => m.enabled)?.name || providerStore.getState().models.find((m) => m.enabled)?.name || providerStore.getState().models[0]?.name || '';
+          if (firstModel && firstModel !== currentModel) {
+            console.log(`[App] Orchestrator disabled. Fallback to model: ${firstModel}`);
+            providerStore.setLastUsedModel(firstModel);
+          }
+        }
+      }
+    };
+
+    ipc.invoke('settings-read').then(applyOrchestratorFallback).catch(() => {});
+
+    const onSettingsChanged = (_e: any, settings: any) => {
+      applyOrchestratorFallback(settings);
+    };
+    ipc.on('settings-changed', onSettingsChanged);
+
+    return () => {
+      ipc.removeListener('settings-changed', onSettingsChanged);
+    };
+  }, [ipc, modelsCatalog]);
 
   // Auto-close the mobile navigation drawer whenever the user navigates.
   useEffect(() => {

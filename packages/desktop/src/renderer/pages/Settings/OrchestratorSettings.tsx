@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { ModelConfig, ProviderConnection } from './types';
-import { Scale, Save, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award, Sparkles, Coins, Cpu, Layers, Zap, Bot, Brain, Activity, Search, Circle } from 'lucide-react';
+import { Scale, Check, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award, Sparkles, Coins, Cpu, Layers, Zap, Bot, Brain, Activity, Search, Circle } from 'lucide-react';
 import { Button, Select, Toggle } from '../../components/ui';
 import { getIpc } from '../../lib/electron';
 
@@ -65,9 +65,12 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
   const [freeOnly, setFreeOnly] = useState(false);
   const [instructions, setInstructions] = useState('');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [updatingPrice, setUpdatingPrice] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  
+  // Auto-save status feedback
+  const [savingStatus, setSavingStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Live provider-health diagnostics (the resilience signal).
   const [health, setHealth] = useState<Record<string, { status: string; cooldownRemainingMs: number; consecutiveFailures: number }>>({});
@@ -125,20 +128,29 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
     }
   };
 
-  const handleSave = async () => {
-    if (!ipc) return;
-    setSaving(true);
-    setMessage(null);
+  const saveConfig = async (updates: {
+    enabled?: boolean;
+    enabledModels?: string[];
+    autoUpdateInstructions?: boolean;
+    optimizationGoal?: 'quality' | 'cost' | 'balanced';
+    routingStrategy?: 'orchestrator' | 'router';
+    reasoningEffort?: 'off' | 'low' | 'medium' | 'high';
+    categoryOverrides?: Record<string, string>;
+    freeOnly?: boolean;
+    instructionsText?: string;
+  }) => {
+    if (!ipc || loading) return;
+    setSavingStatus('saving');
     try {
       const patch = {
-        enabled,
-        enabledModels,
-        autoUpdateInstructions: autoUpdate,
-        optimizationGoal,
-        routingStrategy,
-        reasoningEffort,
-        categoryOverrides,
-        freeOnly
+        enabled: updates.enabled !== undefined ? updates.enabled : enabled,
+        enabledModels: updates.enabledModels !== undefined ? updates.enabledModels : enabledModels,
+        autoUpdateInstructions: updates.autoUpdateInstructions !== undefined ? updates.autoUpdateInstructions : autoUpdate,
+        optimizationGoal: updates.optimizationGoal !== undefined ? updates.optimizationGoal : optimizationGoal,
+        routingStrategy: updates.routingStrategy !== undefined ? updates.routingStrategy : routingStrategy,
+        reasoningEffort: updates.reasoningEffort !== undefined ? updates.reasoningEffort : reasoningEffort,
+        categoryOverrides: updates.categoryOverrides !== undefined ? updates.categoryOverrides : categoryOverrides,
+        freeOnly: updates.freeOnly !== undefined ? updates.freeOnly : freeOnly,
       };
 
       // Save configuration patch
@@ -147,18 +159,23 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
         modelGov: patch
       });
 
-      // Write instructions markdown file
-      await ipc.invoke('orchestrator-write-instructions', instructions);
-      setMessage({ text: 'Orchestrator settings and system instructions saved successfully!', type: 'success' });
-      
-      // Re-load instructions in case they were dynamically recompiled in background
-      const inst = await ipc.invoke('orchestrator-read-instructions') as string;
-      setInstructions(inst);
+      // Write instructions markdown file if provided
+      const finalInstructions = updates.instructionsText !== undefined ? updates.instructionsText : instructions;
+      await ipc.invoke('orchestrator-write-instructions', finalInstructions);
+
+      setSavingStatus('saved');
+      setTimeout(() => {
+        setSavingStatus('idle');
+      }, 2000);
     } catch (e: any) {
-      setMessage({ text: `Failed to save changes: ${e.message}`, type: 'error' });
-    } finally {
-      setSaving(false);
+      setSavingStatus('idle');
+      setMessage({ text: `Failed to auto-save settings: ${e.message}`, type: 'error' });
     }
+  };
+
+  const handleToggleEnabled = (val: boolean) => {
+    setEnabled(val);
+    saveConfig({ enabled: val });
   };
 
   const handleAutoUpdateNow = async () => {
@@ -218,6 +235,7 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
     }
   };
 
+
   const toggleModelSelection = (modelId: string) => {
     // If Free Only is enabled, do not allow selecting a paid model
     const m = availableCatalog.find(model => model.id === modelId);
@@ -225,34 +243,61 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
       setMessage({ text: 'Cannot enable paid models when "Free Only" mode is active.', type: 'error' });
       return;
     }
-    setEnabledModels(prev =>
-      prev.includes(modelId) ? prev.filter(id => id !== modelId) : [...prev, modelId]
-    );
+    const updated = enabledModels.includes(modelId)
+      ? enabledModels.filter(id => id !== modelId)
+      : [...enabledModels, modelId];
+    setEnabledModels(updated);
+    saveConfig({ enabledModels: updated });
   };
 
   const selectAllModels = () => {
-    if (freeOnly) {
-      setEnabledModels(availableCatalog.filter(m => m.free).map(m => m.id));
-    } else {
-      setEnabledModels(availableCatalog.map(m => m.id));
-    }
+    const updated = freeOnly
+      ? availableCatalog.filter(m => m.free).map(m => m.id)
+      : availableCatalog.map(m => m.id);
+    setEnabledModels(updated);
+    saveConfig({ enabledModels: updated });
   };
-  const clearAllModels = () => setEnabledModels([]);
+  
+  const clearAllModels = () => {
+    setEnabledModels([]);
+    saveConfig({ enabledModels: [] });
+  };
 
   const handleOverrideChange = (category: string, value: string) => {
-    setCategoryOverrides(prev => ({
-      ...prev,
+    const updated = {
+      ...categoryOverrides,
       [category]: value
-    }));
+    };
+    setCategoryOverrides(updated);
+    saveConfig({ categoryOverrides: updated });
   };
 
   const handleToggleFreeOnly = (checked: boolean) => {
     setFreeOnly(checked);
     if (checked) {
-      // Auto enable all free models and disable all paid models
       const freeModelIds = availableCatalog.filter(m => m.free).map(m => m.id);
       setEnabledModels(freeModelIds);
+      saveConfig({ freeOnly: checked, enabledModels: freeModelIds });
+    } else {
+      saveConfig({ freeOnly: checked });
     }
+  };
+
+  const handleInstructionsChange = (val: string) => {
+    setInstructions(val);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    timerRef.current = setTimeout(() => {
+      saveConfig({ instructionsText: val });
+    }, 1000);
+  };
+
+  const handleInstructionsBlur = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    saveConfig({ instructionsText: instructions });
   };
 
   useEffect(() => {
@@ -265,6 +310,15 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
     const id = setInterval(refreshHealth, 2000);
     return () => clearInterval(id);
   }, [ipc]);
+
+  // Clean up typing timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
 
   const activeSwarmModels = availableCatalog.filter(m => enabledModels.includes(m.id));
 
@@ -282,7 +336,21 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-brand-border/60 pb-4">
         <div>
-          <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain">Orchestrator</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain">Orchestrator</h1>
+            {savingStatus === 'saving' && (
+              <span className="text-[10px] text-cyan-400 font-mono flex items-center gap-1.5 bg-brand-hover/40 px-2 py-0.5 rounded-full border border-cyan-500/10">
+                <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                <span>Saving...</span>
+              </span>
+            )}
+            {savingStatus === 'saved' && (
+              <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1.5 bg-brand-hover/40 px-2 py-0.5 rounded-full border border-emerald-500/10">
+                <Check className="w-2.5 h-2.5" />
+                <span>All changes saved</span>
+              </span>
+            )}
+          </div>
           <p className="text-xs text-brand-textMuted mt-1">
             Model orchestration layer that auto-routes each query across your enabled models based on complexity, cost, and capability — so no single provider can become a point of failure.
           </p>
@@ -305,15 +373,6 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
           >
             <Sparkles className={`w-3.5 h-3.5 ${optimizing ? 'animate-spin' : ''}`} />
             <span>Optimize by AI</span>
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            variant="primary"
-            size="sm"
-          >
-            <Save className="w-3.5 h-3.5" />
-            <span>{saving ? 'Saving...' : 'Save Settings'}</span>
           </Button>
         </div>
       </div>
@@ -351,7 +410,7 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
         </div>
         <Toggle
           checked={enabled}
-          onChange={(val) => setEnabled(val)}
+          onChange={handleToggleEnabled}
           label={enabled ? 'Enabled' : 'Disabled'}
         />
       </div>
@@ -372,7 +431,11 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
                 { value: 'balanced', label: 'Balanced (Optimal trade-off quality/cost)', icon: <Scale className="w-3.5 h-3.5" /> }
               ]}
               value={optimizationGoal}
-              onChange={(val) => setOptimizationGoal(val as any)}
+              onChange={(val) => {
+                const target = val as 'quality' | 'cost' | 'balanced';
+                setOptimizationGoal(target);
+                saveConfig({ optimizationGoal: target });
+              }}
             />
           </div>
         </div>
@@ -390,7 +453,11 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
                 { value: 'orchestrator', label: 'Orchestrator Mode (Decompose & collaborate)', icon: <Layers className="w-3.5 h-3.5" /> }
               ]}
               value={routingStrategy}
-              onChange={(val) => setRoutingStrategy(val as any)}
+              onChange={(val) => {
+                const target = val as 'orchestrator' | 'router';
+                setRoutingStrategy(target);
+                saveConfig({ routingStrategy: target });
+              }}
             />
           </div>
         </div>
@@ -410,7 +477,11 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
                 { value: 'high', label: 'High (deepest reasoning)', icon: <Brain className="w-3.5 h-3.5" /> }
               ]}
               value={reasoningEffort}
-              onChange={(val) => setReasoningEffort(val as any)}
+              onChange={(val) => {
+                const target = val as 'off' | 'low' | 'medium' | 'high';
+                setReasoningEffort(target);
+                saveConfig({ reasoningEffort: target });
+              }}
             />
             <p className="text-[10px] text-brand-textMuted mt-1.5">
               Overrides per-turn cascade only when no explicit effort is set — hard tasks still escalate.
@@ -680,7 +751,8 @@ export const OrchestratorSettings: React.FC<OrchestratorSettingsProps> = ({
 
         <textarea
           value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
+          onChange={(e) => handleInstructionsChange(e.target.value)}
+          onBlur={handleInstructionsBlur}
           className="w-full h-80 rounded-lg border border-brand-border bg-brand-bg px-3 py-2 text-xs font-mono text-brand-textMain outline-none focus:border-[var(--brand-accent-border)] custom-scrollbar resize-none"
           placeholder="System instructions mapping tasks to capabilities..."
         />
