@@ -480,7 +480,15 @@ export class ArtifactRunner extends EventEmitter {
         runner.server.close();
       }
       if (runner.process) {
-        runner.process.kill('SIGTERM');
+        if (process.platform === 'win32' && runner.process.pid) {
+          try {
+            spawnSync('taskkill', ['/F', '/T', '/PID', String(runner.process.pid)]);
+          } catch (e) {
+            runner.process.kill('SIGKILL');
+          }
+        } else {
+          runner.process.kill('SIGTERM');
+        }
       }
       this.runners.delete(id);
     }
@@ -562,7 +570,7 @@ export class ArtifactRunner extends EventEmitter {
         server.once('listening', () => {
           server.close(() => resolve(port));
         });
-        server.listen(port, '127.0.0.1');
+        server.listen(port);
       };
       checkPort(startPort);
     });
