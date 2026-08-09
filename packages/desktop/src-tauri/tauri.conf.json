@@ -5,7 +5,7 @@
   "identifier": "com.opensource.agentapp",
   "build": {
     "frontendDist": "../dist",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:14692",
     "beforeDevCommand": "npm run build:ui",
     "beforeBuildCommand": "npm run build:ui"
   },

@@ -1,35 +1,40 @@
-# syntax=docker/dockerfile:1
+# Multi-stage Dockerfile for SuperAgent HomeLab / Server deployment on port 14692
 
-# ── Build stage ──────────────────────────────────────────────────────────────
-FROM node:18-bookworm-slim AS build
+# Stage 1: Build Rust Core Daemon
+FROM rust:1.80-alpine AS rust-builder
 WORKDIR /app
+RUN apk add --no-co-cache musl-dev gcc
+COPY packages/core_v2 ./packages/core_v2
+WORKDIR /app/packages/core_v2
+RUN cargo build --release --bin superagent-core-daemon
 
-# Install workspace dependencies first (better layer caching).
-COPY package.json package-lock.json ./
-COPY packages/core/package.json packages/core/
-COPY packages/cli/package.json packages/cli/
-COPY packages/desktop/package.json packages/desktop/
-COPY packages/web/package.json packages/web/
+# Stage 2: Build Web Server & Shared UI
+FROM node:20-alpine AS node-builder
+WORKDIR /app
+COPY package*.json ./
+COPY packages/ui ./packages/ui
+COPY packages/core ./packages/core
+COPY packages/web ./packages/web
 RUN npm ci
+RUN npm run build --workspace=@superagent/ui
+RUN npm run build --workspace=@superagent/web
 
-# Copy sources, then build every workspace (core -> cli -> desktop -> web).
-COPY . .
-RUN npm run build
-
-# ── Runtime stage ────────────────────────────────────────────────────────────
-FROM node:18-bookworm-slim AS runtime
+# Stage 3: Production Runtime Container
+FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV PORT=14692
 ENV HOST=0.0.0.0
-ENV PORT=3000
 
-# The full workspace (incl. node_modules) is carried over; the web server needs
-# @superagent/core and its native deps (sharp/playwright) at runtime.
-COPY --from=build /app /app
+COPY --from=rust-builder /app/packages/core_v2/target/release/superagent-core-daemon /usr/local/bin/superagent-core-daemon
+COPY --from=node-builder /app/package*.json ./
+COPY --from=node-builder /app/packages/web/dist ./packages/web/dist
+COPY --from=node-builder /app/packages/web/package.json ./packages/web/package.json
+COPY --from=node-builder /app/node_modules ./node_modules
 
-EXPOSE 3000
+EXPOSE 14692
 
-# SuperAgent web server (Electron-compatible shared renderer).
-# Update in place:  docker pull <image>:latest && docker restart <container>
-# Or run with watchtower (https://github.com/containrrr/watchtower) for auto-pull.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:14692/api/health || exit 1
+
 CMD ["node", "packages/web/dist/server.js"]

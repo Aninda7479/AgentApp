@@ -1,36 +1,31 @@
 {
   "name": "@superagent/desktop",
   "version": "0.1.0",
-  "description": "SuperAgent desktop app (Electron) — a Codex-inspired autonomous AI agent UI",
+  "description": "SuperAgent Desktop App — Powered by Tauri v2 and Rust Host",
   "license": "GPL-3.0-or-later",
   "repository": {
     "type": "git",
     "url": "https://github.com/Aninda7479/AgentApp.git",
     "directory": "packages/desktop"
   },
-  "main": "dist/main.js",
+  "main": "dist/renderer/entry.bundle.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "npx @tailwindcss/cli -i src/index.css -o dist/index.css && (tsc || true) && (tsc -p models/tsconfig.json || true) && node -e \"const fs=require('fs'),p=require('path');fs.copyFileSync('src/ui.html','dist/ui.html');fs.copyFileSync('src/pet.html','dist/pet.html');fs.copyFileSync('src/circle-search.html','dist/circle-search.html');fs.copyFileSync('src/tray.html','dist/tray.html');fs.copyFileSync('src/overlay.html','dist/overlay.html');if(fs.existsSync('assets')){fs.mkdirSync('dist/assets',{recursive:true});fs.readdirSync('assets').forEach(f=>fs.copyFileSync(p.join('assets',f),p.join('dist/assets',f)));}\" && node -e \"const fs=require('fs'),p=require('path');const sd=p.join('models','lily','v1'),dd=p.join('dist','models','lily','v1');if(fs.existsSync(sd)){fs.mkdirSync(dd,{recursive:true});fs.readdirSync(sd).filter(f=>f.endsWith('.glb')).forEach(f=>fs.copyFileSync(p.join(sd,f),p.join(dd,f)));console.log('[build] copied Lily GLBs to dist/');}else{console.warn('[build] Lily GLBs not found');}\" && node scripts/bundle-renderer.mjs",
-    "dev": "node -e \"const fs=require('fs'),p=require('path');fs.mkdirSync('dist',{recursive:true});fs.copyFileSync('src/ui.html','dist/ui.html');fs.copyFileSync('src/pet.html','dist/pet.html');fs.copyFileSync('src/circle-search.html','dist/circle-search.html');fs.copyFileSync('src/tray.html','dist/tray.html');fs.copyFileSync('src/overlay.html','dist/overlay.html');if(fs.existsSync('assets')){fs.mkdirSync('dist/assets',{recursive:true});fs.readdirSync('assets').forEach(f=>fs.copyFileSync(p.join('assets',f),p.join('dist/assets',f)));}\" && node -e \"const fs=require('fs'),p=require('path');const sd=p.join('models','lily','v1'),dd=p.join('dist','models','lily','v1');if(fs.existsSync(sd)){fs.mkdirSync(dd,{recursive:true});fs.readdirSync(sd).filter(f=>f.endsWith('.glb')).forEach(f=>fs.copyFileSync(p.join(sd,f),p.join(dd,f)));console.log('[build] copied Lily GLBs to dist/');}else{console.warn('[build] Lily GLBs not found');}\" && node scripts/bundle-renderer.mjs && concurrently -n \"tailwind,tsc,models,renderer,electron\" -c \"blue,green,cyan,yellow,magenta\" \"npx @tailwindcss/cli -i src/index.css -o dist/index.css --watch\" \"tsc -w\" \"tsc -p models/tsconfig.json -w\" \"node scripts/bundle-renderer.mjs --watch\" \"nodemon --watch dist/main.js --watch dist/main --watch dist/gateway --watch dist/builder --watch dist/preload --exec electron dist/main.js --dev\"",
-
-
     "build:ui": "node -e \"const fs=require('fs'),p=require('path');fs.mkdirSync('dist',{recursive:true});fs.copyFileSync('src/ui.html','dist/ui.html');fs.copyFileSync('src/pet.html','dist/pet.html');fs.copyFileSync('src/circle-search.html','dist/circle-search.html');fs.copyFileSync('src/tray.html','dist/tray.html');fs.copyFileSync('src/overlay.html','dist/overlay.html');if(fs.existsSync('assets')){fs.mkdirSync('dist/assets',{recursive:true});fs.readdirSync('assets').forEach(f=>fs.copyFileSync(p.join('assets',f),p.join('dist/assets',f)));}\" && node scripts/bundle-renderer.mjs",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
-    "start": "electron dist/main.js",
-    "pack": "node scripts/pack.mjs",
-    "test": "vitest run",
-    "lint:tokens": "node scripts/check-tokens.mjs"
+    "dev": "npx @tauri-apps/cli dev",
+    "build": "npm run build:ui && npx @tauri-apps/cli build",
+    "tauri:dev": "npx @tauri-apps/cli dev",
+    "tauri:build": "npx @tauri-apps/cli build",
+    "test": "vitest run"
   },
   "dependencies": {
     "@superagent/core": "file:../core",
+    "@superagent/ui": "file:../ui",
     "@tauri-apps/api": "^2.2.0",
     "@tauri-apps/plugin-process": "^2.2.0",
     "@tauri-apps/plugin-updater": "^2.2.1",
     "@huggingface/transformers": "^3.5.2",
     "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4",
-    "electron-updater": "^6.8.9",
     "systeminformation": "^5.23.0",
     "esbuild": "^0.25.0",
     "lucide-react": "^1.22.0",
@@ -47,78 +42,9 @@
     "@types/react-dom": "^18.3.0",
     "@types/three": "^0.160.0",
     "concurrently": "^10.0.3",
-    "electron": "^43.0.0",
-    "electron-builder": "^26.0.0",
     "jsdom": "^29.1.1",
-    "nodemon": "^3.1.14",
     "tailwindcss": "^4.3.2",
     "typescript": "^5.6.0",
     "vitest": "^4.1.9"
-  },
-  "build": {
-    "appId": "com.opensource.agentapp",
-    "productName": "SuperAgent",
-    "electronVersion": "43.0.0",
-    "icon": "assets/icon.png",
-    "directories": {
-      "app": ".",
-      "output": "dist-release"
-    },
-    "files": [
-      "dist/**/*",
-      "package.json",
-      "assets/icon.png",
-      "assets/icon.ico",
-      "assets/icon.icns",
-      "assets/icon.svg"
-    ],
-    "extraResources": [
-      {
-        "from": "web",
-        "to": "web"
-      }
-    ],
-    "asar": true,
-    "asarUnpack": [
-      "**/*.node",
-      "**/*.wasm",
-      "**/node_modules/esbuild/**",
-      "**/node_modules/systeminformation/**",
-      "**/node_modules/sharp/**",
-      "**/node_modules/@img/**",
-      "**/node_modules/@modelcontextprotocol/**",
-      "**/node_modules/onnxruntime-web/**"
-    ],
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "Aninda7479",
-        "repo": "AgentApp"
-      }
-    ],
-    "win": {
-      "icon": "assets/icon.ico",
-      "artifactName": "SuperAgent-Setup-${version}.${ext}",
-      "target": [
-        "nsis"
-      ]
-    },
-    "mac": {
-      "icon": "assets/icon.icns",
-      "artifactName": "SuperAgent-${version}.dmg",
-      "target": [
-        "dmg"
-      ],
-      "category": "public.app-category.developer-tool"
-    },
-    "linux": {
-      "icon": "assets/icon.png",
-      "artifactName": "SuperAgent-${version}.AppImage",
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Development"
-    }
   }
 }

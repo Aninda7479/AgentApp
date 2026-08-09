@@ -98,9 +98,16 @@ function makeIpcBridge(
   bridge.invoke = safeInvoke;
   bridge.send = (ch: string, ...a: any[]) => surface.send(ch, ...a);
   bridge.on = (ch: string, fn: (...a: any[]) => void) => surface.on(ch, fn);
-  bridge.off = (ch: string, fn: (...a: any[]) => void) => surface.off(ch, fn);
-  // Aliases used by some call sites.
-  bridge.removeListener = (ch: string, fn: (...a: any[]) => void) => surface.off(ch, fn);
+  const safeOff = (ch: string, fn: (...a: any[]) => void) => {
+    if (typeof surface?.off === 'function') {
+      return surface.off(ch, fn);
+    }
+    if (typeof surface?.removeListener === 'function') {
+      return surface.removeListener(ch, fn);
+    }
+  };
+  bridge.off = safeOff;
+  bridge.removeListener = safeOff;
   bridge.removeAllListeners = (_ch?: string) => {
     /* no-op: renderer can't clear main-side listeners */
   };

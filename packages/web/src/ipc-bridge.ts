@@ -92,6 +92,13 @@ const mockIpcRenderer = {
     listeners.get(channel)!.add(callback);
   },
 
+  off: (channel: string, callback: Function): void => {
+    const channelListeners = listeners.get(channel);
+    if (channelListeners) {
+      channelListeners.delete(callback);
+    }
+  },
+
   removeListener: (channel: string, callback: Function): void => {
     const channelListeners = listeners.get(channel);
     if (channelListeners) {

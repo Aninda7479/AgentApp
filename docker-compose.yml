@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  superagent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: superagent-homelab
+    restart: unless-stopped
+    ports:
+      - "14692:14692"
+    environment:
+      - PORT=14692
+      - HOST=0.0.0.0
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+    volumes:
+      - superagent-data:/root/.superagent
+
+volumes:
+  superagent-data:
