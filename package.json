@@ -17,6 +17,7 @@
   },
   "workspaces": [
     "packages/core",
+    "packages/ui",
     "packages/cli",
     "packages/desktop",
     "packages/web"

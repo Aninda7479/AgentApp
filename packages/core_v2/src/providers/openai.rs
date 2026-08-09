@@ -1,0 +1,223 @@
+use std::collections::HashMap;
+use async_trait::async_trait;
+use futures_util::StreamExt;
+use reqwest::Client;
+use serde_json::json;
+use tokio::sync::mpsc::{channel, Receiver};
+
+use crate::providers::LlmProvider;
+use crate::types::{AgentEvent, ChatMessage, ContentBlock, ModelConfig, Role};
+
+pub struct OpenAiProvider {
+    client: Client,
+}
+
+impl OpenAiProvider {
+    pub fn new() -> Self {
+        Self {
+            client: Client::new(),
+        }
+    }
+
+    fn format_messages(messages: &[ChatMessage]) -> Vec<serde_json::Value> {
+        let mut formatted = Vec::new();
+        for msg in messages {
+            match msg.role {
+                Role::System => {
+                    formatted.push(json!({
+                        "role": "system",
+                        "content": msg.text_content()
+                    }));
+                }
+                Role::User => {
+                    formatted.push(json!({
+                        "role": "user",
+                        "content": msg.text_content()
+                    }));
+                }
+                Role::Assistant => {
+                    let mut tool_calls = Vec::new();
+                    let mut text_parts = Vec::new();
+                    for block in &msg.content {
+                        match block {
+                            ContentBlock::Text { text } => text_parts.push(text.clone()),
+                            ContentBlock::ToolUse { id, name, input } => {
+                                tool_calls.push(json!({
+                                    "id": id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": name,
+                                        "arguments": input.to_string()
+                                    }
+                                }));
+                            }
+                            _ => {}
+                        }
+                    }
+                    let mut obj = serde_json::Map::new();
+                    obj.insert("role".into(), json!("assistant"));
+                    if !text_parts.is_empty() {
+                        obj.insert("content".into(), json!(text_parts.join("\n")));
+                    } else {
+                        obj.insert("content".into(), serde_json::Value::Null);
+                    }
+                    if !tool_calls.is_empty() {
+                        obj.insert("tool_calls".into(), json!(tool_calls));
+                    }
+                    formatted.push(serde_json::Value::Object(obj));
+                }
+                Role::Tool => {
+                    for block in &msg.content {
+                        if let ContentBlock::ToolResult { tool_use_id, content, .. } = block {
+                            formatted.push(json!({
+                                "role": "tool",
+                                "tool_call_id": tool_use_id,
+                                "content": content
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+        formatted
+    }
+}
+
+impl Default for OpenAiProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl LlmProvider for OpenAiProvider {
+    async fn chat_stream(
+        &self,
+        config: &ModelConfig,
+        messages: &[ChatMessage],
+        tools: &[serde_json::Value],
+    ) -> anyhow::Result<Receiver<AgentEvent>> {
+        let base_url = config.get_base_url();
+        let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+
+        let mut payload = json!({
+            "model": config.model_id,
+            "messages": Self::format_messages(messages),
+            "stream": true
+        });
+
+        if let Some(temp) = config.temperature {
+            payload["temperature"] = json!(temp);
+        }
+        if let Some(max_t) = config.max_tokens {
+            payload["max_tokens"] = json!(max_t);
+        }
+        if !tools.is_empty() {
+            payload["tools"] = json!(tools);
+        }
+
+        let mut req = self.client.post(&url).json(&payload);
+        if let Some(ref key) = config.api_key {
+            if !key.is_empty() {
+                req = req.bearer_auth(key);
+            }
+        }
+
+        let res = req.send().await?;
+
+        if !res.status().is_success() {
+            let err_text = res.text().await.unwrap_or_default();
+            anyhow::bail!("OpenAI API error ({url}): {}", err_text);
+        }
+
+        let (tx, rx) = channel(100);
+        let mut stream = res.bytes_stream();
+
+        tokio::spawn(async move {
+            let mut buffer = String::new();
+            let mut tool_calls_map: HashMap<usize, (String, String, String)> = HashMap::new();
+            let mut stop_reason = String::from("stop");
+
+            while let Some(item) = stream.next().await {
+                let bytes = match item {
+                    Ok(b) => b,
+                    Err(e) => {
+                        let _ = tx.send(AgentEvent::Error { message: e.to_string() }).await;
+                        return;
+                    }
+                };
+
+                buffer.push_str(&String::from_utf8_lossy(&bytes));
+
+                while let Some(pos) = buffer.find('\n') {
+                    let line = buffer[..pos].trim_end_matches('\r').trim().to_string();
+                    buffer.drain(..=pos);
+
+                    if line.is_empty() || line.starts_with(':') {
+                        continue;
+                    }
+
+                    if let Some(data_str) = line.strip_prefix("data: ") {
+                        let data_str = data_str.trim();
+                        if data_str == "[DONE]" {
+                            break;
+                        }
+
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(data_str) {
+                            if let Some(choice) = v.get("choices").and_then(|c| c.get(0)) {
+                                if let Some(reason) = choice.get("finish_reason").and_then(|r| r.as_str()) {
+                                    if !reason.is_empty() {
+                                        stop_reason = reason.to_string();
+                                    }
+                                }
+
+                                if let Some(delta) = choice.get("delta") {
+                                    if let Some(content) = delta.get("content").and_then(|c| c.as_str()) {
+                                        if !content.is_empty() {
+                                            if tx.send(AgentEvent::Token { text: content.to_string() }).await.is_err() {
+                                                return;
+                                            }
+                                        }
+                                    }
+
+                                    if let Some(tcs) = delta.get("tool_calls").and_then(|t| t.as_array()) {
+                                        for tc in tcs {
+                                            let idx = tc.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
+                                            let entry = tool_calls_map.entry(idx).or_insert_with(|| (String::new(), String::new(), String::new()));
+
+                                            if let Some(id) = tc.get("id").and_then(|i| i.as_str()) {
+                                                entry.0 = id.to_string();
+                                            }
+                                            if let Some(func) = tc.get("function") {
+                                                if let Some(name) = func.get("name").and_then(|n| n.as_str()) {
+                                                    entry.1.push_str(name);
+                                                }
+                                                if let Some(args) = func.get("arguments").and_then(|a| a.as_str()) {
+                                                    entry.2.push_str(args);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let mut indices: Vec<_> = tool_calls_map.keys().cloned().collect();
+            indices.sort_unstable();
+            for idx in indices {
+                if let Some((id, name, args_str)) = tool_calls_map.remove(&idx) {
+                    let input: serde_json::Value = serde_json::from_str(&args_str)
+                        .unwrap_or_else(|_| json!({ "raw": args_str }));
+                    let _ = tx.send(AgentEvent::ToolCall { id, name, input }).await;
+                }
+            }
+
+            let _ = tx.send(AgentEvent::Finished { stop_reason }).await;
+        });
+
+        Ok(rx)
+    }
+}

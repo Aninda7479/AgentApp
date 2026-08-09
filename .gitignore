@@ -10,7 +10,7 @@ yarn-error.log*
 node_modules/
 jspm_packages/
 .pnpm-store/
-
+target/
 # Build and distribution outputs
 dist/
 dist-release/
