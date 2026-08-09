@@ -159,7 +159,8 @@ describe('CERTAIN-2: tool-loop failure paths', () => {
     const engine = new AgentEngine({
       provider: 'openai', model: 'test', apiKey: 'k',
       extraTools: [makeEchoTool()],
-      permissionMode: 'auto-approve-edits'
+      permissionMode: 'auto-approve-edits',
+      maxIterations: 10
     }, 'max-iter');
 
     const events = await collectEvents(engine, 'Loop forever');

@@ -217,12 +217,14 @@ describe('Step 083: Responsive Left Sidebar Navigation', () => {
   });
 
   it('should limit chat list to 5 chats and render Show 2 more button when there are 7 chats', () => {
+    const now = Date.now();
     const dummyChats = Array.from({ length: 7 }, (_, i) => ({
       id: `chat-${i}`,
       title: `Standalone Chat ${i + 1}`,
       project: '',
       model: 'gpt-4',
       timestamp: 'Just now',
+      startedAt: now - i * 1000,
       steps: []
     }));
 
@@ -508,8 +510,8 @@ describe('Step 082b: Additional Codex UI Sub-components', () => {
         onUseTemplate: () => {}
       })
     );
-    expect(html).toContain('Scheduled');
-    expect(html).toContain('Create your first scheduled task');
+    expect(html).toContain('Automated Triggers');
+    expect(html).toContain('No active scheduled triggers');
   });
 
 

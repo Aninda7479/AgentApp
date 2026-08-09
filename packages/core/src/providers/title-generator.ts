@@ -22,10 +22,12 @@ export interface GenerateTitleAppSettings {
  */
 export function formatLocalTruncatedTitle(rawPrompt: string, maxWords: number): string {
   if (!rawPrompt || !rawPrompt.trim()) return 'New Chat';
-  const words = rawPrompt.trim().split(/\s+/).filter(Boolean);
+  const cleanStr = rawPrompt.trim().replace(/^[\s:\-\_\.#=]+/, '');
+  const words = cleanStr.split(/\s+/).filter(Boolean);
   const targetCount = Math.max(1, maxWords);
   let title = words.slice(0, targetCount).join(' ');
-  if (rawPrompt.length > 25 && words.length > targetCount) {
+  title = title.replace(/[:\,\.\;\!\?]+$/, '').trim();
+  if (cleanStr.length > 25 && words.length > targetCount) {
     title += '...';
   }
   return title || 'New Chat';
@@ -80,7 +82,7 @@ async function fetchTitleFromLLM(options: FetchTitleOptions): Promise<string> {
   const userMessage = `Prompt: "${prompt.slice(0, 500)}"`;
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 6000);
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
     let responseText = '';
@@ -235,6 +237,18 @@ export async function generateChatName(
     targetModel = config.model || 'gpt-4o';
     apiKey = config.apiKey || '';
     baseUrl = config.baseUrl || '';
+  }
+
+  // Fallback lookup: if apiKey or baseUrl are missing, search appSettings.providers
+  if (!apiKey || !baseUrl) {
+    const savedProviders = appSettings?.providers || [];
+    const matched = savedProviders.find(
+      (p) => (p.id || '').toLowerCase() === targetProvider.toLowerCase()
+    );
+    if (matched) {
+      if (!apiKey) apiKey = matched.apiKey || '';
+      if (!baseUrl) baseUrl = matched.baseUrl || '';
+    }
   }
 
   const isLocalProvider = targetProvider.toLowerCase().includes('ollama');

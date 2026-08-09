@@ -2,7 +2,7 @@ import { app, ipcMain, dialog, BrowserWindow, shell, globalShortcut, desktopCapt
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
-import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, isFreeModel, BYOKProviderManager, createProviderAdapter, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, initializeDirectories, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber, resolveProviderFamily, resolveBaseUrl, UserProfileStore, LearningLoopEngine, ProjectInstructionsParser, DEFAULT_AGENT_SYSTEM_PROMPT, buildOrchestratorOptimizerPrompt, BUILTIN_SKILLS } from '@superagent/core';
+import { SettingsStorage, UsageTracker, OrchestratorRouter, OrchestratorStorage, buildRouterPool, buildRequest, isFreeModel, BYOKProviderManager, createProviderAdapter, PlaywrightBrowserEngine, ComputerUse, BrowserLifecycleService, ProviderAutoDetector, enforceNetworkAllowed, MCP_CATALOG, resolveMcpServer, getMcpCatalogEntry, PLUGIN_CATALOG, MARKETPLACE_PLUGINS, SKILL_CATALOG, generateThreeD, ConfirmationHandler, getUserDataDirectory, initializeDirectories, STORAGE_DIRS, providerHealth, AuthStore, startWebServer, stopWebServer, isWebServerRunning, readWebServerLock, WebServerAlreadyRunningError, capabilityRegistry, parseContextLimit, MediaPipelineRouter, AudioTranscriber, resolveProviderFamily, resolveBaseUrl, UserProfileStore, LearningLoopEngine, ProjectInstructionsParser, DEFAULT_AGENT_SYSTEM_PROMPT, buildOrchestratorOptimizerPrompt, BUILTIN_SKILLS, TriggerEngine, type TriggerConfig } from '@superagent/core';
 
 // Keep Electron's cache userData in a standard OS location — NOT inside
 // ~/.superagent, which is the app's own data directory.
@@ -11,6 +11,18 @@ app.setPath('cache', path.join(app.getPath('temp'), 'agentapp-cache'));
 
 // Create all ~/.superagent subdirectories on startup.
 initializeDirectories();
+
+const triggerEngine = new TriggerEngine({
+  storagePath: path.join(getUserDataDirectory(), 'triggers.json'),
+  executor: async (trigger, payload) => {
+    console.log(`[TriggerEngine] Trigger fired: ${trigger.name} (${trigger.id})`);
+    const win = windowManager.getMainWindow();
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('trigger-fired', { trigger, payload, timestamp: new Date().toISOString() });
+    }
+  }
+});
+triggerEngine.start();
 
 import { windowManager } from './main/window';
 import { setupAutoUpdater } from './main/updater';
@@ -347,6 +359,7 @@ safeHandle('agent-run', async (event, {
       // engine's live usage gauge + auto-compaction use the right denominator.
       finalConfig.contextWindow = resolveContextWindow(finalConfig.model, settings?.models);
       engine = new AgentEngine(finalConfig, sessionId);
+      await engine.rehydrateFromStore();
       activeSessions.set(sessionId, engine);
       // Reset context-usage tracking for this run.
       petContextMax = finalConfig.contextWindow ?? 0;
@@ -355,6 +368,14 @@ safeHandle('agent-run', async (event, {
       // Asynchronously generate chat name for the first message of the session
       (async () => {
         try {
+          // Skip generation if this chat session already has a custom title
+          const existingStore = await readStore();
+          const existingChat = existingStore.chats?.find((c) => c.id === sessionId);
+          const currentTitle = existingChat?.title?.trim();
+          if (currentTitle && currentTitle !== 'New Chat' && currentTitle !== 'Draft Chat' && currentTitle !== sessionId) {
+            return;
+          }
+
           const chatName = await generateChatName(prompt, finalConfig, settings);
           
           // Write to chat config file of that folder (if available)
@@ -379,6 +400,17 @@ safeHandle('agent-run', async (event, {
             }
           }
           
+          // Immediately persist generated title to disk store
+          try {
+            const storeToUpdate = await readStore();
+            const updatedChats = (storeToUpdate.chats || []).map((c) =>
+              c.id === sessionId ? { ...c, title: chatName } : c
+            );
+            await writeStore({ ...storeToUpdate, chats: updatedChats });
+          } catch (persistErr) {
+            console.error('[desktop] Failed to persist chatName to store:', persistErr);
+          }
+
           // Emit agent-event of type 'chat-name'
           if (win && !win.isDestroyed()) {
             win.webContents.send('agent-event', {
@@ -776,6 +808,33 @@ safeHandle('kanban-save', (_event, args: { scope: 'global' | 'project'; projectN
     console.error('Failed to save kanban tasks:', err);
     return { success: false, error: err.message };
   }
+});
+
+safeHandle('triggers-list', () => {
+  return triggerEngine.listTriggers();
+});
+
+safeHandle('triggers-create', (_event, config: Omit<TriggerConfig, 'id' | 'runCount'>) => {
+  return triggerEngine.addTrigger(config);
+});
+
+safeHandle('triggers-update', (_event, args: { id: string; updates: Partial<TriggerConfig> }) => {
+  return triggerEngine.updateTrigger(args.id, args.updates);
+});
+
+safeHandle('triggers-remove', (_event, id: string) => {
+  return triggerEngine.removeTrigger(id);
+});
+
+safeHandle('triggers-toggle', (_event, args: { id: string; enabled: boolean }) => {
+  return triggerEngine.updateTrigger(args.id, { enabled: args.enabled });
+});
+
+safeHandle('triggers-run-now', async (_event, id: string) => {
+  const trig = triggerEngine.getTrigger(id);
+  if (!trig) throw new Error(`Trigger ${id} not found`);
+  await triggerEngine.executeTrigger(trig);
+  return triggerEngine.getTrigger(id);
 });
 
 safeHandle('store-write', async (_event, data: StoreData): Promise<void> => {

@@ -118,6 +118,14 @@ export const ALLOWED_CHANNELS = new Set<string>([
   // kanban
   'kanban-load',
   'kanban-save',
+  // triggers / automation
+  'triggers-list',
+  'triggers-create',
+  'triggers-update',
+  'triggers-remove',
+  'triggers-toggle',
+  'triggers-run-now',
+  'trigger-fired',
   // usage
   'usage-records',
   'usage-summary',
