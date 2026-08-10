@@ -20,11 +20,15 @@ export interface IntegrationsSkill {
 export interface IntegrationsPlugin {
   id: string;
   name: string;
+  version?: string;
+  author?: string;
   description: string;
   icon: string;
   category: 'automation' | 'document' | 'media';
   tags: string[];
   defaultEnabled: boolean;
+  skills?: string[];
+  connections?: string[];
   status?: IntegrationStatus;
   source?: 'builtin' | 'marketplace';
 }
@@ -209,44 +213,86 @@ export const IntegrationsSettings: React.FC<IntegrationsSettingsProps> = ({
   const PluginCard: React.FC<{ plugin: IntegrationsPlugin }> = ({ plugin }) => {
     const isUnderDevelopment = plugin.status === 'under-development';
     const enabled = isUnderDevelopment ? false : (pluginEnabled[plugin.id] ?? plugin.defaultEnabled);
+    const hasSkills = plugin.skills && plugin.skills.length > 0;
+    const hasConnections = plugin.connections && plugin.connections.length > 0;
+
     return (
       <div
         data-testid={`integration-plugin-${plugin.id}`}
-        className={`ui-card flex items-center gap-4 p-4 ${isUnderDevelopment ? 'opacity-60' : ''}`}
+        className={`ui-card flex flex-col gap-3 p-4 transition-all ${isUnderDevelopment ? 'opacity-60' : ''}`}
       >
-        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-brand-bg text-2xl">
-          {plugin.icon}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-2">
-            <span className="text-sm font-semibold text-brand-textMain">{plugin.name}</span>
-            {enabled && (
-              <span className="ui-badge constructive">
-                <Check size={10} /> Enabled
-              </span>
-            )}
-            <StatusBadge status={plugin.status} />
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-brand-bg text-2xl border border-brand-border/40">
+              {plugin.icon}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-semibold text-brand-textMain">{plugin.name}</span>
+                {plugin.version && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-brand-bg border border-brand-border/60 text-brand-textMuted font-medium">
+                    v{plugin.version}
+                  </span>
+                )}
+                {enabled && (
+                  <span className="ui-badge constructive">
+                    <Check size={10} /> Enabled
+                  </span>
+                )}
+                <StatusBadge status={plugin.status} />
+              </div>
+              {plugin.author && (
+                <p className="text-[10px] text-brand-textMuted/70 font-mono mt-0.5">by {plugin.author}</p>
+              )}
+            </div>
           </div>
-          <p className="text-xs text-brand-textMuted line-clamp-2">{plugin.description}</p>
+          <button
+            type="button"
+            disabled={isUnderDevelopment}
+            data-testid={`integration-plugin-toggle-${plugin.id}`}
+            onClick={() => {
+              if (isUnderDevelopment) return;
+              onTogglePlugin(plugin.id, !enabled);
+            }}
+            className={`px-3.5 py-1 rounded-lg border text-xs font-semibold transition-all flex-shrink-0 cursor-pointer ${
+              isUnderDevelopment ? 'cursor-not-allowed opacity-50' : ''
+            } ${
+              enabled
+                ? 'border-[var(--brand-accent-border)] bg-[var(--brand-accent-tint)] text-[var(--brand-accent)]'
+                : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-brand-hover hover:text-brand-textMain'
+            }`}
+          >
+            {enabled ? 'On' : 'Off'}
+          </button>
         </div>
-        <button
-          type="button"
-          disabled={isUnderDevelopment}
-          data-testid={`integration-plugin-toggle-${plugin.id}`}
-          onClick={() => {
-            if (isUnderDevelopment) return;
-            onTogglePlugin(plugin.id, !enabled);
-          }}
-          className={`px-3 py-1 rounded-lg border text-xs transition-all flex-shrink-0 ${
-            isUnderDevelopment ? 'cursor-not-allowed' : ''
-          } ${
-            enabled
-              ? 'border-[var(--brand-accent-border)] bg-[var(--brand-accent-tint)] text-[var(--brand-accent)]'
-              : 'border-brand-border bg-brand-bg text-brand-textMuted hover:bg-brand-hover'
-          }`}
-        >
-          {enabled ? 'On' : 'Off'}
-        </button>
+
+        <p className="text-xs text-brand-textMuted leading-relaxed">{plugin.description}</p>
+
+        {/* Skills & Connections bundled tags */}
+        {(hasSkills || hasConnections) && (
+          <div className="flex flex-col gap-1.5 pt-2 border-t border-brand-border/40 text-[11px]">
+            {hasSkills && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-semibold text-brand-textMuted">Skills:</span>
+                {plugin.skills!.map((s) => (
+                  <span key={s} className="px-1.5 py-0.5 rounded bg-[var(--brand-accent)]/10 text-[var(--brand-accent)] border border-[var(--brand-accent)]/20 font-mono text-[10px]">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            )}
+            {hasConnections && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-semibold text-brand-textMuted">Connections:</span>
+                {plugin.connections!.map((c) => (
+                  <span key={c} className="px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-300 border border-violet-500/20 font-mono text-[10px]">
+                    {c}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };

@@ -22,6 +22,24 @@ export interface StoredCredential {
   updatedAt: number;
 }
 
+export interface SessionRecord {
+  id: string;
+  username: string;
+  ip: string;
+  userAgent: string;
+  issuedAt: number;
+  lastSeenAt: number;
+}
+
+export interface LoginHistoryEntry {
+  id: string;
+  timestamp: number;
+  ip: string;
+  userAgent: string;
+  status: 'success' | 'failed';
+  reason?: string;
+}
+
 /** Shape of the on-disk `auth.json` file. */
 export interface AuthFile {
   /** The admin credential, if a password has been set. */
@@ -35,6 +53,10 @@ export interface AuthFile {
    * performed the change.
    */
   sessionVersion?: number;
+  /** Active device sessions tracked by the system. */
+  sessions?: SessionRecord[];
+  /** Log of login attempts (successful and failed). */
+  loginHistory?: LoginHistoryEntry[];
   /** Unix epoch (ms) of the last change to this file. */
   updatedAt?: number;
 }
@@ -250,5 +272,95 @@ export class AuthStore {
       this.write(file);
     }
     return file.sessionSecret;
+  }
+
+  // ─── Session & Login History Management ──────────────────────────────────────
+
+  /** Registers a new active session token for a device. */
+  public static registerSession(
+    sessionId: string,
+    username: string,
+    ip: string,
+    userAgent: string
+  ): SessionRecord {
+    const file = this.read();
+    file.sessions ||= [];
+    const record: SessionRecord = {
+      id: sessionId,
+      username,
+      ip: ip || '127.0.0.1',
+      userAgent: userAgent || 'Unknown Device',
+      issuedAt: Date.now(),
+      lastSeenAt: Date.now()
+    };
+    file.sessions.push(record);
+    this.write(file);
+    return record;
+  }
+
+  /** Returns all active device sessions. */
+  public static getActiveSessions(): SessionRecord[] {
+    return this.read().sessions || [];
+  }
+
+  /** Revokes a specific device session by ID. */
+  public static revokeSession(sessionId: string): boolean {
+    const file = this.read();
+    if (!file.sessions) return false;
+    const initial = file.sessions.length;
+    file.sessions = file.sessions.filter((s) => s.id !== sessionId);
+    if (file.sessions.length !== initial) {
+      this.write(file);
+      return true;
+    }
+    return false;
+  }
+
+  /** Updates the `lastSeenAt` timestamp for an active session. */
+  public static touchSession(sessionId: string): void {
+    const file = this.read();
+    if (!file.sessions) return;
+    const target = file.sessions.find((s) => s.id === sessionId);
+    if (target) {
+      target.lastSeenAt = Date.now();
+      this.write(file);
+    }
+  }
+
+  /** Checks if a session ID has been explicitly revoked or removed. */
+  public static isSessionRevoked(sessionId: string): boolean {
+    const file = this.read();
+    if (!file.sessions || file.sessions.length === 0) return false;
+    return !file.sessions.some((s) => s.id === sessionId);
+  }
+
+  /** Records a successful or failed login attempt to the audit history log. */
+  public static recordLoginAttempt(
+    ip: string,
+    userAgent: string,
+    status: 'success' | 'failed',
+    reason?: string
+  ): void {
+    const file = this.read();
+    file.loginHistory ||= [];
+    file.loginHistory.unshift({
+      id: crypto.randomBytes(8).toString('hex'),
+      timestamp: Date.now(),
+      ip: ip || '127.0.0.1',
+      userAgent: userAgent || 'Unknown Device',
+      status,
+      reason
+    });
+    // Keep max 100 log entries
+    if (file.loginHistory.length > 100) {
+      file.loginHistory = file.loginHistory.slice(0, 100);
+    }
+    this.write(file);
+  }
+
+  /** Returns recent login history entries. */
+  public static getLoginHistory(limit: number = 50): LoginHistoryEntry[] {
+    const history = this.read().loginHistory || [];
+    return history.slice(0, limit);
   }
 }

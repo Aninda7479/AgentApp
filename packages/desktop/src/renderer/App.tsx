@@ -23,7 +23,7 @@ import { AppToast } from './components/AppToast';
 import { GlobalErrorModal, GlobalErrorPayload } from './components/GlobalErrorModal';
 import { VoiceIndicator } from './components/VoiceIndicator';
 import { WorkspaceView } from './pages/Workspace/WorkspaceView';
-import { ProjectSettingsPage } from './pages/Workspace/ProjectSettingsPage';
+import { ProjectSettingsModal } from './pages/Workspace/ProjectSettingsModal';
 import { StandaloneChatPage } from './pages/Workspace/StandaloneChatPage';
 import { builtinSuggestions, SkillInfo } from './components/slashCommands';
 import { BottomNav } from './components/BottomNav';
@@ -1511,24 +1511,21 @@ export const App: React.FC = () => {
             <TasksPage activeProject={activeProject} ipc={ipc} triggerToast={triggerToast} onStartWork={handleStartWorkOnTask} />
           )}
 
-          {activeTab === 'project-settings' && (
-            <ProjectSettingsPage
-              project={projectToConfigure || projects.find((p) => p.name === activeProject) || null}
-              projects={projects}
-              availableSkills={availableSkills}
-              onSave={(updated) => {
-                handleSaveProjectConfig(updated);
-                setProjectToConfigure(updated);
-                triggerToast('Project settings saved');
-              }}
-              onBack={() => setActiveTab('trajectory')}
-              onSelectProject={(name) => {
-                const proj = projects.find((p) => p.name === name) || null;
-                setProjectToConfigure(proj);
-                handleSelectProject(name);
-              }}
-            />
-          )}
+          <ProjectSettingsModal
+            isOpen={activeTab === 'project-settings' || Boolean(projectToConfigure)}
+            onClose={() => {
+              setProjectToConfigure(null);
+              if (activeTab === 'project-settings') setActiveTab('trajectory');
+            }}
+            project={projectToConfigure || projects.find((p) => p.name === activeProject) || null}
+            projectChats={chats.filter((c) => c.project === (projectToConfigure?.name || activeProject))}
+            availableSkills={availableSkills}
+            onSave={(updated) => {
+              handleSaveProjectConfig(updated);
+              setProjectToConfigure(null);
+              triggerToast('Project settings saved');
+            }}
+          />
 
           {activeTab === 'standalone-chat' && (
             <StandaloneChatPage

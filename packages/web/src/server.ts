@@ -49,6 +49,9 @@ import {
   handleStatus,
   handleSetup,
   handleChangePassword,
+  handleGetDevices,
+  handleDeleteDevice,
+  handleGetHistory,
   getAuthenticatedUser,
   isAuthDisabled
 } from './auth.js';
@@ -99,6 +102,9 @@ app.post('/api/auth/login', handleLogin);
 app.post('/api/auth/logout', handleLogout);
 app.get('/api/auth/status', handleStatus);
 app.post('/api/auth/change-password', handleChangePassword);
+app.get('/api/auth/devices', handleGetDevices);
+app.delete('/api/auth/devices/:sessionId', handleDeleteDevice);
+app.get('/api/auth/history', handleGetHistory);
 
 // Serve the standalone login/setup page (public; must stay before the gate).
 app.get('/login', (_req, res) => {

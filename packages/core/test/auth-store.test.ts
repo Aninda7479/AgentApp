@@ -95,4 +95,28 @@ describe('AuthStore', () => {
     expect(a).toBe(b);
     expect(a.length).toBeGreaterThanOrEqual(32);
   });
+
+  it('tracks active sessions and revokes specific device sessions', () => {
+    const s1 = AuthStore.registerSession('sid-1', 'admin', '192.168.1.1', 'Chrome Mobile');
+    const s2 = AuthStore.registerSession('sid-2', 'admin', '192.168.1.2', 'Firefox Desktop');
+    expect(AuthStore.getActiveSessions()).toHaveLength(2);
+    expect(AuthStore.isSessionRevoked('sid-1')).toBe(false);
+
+    const revoked = AuthStore.revokeSession('sid-1');
+    expect(revoked).toBe(true);
+    expect(AuthStore.isSessionRevoked('sid-1')).toBe(true);
+    expect(AuthStore.getActiveSessions()).toHaveLength(1);
+    expect(AuthStore.getActiveSessions()[0].id).toBe('sid-2');
+  });
+
+  it('records and returns login attempt history', () => {
+    AuthStore.recordLoginAttempt('10.0.0.1', 'Safari iOS', 'success');
+    AuthStore.recordLoginAttempt('10.0.0.2', 'Unknown Agent', 'failed', 'Invalid password');
+
+    const history = AuthStore.getLoginHistory();
+    expect(history).toHaveLength(2);
+    expect(history[0].status).toBe('failed');
+    expect(history[0].reason).toBe('Invalid password');
+    expect(history[1].status).toBe('success');
+  });
 });

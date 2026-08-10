@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Check, ShieldCheck, ShieldAlert, Globe } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Check, ShieldCheck, ShieldAlert, Globe, Brain, RefreshCw, Coins, Cpu } from 'lucide-react';
 import { StoredChat, InheritableSandbox, InheritableApproval, InheritableInternet, AgentScopeSettings } from '../../types';
 
 /** Props for the ChatSettingsModal component. */
@@ -7,7 +7,7 @@ interface ChatSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   chat: StoredChat | null;
-  onSave: (settings: AgentScopeSettings) => void;
+  onSave: (settings: AgentScopeSettings & { memory?: string }) => void;
 }
 
 function Segmented<T extends string>(props: {
@@ -38,9 +38,38 @@ function Segmented<T extends string>(props: {
   );
 }
 
+/** Summarizes chat history part by part and enforces a strict 12,000 char (12K) limit. */
+function rebuildChatMemory(steps: any[], currentMem: string): string {
+  if (!steps || steps.length === 0) return currentMem.slice(0, 12000);
+  
+  const CHUNK_SIZE = 8;
+  const chunkSummaries: string[] = [];
+
+  for (let i = 0; i < steps.length; i += CHUNK_SIZE) {
+    const batch = steps.slice(i, i + CHUNK_SIZE);
+    const summary = `• Part ${Math.floor(i / CHUNK_SIZE) + 1} (${batch.length} steps):\n` +
+      batch
+        .filter((s: any) => s.content)
+        .map((s: any) => `  - [${(s.type || 'step').toUpperCase()}]: ${String(s.content).replace(/\n+/g, ' ').slice(0, 140)}`)
+        .join('\n');
+    chunkSummaries.push(summary);
+  }
+
+  let fullMemory = chunkSummaries.join('\n\n');
+  if (currentMem.trim()) {
+    fullMemory = `[Prior Memory]\n${currentMem.trim()}\n\n[Rebuilt History]\n${fullMemory}`;
+  }
+
+  // 12K character limit
+  const LIMIT = 12000;
+  if (fullMemory.length > LIMIT) {
+    fullMemory = fullMemory.slice(0, LIMIT);
+  }
+  return fullMemory;
+}
+
 /**
- * Modal for per-chat Sandbox & Internet overrides. These win over the parent
- * project's settings and the global default for this chat only.
+ * Modal for per-chat Sandbox, Internet, and Memory settings with token/cost tracking.
  */
 export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
   isOpen,
@@ -51,6 +80,8 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
   const [sandbox, setSandbox] = useState<InheritableSandbox>('inherit');
   const [approval, setApproval] = useState<InheritableApproval>('inherit');
   const [internet, setInternet] = useState<InheritableInternet>('inherit');
+  const [memory, setMemory] = useState<string>('');
+  const [isRebuilding, setIsRebuilding] = useState(false);
   const [closing, setClosing] = useState(false);
 
   useEffect(() => {
@@ -59,8 +90,31 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
       setSandbox(chat.settings?.sandbox ?? 'inherit');
       setApproval(chat.settings?.approval ?? 'inherit');
       setInternet(chat.settings?.internet ?? 'inherit');
+      setMemory((chat.standaloneConfig?.memory ?? chat.projectStorageKey) || '');
     }
   }, [isOpen, chat]);
+
+  // Compute token usage & cost for this chat step history
+  const { inputTokens, outputTokens, totalTokens, totalCost } = useMemo(() => {
+    if (!chat || !chat.steps) {
+      return { inputTokens: 0, outputTokens: 0, totalTokens: 0, totalCost: 0 };
+    }
+    let input = 0;
+    let output = 0;
+    for (const s of chat.steps) {
+      const len = s.content ? s.content.length : 0;
+      const est = Math.ceil(len / 4);
+      if (s.type === 'user') {
+        input += est;
+      } else {
+        output += est;
+      }
+    }
+    const tot = input + output;
+    // Estimated $1.50 per 1M input, $4.00 per 1M output
+    const cost = (input * 1.5 + output * 4.0) / 1000000;
+    return { inputTokens: input, outputTokens: output, totalTokens: tot, totalCost: cost };
+  }, [chat]);
 
   if (!isOpen || !chat) return null;
 
@@ -72,8 +126,17 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
     }, 150);
   };
 
+  const handleRebuildMemory = () => {
+    setIsRebuilding(true);
+    setTimeout(() => {
+      const rebuilt = rebuildChatMemory(chat.steps || [], memory);
+      setMemory(rebuilt);
+      setIsRebuilding(false);
+    }, 300);
+  };
+
   const handleSave = () => {
-    onSave({ sandbox, approval, internet });
+    onSave({ sandbox, approval, internet, memory });
     handleDismiss();
   };
 
@@ -87,21 +150,21 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
       }}
     >
       <div
-        className={`bg-brand-sidebar border border-brand-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden text-brand-textMain transition-all duration-150 ${
+        className={`bg-brand-sidebar border border-brand-border rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden text-brand-textMain transition-all duration-150 ${
           closing ? 'opacity-0 scale-95 translate-y-1' : 'opacity-100 scale-100 translate-y-0'
         }`}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-brand-border">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-brand-border bg-black/20">
           <div className="w-9 h-9 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center flex-shrink-0 text-violet-400 font-outfit font-semibold text-sm">
             ⚙️
           </div>
-          <div className="flex flex-col min-w-0">
-            <h3 className="font-semibold text-base text-brand-textMain font-outfit leading-tight">
+          <div className="flex flex-col min-w-0 flex-1">
+            <h3 className="font-semibold text-base text-brand-textMain font-outfit leading-tight truncate">
               Chat Settings: {chat.title}
             </h3>
             <p className="text-xs text-brand-textMuted leading-tight mt-0.5">
-              Override sandbox & internet access for this chat only
+              Permissions, total usage, and 12K memory management
             </p>
           </div>
           <button
@@ -113,8 +176,33 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
           </button>
         </div>
 
+        {/* Usage Stats Banner */}
+        <div className="grid grid-cols-3 gap-2 px-5 py-3 bg-brand-bg/60 border-b border-brand-border/60">
+          <div className="flex flex-col bg-brand-card/40 border border-brand-border/40 rounded-lg p-2 text-center">
+            <span className="text-[10px] text-brand-textMuted font-medium uppercase tracking-wider flex items-center justify-center gap-1">
+              <Cpu size={11} /> Total Tokens
+            </span>
+            <span className="text-sm font-bold font-mono text-brand-textMain mt-0.5">{totalTokens.toLocaleString()}</span>
+          </div>
+          <div className="flex flex-col bg-brand-card/40 border border-brand-border/40 rounded-lg p-2 text-center">
+            <span className="text-[10px] text-brand-textMuted font-medium uppercase tracking-wider">In / Out Tokens</span>
+            <span className="text-xs font-mono text-brand-textMuted mt-0.5">
+              {inputTokens.toLocaleString()} / {outputTokens.toLocaleString()}
+            </span>
+          </div>
+          <div className="flex flex-col bg-brand-card/40 border border-brand-border/40 rounded-lg p-2 text-center">
+            <span className="text-[10px] text-brand-textMuted font-medium uppercase tracking-wider flex items-center justify-center gap-1">
+              <Coins size={11} className="text-amber-400" /> Total Cost
+            </span>
+            <span className="text-sm font-bold font-mono text-amber-400 mt-0.5">
+              ${totalCost < 0.001 ? '< 0.001' : totalCost.toFixed(4)}
+            </span>
+          </div>
+        </div>
+
         {/* Content */}
-        <div className="p-5 flex flex-col gap-5 max-h-[460px] overflow-y-auto custom-scrollbar">
+        <div className="p-5 flex flex-col gap-5 max-h-[480px] overflow-y-auto custom-scrollbar">
+          {/* Sandbox & Permissions */}
           <div className="flex flex-col gap-1.5">
             <span className="text-xs font-bold text-brand-textMuted uppercase tracking-wider flex items-center gap-1.5">
               <ShieldCheck size={13} className="text-[color:var(--neon-constructive)]" /> Sandbox
@@ -128,7 +216,6 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
                 { value: 'full-access', label: 'Full access' }
               ]}
             />
-            <span className="text-[10px] text-brand-textMuted/60">Full access lets the agent read/write anywhere on disk; Sandboxed confines file access to the project's authorized folders.</span>
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -145,7 +232,6 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
                 { value: 'never', label: 'Never approve' }
               ]}
             />
-            <span className="text-[10px] text-brand-textMuted/60">Never approve blocks every command unless it is on the project's allowed-commands list.</span>
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -162,7 +248,35 @@ export const ChatSettingsModal: React.FC<ChatSettingsModalProps> = ({
                 { value: 'none', label: 'None' }
               ]}
             />
-            <span className="text-[10px] text-brand-textMuted/60">Observation only allows read-only GET requests; None blocks web fetch, search, and uploads (the AI provider API still works).</span>
+          </div>
+
+          {/* Memory Section with Rebuild Memory Button */}
+          <div className="flex flex-col gap-2 pt-3 border-t border-brand-border/60">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-brand-textMuted uppercase tracking-wider flex items-center gap-1.5">
+                <Brain size={13} className="text-violet-400" /> Chat Memory (12K Limit)
+              </span>
+              <button
+                type="button"
+                onClick={handleRebuildMemory}
+                disabled={isRebuilding}
+                className="px-2.5 py-1 text-[11px] font-semibold bg-violet-500/15 hover:bg-violet-500/25 text-violet-300 border border-violet-500/30 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw size={11} className={isRebuilding ? 'animate-spin' : ''} />
+                <span>Rebuild Memory</span>
+              </button>
+            </div>
+            <textarea
+              value={memory}
+              onChange={(e) => setMemory(e.target.value)}
+              placeholder="Chat memory context prepended to requests..."
+              rows={4}
+              maxLength={12000}
+              className="w-full resize-y rounded-xl border border-brand-border bg-brand-bg/40 px-3 py-2 text-xs text-brand-textMain font-mono leading-relaxed placeholder:text-brand-textMuted/40 focus:outline-none focus:border-violet-500"
+            />
+            <div className="flex justify-end text-[10px] text-brand-textMuted font-mono">
+              {memory.length} / 12,000 chars
+            </div>
           </div>
         </div>
 

@@ -28,7 +28,7 @@ export type PluginStatus = 'active' | 'under-development' | 'incomplete';
 /** Whether the plugin ships with the app or comes from the marketplace catalog. */
 export type PluginSource = 'builtin' | 'marketplace';
 
-/** A single built-in plugin definition. */
+/** A single built-in or custom plugin definition. Plugins bundle skills and connections into toggleable packages. */
 export interface PluginCatalogEntry {
   /** Stable plugin id (e.g. `browser-use`). */
   id: string;
@@ -36,6 +36,10 @@ export interface PluginCatalogEntry {
   capability: PluginCapability;
   /** Display name. */
   name: string;
+  /** Plugin semantic version string (e.g. "1.0.0"). */
+  version?: string;
+  /** Plugin author or maintainer (e.g. "SuperAgent Team"). */
+  author?: string;
   /** One-line description. */
   description: string;
   /** Emoji/icon shown in the plugin card. */
@@ -44,6 +48,10 @@ export interface PluginCatalogEntry {
   category: PluginCategory;
   /** Whether the plugin ships enabled by default. */
   defaultEnabled: boolean;
+  /** Array of bundled Skill IDs or custom skill names. */
+  skills?: string[];
+  /** Array of bundled Connection/MCP IDs or custom connection names. */
+  connections?: string[];
   /** Free-form tags. */
   tags: string[];
   /** Readiness status. Built-ins default to `active`; marketplace items are `under-development`. */
@@ -52,76 +60,104 @@ export interface PluginCatalogEntry {
   source?: PluginSource;
 }
 
-/** The seven built-in plugins. */
+/** The seven built-in plugins redefined as Skill + Connection bundles. */
 export const PLUGIN_CATALOG: PluginCatalogEntry[] = [
   {
     id: 'browser-use',
     capability: 'browserUse',
     name: 'Browser Use',
+    version: '1.2.0',
+    author: 'SuperAgent Core Team',
     description: 'Drive a real browser to research, navigate, and act on the web.',
     icon: '🌐',
     category: 'automation',
     defaultEnabled: true,
+    skills: ['web-search', 'browser-navigation', 'form-filler'],
+    connections: ['chrome-devtools-mcp', 'playwright-bridge'],
     tags: ['web', 'automation']
   },
   {
     id: 'computer-use',
     capability: 'computerUse',
     name: 'Computer Use',
+    version: '1.1.0',
+    author: 'SuperAgent Core Team',
     description: 'Control the desktop — click, type, and run workflows on your machine.',
     icon: '🖥️',
     category: 'automation',
     defaultEnabled: true,
+    skills: ['screen-analyzer', 'key-presser', 'window-manager'],
+    connections: ['desktop-automation-native', 'os-input-driver'],
     tags: ['desktop', 'automation']
   },
   {
     id: 'document',
     capability: 'document',
     name: 'Document',
+    version: '1.0.0',
+    author: 'SuperAgent Core Team',
     description: 'Read and author Word and Markdown documents with the agent.',
     icon: '📄',
     category: 'document',
     defaultEnabled: true,
+    skills: ['doc-parser', 'markdown-formatter', 'office-author'],
+    connections: ['docx-engine', 'markdown-renderer'],
     tags: ['office', 'writing']
   },
   {
     id: 'pdf',
     capability: 'pdf',
     name: 'PDF',
+    version: '1.0.0',
+    author: 'SuperAgent Core Team',
     description: 'Generate, compile, and extract content from PDF files.',
     icon: '📕',
     category: 'document',
     defaultEnabled: true,
+    skills: ['pdf-text-extractor', 'pdf-generator', 'form-signer'],
+    connections: ['pdf-lib-native', 'pdftotext-cli'],
     tags: ['office', 'pdf']
   },
   {
     id: 'spreadsheets',
     capability: 'spreadsheets',
     name: 'Spreadsheets',
+    version: '1.0.5',
+    author: 'SuperAgent Core Team',
     description: 'Create and edit spreadsheets and CSV data directly in your workspace.',
     icon: '📊',
     category: 'document',
     defaultEnabled: true,
+    skills: ['csv-parser', 'excel-builder', 'formula-calc'],
+    connections: ['xlsx-core', 'csv-transformer'],
     tags: ['office', 'data']
   },
   {
     id: 'presentations',
     capability: 'presentations',
     name: 'Presentations',
+    version: '1.0.2',
+    author: 'SuperAgent Core Team',
     description: 'Build slide decks with an agent-written narrative and design.',
     icon: '📽️',
     category: 'media',
     defaultEnabled: true,
+    skills: ['slide-designer', 'narrative-structurer'],
+    connections: ['pptxgenjs-bridge'],
     tags: ['office', 'slides']
   },
   {
     id: 'visualize',
     capability: 'visualize',
     name: 'Visualize',
+    version: '1.0.0',
+    author: 'SuperAgent Core Team',
     description: 'Render charts, diagrams, and rich data visualizations.',
     icon: '📈',
     category: 'media',
     defaultEnabled: false,
+    skills: ['mermaid-diagrammer', 'chart-builder', 'svg-renderer'],
+    connections: ['mermaid-cli', 'chartjs-engine'],
     tags: ['media', 'data']
   }
 ];

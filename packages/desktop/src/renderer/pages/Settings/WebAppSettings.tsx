@@ -482,8 +482,139 @@ export const WebAppSettings: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* Logged in Accounts & Active Devices */}
+      <section className="mb-8">
+        <h3 className="mb-3 flex items-center gap-2 text-base font-semibold text-brand-textMain">
+          <Globe size={16} /> Logged in Accounts &amp; Active Devices
+        </h3>
+        <div className="rounded-xl border border-brand-border bg-brand-card p-5 space-y-4">
+          <DeviceAndHistoryManager />
+        </div>
+      </section>
     </div>
   );
 };
+
+/** Sub-component for managing active sessions and inspecting login history. */
+function DeviceAndHistoryManager(): React.ReactElement {
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadAuthData = async () => {
+    setLoading(true);
+    try {
+      const resDev = await fetch('/api/auth/devices', { credentials: 'same-origin' });
+      if (resDev.ok) {
+        const data = await resDev.json();
+        setSessions(data.sessions || []);
+      }
+      const resHist = await fetch('/api/auth/history', { credentials: 'same-origin' });
+      if (resHist.ok) {
+        const data = await resHist.json();
+        setHistory(data.history || []);
+      }
+    } catch {
+      /* ignore fetch failures if offline or outside web surface */
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAuthData();
+  }, []);
+
+  const removeDevice = async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/auth/devices/${sessionId}`, {
+        method: 'DELETE',
+        credentials: 'same-origin'
+      });
+      if (res.ok) {
+        await loadAuthData();
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Active Sessions */}
+      <div className="flex flex-col gap-2.5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-brand-textMain">Active Sessions ({sessions.length})</span>
+          <button
+            type="button"
+            onClick={loadAuthData}
+            className="text-[11px] text-[var(--brand-accent)] hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <RotateCw size={11} /> Refresh
+          </button>
+        </div>
+
+        {sessions.length === 0 ? (
+          <p className="text-xs text-brand-textMuted italic">No active session records found or running standalone.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {sessions.map((s) => (
+              <div key={s.id} className="flex items-center justify-between bg-brand-bg/40 border border-brand-border/60 rounded-lg px-3 py-2 text-xs">
+                <div className="flex flex-col min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-brand-textMain truncate">{s.userAgent || 'Web Browser'}</span>
+                    {s.isCurrent && (
+                      <span className="rounded-full bg-[var(--brand-accent)]/15 border border-[var(--brand-accent)]/30 text-[var(--brand-accent)] px-1.5 py-0.2 text-[9px] font-bold">
+                        THIS DEVICE
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-brand-textMuted font-mono mt-0.5">
+                    IP: {s.ip} • Issued: {new Date(s.issuedAt).toLocaleTimeString()}
+                  </span>
+                </div>
+                {!s.isCurrent && (
+                  <button
+                    type="button"
+                    onClick={() => removeDevice(s.id)}
+                    className="px-2.5 py-1 text-[11px] font-medium bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-md transition-colors cursor-pointer"
+                  >
+                    Remove Device
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Login History */}
+      <div className="flex flex-col gap-2.5 pt-4 border-t border-brand-border/40">
+        <span className="text-xs font-semibold text-brand-textMain">Login History Audit Log</span>
+        {history.length === 0 ? (
+          <p className="text-xs text-brand-textMuted italic">No recent login attempts logged.</p>
+        ) : (
+          <div className="max-h-[180px] overflow-y-auto custom-scrollbar flex flex-col gap-1.5 pr-1">
+            {history.map((h) => (
+              <div key={h.id} className="flex items-center justify-between bg-brand-bg/30 border border-brand-border/40 rounded-lg px-3 py-1.5 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${h.status === 'success' ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[11px] font-mono text-brand-textMain truncate">{h.ip} — {h.userAgent}</span>
+                    {h.reason && <span className="text-[9px] text-red-400 font-mono">{h.reason}</span>}
+                  </div>
+                </div>
+                <span className="text-[10px] text-brand-textMuted font-mono shrink-0 ml-2">
+                  {new Date(h.timestamp).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default WebAppSettings;

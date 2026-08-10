@@ -117,7 +117,15 @@ pub fn run() {
             read_settings_file,
             write_settings_file,
             check_ollama_port,
-            search_workspace_files
+            search_workspace_files,
+            partner_list,
+            partner_get,
+            partner_set_active,
+            partner_get_active,
+            partner_import_json,
+            partner_remove,
+            partner_pick_model_file,
+            partner_pick_model_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running SuperAgent tauri application");

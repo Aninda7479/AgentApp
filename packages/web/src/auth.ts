@@ -62,15 +62,31 @@ function sign(data: string): string {
     .digest('base64url');
 }
 
-/** Creates a signed session token embedding the username and an expiry. */
-export function createSessionToken(username: string): string {
+/** Creates a signed session token embedding the username, session ID, and an expiry. */
+export function createSessionToken(username: string, sessionId?: string): string {
+  const sid = sessionId || crypto.randomBytes(16).toString('hex');
   const payload = JSON.stringify({
     u: username,
+    sid,
     v: AuthStore.getSessionVersion(),
     exp: Date.now() + sessionTtlMs()
   });
   const encoded = Buffer.from(payload, 'utf-8').toString('base64url');
   return `${encoded}.${sign(encoded)}`;
+}
+
+/** Extracts the session ID from a session token if present. */
+export function getSessionIdFromToken(token: string | undefined): string | null {
+  if (!token) return null;
+  const dot = token.lastIndexOf('.');
+  if (dot === -1) return null;
+  try {
+    const encoded = token.slice(0, dot);
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf-8'));
+    return typeof payload.sid === 'string' ? payload.sid : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Verifies a session token; returns the username or null if invalid/expired. */
@@ -97,6 +113,14 @@ export function verifySessionToken(token: string | undefined): string | null {
     // bumps the stored version, so every older session (other devices) is invalid.
     const tokenVersion = typeof payload.v === 'number' ? payload.v : 0;
     if (tokenVersion !== AuthStore.getSessionVersion()) return null;
+
+    if (payload.sid && AuthStore.isSessionRevoked(payload.sid)) {
+      return null;
+    }
+    if (payload.sid) {
+      AuthStore.touchSession(payload.sid);
+    }
+
     return typeof payload.u === 'string' ? payload.u : null;
   } catch {
     return null;
@@ -132,9 +156,13 @@ function buildSetCookie(value: string, maxAgeMs: number): string {
   return attrs.join('; ');
 }
 
-/** Issues a fresh session cookie for the given user. */
-export function setSessionCookie(res: Response, username: string): void {
-  res.setHeader('Set-Cookie', buildSetCookie(createSessionToken(username), sessionTtlMs()));
+/** Issues a fresh session cookie for the given user and registers the session record. */
+export function setSessionCookie(res: Response, username: string, req?: Request): void {
+  const sid = crypto.randomBytes(16).toString('hex');
+  const ip = req ? clientIp(req) : '127.0.0.1';
+  const ua = (req ? (req.headers['user-agent'] as string) : null) || 'Web Browser';
+  AuthStore.registerSession(sid, username, ip, ua);
+  res.setHeader('Set-Cookie', buildSetCookie(createSessionToken(username, sid), sessionTtlMs()));
 }
 
 /** Clears the session cookie (logout). */
@@ -319,7 +347,8 @@ export function handleSetup(req: Request, res: Response): void {
   }
 
   // Log the admin in immediately.
-  setSessionCookie(res, AuthStore.getUsername());
+  setSessionCookie(res, AuthStore.getUsername(), req);
+  AuthStore.recordLoginAttempt(clientIp(req), req.headers['user-agent'] || 'Unknown Device', 'success');
   res.json({ ok: true });
 }
 
@@ -332,6 +361,7 @@ export function handleLogin(req: Request, res: Response): void {
 
   const limit = checkRateLimit(req);
   if (!limit.allowed) {
+    AuthStore.recordLoginAttempt(clientIp(req), req.headers['user-agent'] || 'Unknown Device', 'failed', 'Rate limited');
     res.status(429).json({
       error: 'Too many attempts. Please try again later.',
       retryAfterSeconds: Math.ceil((limit.retryAfterMs || 0) / 1000)
@@ -347,13 +377,43 @@ export function handleLogin(req: Request, res: Response): void {
 
   if (AuthStore.verifyPassword(password)) {
     clearAttempts(req);
-    setSessionCookie(res, AuthStore.getUsername());
+    setSessionCookie(res, AuthStore.getUsername(), req);
+    AuthStore.recordLoginAttempt(clientIp(req), req.headers['user-agent'] || 'Unknown Device', 'success');
     res.json({ ok: true });
     return;
   }
 
   recordFailedAttempt(req);
+  AuthStore.recordLoginAttempt(clientIp(req), req.headers['user-agent'] || 'Unknown Device', 'failed', 'Invalid password');
   res.status(401).json({ error: 'Invalid password.' });
+}
+
+/** GET /api/auth/devices — lists active sessions/devices. */
+export function handleGetDevices(req: Request, res: Response): void {
+  const cookies = parseCookies(req.headers.cookie);
+  const currentSid = getSessionIdFromToken(cookies[COOKIE_NAME]);
+  const sessions = AuthStore.getActiveSessions().map((s) => ({
+    ...s,
+    isCurrent: s.id === currentSid
+  }));
+  res.json({ sessions });
+}
+
+/** DELETE /api/auth/devices/:sessionId — revokes a specific device session. */
+export function handleDeleteDevice(req: Request, res: Response): void {
+  const sessionId = req.params.sessionId || (req.query.sessionId as string);
+  if (!sessionId) {
+    res.status(400).json({ error: 'Session ID is required.' });
+    return;
+  }
+  const removed = AuthStore.revokeSession(sessionId);
+  res.json({ ok: removed });
+}
+
+/** GET /api/auth/history — retrieves recent login history. */
+export function handleGetHistory(_req: Request, res: Response): void {
+  const history = AuthStore.getLoginHistory(50);
+  res.json({ history });
 }
 
 /** POST /api/auth/logout — clears the session cookie. */

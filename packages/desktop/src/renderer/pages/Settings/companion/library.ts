@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getIpc } from '../../../lib/electron';
+import { getIpc, invoke } from '../../../lib/electron';
 import {
   DEFAULT_PARTNERS
 } from './defaultPartners';
@@ -13,8 +13,8 @@ import {
 /**
  * Storage abstraction for the open Partner ecosystem.
  *
- * In the Electron desktop app this talks to the main process over IPC, which
- * reads/writes `partner.json` folders under the user-data `pets/` directory.
+ * In the Electron desktop app or Tauri app this talks to the main process / Rust backend,
+ * reading/writing `partner.json` folders under the user-data `partners/` directory.
  * In the web build (or under test) there is no IPC, so it degrades gracefully
  * to localStorage — the UI stays fully functional and the same code path is
  * exercised.
@@ -92,6 +92,12 @@ export function mergePets(
 export const PartnerLibrary = {
   /** Lists installed (user) Partners from disk / localStorage. */
   async list(): Promise<PartnerManifest[]> {
+    try {
+      const res = await invoke('partner-list');
+      if (Array.isArray(res)) return res.map((p: any) => normalizeManifest(p));
+    } catch {
+      /* fall through */
+    }
     const ipc = getIpc();
     if (ipc) {
       try {
@@ -106,6 +112,12 @@ export const PartnerLibrary = {
 
   /** Reads the currently active Partner id. */
   async getActiveId(): Promise<string | null> {
+    try {
+      const res = await invoke('partner-get-active');
+      if (typeof res === 'string' || res === null) return res;
+    } catch {
+      /* fall through */
+    }
     const ipc = getIpc();
     if (ipc) {
       try {
@@ -120,6 +132,12 @@ export const PartnerLibrary = {
 
   /** Persists the active Partner id. */
   async setActive(id: string | null): Promise<void> {
+    try {
+      await invoke('partner-set-active', id);
+      return;
+    } catch {
+      /* fall through */
+    }
     const ipc = getIpc();
     if (ipc) {
       try {
@@ -134,6 +152,15 @@ export const PartnerLibrary = {
 
   /** Opens a folder picker (desktop) to import a Partner folder. Returns the installed manifest or null. */
   async installFromFolder(): Promise<PartnerManifest | null> {
+    const folder = await invoke('partner-pick-model-folder');
+    if (folder && typeof folder === 'string') {
+      try {
+        const res = await invoke('partner-install-folder', folder);
+        if (res) return normalizeManifest(res.manifest || res);
+      } catch {
+        /* fall through to IPC */
+      }
+    }
     const ipc = getIpc();
     if (!ipc) return null;
     const res = await ipc('partner-install');
@@ -151,6 +178,13 @@ export const PartnerLibrary = {
     }
     const result: ValidateResult = validatePartnerManifest(parsed);
     if (!result.ok) throw new Error(result.error);
+
+    try {
+      const res = await invoke('partner-import-json', json);
+      if (res) return normalizeManifest(res.manifest || res);
+    } catch {
+      /* fall through */
+    }
 
     const ipc = getIpc();
     if (ipc) {
@@ -170,6 +204,12 @@ export const PartnerLibrary = {
 
   /** Removes an installed Partner by id. */
   async remove(id: string): Promise<void> {
+    try {
+      await invoke('partner-remove', id);
+      return;
+    } catch {
+      /* fall through */
+    }
     const ipc = getIpc();
     if (ipc) {
       try {

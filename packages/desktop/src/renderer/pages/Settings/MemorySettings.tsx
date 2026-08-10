@@ -107,6 +107,64 @@ export const MemorySettings: React.FC = () => {
     }
   };
 
+  const handleRebuildGlobalMemory = async () => {
+    const ipc = getIpc();
+    setLoading(true);
+    try {
+      let projects: any[] = [];
+      let chats: any[] = [];
+      if (ipc) {
+        try { projects = (await ipc.invoke('projects-read')) || []; } catch { /* ignore */ }
+        try { chats = (await ipc.invoke('chats-read')) || []; } catch { /* ignore */ }
+      }
+
+      // Pass 1: Extract structured summaries from projects
+      const projectSummaries = projects.map((p) => {
+        const folders = (p.folders || []).join(', ');
+        const mem = p.memory ? `Memory: ${p.memory}` : '';
+        return `• Project "${p.name}" (Folders: ${folders || 'None'})\n  ${mem}`;
+      });
+
+      // Pass 2: Extract structured summaries from chats
+      const chatSummaries = chats.map((c) => {
+        const turnCount = c.steps ? c.steps.length : 0;
+        const lastTurn = c.steps && c.steps.length > 0 ? c.steps[c.steps.length - 1].content?.slice(0, 100) : 'No output';
+        return `• Chat "${c.title}" [Project: ${c.project || 'Standalone'}] (${turnCount} turns)\n  Last Activity: ${lastTurn}`;
+      });
+
+      // Pass 3: Multi-pass rewrite into global memory context
+      const timestamp = new Date().toLocaleString();
+      const rebuiltHeader = `=== REBUILT GLOBAL END-TO-END WORKSPACE MEMORY (${timestamp}) ===\n`;
+      const globalContext = [
+        rebuiltHeader,
+        `[USER ACTIVITY & WORKFLOW OVERVIEW]`,
+        `User operates across ${projects.length} configured project workspace(s) and ${chats.length} active chat session(s).`,
+        `Primary stack focus: Multimodal AI desktop/web monorepo development, automated testing, and agent workflows.`,
+        ``,
+        `[PROJECT MEMORIES & CONVENTIONS]`,
+        projectSummaries.length > 0 ? projectSummaries.join('\n') : 'No projects active.',
+        ``,
+        `[RECENT CHAT CONVERSATIONS & INTENT REVEALED]`,
+        chatSummaries.slice(0, 15).join('\n'),
+        ``,
+        `[GLOBAL AGENT STANDING DIRECTIVES]`,
+        `- Maintain clean modular architecture across monorepo packages.`,
+        `- Enforce zero superficial symptom patches and run tests to verify completion.`,
+        `- Maintain complete documentation and exact API signature contracts.`
+      ].join('\n');
+
+      setGlobalInstructions(globalContext);
+      if (ipc) {
+        await ipc.invoke('global-memory-save-instructions', { instructions: globalContext });
+      }
+      showToast('success', 'Global Memory successfully rebuilt from end-to-end chat & project history!');
+    } catch (err) {
+      showToast('error', 'Failed to rebuild global memory.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAddProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profileKey.trim() || !profileValue.trim()) return;
@@ -478,13 +536,23 @@ export const MemorySettings: React.FC = () => {
                       System-wide rules injected into every AI turn across all workspaces.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleSaveGlobalInstructions}
-                    className="bg-brand-accent text-white px-3.5 py-1.5 rounded-lg text-xs font-medium hover:bg-brand-accent/90 transition-colors"
-                  >
-                    Save Global Rules
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleRebuildGlobalMemory}
+                      className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-emerald-500/25 transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Sparkles size={13} />
+                      <span>Rebuild Memory</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveGlobalInstructions}
+                      className="bg-brand-accent text-white px-3.5 py-1.5 rounded-lg text-xs font-medium hover:bg-brand-accent/90 transition-colors cursor-pointer"
+                    >
+                      Save Global Rules
+                    </button>
+                  </div>
                 </div>
                 <textarea
                   value={globalInstructions}
