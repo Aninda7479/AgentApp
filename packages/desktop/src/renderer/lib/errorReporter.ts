@@ -18,7 +18,7 @@ export interface IpcErrorEnvelope {
   channel: string;
 }
 
-type ErrorListener = (context: string, message: string) => void;
+type ErrorListener = (context: string, message: string, stack?: string) => void;
 const listeners = new Set<ErrorListener>();
 
 /** Normalizes an unknown thrown value into a human-readable string. */
@@ -33,20 +33,21 @@ export function errorMessage(err: unknown): string {
 }
 
 /**
- * Logs an error to the console and notifies all subscribers (which surface a toast).
+ * Logs an error to the console and notifies all subscribers (which surface a toast / modal).
  * Never throws.
  */
 export function reportError(context: string, err: unknown): void {
   const message = errorMessage(err);
+  const stack = err instanceof Error && err.stack ? err.stack : undefined;
   // eslint-disable-next-line no-console
-  console.error('[ERROR]', context, '-', message);
-  if (err instanceof Error && err.stack) {
+  console.error(`[ERROR] ${context} - ${message}`);
+  if (stack) {
     // eslint-disable-next-line no-console
-    console.error('[ERROR-STACK]', context, '\n' + err.stack);
+    console.debug(`[ERROR-STACK] ${context}:`, stack);
   }
   for (const fn of listeners) {
     try {
-      fn(context, message);
+      fn(context, message, stack);
     } catch {
       /* logging must never throw */
     }

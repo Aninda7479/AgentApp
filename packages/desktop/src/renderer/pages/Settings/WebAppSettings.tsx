@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Globe, Play, Square, KeyRound, CheckCircle2, AlertTriangle, ExternalLink, RotateCw } from 'lucide-react';
+import { Globe, Play, Square, KeyRound, CheckCircle2, AlertTriangle, ExternalLink, RotateCw, Copy, Check, ShieldCheck, User } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
 import { getIpc } from '../../lib/electron';
 
@@ -22,19 +22,17 @@ interface PasswordResult {
 /**
  * Settings → Web App.
  *
- * Lets the user host the SuperAgent web server straight from the Desktop app
- * (Start / Stop), configure its port + auto-start, and change the Web App admin
- * password. The server itself is launched as a child process by the main process
- * (the same `@superagent/web` host the CLI starts with `superagent --start-web`);
- * the password is shared with the web login via core's AuthStore.
+ * Host the SuperAgent web server straight from the Desktop app (Start / Stop),
+ * configure its port + auto-start, and manage the Web App admin owner & password.
  */
 export const WebAppSettings: React.FC = () => {
   const ipc = getIpc();
 
   const [status, setStatus] = useState<WebStatus | null>(null);
-  const [port, setPort] = useState<number>(3000);
+  const [port, setPort] = useState<number>(14692);
   const [autoStart, setAutoStart] = useState<boolean>(false);
   const [busy, setBusy] = useState<boolean>(false);
+  const [copiedUrl, setCopiedUrl] = useState<'local' | 'lan' | null>(null);
 
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -49,6 +47,9 @@ export const WebAppSettings: React.FC = () => {
     try {
       const s = await ipc.invoke('web-status');
       setStatus(s);
+      if (s?.port) {
+        setPort(s.port);
+      }
     } catch {
       /* ignore */
     }
@@ -100,7 +101,7 @@ export const WebAppSettings: React.FC = () => {
     if (!ipc) return;
     setBusy(true);
     try {
-      await ipc.invoke('web-start', { port: Number(port) || 3000 });
+      await ipc.invoke('web-start', { port: Number(port) || 14692 });
     } finally {
       setBusy(false);
       await refreshStatus();
@@ -125,7 +126,7 @@ export const WebAppSettings: React.FC = () => {
       const settings = await ipc.invoke('settings-read');
       await ipc.invoke('settings-write', {
         ...settings,
-        webApp: { ...settings?.webApp, autoStart: val, port: Number(port) || 3000 }
+        webApp: { ...settings?.webApp, autoStart: val, port: Number(port) || 14692 }
       });
     } catch {
       /* ignore */
@@ -179,10 +180,17 @@ export const WebAppSettings: React.FC = () => {
     }
   };
 
+  const copyUrl = (text: string, type: 'local' | 'lan') => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedUrl(type);
+      setTimeout(() => setCopiedUrl(null), 2000);
+    });
+  };
+
   return (
     <div className="max-w-[680px] text-left">
       {/* Atmosphere hero */}
-      <div className="relative mb-7 overflow-hidden rounded-2xl border border-brand-border bg-brand-card">
+      <div className="relative mb-7 overflow-hidden rounded-2xl border border-brand-border bg-brand-card shadow-xl">
         <div className="pointer-events-none absolute inset-0" aria-hidden="true">
           <div
             className="absolute inset-0"
@@ -190,14 +198,18 @@ export const WebAppSettings: React.FC = () => {
           />
         </div>
         <div className="relative flex items-center gap-4 px-6 py-6">
-          <div className="animate-float shrink-0">
-            <BrandLogo size={48} />
+          <div className="shrink-0 flex items-center justify-center w-12 h-12 rounded-xl bg-brand-popover border border-brand-border shadow-inner">
+            <BrandLogo size={32} />
           </div>
           <div>
-            <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain">Web App</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain">Web App & Remote Host</h1>
+              <span className="rounded-full bg-[var(--brand-accent)]/15 px-2.5 py-0.5 text-[10px] font-semibold text-[var(--brand-accent)] border border-[var(--brand-accent)]/30">
+                Port {port}
+              </span>
+            </div>
             <p className="mt-1 text-sm leading-6 text-brand-textMuted">
-              Host SuperAgent in your browser. Other devices on your network can open it too — great for
-              sharing your agent from a phone or tablet.
+              Host SuperAgent directly from your computer. Connect from your phone, tablet, or secondary devices on your local network.
             </p>
           </div>
         </div>
@@ -205,100 +217,144 @@ export const WebAppSettings: React.FC = () => {
 
       {/* Host controls */}
       <section className="mb-8">
-        <h3 className="mb-3 text-base font-semibold text-brand-textMain">Hosting</h3>
-        <div className="rounded-lg border border-brand-border bg-brand-card p-4">
+        <h3 className="mb-3 text-base font-semibold text-brand-textMain">Server Status</h3>
+        <div className="rounded-xl border border-brand-border bg-brand-card p-5 shadow-sm space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span
-                className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
                   status?.running
-                    ? 'bg-[color:var(--neon-constructive)]/15 text-[color:var(--neon-constructive)]'
-                    : 'bg-brand-bg text-brand-textMuted'
+                    ? 'bg-[color:var(--neon-constructive)]/15 text-[color:var(--neon-constructive)] border border-[color:var(--neon-constructive)]/30'
+                    : 'bg-brand-bg text-brand-textMuted border border-brand-border'
                 }`}
               >
-                <Globe size={18} />
+                <Globe size={20} />
               </span>
               <div>
-                <div className="text-sm font-medium text-brand-textMain">
-                  {status?.running ? 'Web App is running' : 'Web App is stopped'}
-                  {status?.running && status.startedBy && status.startedBy !== 'desktop' && (
-                    <span className="ml-2 rounded bg-brand-bg px-1.5 py-0.5 text-[11px] font-normal text-brand-textMuted">
-                      started from {status.startedBy === 'cli' ? 'CLI' : status.startedBy}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-brand-textMain">
+                    {status?.running ? 'Web App is running' : 'Web App is stopped'}
+                  </span>
+                  {status?.running && status.startedBy && (
+                    <span className="rounded-full bg-brand-bg px-2 py-0.5 text-[10px] font-medium text-brand-textMuted border border-brand-border/60">
+                      started from {status.startedBy}
                     </span>
                   )}
                 </div>
-                <div className="text-xs leading-5 text-brand-textMuted">
+                <div className="mt-0.5 text-xs text-brand-textMuted">
                   {status?.running ? (
-                    <button
-                      type="button"
-                      className="inline-flex cursor-pointer items-center gap-1 text-[var(--brand-accent)] hover:underline"
-                      onClick={() => openUrl(status.url)}
-                    >
-                      {status.url} <ExternalLink size={12} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="inline-flex cursor-pointer items-center gap-1 font-mono text-[var(--brand-accent)] hover:underline font-medium"
+                        onClick={() => openUrl(status.url || `http://localhost:${port}`)}
+                      >
+                        {status.url || `http://localhost:${port}`} <ExternalLink size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => copyUrl(status.url || `http://localhost:${port}`, 'local')}
+                        className="p-1 rounded text-brand-textMuted hover:text-brand-textMain hover:bg-brand-popover transition-all cursor-pointer"
+                        title="Copy Local URL"
+                      >
+                        {copiedUrl === 'local' ? <Check size={12} className="text-[color:var(--neon-constructive)]" /> : <Copy size={12} />}
+                      </button>
+                    </div>
                   ) : (
-                    'Start the server to open SuperAgent in a browser.'
+                    'Start the web server to open SuperAgent in any browser.'
                   )}
                 </div>
               </div>
             </div>
 
             {status?.running ? (
-              <button type="button" disabled={busy} onClick={doStop} className="ui-btn">
-                <Square size={15} /> Stop
+              <button
+                type="button"
+                disabled={busy}
+                onClick={doStop}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-red-500/15 text-red-300 hover:bg-red-500/25 border border-red-500/30 transition-all cursor-pointer flex items-center gap-2"
+              >
+                <Square size={14} /> Stop Server
               </button>
             ) : (
-              <button type="button" disabled={busy} onClick={doStart} className="ui-btn ui-btn-primary">
-                <Play size={15} /> Start
+              <button
+                type="button"
+                disabled={busy}
+                onClick={doStart}
+                className="ui-btn ui-btn-primary px-4 py-2 text-xs font-semibold flex items-center gap-2"
+              >
+                <Play size={14} /> Start Server
               </button>
             )}
           </div>
 
-          {status?.running && (
-            <div className="mt-4 flex items-center gap-2 rounded-lg border border-brand-border bg-brand-bg px-3 py-2 text-xs text-brand-textMuted">
-              <span className="font-medium text-brand-textMain">LAN:</span>
-              <code className="text-brand-textMain">{status.lanUrl}</code>
-              <span>— reachable from other devices on your network.</span>
+          {status?.running && status.lanUrl && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-brand-border/60 bg-brand-bg/80 px-4 py-3 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-semibold text-brand-textMain shrink-0">LAN Address:</span>
+                <code className="font-mono text-brand-textMain truncate">{status.lanUrl}</code>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => copyUrl(status.lanUrl, 'lan')}
+                  className="px-2.5 py-1 rounded-lg bg-brand-popover text-brand-textMain border border-brand-border hover:bg-brand-card transition-all cursor-pointer flex items-center gap-1.5 text-[11px] font-medium"
+                >
+                  {copiedUrl === 'lan' ? (
+                    <>
+                      <Check size={12} className="text-[color:var(--neon-constructive)]" /> Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={12} /> Copy LAN Link
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
         </div>
 
         {/* Port + auto-start */}
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="rounded-lg border border-brand-border bg-brand-card p-4">
-            <label className="mb-2 block text-sm font-medium text-brand-textMain">Port</label>
+          <div className="rounded-xl border border-brand-border bg-brand-card p-4">
+            <label className="mb-1.5 block text-sm font-medium text-brand-textMain">Server Port</label>
             <input
               type="number"
               min={1}
               max={65535}
               value={port}
               disabled={status?.running}
-              onChange={(e) => changePort(Number(e.target.value) || 3000)}
-              className="ui-input w-full"
+              onChange={(e) => changePort(Number(e.target.value) || 14692)}
+              className="ui-input w-full font-mono text-sm"
             />
-            <p className="mt-1 text-xs text-brand-textMuted">
-              {status?.running ? 'Stop the server to change the port.' : 'Applied the next time you start.'}
+            <p className="mt-1.5 text-xs text-brand-textMuted leading-normal">
+              {status?.running ? 'Stop the server to change the port.' : 'Applied the next time you start the server.'}
             </p>
           </div>
 
-          <div className="rounded-lg border border-brand-border bg-brand-card p-4">
-            <label className="mb-2 block text-sm font-medium text-brand-textMain">Auto-start</label>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={autoStart}
-              onClick={() => toggleAutoStart(!autoStart)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                autoStart ? 'bg-[color:var(--neon-constructive)]' : 'bg-brand-bg border border-brand-border'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  autoStart ? 'translate-x-6' : 'translate-x-1'
+          <div className="rounded-xl border border-brand-border bg-brand-card p-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-brand-textMain">Auto-start Server</label>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoStart}
+                onClick={() => toggleAutoStart(!autoStart)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+                  autoStart ? 'bg-[color:var(--neon-constructive)]' : 'bg-brand-bg border border-brand-border'
                 }`}
-              />
-            </button>
-            <p className="mt-1 text-xs text-brand-textMuted">Launch the Web App automatically when SuperAgent starts.</p>
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    autoStart ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className="text-xs text-brand-textMuted leading-normal">
+              Automatically launch the Web App host when SuperAgent starts up.
+            </p>
           </div>
         </div>
       </section>
@@ -306,15 +362,15 @@ export const WebAppSettings: React.FC = () => {
       {/* Host Owner Name */}
       <section className="mb-8">
         <h3 className="mb-3 flex items-center gap-2 text-base font-semibold text-brand-textMain">
-          Host Ownership
+          <User size={16} /> Host Ownership & Branding
         </h3>
-        <div className="rounded-lg border border-brand-border bg-brand-card p-4">
-          <p className="mb-4 text-sm text-brand-textMuted">
-            Configure the owner's name shown on the login screen to indicate that this host is private and for you only.
+        <div className="rounded-xl border border-brand-border bg-brand-card p-5 space-y-4">
+          <p className="text-xs leading-relaxed text-brand-textMuted">
+            Set the host owner's name shown on the login screen to indicate that this host is private.
           </p>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-brand-textMuted">Host Owner Name</label>
+            <label className="mb-1.5 block text-xs font-medium text-brand-textMuted">Host Owner Name</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -326,21 +382,21 @@ export const WebAppSettings: React.FC = () => {
               <button
                 type="button"
                 onClick={saveOwnerName}
-                className="ui-btn ui-btn-primary"
+                className="ui-btn ui-btn-primary px-4 py-2 cursor-pointer font-medium text-xs"
               >
-                Save
+                Save Name
               </button>
             </div>
             {saveResult && (
               <div
-                className={`mt-2 flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs ${
+                className={`mt-2.5 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium ${
                   saveResult.ok
                     ? 'border-[color:var(--neon-constructive)]/40 bg-[color:var(--neon-constructive)]/10 text-[color:var(--neon-constructive)]'
                     : 'border-[color:var(--neon-destructive)]/40 bg-[color:var(--neon-destructive)]/10 text-[color:var(--neon-destructive)]'
                 }`}
               >
-                {saveResult.ok ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
-                {saveResult.ok ? 'Owner name updated.' : saveResult.error}
+                {saveResult.ok ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+                {saveResult.ok ? 'Host owner name saved successfully.' : saveResult.error}
               </div>
             )}
           </div>
@@ -350,44 +406,51 @@ export const WebAppSettings: React.FC = () => {
       {/* Password */}
       <section className="mb-8">
         <h3 className="mb-3 flex items-center gap-2 text-base font-semibold text-brand-textMain">
-          <KeyRound size={16} /> Change Web App Password
+          <KeyRound size={16} /> Web App Authentication
         </h3>
-        <div className="rounded-lg border border-brand-border bg-brand-card p-4">
-          <p className="mb-4 text-sm text-brand-textMuted">
-            This is the password used to log in to the hosted Web App (and the same admin account the Desktop
-            app shares). The default is <code className="rounded bg-brand-bg px-1 py-0.5">admin</code>.
-          </p>
+        <div className="rounded-xl border border-brand-border bg-brand-card p-5 space-y-4">
+          <div className="flex items-center justify-between gap-3 pb-3 border-b border-brand-border/40">
+            <div>
+              <div className="text-xs font-semibold text-brand-textMain">Access Password</div>
+              <p className="text-[11px] text-brand-textMuted mt-0.5">
+                Protects remote web browser logins. Default admin password is <code className="rounded bg-brand-bg px-1.5 py-0.5 font-mono text-brand-textMain">admin</code>.
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[color:var(--neon-constructive)]/10 border border-[color:var(--neon-constructive)]/20 text-[color:var(--neon-constructive)] text-[11px] font-medium shrink-0">
+              <ShieldCheck size={13} /> Active
+            </div>
+          </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-brand-textMuted">Current password</label>
+              <label className="mb-1 block text-xs font-medium text-brand-textMuted">Current Password</label>
               <input
                 type="password"
                 value={current}
                 onChange={(e) => setCurrent(e.target.value)}
-                className="ui-input w-full"
+                className="ui-input w-full font-mono text-xs"
                 placeholder="admin"
                 autoComplete="current-password"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-brand-textMuted">New password</label>
+              <label className="mb-1 block text-xs font-medium text-brand-textMuted">New Password</label>
               <input
                 type="password"
                 value={next}
                 onChange={(e) => setNext(e.target.value)}
-                className="ui-input w-full"
+                className="ui-input w-full font-mono text-xs"
                 placeholder="At least 6 characters"
                 autoComplete="new-password"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-brand-textMuted">Confirm new password</label>
+              <label className="mb-1 block text-xs font-medium text-brand-textMuted">Confirm New Password</label>
               <input
                 type="password"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
-                className="ui-input w-full"
+                className="ui-input w-full font-mono text-xs"
                 placeholder="At least 6 characters"
                 autoComplete="new-password"
               />
@@ -396,25 +459,25 @@ export const WebAppSettings: React.FC = () => {
 
           {pwResult && (
             <div
-              className={`mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+              className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium ${
                 pwResult.ok
                   ? 'border-[color:var(--neon-constructive)]/40 bg-[color:var(--neon-constructive)]/10 text-[color:var(--neon-constructive)]'
                   : 'border-[color:var(--neon-destructive)]/40 bg-[color:var(--neon-destructive)]/10 text-[color:var(--neon-destructive)]'
               }`}
             >
-              {pwResult.ok ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
-              {pwResult.ok ? 'Password updated.' : pwResult.error}
+              {pwResult.ok ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+              {pwResult.ok ? 'Web app password updated successfully.' : pwResult.error}
             </div>
           )}
 
-          <div className="mt-4">
+          <div className="pt-2">
             <button
               type="button"
               disabled={!next || next !== confirm}
               onClick={doChangePassword}
-              className="ui-btn ui-btn-primary"
+              className="ui-btn ui-btn-primary flex items-center gap-2 text-xs font-semibold px-4 py-2 cursor-pointer disabled:opacity-50"
             >
-              <RotateCw size={15} /> Update Password
+              <RotateCw size={14} /> Update Admin Password
             </button>
           </div>
         </div>

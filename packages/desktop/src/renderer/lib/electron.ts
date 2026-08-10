@@ -122,21 +122,38 @@ export function isElectron(): boolean {
   return !!superagent();
 }
 
+const SILENT_IPC_CHANNELS = new Set<string>([
+  'pet-set-partner',
+  'pet-say',
+  'pet-status',
+  'pet-start',
+  'pet-stop',
+  'pet-set-visible',
+  'web-status',
+  'check-for-updates'
+]);
+
 function wrapInvoke(fn: (channel: string, ...args: any[]) => Promise<any>) {
   return async (channel: string, ...args: any[]): Promise<any> => {
     try {
       const result = await fn(channel, ...args);
       if (result && typeof result === 'object' && (result as IpcErrorEnvelope).__ipcError) {
-        reportError('ipc:' + channel, (result as IpcErrorEnvelope).error);
+        if (!SILENT_IPC_CHANNELS.has(channel)) {
+          reportError('ipc:' + channel, (result as IpcErrorEnvelope).error);
+        }
         return null;
       }
       // App handlers universally signal failure with `{ ok: false, error }`.
       if (result && typeof result === 'object' && result.ok === false && result.error) {
-        reportError('ipc:' + channel, result.error);
+        if (!SILENT_IPC_CHANNELS.has(channel) && !result.unsupported) {
+          reportError('ipc:' + channel, result.error);
+        }
       }
       return result;
     } catch (err) {
-      reportError('ipc:' + channel, err);
+      if (!SILENT_IPC_CHANNELS.has(channel)) {
+        reportError('ipc:' + channel, err);
+      }
       return null;
     }
   };

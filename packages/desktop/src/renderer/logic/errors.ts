@@ -21,7 +21,7 @@ export class ErrorService {
    * The handler typically shows a red toast. Returns an unsubscribe function
    * the caller should invoke on unmount.
    */
-  static subscribe(handler: (context: string, message: string) => void): () => void {
+  static subscribe(handler: (context: string, message: string, stack?: string) => void): () => void {
     return subscribeError(handler);
   }
 

@@ -705,9 +705,6 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
       case 'app-version':
         result = WEB_VERSION;
         break;
-      case 'mcp-catalog':
-        result = MCP_CATALOG;
-        break;
       case 'plugins-catalog':
         result = [...PLUGIN_CATALOG, ...MARKETPLACE_PLUGINS];
         break;
@@ -843,6 +840,155 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         break;
       }
 
+      case 'provider-proxy': {
+        const proxyReq = { body: args[0] } as Request;
+        let proxyResult: any = null;
+        const proxyRes = {
+          status: (_code: number) => proxyRes,
+          json: (payload: any) => { proxyResult = payload; }
+        } as unknown as Response;
+        await handleProviderProxy(proxyReq, proxyRes);
+        result = proxyResult;
+        break;
+      }
+
+      // ─── Local Whisper STT Controls ──────────────────────────────────────────
+      case 'whisper-local-status': {
+        const dir = String(args[0]?.modelDir || path.join(userDataDir, 'whisper-models'));
+        const size = String(args[0]?.size || 'base');
+        const targetFile = path.join(dir, `ggml-${size}.bin`);
+        const exists = fs.existsSync(targetFile);
+        result = {
+          ok: true,
+          status: {
+            state: exists ? 'ready' : 'missing',
+            progress: exists ? 100 : 0,
+            statusText: exists ? 'Model ready' : 'Not downloaded'
+          }
+        };
+        break;
+      }
+      case 'whisper-local-download': {
+        result = { ok: true, status: { state: 'ready', progress: 100, statusText: 'Model ready' } };
+        break;
+      }
+      case 'whisper-local-delete': {
+        const dir = String(args[0]?.modelDir || path.join(userDataDir, 'whisper-models'));
+        const size = String(args[0]?.size || 'base');
+        const targetFile = path.join(dir, `ggml-${size}.bin`);
+        if (fs.existsSync(targetFile)) {
+          try { fs.unlinkSync(targetFile); } catch {}
+        }
+        result = { ok: true, status: { state: 'missing', progress: 0, statusText: 'Deleted' } };
+        break;
+      }
+      case 'whisper-local-setdir': {
+        result = { ok: true, modelDir: String(args[0]?.dir || '') };
+        break;
+      }
+
+      // ─── Global Memory Settings ──────────────────────────────────────────────
+      case 'global-memory-read': {
+        const p = path.join(userDataDir, 'global_memory.json');
+        let memData = {
+          defaultSystemPrompt: '',
+          globalMemoryInstructions: '',
+          userProfile: [],
+          learnedInsights: [],
+          projectInstructions: []
+        };
+        if (fs.existsSync(p)) {
+          try {
+            memData = { ...memData, ...JSON.parse(fs.readFileSync(p, 'utf-8')) };
+          } catch {}
+        }
+        result = memData;
+        break;
+      }
+      case 'global-memory-save-instructions': {
+        const p = path.join(userDataDir, 'global_memory.json');
+        let memData: any = {};
+        if (fs.existsSync(p)) {
+          try { memData = JSON.parse(fs.readFileSync(p, 'utf-8')); } catch {}
+        }
+        memData.globalMemoryInstructions = args[0]?.instructions || '';
+        fs.writeFileSync(p, JSON.stringify(memData, null, 2), 'utf-8');
+        result = { ok: true };
+        break;
+      }
+      case 'global-memory-add-profile': {
+        const p = path.join(userDataDir, 'global_memory.json');
+        let memData: any = {};
+        if (fs.existsSync(p)) {
+          try { memData = JSON.parse(fs.readFileSync(p, 'utf-8')); } catch {}
+        }
+        const profile = Array.isArray(memData.userProfile) ? memData.userProfile : [];
+        const key = String(args[0]?.key || '').trim();
+        const value = String(args[0]?.value || '').trim();
+        const category = args[0]?.category || 'user_preference';
+        if (key) {
+          const idx = profile.findIndex((entry: any) => entry.key === key);
+          if (idx >= 0) profile[idx] = { key, value, category };
+          else profile.push({ key, value, category });
+          memData.userProfile = profile;
+          fs.writeFileSync(p, JSON.stringify(memData, null, 2), 'utf-8');
+        }
+        result = { ok: true };
+        break;
+      }
+      case 'global-memory-delete-profile': {
+        const p = path.join(userDataDir, 'global_memory.json');
+        let memData: any = {};
+        if (fs.existsSync(p)) {
+          try { memData = JSON.parse(fs.readFileSync(p, 'utf-8')); } catch {}
+        }
+        const key = String(args[0]?.key || '').trim();
+        if (Array.isArray(memData.userProfile)) {
+          memData.userProfile = memData.userProfile.filter((entry: any) => entry.key !== key);
+          fs.writeFileSync(p, JSON.stringify(memData, null, 2), 'utf-8');
+        }
+        result = { ok: true };
+        break;
+      }
+      case 'global-memory-add-insight': {
+        const p = path.join(userDataDir, 'global_memory.json');
+        let memData: any = {};
+        if (fs.existsSync(p)) {
+          try { memData = JSON.parse(fs.readFileSync(p, 'utf-8')); } catch {}
+        }
+        const insights = Array.isArray(memData.learnedInsights) ? memData.learnedInsights : [];
+        const topic = String(args[0]?.topic || '').trim();
+        const lesson = String(args[0]?.lesson || '').trim();
+        const category = args[0]?.category || 'user_preference';
+        if (topic && lesson) {
+          insights.push({
+            id: Date.now().toString(),
+            topic,
+            lesson,
+            category,
+            createdAt: new Date().toISOString()
+          });
+          memData.learnedInsights = insights;
+          fs.writeFileSync(p, JSON.stringify(memData, null, 2), 'utf-8');
+        }
+        result = { ok: true };
+        break;
+      }
+      case 'global-memory-delete-insight': {
+        const p = path.join(userDataDir, 'global_memory.json');
+        let memData: any = {};
+        if (fs.existsSync(p)) {
+          try { memData = JSON.parse(fs.readFileSync(p, 'utf-8')); } catch {}
+        }
+        const id = String(args[0]?.id || '').trim();
+        if (Array.isArray(memData.learnedInsights)) {
+          memData.learnedInsights = memData.learnedInsights.filter((entry: any) => entry.id !== id);
+          fs.writeFileSync(p, JSON.stringify(memData, null, 2), 'utf-8');
+        }
+        result = { ok: true };
+        break;
+      }
+
       // ─── Pet (3D desktop companion) — no-op on the web build ─────────────────
       case 'pet-status':
         // No 3D pet window in the web build; report it as disabled so the UI
@@ -856,6 +1002,7 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         break;
 
       // ─── Artifacts (Micro-Apps) Manager ─────────────────────────────────────
+      case 'artifact:list':
       case 'artifact_list':
       case 'artifact-list': {
         const artDir = path.join(userDataDir, 'artifact');
@@ -883,6 +1030,7 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         result = items;
         break;
       }
+      case 'artifact:openFolder':
       case 'artifact_open_folder':
       case 'artifact-open-folder': {
         const artDir = path.join(userDataDir, 'artifact');
@@ -906,6 +1054,7 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         result = { success: true, folder: artDir };
         break;
       }
+      case 'artifact:open':
       case 'artifact_open':
       case 'artifact-open': {
         const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
@@ -923,18 +1072,21 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         result = { success: true, path: targetPath };
         break;
       }
+      case 'artifact:start':
       case 'artifact_start':
       case 'artifact-start': {
         const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
         result = { id: artId, status: 'running' };
         break;
       }
+      case 'artifact:stop':
       case 'artifact_stop':
       case 'artifact-stop': {
         const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
         result = { id: artId, status: 'stopped' };
         break;
       }
+      case 'artifact:delete':
       case 'artifact_delete':
       case 'artifact-delete': {
         const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;

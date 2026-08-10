@@ -6,10 +6,11 @@ interface AppToastProps {
   message: string;
   type?: 'info' | 'error';
   onClose: () => void;
+  onViewDetails?: () => void;
 }
 
 /** Toast notification component with copy-to-clipboard and auto-dismiss. */
-export const AppToast: React.FC<AppToastProps> = ({ open, message, type = 'info', onClose }) => {
+export const AppToast: React.FC<AppToastProps> = ({ open, message, type = 'info', onClose, onViewDetails }) => {
   const [copied, setCopied] = useState(false);
 
   if (!open) return null;
@@ -65,6 +66,16 @@ export const AppToast: React.FC<AppToastProps> = ({ open, message, type = 'info'
       </div>
 
       <div className="flex items-center gap-1 border-l border-brand-border/40 pl-2.5 ml-1 select-none">
+        {isError && onViewDetails && (
+          <button
+            onClick={onViewDetails}
+            className="px-2 py-0.5 rounded text-[11px] font-semibold bg-red-500/20 text-red-300 hover:bg-red-500/30 transition-all cursor-pointer mr-1"
+            title="View full error details and copy diagnostic report"
+          >
+            Details
+          </button>
+        )}
+
         {/* Copy button */}
         <button
           onClick={handleCopy}

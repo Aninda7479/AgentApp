@@ -20,6 +20,7 @@ import { ChatSettingsModal } from './pages/Workspace/ChatSettingsModal';
 import { NewChatModal } from './components/NewChatModal';
 import { TitleBar } from './components/TitleBar';
 import { AppToast } from './components/AppToast';
+import { GlobalErrorModal, GlobalErrorPayload } from './components/GlobalErrorModal';
 import { VoiceIndicator } from './components/VoiceIndicator';
 import { WorkspaceView } from './pages/Workspace/WorkspaceView';
 import { ProjectSettingsPage } from './pages/Workspace/ProjectSettingsPage';
@@ -153,6 +154,7 @@ export const App: React.FC = () => {
   const [toastOpen, setToastOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
   const [toastType, setToastType] = useState<'info' | 'error'>('info');
+  const [activeErrorModal, setActiveErrorModal] = useState<GlobalErrorPayload | null>(null);
   // Live context-window usage reported by the engine (null until a real agent
   // run streams a `context` event; the workspace falls back to a local estimate
   // in demo/simulation mode).
@@ -1182,11 +1184,29 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('partner:say', onSay as EventListener);
   }, [ipc]);
 
-  // Surface renderer + main-process errors as red toasts.
+  // Surface renderer + main-process errors as red toasts & popup error modal for unhandled crashes.
   useEffect(() => {
     ErrorService.install();
-    const unsubscribe = ErrorService.subscribe((_context, message) => triggerToast(message, 'error'));
-    const cleanupAppError = ErrorService.bindAppError(ipc, (message) => triggerToast(message, 'error'));
+    const unsubscribe = ErrorService.subscribe((context, message, stack) => {
+      triggerToast(message, 'error');
+      // Auto-popup GlobalErrorModal only for unhandled window/promise rejections or React render crashes
+      if (context.startsWith('unhandled') || context.startsWith('react-render')) {
+        setActiveErrorModal({
+          context,
+          message,
+          stack,
+          timestamp: new Date().toLocaleTimeString()
+        });
+      }
+    });
+    const cleanupAppError = ErrorService.bindAppError(ipc, (message) => {
+      triggerToast(message, 'error');
+      setActiveErrorModal({
+        context: 'app-error',
+        message,
+        timestamp: new Date().toLocaleTimeString()
+      });
+    });
     return () => {
       unsubscribe();
       cleanupAppError();
@@ -1697,7 +1717,22 @@ export const App: React.FC = () => {
         onResolve={resolvePermission}
       />
 
-      <AppToast open={toastOpen} message={toastMessage} type={toastType} onClose={() => setToastOpen(false)} />
+      {/* Interactive Global Error Modal with Copy Details Prompt */}
+      <GlobalErrorModal error={activeErrorModal} onClose={() => setActiveErrorModal(null)} />
+
+      <AppToast
+        open={toastOpen}
+        message={toastMessage}
+        type={toastType}
+        onClose={() => setToastOpen(false)}
+        onViewDetails={() =>
+          setActiveErrorModal({
+            context: 'system-notification',
+            message: toastMessage,
+            timestamp: new Date().toLocaleTimeString()
+          })
+        }
+      />
       <VoiceIndicator />
 
       {/* Floating Partner / Pet companion. On the desktop the 3D overlay window

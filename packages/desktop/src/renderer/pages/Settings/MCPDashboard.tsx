@@ -146,7 +146,8 @@ const CatalogCard: React.FC<{
   onRequestInstall: (entry: CatalogEntry) => void;
 }> = ({ entry, onRequestInstall }) => {
   const installable = entry.installable !== false;
-  const needsKeys = entry.envKeys.length > 0;
+  const envKeys = Array.isArray(entry?.envKeys) ? entry.envKeys : [];
+  const needsKeys = envKeys.length > 0;
 
   return (
     <div

@@ -108,7 +108,10 @@ pub fn run() {
             artifact_stop,
             artifact_open,
             artifact_delete,
-            artifact_open_folder
+            artifact_open_folder,
+            read_text_file,
+            write_text_file,
+            file_exists
         ])
         .run(tauri::generate_context!())
         .expect("error while running SuperAgent tauri application");

@@ -62,25 +62,39 @@ const mockIpcRenderer = {
       window.open(args[0], '_blank');
       return { ok: true };
     }
-    try {
+
+    const performFetch = async () => {
       const response = await fetch(`/api/ipc/${channel}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
         body: JSON.stringify({ args }),
       });
-      // Session expired or unauthenticated — bounce to the login page.
+      // Session expired or unauthenticated — bounce to the login page cleanly.
       if (response.status === 401) {
         window.location.replace('/login');
-        throw new Error('Authentication required');
+        return new Promise(() => {});
       }
       const result = await response.json();
       if (result.error) {
         throw new Error(result.error);
       }
       return result.data;
+    };
+
+    try {
+      return await performFetch();
     } catch (err: any) {
-      console.error(`[IPC-Bridge] Error invoking channel "${channel}":`, err);
+      // Retry once for transient fetch/network errors (e.g. initial page load or SW updates)
+      if (err instanceof TypeError && (err.message.includes('fetch') || err.message.includes('NetworkError'))) {
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          return await performFetch();
+        } catch {
+          /* retry failed; surface final error below */
+        }
+      }
+      console.warn(`[IPC-Bridge] Channel "${channel}" fetch failed:`, err?.message || err);
       throw err;
     }
   },

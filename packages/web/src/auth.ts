@@ -238,6 +238,17 @@ const PUBLIC_PATHS = new Set([
   '/api/auth/setup'
 ]);
 
+function isLoopbackReq(req: Request): boolean {
+  const ip = req.socket.remoteAddress || '';
+  return (
+    ip === '127.0.0.1' ||
+    ip === '::1' ||
+    ip === '::ffff:127.0.0.1' ||
+    req.hostname === 'localhost' ||
+    req.hostname === '127.0.0.1'
+  );
+}
+
 /**
  * Express gate: allows public paths, then requires a valid session. Unauthenticated
  * API calls receive 401 JSON; page requests are redirected to `/login`.
@@ -246,6 +257,11 @@ export function authGate(req: Request, res: Response, next: NextFunction): void 
   // Gate: allow public paths, require session for everything else
   if (isAuthDisabled()) return next();
   if (PUBLIC_PATHS.has(req.path)) return next();
+
+  // Allow local desktop app IPC calls over loopback (Tauri / Electron desktop clients)
+  if (req.path.startsWith('/api/ipc/') && isLoopbackReq(req)) {
+    return next();
+  }
 
   const user = getAuthenticatedUser(req);
   if (user) {

@@ -27,12 +27,19 @@ export async function browserSafeFetch(url: string, init: RequestInit = {}): Pro
         headers: init.headers ?? {}
       });
       if (payload && typeof payload === 'object') {
-        if (payload.error) throw new Error(payload.error);
+        if (payload.error && payload.ok === undefined) {
+          throw new Error(payload.error);
+        }
+        const ok = payload.ok ?? false;
+        const status = payload.status ?? (ok ? 200 : 502);
+        const statusText = payload.statusText ?? (ok ? 'OK' : 'Bad Gateway');
+        const data = payload.data ?? (payload.error ? { error: payload.error } : {});
         return {
-          ok: payload.ok ?? false,
-          status: payload.status ?? 502,
-          statusText: payload.statusText ?? 'Bad Gateway',
-          json: async () => payload.data,
+          ok,
+          status,
+          statusText,
+          text: async () => (typeof data === 'string' ? data : JSON.stringify(data)),
+          json: async () => (typeof data === 'string' ? JSON.parse(data) : data),
         } as unknown as Response;
       }
     } catch (ipcErr: any) {
@@ -67,14 +74,18 @@ export async function browserSafeFetch(url: string, init: RequestInit = {}): Pro
   }
 
   const payload = await res.json().catch(() => ({} as any));
-  if (payload.error) {
+  if (payload.error && payload.ok === undefined) {
     throw new Error(payload.error);
   }
+  const ok = payload.ok ?? false;
+  const status = payload.status ?? (ok ? 200 : 502);
+  const statusText = payload.statusText ?? (ok ? 'OK' : 'Bad Gateway');
+  const data = payload.data ?? (payload.error ? { error: payload.error } : {});
   return {
-    ok: payload.ok ?? false,
-    status: payload.status ?? 502,
-    statusText: payload.statusText ?? 'Bad Gateway',
-    text: async () => (typeof payload.data === 'string' ? payload.data : JSON.stringify(payload.data || {})),
-    json: async () => payload.data,
+    ok,
+    status,
+    statusText,
+    text: async () => (typeof data === 'string' ? data : JSON.stringify(data)),
+    json: async () => (typeof data === 'string' ? JSON.parse(data) : data),
   } as unknown as Response;
 }

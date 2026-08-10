@@ -165,8 +165,9 @@ pub fn artifact_open_folder() -> Result<(), String> {
 
 #[tauri::command]
 pub fn get_system_info() -> SystemInfoResponse {
-    let mut sys = System::new_all();
-    sys.refresh_all();
+    let mut sys = System::new();
+    sys.refresh_memory();
+    sys.refresh_cpu_usage();
 
     let total_mem = sys.total_memory() / 1024 / 1024;
     let used_mem = sys.used_memory() / 1024 / 1024;
@@ -188,6 +189,24 @@ pub fn get_system_info() -> SystemInfoResponse {
         cpu_usage_percent: cpu_usage,
         hostname: System::host_name().unwrap_or_else(|| "SuperAgent-Device".to_string()),
     }
+}
+
+#[tauri::command]
+pub fn read_text_file(path: String) -> Result<String, String> {
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn write_text_file(path: String, content: String) -> Result<(), String> {
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn file_exists(path: String) -> bool {
+    std::path::Path::new(&path).exists()
 }
 
 #[tauri::command]

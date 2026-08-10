@@ -90,7 +90,11 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
       downloading: { Icon: RefreshCw, cls: 'border-[color:var(--neon-live)]/40 bg-[color:var(--neon-live)]/10 text-[color:var(--neon-live)]', spin: true },
       downloaded: { Icon: CheckCircle2, cls: 'border-[color:var(--neon-constructive)]/40 bg-[color:var(--neon-constructive)]/10 text-[color:var(--neon-constructive)]', spin: false }
     } as const;
-    const cfg = map[updateStatus.status];
+    const cfg = map[updateStatus.status] ?? {
+      Icon: Info,
+      cls: 'border-brand-border bg-brand-bg text-brand-textMuted',
+      spin: false
+    };
     const { Icon } = cfg;
     return (
       <div className={`mt-4 flex flex-col gap-3 rounded-lg border px-4 py-3 text-sm ${cfg.cls}`}>

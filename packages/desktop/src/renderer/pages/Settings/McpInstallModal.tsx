@@ -100,7 +100,8 @@ export const McpInstallModal: React.FC<McpInstallModalProps> = ({ isOpen, entry,
 
   if (!isOpen || !entry) return null;
 
-  const requiredKeys = entry.envKeys.filter((k) => k.required);
+  const envKeys = Array.isArray(entry.envKeys) ? entry.envKeys : [];
+  const requiredKeys = envKeys.filter((k) => k?.required);
   const hasRequired = requiredKeys.length > 0;
   const missingRequired = requiredKeys.some((k) => !values[k.key]?.trim());
 

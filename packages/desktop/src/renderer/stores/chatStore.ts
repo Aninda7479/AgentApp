@@ -106,8 +106,12 @@ class ChatStoreManager {
         }
       }
 
-      // Also update meta chat record steps for active view
-      const updatedChats = prev.chats.map((c) => (c.id === chatId ? { ...c, steps } : c));
+      // Also update meta chat records; prune heavy step arrays from evicted non-resident chats to free RAM
+      const updatedChats = prev.chats.map((c) => {
+        if (c.id === chatId) return { ...c, steps };
+        if (!newMap.has(c.id) && c.steps.length > 0) return { ...c, steps: [] };
+        return c;
+      });
       return { residentSteps: newMap, chats: updatedChats };
     });
   }
