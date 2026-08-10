@@ -62,6 +62,29 @@ async function build() {
   fs.copyFileSync(path.join(webRoot, 'src/account.html'), path.join(distDir, 'account.html'));
   console.log('[Build] account.html copied.');
 
+  // 3c-2. Build tray.js and copy tray.html for Artifacts tray popup
+  const rendererDistDir = path.join(distDir, 'renderer');
+  if (!fs.existsSync(rendererDistDir)) {
+    fs.mkdirSync(rendererDistDir, { recursive: true });
+  }
+  await esbuild.build({
+    entryPoints: [path.join(desktopRoot, 'src/renderer/trayCard/TrayCardApp.tsx')],
+    bundle: true,
+    outfile: path.join(rendererDistDir, 'tray.js'),
+    format: 'iife',
+    minify: process.env.NODE_ENV === 'production',
+    loader: {
+      '.png': 'dataurl',
+      '.svg': 'dataurl',
+    },
+    define: {
+      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+    },
+  });
+  console.log('[Build] renderer/tray.js compiled.');
+  fs.copyFileSync(path.join(desktopRoot, 'src/tray.html'), path.join(distDir, 'tray.html'));
+  console.log('[Build] tray.html copied.');
+
   // 3d. Copy PWA Assets (manifest.json, sw.js, icon.png, icon.svg)
   fs.copyFileSync(path.join(webRoot, 'src/manifest.json'), path.join(distDir, 'manifest.json'));
   fs.copyFileSync(path.join(webRoot, 'src/sw.js'), path.join(distDir, 'sw.js'));

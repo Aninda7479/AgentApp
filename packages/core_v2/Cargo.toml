@@ -29,3 +29,5 @@ uuid = { version = "1.8", features = ["v4", "serde"] }
 regex = "1.10"
 walkdir = "2.5"
 url = "2.5"
+rand = "0.8"
+sha2 = "0.10"

@@ -21,6 +21,19 @@
         "fullscreen": false,
         "label": "main",
         "center": true
+      },
+      {
+        "title": "SuperAgent Artifacts Card",
+        "url": "tray.html",
+        "width": 380,
+        "height": 540,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "resizable": false,
+        "fullscreen": false,
+        "label": "artifacts"
       }
     ],
     "security": {
