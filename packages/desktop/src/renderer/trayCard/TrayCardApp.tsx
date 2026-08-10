@@ -31,78 +31,8 @@ export const TrayCardApp: React.FC = () => {
       const list = await invokeCommand<ArtifactRuntimeState[]>('artifact_list');
       setArtifacts(list || []);
     } catch (err) {
-      console.warn('[ArtifactsList] Fallback sample micro-apps list loaded', err);
-      setArtifacts([
-        {
-          id: 'quick-calc',
-          manifest: {
-            name: 'Quick Calculator',
-            description: 'Glassmorphism dark scientific mini-calculator app',
-            version: '1.0.0',
-            artifact_type: 'static',
-            icon: '🧮',
-            entry: 'index.html',
-          },
-          status: 'stopped',
-          path: '~/.superagent/artifact/quick-calc',
-        },
-        {
-          id: 'scratchpad',
-          manifest: {
-            name: 'Super Scratchpad',
-            description: 'Persistent local markdown notepad artifact app',
-            version: '1.1.0',
-            artifact_type: 'static',
-            icon: '📝',
-            entry: 'index.html',
-          },
-          status: 'stopped',
-          path: '~/.superagent/artifact/scratchpad',
-        },
-        {
-          id: 'system-dashboard',
-          manifest: {
-            name: 'Hardware Monitor',
-            description: 'Live CPU & Memory telemetry app',
-            version: '1.0.0',
-            artifact_type: 'web',
-            icon: '📊',
-            entry: 'index.html',
-          },
-          status: 'running',
-          port: 14692,
-          url: 'http://localhost:14692',
-          path: '~/.superagent/artifact/system-dashboard',
-        },
-        {
-          id: 'code-sandbox',
-          manifest: {
-            name: 'Python Sandbox',
-            description: 'Isolated code runner & compiler',
-            version: '1.2.0',
-            artifact_type: 'python',
-            icon: '🐍',
-            entry: 'main.py',
-          },
-          status: 'stopped',
-          path: '~/.superagent/artifact/code-sandbox',
-        },
-        {
-          id: 'mcp-inspector',
-          manifest: {
-            name: 'MCP Tool Suite',
-            description: 'JSON-RPC protocol tool debugger',
-            version: '2.0.0',
-            artifact_type: 'node',
-            icon: '⚡',
-            entry: 'server.js',
-          },
-          status: 'running',
-          port: 8080,
-          url: 'http://localhost:8080',
-          path: '~/.superagent/artifact/mcp-inspector',
-        },
-      ]);
+      console.error('[ArtifactsList] Could not fetch native artifacts', err);
+      setArtifacts([]);
     } finally {
       setLoading(false);
     }
@@ -153,11 +83,13 @@ export const TrayCardApp: React.FC = () => {
     }
   };
 
-  const handleOpenFolder = async () => {
+  const handleOpenFolder = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     try {
       await invokeCommand('artifact_open_folder');
     } catch (err) {
-      console.error('Failed to open folder', err);
+      console.error('[Artifacts] Failed to open folder:', err);
     }
   };
 
@@ -171,17 +103,17 @@ export const TrayCardApp: React.FC = () => {
     if (type === 'python') return 'Py';
     if (type === 'node') return 'JS/Node';
     if (type === 'static' || type === 'web') return 'JS/HTML';
-    return type.toUpperCase();
+    return type ? type.toUpperCase() : 'APP';
   };
 
   return (
-    <div className="w-full h-full bg-[#0d0f17] text-slate-200 flex flex-col font-sans select-none overflow-hidden border border-slate-800 rounded-xl shadow-2xl">
+    <div className="w-full h-full bg-[#0f172a] opacity-100 text-slate-200 flex flex-col font-sans select-none overflow-hidden border border-slate-700 rounded-xl shadow-2xl">
       {/* Title Header */}
-      <div className="px-3.5 py-2.5 bg-slate-900/90 border-b border-slate-800/80 flex items-center justify-between">
+      <div className="px-3.5 py-2.5 bg-slate-900 border-b border-slate-700 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-base">⚡</span>
           <h1 className="text-xs font-bold text-slate-100 tracking-wide">
-            SuperAgent Artifacts
+            SuperAgent Artifacts ({artifacts.length})
           </h1>
         </div>
 
@@ -195,7 +127,7 @@ export const TrayCardApp: React.FC = () => {
           </button>
           <button
             onClick={handleOpenFolder}
-            title="Open Apps Storage (~/.superagent/artifact)"
+            title="Open Storage (~/.superagent/artifact)"
             className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-all flex items-center justify-center active:scale-95"
           >
             📁
@@ -222,15 +154,18 @@ export const TrayCardApp: React.FC = () => {
         )}
       </div>
 
-      {/* Simple List [Icon, App Name, JS/Py, Run/Stop, Open] */}
+      {/* Simple Real List [Icon, App Name, JS/Py, Run/Stop, Open] */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
         {loading && artifacts.length === 0 ? (
           <div className="h-full flex items-center justify-center text-xs text-slate-500 font-medium py-12">
-            Loading artifacts...
+            Loading real artifacts...
           </div>
         ) : filtered.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 py-12">
-            <p className="text-xs text-slate-300 font-medium">No artifacts found</p>
+            <p className="text-xs text-slate-300 font-medium">No small app artifacts installed</p>
+            <p className="text-[11px] text-slate-500 mt-1 max-w-[220px]">
+              Small apps generated by SuperAgent will appear here automatically (~/.superagent/artifact).
+            </p>
           </div>
         ) : (
           filtered.map((art) => {
@@ -295,7 +230,7 @@ export const TrayCardApp: React.FC = () => {
       {/* Footer */}
       <div className="px-3 py-1.5 bg-slate-900/90 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-500 font-medium">
         <span>Store: ~/.superagent/artifact</span>
-        <span className="text-cyan-400 font-semibold">Artifacts List</span>
+        <span className="text-cyan-400 font-semibold">Real Installed Apps</span>
       </div>
     </div>
   );

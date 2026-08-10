@@ -24,8 +24,9 @@
   ],
   "scripts": {
     "install:all": "npm install && npm install --prefix website",
-    "dev": "npm run dev:web",
-    "dev:app": "npm run tauri:dev --workspace=@superagent/desktop",
+    "dev": "npx concurrently -n \"web,app\" -c \"blue,magenta\" \"npm run dev:web\" \"npm run dev:app\"",
+    "dev:all": "npx concurrently -n \"web,app\" -c \"blue,magenta\" \"npm run dev:web\" \"npm run dev:app\"",
+    "dev:app": "npm run dev --workspace=@superagent/desktop",
     "dev:web": "npm run dev --workspace=@superagent/web",
     "dev:cli": "npm run start --workspace=@superagent/cli --",
     "dev:core": "cargo run --manifest-path packages/core_v2/Cargo.toml --bin superagent-core-daemon",
@@ -51,6 +52,7 @@
     "pack:desktop-all": "npm run pack:desktop-mac && npm run pack:desktop-win && npm run pack:desktop-linux"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.1.9"
+    "@vitest/coverage-v8": "^4.1.9",
+    "concurrently": "^10.0.3"
   }
 }

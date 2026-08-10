@@ -12,9 +12,10 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build:ui": "node -e \"const fs=require('fs'),p=require('path');fs.mkdirSync('dist',{recursive:true});fs.copyFileSync('src/ui.html','dist/ui.html');fs.copyFileSync('src/pet.html','dist/pet.html');fs.copyFileSync('src/circle-search.html','dist/circle-search.html');fs.copyFileSync('src/tray.html','dist/tray.html');fs.copyFileSync('src/overlay.html','dist/overlay.html');if(fs.existsSync('assets')){fs.mkdirSync('dist/assets',{recursive:true});fs.readdirSync('assets').forEach(f=>fs.copyFileSync(p.join('assets',f),p.join('dist/assets',f)));}\" && node scripts/bundle-renderer.mjs",
-    "dev": "npx @tauri-apps/cli dev",
+    "watch:ui": "npm run build:ui && node scripts/bundle-renderer.mjs --watch",
+    "dev": "concurrently -n \"watch-ui,tauri\" -c \"cyan,magenta\" \"npm run watch:ui\" \"npx @tauri-apps/cli dev\"",
     "build": "npm run build:ui && npx @tauri-apps/cli build",
-    "tauri:dev": "npx @tauri-apps/cli dev",
+    "tauri:dev": "npm run dev",
     "tauri:build": "npx @tauri-apps/cli build",
     "test": "vitest run"
   },

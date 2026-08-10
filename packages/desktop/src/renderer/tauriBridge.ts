@@ -28,6 +28,23 @@ export async function invokeCommand<T>(command: string, args?: Record<string, un
     }
   } else if (typeof window !== 'undefined' && (window as any).electron?.ipcRenderer) {
     return (window as any).electron.ipcRenderer.invoke(command, args);
+  } else if (typeof window !== 'undefined' && typeof fetch === 'function') {
+    try {
+      const res = await fetch(`/api/ipc/${command}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: command, args: args ? [args] : [] }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      return json.data as T;
+    } catch (err) {
+      console.error(`[HTTPBridge] Command error (${command}):`, err);
+      throw err;
+    }
   }
   throw new Error(`[PlatformBridge] Unsupported runtime environment for command: ${command}`);
 }

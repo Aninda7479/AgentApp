@@ -6,6 +6,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { exec } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -853,6 +854,97 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         // Harmless on web (no pet) — acknowledge so the call succeeds.
         result = { ok: true };
         break;
+
+      // ─── Artifacts (Micro-Apps) Manager ─────────────────────────────────────
+      case 'artifact_list':
+      case 'artifact-list': {
+        const artDir = path.join(userDataDir, 'artifact');
+        const items: any[] = [];
+        if (fs.existsSync(artDir)) {
+          const entries = fs.readdirSync(artDir);
+          for (const folder of entries) {
+            const folderPath = path.join(artDir, folder);
+            if (fs.statSync(folderPath).isDirectory()) {
+              const manifestPath = path.join(folderPath, 'manifest.json');
+              if (fs.existsSync(manifestPath)) {
+                try {
+                  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+                  items.push({
+                    id: folder,
+                    manifest,
+                    status: 'stopped',
+                    path: folderPath
+                  });
+                } catch {}
+              }
+            }
+          }
+        }
+        result = items;
+        break;
+      }
+      case 'artifact_open_folder':
+      case 'artifact-open-folder': {
+        const artDir = path.join(userDataDir, 'artifact');
+        if (!fs.existsSync(artDir)) {
+          fs.mkdirSync(artDir, { recursive: true });
+        }
+        const winPath = artDir.replace(/\//g, '\\');
+        const cmd = process.platform === 'win32'
+          ? `cmd /c start "" "${winPath}"`
+          : process.platform === 'darwin'
+          ? `open "${artDir}"`
+          : `xdg-open "${artDir}"`;
+        exec(cmd, (err) => {
+          if (err) {
+            console.error('[Artifacts] Failed to open folder in OS:', err);
+            if (process.platform === 'win32') {
+              exec(`explorer "${winPath}"`);
+            }
+          }
+        });
+        result = { success: true, folder: artDir };
+        break;
+      }
+      case 'artifact_open':
+      case 'artifact-open': {
+        const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
+        const artDir = path.join(userDataDir, 'artifact', artId || '');
+        const targetHtml = path.join(artDir, 'index.html');
+        const targetPath = fs.existsSync(targetHtml) ? targetHtml : artDir;
+        const cmd = process.platform === 'win32'
+          ? `start "" "${targetPath}"`
+          : process.platform === 'darwin'
+          ? `open "${targetPath}"`
+          : `xdg-open "${targetPath}"`;
+        exec(cmd, (err) => {
+          if (err) console.error('[Artifacts] Failed to open artifact:', err);
+        });
+        result = { success: true, path: targetPath };
+        break;
+      }
+      case 'artifact_start':
+      case 'artifact-start': {
+        const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
+        result = { id: artId, status: 'running' };
+        break;
+      }
+      case 'artifact_stop':
+      case 'artifact-stop': {
+        const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
+        result = { id: artId, status: 'stopped' };
+        break;
+      }
+      case 'artifact_delete':
+      case 'artifact-delete': {
+        const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
+        const artDir = path.join(userDataDir, 'artifact', artId || '');
+        if (fs.existsSync(artDir)) {
+          fs.rmSync(artDir, { recursive: true, force: true });
+        }
+        result = { success: true };
+        break;
+      }
 
       default:
         res.status(404).json({ error: `IPC channel "${channel}" not implemented` });
