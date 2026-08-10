@@ -214,6 +214,82 @@ pub fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+fn get_user_data_dir() -> PathBuf {
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home).join(".superagent")
+}
+
+#[tauri::command]
+pub fn read_global_memory() -> String {
+    let p = get_user_data_dir().join("global_memory.json");
+    fs::read_to_string(p).unwrap_or_else(|_| "{}".to_string())
+}
+
+#[tauri::command]
+pub fn write_global_memory(content: String) -> Result<(), String> {
+    let dir = get_user_data_dir();
+    let _ = fs::create_dir_all(&dir);
+    fs::write(dir.join("global_memory.json"), content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn read_settings_file() -> String {
+    let p = get_user_data_dir().join("settings.json");
+    fs::read_to_string(p).unwrap_or_else(|_| "{}".to_string())
+}
+
+#[tauri::command]
+pub fn write_settings_file(content: String) -> Result<(), String> {
+    let dir = get_user_data_dir();
+    let _ = fs::create_dir_all(&dir);
+    fs::write(dir.join("settings.json"), content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn check_ollama_port() -> bool {
+    use std::net::ToSocketAddrs;
+    if let Ok(mut addrs) = "127.0.0.1:11434".to_socket_addrs() {
+        if let Some(addr) = addrs.next() {
+            return std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(300)).is_ok();
+        }
+    }
+    false
+}
+
+#[tauri::command]
+pub fn search_workspace_files(root: String, query: String) -> Vec<String> {
+    let mut results = Vec::new();
+    let query_lower = query.to_lowercase();
+    let root_path = PathBuf::from(root);
+
+    fn walk(dir: &PathBuf, query: &str, results: &mut Vec<String>, max_files: &mut usize) {
+        if *max_files >= 100 {
+            return;
+        }
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                let name = p.file_name().unwrap_or_default().to_string_lossy();
+                if name.starts_with('.') || name == "node_modules" || name == "target" || name == "dist" {
+                    continue;
+                }
+                if p.is_dir() {
+                    walk(&p, query, results, max_files);
+                } else if name.to_lowercase().contains(query) {
+                    results.push(p.to_string_lossy().to_string());
+                    *max_files += 1;
+                }
+            }
+        }
+    }
+
+    let mut max = 0;
+    walk(&root_path, &query_lower, &mut results, &mut max);
+    results
+}
+
 #[tauri::command]
 pub fn toggle_window_maximize(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {

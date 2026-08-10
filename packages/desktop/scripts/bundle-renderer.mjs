@@ -39,6 +39,8 @@ const common = {
   loader: { '.css': 'empty' },
   logLevel: 'info',
   metafile: true,
+  minify: !WATCH,
+  treeShaking: true,
 };
 
 // `context()` is required for `--watch` (esbuild removed the `watch` option from
