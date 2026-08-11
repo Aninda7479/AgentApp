@@ -1,5 +1,6 @@
 import React from 'react';
 import { moodReaction, type PartnerAnimation, type PartnerManifest, type PartnerMood } from './types';
+import { PetSprite3D } from './PetSprite3D';
 
 const ANIM_CLASS: Record<PartnerAnimation, string> = {
   float: 'partner-anim-float',
@@ -10,23 +11,59 @@ const ANIM_CLASS: Record<PartnerAnimation, string> = {
   none: ''
 };
 
+/** Partners whose `model` field maps to a built-in 3D procedural character. */
+const PROCEDURAL_MODELS = new Set(['lily']);
+
 export interface PetSpriteProps {
   manifest: PartnerManifest;
   mood: PartnerMood;
-  /** Pixel size of the emoji glyph. Default 48. */
+  /** Pixel size of the sprite. Default 48. */
   size?: number;
   className?: string;
 }
 
 /**
- * Renders a Partner's current look: the mood's emoji (or default), wrapped in a
- * soft accent glow ring and playing the mood's CSS animation.
+ * Renders a Partner's current look.
+ *
+ * For partners with a known built-in 3D model (currently just "lily") this
+ * delegates to <PetSprite3D> which runs a full Three.js WebGL canvas with the
+ * procedural Lily character — animated, mood-reactive, and alive.
+ *
+ * All other partners fall back to the original 2D path:
+ *   dpUrl image → emoji glyph
+ * wrapped in the same soft accent glow ring.
  */
 export const PetSprite: React.FC<PetSpriteProps> = ({ manifest, mood, size = 48, className = '' }) => {
+  const accent = manifest.accent || '#7c83ff';
+
+  // ── 3D path ──────────────────────────────────────────────────────────────────
+  if (manifest.model && PROCEDURAL_MODELS.has(manifest.model)) {
+    return (
+      <div
+        data-testid="partner-sprite"
+        data-mood={mood}
+        className={`relative flex items-center justify-center rounded-2xl ${className}`}
+        style={{
+          width: size,
+          height: size,
+          boxShadow: `0 0 28px color-mix(in srgb, ${accent} 35%, transparent), inset 0 0 0 1px color-mix(in srgb, ${accent} 30%, transparent)`
+        }}
+        aria-label={`${manifest.name} (${mood})`}
+      >
+        <PetSprite3D
+          manifest={manifest}
+          mood={mood}
+          size={size}
+          className="w-full h-full"
+        />
+      </div>
+    );
+  }
+
+  // ── 2D path (original behaviour) ─────────────────────────────────────────────
   const reaction = moodReaction(manifest, mood);
   const emoji = reaction.emoji ?? manifest.emoji ?? '🐾';
   const anim = reaction.animation ?? 'none';
-  const accent = manifest.accent || '#7c83ff';
 
   return (
     <div

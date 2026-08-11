@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CalendarDays, Folder, Plug, Sparkles, Stethoscope, Terminal, Bot, Plus, X, RefreshCw } from 'lucide-react';
 import { Composer, ComposerOptions } from './Composer';
 import { TrajectoryCanvas, TrajectoryStep } from './TrajectoryCanvas';
+import { WorkspaceRightSidebar } from '../../workspace/WorkspaceRightSidebar';
 import { MCPServerInfo } from '../../pages/Settings/MCPDashboard';
 import { ModelConfig } from '../../pages/Settings/SettingsView';
 import { WorkspaceService } from '../../logic/workspace';
@@ -533,175 +534,182 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({
         </div>
       )}
 
-      {/* ── Trajectory Canvas ─────────────────────────────────────────────── */}
-      <TrajectoryCanvas
-        steps={activeSessionId === 'session-main' ? trajectorySteps : (activeSession?.steps || [])}
-        isStreaming={activeSessionId === 'session-main' ? isGenerating : (activeSession?.isGenerating || false)}
-        onViewDiff={onViewDiff}
-        onUndoStep={onUndoStep}
-        onEditStep={(id, content) => onPromptChange(content)}
-        lastError={lastError}
-        onRetryLast={onRetryLast}
-        onRegenerate={onRegenerate}
-        onActionClick={(action, data) => {
-          if (action === 'openMedia') {
-            WorkspaceService.openMedia(data?.mediaPath, () =>
-              onToast(`Open Media Artifact: ${data?.mediaPath || 'No Path'}`)
-            );
-          }
-        }}
-      >
-        {/* ── Welcome/Empty State ─────────────────────────────────────────── */}
-        {(activeSessionId === 'session-main' ? trajectorySteps : (activeSession?.steps || [])).length === 0 && (
-          <div className="flex flex-col items-center justify-center px-4 max-w-[760px] w-full mx-auto mt-6 mb-4 animate-fade-in relative">
-            {/* Glow blob */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[360px] h-[360px] bg-brand-textMuted/5 rounded-full blur-[90px] pointer-events-none" />
+      {/* ── Main Workspace Body with Trajectory Canvas + Right Sidebar ──── */}
+      <div className="flex-1 flex h-full min-w-0 overflow-hidden relative">
+        {/* Left / Center Main Canvas Area */}
+        <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
+          {/* ── Trajectory Canvas ─────────────────────────────────────────────── */}
+          <TrajectoryCanvas
+            steps={activeSessionId === 'session-main' ? trajectorySteps : (activeSession?.steps || [])}
+            isStreaming={activeSessionId === 'session-main' ? isGenerating : (activeSession?.isGenerating || false)}
+            onViewDiff={onViewDiff}
+            onUndoStep={onUndoStep}
+            onEditStep={(id, content) => onPromptChange(content)}
+            lastError={lastError}
+            onRetryLast={onRetryLast}
+            onRegenerate={onRegenerate}
+            onActionClick={(action, data) => {
+              if (action === 'openMedia') {
+                WorkspaceService.openMedia(data?.mediaPath, () =>
+                  onToast(`Open Media Artifact: ${data?.mediaPath || 'No Path'}`)
+                );
+              }
+            }}
+          >
+            {/* ── Welcome/Empty State ─────────────────────────────────────────── */}
+            {(activeSessionId === 'session-main' ? trajectorySteps : (activeSession?.steps || [])).length === 0 && (
+              <div className="flex flex-col items-center justify-center px-4 max-w-[760px] w-full mx-auto mt-6 mb-4 animate-fade-in relative">
+                {/* Glow blob */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[360px] h-[360px] bg-brand-textMuted/5 rounded-full blur-[90px] pointer-events-none" />
 
-            {/* Layered-atmosphere backdrop — echoes the BrandLogo's flat depth bands
-                (Atmosphere mode): the single focal disc floats above calm, deepening
-                silhouettes. Theme-adaptive via the --brand-atmo-* tokens so it reads on
-                both dark and light canvas without harming text contrast. Purely
-                decorative; no layout impact, no motion (calm, reduced-motion safe). */}
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 bottom-0 h-[46%] overflow-hidden"
-            >
-              <svg
-                viewBox="0 0 320 120"
-                preserveAspectRatio="none"
-                className="h-full w-full"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                {/* Soft accent glow settling behind the focal disc */}
-                <ellipse cx="160" cy="34" rx="150" ry="58" style={{ fill: 'var(--brand-atmo-glow)' }} />
-                {/* Depth bands, back → front, flat and calm */}
-                <path
-                  d="M0 66 C58 56 112 63 170 57 C228 51 282 60 320 55 L320 120 L0 120 Z"
-                  style={{ fill: 'var(--brand-atmo-1)' }}
-                />
-                <path
-                  d="M0 82 C66 72 124 80 182 74 C240 68 292 78 320 72 L320 120 L0 120 Z"
-                  style={{ fill: 'var(--brand-atmo-2)' }}
-                />
-                <path
-                  d="M0 98 C60 90 122 96 182 92 C246 88 300 96 320 92 L320 120 L0 120 Z"
-                  style={{ fill: 'var(--brand-atmo-3)' }}
-                />
-              </svg>
-            </div>
-
-            {/* Brand emblem — the single focal motif of the empty state */}
-            <div className="relative z-10 mb-5 flex justify-center">
-              <div className="opacity-95 drop-shadow-[0_8px_24px_rgba(0,0,0,0.22)]">
-                <BrandLogo size={46} variant="glyph" />
-              </div>
-            </div>
-
-            {/* Title */}
-            <div
-              data-testid="workspace-title-question"
-              className="text-center text-xl font-outfit font-bold tracking-tight text-brand-textMain mb-1"
-            >
-              {activeProject ? (
-                <>
-                  What should we build in{' '}
-                  <span className="text-brand-textMain">
-                    {activeProject}
-                  </span>
-                  ?
-                </>
-              ) : (
-                'What should we build?'
-              )}
-            </div>
-            <p className="text-brand-textMuted text-[11px] text-center mb-5">
-              Pick a starting point below — or just describe what you have in mind.
-            </p>
-
-
-
-            {/* Recommendation cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-[680px] mb-5">
-              {recommendations.map(({ title, prompt, description, Icon }) => (
-                <button
-                  key={title}
-                  onClick={() => onPromptChange(prompt)}
-                  className="group glass-card glow-hover p-3.5 rounded-xl cursor-pointer text-left flex gap-3 items-start transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-highlight/60"
+                {/* Layered-atmosphere backdrop */}
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 bottom-0 h-[46%] overflow-hidden"
                 >
-                  <span className="w-7 h-7 rounded-lg flex items-center justify-center border border-brand-border bg-brand-hover text-brand-textMuted group-hover:text-brand-textMain transition-colors flex-shrink-0">
-                    <Icon size={13} />
-                  </span>
-                  <span>
-                    <span className="block font-semibold text-brand-textMain text-[12px]">{title}</span>
-                    <span className="block text-brand-textMuted text-[10px] mt-0.5 leading-relaxed">{description}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
+                  <svg
+                    viewBox="0 0 320 120"
+                    preserveAspectRatio="none"
+                    className="h-full w-full"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <ellipse cx="160" cy="34" rx="150" ry="58" style={{ fill: 'var(--brand-atmo-glow)' }} />
+                    <path
+                      d="M0 66 C58 56 112 63 170 57 C228 51 282 60 320 55 L320 120 L0 120 Z"
+                      style={{ fill: 'var(--brand-atmo-1)' }}
+                    />
+                    <path
+                      d="M0 82 C66 72 124 80 182 74 C240 68 292 78 320 72 L320 120 L0 120 Z"
+                      style={{ fill: 'var(--brand-atmo-2)' }}
+                    />
+                    <path
+                      d="M0 98 C60 90 122 96 182 92 C246 88 300 96 320 92 L320 120 L0 120 Z"
+                      style={{ fill: 'var(--brand-atmo-3)' }}
+                    />
+                  </svg>
+                </div>
 
-            {/* Status pills */}
-            <div className="flex items-center gap-x-4 gap-y-2 flex-wrap text-[10px] text-brand-textMuted font-mono border-t border-brand-border/20 pt-4 w-full max-w-[680px] justify-center select-none">
-              <div className="flex items-center gap-1.5">
-                <span className={`w-1 h-1 rounded-full ${enabledModels.length > 0 ? 'bg-[color:var(--neon-constructive)]' : 'bg-brand-textMuted/20'}`} />
-                <span>models: {enabledModels.length > 0 ? enabledModels.length : 'none'}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className={`w-1 h-1 rounded-full ${mcpServers.filter(s => s.enabled).length > 0 ? 'bg-[color:var(--neon-live)]' : 'bg-brand-textMuted/20'}`} />
-                <span>mcp: {mcpServers.filter(s => s.enabled).length} online</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className={`w-1 h-1 rounded-full ${hasCredentials ? 'bg-[color:var(--neon-live)]' : 'bg-[color:var(--neon-attention)]'}`} />
-                <span>keys: {hasCredentials ? 'active' : 'setup'}</span>
-              </div>
-              <button
-                onClick={handleAddAgentSession}
-                disabled={noModels}
-                title={noModels ? 'Connect a model in Settings to use agents' : 'Run another agent in parallel'}
-                className={`flex items-center gap-1.5 border px-2.5 py-1 rounded-full text-brand-textMain transition-all ${
-                  noModels
-                    ? 'opacity-40 cursor-not-allowed border-brand-border bg-brand-hover'
-                    : 'bg-brand-hover border-brand-border hover:border-brand-border-strong cursor-pointer'
-                }`}
-              >
-                <Bot size={10} />
-                <span>Run parallel agent</span>
-              </button>
-            </div>
-          </div>
-        )}
-      </TrajectoryCanvas>
+                {/* Brand emblem */}
+                <div className="relative z-10 mb-5 flex justify-center">
+                  <div className="opacity-95 drop-shadow-[0_8px_24px_rgba(0,0,0,0.22)]">
+                    <BrandLogo size={46} variant="glyph" />
+                  </div>
+                </div>
 
-      {/* ── Prompt Composer ───────────────────────────────────────────────── */}
-      <Composer
-        onSend={handleSendPromptForSession}
-        isGenerating={activeSessionId === 'session-main' ? isGenerating : (activeSession?.isGenerating || false)}
-        onStop={activeSessionId === 'session-main' ? onStop : () => {
-          setAgentSessions(prev => prev.map(s =>
-            s.id === activeSessionId ? { ...s, isGenerating: false } : s
-          ));
-        }}
-        activeProject={activeProject}
-        onAttachClick={onAttachClick}
-        availableModels={composerModelsFromCatalog(modelsCatalog, orchestratorEnabled)}
-        emptyStateMessage={composerEmptyStateMessage(modelsCatalog)}
-        defaultModel={activeChatModel && enabledModels.some(m => m.name === activeChatModel) ? activeChatModel : (enabledModels.length > 1 && orchestratorEnabled ? 'Orchestrator' : (enabledModels[0]?.name || ''))}
-        defaultApprovalMode={defaultApprovalMode}
-        promptValue={composerPrompt}
-        onPromptChange={onPromptChange}
-        onAttachPastedFiles={onAttachPastedFiles}
-        attachments={composerAttachments}
-        onRemoveAttachment={onRemoveAttachment}
-        onModelChange={onModelChange}
-        projects={projects}
-        onSelectProject={onSelectProject}
-        sandbox={!unsandboxedActions}
-        onSandboxChange={(v) => onUnsandboxedActionsChange?.(!v)}
-        onMicUnavailable={onMicUnavailable}
-        onMicNotice={onMicNotice}
-        slashCommands={slashCommands}
-        skills={skills}
-        mcpServers={mcpServers.map((s) => ({ name: s.name, id: s.id }))}
-      />
+                {/* Title */}
+                <div
+                  data-testid="workspace-title-question"
+                  className="text-center text-xl font-outfit font-bold tracking-tight text-brand-textMain mb-1"
+                >
+                  {activeProject ? (
+                    <>
+                      What should we build in{' '}
+                      <span className="text-brand-textMain">
+                        {activeProject}
+                      </span>
+                      ?
+                    </>
+                  ) : (
+                    'What should we build?'
+                  )}
+                </div>
+                <p className="text-brand-textMuted text-[11px] text-center mb-5">
+                  Pick a starting point below — or just describe what you have in mind.
+                </p>
+
+                {/* Recommendation cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-[680px] mb-5">
+                  {recommendations.map(({ title, prompt, description, Icon }) => (
+                    <button
+                      key={title}
+                      onClick={() => onPromptChange(prompt)}
+                      className="group glass-card glow-hover p-3.5 rounded-xl cursor-pointer text-left flex gap-3 items-start transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-highlight/60"
+                    >
+                      <span className="w-7 h-7 rounded-lg flex items-center justify-center border border-brand-border bg-brand-hover text-brand-textMuted group-hover:text-brand-textMain transition-colors flex-shrink-0">
+                        <Icon size={13} />
+                      </span>
+                      <span>
+                        <span className="block font-semibold text-brand-textMain text-[12px]">{title}</span>
+                        <span className="block text-brand-textMuted text-[10px] mt-0.5 leading-relaxed">{description}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Status pills */}
+                <div className="flex items-center gap-x-4 gap-y-2 flex-wrap text-[10px] text-brand-textMuted font-mono border-t border-brand-border/20 pt-4 w-full max-w-[680px] justify-center select-none">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-1 h-1 rounded-full ${enabledModels.length > 0 ? 'bg-[color:var(--neon-constructive)]' : 'bg-brand-textMuted/20'}`} />
+                    <span>models: {enabledModels.length > 0 ? enabledModels.length : 'none'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-1 h-1 rounded-full ${mcpServers.filter(s => s.enabled).length > 0 ? 'bg-[color:var(--neon-live)]' : 'bg-brand-textMuted/20'}`} />
+                    <span>mcp: {mcpServers.filter(s => s.enabled).length} online</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-1 h-1 rounded-full ${hasCredentials ? 'bg-[color:var(--neon-live)]' : 'bg-[color:var(--neon-attention)]'}`} />
+                    <span>keys: {hasCredentials ? 'active' : 'setup'}</span>
+                  </div>
+                  <button
+                    onClick={handleAddAgentSession}
+                    disabled={noModels}
+                    title={noModels ? 'Connect a model in Settings to use agents' : 'Run another agent in parallel'}
+                    className={`flex items-center gap-1.5 border px-2.5 py-1 rounded-full text-brand-textMain transition-all ${
+                      noModels
+                        ? 'opacity-40 cursor-not-allowed border-brand-border bg-brand-hover'
+                        : 'bg-brand-hover border-brand-border hover:border-brand-border-strong cursor-pointer'
+                    }`}
+                  >
+                    <Bot size={10} />
+                    <span>Run parallel agent</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </TrajectoryCanvas>
+
+          {/* ── Prompt Composer ───────────────────────────────────────────────── */}
+          <Composer
+            onSend={handleSendPromptForSession}
+            isGenerating={activeSessionId === 'session-main' ? isGenerating : (activeSession?.isGenerating || false)}
+            onStop={activeSessionId === 'session-main' ? onStop : () => {
+              setAgentSessions(prev => prev.map(s =>
+                s.id === activeSessionId ? { ...s, isGenerating: false } : s
+              ));
+            }}
+            activeProject={activeProject}
+            onAttachClick={onAttachClick}
+            availableModels={composerModelsFromCatalog(modelsCatalog, orchestratorEnabled)}
+            emptyStateMessage={composerEmptyStateMessage(modelsCatalog)}
+            defaultModel={activeChatModel && enabledModels.some(m => m.name === activeChatModel) ? activeChatModel : (enabledModels.length > 1 && orchestratorEnabled ? 'Orchestrator' : (enabledModels[0]?.name || ''))}
+            defaultApprovalMode={defaultApprovalMode}
+            promptValue={composerPrompt}
+            onPromptChange={onPromptChange}
+            onAttachPastedFiles={onAttachPastedFiles}
+            attachments={composerAttachments}
+            onRemoveAttachment={onRemoveAttachment}
+            onModelChange={onModelChange}
+            projects={projects}
+            onSelectProject={onSelectProject}
+            sandbox={!unsandboxedActions}
+            onSandboxChange={(v) => onUnsandboxedActionsChange?.(!v)}
+            onMicUnavailable={onMicUnavailable}
+            onMicNotice={onMicNotice}
+            slashCommands={slashCommands}
+            skills={skills}
+            mcpServers={mcpServers.map((s) => ({ name: s.name, id: s.id }))}
+          />
+        </div>
+
+        {/* ── Tabbed Right Workspace Sidebar ───────────────────────────── */}
+        <WorkspaceRightSidebar
+          steps={activeSessionId === 'session-main' ? trajectorySteps : (activeSession?.steps || [])}
+          isGenerating={activeSessionId === 'session-main' ? isGenerating : (activeSession?.isGenerating || false)}
+          activeChatId={activeSessionId}
+          onViewDiff={onViewDiff}
+          onAddAgentSession={handleAddAgentSession}
+        />
+      </div>
     </>
   );
 };

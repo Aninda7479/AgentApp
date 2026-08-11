@@ -1,14 +1,11 @@
-/**
- * Workspace Stage Component (Pure TailwindCSS)
- * Renders a clean, single-panel agent workspace for the active chat session.
- */
-
 import React from 'react';
-import { useChatStore } from '../stores/chatStore';
+import { useChatStore, chatStore } from '../stores/chatStore';
+import { useSessionStore } from '../stores/sessionStore';
 import { MessageCanvas } from './MessageCanvas';
 import { ComposerBar } from './ComposerBar';
+import { WorkspaceRightSidebar } from './WorkspaceRightSidebar';
 import { AgentOrchestrator } from '../services/AgentOrchestrator';
-import type { ComposerOptions, ComposerAttachment } from '../core/types';
+import type { ComposerOptions, ComposerAttachment, StoredChat } from '../core/types';
 
 interface WorkspaceStageProps {
   activeProject: string;
@@ -21,11 +18,15 @@ interface WorkspaceStageProps {
 
 export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
   activeProject,
+  onViewDiff,
   onToast,
   onUndoStep,
   onEditStep,
 }) => {
   const activeChatId = useChatStore((s) => s.activeChatId) || 'draft-chat';
+  const activeChat = useChatStore((s) => s.chats.find((c) => c.id === activeChatId));
+  const isGenerating = useSessionStore((s) => Boolean(s.runningSessions.get(activeChatId)?.isGenerating));
+  const steps = activeChat?.steps || [];
 
   const handleSendPrompt = (prompt: string, options: ComposerOptions, attachments: ComposerAttachment[]) => {
     if (activeChatId) {
@@ -39,9 +40,23 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
     }
   };
 
-  return (
-    <div className="flex-1 flex flex-col h-full min-w-0 relative">
+  const handleAddAgentSession = () => {
+    const newChatId = `chat-${Date.now()}`;
+    const newChat: StoredChat = {
+      id: newChatId,
+      title: `Agent ${chatStore.getState().chats.length + 1}`,
+      project: activeProject,
+      model: activeChat?.model || '',
+      timestamp: new Date().toLocaleTimeString(),
+      steps: []
+    };
+    chatStore.setChats([...chatStore.getState().chats, newChat]);
+    chatStore.setActiveChatId(newChatId);
+    onToast('Launched new parallel agent session');
+  };
 
+  return (
+    <div className="flex-1 flex h-full min-w-0 relative overflow-hidden">
       {/* Active Chat Panel */}
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">
         {activeChatId ? (
@@ -66,6 +81,17 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
           </div>
         )}
       </div>
+
+      {/* Tabbed Workspace Right Sidebar */}
+      <WorkspaceRightSidebar
+        steps={steps}
+        isGenerating={isGenerating}
+        activeChatId={activeChatId}
+        onViewDiff={onViewDiff}
+        onAddAgentSession={handleAddAgentSession}
+        onSelectChat={(id) => chatStore.setActiveChatId(id)}
+      />
     </div>
   );
 };
+

@@ -1,0 +1,521 @@
+import React, { useState, useMemo } from 'react';
+import {
+  FileCode2,
+  Users,
+  Sparkles,
+  ChevronRight,
+  ChevronLeft,
+  Eye,
+  Bot,
+  Search,
+  Plus,
+  Heart,
+  Smile,
+  Zap,
+  Activity,
+  FileCheck
+} from 'lucide-react';
+import { useChatStore } from '../stores/chatStore';
+import { useSessionStore } from '../stores/sessionStore';
+import { usePartners } from '../pages/Settings/companion/library';
+import { PetSprite } from '../partner-popup/PetSprite';
+import type { TrajectoryStep } from '../pages/Workspace/TrajectoryCanvas';
+import type { PartnerMood } from '../partner-popup/types';
+
+export type WorkspaceSidebarTab = 'files' | 'agents' | 'partner';
+
+export interface WorkspaceRightSidebarProps {
+  steps?: TrajectoryStep[];
+  isGenerating?: boolean;
+  activeChatId?: string;
+  onViewDiff?: (filename: string, originalCode: string, modifiedCode: string) => void;
+  onAddAgentSession?: () => void;
+  onSelectChat?: (chatId: string) => void;
+}
+
+export interface ModifiedFileItem {
+  filename: string;
+  action: 'modified' | 'added' | 'deleted';
+  originalCode: string;
+  modifiedCode: string;
+  stepId: string;
+}
+
+export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
+  steps = [],
+  isGenerating = false,
+  activeChatId,
+  onViewDiff,
+  onAddAgentSession,
+  onSelectChat
+}) => {
+  const [activeTab, setActiveTab] = useState<WorkspaceSidebarTab>('files');
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [customMood, setCustomMood] = useState<PartnerMood | null>(null);
+
+  // Read stores
+  const chats = useChatStore((s) => s.chats);
+  const activeChat = chats.find((c) => c.id === activeChatId);
+  const runningSessions = useSessionStore((s) => s.runningSessions);
+
+  // Partner hooks
+  const partners = usePartners();
+  const activePartner = partners.pets.find((p) => p.id === partners.activeId) || partners.pets[0] || null;
+
+  // Compute file changes from trajectory steps
+  const modifiedFiles = useMemo(() => {
+    const fileMap = new Map<string, ModifiedFileItem>();
+
+    steps.forEach((step) => {
+      // Check tool metadata or content for file modifications
+      if (step.metadata?.diff) {
+        const { filename, originalCode, modifiedCode } = step.metadata.diff as any;
+        if (filename) {
+          fileMap.set(filename, {
+            filename,
+            action: 'modified',
+            originalCode: originalCode || '',
+            modifiedCode: modifiedCode || '',
+            stepId: step.id
+          });
+        }
+      } else if (step.content) {
+        // Regex search for write/edit patterns if metadata missing
+        const writeMatch = step.content.match(/(?:Wrote|Updated|Created|Edited)\s+([a-zA-Z0-9_\-./\\]+\.[a-zA-Z0-9]+)/i);
+        if (writeMatch && writeMatch[1]) {
+          const filename = writeMatch[1];
+          if (!fileMap.has(filename)) {
+            fileMap.set(filename, {
+              filename,
+              action: 'modified',
+              originalCode: '// Original code unavailable',
+              modifiedCode: step.content,
+              stepId: step.id
+            });
+          }
+        }
+      }
+    });
+
+    return Array.from(fileMap.values());
+  }, [steps]);
+
+  // Filter modified files by search query
+  const filteredFiles = useMemo(() => {
+    if (!searchQuery.trim()) return modifiedFiles;
+    const q = searchQuery.toLowerCase();
+    return modifiedFiles.filter((f) => f.filename.toLowerCase().includes(q));
+  }, [modifiedFiles, searchQuery]);
+
+  // Compute multiagent running items
+  const agentItems = useMemo(() => {
+    const items: Array<{
+      id: string;
+      title: string;
+      isRunning: boolean;
+      startedAt?: number;
+      model?: string;
+      lastError?: string;
+    }> = [];
+
+    // Main running sessions from sessionStore
+    runningSessions.forEach((sess, id) => {
+      const chat = chats.find((c) => c.id === id);
+      items.push({
+        id,
+        title: chat?.title || `Session ${id.slice(0, 8)}`,
+        isRunning: sess.isGenerating,
+        startedAt: sess.startedAt,
+        model: chat?.model || 'Auto Orchestrator',
+        lastError: sess.lastError
+      });
+    });
+
+    // Also include other non-running active chats if list is short
+    chats.forEach((c) => {
+      if (!items.some((i) => i.id === c.id)) {
+        items.push({
+          id: c.id,
+          title: c.title || 'Untitled Session',
+          isRunning: c.isRunning || false,
+          startedAt: c.startedAt,
+          model: c.model || 'Default Model',
+          lastError: c.lastError
+        });
+      }
+    });
+
+    return items;
+  }, [runningSessions, chats]);
+
+  // Partner derived mood
+  const mood: PartnerMood = customMood || (activeChat?.lastError ? 'sad' : isGenerating ? 'working' : 'idle');
+
+  // Helper for basename
+  const getBasename = (filePath: string) => {
+    const parts = filePath.split(/[\\/]/);
+    return parts[parts.length - 1] || filePath;
+  };
+
+  // Helper for dirpath
+  const getDirPath = (filePath: string) => {
+    const parts = filePath.split(/[\\/]/);
+    if (parts.length <= 1) return './';
+    return parts.slice(0, -1).join('/');
+  };
+
+  if (isCollapsed) {
+    return (
+      <div className="flex flex-col items-center py-3 px-1.5 bg-brand-sidebar/95 border-l border-brand-border/60 select-none z-20">
+        <button
+          onClick={() => setIsCollapsed(false)}
+          className="p-1.5 rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors mb-3"
+          title="Expand Right Sidebar"
+        >
+          <ChevronLeft size={16} />
+        </button>
+
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => { setActiveTab('files'); setIsCollapsed(false); }}
+            className={`relative p-2 rounded-lg transition-colors ${activeTab === 'files' ? 'bg-brand-card text-brand-textMain border border-brand-border' : 'text-brand-textMuted hover:text-brand-textMain'}`}
+            title="File Changes"
+          >
+            <FileCode2 size={16} />
+            {modifiedFiles.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-brand-primary text-[9px] font-bold text-brand-bg flex items-center justify-center">
+                {modifiedFiles.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('agents'); setIsCollapsed(false); }}
+            className={`relative p-2 rounded-lg transition-colors ${activeTab === 'agents' ? 'bg-brand-card text-brand-textMain border border-brand-border' : 'text-brand-textMuted hover:text-brand-textMain'}`}
+            title="Multiagent Sessions"
+          >
+            <Users size={16} />
+            {agentItems.filter(a => a.isRunning).length > 0 && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[color:var(--neon-live)] animate-pulse" />
+            )}
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('partner'); setIsCollapsed(false); }}
+            className={`p-2 rounded-lg transition-colors ${activeTab === 'partner' ? 'bg-brand-card text-brand-textMain border border-brand-border' : 'text-brand-textMuted hover:text-brand-textMain'}`}
+            title="Partner Companion"
+          >
+            <Sparkles size={16} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <aside className="w-80 h-full flex flex-col bg-brand-sidebar/95 border-l border-brand-border/60 select-none z-20 overflow-hidden transition-all duration-200">
+      {/* Sidebar Header & Tab Nav */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-brand-border/60 bg-brand-sidebar/80">
+        <div className="flex items-center gap-1 bg-brand-bg/60 p-1 rounded-lg border border-brand-border/40">
+          <button
+            onClick={() => setActiveTab('files')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+              activeTab === 'files'
+                ? 'bg-brand-card text-brand-textMain shadow-sm border border-brand-border/60'
+                : 'text-brand-textMuted hover:text-brand-textMain'
+            }`}
+          >
+            <FileCode2 size={13} />
+            <span>Diffs</span>
+            {modifiedFiles.length > 0 && (
+              <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-brand-border text-[9px] text-brand-textMain font-mono">
+                {modifiedFiles.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('agents')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+              activeTab === 'agents'
+                ? 'bg-brand-card text-brand-textMain shadow-sm border border-brand-border/60'
+                : 'text-brand-textMuted hover:text-brand-textMain'
+            }`}
+          >
+            <Users size={13} />
+            <span>Agents</span>
+            {agentItems.filter(a => a.isRunning).length > 0 && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)] animate-pulse" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('partner')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+              activeTab === 'partner'
+                ? 'bg-brand-card text-brand-textMain shadow-sm border border-brand-border/60'
+                : 'text-brand-textMuted hover:text-brand-textMain'
+            }`}
+          >
+            <Sparkles size={13} />
+            <span>Partner</span>
+          </button>
+        </div>
+
+        {/* Collapse button */}
+        <button
+          onClick={() => setIsCollapsed(true)}
+          className="p-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors"
+          title="Collapse Panel"
+        >
+          <ChevronRight size={15} />
+        </button>
+      </div>
+
+      {/* Tab Content Body */}
+      <div className="flex-1 overflow-y-auto p-3 scrollbar-thin scrollbar-thumb-brand-border">
+        {/* ── TAB 1: FILE CHANGES ────────────────────────────────────────── */}
+        {activeTab === 'files' && (
+          <div className="space-y-3">
+            {/* Search filter */}
+            {modifiedFiles.length > 0 && (
+              <div className="relative">
+                <Search size={12} className="absolute left-2.5 top-2.5 text-brand-textMuted" />
+                <input
+                  type="text"
+                  placeholder="Filter changed files..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-brand-bg border border-brand-border rounded-lg pl-7 pr-3 py-1.5 text-xs text-brand-textMain placeholder:text-brand-textMuted focus:outline-none focus:border-brand-primary"
+                />
+              </div>
+            )}
+
+            {filteredFiles.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center text-brand-textMuted">
+                <FileCheck size={28} className="text-brand-textMuted/40 mb-2" />
+                <p className="text-xs font-medium text-brand-textMain">No File Changes</p>
+                <p className="text-[11px] text-brand-textMuted mt-1 max-w-[200px]">
+                  Files created or modified during agent runs will appear here for side-by-side diff review.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[10px] font-mono text-brand-textMuted px-1">
+                  <span>CHANGED FILES ({filteredFiles.length})</span>
+                  <span>CLICK TO VIEW DIFF</span>
+                </div>
+
+                {filteredFiles.map((file) => (
+                  <div
+                    key={file.filename}
+                    onClick={() => onViewDiff?.(file.filename, file.originalCode, file.modifiedCode)}
+                    className="group glass-card p-2.5 rounded-xl border border-brand-border/60 hover:border-brand-border hover:bg-brand-hover cursor-pointer transition-all flex items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileCode2 size={15} className="text-brand-primary flex-shrink-0" />
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-brand-textMain truncate">
+                          {getBasename(file.filename)}
+                        </div>
+                        <div className="text-[10px] text-brand-textMuted truncate font-mono">
+                          {getDirPath(file.filename)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[color:var(--neon-live)]/10 text-[color:var(--neon-live)] font-medium">
+                        {file.action}
+                      </span>
+                      <button
+                        type="button"
+                        className="opacity-0 group-hover:opacity-100 p-1 text-brand-textMuted hover:text-brand-textMain transition-all"
+                        title="View Diff"
+                      >
+                        <Eye size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB 2: MULTIAGENT RUNNING NAMES ──────────────────────────────── */}
+        {activeTab === 'agents' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono text-brand-textMuted uppercase tracking-wider">
+                Multiagent Sessions ({agentItems.length})
+              </span>
+              {onAddAgentSession && (
+                <button
+                  onClick={onAddAgentSession}
+                  className="flex items-center gap-1 text-[10px] font-medium text-brand-primary hover:text-brand-primary/80 transition-colors"
+                >
+                  <Plus size={11} />
+                  <span>New Agent</span>
+                </button>
+              )}
+            </div>
+
+            {agentItems.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center text-brand-textMuted">
+                <Bot size={28} className="text-brand-textMuted/40 mb-2" />
+                <p className="text-xs font-medium text-brand-textMain">No Multiagent Sessions</p>
+                <p className="text-[11px] text-brand-textMuted mt-1">
+                  Launch parallel agents to execute independent tasks in background threads.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {agentItems.map((agent) => (
+                  <div
+                    key={agent.id}
+                    onClick={() => onSelectChat?.(agent.id)}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                      agent.id === activeChatId
+                        ? 'bg-brand-card border-brand-border text-brand-textMain shadow-sm'
+                        : 'bg-brand-bg/40 border-brand-border/40 text-brand-textMuted hover:bg-brand-hover hover:text-brand-textMain'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Bot
+                          size={15}
+                          className={agent.isRunning ? 'text-[color:var(--neon-live)] animate-pulse' : 'text-brand-textMuted'}
+                        />
+                        <span className="text-xs font-semibold truncate text-brand-textMain">
+                          {agent.title}
+                        </span>
+                      </div>
+
+                      <span
+                        className={`flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                          agent.isRunning
+                            ? 'bg-[color:var(--neon-live)]/15 text-[color:var(--neon-live)] font-semibold'
+                            : 'bg-brand-border/40 text-brand-textMuted'
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            agent.isRunning ? 'bg-[color:var(--neon-live)] animate-pulse' : 'bg-brand-textMuted/40'
+                          }`}
+                        />
+                        {agent.isRunning ? 'Running' : 'Idle'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] font-mono text-brand-textMuted mt-2 pt-2 border-t border-brand-border/30">
+                      <span className="truncate">Model: {agent.model}</span>
+                      <span>{agent.id === activeChatId ? 'Active' : 'Switch'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TAB 3: PARTNER FULL BODY ──────────────────────────────────────── */}
+        {activeTab === 'partner' && (
+          <div className="space-y-4 flex flex-col items-center">
+            {activePartner ? (
+              <div className="w-full flex flex-col items-center">
+                {/* Full Body Stage Box */}
+                <div
+                  className="w-full h-64 rounded-2xl relative overflow-hidden flex flex-col items-center justify-center p-3 border border-brand-border/60 shadow-inner"
+                  style={{
+                    background: `radial-gradient(ellipse at 50% 30%, color-mix(in srgb, ${activePartner.accent || '#7c83ff'} 25%, transparent), transparent 80%), var(--brand-sidebar)`
+                  }}
+                >
+                  {/* Status header overlay */}
+                  <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-10">
+                    <div className="flex items-center gap-1.5 bg-brand-sidebar/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-brand-border/60 text-[11px] font-medium text-brand-textMain">
+                      <span
+                        className="w-2 h-2 rounded-full"
+                        style={{
+                          background: mood === 'working' ? 'var(--neon-live)' : mood === 'sad' ? 'var(--neon-destructive)' : '#60a5fa'
+                        }}
+                      />
+                      <span>{activePartner.name}</span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-brand-sidebar/80 backdrop-blur-md border border-brand-border/60 text-brand-textMuted uppercase">
+                      {mood}
+                    </span>
+                  </div>
+
+                  {/* Character Sprite / 3D Stage */}
+                  <div className="my-auto transform transition-transform duration-300 hover:scale-105">
+                    <PetSprite manifest={activePartner} mood={mood} size={140} />
+                  </div>
+
+                  {/* Dialogue Bubble */}
+                  <div className="w-full bg-brand-sidebar/90 backdrop-blur-md p-2.5 rounded-xl border border-brand-border/60 text-[11px] text-brand-textMain text-center shadow-lg mt-2">
+                    {mood === 'working'
+                      ? 'Analyzing files & writing code...'
+                      : mood === 'sad'
+                      ? 'Ouch, an error occurred. Let’s retry!'
+                      : `${activePartner.name} is ready to assist you.`}
+                  </div>
+                </div>
+
+                {/* Mood Quick Reactions */}
+                <div className="w-full mt-3 space-y-2">
+                  <div className="text-[10px] font-mono text-brand-textMuted uppercase tracking-wider px-1">
+                    Interactions
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setCustomMood('happy')}
+                      className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-brand-bg border border-brand-border/60 text-xs font-medium text-brand-textMain hover:bg-brand-hover transition-colors"
+                    >
+                      <Smile size={14} className="text-amber-400" />
+                      <span>Cheer Up</span>
+                    </button>
+
+                    <button
+                      onClick={() => setCustomMood('celebrate')}
+                      className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-brand-bg border border-brand-border/60 text-xs font-medium text-brand-textMain hover:bg-brand-hover transition-colors"
+                    >
+                      <Heart size={14} className="text-rose-400" />
+                      <span>Praise</span>
+                    </button>
+
+                    <button
+                      onClick={() => setCustomMood('working')}
+                      className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-brand-bg border border-brand-border/60 text-xs font-medium text-brand-textMain hover:bg-brand-hover transition-colors"
+                    >
+                      <Zap size={14} className="text-emerald-400" />
+                      <span>Focus</span>
+                    </button>
+
+                    <button
+                      onClick={() => setCustomMood(null)}
+                      className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-brand-bg border border-brand-border/60 text-xs font-medium text-brand-textMain hover:bg-brand-hover transition-colors"
+                    >
+                      <Activity size={14} className="text-blue-400" />
+                      <span>Auto Mood</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center text-brand-textMuted">
+                <Sparkles size={28} className="text-brand-textMuted/40 mb-2" />
+                <p className="text-xs font-medium text-brand-textMain">No Partner Active</p>
+                <p className="text-[11px] text-brand-textMuted mt-1">
+                  Select a Partner in Settings → Companion to show your AI character.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+};

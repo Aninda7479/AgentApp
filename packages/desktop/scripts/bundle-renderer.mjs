@@ -25,6 +25,12 @@
 // owned exclusively by esbuild. Pass `--watch` to keep the bundles in sync with
 // source changes during development.
 import { build, context } from 'esbuild';
+import { resolve } from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(__dirname, '..');
 
 const WATCH = process.argv.includes('--watch');
 
@@ -35,6 +41,11 @@ const common = {
   jsx: 'automatic',
   target: 'es2020',
   external: ['electron'],
+  alias: {
+    // Allow renderer code to import the Lily 3D model from models/ which lives
+    // outside src/. esbuild resolves the alias before any other resolver.
+    '@lily-model': resolve(ROOT, 'models/lily/index.ts')
+  },
   define: { 'process.env.NODE_ENV': '"production"' },
   loader: { '.css': 'empty' },
   logLevel: 'info',

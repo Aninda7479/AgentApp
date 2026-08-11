@@ -935,6 +935,13 @@ body {
 .partner-anim-wiggle { animation: partnerWiggle 0.6s infinite ease-in-out; }
 .partner-anim-think { animation: partnerThink 1.6s infinite ease-in-out; }
 
+/* 3D card: accent glow flashes in at the top on mood change */
+@keyframes partner-glow-in {
+  0%   { opacity: 0; }
+  30%  { opacity: 1; }
+  100% { opacity: 0.35; }
+}
+
 /* Light-mode fallbacks for legacy white-based utilities */
 :root[data-theme='light'] .bg-white\/5 {
   background-color: rgba(0, 0, 0, 0.045);

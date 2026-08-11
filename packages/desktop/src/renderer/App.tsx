@@ -1732,18 +1732,17 @@ export const App: React.FC = () => {
       />
       <VoiceIndicator />
 
-      {/* Floating Partner / Pet companion. On the desktop the 3D overlay window
-          is the pet; in the web build there is no separate window, so we fall
-          back to this in-app 2D companion. */}
-      {isWebMode && (
-        <PartnerOverlay
-          manifest={partners.pets.find((p) => p.id === partners.activeId) || null}
-          visible={partnerVisible}
-          isGenerating={isGenerating}
-          lastError={activeChat?.lastError}
-          onToggle={() => setPartnerVisible((v) => !v)}
-        />
-      )}
+      {/* Floating Partner / Pet companion card. Shown in all modes — the
+          3D overlay window (desktop) and this in-app card coexist; the card
+          gives quick mood / status feedback right in the UI without needing
+          to look at the separate pet window. */}
+      <PartnerOverlay
+        manifest={partners.pets.find((p) => p.id === partners.activeId) || null}
+        visible={partnerVisible}
+        isGenerating={isGenerating}
+        lastError={activeChat?.lastError}
+        onToggle={() => setPartnerVisible((v) => !v)}
+      />
     </div>
   );
 };
