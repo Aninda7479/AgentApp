@@ -20,6 +20,10 @@ export interface PetSpriteProps {
   /** Pixel size of the sprite. Default 48. */
   size?: number;
   className?: string;
+  cameraAngle?: 'close-up' | 'normal' | 'full';
+  lipSync?: boolean;
+  darkCircles?: boolean;
+  onPoke?: (part: string) => void;
 }
 
 /**
@@ -33,7 +37,16 @@ export interface PetSpriteProps {
  *   dpUrl image → emoji glyph
  * wrapped in the same soft accent glow ring.
  */
-export const PetSprite: React.FC<PetSpriteProps> = ({ manifest, mood, size = 48, className = '' }) => {
+export const PetSprite: React.FC<PetSpriteProps> = ({
+  manifest,
+  mood,
+  size = 48,
+  className = '',
+  cameraAngle,
+  lipSync,
+  darkCircles,
+  onPoke
+}) => {
   const accent = manifest.accent || '#7c83ff';
 
   // ── 3D path ──────────────────────────────────────────────────────────────────
@@ -55,6 +68,10 @@ export const PetSprite: React.FC<PetSpriteProps> = ({ manifest, mood, size = 48,
           mood={mood}
           size={size}
           className="w-full h-full"
+          cameraAngle={cameraAngle}
+          lipSync={lipSync}
+          darkCircles={darkCircles}
+          onPoke={onPoke}
         />
       </div>
     );

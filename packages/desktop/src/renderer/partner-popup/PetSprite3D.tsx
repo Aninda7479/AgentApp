@@ -25,36 +25,63 @@ export interface PetSprite3DProps {
   /** CSS pixel size of the canvas square. Default 160. */
   size?: number;
   className?: string;
+  /** Camera framing level */
+  cameraAngle?: 'close-up' | 'normal' | 'full';
+  /** Toggle real-time talking mouth animation */
+  lipSync?: boolean;
+  /** Toggle tired/angry visual style */
+  darkCircles?: boolean;
+  /** Callback fired when a specific body/hair/accessory part is clicked */
+  onPoke?: (part: string) => void;
 }
 
+// Camera presets for smooth lerping
+const CAMERA_PRESETS = {
+  'close-up': {
+    pos: new THREE.Vector3(0, 0.72, 2.0),
+    look: new THREE.Vector3(0, 0.65, 0)
+  },
+  'normal': {
+    pos: new THREE.Vector3(0, 0.55, 3.8),
+    look: new THREE.Vector3(0, 0.35, 0)
+  },
+  'full': {
+    pos: new THREE.Vector3(0, 0.25, 5.0),
+    look: new THREE.Vector3(0, 0.15, 0)
+  }
+};
+
 /**
- * Renders the Lily 3D procedural model (Three.js) inside a small canvas that
- * lives inside the PartnerOverlay card.
- *
- * Reuses the exact Lily class that powers the full-screen desktop pet — the
- * same geometry, joints, animations, face details, laptop screen, and
- * behavior state machine — scaled down and capped at 24 FPS for efficiency.
+ * Renders the Lily 3D procedural model (Three.js) inside a small canvas.
+ * Supports smooth camera transitions, raycasting pokes, expressions, and sound feedback.
  */
 export const PetSprite3D: React.FC<PetSprite3DProps> = ({
   manifest,
   mood,
   size = 160,
-  className = ''
+  className = '',
+  cameraAngle = 'normal',
+  lipSync = false,
+  darkCircles = false,
+  onPoke
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef  = useRef<THREE.WebGLRenderer | null>(null);
   const lilyRef      = useRef<InstanceType<typeof Lily> | null>(null);
+  const cameraRef    = useRef<THREE.PerspectiveCamera | null>(null);
   const rafRef       = useRef<number | null>(null);
   const prevTimeRef  = useRef<number | null>(null);
-  const moodRef      = useRef<PartnerMood>(mood);
 
-  // Sync mood to the live Lily instance without remounting the scene.
+  // Sync props to refs to avoid re-mounting
+  const propsRef = useRef({ mood, lipSync, darkCircles, cameraAngle, onPoke });
   useEffect(() => {
-    moodRef.current = mood;
+    propsRef.current = { mood, lipSync, darkCircles, cameraAngle, onPoke };
     if (lilyRef.current) {
       lilyRef.current.setBehavior(behaviorFor(mood));
+      lilyRef.current.setLipSync(lipSync);
+      lilyRef.current.setDarkCircles(darkCircles);
     }
-  }, [mood]);
+  }, [mood, lipSync, darkCircles, cameraAngle, onPoke]);
 
   // Mount the Three.js scene once on first render.
   useEffect(() => {
@@ -64,7 +91,7 @@ export const PetSprite3D: React.FC<PetSprite3DProps> = ({
     // ── Canvas + Renderer ────────────────────────────────────────────────────
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const canvas = document.createElement('canvas');
-    canvas.style.cssText = `width:${size}px;height:${size}px;display:block;border-radius:inherit;`;
+    canvas.style.cssText = `width:${size}px;height:${size}px;display:block;border-radius:inherit;cursor:pointer;`;
     container.appendChild(canvas);
 
     const renderer = new THREE.WebGLRenderer({
@@ -86,13 +113,14 @@ export const PetSprite3D: React.FC<PetSprite3DProps> = ({
     // ── Scene ────────────────────────────────────────────────────────────────
     const scene = new THREE.Scene();
 
-    // ── Camera — frames Lily from knee-level up, focusing on face+torso ──────
-    // FOV 38° with aspect 1:1 at z=3.8 puts the full seated figure in frame.
+    // ── Camera ───────────────────────────────────────────────────────────────
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 50);
-    camera.position.set(0, 0.55, 3.8);
-    camera.lookAt(0, 0.35, 0);
+    const initialPreset = CAMERA_PRESETS[propsRef.current.cameraAngle] || CAMERA_PRESETS.normal;
+    camera.position.copy(initialPreset.pos);
+    const currentLookAt = initialPreset.look.clone();
+    cameraRef.current = camera;
 
-    // ── Lighting (3 lights, no env map — fast for small canvas) ─────────────
+    // ── Lighting ─────────────────────────────────────────────────────────────
     const ambient = new THREE.AmbientLight(0xffffff, 0.35);
     scene.add(ambient);
 
@@ -109,17 +137,14 @@ export const PetSprite3D: React.FC<PetSprite3DProps> = ({
     key.shadow.bias = -0.0004;
     scene.add(key);
 
-    // Rim light — classic anime character lighting from upper-left
     const rim = new THREE.DirectionalLight(0xaabbff, 0.55);
     rim.position.set(-2, 2, -1);
     scene.add(rim);
 
-    // Warm fill from front-below simulating laptop screen glow
     const fill = new THREE.DirectionalLight(0xffd9ec, 0.28);
     fill.position.set(0, -1, 3);
     scene.add(fill);
 
-    // Soft contact shadow grounding the character
     const shadow = new THREE.Mesh(
       new THREE.PlaneGeometry(10, 10),
       new THREE.ShadowMaterial({ opacity: 0.22 })
@@ -133,13 +158,43 @@ export const PetSprite3D: React.FC<PetSprite3DProps> = ({
     let lily: InstanceType<typeof Lily> | null = null;
     try {
       lily = new Lily(manifest.accent || '#ff8fb3');
-      lily.setBehavior(behaviorFor(moodRef.current));
+      lily.setBehavior(behaviorFor(propsRef.current.mood));
+      lily.setLipSync(propsRef.current.lipSync);
+      lily.setDarkCircles(propsRef.current.darkCircles);
       scene.add(lily.object);
       lilyRef.current = lily;
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('[PetSprite3D] Failed to build Lily model:', err);
     }
+
+    // ── Click to Poke / Raycasting ───────────────────────────────────────────
+    const handleClick = (e: MouseEvent) => {
+      if (!lily || !cameraRef.current) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      const part = lily.raycastPart(new THREE.Vector2(x, y), cameraRef.current);
+      if (part) {
+        lily.setBehavior('poke', { part });
+        
+        // Audio synthesis for click feedback
+        try {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioContextClass) {
+            const ctx = new AudioContextClass();
+            lily.playSound(520, ctx);
+          }
+        } catch (_) { /* ignore audio permission failures */ }
+
+        // Callback trigger
+        if (propsRef.current.onPoke) {
+          propsRef.current.onPoke(part);
+        }
+      }
+    };
+    canvas.addEventListener('click', handleClick);
 
     // ── Animation loop — capped at 24 FPS ───────────────────────────────────
     const FPS_CAP_MS = 1000 / 24;
@@ -155,6 +210,12 @@ export const PetSprite3D: React.FC<PetSprite3DProps> = ({
       prevTimeRef.current = timestamp;
       lastFrameTs = timestamp;
 
+      // Camera Angle smooth interpolation (Lerp)
+      const targetPreset = CAMERA_PRESETS[propsRef.current.cameraAngle] || CAMERA_PRESETS.normal;
+      camera.position.lerp(targetPreset.pos, 0.1);
+      currentLookAt.lerp(targetPreset.look, 0.1);
+      camera.lookAt(currentLookAt);
+
       if (lily) {
         lily.update(dt, timestamp / 1000);
       }
@@ -165,6 +226,7 @@ export const PetSprite3D: React.FC<PetSprite3DProps> = ({
 
     // ── Cleanup ──────────────────────────────────────────────────────────────
     return () => {
+      canvas.removeEventListener('click', handleClick);
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
@@ -175,12 +237,11 @@ export const PetSprite3D: React.FC<PetSprite3DProps> = ({
       }
       renderer.dispose();
       rendererRef.current = null;
-      // Remove the canvas from the DOM
       if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
       prevTimeRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally runs only once — mood synced via the effect above
+  }, []);
 
   return (
     <div

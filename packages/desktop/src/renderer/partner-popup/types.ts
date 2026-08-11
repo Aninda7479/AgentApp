@@ -212,20 +212,23 @@ export function normalizeManifest(raw: Record<string, unknown>): PartnerManifest
     };
   }
 
+  const idStr = String(raw.id);
+  const isLily = idStr.toLowerCase() === 'lily';
+
   return {
     schema: 'superagent-partner',
-    id: String(raw.id),
+    id: idStr,
     name: String(raw.name),
     kind: String(raw.kind),
     version: typeof raw.version === 'string' && raw.version ? raw.version : '1.0.0',
     description: String(raw.description),
     author: typeof raw.author === 'string' ? raw.author : undefined,
-    accent: typeof raw.accent === 'string' ? raw.accent : '#7c83ff',
+    accent: typeof raw.accent === 'string' ? raw.accent : (isLily ? '#ff8fb3' : '#7c83ff'),
     emoji: typeof raw.emoji === 'string' ? raw.emoji : '🐾',
     dp: typeof raw.dp === 'string' ? raw.dp : undefined,
     dpUrl: typeof raw.dpUrl === 'string' ? raw.dpUrl : undefined,
     frames: Array.isArray(raw.frames) ? (raw.frames as string[]) : undefined,
-    model: typeof raw.model === 'string' ? raw.model : undefined,
+    model: typeof raw.model === 'string' ? raw.model : (isLily ? 'lily' : undefined),
     vrm: typeof raw.vrm === 'string' ? raw.vrm : undefined,
     modelFolder: typeof raw.modelFolder === 'string' ? raw.modelFolder : undefined,
     script: typeof raw.script === 'string' ? raw.script : undefined,

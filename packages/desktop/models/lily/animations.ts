@@ -561,4 +561,16 @@ export function updateAnimations(lily: any, dt: number, t: number): void {
   if (lily.animator) {
     lily.animator.update(lily.behavior, t, dt);
   }
+
+  // ── Upgraded Lily Accessories & Sway Animating ──────────────────────────────
+  if (lily.joints.hairTailL && lily.joints.hairTailR) {
+    const hairSway = Math.sin(t * 3.5) * 0.08;
+    const walkSway = lily.behavior === 'walk' ? Math.cos(t * 9) * 0.12 : 0;
+    lily.joints.hairTailL.rotation.z = lerp(lily.joints.hairTailL.rotation.z, d2r(15) + hairSway + walkSway, k);
+    lily.joints.hairTailR.rotation.z = lerp(lily.joints.hairTailR.rotation.z, d2r(-15) - hairSway + walkSway, k);
+  }
+
+  if (lily.sleepMask) {
+    lily.sleepMask.visible = (lily.behavior === 'sleeping');
+  }
 }
