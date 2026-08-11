@@ -89,3 +89,76 @@ describe('web IPC handler — read-file-base64 scoping', () => {
     expect(res.body.data).toMatch(/^data:/);
   });
 });
+
+describe('web IPC handler — triggers channels', () => {
+  it('implements triggers-create, triggers-list, triggers-toggle, triggers-run-now, and triggers-remove', async () => {
+    // 1. Create a trigger
+    const createRes = mockRes();
+    await handleIpc(
+      mockReq('triggers-create', {
+        args: [
+          {
+            name: 'Test Trigger IPC',
+            type: 'cron',
+            enabled: true,
+            cronExpression: '0 9 * * 1-5',
+            prompt: 'Test Prompt'
+          }
+        ]
+      }),
+      createRes
+    );
+    expect(createRes.statusCode).toBe(200);
+    const createdTrigger = createRes.body.data;
+    expect(createdTrigger).toBeDefined();
+    expect(createdTrigger.id).toBeDefined();
+    expect(createdTrigger.name).toBe('Test Trigger IPC');
+
+    const triggerId = createdTrigger.id;
+
+    // 2. List triggers to verify it was added
+    const listRes = mockRes();
+    await handleIpc(mockReq('triggers-list', { args: [] }), listRes);
+    expect(listRes.statusCode).toBe(200);
+    expect(Array.isArray(listRes.body.data)).toBe(true);
+    const found = listRes.body.data.find((t: any) => t.id === triggerId);
+    expect(found).toBeDefined();
+    expect(found.name).toBe('Test Trigger IPC');
+    expect(found.enabled).toBe(true);
+
+    // 3. Toggle the trigger (disable it)
+    const toggleRes = mockRes();
+    await handleIpc(
+      mockReq('triggers-toggle', {
+        args: [
+          {
+            id: triggerId,
+            enabled: false
+          }
+        ]
+      }),
+      toggleRes
+    );
+    expect(toggleRes.statusCode).toBe(200);
+    expect(toggleRes.body.data.enabled).toBe(false);
+
+    // 4. Run the trigger now
+    const runRes = mockRes();
+    await handleIpc(mockReq('triggers-run-now', { args: [triggerId] }), runRes);
+    expect(runRes.statusCode).toBe(200);
+    expect(runRes.body.data.success).toBe(true);
+    expect(runRes.body.data.trigger.runCount).toBe(1);
+
+    // 5. Remove the trigger
+    const removeRes = mockRes();
+    await handleIpc(mockReq('triggers-remove', { args: [triggerId] }), removeRes);
+    expect(removeRes.statusCode).toBe(200);
+    expect(removeRes.body.data).toBe(true);
+
+    // Verify it is no longer listed
+    const listRes2 = mockRes();
+    await handleIpc(mockReq('triggers-list', { args: [] }), listRes2);
+    expect(listRes2.body.data.find((t: any) => t.id === triggerId)).toBeUndefined();
+  });
+});
+

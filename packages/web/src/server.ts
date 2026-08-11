@@ -751,25 +751,38 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         break;
 
       // ─── Proactive Background Triggers ─────────────────────────────────────
+      case 'triggers-list':
       case 'trigger-list':
         result = triggerEngine.listTriggers();
         break;
+      case 'triggers-create':
       case 'trigger-add':
         result = triggerEngine.addTrigger(args[0]);
         break;
-      case 'trigger-remove':
-        result = triggerEngine.removeTrigger(args[0]);
+      case 'triggers-remove':
+      case 'trigger-remove': {
+        const id = typeof args[0] === 'string' ? args[0] : args[0]?.id;
+        result = triggerEngine.removeTrigger(id);
         break;
+      }
       case 'trigger-update':
         result = triggerEngine.updateTrigger(args[0].id, args[0].updates);
         break;
+      case 'triggers-toggle': {
+        const id = args[0]?.id;
+        const enabled = args[0]?.enabled;
+        result = triggerEngine.updateTrigger(id, { enabled });
+        break;
+      }
+      case 'triggers-run-now':
       case 'trigger-execute': {
-        const trig = triggerEngine.getTrigger(args[0]?.id);
+        const id = typeof args[0] === 'string' ? args[0] : args[0]?.id;
+        const trig = triggerEngine.getTrigger(id);
         if (!trig) {
           result = { error: 'Trigger not found' };
         } else {
-          await triggerEngine.executeTrigger(trig, args[0]?.payload);
-          result = { success: true, trigger: triggerEngine.getTrigger(args[0]?.id) };
+          await triggerEngine.executeTrigger(trig, typeof args[0] === 'object' ? args[0]?.payload : undefined);
+          result = { success: true, trigger: triggerEngine.getTrigger(id) };
         }
         break;
       }

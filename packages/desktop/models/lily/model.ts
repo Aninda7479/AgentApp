@@ -1,11 +1,10 @@
 import * as THREE from 'three';
 import { d2r } from './animations';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 /**
  * Materials.
- *
- * Kept PBR-soft so the ACES tone-mapping + RoomEnvironment in the
- * renderer give the character a "toon-shaded but real" look.
  */
 export function makeMat(color: string, rough = 0.6, metal = 0.05) {
   return new THREE.MeshStandardMaterial({
@@ -19,11 +18,11 @@ export function makeMat(color: string, rough = 0.6, metal = 0.05) {
 // ── Shared palette ────────────────────────────────────────────────────────────
 const SKIN = '#ffe2d0';
 const HAIR = '#8a5a3c';
-const DRESS = '#e23a4e'; // bodice red
-const SKIRT = '#ef4f66'; // skirt red
-const UNDER = '#fbf3ef'; // white underwear/apron/cuffs
-const SHOE = '#b32d44'; // red shoes
-const IRIS = '#2f8fd0'; // bright anime-blue eyes
+const DRESS = '#e23a4e';
+const SKIRT = '#ef4f66';
+const UNDER = '#fbf3ef';
+const SHOE = '#b32d44';
+const IRIS = '#2f8fd0';
 
 const MODEL_SCALE = 1.45;
 
@@ -38,6 +37,9 @@ export function buildLilyGeometry(lily: any, accent: string): void {
 
   const g = lily.object;
 
+  // List of procedural body meshes to hide if GLB loads successfully
+  const meshesToHide: THREE.Mesh[] = [];
+
   // Scaling group to fit height
   const body = new THREE.Group();
   body.scale.setScalar(MODEL_SCALE);
@@ -48,7 +50,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   body.add(pelvis);
   lily.joints.pelvis = pelvis;
 
-  // ── Torso (bodice + apron) ──────────────────────────────────────────────────
+  // ── Torso ───────────────────────────────────────────────────────────────────
   const torso = new THREE.Group();
   torso.position.y = 0.1;
   pelvis.add(torso);
@@ -61,8 +63,9 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   );
   bodice.position.y = 0.05;
   torso.add(bodice);
+  meshesToHide.push(bodice);
 
-  // White apron top layer overlay
+  // White apron top layer
   const apron = new THREE.Mesh(
     new THREE.CylinderGeometry(0.132, 0.167, 0.3, 28),
     underMat
@@ -70,11 +73,13 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   apron.position.set(0, -0.01, 0.002);
   apron.scale.set(1.02, 1.02, 1.02);
   torso.add(apron);
+  meshesToHide.push(apron);
 
-  // White frilly collar around the neck
+  // White frilly collar
   const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.04, 20), underMat);
   collar.position.y = 0.25;
   torso.add(collar);
+  meshesToHide.push(collar);
 
   // Front ribbon bow
   const chestBow = new THREE.Group();
@@ -85,10 +90,12 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     loop.position.set(sx * 0.03, 0, 0);
     loop.scale.set(1.2, 0.7, 0.4);
     chestBow.add(loop);
+    meshesToHide.push(loop);
   }
   const chestKnot = new THREE.Mesh(new THREE.SphereGeometry(0.02, 12, 10), accentMat);
   chestBow.add(chestKnot);
   torso.add(chestBow);
+  meshesToHide.push(chestKnot);
 
   // Soft shoulders
   for (const sx of [-1, 1]) {
@@ -96,12 +103,14 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     sh.position.set(sx * 0.135, 0.22, 0);
     sh.scale.set(1, 0.8, 0.9);
     torso.add(sh);
+    meshesToHide.push(sh);
   }
 
   // Neck (skin)
   const neckMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.14, 6, 16), lily.skinMat);
   neckMesh.position.y = 0.29;
   torso.add(neckMesh);
+  meshesToHide.push(neckMesh);
 
   // ── Head joint ──────────────────────────────────────────────────────────────
   const neck = new THREE.Group();
@@ -114,6 +123,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   headMesh.position.y = 0.15;
   headMesh.scale.set(1, 1.06, 0.95);
   neck.add(headMesh);
+  meshesToHide.push(headMesh);
 
   // Ears
   for (const sx of [-1, 1]) {
@@ -121,6 +131,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     ear.position.set(sx * 0.145, 0.14, -0.02);
     ear.scale.set(0.7, 1, 0.6);
     neck.add(ear);
+    meshesToHide.push(ear);
   }
 
   // ── Hair ───────────────────────────────────────────────────────────────────
@@ -128,6 +139,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.17, 28, 24), lily.hairMat);
   hairBack.position.set(0, 0.17, -0.05);
   neck.add(hairBack);
+  meshesToHide.push(hairBack);
 
   // Bangs
   const bangs = new THREE.Mesh(
@@ -144,6 +156,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   );
   bangs.position.set(0, 0.15, 0.005);
   neck.add(bangs);
+  meshesToHide.push(bangs);
 
   // Side locks
   for (const sx of [-1, 1]) {
@@ -151,6 +164,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     lock.position.set(sx * 0.135, 0.06, 0.04);
     lock.scale.set(1, 1, 0.7);
     neck.add(lock);
+    meshesToHide.push(lock);
   }
 
   // Short back tail
@@ -158,6 +172,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   tail.position.set(0, 0.02, -0.16);
   tail.rotation.x = d2r(12);
   neck.add(tail);
+  meshesToHide.push(tail);
 
   // Large hair bow
   const bow = new THREE.Group();
@@ -167,10 +182,12 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     loop.position.set(sx * 0.055, 0, 0);
     loop.scale.set(1.1, 0.7, 0.4);
     bow.add(loop);
+    meshesToHide.push(loop);
   }
   const knot = new THREE.Mesh(new THREE.SphereGeometry(0.03, 14, 12), accentMat);
   bow.add(knot);
   neck.add(bow);
+  meshesToHide.push(knot);
 
   // Twintails!
   for (const sx of [-1, 1]) {
@@ -181,6 +198,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     tie.position.set(sx * 0.14, 0.22, -0.06);
     tie.rotation.z = -sx * d2r(25);
     neck.add(tie);
+    meshesToHide.push(tie);
 
     // Group for dynamic rotation/sway
     const tailGroup = new THREE.Group();
@@ -193,15 +211,17 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     strand1.position.set(sx * 0.02, -0.16, 0.01);
     strand1.rotation.z = -sx * d2r(12);
     tailGroup.add(strand1);
+    meshesToHide.push(strand1);
 
     // Inner shorter lock strand
     const strand2 = new THREE.Mesh(new THREE.CapsuleGeometry(0.022, 0.2, 4, 12), lily.hairMat);
     strand2.position.set(-sx * 0.02, -0.1, 0.03);
     strand2.rotation.z = -sx * d2r(5);
     tailGroup.add(strand2);
+    meshesToHide.push(strand2);
   }
 
-  // Developer headphones
+  // Developer headphones (always visible overlay)
   const bandGeo = new THREE.TorusGeometry(0.165, 0.016, 12, 40, Math.PI);
   const band = new THREE.Mesh(bandGeo, makeMat('#334155', 0.5));
   band.position.set(0, 0.18, 0);
@@ -213,12 +233,10 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     padGroup.position.set(sx * 0.155, 0.14, 0);
     padGroup.rotation.y = sx * d2r(5);
     
-    // Earcup back (Tauri accent color)
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.024, 16), accentMat);
     cap.rotation.z = d2r(90);
     padGroup.add(cap);
 
-    // Cushion
     const cushion = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.046, 0.016, 16), makeMat('#1e293b', 0.8));
     cushion.position.x = -sx * 0.015;
     cushion.rotation.z = d2r(90);
@@ -227,7 +245,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     neck.add(padGroup);
   }
 
-  // Eyelashes
+  // Eyelashes (drawn on top of both procedural face and GLB)
   for (const sx of [-1, 1]) {
     const lashGroup = new THREE.Group();
     lashGroup.position.set(sx * 0.062, 0.165, 0.155);
@@ -275,7 +293,6 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     pupil.position.z = 0.035;
     eye.add(pupil);
 
-    // Anime star highlights
     const starGroup = new THREE.Group();
     starGroup.position.set(0.014, 0.015, 0.037);
     const starMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -327,7 +344,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     neck.add(blush);
   }
 
-  // Dark circles (tired look)
+  // Dark circles
   const darkGeo = new THREE.BoxGeometry(0.06, 0.018, 0.005);
   const darkMat = new THREE.MeshBasicMaterial({ color: 0x6a4a6a, transparent: true, opacity: 0 });
   lily.darkL = new THREE.Mesh(darkGeo, darkMat);
@@ -376,6 +393,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     sleeve.position.y = -0.08;
     sleeve.scale.set(1, 1, 0.9);
     upper.add(sleeve);
+    meshesToHide.push(sleeve);
 
     const lower = new THREE.Group();
     lower.position.y = -0.2;
@@ -386,11 +404,13 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     const forearm = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.16, 6, 16), lily.skinMat);
     forearm.position.y = -0.08;
     lower.add(forearm);
+    meshesToHide.push(forearm);
 
     // Cuffs
     const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.025, 16), underMat);
     cuff.position.y = -0.15;
     lower.add(cuff);
+    meshesToHide.push(cuff);
 
     const hand = new THREE.Group();
     hand.position.y = -0.18;
@@ -400,6 +420,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     const handMesh = new THREE.Mesh(new THREE.SphereGeometry(0.046, 16, 14), lily.skinMat);
     handMesh.scale.set(0.9, 1, 0.7);
     hand.add(handMesh);
+    meshesToHide.push(handMesh);
   };
 
   buildArm(-1, 'armUL', 'armEL', 'handL');
@@ -417,6 +438,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   );
   skirt.position.set(0, 0, 0);
   skirtGroup.add(skirt);
+  meshesToHide.push(skirt);
 
   // White apron skirt overlay
   const apronSkirt = new THREE.Mesh(
@@ -426,6 +448,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   apronSkirt.position.set(0, 0.04, 0.005);
   apronSkirt.scale.set(1.02, 1.02, 1.02);
   skirtGroup.add(apronSkirt);
+  meshesToHide.push(apronSkirt);
 
   // ── Articulated Legs ────────────────────────────────────────────────────────
   for (const sx of [-1, 1]) {
@@ -439,6 +462,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.2, 6, 16), lily.skinMat);
     thigh.position.y = -0.1;
     hip.add(thigh);
+    meshesToHide.push(thigh);
 
     const knee = new THREE.Group();
     knee.position.set(0, -0.22, 0);
@@ -448,10 +472,12 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     const shin = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.2, 6, 16), lily.skinMat);
     shin.position.y = -0.1;
     knee.add(shin);
+    meshesToHide.push(shin);
 
     const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.05, 0.1, 16), underMat);
     sock.position.y = -0.2;
     knee.add(sock);
+    meshesToHide.push(sock);
 
     const ankle = new THREE.Group();
     ankle.position.set(0, -0.26, 0);
@@ -462,6 +488,7 @@ export function buildLilyGeometry(lily: any, accent: string): void {
     shoe.position.set(0, 0, 0.05);
     shoe.geometry.translate(0, 0, 0.02);
     ankle.add(shoe);
+    meshesToHide.push(shoe);
   }
 
   // Underwear (bloomer-style)
@@ -472,8 +499,9 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   underwear.position.set(0, -0.1, 0.01);
   underwear.scale.set(1, 1, 0.85);
   pelvis.add(underwear);
+  meshesToHide.push(underwear);
 
-  // ── Props: Laptop (base + screen + developer stickers) ──────────────────────
+  // ── Props: Laptop ───────────────────────────────────────────────────────────
   lily.laptop = new THREE.Group();
   lily.laptop.position.set(0, -0.16, 0.26);
   pelvis.add(lily.laptop);
@@ -521,7 +549,6 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   torso.add(lily.pillow);
   lily.joints.pillow = lily.pillow;
 
-  // Squashed round fluff pillow
   const pillowMesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 24, 20), makeMat('#ffe8ed', 0.9));
   pillowMesh.scale.set(1.4, 0.7, 1.15);
   pillowMesh.rotation.set(d2r(15), d2r(-10), d2r(5));
@@ -533,6 +560,56 @@ export function buildLilyGeometry(lily: any, accent: string): void {
   neck.userData = { part: 'head' };
   (lily.joints.armUR as THREE.Object3D).userData = { part: 'arm' };
   (lily.joints.armUL as THREE.Object3D).userData = { part: 'arm' };
+
+  // ── Load smooth GLB mesh file (Asynchronous) ──────────────────────────────
+  try {
+    const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
+
+    const glbUrl = './models/lily/v1/girl_web.glb';
+    loader.load(glbUrl, (gltf) => {
+      const model = gltf.scene;
+
+      // Fit to pelvis scale and position
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+      const targetHeight = 1.34;
+      const scale = targetHeight / maxDim;
+      model.scale.setScalar(scale);
+
+      // Align model center with pelvis/torso center
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      model.position.set(-center.x * scale, -center.y * scale + 0.65, -center.z * scale - 0.05);
+
+      model.traverse((child: any) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          if (child.material) {
+            child.material.roughness = 0.68;
+            child.material.metalness = 0.05;
+          }
+        }
+      });
+
+      // Add to pelvis so it tilts, breathes, and sways with the companion body
+      pelvis.add(model);
+
+      // Hide the blocky procedural body parts now that smooth model is successfully loaded
+      meshesToHide.forEach((m) => {
+        m.visible = false;
+      });
+
+      console.log('[pet] Loaded smooth girl_web.glb successfully. Swapped blocky procedural meshes.');
+    }, undefined, (err) => {
+      console.warn('[pet] Failed to load smooth girl_web.glb, fell back to high-quality procedural body.', err);
+    });
+  } catch (err) {
+    console.warn('[pet] GLTFLoader error, fell back to high-quality procedural body.', err);
+  }
 }
 
 export function applyLilyRest(lily: any): void {

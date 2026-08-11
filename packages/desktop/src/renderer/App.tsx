@@ -29,7 +29,6 @@ import { builtinSuggestions, SkillInfo } from './components/slashCommands';
 import { BottomNav } from './components/BottomNav';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { usePartners } from './pages/Settings/companion/library';
-import { PartnerOverlay } from './partner-popup/PartnerOverlay';
 import { ThreeDStudio } from './pages/Studio/ThreeDStudio';
 import { PartnerPage } from './pages/Partner/PartnerPage';
 import { StoredChat, StoredProject } from './types';
@@ -1731,18 +1730,6 @@ export const App: React.FC = () => {
         }
       />
       <VoiceIndicator />
-
-      {/* Floating Partner / Pet companion card. Shown in all modes — the
-          3D overlay window (desktop) and this in-app card coexist; the card
-          gives quick mood / status feedback right in the UI without needing
-          to look at the separate pet window. */}
-      <PartnerOverlay
-        manifest={partners.pets.find((p) => p.id === partners.activeId) || null}
-        visible={partnerVisible}
-        isGenerating={isGenerating}
-        lastError={activeChat?.lastError}
-        onToggle={() => setPartnerVisible((v) => !v)}
-      />
     </div>
   );
 };
