@@ -30,28 +30,34 @@ ARCH=$(uname -m)
 
 if [ "$OS" = "Darwin" ]; then
   if [ "$ARCH" = "arm64" ]; then
-    ASSET="superagent-cli-v${VERSION}-macos-arm64.zip"
+    PLATFORM_KEY="macos-arm64"
     EXT="zip"
   else
-    ASSET="superagent-cli-v${VERSION}-macos-x64.zip"
+    PLATFORM_KEY="macos-x64"
     EXT="zip"
   fi
 else
   if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-    ASSET="superagent-cli-v${VERSION}-linux-arm64.tar.gz"
+    PLATFORM_KEY="linux-arm64"
     EXT="tar.gz"
   else
-    ASSET="superagent-cli-v${VERSION}-linux-x64.tar.gz"
+    PLATFORM_KEY="linux-x64"
     EXT="tar.gz"
   fi
 fi
 
-URL="https://github.com/${REPO}/releases/download/v${VERSION}/${ASSET}"
+ASSET="superagent-cli-${PLATFORM_KEY}.${EXT}"
+URL=$(echo "$LATEST_JSON" | grep '"browser_download_url"' | grep "$PLATFORM_KEY" | head -1 | sed 's/.*"browser_download_url": *"\([^"]*\)".*/\1/')
+
+if [ -z "$URL" ]; then
+  URL="https://github.com/${REPO}/releases/download/v${VERSION}/superagent-cli-v${VERSION}-${PLATFORM_KEY}.${EXT}"
+fi
+
 LAUNCHER_DIR="$HOME/.local/bin"
 TARGET_BIN="$LAUNCHER_DIR/superagent"
 
 # ── Download & Extract ──────────────────────────────────────────────────────
-echo "Downloading ${ASSET}…"
+echo "Downloading standalone CLI binary (${PLATFORM_KEY})…"
 TMP=$(mktemp -d)
 curl -fsSL "$URL" -o "$TMP/$ASSET"
 
