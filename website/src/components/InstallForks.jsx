@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import Reveal from './Reveal.jsx'
 import { useCopy } from '../lib/useCopy.js'
-import { INSTALL_SH, INSTALL_PS1, DL, RELEASES_LATEST } from '../config.js'
+import { INSTALL_SH, INSTALL_PS1, DL, SERVER_DL, RELEASES_LATEST } from '../config.js'
 
 const COMMANDS = {
   powershell: `irm ${INSTALL_PS1} | iex`,
@@ -84,9 +84,38 @@ export function CliFork() {
       </div>
       <ul>
         <li><Check /> A <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>superagent</code> command on your PATH</li>
-        <li><Check /> Local web UI dashboard at <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>localhost:3000</code></li>
-        <li><Check /> Perfect for scripts, servers, workflows, and headless CI runs</li>
+        <li><Check /> Local web UI dashboard at <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>localhost:14692</code></li>
+        <li><Check /> <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>superagent --serve</code> for servers &amp; CI — accessible on local &amp; public internet</li>
+        <li><Check /> <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>superagent update</code> to self-update from GitHub Releases</li>
       </ul>
+
+      {/* Server / HomeLab download links */}
+      <details style={{ marginTop: '14px' }}>
+        <summary style={{ cursor: 'pointer', fontSize: '0.82rem', color: 'var(--muted)', userSelect: 'none' }}>
+          🖥️ Server / HomeLab direct downloads
+        </summary>
+        <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {[
+            { label: '🐧 Linux (x64)', href: SERVER_DL.linux },
+            { label: '🪟 Windows (x64)', href: SERVER_DL.windows },
+            { label: '🍎 macOS (Apple Silicon)', href: SERVER_DL.mac },
+          ].map(({ label, href }) => (
+            <a
+              key={href}
+              href={href}
+              target="_blank"
+              rel="noopener"
+              style={{
+                fontSize: '0.8rem', color: 'var(--accent)',
+                textDecoration: 'none', fontFamily: 'var(--font-mono)'
+              }}
+            >
+              ↓ {label}
+            </a>
+          ))}
+        </div>
+      </details>
+
       <p className="best">Best for <b>developers &amp; automated workflows</b></p>
     </Reveal>
   )
@@ -129,7 +158,7 @@ export function DesktopFork() {
       <ul>
         <li><Check /> Native desktop window with the full workspace client</li>
         <li><Check /> 3D companion pet that floats and reacts to actions</li>
-        <li><Check /> Automatically handles updates and background execution</li>
+        <li><Check /> Auto-updates from GitHub Releases via Settings → Updates</li>
       </ul>
       <p className="best" style={{ marginTop: 'auto' }}>Best for <b>daily coding &amp; visual task automation</b></p>
     </Reveal>

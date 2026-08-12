@@ -395,6 +395,54 @@ app.post('/api/ipc/:channel', (req, res) => { void handleIpc(req, res); });
 // so only authenticated sessions can reach it; restricted to http(s) urls.
 app.post('/api/provider-proxy', (req, res) => { void handleProviderProxy(req, res); });
 
+// ─── Update-check API ─────────────────────────────────────────────────────────
+// GET /api/update/check  (behind authGate)
+// Returns { current, latest, hasUpdate, releaseUrl } by querying GitHub Releases.
+app.get('/api/update/check', (_req, res) => {
+  const REPO = 'Aninda7479/AgentApp';
+
+  // Read the running version from this package's own package.json.
+  let current = '0.0.0';
+  try {
+    const pkgPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../package.json');
+    current = (JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version: string }).version;
+  } catch { /* use default */ }
+
+  const compareVer = (a: string, b: string): number => {
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+      if (diff !== 0) return diff;
+    }
+    return 0;
+  };
+
+  // Dynamic import so the ESM module graph doesn't need https at the top level.
+  import('https').then(({ default: httpsModule }) => {
+    const req2 = httpsModule.get(
+      `https://api.github.com/repos/${REPO}/releases/latest`,
+      { headers: { 'User-Agent': 'superagent-web-server', 'Accept': 'application/vnd.github+json' } },
+      (upstream) => {
+        let raw = '';
+        upstream.on('data', (chunk: Buffer) => { raw += chunk; });
+        upstream.on('end', () => {
+          try {
+            const json = JSON.parse(raw) as { tag_name?: string };
+            const latest = (json.tag_name ?? '').replace(/^v/, '');
+            const hasUpdate = latest ? compareVer(latest, current) > 0 : false;
+            res.json({ current, latest: latest || null, hasUpdate, releaseUrl: `https://github.com/${REPO}/releases/latest` });
+          } catch {
+            res.status(502).json({ error: 'Failed to parse GitHub response' });
+          }
+        });
+      }
+    );
+    req2.on('error', () => res.status(503).json({ error: 'Could not reach GitHub — check network connectivity' }));
+    req2.setTimeout(8000, () => { req2.destroy(); res.status(504).json({ error: 'GitHub API timed out' }); });
+  }).catch(() => res.status(500).json({ error: 'Internal error loading https module' }));
+});
+
 /**
  * Forwards a provider API call server-side so the web/VPS build can test a
  * provider connection without being blocked by CORS (the browser cannot call

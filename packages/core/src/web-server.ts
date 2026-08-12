@@ -24,7 +24,7 @@ import {
 
 /** Options controlling how the web server is launched. */
 export interface StartWebServerOptions {
-  /** TCP port to bind (passed through as `PORT`). Defaults to 3000. */
+  /** TCP port to bind (passed through as `PORT`). Defaults to 14692. */
   port?: number | string;
   /** Interface to bind (passed through as `HOST`). Defaults to 0.0.0.0. */
   host?: string;

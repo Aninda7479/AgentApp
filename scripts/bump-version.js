@@ -99,15 +99,25 @@ try {
   console.error('❌ Website npm install failed');
 }
 
-// 5. Git Commit and Tag
-console.log('\n💾 Committing and tagging release...');
+// 5. Git Commit — push to `release` branch to trigger the release pipeline
+console.log('\n💾 Committing version bump...');
 try {
   execSync('git add .', { cwd: rootDir, stdio: 'inherit' });
   execSync(`git commit -m "chore: release version ${newVersion}"`, { cwd: rootDir, stdio: 'inherit' });
-  execSync(`git tag v${newVersion}`, { cwd: rootDir, stdio: 'inherit' });
-  console.log(`\n✅ Git commit and tag v${newVersion} created successfully.`);
+  console.log(`\n✅ Git commit for v${newVersion} created.`);
 } catch (err) {
-  console.warn('⚠️ Warning: Git commit/tag failed (check if there were actual changes)');
+  console.warn('⚠️ Warning: Git commit failed (check if there were actual changes)');
 }
 
-console.log(`\n🎉 Success! All versions bumped to ${newVersion}. Run 'git push && git push --tags' to publish changes.\n`);
+console.log(`
+🎉 Done! All packages bumped to v${newVersion}.
+
+Next steps to publish a release:
+  1. git push origin HEAD:release
+     → This pushes your version bump directly to the 'release' branch,
+       which triggers the GitHub Actions release pipeline automatically.
+     → The pipeline will build Desktop installers + server tarballs and
+       publish them all to a GitHub Release (no npm publish).
+
+  Alternatively, merge your branch → release via a PR, then merge it.
+`);

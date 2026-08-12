@@ -48,7 +48,8 @@ cd website && npm ci && npm run build
 ```
 
 The web server lives inside `@superagent/core` (`startWebServer`), so installing
-the CLI alone already delivers Core + Web. `superagent --start-web` launches it.
+the CLI alone already delivers Core + Web. `superagent --serve` (or the equivalent
+`superagent --start-web`) launches it.
 
 ---
 

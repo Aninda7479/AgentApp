@@ -28,9 +28,11 @@ export function createCliProgram(onExecute?: (options: CliOptions, prompt?: stri
     .exitOverride()
     .option('--models', 'List all available model IDs for easy copying')
     .option('--start-web', 'Start the SuperAgent web server and host the web app (same as `npm start:web`)')
+    .option('--serve', 'Alias for --start-web — start the web server (homelab/server shorthand)')
     .option('--stop-web', 'Stop the running SuperAgent web server (even one started by the Desktop app)')
     .option('--web-status', 'Print whether the SuperAgent web server is running, and who started it')
-    .option('--web-port <port>', 'Port for the web server when using --start-web', '3000');
+    .option('--web-port <port>', 'Port for the web server when using --start-web / --serve', '14692')
+    .option('--serve-port <port>', 'Alias for --web-port — port for the web server', '14692');
 
   program
     .command('chat [prompt]', { isDefault: true })

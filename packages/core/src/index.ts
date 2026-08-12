@@ -99,7 +99,7 @@ export * from './media/ppt_stylizer.js';
 
 /** Shared launcher for the self-hosted web server (CLI `--start-web` + Desktop). */
 export * from './web-server.js';
-/** Cross-process lock coordinating the single web-server instance (port 3000). */
+/** Cross-process lock coordinating the single web-server instance (port 14692). */
 export * from './web-server-lock.js';
 export * from './providers/system-info.js';
 export * from './artifact/artifactManifest.js';
