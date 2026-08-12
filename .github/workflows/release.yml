@@ -2,32 +2,50 @@ name: Release
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Trigger: push to the `release` branch.
-# Version is read from the root package.json (no git tags needed).
-# No npm publish — all artifacts go to GitHub Releases only.
+# Auto-bumps version via Conventional Commits, builds installers & CLI binaries,
+# and publishes a GitHub Release tagged v<VERSION>.
 # ─────────────────────────────────────────────────────────────────────────────
 on:
   push:
     branches:
       - release
-      - main
-      - rust
 
 permissions:
   contents: write
 
 jobs:
-  # ── Step 0: Read version once, share across all jobs ─────────────────────
+  # ── Step 0: Auto-bump version & push git tag ─────────────────────────────────
   version:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.read.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Configure Git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Auto-bump version & commit
+        run: |
+          node scripts/bump-version.js auto
+          git push origin HEAD:${{ github.ref_name }} || true
+
       - id: read
         run: |
           VERSION=$(node -p "require('./packages/desktop/package.json').version")
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Building SuperAgent v${VERSION}"
+          git tag "v${VERSION}" || true
+          git push origin "v${VERSION}" || true
 
   # ── Step 1: Build Tauri desktop installers (Win / macOS / Linux) ──────────
   build-desktop:
@@ -56,7 +74,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install Rust (stable)
@@ -91,7 +109,6 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          # Creates a draft release (or adds to one if it already exists for this tag).
           tagName: v${{ needs.version.outputs.version }}
           releaseName: SuperAgent v${{ needs.version.outputs.version }}
           releaseDraft: true
@@ -139,7 +156,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Download Tauri artifacts (for updater.json sig files)
         uses: actions/download-artifact@v4
@@ -162,23 +179,16 @@ jobs:
           RELEASE_VERSION: ${{ needs.version.outputs.version }}
         run: node scripts/generate-release-notes.mjs
 
-      - name: Upload CLI binaries to GitHub Release
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.version.outputs.version }}
-          draft: true
+          name: SuperAgent v${{ needs.version.outputs.version }}
+          target_commitish: ${{ github.ref_name }}
+          draft: false
           files: |
             cli-artifacts/*
             artifacts/updater.json
           body_path: release-notes.md
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Publish the draft (make it public)
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.version.outputs.version }}
-          draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
