@@ -23,6 +23,7 @@ import { AppToast } from './components/AppToast';
 import { GlobalErrorModal, GlobalErrorPayload } from './components/GlobalErrorModal';
 import { VoiceIndicator } from './components/VoiceIndicator';
 import { WorkspaceView } from './pages/Workspace/WorkspaceView';
+import { OnboardingWizard } from './components/OnboardingWizard';
 import { ProjectSettingsModal } from './pages/Workspace/ProjectSettingsModal';
 import { StandaloneChatPage } from './pages/Workspace/StandaloneChatPage';
 import { builtinSuggestions, SkillInfo } from './components/slashCommands';
@@ -194,6 +195,7 @@ export const App: React.FC = () => {
   // the catalog/providers are merely not-yet-loaded (not genuinely empty), so
   // panels must show a loading state rather than a false "nothing connected".
   const [bootstrapping, setBootstrapping] = useState<boolean>(true);
+  const [onboardingDismissed, setOnboardingDismissed] = useState<boolean>(false);
 
   // Trajectory steps (the canvas)
   const [trajectorySteps, setTrajectorySteps] = useState<TrajectoryStep[]>([
@@ -1730,6 +1732,14 @@ export const App: React.FC = () => {
         }
       />
       <VoiceIndicator />
+
+      {/* Onboarding Wizard for first-run users */}
+      {!bootstrapping && connectedProviders.length === 0 && !onboardingDismissed && (
+        <OnboardingWizard
+          onComplete={() => setOnboardingDismissed(true)}
+          onConnectProvider={handleConnectProvider}
+        />
+      )}
     </div>
   );
 };

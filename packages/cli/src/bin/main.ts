@@ -133,6 +133,12 @@ async function handleChat(opts: CliOptions, prompt?: string): Promise<void> {
 
   // Interactive TUI. Ink keeps the process alive until the user quits (/exit).
   const resumeMessages = opts.resume ? loadSession(opts.resume) : null;
+
+  // Run onboarding if first-run user (no saved providers) and not resuming a session
+  if (!opts.resume) {
+    const { runCliOnboarding } = await import('../commands/onboarding.js');
+    await runCliOnboarding();
+  }
   
   // Enter alternate screen buffer before Ink starts rendering
   try {
