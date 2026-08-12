@@ -13,7 +13,7 @@ export const SITE_URL =
 
 // Current published version — keep in sync with the package versions.
 // This is automatically updated by scripts/bump-version.js.
-export const VERSION = '0.2.0'
+export const VERSION = '0.2.1'
 
 // Raw install-script endpoints (served from website/public/).
 export const INSTALL_SH = `${SITE_URL}/install.sh`
