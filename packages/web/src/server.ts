@@ -65,7 +65,8 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 
 // Setup JSON parsing limit to accommodate larger buffer contents
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
 const userDataDir = getUserDataDirectory();
 
