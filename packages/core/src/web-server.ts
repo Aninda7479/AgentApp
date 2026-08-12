@@ -123,6 +123,32 @@ export function startWebServer(options: StartWebServerOptions = {}): ChildProces
     if (lock) throw new WebServerAlreadyRunningError(lock);
   }
 
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  if (options.port != null) env.PORT = String(options.port);
+  if (options.host != null) env.HOST = options.host;
+  // Record who launched it so the server can write it into the shared lock.
+  env.SUPERAGENT_WEB_LAUNCHER = options.startedBy ?? 'standalone';
+
+  // When running inside a standalone @yao-pkg/pkg binary, process.execPath IS the binary.
+  // Spawn process.execPath with SUPERAGENT_INTERNAL_WEB_SERVER=1 to launch the web server child process!
+  if ((process as any).pkg) {
+    env.SUPERAGENT_INTERNAL_WEB_SERVER = '1';
+    const child = spawn(process.execPath, [], {
+      env,
+      stdio: options.quiet ? 'ignore' : 'inherit'
+    });
+
+    activeChild = child;
+    child.on('exit', () => {
+      if (activeChild === child) activeChild = null;
+    });
+    child.on('error', () => {
+      if (activeChild === child) activeChild = null;
+    });
+
+    return child;
+  }
+
   const entry = locateWebServerEntry();
   if (!entry) {
     throw new Error(
@@ -131,11 +157,6 @@ export function startWebServer(options: StartWebServerOptions = {}): ChildProces
     );
   }
 
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  if (options.port != null) env.PORT = String(options.port);
-  if (options.host != null) env.HOST = options.host;
-  // Record who launched it so the server can write it into the shared lock.
-  env.SUPERAGENT_WEB_LAUNCHER = options.startedBy ?? 'standalone';
   // If launching from an Electron executable, force it to run as a node child process.
   env.ELECTRON_RUN_AS_NODE = '1';
 

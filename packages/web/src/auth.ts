@@ -22,7 +22,7 @@
 // proof of identity. If no password exists yet, visitors are guided through a
 // one-time setup flow to create it.
 
-import crypto from 'crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
 import type { IncomingMessage } from 'http';
 import path from 'path';
@@ -59,15 +59,14 @@ function useSecureCookies(): boolean {
 
 /** Signs arbitrary data with the persistent session secret from core. */
 function sign(data: string): string {
-  return crypto
-    .createHmac('sha256', AuthStore.getOrCreateSessionSecret())
+  return createHmac('sha256', AuthStore.getOrCreateSessionSecret())
     .update(data)
     .digest('base64url');
 }
 
 /** Creates a signed session token embedding the username, session ID, and an expiry. */
 export function createSessionToken(username: string, sessionId?: string): string {
-  const sid = sessionId || crypto.randomBytes(16).toString('hex');
+  const sid = sessionId || randomBytes(16).toString('hex');
   const payload = JSON.stringify({
     u: username,
     sid,
@@ -105,7 +104,7 @@ export function verifySessionToken(token: string | undefined): string | null {
   const expected = sign(encoded);
   const sigBuf = Buffer.from(signature);
   const expBuf = Buffer.from(expected);
-  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+  if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) {
     return null;
   }
 

@@ -1,11 +1,10 @@
-#!/usr/bin/env node
 import express from 'express';
 import type { Request, Response } from 'express';
-import http from 'http';
+import * as http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import path from 'path';
-import fs from 'fs';
-import os from 'os';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 import { exec } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -57,8 +56,8 @@ import {
 } from './auth.js';
 import { getSystemInfo } from './system-info.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const serverFilename = typeof __filename !== 'undefined' ? __filename : (typeof import.meta !== 'undefined' && import.meta.url ? fileURLToPath(import.meta.url) : '');
+const serverDirname = typeof __dirname !== 'undefined' ? __dirname : (serverFilename ? dirname(serverFilename) : process.cwd());
 
 const app = express();
 const server = http.createServer(app);
@@ -78,7 +77,7 @@ triggerEngine.start();
 // Web build version, read from the package manifest at startup.
 const WEB_VERSION = (() => {
   try {
-    return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8')).version;
+    return JSON.parse(fs.readFileSync(path.join(serverDirname, '..', 'package.json'), 'utf-8')).version;
   } catch {
     return '0.0.0';
   }
@@ -109,7 +108,7 @@ app.get('/api/auth/history', handleGetHistory);
 
 // Serve the standalone login/setup page (public; must stay before the gate).
 app.get('/login', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'login.html'));
+  res.sendFile(path.join(serverDirname, 'login.html'));
 });
 
 // NOTE: the account (change-password) page is registered AFTER `app.use(authGate)`
@@ -132,7 +131,7 @@ app.use(authGate);
 // to /login by the gate above. (This page was previously registered BEFORE the
 // gate and was therefore reachable without authentication.)
 app.get('/account', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'account.html'));
+  res.sendFile(path.join(serverDirname, 'account.html'));
 });
 
 // ─── WebSocket Event Hub ────────────────────────────────────────────────────
@@ -1178,7 +1177,7 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
 }
 
 // ─── Static Web Asset Serving ────────────────────────────────────────────────
-const distPath = __dirname;
+const distPath = serverDirname;
 app.use(express.static(distPath));
 
 app.get('*', (req, res) => {

@@ -9,6 +9,8 @@ on:
   push:
     branches:
       - release
+      - main
+      - rust
 
 permissions:
   contents: write
@@ -83,7 +85,7 @@ jobs:
         run: npm run build --workspace=@superagent/web
 
       - name: Build & bundle Tauri app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -96,121 +98,40 @@ jobs:
           prerelease: false
           args: --target ${{ matrix.target }}
 
-  # ── Step 2: Build server tarballs for headless --serve deployments ─────────
-  build-server:
+  # ── Step 2: Build self-contained standalone binaries for CLI + Web server ────
+  build-cli-binary:
     needs: version
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            label: linux-x64
-            ext: tar.gz
-          - os: windows-latest
-            label: windows-x64
-            ext: zip
-          - os: macos-latest
-            label: macos-arm64
-            ext: zip
-
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: 22
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build packages
+      - name: Build core & web packages
         run: |
           npm run build --workspace=@superagent/core
-          npm run build --workspace=@superagent/cli
           npm run build --workspace=@superagent/web
+          npm run build --workspace=@superagent/cli
 
-      # Bundle CLI + Web into a self-contained directory ready to tar/zip.
-      - name: Assemble server bundle
-        shell: bash
-        run: |
-          VERSION=${{ needs.version.outputs.version }}
-          BUNDLE="superagent-server-v${VERSION}-${{ matrix.label }}"
-          mkdir -p "${BUNDLE}"
+      - name: Build standalone binaries via pack.mjs
+        run: node packages/cli/scripts/pack.mjs
 
-          # Copy CLI dist
-          cp -r packages/cli/dist "${BUNDLE}/cli"
-          cp packages/cli/package.json "${BUNDLE}/cli/"
-
-          # Copy Web dist (the server binary)
-          cp -r packages/web/dist "${BUNDLE}/web"
-          cp packages/web/package.json "${BUNDLE}/web/"
-
-          # Copy Core dist (runtime dependency)
-          cp -r packages/core/dist "${BUNDLE}/core"
-          cp packages/core/package.json "${BUNDLE}/core/"
-
-          # Write a minimal root package.json so node resolves the workspace
-          node -e "
-            const pkg = require('./package.json');
-            const mini = { name: 'superagent-server', version: pkg.version, type: 'module' };
-            require('fs').writeFileSync('${BUNDLE}/package.json', JSON.stringify(mini, null, 2));
-          "
-
-          # Launcher scripts
-          cat > "${BUNDLE}/README.md" << 'EOF'
-          # SuperAgent Server — Headless / HomeLab
-
-          ## Start the web server
-          \`\`\`
-          node cli/dist/bin/main.js --serve
-          # or with a custom port:
-          node cli/dist/bin/main.js --serve --serve-port 8080
-          \`\`\`
-
-          Access at: http://localhost:14692  (or the port you configured)
-          The server binds to 0.0.0.0 by default — accessible from your LAN and public internet.
-
-          ## Update
-          \`\`\`
-          node cli/dist/bin/main.js update
-          \`\`\`
-          EOF
-
-          echo "Bundle ready: ${BUNDLE}"
-          ls -lh "${BUNDLE}"
-
-      - name: Create tarball (Linux)
-        if: matrix.ext == 'tar.gz'
-        run: |
-          VERSION=${{ needs.version.outputs.version }}
-          tar -czf "superagent-server-v${VERSION}-${{ matrix.label }}.tar.gz" \
-            "superagent-server-v${VERSION}-${{ matrix.label }}"
-
-      - name: Create zip (Windows / macOS)
-        if: matrix.ext == 'zip'
-        shell: bash
-        run: |
-          VERSION=${{ needs.version.outputs.version }}
-          BUNDLE="superagent-server-v${VERSION}-${{ matrix.label }}"
-          if command -v zip &>/dev/null; then
-            zip -r "${BUNDLE}.zip" "${BUNDLE}"
-          else
-            powershell Compress-Archive -Path "${BUNDLE}" -DestinationPath "${BUNDLE}.zip"
-          fi
-
-      - name: Upload server artifact
+      - name: Upload binary artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: server-${{ matrix.label }}
-          path: superagent-server-v${{ needs.version.outputs.version }}-${{ matrix.label }}.${{ matrix.ext }}
+          name: cli-binary-artifacts
+          path: packages/cli/dist-release-cli/superagent-cli-v*.*
           if-no-files-found: error
 
   # ── Step 3: Generate updater.json + release notes, publish final release ──
   publish:
-    needs: [version, build-desktop, build-server]
+    needs: [version, build-desktop, build-cli-binary]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -225,12 +146,11 @@ jobs:
         with:
           path: artifacts
 
-      - name: Download server tarballs
+      - name: Download CLI binary archives
         uses: actions/download-artifact@v4
         with:
-          pattern: server-*
-          path: server-artifacts
-          merge-multiple: true
+          name: cli-binary-artifacts
+          path: cli-artifacts
 
       - name: Generate updater.json
         env:
@@ -242,13 +162,13 @@ jobs:
           RELEASE_VERSION: ${{ needs.version.outputs.version }}
         run: node scripts/generate-release-notes.mjs
 
-      - name: Upload server tarballs to GitHub Release
+      - name: Upload CLI binaries to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.version.outputs.version }}
           draft: true
           files: |
-            server-artifacts/*
+            cli-artifacts/*
             artifacts/updater.json
           body_path: release-notes.md
         env:

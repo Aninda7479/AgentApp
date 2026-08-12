@@ -21,6 +21,13 @@ if (process.argv.includes('--models')) {
   process.exit(0);
 }
 
+if (process.env.SUPERAGENT_INTERNAL_WEB_SERVER === '1' || process.argv.includes('--internal-web-server')) {
+  import('@superagent/web').catch((err) => {
+    console.error('[web-server] Failed to start web server:', err?.stack || err);
+    process.exit(1);
+  });
+} else {
+
 // `superagent --stop-web` / `--web-status` coordinate the single shared web
 // server across the CLI, Desktop app, and standalone host via a lock file in
 // ~/.superagent. Intercept before commander parses so the chat TUI never renders.
@@ -186,7 +193,13 @@ program
   .parseAsync(process.argv)
   .catch((err: unknown) => {
     // exitOverride() surfaces --help/--version as a CommanderError; don't treat that as a crash.
-    if (err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === 'commander.helpDisplayed') {
+    if (
+      err &&
+      typeof err === 'object' &&
+      'code' in err &&
+      ((err as { code?: string }).code === 'commander.helpDisplayed' ||
+        (err as { code?: string }).code === 'commander.version')
+    ) {
       return;
     }
     console.error(err instanceof Error ? err.message : err);

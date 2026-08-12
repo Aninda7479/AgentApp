@@ -2,8 +2,8 @@
 # SuperAgent installer — Core + CLI + Web (Server / HomeLab)
 # Usage: curl -fsSL https://aninda7479.github.io/AgentApp/install.sh | sh
 #
-# Downloads the pre-built server tarball from GitHub Releases.
-# Node.js >= 18 is still required to run the server.
+# Downloads the self-contained standalone binary from GitHub Releases.
+# Zero prerequisites required (no Node.js or npm needed).
 set -eu
 
 REPO="Aninda7479/AgentApp"
@@ -13,17 +13,6 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo "${CYAN}SuperAgent installer — Core + CLI + Web${NC}"
-
-# ── Detect Node.js ──────────────────────────────────────────────────────────
-if ! command -v node > /dev/null 2>&1; then
-  echo "${RED}Error: Node.js >= 18 is required. Get it at https://nodejs.org${NC}" >&2
-  exit 1
-fi
-NODE_MAJOR=$(node -v | sed 's/^v//;s/\..*//')
-if [ "$NODE_MAJOR" -lt 18 ]; then
-  echo "${RED}Error: Node.js >= 18 is required (found $(node -v)).${NC}" >&2
-  exit 1
-fi
 
 # ── Fetch latest version from GitHub ────────────────────────────────────────
 echo "Checking latest release…"
@@ -41,60 +30,71 @@ ARCH=$(uname -m)
 
 if [ "$OS" = "Darwin" ]; then
   if [ "$ARCH" = "arm64" ]; then
-    ASSET="superagent-server-v${VERSION}-macos-arm64.zip"
+    ASSET="superagent-cli-v${VERSION}-macos-arm64.zip"
     EXT="zip"
   else
-    # Intel mac — use linux-x64 bundle (Node.js is cross-platform)
-    ASSET="superagent-server-v${VERSION}-linux-x64.tar.gz"
-    EXT="tar.gz"
+    ASSET="superagent-cli-v${VERSION}-macos-x64.zip"
+    EXT="zip"
   fi
 else
-  # Linux (and anything else)
-  ASSET="superagent-server-v${VERSION}-linux-x64.tar.gz"
-  EXT="tar.gz"
+  if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+    ASSET="superagent-cli-v${VERSION}-linux-arm64.tar.gz"
+    EXT="tar.gz"
+  else
+    ASSET="superagent-cli-v${VERSION}-linux-x64.tar.gz"
+    EXT="tar.gz"
+  fi
 fi
 
 URL="https://github.com/${REPO}/releases/download/v${VERSION}/${ASSET}"
-INSTALL_DIR="$HOME/.superagent-server"
+LAUNCHER_DIR="$HOME/.local/bin"
+TARGET_BIN="$LAUNCHER_DIR/superagent"
 
-# ── Download ────────────────────────────────────────────────────────────────
+# ── Download & Extract ──────────────────────────────────────────────────────
 echo "Downloading ${ASSET}…"
 TMP=$(mktemp -d)
 curl -fsSL "$URL" -o "$TMP/$ASSET"
 
-# ── Extract ─────────────────────────────────────────────────────────────────
-rm -rf "$INSTALL_DIR"
-mkdir -p "$INSTALL_DIR"
+mkdir -p "$LAUNCHER_DIR"
+
 if [ "$EXT" = "zip" ]; then
-  unzip -q "$TMP/$ASSET" -d "$INSTALL_DIR"
-  # Flatten one level if needed
-  INNER=$(ls "$INSTALL_DIR" | head -1)
-  if [ -d "$INSTALL_DIR/$INNER/cli" ]; then
-    mv "$INSTALL_DIR/$INNER"/* "$INSTALL_DIR/"
-    rmdir "$INSTALL_DIR/$INNER" 2>/dev/null || true
+  unzip -q "$TMP/$ASSET" -d "$TMP/extracted"
+  if [ -f "$TMP/extracted/superagent" ]; then
+    mv "$TMP/extracted/superagent" "$TARGET_BIN"
+  elif [ -f "$TMP/extracted/superagent-cli" ]; then
+    mv "$TMP/extracted/superagent-cli" "$TARGET_BIN"
   fi
 else
-  tar -xzf "$TMP/$ASSET" -C "$INSTALL_DIR" --strip-components=1
+  tar -xzf "$TMP/$ASSET" -C "$TMP"
+  if [ -f "$TMP/superagent" ]; then
+    mv "$TMP/superagent" "$TARGET_BIN"
+  elif [ -f "$TMP/superagent-cli" ]; then
+    mv "$TMP/superagent-cli" "$TARGET_BIN"
+  fi
 fi
 rm -rf "$TMP"
+chmod +x "$TARGET_BIN"
 
-# ── Create launcher script ───────────────────────────────────────────────────
-LAUNCHER_DIR="$HOME/.local/bin"
-mkdir -p "$LAUNCHER_DIR"
-cat > "$LAUNCHER_DIR/superagent" << SCRIPT
-#!/usr/bin/env sh
-exec node "$INSTALL_DIR/cli/dist/bin/main.js" "\$@"
-SCRIPT
-chmod +x "$LAUNCHER_DIR/superagent"
+# ── Update PATH in RC files if needed ────────────────────────────────────────
+PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+case ":$PATH:" in
+  *":$LAUNCHER_DIR:"*) ;;
+  *)
+    for RC in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+      if [ -f "$RC" ] && ! grep -q '\.local/bin' "$RC"; then
+        echo "" >> "$RC"
+        echo "$PATH_LINE" >> "$RC"
+      fi
+    done
+    ;;
+esac
 
 echo ""
-echo "${GREEN}✓ Done! SuperAgent v${VERSION} installed to ${INSTALL_DIR}${NC}"
+echo "${GREEN}✓ Done! SuperAgent v${VERSION} binary installed to ${TARGET_BIN}${NC}"
 echo ""
-echo "Make sure ${LAUNCHER_DIR} is in your PATH:"
-echo '  export PATH="$HOME/.local/bin:$PATH"   # add to ~/.bashrc or ~/.zshrc'
-echo ""
-echo "Then run:"
+echo "Run SuperAgent directly:"
 echo "    superagent                      # interactive CLI (TUI)"
 echo "    superagent --serve              # web UI at http://localhost:14692"
 echo "    superagent --serve-port 8080    # web UI on a custom port"
 echo "    superagent update               # check / update to a newer release"
+

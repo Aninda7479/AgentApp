@@ -25,7 +25,7 @@ export interface UpdateOptions {
 }
 
 /** Fetches the latest GitHub release version via the GitHub API (no auth required for public repos). */
-function getLatestGitHubVersion(): string | null {
+function getLatestGitHubVersion(): Promise<string | null> {
   return new Promise<string | null>((resolve) => {
     const req = https.get(
       RELEASES_API,
@@ -46,40 +46,7 @@ function getLatestGitHubVersion(): string | null {
     );
     req.on('error', () => resolve(null));
     req.setTimeout(8000, () => { req.destroy(); resolve(null); });
-  }) as unknown as string | null;  // sync wrapper below handles the promise
-}
-
-/** Synchronous wrapper — runs the async GitHub fetch in a tiny child node process. */
-function getLatestVersion(): string | null {
-  try {
-    const script = `
-      const https = require('https');
-      const req = https.get(
-        '${RELEASES_API}',
-        { headers: { 'User-Agent': 'superagent-cli', Accept: 'application/vnd.github+json' } },
-        res => {
-          let d = '';
-          res.on('data', c => d += c);
-          res.on('end', () => {
-            try {
-              const tag = JSON.parse(d).tag_name || '';
-              process.stdout.write(tag.replace(/^v/, ''));
-            } catch { process.exit(1); }
-          });
-        }
-      );
-      req.on('error', () => process.exit(1));
-      req.setTimeout(8000, () => { req.destroy(); process.exit(1); });
-    `;
-    const out = execFileSync(process.execPath, ['-e', script], {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: 10000,
-    });
-    return out.trim() || null;
-  } catch {
-    return null;
-  }
+  });
 }
 
 /** Semantic-ish comparison of two `x.y.z` version strings. */
@@ -96,40 +63,37 @@ function compareVersions(a: string, b: string): number {
 
 /**
  * Detects the OS / arch and returns the download URL for the appropriate
- * server tarball from the GitHub Release.
+ * standalone binary archive from the GitHub Release.
  */
-function getServerTarballUrl(version: string): string {
+function getBinaryArchiveUrl(version: string): string {
   const platform = process.platform;
   const arch = process.arch;
 
+  let osLabel = 'linux-x64';
+  let ext = 'tar.gz';
+
   if (platform === 'win32') {
-    return `https://github.com/${REPO}/releases/download/v${version}/superagent-server-v${version}-windows-x64.zip`;
+    osLabel = 'windows-x64';
+    ext = 'zip';
+  } else if (platform === 'darwin') {
+    osLabel = arch === 'arm64' ? 'macos-arm64' : 'macos-x64';
+    ext = 'zip';
+  } else if (platform === 'linux') {
+    osLabel = arch === 'arm64' ? 'linux-arm64' : 'linux-x64';
+    ext = 'tar.gz';
   }
-  if (platform === 'darwin') {
-    // arm64 covers M1/M2/M3; fall back to linux-x64-equivalent for x86_64 macs
-    const label = arch === 'arm64' ? 'macos-arm64' : 'linux-x64';
-    return `https://github.com/${REPO}/releases/download/v${version}/superagent-server-v${version}-${label}.zip`;
-  }
-  // Linux default
-  return `https://github.com/${REPO}/releases/download/v${version}/superagent-server-v${version}-linux-x64.tar.gz`;
+
+  return `https://github.com/${REPO}/releases/download/v${version}/superagent-cli-v${version}-${osLabel}.${ext}`;
 }
 
 /**
  * Self-update command.
- *
- * Strategy:
- *  1. Hit the GitHub Releases API to find the latest published version.
- *  2. With `--check`: just print whether an update is available.
- *  3. Without `--check`: print download links. If npm is available and the user
- *     is on a global npm install, run `npm install -g @superagent/cli@latest
- *     @superagent/web@latest`. Otherwise, print the GitHub tarball URL so the
- *     user can re-run the install script or grab the binary directly.
  */
-export function runUpdate(options: UpdateOptions = {}): void {
+export async function runUpdate(options: UpdateOptions = {}): Promise<void> {
   const current = pkg.version;
 
   console.log('[update] Checking GitHub Releases for the latest version…');
-  const latest = getLatestVersion();
+  const latest = await getLatestGitHubVersion();
 
   if (!latest) {
     console.error('[update] Could not reach GitHub to check for updates — are you online?');
@@ -145,7 +109,7 @@ export function runUpdate(options: UpdateOptions = {}): void {
   }
 
   const releaseUrl = `https://github.com/${REPO}/releases/tag/v${latest}`;
-  const tarballUrl = getServerTarballUrl(latest);
+  const binaryUrl = getBinaryArchiveUrl(latest);
 
   if (options.check) {
     console.log(`[update] A newer version (v${latest}) is available.`);
@@ -165,10 +129,10 @@ export function runUpdate(options: UpdateOptions = {}): void {
   console.log(`     irm https://aninda7479.github.io/AgentApp/install.ps1 | iex`);
   console.log('');
 
-  // ── Option B: download tarball directly ─────────────────────────────────
-  console.log('── Option B: Download tarball directly');
-  console.log(`   ${tarballUrl}`);
-  console.log('   Extract and run: node cli/dist/bin/main.js --serve');
+  // ── Option B: download binary archive directly ───────────────────────────
+  console.log('── Option B: Download standalone binary directly');
+  console.log(`   ${binaryUrl}`);
+  console.log('   Extract and run: ./superagent --serve');
   console.log('');
 
   // ── Option C: try npm global install (legacy path) ───────────────────────

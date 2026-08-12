@@ -53,19 +53,27 @@ const desktopRows = [
   },
 ];
 
-// ── Server / HomeLab rows ────────────────────────────────────────────────────
-const serverRows = [
+// ── Standalone CLI / Server Binary rows ──────────────────────────────────────
+const cliRows = [
   {
-    os: '🐧 Linux',
-    link: `[superagent-server-v${version}-linux-x64.tar.gz](${BASE}/superagent-server-v${version}-linux-x64.tar.gz)`,
+    os: '🐧 **Linux (x64)**',
+    link: `[superagent-cli-v${version}-linux-x64.tar.gz](${BASE}/superagent-cli-v${version}-linux-x64.tar.gz)`,
   },
   {
-    os: '🪟 Windows',
-    link: `[superagent-server-v${version}-windows-x64.zip](${BASE}/superagent-server-v${version}-windows-x64.zip)`,
+    os: '🐧 **Linux (arm64)**',
+    link: `[superagent-cli-v${version}-linux-arm64.tar.gz](${BASE}/superagent-cli-v${version}-linux-arm64.tar.gz)`,
   },
   {
-    os: '🍎 macOS',
-    link: `[superagent-server-v${version}-macos-arm64.zip](${BASE}/superagent-server-v${version}-macos-arm64.zip)`,
+    os: '🪟 **Windows (x64)**',
+    link: `[superagent-cli-v${version}-windows-x64.zip](${BASE}/superagent-cli-v${version}-windows-x64.zip)`,
+  },
+  {
+    os: '🍎 **macOS (Apple Silicon)**',
+    link: `[superagent-cli-v${version}-macos-arm64.zip](${BASE}/superagent-cli-v${version}-macos-arm64.zip)`,
+  },
+  {
+    os: '🍎 **macOS (Intel)**',
+    link: `[superagent-cli-v${version}-macos-x64.zip](${BASE}/superagent-cli-v${version}-macos-x64.zip)`,
   },
 ];
 
@@ -87,10 +95,10 @@ const desktopTable = [
   ...desktopRows.map(r => `| ${r.os} | ${r.links} | ${r.desc} |`),
 ].join('\n');
 
-const serverTable = [
-  '| OS | Direct Download |',
+const cliTable = [
+  '| OS / Architecture | Direct Download |',
   '| :--- | :--- |',
-  ...serverRows.map(r => `| ${r.os} | ${r.link} |`),
+  ...cliRows.map(r => `| ${r.os} | ${r.link} |`),
 ].join('\n');
 
 const notes = `\
@@ -100,16 +108,17 @@ ${desktopTable}
 
 ---
 
-#### 🖥️ Server / HomeLab (Headless \`--serve\` mode)
+#### 🖥️ SuperAgent Standalone Binary (CLI & Web Server)
 
-Extract the archive and run:
+Zero-dependency executable (no Node.js required):
+
 \`\`\`bash
-node cli/dist/bin/main.js --serve
+./superagent --serve
 # or with custom port:
-node cli/dist/bin/main.js --serve --serve-port 8080
+./superagent --serve --serve-port 8080
 \`\`\`
 
-${serverTable}
+${cliTable}
 
 ---
 

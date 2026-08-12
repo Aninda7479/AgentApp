@@ -35,22 +35,31 @@ async function run() {
   fs.mkdirSync(packDir, { recursive: true });
   fs.mkdirSync(outDir, { recursive: true });
 
-  // 2. Create staging package.json with all production dependencies of CLI and Core combined
+  // 2. Create staging package.json with all production dependencies of CLI, Web, and Core combined
   console.log('[pack] Creating staging package.json...');
   const cliPkg = JSON.parse(fs.readFileSync(path.join(cliDir, 'package.json'), 'utf8'));
   const corePkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages', 'core', 'package.json'), 'utf8'));
+  const webPkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages', 'web', 'package.json'), 'utf8'));
 
   const combinedDeps = {
     ...corePkg.dependencies,
+    ...webPkg.dependencies,
     ...cliPkg.dependencies
   };
   // Remove monorepo workspace dependencies as they are bundled/handled manually
   delete combinedDeps['@superagent/core'];
+  delete combinedDeps['@superagent/ui'];
+  delete combinedDeps['@superagent/web'];
 
   const stagingPkg = {
     name: 'superagent-cli-pack',
-    version: '0.1.0',
+    version: cliPkg.version,
     private: true,
+    pkg: {
+      assets: [
+        'node_modules/@superagent/web/dist/**/*'
+      ]
+    },
     dependencies: {
       ...combinedDeps,
       // Force installation of sharp platform-specific native binaries
@@ -82,12 +91,17 @@ async function run() {
     '--prefer-offline'
   ], { cwd: packDir });
 
-  // 4. Copy the compiled core files into the staged node_modules so esbuild resolves it as a local module
-  console.log('[pack] Linking staged core package...');
+  // 4. Copy compiled core and web files into staged node_modules
+  console.log('[pack] Linking staged core and web packages...');
   const stagedCoreDir = path.join(packDir, 'node_modules', '@superagent', 'core');
   fs.mkdirSync(stagedCoreDir, { recursive: true });
   fs.cpSync(path.join(repoRoot, 'packages', 'core', 'dist'), path.join(stagedCoreDir, 'dist'), { recursive: true });
   fs.copyFileSync(path.join(repoRoot, 'packages', 'core', 'package.json'), path.join(stagedCoreDir, 'package.json'));
+
+  const stagedWebDir = path.join(packDir, 'node_modules', '@superagent', 'web');
+  fs.mkdirSync(stagedWebDir, { recursive: true });
+  fs.cpSync(path.join(repoRoot, 'packages', 'web', 'dist'), path.join(stagedWebDir, 'dist'), { recursive: true });
+  fs.copyFileSync(path.join(repoRoot, 'packages', 'web', 'package.json'), path.join(stagedWebDir, 'package.json'));
 
   // Patch ink reconciler top-level await to prevent esbuild syntax errors when compiling to CJS
   console.log('[pack] Patching ink reconciler devtools import in root and staging folders...');
@@ -174,8 +188,6 @@ if (process.pkg) {
 `;
 
   // 6. Bundle CLI entry point with esbuild
-  // We keep only the native C++ modules, playwright, and system utilities external.
-  // We alias 'yoga-wasm-web' to 'yoga-wasm-web/asm' to avoid top-level await compile errors in CommonJS.
   console.log('[pack] Bundling Javascript code via esbuild...');
   const bundleFile = path.join(packDir, 'bundle.cjs');
   
@@ -210,10 +222,11 @@ if (process.pkg) {
 
   // 7. Build standalone binaries for targeted platforms
   const targets = [
-    { id: 'node22-win-x64', platform: 'win', arch: 'x64', binaryName: 'superagent-cli.exe', releaseDirName: 'win-x64' },
-    { id: 'node22-macos-x64', platform: 'macos', arch: 'x64', binaryName: 'superagent-cli', releaseDirName: 'mac-x64' },
-    { id: 'node22-macos-arm64', platform: 'macos', arch: 'arm64', binaryName: 'superagent-cli', releaseDirName: 'mac-arm64' },
-    { id: 'node22-linux-x64', platform: 'linux', arch: 'x64', binaryName: 'superagent-cli', releaseDirName: 'linux-x64' },
+    { id: 'node22-win-x64', platform: 'win', arch: 'x64', binaryName: 'superagent-cli.exe', releaseDirName: 'windows-x64', ext: 'zip' },
+    { id: 'node22-macos-x64', platform: 'macos', arch: 'x64', binaryName: 'superagent-cli', releaseDirName: 'macos-x64', ext: 'zip' },
+    { id: 'node22-macos-arm64', platform: 'macos', arch: 'arm64', binaryName: 'superagent-cli', releaseDirName: 'macos-arm64', ext: 'zip' },
+    { id: 'node22-linux-x64', platform: 'linux', arch: 'x64', binaryName: 'superagent-cli', releaseDirName: 'linux-x64', ext: 'tar.gz' },
+    { id: 'node22-linux-arm64', platform: 'linux', arch: 'arm64', binaryName: 'superagent-cli', releaseDirName: 'linux-arm64', ext: 'tar.gz' },
   ];
 
   for (const target of targets) {
@@ -233,7 +246,14 @@ if (process.pkg) {
       '--public-packages', '*'
     ], { cwd: cliDir });
 
-    // 8. Copy and filter production node_modules to ensure target platform contains correct binaries
+    // Also copy to 'superagent' / 'superagent.exe' so users can run superagent directly
+    const stdBinaryName = target.platform === 'win' ? 'superagent.exe' : 'superagent';
+    const stdBinPath = path.join(targetReleaseDir, stdBinaryName);
+    if (stdBinPath !== targetBinPath) {
+      fs.copyFileSync(targetBinPath, stdBinPath);
+    }
+
+    // 8. Copy and filter production node_modules for native modules
     console.log(`[pack] Copying production node_modules for target: ${target.releaseDirName}...`);
     const srcModulesDir = path.join(packDir, 'node_modules');
     const destModulesDir = path.join(targetReleaseDir, 'node_modules');
@@ -247,7 +267,7 @@ if (process.pkg) {
       }
     }
 
-    // Always copy @img which contains sharp's native binaries (filtered for the target platform)
+    // Always copy @img which contains sharp's native binaries (filtered for target platform)
     const srcImgDir = path.join(srcModulesDir, '@img');
     const destImgDir = path.join(destModulesDir, '@img');
     if (fs.existsSync(srcImgDir)) {
@@ -255,10 +275,11 @@ if (process.pkg) {
       const imgEntries = fs.readdirSync(srcImgDir);
       for (const imgEntry of imgEntries) {
         let matches = false;
-        if (target.releaseDirName === 'win-x64' && imgEntry.includes('win32-x64')) matches = true;
-        else if (target.releaseDirName === 'mac-x64' && imgEntry.includes('darwin-x64')) matches = true;
-        else if (target.releaseDirName === 'mac-arm64' && imgEntry.includes('darwin-arm64')) matches = true;
+        if (target.releaseDirName === 'windows-x64' && imgEntry.includes('win32-x64')) matches = true;
+        else if (target.releaseDirName === 'macos-x64' && imgEntry.includes('darwin-x64')) matches = true;
+        else if (target.releaseDirName === 'macos-arm64' && imgEntry.includes('darwin-arm64')) matches = true;
         else if (target.releaseDirName === 'linux-x64' && imgEntry.includes('linux-x64')) matches = true;
+        else if (target.releaseDirName === 'linux-arm64' && imgEntry.includes('linux-arm64')) matches = true;
 
         if (matches) {
           fs.cpSync(path.join(srcImgDir, imgEntry), path.join(destImgDir, imgEntry), { recursive: true });
@@ -266,15 +287,17 @@ if (process.pkg) {
       }
     }
 
-    // 9. Compress release directory into a zip/tarball file
-    const archiveName = `superagent-cli-${target.releaseDirName}`;
+    // 9. Compress release directory into archive
+    const archiveName = `superagent-cli-v${cliPkg.version}-${target.releaseDirName}`;
     console.log(`[pack] Creating archive for target: ${target.releaseDirName}...`);
-    sh('tar', ['-czf', `${archiveName}.tar.gz`, '-C', targetReleaseDir, '.'], { cwd: outDir });
+    if (target.ext === 'zip') {
+      const zipPath = path.join(outDir, `${archiveName}.zip`);
+      const targetPattern = path.join(targetReleaseDir, '*');
+      sh('powershell', ['Compress-Archive', '-Path', `"${targetPattern}"`, '-DestinationPath', `"${zipPath}"`, '-Force'], { cwd: outDir });
+    } else {
+      sh('tar', ['-czf', `${archiveName}.tar.gz`, '-C', targetReleaseDir, '.'], { cwd: outDir });
+    }
   }
-
-  // 10. Cleanup staging directory
-  console.log('[pack] Cleaning up staging directory...');
-  // rmrf(packDir);
 
   console.log(`[pack] 🎉 CLI packaging successfully finished! Outdir: ${outDir}`);
 }
