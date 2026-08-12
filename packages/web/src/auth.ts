@@ -160,7 +160,7 @@ function buildSetCookie(value: string, maxAgeMs: number): string {
 
 /** Issues a fresh session cookie for the given user and registers the session record. */
 export function setSessionCookie(res: Response, username: string, req?: Request): void {
-  const sid = crypto.randomBytes(16).toString('hex');
+  const sid = randomBytes(16).toString('hex');
   const ip = req ? clientIp(req) : '127.0.0.1';
   const ua = (req ? (req.headers['user-agent'] as string) : null) || 'Web Browser';
   AuthStore.registerSession(sid, username, ip, ua);
