@@ -54,5 +54,6 @@
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.9",
     "concurrently": "^10.0.3"
-  }
+  },
+  "version": "0.2.0"
 }
