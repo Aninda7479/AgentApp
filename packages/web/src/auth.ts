@@ -25,6 +25,9 @@
 import crypto from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
 import type { IncomingMessage } from 'http';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { AuthStore, SettingsStorage } from '@superagent/core';
 
 /** Name of the session cookie. */
@@ -312,8 +315,14 @@ export function handleStatus(req: Request, res: Response): void {
   const settings = SettingsStorage.loadSettings();
   const ownerName = settings.general?.ownerName ?? null;
 
+  let version = '0.1.0';
+  try {
+    const pkgPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../package.json');
+    version = (JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version: string }).version || '0.1.0';
+  } catch { /* use default */ }
+
   if (isAuthDisabled()) {
-    res.json({ authenticated: true, authRequired: false, passwordSet: true, ownerName });
+    res.json({ authenticated: true, authRequired: false, passwordSet: true, ownerName, version });
     return;
   }
   const user = getAuthenticatedUser(req);
@@ -321,7 +330,8 @@ export function handleStatus(req: Request, res: Response): void {
     authenticated: Boolean(user),
     authRequired: true,
     passwordSet: AuthStore.isPasswordSet(),
-    ownerName
+    ownerName,
+    version
   });
 }
 

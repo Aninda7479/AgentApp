@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
       - id: read
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          VERSION=$(node -p "require('./packages/desktop/package.json').version")
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Building SuperAgent v${VERSION}"
 

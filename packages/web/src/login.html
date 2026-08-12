@@ -183,7 +183,7 @@
     </div>
 
     <button type="submit" id="submit">Sign in</button>
-    <div class="foot">SuperAgent — your autonomous workspace</div>
+    <div class="foot">SuperAgent <span id="app-version"></span> — your autonomous workspace</div>
   </form>
 
   <script>
@@ -212,6 +212,12 @@
             var badge = document.getElementById('owner-badge');
             display.textContent = s.ownerName;
             badge.style.display = 'flex';
+          }
+          if (s.version) {
+            var versionText = document.getElementById('app-version');
+            if (versionText) {
+              versionText.textContent = 'v' + s.version;
+            }
           }
         })
         .catch(function () {});
