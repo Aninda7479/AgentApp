@@ -260,13 +260,17 @@ export function clearAttempts(req: Request): void {
 
 // ─── Express middleware & route handlers ─────────────────────────────────────
 
-/** Paths reachable without a valid session (login/setup flow + health). */
+/** Paths reachable without a valid session (login/setup flow + health + brand assets). */
 const PUBLIC_PATHS = new Set([
   '/login',
   '/api/health',
   '/api/auth/status',
   '/api/auth/login',
-  '/api/auth/setup'
+  '/api/auth/setup',
+  '/manifest.json',
+  '/icon.svg',
+  '/icon.png',
+  '/favicon.ico'
 ]);
 
 function isLoopbackReq(req: Request): boolean {
