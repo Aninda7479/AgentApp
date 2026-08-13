@@ -57,7 +57,8 @@ async function run() {
     private: true,
     pkg: {
       assets: [
-        'node_modules/@superagent/web/dist/**/*'
+        'node_modules/@superagent/web/dist/**/*',
+        'web-dist/**/*'
       ]
     },
     dependencies: {
@@ -102,6 +103,10 @@ async function run() {
   fs.mkdirSync(stagedWebDir, { recursive: true });
   fs.cpSync(path.join(repoRoot, 'packages', 'web', 'dist'), path.join(stagedWebDir, 'dist'), { recursive: true });
   fs.copyFileSync(path.join(repoRoot, 'packages', 'web', 'package.json'), path.join(stagedWebDir, 'package.json'));
+
+  const stagedWebDistDir = path.join(packDir, 'web-dist');
+  fs.mkdirSync(stagedWebDistDir, { recursive: true });
+  fs.cpSync(path.join(repoRoot, 'packages', 'web', 'dist'), stagedWebDistDir, { recursive: true });
 
   // Patch ink reconciler top-level await to prevent esbuild syntax errors when compiling to CJS
   console.log('[pack] Patching ink reconciler devtools import in root and staging folders...');

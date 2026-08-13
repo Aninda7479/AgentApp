@@ -61,16 +61,19 @@ const serverDirname = typeof __dirname !== 'undefined' ? __dirname : (serverFile
 
 const getWebDistDir = (): string => {
   const candidates = [
-    serverDirname,
+    path.join(serverDirname, 'web-dist'),
     path.join(serverDirname, 'node_modules', '@superagent', 'web', 'dist'),
     path.join(serverDirname, '..', 'web', 'dist'),
     path.join(process.cwd(), 'node_modules', '@superagent', 'web', 'dist'),
     path.join(path.dirname(process.execPath), 'node_modules', '@superagent', 'web', 'dist'),
+    serverDirname,
   ];
   for (const cand of candidates) {
-    if (fs.existsSync(path.join(cand, 'login.html')) || fs.existsSync(path.join(cand, 'index.html'))) {
-      return cand;
-    }
+    try {
+      if (fs.existsSync(path.join(cand, 'login.html')) && fs.existsSync(path.join(cand, 'index.html'))) {
+        return cand;
+      }
+    } catch {}
   }
   return serverDirname;
 };
@@ -125,7 +128,13 @@ app.get('/api/auth/history', handleGetHistory);
 
 // Serve the standalone login/setup page (public; must stay before the gate).
 app.get('/login', (_req, res) => {
-  res.sendFile(path.join(webDistDir, 'login.html'));
+  const filePath = path.join(webDistDir, 'login.html');
+  res.sendFile(filePath, (err) => {
+    if (err && !res.headersSent) {
+      console.error(`[Web] Error serving login.html from ${filePath}:`, err.message);
+      res.status(404).send('login.html not found');
+    }
+  });
 });
 
 // NOTE: the account (change-password) page is registered AFTER `app.use(authGate)`
@@ -148,7 +157,13 @@ app.use(authGate);
 // to /login by the gate above. (This page was previously registered BEFORE the
 // gate and was therefore reachable without authentication.)
 app.get('/account', (_req, res) => {
-  res.sendFile(path.join(webDistDir, 'account.html'));
+  const filePath = path.join(webDistDir, 'account.html');
+  res.sendFile(filePath, (err) => {
+    if (err && !res.headersSent) {
+      console.error(`[Web] Error serving account.html from ${filePath}:`, err.message);
+      res.status(404).send('account.html not found');
+    }
+  });
 });
 
 // ─── WebSocket Event Hub ────────────────────────────────────────────────────
@@ -1198,7 +1213,13 @@ const distPath = webDistDir;
 app.use(express.static(distPath));
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(distPath, 'index.html'));
+  const filePath = path.join(distPath, 'index.html');
+  res.sendFile(filePath, (err) => {
+    if (err && !res.headersSent) {
+      console.error(`[Web] Error serving index.html from ${filePath}:`, err.message);
+      res.status(404).send('index.html not found');
+    }
+  });
 });
 
 // ─── Server Ignition ─────────────────────────────────────────────────────────
