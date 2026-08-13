@@ -1,6 +1,10 @@
 {
   "name": "@superagent/core",
+<<<<<<< HEAD
   "version": "0.3.3",
+=======
+  "version": "0.3.2",
+>>>>>>> main
   "description": "Shared agent intelligence core for SuperAgent (Desktop, Web, and CLI)",
   "license": "GPL-3.0-or-later",
   "repository": {

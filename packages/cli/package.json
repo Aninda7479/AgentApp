@@ -1,6 +1,10 @@
 {
   "name": "@superagent/cli",
+<<<<<<< HEAD
   "version": "0.3.3",
+=======
+  "version": "0.3.2",
+>>>>>>> main
   "type": "module",
   "description": "Terminal TUI application for SuperAgent",
   "license": "GPL-3.0-or-later",
@@ -30,7 +34,11 @@
     "pack": "node scripts/pack.mjs"
   },
   "dependencies": {
+<<<<<<< HEAD
     "@superagent/core": "^0.3.3",
+=======
+    "@superagent/core": "^0.3.2",
+>>>>>>> main
     "commander": "^12.1.0",
     "ink": "^4.4.1",
     "react": "^18.3.1"

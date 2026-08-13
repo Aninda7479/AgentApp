@@ -1,7 +1,11 @@
 {
   "name": "superagent-website",
   "private": true,
+<<<<<<< HEAD
   "version": "0.3.3",
+=======
+  "version": "0.3.2",
+>>>>>>> main
   "type": "module",
   "description": "Marketing & install site for SuperAgent — built with Vite + React + React Router.",
   "scripts": {
