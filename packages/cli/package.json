@@ -1,6 +1,6 @@
 {
   "name": "@superagent/cli",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "type": "module",
   "description": "Terminal TUI application for SuperAgent",
   "license": "GPL-3.0-or-later",
@@ -30,7 +30,7 @@
     "pack": "node scripts/pack.mjs"
   },
   "dependencies": {
-    "@superagent/core": "^0.3.4",
+    "@superagent/core": "^0.3.5",
     "commander": "^12.1.0",
     "ink": "^4.4.1",
     "react": "^18.3.1"
