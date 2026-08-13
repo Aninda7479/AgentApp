@@ -59,6 +59,23 @@ import { getSystemInfo } from './system-info.js';
 const serverFilename = typeof __filename !== 'undefined' ? __filename : (typeof import.meta !== 'undefined' && import.meta.url ? fileURLToPath(import.meta.url) : '');
 const serverDirname = typeof __dirname !== 'undefined' ? __dirname : (serverFilename ? dirname(serverFilename) : process.cwd());
 
+const getWebDistDir = (): string => {
+  const candidates = [
+    serverDirname,
+    path.join(serverDirname, 'node_modules', '@superagent', 'web', 'dist'),
+    path.join(serverDirname, '..', 'web', 'dist'),
+    path.join(process.cwd(), 'node_modules', '@superagent', 'web', 'dist'),
+    path.join(path.dirname(process.execPath), 'node_modules', '@superagent', 'web', 'dist'),
+  ];
+  for (const cand of candidates) {
+    if (fs.existsSync(path.join(cand, 'login.html')) || fs.existsSync(path.join(cand, 'index.html'))) {
+      return cand;
+    }
+  }
+  return serverDirname;
+};
+const webDistDir = getWebDistDir();
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
@@ -108,7 +125,7 @@ app.get('/api/auth/history', handleGetHistory);
 
 // Serve the standalone login/setup page (public; must stay before the gate).
 app.get('/login', (_req, res) => {
-  res.sendFile(path.join(serverDirname, 'login.html'));
+  res.sendFile(path.join(webDistDir, 'login.html'));
 });
 
 // NOTE: the account (change-password) page is registered AFTER `app.use(authGate)`
@@ -131,7 +148,7 @@ app.use(authGate);
 // to /login by the gate above. (This page was previously registered BEFORE the
 // gate and was therefore reachable without authentication.)
 app.get('/account', (_req, res) => {
-  res.sendFile(path.join(serverDirname, 'account.html'));
+  res.sendFile(path.join(webDistDir, 'account.html'));
 });
 
 // ─── WebSocket Event Hub ────────────────────────────────────────────────────
@@ -1177,7 +1194,7 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
 }
 
 // ─── Static Web Asset Serving ────────────────────────────────────────────────
-const distPath = serverDirname;
+const distPath = webDistDir;
 app.use(express.static(distPath));
 
 app.get('*', (req, res) => {
