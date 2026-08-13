@@ -86,10 +86,22 @@ $TmpExtract = "$env:TEMP\superagent-extract-$(Get-Random)"
 Expand-Archive -Path $Tmp -DestinationPath $TmpExtract -Force
 Remove-Item $Tmp -Force
 
+$NewExe = $null
 if (Test-Path "$TmpExtract\superagent.exe") {
-  Copy-Item "$TmpExtract\superagent.exe" "$TargetBin" -Force
+  $NewExe = "$TmpExtract\superagent.exe"
 } elseif (Test-Path "$TmpExtract\superagent-cli.exe") {
-  Copy-Item "$TmpExtract\superagent-cli.exe" "$TargetBin" -Force
+  $NewExe = "$TmpExtract\superagent-cli.exe"
+}
+
+if ($NewExe) {
+  if (Test-Path $TargetBin) {
+    $OldBin = "$TargetBin.old"
+    try {
+      if (Test-Path $OldBin) { Remove-Item $OldBin -Force -ErrorAction SilentlyContinue }
+      Move-Item $TargetBin $OldBin -Force -ErrorAction SilentlyContinue
+    } catch {}
+  }
+  Copy-Item $NewExe "$TargetBin" -Force
 }
 if (Test-Path "$TmpExtract\node_modules") {
   Copy-Item "$TmpExtract\node_modules" "$BinDir\node_modules" -Recurse -Force

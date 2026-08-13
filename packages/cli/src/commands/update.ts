@@ -1,4 +1,4 @@
-import { execFileSync, execSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 import { createRequire } from 'module';
 import https from 'https';
 
@@ -138,12 +138,41 @@ export async function runUpdate(options: UpdateOptions = {}): Promise<void> {
   if (options.check) {
     console.log(`[update] A newer version (v${latest}) is available.`);
     console.log(`         Release: ${releaseUrl}`);
-    console.log(`         Run \`superagent update\` to see install instructions.`);
+    console.log(`         Run \`superagent update\` to update automatically.`);
     return;
   }
 
   console.log(`\n[update] New version available: v${latest}`);
   console.log(`         Release page: ${releaseUrl}\n`);
+  console.log('[update] Automatically running install script to self update…\n');
+
+  const isWin = process.platform === 'win32';
+  const cmd = isWin ? 'powershell.exe' : 'sh';
+  const args = isWin
+    ? ['-ExecutionPolicy', 'Bypass', '-Command', 'irm https://aninda7479.github.io/AgentApp/install.ps1 | iex']
+    : ['-c', 'curl -fsSL https://aninda7479.github.io/AgentApp/install.sh | sh'];
+
+  let installSuccess = false;
+  try {
+    const result = spawnSync(cmd, args, {
+      stdio: 'inherit',
+      env: { ...process.env, FORCE: '1' },
+    });
+    if (result.status === 0) {
+      installSuccess = true;
+    } else {
+      console.error(`\n[update] Automatic update script exited with code ${result.status ?? 1}.`);
+    }
+  } catch (err) {
+    console.error(`\n[update] Failed to execute automatic update script:`, err);
+  }
+
+  if (installSuccess) {
+    console.log(`\n[update] SuperAgent successfully updated to v${latest}!`);
+    return;
+  }
+
+  console.log('\n[update] Manual update fallback options:\n');
 
   // ── Option A: re-run the install script (recommended for most users) ────
   console.log('── Option A: Re-run the install script (recommended)');
@@ -173,3 +202,4 @@ export async function runUpdate(options: UpdateOptions = {}): Promise<void> {
     console.log('   (Only works if packages are published to npm — check the release notes)');
   }
 }
+
