@@ -1237,6 +1237,22 @@ server.on('upgrade', (request, socket, head) => {
 });
 
 if (process.env.NODE_ENV !== 'test') {
+  server.on('error', (err: any) => {
+    if (err.code === 'EACCES' || err.code === 'EADDRINUSE') {
+      console.error(`\n❌ [SuperAgent Web Server] Failed to bind to ${HOST}:${PORT} (${err.code}).`);
+      if (err.code === 'EACCES') {
+        console.error(`👉 On Windows, this usually means port ${PORT} is inside a Hyper-V / Windows NAT excluded port range.`);
+        console.error(`👉 Solution 1 (Admin PowerShell): Run "net stop winnat" then "net start winnat" to reset dynamic port reservations.`);
+        console.error(`👉 Solution 2: Start with custom PORT (e.g. PORT=14670 npm run dev:all)\n`);
+      } else {
+        console.error(`👉 Port ${PORT} is currently in use by another process.\n`);
+      }
+    } else {
+      console.error(`❌ [SuperAgent Web Server] Server error:`, err);
+    }
+    process.exit(1);
+  });
+
   server.listen(Number(PORT), HOST, () => {
   console.log(`================================================================`);
   console.log(`SuperAgent Web Server ignited at: http://localhost:${PORT}`);
