@@ -60,6 +60,27 @@ else
 fi
 TARGET_BIN="$LAUNCHER_DIR/superagent"
 
+# ── Check if already installed & up to date ──────────────────────────────────
+INSTALLED_VER=""
+if command -v superagent >/dev/null 2>&1; then
+  INSTALLED_VER=$(superagent --version 2>/dev/null || echo "")
+elif [ -x "$TARGET_BIN" ]; then
+  INSTALLED_VER=$("$TARGET_BIN" --version 2>/dev/null || echo "")
+fi
+INSTALLED_VER=$(echo "$INSTALLED_VER" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "")
+
+if [ -n "$INSTALLED_VER" ] && [ "$INSTALLED_VER" = "$VERSION" ]; then
+  if [ "${FORCE:-0}" != "1" ]; then
+    echo ""
+    echo "${GREEN}✓ SuperAgent v${VERSION} is already installed and up to date at ${TARGET_BIN}${NC}"
+    echo ""
+    echo "To force reinstall, run:"
+    echo "    curl -fsSL https://aninda7479.github.io/AgentApp/install.sh | FORCE=1 sh"
+    echo ""
+    exit 0
+  fi
+fi
+
 # ── Download & Extract ──────────────────────────────────────────────────────
 TMP=$(mktemp -d)
 START_TIME=$(date +%s 2>/dev/null || echo 0)
