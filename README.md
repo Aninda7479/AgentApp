@@ -21,6 +21,15 @@ irm https://aninda7479.github.io/AgentApp/install.ps1 | iex
 curl -fsSL https://aninda7479.github.io/AgentApp/install.sh | sh
 ```
 
+To uninstall:
+```bash
+# Windows (PowerShell)
+irm https://aninda7479.github.io/AgentApp/uninstall.ps1 | iex
+
+# macOS / Linux
+curl -fsSL https://aninda7479.github.io/AgentApp/uninstall.sh | sh
+```
+
 Then run `superagent` (interactive TUI) or `superagent --serve` / `superagent --start-web` (local web UI at `http://localhost:14692`).
 See the [CLI install page](https://aninda7479.github.io/AgentApp/cli).
 
