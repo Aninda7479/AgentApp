@@ -64,14 +64,43 @@ TARGET_BIN="$LAUNCHER_DIR/superagent"
 TMP=$(mktemp -d)
 START_TIME=$(date +%s 2>/dev/null || echo 0)
 
+# Fetch total file size from Content-Length header
+TOTAL_BYTES=$(curl -sIL "$URL" | grep -i '^content-length:' | tail -1 | awk '{print $2}' | tr -d '\r\n')
+case "$TOTAL_BYTES" in
+  ''|*[!0-9]*) TOTAL_BYTES=0 ;;
+esac
+
 curl -fsSL "$URL" -o "$TMP/$ASSET" &
 CURL_PID=$!
 
-SPINSTR='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 while kill -0 "$CURL_PID" 2>/dev/null; do
-  TMP_SPIN=${SPINSTR#?}
-  printf "\r${CYAN}%c${NC} Downloading standalone CLI binary (${PLATFORM_KEY})..." "$SPINSTR"
-  SPINSTR=$TMP_SPIN${SPINSTR%"$TMP_SPIN"}
+  CURR_BYTES=0
+  if [ -f "$TMP/$ASSET" ]; then
+    CURR_BYTES=$(wc -c < "$TMP/$ASSET" 2>/dev/null || echo 0)
+    CURR_BYTES=$(echo "$CURR_BYTES" | tr -d ' ')
+  fi
+
+  if [ "$TOTAL_BYTES" -gt 0 ]; then
+    PCT=$(( CURR_BYTES * 100 / TOTAL_BYTES ))
+    [ "$PCT" -gt 100 ] && PCT=100
+    HASHES=$(( PCT / 10 ))
+    DASHES=$(( 10 - HASHES ))
+
+    BAR=""
+    i=0
+    while [ "$i" -lt "$HASHES" ]; do BAR="${BAR}#"; i=$((i+1)); done
+    i=0
+    while [ "$i" -lt "$DASHES" ]; do BAR="${BAR}-"; i=$((i+1)); done
+
+    CURR_MB=$(awk "BEGIN {printf \"%.1f\", $CURR_BYTES/1048576}" 2>/dev/null || echo "$((CURR_BYTES / 1048576))")
+    TOTAL_MB=$(awk "BEGIN {printf \"%.1f\", $TOTAL_BYTES/1048576}" 2>/dev/null || echo "$((TOTAL_BYTES / 1048576))")
+
+    printf "\rDownloading: ${CYAN}[%s] %3d%%${NC} (%s MB / %s MB)" "$BAR" "$PCT" "$CURR_MB" "$TOTAL_MB"
+  else
+    CURR_MB=$(awk "BEGIN {printf \"%.1f\", $CURR_BYTES/1048576}" 2>/dev/null || echo "$((CURR_BYTES / 1048576))")
+    printf "\rDownloading: ${CYAN}%s MB${NC}..." "$CURR_MB"
+  fi
+
   sleep 0.1 2>/dev/null || sleep 1
 done
 
@@ -91,11 +120,7 @@ if [ -f "$TMP/$ASSET" ] && command -v du >/dev/null 2>&1; then
   SIZE_KB=$(du -k "$TMP/$ASSET" | cut -f1)
   if [ -n "$SIZE_KB" ] && [ "$SIZE_KB" -gt 0 ]; then
     SIZE_MB=$(awk "BEGIN {printf \"%.1f\", $SIZE_KB/1024}" 2>/dev/null || echo "$((SIZE_KB / 1024))")
-    if [ "$ELAPSED" -gt 0 ]; then
-      echo "${GREEN}✓ Downloaded ${SIZE_MB} MB (${PLATFORM_KEY}) in ${ELAPSED}s${NC}"
-    else
-      echo "${GREEN}✓ Downloaded ${SIZE_MB} MB (${PLATFORM_KEY})${NC}"
-    fi
+    echo "${GREEN}✓ Downloaded [##########] 100%% (${SIZE_MB} MB) in ${ELAPSED}s${NC}"
   fi
 fi
 
