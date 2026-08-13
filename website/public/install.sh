@@ -53,13 +53,21 @@ if [ -z "$URL" ]; then
   URL="https://github.com/${REPO}/releases/download/v${VERSION}/superagent-cli-v${VERSION}-${PLATFORM_KEY}.${EXT}"
 fi
 
-LAUNCHER_DIR="$HOME/.local/bin"
+if [ -w "/usr/local/bin" ]; then
+  LAUNCHER_DIR="/usr/local/bin"
+else
+  LAUNCHER_DIR="$HOME/.local/bin"
+fi
 TARGET_BIN="$LAUNCHER_DIR/superagent"
 
 # ── Download & Extract ──────────────────────────────────────────────────────
 echo "Downloading standalone CLI binary (${PLATFORM_KEY})…"
 TMP=$(mktemp -d)
-curl -fsSL "$URL" -o "$TMP/$ASSET"
+if [ -t 1 ]; then
+  curl -fL --progress-bar "$URL" -o "$TMP/$ASSET"
+else
+  curl -fsSL "$URL" -o "$TMP/$ASSET"
+fi
 
 mkdir -p "$LAUNCHER_DIR"
 
@@ -82,6 +90,7 @@ rm -rf "$TMP"
 chmod +x "$TARGET_BIN"
 
 # ── Update PATH in RC files if needed ────────────────────────────────────────
+PATH_ADDED=0
 PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
 case ":$PATH:" in
   *":$LAUNCHER_DIR:"*) ;;
@@ -90,6 +99,7 @@ case ":$PATH:" in
       if [ -f "$RC" ] && ! grep -q '\.local/bin' "$RC"; then
         echo "" >> "$RC"
         echo "$PATH_LINE" >> "$RC"
+        PATH_ADDED=1
       fi
     done
     ;;
@@ -98,6 +108,16 @@ esac
 echo ""
 echo "${GREEN}✓ Done! SuperAgent v${VERSION} binary installed to ${TARGET_BIN}${NC}"
 echo ""
+
+case ":$PATH:" in
+  *":$LAUNCHER_DIR:"*) ;;
+  *)
+    echo "${CYAN}Note: Please update your current terminal's PATH by running:${NC}"
+    echo "    source ~/.bashrc"
+    echo ""
+    ;;
+esac
+
 echo "Run SuperAgent directly:"
 echo "    superagent                      # interactive CLI (TUI)"
 echo "    superagent --serve              # web UI at http://localhost:14692"
