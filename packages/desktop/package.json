@@ -1,6 +1,6 @@
 {
   "name": "@superagent/desktop",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "SuperAgent Desktop App — Powered by Tauri v2 and Rust Host",
   "license": "GPL-3.0-or-later",
   "repository": {
