@@ -158,22 +158,26 @@ if [ -f "$TMP/$ASSET" ] && command -v du >/dev/null 2>&1; then
 fi
 
 mkdir -p "$LAUNCHER_DIR"
+EXTRACTED_DIR="$TMP/extracted"
+mkdir -p "$EXTRACTED_DIR"
 
 if [ "$EXT" = "zip" ]; then
-  unzip -q "$TMP/$ASSET" -d "$TMP/extracted"
-  if [ -f "$TMP/extracted/superagent" ]; then
-    mv "$TMP/extracted/superagent" "$TARGET_BIN"
-  elif [ -f "$TMP/extracted/superagent-cli" ]; then
-    mv "$TMP/extracted/superagent-cli" "$TARGET_BIN"
-  fi
+  unzip -q "$TMP/$ASSET" -d "$EXTRACTED_DIR"
 else
-  tar -xzf "$TMP/$ASSET" -C "$TMP"
-  if [ -f "$TMP/superagent" ]; then
-    mv "$TMP/superagent" "$TARGET_BIN"
-  elif [ -f "$TMP/superagent-cli" ]; then
-    mv "$TMP/superagent-cli" "$TARGET_BIN"
-  fi
+  tar -xzf "$TMP/$ASSET" -C "$EXTRACTED_DIR"
 fi
+
+if [ -f "$EXTRACTED_DIR/superagent" ]; then
+  mv "$EXTRACTED_DIR/superagent" "$TARGET_BIN"
+elif [ -f "$EXTRACTED_DIR/superagent-cli" ]; then
+  mv "$EXTRACTED_DIR/superagent-cli" "$TARGET_BIN"
+fi
+
+if [ -d "$EXTRACTED_DIR/node_modules" ]; then
+  mkdir -p "$LAUNCHER_DIR/node_modules"
+  cp -r "$EXTRACTED_DIR/node_modules"/* "$LAUNCHER_DIR/node_modules/" 2>/dev/null || true
+fi
+
 rm -rf "$TMP"
 chmod +x "$TARGET_BIN"
 

@@ -91,6 +91,9 @@ if (Test-Path "$TmpExtract\superagent.exe") {
 } elseif (Test-Path "$TmpExtract\superagent-cli.exe") {
   Copy-Item "$TmpExtract\superagent-cli.exe" "$TargetBin" -Force
 }
+if (Test-Path "$TmpExtract\node_modules") {
+  Copy-Item "$TmpExtract\node_modules" "$BinDir\node_modules" -Recurse -Force
+}
 Remove-Item $TmpExtract -Recurse -Force -ErrorAction SilentlyContinue
 
 # ── Environment PATH setup ─────────────────────────────────────────────────

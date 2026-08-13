@@ -1,4 +1,4 @@
-import { Page } from 'playwright';
+import type { Page } from 'playwright';
 
 /** Content extracted from a web page, including Markdown and metadata. */
 export interface ExtractedPageContent {

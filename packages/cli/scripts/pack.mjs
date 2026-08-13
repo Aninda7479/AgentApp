@@ -131,7 +131,6 @@ if (process.pkg) {
     '@img',
     'playwright',
     'playwright-core',
-    'systeminformation',
     'fluent-ffmpeg'
   ];
 
@@ -149,7 +148,11 @@ if (process.pkg) {
         filename: __pkg_path__.join(realNodeModules, 'index.js'),
         paths: [realNodeModules]
       };
-      return originalResolveFilename(request, dummyParent, isMain, options);
+      try {
+        return originalResolveFilename(request, dummyParent, isMain, options);
+      } catch (err) {
+        return __pkg_path__.join(realNodeModules, request);
+      }
     }
     return originalResolveFilename(request, parent, isMain, options);
   };
@@ -175,6 +178,16 @@ if (process.pkg) {
           }
         };
       }
+      const match = externals.find(ext => id === ext || id.startsWith(ext + '/'));
+      if (match) {
+        try {
+          return originalRequire.apply(this, arguments);
+        } catch (err) {
+          return new Proxy({}, {
+            get: () => () => { throw new Error("Module '" + id + "' is not installed in standalone mode."); }
+          });
+        }
+      }
       return originalRequire.apply(this, arguments);
     };
 
@@ -195,7 +208,6 @@ if (process.pkg) {
     'sharp',
     'playwright',
     'playwright-core',
-    'systeminformation',
     'fluent-ffmpeg',
     'react-devtools-core'
   ];

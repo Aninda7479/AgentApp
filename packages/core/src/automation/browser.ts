@@ -1,4 +1,13 @@
-import { chromium, Browser, BrowserContext, Page, LaunchOptions } from 'playwright';
+import type { Browser, BrowserContext, Page, LaunchOptions } from 'playwright';
+
+function getChromium() {
+  try {
+    const pw = require('playwright');
+    return pw.chromium;
+  } catch {
+    throw new Error('Playwright is not available. Please install playwright to run browser automation.');
+  }
+}
 
 /** Configuration for the Playwright-based browser engine. */
 export interface BrowserEngineConfig {
@@ -47,6 +56,7 @@ export class PlaywrightBrowserEngine {
 
   public async initialize(launchOptions?: LaunchOptions): Promise<void> {
     if (this.browser || this.context) return;
+    const chromium = getChromium();
     try {
       if (this.config.connectToActiveChrome) {
         const port = this.config.chromeDebugPort || 9222;
