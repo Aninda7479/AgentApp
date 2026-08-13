@@ -24,13 +24,37 @@ export interface UpdateOptions {
   check?: boolean;
 }
 
-/** Fetches the latest GitHub release version via the GitHub API (no auth required for public repos). */
+/** Fetches the latest GitHub release version via web redirect or API fallback. */
 function getLatestGitHubVersion(): Promise<string | null> {
+  return new Promise<string | null>((resolve) => {
+    // 1. Primary: Extract version from web redirect (bypasses api.github.com 60 req/hr rate limit)
+    const req = https.request(
+      `https://github.com/${REPO}/releases/latest`,
+      { method: 'HEAD', headers: { 'User-Agent': 'superagent-cli' } },
+      (res) => {
+        const location = res.headers.location;
+        if (location) {
+          const match = location.match(/\/tag\/v?([^/]+)$/);
+          if (match && match[1]) {
+            return resolve(match[1].trim());
+          }
+        }
+        fetchViaApi().then(resolve);
+      }
+    );
+    req.on('error', () => fetchViaApi().then(resolve));
+    req.setTimeout(4000, () => { req.destroy(); fetchViaApi().then(resolve); });
+    req.end();
+  });
+}
+
+function fetchViaApi(): Promise<string | null> {
   return new Promise<string | null>((resolve) => {
     const req = https.get(
       RELEASES_API,
       { headers: { 'User-Agent': 'superagent-cli', Accept: 'application/vnd.github+json' } },
       (res) => {
+        if (res.statusCode !== 200) return resolve(null);
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => {
@@ -45,7 +69,7 @@ function getLatestGitHubVersion(): Promise<string | null> {
       }
     );
     req.on('error', () => resolve(null));
-    req.setTimeout(8000, () => { req.destroy(); resolve(null); });
+    req.setTimeout(4000, () => { req.destroy(); resolve(null); });
   });
 }
 
