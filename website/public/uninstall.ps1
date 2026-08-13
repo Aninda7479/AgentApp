@@ -3,8 +3,10 @@
 
 $ErrorActionPreference = 'SilentlyContinue'
 
-Write-Host "SuperAgent Uninstaller" -ForegroundColor Cyan
-Write-Host "----------------------------------------"
+Write-Host "SuperAgent CLI Uninstaller (Standalone CLI)" -ForegroundColor Cyan
+Write-Host "Note: This script uninstalls the CLI binary ($env:USERPROFILE\.local\bin\superagent.exe)." -ForegroundColor Gray
+Write-Host "Desktop GUI apps (.msi) are uninstalled via Windows Installed Apps settings." -ForegroundColor Gray
+Write-Host "--------------------------------------------------------------------------------"
 
 function Prompt-YesNo ($Message, $DefaultYes = $true) {
   $defaultStr = if ($DefaultYes) { "[Y/n]" } else { "[y/N]" }

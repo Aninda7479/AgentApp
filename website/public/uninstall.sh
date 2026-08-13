@@ -9,8 +9,9 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo "${CYAN}SuperAgent Uninstaller${NC}"
-echo "----------------------------------------"
+echo "${CYAN}SuperAgent CLI Uninstaller (Standalone CLI)${NC}"
+echo "Note: This script uninstalls the CLI binary. Desktop GUI apps (.deb/.dmg/.msi) are uninstalled via your OS App Settings."
+echo "--------------------------------------------------------------------------------"
 
 prompt_yes_no() {
   msg="$1"
