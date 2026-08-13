@@ -1,10 +1,6 @@
 {
   "name": "@superagent/web",
-<<<<<<< HEAD
   "version": "0.3.3",
-=======
-  "version": "0.3.2",
->>>>>>> main
   "description": "SuperAgent web server + responsive SPA (Electron-compatible shared renderer)",
   "main": "dist/server.js",
   "bin": {
@@ -27,11 +23,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-<<<<<<< HEAD
     "@superagent/core": "^0.3.3",
-=======
-    "@superagent/core": "^0.3.2",
->>>>>>> main
     "@superagent/ui": "file:../ui",
     "express": "^4.19.2",
     "systeminformation": "^5.31.17",

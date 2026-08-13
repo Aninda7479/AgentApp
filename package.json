@@ -55,9 +55,5 @@
     "@vitest/coverage-v8": "^4.1.9",
     "concurrently": "^10.0.3"
   },
-<<<<<<< HEAD
   "version": "0.3.3"
-=======
-  "version": "0.3.2"
->>>>>>> main
 }
