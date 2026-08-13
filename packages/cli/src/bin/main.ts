@@ -65,7 +65,7 @@ if (process.argv.includes(WEB_FLAG) || process.argv.includes(SERVE_FLAG)) {
   const portIdx = process.argv.includes('--web-port')
     ? process.argv.indexOf('--web-port')
     : process.argv.indexOf('--serve-port');
-  const port = portIdx !== -1 ? Number(process.argv[portIdx + 1]) : (portArg && /^\d+$/.test(portArg) ? Number(portArg) : 14692);
+  const port = portIdx !== -1 ? Number(process.argv[portIdx + 1]) : (portArg && /^\d+$/.test(portArg) ? Number(portArg) : 1469);
 
   try {
     const child = startWebServer({ port, startedBy: 'cli' });

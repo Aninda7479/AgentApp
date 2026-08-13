@@ -30,7 +30,7 @@ irm https://aninda7479.github.io/AgentApp/uninstall.ps1 | iex
 curl -fsSL https://aninda7479.github.io/AgentApp/uninstall.sh | sh
 ```
 
-Then run `superagent` (interactive TUI) or `superagent --serve` / `superagent --start-web` (local web UI at `http://localhost:14692`).
+Then run `superagent` (interactive TUI) or `superagent --serve` / `superagent --start-web` (local web UI at `http://localhost:1469`).
 See the [CLI install page](https://aninda7479.github.io/AgentApp/cli).
 
 **Option 2 — Core + Desktop + Web** (native app for Windows / macOS / Linux):
@@ -111,9 +111,9 @@ npm run dev --workspace=@superagent/web
 
 The server binds to **all network interfaces** (`0.0.0.0`) by default, so it is
 reachable from other devices on your LAN — the startup log prints a
-`Network (LAN) URL` (e.g. `http://192.168.x.x:14692`) you can open on a phone or
+`Network (LAN) URL` (e.g. `http://192.168.x.x:1469`) you can open on a phone or
 another machine. To restrict it to the local machine only, set `HOST=127.0.0.1`.
-Both `PORT` (default `14692`) and `HOST` are configurable via environment variables.
+Both `PORT` (default `1469`) and `HOST` are configurable via environment variables.
 
 The web UI is fully responsive and works on phones, tablets, and desktops
 (the sidebar becomes a slide-over drawer on small screens).
@@ -187,7 +187,7 @@ npx @superagent/cli
 | Flag | Alias | Description |
 | :--- | :--- | :--- |
 | `--serve` | `--start-web` | Start the self-hosted web server |
-| `--serve-port <port>` | `--web-port <port>` | Port to bind (default `14692`) |
+| `--serve-port <port>` | `--web-port <port>` | Port to bind (default `1469`) |
 | `--stop-web` | — | Stop the running web server |
 | `--web-status` | — | Print server status & PID |
 

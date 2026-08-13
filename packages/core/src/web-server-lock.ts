@@ -3,7 +3,7 @@ import * as path from 'path';
 import { getUserDataDirectory } from './storage/locations.js';
 
 /**
- * Cross-process lock for the self-hosted **web server** (port 14692).
+ * Cross-process lock for the self-hosted **web server** (port 1469).
  *
  * The web server can be launched from three surfaces that share no runtime
  * state — the CLI (`superagent --start-web`), the Desktop app (Settings → Web
@@ -26,7 +26,7 @@ export type WebServerLauncher = 'cli' | 'desktop' | 'standalone';
 export interface WebServerLock {
   /** PID of the web-server process that owns the port. */
   pid: number;
-  /** Bound TCP port (e.g. 14692). */
+  /** Bound TCP port (e.g. 1469). */
   port: number;
   /** Bound interface (e.g. 0.0.0.0). */
   host: string;

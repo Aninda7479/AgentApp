@@ -886,7 +886,7 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
       // the Web App — so report an honest running status and treat start/stop as
       // no-ops. Without these, the renderer's 3s `web-status` poll 404s forever.
       case 'web-status': {
-        const port = Number(process.env.PORT) || 14692;
+        const port = Number(process.env.PORT) || 1469;
         const localIp = (() => {
           const addrs = lanAddresses();
           return addrs[0] || 'localhost';
@@ -1202,7 +1202,7 @@ app.get('*', (req, res) => {
 });
 
 // ─── Server Ignition ─────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 14692;
+const PORT = process.env.PORT || 1469;
 // Bind to all interfaces by default so the server is reachable from other devices
 // on the local network. Override with HOST=127.0.0.1 to restrict to localhost.
 const HOST = process.env.HOST || '0.0.0.0';

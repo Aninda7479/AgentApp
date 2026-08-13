@@ -214,7 +214,7 @@ export interface ArtifactSettings {
  * these fields only persist the user's preferred port / auto-start toggle.
  */
 export interface WebAppSettings {
-  /** TCP port the hosted web server binds to (default 14692). */
+  /** TCP port the hosted web server binds to (default 1469). */
   port?: number;
   /** When true, the Desktop app launches the web server on startup. */
   autoStart?: boolean;

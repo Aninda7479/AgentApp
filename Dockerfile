@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for SuperAgent HomeLab / Server deployment on port 14692
+# Multi-stage Dockerfile for SuperAgent HomeLab / Server deployment on port 1469
 
 # Stage 1: Build Rust Core Daemon
 FROM rust:1.80-alpine AS rust-builder
@@ -23,7 +23,7 @@ RUN npm run build --workspace=@superagent/web
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-ENV PORT=14692
+ENV PORT=1469
 ENV HOST=0.0.0.0
 
 COPY --from=rust-builder /app/packages/core_v2/target/release/superagent-core-daemon /usr/local/bin/superagent-core-daemon
@@ -32,9 +32,9 @@ COPY --from=node-builder /app/packages/web/dist ./packages/web/dist
 COPY --from=node-builder /app/packages/web/package.json ./packages/web/package.json
 COPY --from=node-builder /app/node_modules ./node_modules
 
-EXPOSE 14692
+EXPOSE 1469
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:14692/api/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:1469/api/health || exit 1
 
 CMD ["node", "packages/web/dist/server.js"]

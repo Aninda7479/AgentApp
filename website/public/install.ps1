@@ -110,7 +110,7 @@ Write-Host "✓ Done! SuperAgent v$Version binary installed to $TargetBin" -Fore
 Write-Host ""
 Write-Host "Run SuperAgent directly:"
 Write-Host "  superagent                       # interactive CLI (TUI)"
-Write-Host "  superagent --serve               # web UI at http://localhost:14692"
+Write-Host "  superagent --serve               # web UI at http://localhost:1469"
 Write-Host "  superagent --serve-port 8080     # web UI on a custom port"
 Write-Host "  superagent update                # check / update to a newer release"
 

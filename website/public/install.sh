@@ -212,7 +212,7 @@ esac
 
 echo "Run SuperAgent directly:"
 echo "    superagent                      # interactive CLI (TUI)"
-echo "    superagent --serve              # web UI at http://localhost:14692"
+echo "    superagent --serve              # web UI at http://localhost:1469"
 echo "    superagent --serve-port 8080    # web UI on a custom port"
 echo "    superagent update               # check / update to a newer release"
 

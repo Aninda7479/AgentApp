@@ -64,6 +64,6 @@ export interface ArtifactItem {
 
 export interface ServerConfig {
   host: string;
-  port: number; // Default 14692
+  port: number; // Default 1469
   isTauri: boolean;
 }

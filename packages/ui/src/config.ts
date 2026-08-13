@@ -1,6 +1,6 @@
 import { ServerConfig, ModelOption } from './types.js';
 
-export const DEFAULT_HOMELAB_PORT = 14692;
+export const DEFAULT_HOMELAB_PORT = 1469;
 
 export const DEFAULT_SERVER_CONFIG: ServerConfig = {
   host: 'localhost',

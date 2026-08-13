@@ -84,7 +84,7 @@ export function CliFork() {
       </div>
       <ul>
         <li><Check /> A <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>superagent</code> command on your PATH</li>
-        <li><Check /> Local web UI dashboard at <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>localhost:14692</code></li>
+        <li><Check /> Local web UI dashboard at <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>localhost:1469</code></li>
         <li><Check /> <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>superagent --serve</code> for servers &amp; CI — accessible on local &amp; public internet</li>
         <li><Check /> <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>superagent update</code> to self-update from GitHub Releases</li>
       </ul>

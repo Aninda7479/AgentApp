@@ -3,17 +3,17 @@ import { DEFAULT_HOMELAB_PORT, AVAILABLE_MODELS } from './config.js';
 import { SuperAgentApiClient } from './api/client.js';
 
 describe('@superagent/ui Config & API Tests', () => {
-  it('should use default HomeLab port 14692', () => {
-    expect(DEFAULT_HOMELAB_PORT).toBe(14692);
+  it('should use default HomeLab port 1469', () => {
+    expect(DEFAULT_HOMELAB_PORT).toBe(1469);
   });
 
   it('should format HomeLab API base URL correctly', () => {
     const client = new SuperAgentApiClient({
       host: '192.168.1.100',
-      port: 14692,
+      port: 1469,
       isTauri: false
     });
-    expect(client.getBaseUrl()).toBe('http://192.168.1.100:14692');
+    expect(client.getBaseUrl()).toBe('http://192.168.1.100:1469');
   });
 
   it('should contain default LLM model options', () => {

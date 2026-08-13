@@ -98,7 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <div className="px-3 py-2 bg-slate-900 rounded-lg border border-slate-800 flex items-center space-x-2 text-[11px] text-slate-400">
             <Sparkles className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-            <span className="truncate">HomeLab Port: 14692</span>
+            <span className="truncate">HomeLab Port: 1469</span>
           </div>
         </div>
       </aside>

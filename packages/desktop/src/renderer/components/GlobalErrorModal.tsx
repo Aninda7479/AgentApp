@@ -51,7 +51,7 @@ export const GlobalErrorModal: React.FC<GlobalErrorModalProps> = ({ error, onClo
     if (text.includes('network') || text.includes('fetch') || text.includes('failed to fetch')) {
       return {
         title: 'Connection Interrupted',
-        advice: 'SuperAgent lost connection to the local API server or a cloud AI provider. Check if your backend server process has stopped or if there are local firewall rules blocking port 14692.',
+        advice: 'SuperAgent lost connection to the local API server or a cloud AI provider. Check if your backend server process has stopped or if there are local firewall rules blocking port 1469.',
         action: 'Check Network'
       };
     }

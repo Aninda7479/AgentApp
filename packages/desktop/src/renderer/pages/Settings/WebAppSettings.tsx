@@ -29,7 +29,7 @@ export const WebAppSettings: React.FC = () => {
   const ipc = getIpc();
 
   const [status, setStatus] = useState<WebStatus | null>(null);
-  const [port, setPort] = useState<number>(14692);
+  const [port, setPort] = useState<number>(1469);
   const [autoStart, setAutoStart] = useState<boolean>(false);
   const [busy, setBusy] = useState<boolean>(false);
   const [copiedUrl, setCopiedUrl] = useState<'local' | 'lan' | null>(null);
@@ -101,7 +101,7 @@ export const WebAppSettings: React.FC = () => {
     if (!ipc) return;
     setBusy(true);
     try {
-      await ipc.invoke('web-start', { port: Number(port) || 14692 });
+      await ipc.invoke('web-start', { port: Number(port) || 1469 });
     } finally {
       setBusy(false);
       await refreshStatus();
@@ -126,7 +126,7 @@ export const WebAppSettings: React.FC = () => {
       const settings = await ipc.invoke('settings-read');
       await ipc.invoke('settings-write', {
         ...settings,
-        webApp: { ...settings?.webApp, autoStart: val, port: Number(port) || 14692 }
+        webApp: { ...settings?.webApp, autoStart: val, port: Number(port) || 1469 }
       });
     } catch {
       /* ignore */
@@ -325,7 +325,7 @@ export const WebAppSettings: React.FC = () => {
               max={65535}
               value={port}
               disabled={status?.running}
-              onChange={(e) => changePort(Number(e.target.value) || 14692)}
+              onChange={(e) => changePort(Number(e.target.value) || 1469)}
               className="ui-input w-full font-mono text-sm"
             />
             <p className="mt-1.5 text-xs text-brand-textMuted leading-normal">

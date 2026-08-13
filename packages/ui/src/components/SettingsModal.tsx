@@ -74,13 +74,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   type="number"
                   value={port}
                   onChange={(e) => setPort(Number(e.target.value))}
-                  placeholder="14692"
+                  placeholder="1469"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 font-mono focus:outline-none focus:border-indigo-500"
                 />
               </div>
             </div>
             <p className="text-[11px] text-slate-400">
-              Default HomeLab server port is configured to <strong className="text-emerald-400 font-mono">14692</strong>.
+              Default HomeLab server port is configured to <strong className="text-emerald-400 font-mono">1469</strong>.
             </p>
           </div>
 
