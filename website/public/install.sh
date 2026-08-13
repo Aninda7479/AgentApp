@@ -61,12 +61,42 @@ fi
 TARGET_BIN="$LAUNCHER_DIR/superagent"
 
 # ── Download & Extract ──────────────────────────────────────────────────────
-echo "Downloading standalone CLI binary (${PLATFORM_KEY})…"
 TMP=$(mktemp -d)
-if [ -t 1 ]; then
-  curl -fL --progress-bar "$URL" -o "$TMP/$ASSET"
-else
-  curl -fsSL "$URL" -o "$TMP/$ASSET"
+START_TIME=$(date +%s 2>/dev/null || echo 0)
+
+curl -fsSL "$URL" -o "$TMP/$ASSET" &
+CURL_PID=$!
+
+SPINSTR='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+while kill -0 "$CURL_PID" 2>/dev/null; do
+  TMP_SPIN=${SPINSTR#?}
+  printf "\r${CYAN}%c${NC} Downloading standalone CLI binary (${PLATFORM_KEY})..." "$SPINSTR"
+  SPINSTR=$TMP_SPIN${SPINSTR%"$TMP_SPIN"}
+  sleep 0.1 2>/dev/null || sleep 1
+done
+
+wait "$CURL_PID"
+CURL_EXIT=$?
+printf "\r\033[K"
+
+if [ $CURL_EXIT -ne 0 ]; then
+  echo "${RED}Error: Download failed for ${URL}${NC}" >&2
+  exit 1
+fi
+
+END_TIME=$(date +%s 2>/dev/null || echo 0)
+ELAPSED=$((END_TIME - START_TIME))
+
+if [ -f "$TMP/$ASSET" ] && command -v du >/dev/null 2>&1; then
+  SIZE_KB=$(du -k "$TMP/$ASSET" | cut -f1)
+  if [ -n "$SIZE_KB" ] && [ "$SIZE_KB" -gt 0 ]; then
+    SIZE_MB=$(awk "BEGIN {printf \"%.1f\", $SIZE_KB/1024}" 2>/dev/null || echo "$((SIZE_KB / 1024))")
+    if [ "$ELAPSED" -gt 0 ]; then
+      echo "${GREEN}✓ Downloaded ${SIZE_MB} MB (${PLATFORM_KEY}) in ${ELAPSED}s${NC}"
+    else
+      echo "${GREEN}✓ Downloaded ${SIZE_MB} MB (${PLATFORM_KEY})${NC}"
+    fi
+  fi
 fi
 
 mkdir -p "$LAUNCHER_DIR"
