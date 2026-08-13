@@ -16,8 +16,17 @@ echo "${CYAN}SuperAgent installer — Core + CLI + Web${NC}"
 
 # ── Fetch latest version from GitHub ────────────────────────────────────────
 echo "Checking latest release…"
-LATEST_JSON=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest")
-VERSION=$(echo "$LATEST_JSON" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"v\?\([^"]*\)".*/\1/')
+
+# 1. Primary: Extract version from web redirect (bypasses api.github.com 60 req/hr rate limits)
+VERSION=$(curl -sI -H "User-Agent: SuperAgent-Installer" "https://github.com/${REPO}/releases/latest" 2>/dev/null | grep -i '^location:' | sed 's/.*\/tag\/v\?//' | tr -d '\r\n')
+
+# 2. Fallback: Query GitHub API
+LATEST_JSON=""
+if [ -z "$VERSION" ]; then
+  LATEST_JSON=$(curl -fsSL -H "User-Agent: SuperAgent-Installer" "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null || echo "")
+  VERSION=$(echo "$LATEST_JSON" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"v\?\([^"]*\)".*/\1/' || echo "")
+fi
+
 if [ -z "$VERSION" ]; then
   echo "${RED}Error: Could not fetch latest version from GitHub.${NC}" >&2
   exit 1
@@ -47,7 +56,10 @@ else
 fi
 
 ASSET="superagent-cli-${PLATFORM_KEY}.${EXT}"
-URL=$(echo "$LATEST_JSON" | grep '"browser_download_url"' | grep "$PLATFORM_KEY" | head -1 | sed 's/.*"browser_download_url": *"\([^"]*\)".*/\1/')
+URL=""
+if [ -n "$LATEST_JSON" ]; then
+  URL=$(echo "$LATEST_JSON" | grep '"browser_download_url"' | grep "$PLATFORM_KEY" | head -1 | sed 's/.*"browser_download_url": *"\([^"]*\)".*/\1/')
+fi
 
 if [ -z "$URL" ]; then
   URL="https://github.com/${REPO}/releases/download/v${VERSION}/superagent-cli-v${VERSION}-${PLATFORM_KEY}.${EXT}"
