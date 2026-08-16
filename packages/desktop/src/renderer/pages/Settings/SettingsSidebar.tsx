@@ -22,7 +22,8 @@ import {
   MousePointer2,
   Network,
   RefreshCw,
-  Globe
+  Globe,
+  Send
 } from 'lucide-react';
 
 /** A single navigation entry in the settings sidebar. */
@@ -59,6 +60,7 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
     { id: 'usage', label: 'AI Usage', Icon: SquareTerminal }
   ],
   Integrations: [
+    { id: 'telegram', label: 'Telegram', Icon: Send },
     { id: 'skills', label: 'Skills', Icon: Sparkles },
     { id: 'connectors', label: 'Connectors', Icon: Plug },
     { id: 'plugins', label: 'Plugins', Icon: Boxes },

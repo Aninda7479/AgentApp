@@ -53,6 +53,7 @@ export interface ToolCall {
   args: Record<string, any>;
   result?: any;
   status: 'pending' | 'executing' | 'completed' | 'failed';
+  thoughtSignature?: string;
 }
 
 /** Definition of a tool available to the agent, including its schema and executor. */

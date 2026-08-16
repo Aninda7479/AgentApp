@@ -17,6 +17,7 @@ import { UserProfileStore } from '../memory/profile.js';
 import { ProjectInstructionsParser } from '../memory/instructions.js';
 import { ArtifactRunner } from '../artifact/artifactRunner.js';
 import { getStandaloneWorkspace } from '../storage/locations.js';
+import { sendTelegramMessage } from '../integrations/telegram.js';
 
 const execAsync = promisify(exec);
 const artifactRunner = new ArtifactRunner();
@@ -1032,6 +1033,66 @@ export function createBuiltinTools(
           const engine = new LearningLoopEngine();
           await engine.saveInsight(key, value, category as any);
           return `Successfully saved learned insight [${key}]: "${value}"`;
+        }
+      }
+    },
+    {
+      name: 'notify_message',
+      description:
+        'Send an outbound notification message or report to an external messaging channel (such as Telegram). Use this when the user asks to send a message/notification to Telegram, or when automated alerts need to be delivered.',
+      parameters: {
+        type: 'object',
+        properties: {
+          platform: {
+            type: 'string',
+            description: 'Target messaging platform. Currently supports "telegram". (Default: "telegram")',
+            enum: ['telegram']
+          },
+          message: {
+            type: 'string',
+            description: 'The notification message text to deliver.'
+          },
+          chat_id: {
+            type: 'string',
+            description: 'Optional recipient chat ID or channel ID. If omitted, uses the default configured Chat ID in settings.'
+          },
+          parse_mode: {
+            type: 'string',
+            description: 'Optional formatting mode: "Markdown" or "HTML". (Default: "Markdown")',
+            enum: ['Markdown', 'HTML']
+          }
+        },
+        required: ['message'],
+        additionalProperties: false
+      },
+      execute: async (args: Record<string, any>) => {
+        const platform = args.platform || 'telegram';
+        const message = args.message;
+        const chatId = args.chat_id;
+        const parseMode = args.parse_mode;
+
+        if (platform !== 'telegram') {
+          return `Error: Unsupported messaging platform "${platform}". Supported platforms: "telegram".`;
+        }
+
+        if (!message || typeof message !== 'string' || !message.trim()) {
+          return 'Error: Notification message cannot be empty.';
+        }
+
+        try {
+          const result = await sendTelegramMessage({
+            chatId,
+            text: message,
+            parseMode,
+          });
+
+          if (result.success) {
+            return `Notification successfully delivered to Telegram${result.messageId ? ` (Message ID: ${result.messageId})` : ''}. Chunks sent: ${result.chunksSent || 1}.`;
+          } else {
+            return `Failed to send Telegram notification: ${result.error}`;
+          }
+        } catch (err: any) {
+          return `Telegram notification error: ${err.message || String(err)}`;
         }
       }
     },

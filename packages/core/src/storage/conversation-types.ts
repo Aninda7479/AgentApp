@@ -7,6 +7,20 @@
  * {@link ProjectConfig}.
  */
 
+export interface TrajectoryAttachment {
+  name: string;
+  path: string;
+  mediaType: 'image' | 'pdf' | 'ppt' | 'audio' | 'video' | 'code' | 'file';
+  size?: number;
+  url?: string;
+}
+
+export interface TrajectoryCodeBlock {
+  language: string;
+  code: string;
+  filename?: string;
+}
+
 /** A single step in a conversation trajectory (user message, assistant reply, tool call, etc.). */
 export interface TrajectoryStep {
   id: string;
@@ -15,11 +29,23 @@ export interface TrajectoryStep {
   timestamp?: string;
   status?: 'pending' | 'running' | 'success' | 'error';
   toolName?: string;
+  model?: string;
   metadata?: {
+    model?: string;
+    cwd?: string;
+    command?: string;
+    toolArgs?: Record<string, any>;
+    toolResult?: string;
+    exitCode?: number;
+    durationMs?: number;
     filename?: string;
     originalCode?: string;
     modifiedCode?: string;
-    mediaType?: 'image' | 'pdf' | 'ppt' | 'audio';
+    mediaType?: 'image' | 'pdf' | 'ppt' | 'audio' | 'video' | 'code' | 'file';
+    mediaPath?: string;
+    attachments?: TrajectoryAttachment[];
+    codeBlocks?: TrajectoryCodeBlock[];
+    sandboxMode?: 'sandboxed' | 'full';
     addedLines?: number;
     removedLines?: number;
     filesExplored?: number;

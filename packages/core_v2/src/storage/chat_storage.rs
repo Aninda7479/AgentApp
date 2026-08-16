@@ -11,6 +11,10 @@ use crate::types::ChatMessage;
 pub struct ChatSession {
     pub id: String,
     pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     pub messages: Vec<ChatMessage>,
@@ -20,6 +24,10 @@ pub struct ChatSession {
 pub struct ChatSessionMetadata {
     pub id: String,
     pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     pub message_count: usize,
@@ -30,6 +38,8 @@ impl From<&ChatSession> for ChatSessionMetadata {
         Self {
             id: session.id.clone(),
             title: session.title.clone(),
+            project: session.project.clone(),
+            model: session.model.clone(),
             created_at: session.created_at,
             updated_at: session.updated_at,
             message_count: session.messages.len(),
@@ -135,6 +145,8 @@ mod tests {
         let session = ChatSession {
             id: session_id.clone(),
             title: "Test Chat".to_string(),
+            project: Some("Test Project".to_string()),
+            model: Some("gpt-4o".to_string()),
             created_at: 1000,
             updated_at: 2000,
             messages: vec![msg.clone()],

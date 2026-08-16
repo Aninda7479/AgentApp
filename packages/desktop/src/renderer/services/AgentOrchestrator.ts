@@ -99,7 +99,18 @@ export class AgentOrchestrator {
     }
 
     // Step 1: Add User Step & Attachment steps to trajectory
-    const userStep = StepFactory.userStep(trimmedPrompt, undefined, undefined, sandboxMode);
+    const userStep = StepFactory.userStep(
+      trimmedPrompt,
+      undefined,
+      undefined,
+      sandboxMode,
+      selectedModelName,
+      attachments.map((att) => ({
+        name: att.filename,
+        path: att.fullPath || att.filename,
+        mediaType: StepFactory.detectMediaType(att.filename)
+      }))
+    );
     const attachmentSteps: TrajectoryStep[] = attachments.map((att) =>
       StepFactory.attachmentStep(att.filename, att.fullPath || att.filename)
     );
@@ -111,6 +122,7 @@ export class AgentOrchestrator {
         c.id === targetChatId
           ? {
               ...c,
+              model: selectedModelName || c.model,
               isRunning: true,
               startedAt,
               timestamp: new Date().toISOString(),
@@ -125,6 +137,7 @@ export class AgentOrchestrator {
     buffer.resetTurn();
     buffer.responseSeq = 0;
     buffer.sandboxMode = sandboxMode;
+    buffer.modelName = selectedModelName;
     buffer.setStartedAt(startedAt);
 
     // Setup Agent Event Bus listener for this session
@@ -293,6 +306,8 @@ export class AgentOrchestrator {
 
         case 'tool_call':
           if (event.toolName) {
+            const currentChat = chatStore.getState().chats.find((c) => c.id === chatId);
+            const activeModel = buffer.modelName || currentChat?.model || '';
             const toolStep = StepFactory.toolCallStep(
               event.toolName,
               `${event.toolName}(${JSON.stringify(event.toolArgs || {})})`,
@@ -301,7 +316,8 @@ export class AgentOrchestrator {
               undefined,
               buffer.responseSeq,
               sandboxMode,
-              event.toolArgs
+              event.toolArgs,
+              activeModel
             );
             chatStore.updateSteps(chatId, (prev) => [...prev, toolStep]);
             ChatRepository.persistAll().catch(console.error);
@@ -314,7 +330,9 @@ export class AgentOrchestrator {
             const lastToolCall = [...steps]
               .reverse()
               .find((s) => s.type === 'tool_call' && s.toolName === event.toolName);
-            const toolArgs = lastToolCall?.metadata?.toolArgs as Record<string, unknown> | undefined;
+            const toolArgs = (event.toolArgs || lastToolCall?.metadata?.toolArgs) as Record<string, unknown> | undefined;
+            const currentChat = chatStore.getState().chats.find((c) => c.id === chatId);
+            const activeModel = buffer.modelName || currentChat?.model || '';
 
             const resultStep = StepFactory.toolResultStep(
               event.toolName,
@@ -322,7 +340,8 @@ export class AgentOrchestrator {
               undefined,
               undefined,
               sandboxMode,
-              toolArgs
+              toolArgs,
+              activeModel
             );
             chatStore.updateSteps(chatId, (prev) => [...prev, resultStep]);
             ChatRepository.persistAll().catch(console.error);

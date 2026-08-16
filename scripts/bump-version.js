@@ -115,12 +115,40 @@ if (!semverRegex.test(newVersion)) {
 
 console.log(`\n🚀 Starting version bump to: ${newVersion}\n`);
 
-// 2. Update package.json files
+function updateTomlVersion(filePath, newVer) {
+  const absolutePath = path.join(rootDir, filePath);
+  if (!fs.existsSync(absolutePath)) {
+    console.warn(`⚠️ Warning: file not found: ${filePath}`);
+    return;
+  }
+  let content = fs.readFileSync(absolutePath, 'utf8');
+  content = content.replace(/(^\[package\][\s\S]*?^version\s*=\s*)"[^"]+"/m, `$1"${newVer}"`);
+  fs.writeFileSync(absolutePath, content, 'utf8');
+  console.log(`✅ Updated ${filePath}`);
+}
+
+function updateJsonFile(filePath, updater) {
+  const absolutePath = path.join(rootDir, filePath);
+  if (!fs.existsSync(absolutePath)) {
+    console.warn(`⚠️ Warning: file not found: ${filePath}`);
+    return;
+  }
+  const data = JSON.parse(fs.readFileSync(absolutePath, 'utf8'));
+  updater(data);
+  fs.writeFileSync(absolutePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+  console.log(`✅ Updated ${filePath}`);
+}
+
+// 2. Update package.json, tauri.conf.json, and Cargo.toml files
 updatePackageJson('package.json', (data) => {
   data.version = newVersion;
 });
 
 updatePackageJson('packages/core/package.json', (data) => {
+  data.version = newVersion;
+});
+
+updatePackageJson('packages/ui/package.json', (data) => {
   data.version = newVersion;
 });
 
@@ -141,6 +169,13 @@ updatePackageJson('packages/web/package.json', (data) => {
 updatePackageJson('packages/desktop/package.json', (data) => {
   data.version = newVersion;
 });
+
+updateJsonFile('packages/desktop/src-tauri/tauri.conf.json', (data) => {
+  data.version = newVersion;
+});
+
+updateTomlVersion('packages/desktop/src-tauri/Cargo.toml', newVersion);
+updateTomlVersion('packages/core_v2/Cargo.toml', newVersion);
 
 updatePackageJson('website/package.json', (data) => {
   data.version = newVersion;

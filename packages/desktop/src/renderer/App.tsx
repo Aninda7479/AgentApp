@@ -261,36 +261,45 @@ export const App: React.FC = () => {
     };
   });
 
+  const prevProjectsLengthRef = useRef<number>(0);
+  const prevChatsLengthRef = useRef<number>(0);
+
   // Bidirectional Synchronization between React State and Zustand Stores
   useEffect(() => {
     const unsubChat = chatStore.subscribe(() => {
       const state = chatStore.getState();
-      setProjects((prev) => (JSON.stringify(prev) === JSON.stringify(state.projects) ? prev : state.projects));
-      setChats((prev) => {
-        // Compare meta arrays to avoid infinite loops, but map resident steps
-        const prevMeta = prev.map(c => ({
-          id: c.id,
-          title: c.title,
-          project: c.project,
-          model: c.model,
-          timestamp: c.timestamp,
-          isRunning: c.isRunning,
-          startedAt: c.startedAt,
-          stepCount: c.steps?.length || 0
-        }));
-        const nextMeta = state.chats.map(c => ({
-          id: c.id,
-          title: c.title,
-          project: c.project,
-          model: c.model,
-          timestamp: c.timestamp,
-          isRunning: c.isRunning,
-          startedAt: c.startedAt,
-          stepCount: c.steps?.length || 0
-        }));
-        if (JSON.stringify(prevMeta) === JSON.stringify(nextMeta)) return prev;
-        return state.chats;
-      });
+      if (state.projects && (state.projects.length > 0 || prevProjectsLengthRef.current === 0)) {
+        setProjects((prev) => (JSON.stringify(prev) === JSON.stringify(state.projects) ? prev : state.projects));
+        prevProjectsLengthRef.current = state.projects.length;
+      }
+      if (state.chats && (state.chats.length > 0 || prevChatsLengthRef.current === 0)) {
+        setChats((prev) => {
+          // Compare meta arrays to avoid infinite loops, but map resident steps
+          const prevMeta = prev.map(c => ({
+            id: c.id,
+            title: c.title,
+            project: c.project,
+            model: c.model,
+            timestamp: c.timestamp,
+            isRunning: c.isRunning,
+            startedAt: c.startedAt,
+            stepCount: c.steps?.length || 0
+          }));
+          const nextMeta = state.chats.map(c => ({
+            id: c.id,
+            title: c.title,
+            project: c.project,
+            model: c.model,
+            timestamp: c.timestamp,
+            isRunning: c.isRunning,
+            startedAt: c.startedAt,
+            stepCount: c.steps?.length || 0
+          }));
+          if (JSON.stringify(prevMeta) === JSON.stringify(nextMeta)) return prev;
+          prevChatsLengthRef.current = state.chats.length;
+          return state.chats;
+        });
+      }
       setActiveChatId((prev) => (prev === state.activeChatId ? prev : state.activeChatId));
       setActiveProject((prev) => (prev === state.activeProject ? prev : state.activeProject));
       setDraftProject((prev) => (prev === state.draftProject ? prev : state.draftProject));
@@ -873,7 +882,7 @@ export const App: React.FC = () => {
       if (!orchEnabled) {
         const currentModel = providerStore.getState().lastUsedModel;
         if (currentModel === 'Orchestrator' || currentModel === 'auto' || currentModel === 'Model Governance' || !currentModel) {
-          const firstModel = modelsCatalog.find((m) => m.enabled)?.name || providerStore.getState().models.find((m) => m.enabled)?.name || providerStore.getState().models[0]?.name || '';
+          const firstModel = providerStore.getState().models.find((m) => m.enabled)?.name || providerStore.getState().models[0]?.name || '';
           if (firstModel && firstModel !== currentModel) {
             console.log(`[App] Orchestrator disabled. Fallback to model: ${firstModel}`);
             providerStore.setLastUsedModel(firstModel);
@@ -892,7 +901,7 @@ export const App: React.FC = () => {
     return () => {
       ipc.removeListener('settings-changed', onSettingsChanged);
     };
-  }, [ipc, modelsCatalog]);
+  }, [ipc]);
 
   // Auto-close the mobile navigation drawer whenever the user navigates.
   useEffect(() => {
@@ -951,7 +960,7 @@ export const App: React.FC = () => {
         setShowStudio(cfg.enabled === true && cfg.mode === 'studio');
       })
       .catch(() => {});
-  }, [ipc, activeTab]);
+  }, [ipc]);
 
   // ── Discovered skills ──────────────────────────────────────────────────────
   const [importableSkills, setImportableSkills] = useState<{ id: string; name: string }[]>([]);
@@ -1199,9 +1208,7 @@ export const App: React.FC = () => {
     const unsubscribe = ErrorService.subscribe((context, message, stack) => {
       const lower = (message || '').toLowerCase();
       if (
-        lower.includes('failed to fetch') ||
         lower.includes('err_connection_refused') ||
-        lower.includes('networkerror') ||
         lower.includes('econnrefused')
       ) {
         setIsBackendDisconnected(true);
@@ -1288,7 +1295,7 @@ export const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [activeChatId]);
+  }, [activeChatId, chats, ipc]);
 
   // ── Sandbox permission prompts (user-in-the-loop) ───────────────────────
   useEffect(() => {
@@ -1377,7 +1384,7 @@ export const App: React.FC = () => {
       window.removeEventListener('offline', onOffline);
       window.removeEventListener('online', checkHealth);
     };
-  }, [isWebMode, ipc]);
+  }, []);
 
   // ── Background Update Check on Mount ────────────────────────────────────
   useEffect(() => {
@@ -1413,7 +1420,7 @@ export const App: React.FC = () => {
       isMounted = false;
       clearInterval(updateInterval);
     };
-  }, [isWebMode, ipc]);
+  }, []);
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   if (loading) {

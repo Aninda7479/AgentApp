@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { CalendarPlus, Search, Bell, FileCheck2, Folder, Clock, Play, Pause, Trash2, Plus, RefreshCw, AlertCircle, CheckCircle2, Eye, X, Activity } from 'lucide-react';
+import { CalendarPlus, Search, Bell, FileCheck2, Folder, Clock, Play, Pause, Trash2, Plus, RefreshCw, AlertCircle, CheckCircle2, Eye, X, Activity, Send } from 'lucide-react';
 import { getIpc } from '../../lib/electron';
 
 export interface ScheduledViewProps {
@@ -20,6 +20,8 @@ export interface LiveTrigger {
   lastStatus?: 'success' | 'error' | 'running';
   lastError?: string;
   runCount: number;
+  notifyTelegram?: boolean;
+  telegramChatId?: string;
 }
 
 interface TemplateCard {
@@ -47,6 +49,8 @@ export const ScheduledView: React.FC<ScheduledViewProps> = ({
   const [newTriggerCron, setNewTriggerCron] = useState<string>('0 9 * * 1-5');
   const [newTriggerPrompt, setNewTriggerPrompt] = useState<string>('');
   const [newTriggerPath, setNewTriggerPath] = useState<string>('');
+  const [newTriggerNotifyTelegram, setNewTriggerNotifyTelegram] = useState<boolean>(false);
+  const [newTriggerTelegramChatId, setNewTriggerTelegramChatId] = useState<string>('');
 
   const ipc = getIpc();
 
@@ -125,12 +129,16 @@ export const ScheduledView: React.FC<ScheduledViewProps> = ({
         enabled: true,
         cronExpression: newTriggerType === 'cron' ? newTriggerCron : undefined,
         targetPath: newTriggerType === 'watcher' ? newTriggerPath : undefined,
-        prompt: newTriggerPrompt.trim()
+        prompt: newTriggerPrompt.trim(),
+        notifyTelegram: newTriggerNotifyTelegram,
+        telegramChatId: newTriggerNotifyTelegram && newTriggerTelegramChatId.trim() ? newTriggerTelegramChatId.trim() : undefined
       });
       setIsModalOpen(false);
       setNewTriggerName('');
       setNewTriggerPrompt('');
       setNewTriggerPath('');
+      setNewTriggerNotifyTelegram(false);
+      setNewTriggerTelegramChatId('');
       fetchTriggers();
     } catch (err) {
       console.error('Failed to create trigger:', err);
@@ -363,6 +371,16 @@ export const ScheduledView: React.FC<ScheduledViewProps> = ({
                                 <AlertCircle size={12} /> Error
                               </span>
                             )}
+
+                            {/* Telegram Delivery Badge */}
+                            {t.notifyTelegram && (
+                              <span
+                                className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/15 text-sky-400 border border-sky-500/30"
+                                title={t.telegramChatId ? `Telegram Chat ID: ${t.telegramChatId}` : 'Delivers to configured Telegram chat'}
+                              >
+                                <Send size={10} /> Telegram
+                              </span>
+                            )}
                           </div>
 
                           <p className="text-xs text-brand-textMuted leading-relaxed max-w-2xl">
@@ -567,6 +585,38 @@ export const ScheduledView: React.FC<ScheduledViewProps> = ({
                   onChange={(e) => setNewTriggerPrompt(e.target.value)}
                   className="ui-input w-full mt-1 text-xs resize-none"
                 />
+              </div>
+
+              {/* Telegram Delivery Configuration */}
+              <div className="rounded-xl border border-brand-border/60 bg-brand-card/60 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Send size={14} className="text-sky-400" />
+                    <div>
+                      <div className="text-xs font-semibold text-brand-textMain">Send response via Telegram</div>
+                      <div className="text-[11px] text-brand-textMuted">Forward completed output to Telegram</div>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={newTriggerNotifyTelegram}
+                    onChange={(e) => setNewTriggerNotifyTelegram(e.target.checked)}
+                    className="h-4 w-4 rounded border-brand-border bg-brand-bg text-brand-highlight focus:ring-0 cursor-pointer"
+                  />
+                </div>
+
+                {newTriggerNotifyTelegram && (
+                  <div className="pt-2 border-t border-brand-border/30 animate-fade-in">
+                    <label className="text-[11px] font-medium text-brand-textMuted">Custom Telegram Chat ID (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 123456789 or @mychannel (uses Settings default if empty)"
+                      value={newTriggerTelegramChatId}
+                      onChange={(e) => setNewTriggerTelegramChatId(e.target.value)}
+                      className="ui-input w-full mt-1 text-xs"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2 justify-end pt-3 border-t border-brand-border/40">

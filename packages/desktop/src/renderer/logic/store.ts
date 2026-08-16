@@ -14,6 +14,7 @@ import type {
   TrajectoryStep
 } from './types';
 import { providerStore } from '../stores/providerStore';
+import { chatStore } from '../stores/chatStore';
 
 /**
  * Residency (LRU) of chat trajectories in RAM. Only the chats the user is
@@ -95,6 +96,7 @@ export class StoreService {
     ctx.setProjects(stored.projects);
     ctx.setConnectedProviders(stored.connectedProviders);
     ctx.setModelsCatalog(stored.modelsCatalog);
+    chatStore.setProjects(stored.projects);
 
     if (stored.connectedProviders.length > 0) {
       providerStore.setProviders(stored.connectedProviders);
@@ -118,18 +120,23 @@ export class StoreService {
       c.id === activeChat?.id ? c : { ...c, steps: [] }
     );
     ctx.setChats(metaChats);
+    chatStore.setChats(metaChats);
 
     residentOrder.length = 0;
     if (activeChat) {
       ctx.setActiveChatId(activeChat.id);
-      ctx.setActiveProject(defaultProject);
-      ctx.setTrajectorySteps(activeChat.steps);
+      ctx.setActiveProject(activeChat.project || defaultProject);
+      ctx.setTrajectorySteps(activeChat.steps || []);
+      chatStore.setSteps(activeChat.id, activeChat.steps || []);
+      chatStore.setActiveChatId(activeChat.id);
       residentOrder.push(activeChat.id);
     } else {
       ctx.setActiveChatId('draft-chat');
       ctx.setActiveProject(defaultProject);
       ctx.setDraftProject(defaultProject);
       ctx.setTrajectorySteps([]);
+      chatStore.setSteps('draft-chat', []);
+      chatStore.setActiveChatId('draft-chat');
     }
 
     // Persist the full store as-is so the on-disk transcript stays complete.
@@ -176,6 +183,8 @@ export class StoreService {
     ctx.setChats(nextChats);
     ctx.setTrajectorySteps(steps);
     ctx.setActiveChatId(chatId);
+    chatStore.setSteps(chatId, steps);
+    chatStore.setActiveChatId(chatId);
     const meta = ctx.getChats().find((c) => c.id === chatId);
     ctx.setActiveProject(meta?.project || '');
     ctx.setDraftProject(meta?.project || '');

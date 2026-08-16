@@ -239,6 +239,14 @@ export interface ChatTitleSettings {
   maxWords?: number;
 }
 
+/** Configuration for Telegram notifications & messaging. */
+export interface TelegramSettings {
+  enabled?: boolean;
+  botToken?: string;
+  chatId?: string;
+  parseMode?: 'Markdown' | 'HTML';
+}
+
 /** Top-level application settings object persisted to disk. */
 export interface AppSettings {
   theme?: ThemeSettings;
@@ -258,6 +266,7 @@ export interface AppSettings {
   circleSearch?: CircleSearchSettings;
   chatTitle?: ChatTitleSettings;
   artifact?: ArtifactSettings;
+  telegram?: TelegramSettings;
 }
 
 /** Resolved file system paths for user data and config files. */
@@ -402,9 +411,12 @@ export class SettingsStorage {
         threeD: settings.threeD !== undefined ? (settings.threeD === null ? undefined : settings.threeD) : current.threeD,
         voice: settings.voice !== undefined ? (settings.voice === null ? undefined : { ...current.voice, ...settings.voice }) : current.voice,
         webApp: settings.webApp !== undefined ? (settings.webApp === null ? undefined : { ...current.webApp, ...settings.webApp }) : current.webApp,
+        browserUse: settings.browserUse !== undefined ? (settings.browserUse === null ? undefined : { ...current.browserUse, ...settings.browserUse }) : current.browserUse,
+        computerUse: settings.computerUse !== undefined ? (settings.computerUse === null ? undefined : { ...current.computerUse, ...settings.computerUse }) : current.computerUse,
         circleSearch: settings.circleSearch !== undefined ? (settings.circleSearch === null ? undefined : { ...current.circleSearch, ...settings.circleSearch }) : current.circleSearch,
         chatTitle: settings.chatTitle !== undefined ? (settings.chatTitle === null ? undefined : { ...current.chatTitle, ...settings.chatTitle }) : current.chatTitle,
-        artifact: settings.artifact !== undefined ? (settings.artifact === null ? undefined : { ...current.artifact, ...settings.artifact }) : current.artifact
+        artifact: settings.artifact !== undefined ? (settings.artifact === null ? undefined : { ...current.artifact, ...settings.artifact }) : current.artifact,
+        telegram: settings.telegram !== undefined ? (settings.telegram === null ? undefined : { ...current.telegram, ...settings.telegram }) : current.telegram
       };
 
       this.cachedSettings = updated;

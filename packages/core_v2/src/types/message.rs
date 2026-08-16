@@ -25,6 +25,23 @@ pub enum ContentBlock {
         content: String,
         is_error: bool,
     },
+    Image {
+        media_type: String,
+        data: String,
+    },
+    Audio {
+        media_type: String,
+        data: String,
+    },
+    Video {
+        media_type: String,
+        data: String,
+    },
+    Document {
+        filename: String,
+        media_type: String,
+        data: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -32,6 +49,8 @@ pub struct ChatMessage {
     pub id: String,
     pub role: Role,
     pub content: Vec<ContentBlock>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     pub timestamp: i64,
 }
 
@@ -41,8 +60,14 @@ impl ChatMessage {
             id: uuid::Uuid::new_v4().to_string(),
             role,
             content,
+            model: None,
             timestamp: chrono::Utc::now().timestamp_millis(),
         }
+    }
+
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
+        self
     }
 
     pub fn system(text: impl Into<String>) -> Self {

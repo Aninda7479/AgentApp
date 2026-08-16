@@ -29,14 +29,15 @@ export class ArtifactRunner extends EventEmitter {
 
   constructor(customDir?: string) {
     super();
-    this.baseDir = customDir || getArtifactDirectory();
+    this.baseDir = customDir || '';
   }
 
   public getStoreDirectory(): string {
-    if (!fs.existsSync(this.baseDir)) {
-      fs.mkdirSync(this.baseDir, { recursive: true });
+    const dir = this.baseDir || getArtifactDirectory();
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
     }
-    return this.baseDir;
+    return dir;
   }
 
   /**

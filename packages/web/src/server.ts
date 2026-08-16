@@ -32,6 +32,9 @@ import {
   SkillStore,
   providerHealth,
   ArtifactRunner,
+  sendTelegramMessage,
+  testTelegramConnection,
+  getTelegramConfig,
   writeWebServerLock,
   clearWebServerLock,
   readWebServerLock,
@@ -64,14 +67,24 @@ const getWebDistDir = (): string => {
   const candidates = [
     path.join(serverDirname, 'web-dist'),
     path.join(serverDirname, 'node_modules', '@superagent', 'web', 'dist'),
-    path.join(serverDirname, '..', 'web', 'dist'),
-    path.join(process.cwd(), 'node_modules', '@superagent', 'web', 'dist'),
+    path.join(path.dirname(process.execPath), 'web-dist'),
     path.join(path.dirname(process.execPath), 'node_modules', '@superagent', 'web', 'dist'),
+    path.join(process.cwd(), 'web-dist'),
+    path.join(process.cwd(), 'node_modules', '@superagent', 'web', 'dist'),
+    path.join(serverDirname, '..', 'web', 'dist'),
+    path.join(serverDirname, 'dist'),
     serverDirname,
   ];
   for (const cand of candidates) {
     try {
       if (fs.existsSync(path.join(cand, 'login.html')) && fs.existsSync(path.join(cand, 'index.html'))) {
+        return cand;
+      }
+    } catch {}
+  }
+  for (const cand of candidates) {
+    try {
+      if (fs.existsSync(path.join(cand, 'login.html')) || fs.existsSync(path.join(cand, 'index.html'))) {
         return cand;
       }
     } catch {}
@@ -91,7 +104,61 @@ app.use(express.urlencoded({ limit: '500mb', extended: true }));
 const userDataDir = getUserDataDirectory();
 
 const triggerEngine = new TriggerEngine({
-  storagePath: path.join(userDataDir, 'config', 'triggers.json')
+  storagePath: path.join(userDataDir, 'config', 'triggers.json'),
+  executor: async (trigger, payload) => {
+    console.log(`[TriggerEngine] Executing scheduled trigger "${trigger.name}" (${trigger.id})...`);
+    const settings = SettingsStorage.loadSettings();
+    const defaultModel = settings.models?.find(m => m.enabled) || settings.models?.[0];
+    const providerId = defaultModel?.providerId || 'openai';
+    const modelId = defaultModel ? OrchestratorRouter.stripProviderPrefix(defaultModel.providerId, defaultModel.id) : 'gpt-4o';
+    const byok = settings.providers?.find(p => p.id === providerId);
+
+    const sessionId = `trig-run-${trigger.id}-${Date.now()}`;
+    const engine = new AgentEngine({
+      provider: providerId as any,
+      model: modelId,
+      apiKey: byok?.apiKey || '',
+      baseUrl: byok?.baseUrl,
+      projectRoot: trigger.targetPath || process.cwd(),
+      permissionMode: 'auto-approve-edits'
+    }, sessionId);
+
+    let outputText = '';
+    try {
+      const hasKey = Boolean(byok?.apiKey || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY);
+      if (hasKey && process.env.NODE_ENV !== 'test') {
+        await engine.run(trigger.prompt, (event: AgentEvent) => {
+          if (event.type === 'token' && event.content) {
+            outputText += event.content;
+          }
+        });
+      } else {
+        outputText = `Trigger "${trigger.name}" executed successfully.`;
+      }
+    } catch (err: any) {
+      console.warn(`[TriggerEngine] Trigger execution warning for ${trigger.id}:`, err?.message || err);
+      outputText = `Executed with warning: ${err?.message || err}`;
+    }
+
+    if (trigger.notifyTelegram) {
+      const summaryMsg = `🔔 *[Scheduled Routine: ${trigger.name}]*\n\n${outputText.trim() || '(Execution completed without text output)'}`;
+      const sendRes = await sendTelegramMessage({
+        chatId: trigger.telegramChatId,
+        text: summaryMsg,
+      });
+      if (!sendRes.success) {
+        console.warn(`[TriggerEngine] Failed to send Telegram notification for ${trigger.id}:`, sendRes.error);
+      } else {
+        console.log(`[TriggerEngine] Telegram notification sent for ${trigger.id} (messageId: ${sendRes.messageId})`);
+      }
+    }
+
+    broadcast('trigger-fired', {
+      trigger,
+      output: outputText,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 triggerEngine.start();
 
@@ -132,6 +199,14 @@ app.get('/api/auth/history', handleGetHistory);
 // Serve the standalone login/setup page (public; must stay before the gate).
 app.get('/login', (_req, res) => {
   const filePath = path.join(webDistDir, 'login.html');
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(content);
+      return;
+    }
+  } catch {}
   res.sendFile(filePath, (err) => {
     if (err && !res.headersSent) {
       console.error(`[Web] Error serving login.html from ${filePath}:`, err.message);
@@ -1148,6 +1223,36 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         break;
       }
 
+      // ─── Telegram Messaging & Verification ────────────────────────────────
+      case 'telegram-test': {
+        const token = args[0]?.botToken;
+        const chatId = args[0]?.chatId;
+        const sendTestMessage = args[0]?.sendTestMessage !== false;
+        result = await testTelegramConnection(token, chatId, sendTestMessage);
+        break;
+      }
+      case 'telegram-send': {
+        const sendOpts = args[0] || {};
+        result = await sendTelegramMessage(sendOpts);
+        break;
+      }
+      case 'telegram-config-get': {
+        const allSettings = SettingsStorage.loadSettings();
+        result = allSettings?.telegram || null;
+        break;
+      }
+      case 'telegram-config-save': {
+        const updates = args[0] || {};
+        const settings = SettingsStorage.loadSettings();
+        settings.telegram = {
+          ...(settings.telegram || {}),
+          ...updates
+        };
+        SettingsStorage.saveSettings(settings);
+        result = { success: true, telegram: settings.telegram };
+        break;
+      }
+
       // ─── Partner store (web-persistent; shared renderer expects these) ───────
       case 'partner-list':
         result = PartnerStore.listPartners(userDataDir);
@@ -1523,6 +1628,14 @@ app.use(express.static(distPath));
 
 app.get('*', (req, res) => {
   const filePath = path.join(distPath, 'index.html');
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(content);
+      return;
+    }
+  } catch {}
   res.sendFile(filePath, (err) => {
     if (err && !res.headersSent) {
       console.error(`[Web] Error serving index.html from ${filePath}:`, err.message);
