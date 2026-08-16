@@ -51,10 +51,14 @@ export const TelegramSettings: React.FC = () => {
         setSavedSnapshot({ botToken: token, chatId: chat });
 
         if (token) {
-          // Silently call getMe to restore connection state across refreshes
+          // Silently call getMe to restore connection state across refreshes (no spam message)
           setVerifying(true);
           try {
-            const res = await ipc.invoke('telegram-test', { botToken: token, chatId: chat || undefined });
+            const res = await ipc.invoke('telegram-test', {
+              botToken: token,
+              chatId: chat || undefined,
+              sendTestMessage: false,
+            });
             if (res?.success) {
               setConnInfo({ botName: res.botName, username: res.username, botId: res.botId });
               setSavedOk(true);
@@ -87,7 +91,24 @@ export const TelegramSettings: React.FC = () => {
     setSaving(true);
     setStatus(null);
     try {
-      await persistConfig(botToken.trim(), chatId.trim());
+      const trimmedToken = botToken.trim();
+      const trimmedChat = chatId.trim();
+      await persistConfig(trimmedToken, trimmedChat);
+      if (trimmedToken) {
+        try {
+          const res = await ipc.invoke('telegram-test', {
+            botToken: trimmedToken,
+            chatId: trimmedChat || undefined,
+            sendTestMessage: false,
+          });
+          if (res?.success) {
+            setConnInfo({ botName: res.botName, username: res.username, botId: res.botId });
+            setSavedOk(true);
+          }
+        } catch {
+          // Best effort validation on save
+        }
+      }
       setStatus({ type: 'success', message: 'Settings saved.' });
     } catch (err: any) {
       setStatus({ type: 'error', message: `Failed to save: ${err.message || err}` });
@@ -110,6 +131,7 @@ export const TelegramSettings: React.FC = () => {
       const res = await ipc.invoke('telegram-test', {
         botToken: botToken.trim(),
         chatId: chatId.trim() || undefined,
+        sendTestMessage: true,
       });
       if (res?.success) {
         await persistConfig(botToken.trim(), chatId.trim());

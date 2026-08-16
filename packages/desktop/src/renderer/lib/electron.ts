@@ -141,6 +141,8 @@ const SILENT_IPC_CHANNELS = new Set<string>([
   // Telegram background verify — failures are handled gracefully in TelegramSettings
   'telegram-test',
   'telegram-config-get',
+  'telegram-config-save',
+  'telegram-send',
 ]);
 
 function wrapInvoke(fn: (channel: string, ...args: any[]) => Promise<any>) {

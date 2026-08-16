@@ -1227,7 +1227,8 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
       case 'telegram-test': {
         const token = args[0]?.botToken;
         const chatId = args[0]?.chatId;
-        result = await testTelegramConnection(token, chatId);
+        const sendTestMessage = args[0]?.sendTestMessage !== false;
+        result = await testTelegramConnection(token, chatId, sendTestMessage);
         break;
       }
       case 'telegram-send': {

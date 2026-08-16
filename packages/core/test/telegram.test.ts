@@ -136,6 +136,86 @@ describe('Telegram Integration & Tooling', () => {
       expect(res.botName).toBe('SuperAgentBot');
       expect(res.username).toBe('@superagent_bot');
     });
+
+    it('does not send message when sendTestMessage is false', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          ok: true,
+          result: {
+            id: 123456,
+            first_name: 'SuperAgentBot',
+            username: 'superagent_bot'
+          }
+        })
+      } as any);
+      globalThis.fetch = mockFetch;
+
+      const res = await testTelegramConnection('123:ABC', '99999', false);
+      expect(res.success).toBe(true);
+      expect(res.botName).toBe('SuperAgentBot');
+      // Only getMe was called, sendMessage was not
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch.mock.calls[0][0]).toContain('/getMe');
+    });
+
+    it('sends test message when sendTestMessage is true and chatId is provided', async () => {
+      const mockFetch = vi.fn()
+        .mockResolvedValueOnce({
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({
+            ok: true,
+            result: {
+              id: 123456,
+              first_name: 'SuperAgentBot',
+              username: 'superagent_bot'
+            }
+          })
+        } as any)
+        .mockResolvedValueOnce({
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({
+            ok: true,
+            result: {
+              message_id: 888
+            }
+          })
+        } as any);
+      globalThis.fetch = mockFetch;
+
+      const res = await testTelegramConnection('123:ABC', '99999', true);
+      expect(res.success).toBe(true);
+      expect(res.botName).toBe('SuperAgentBot');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[0][0]).toContain('/getMe');
+      expect(mockFetch.mock.calls[1][0]).toContain('/sendMessage');
+    });
+  });
+
+  describe('Telegram Settings Persistence', () => {
+    it('persists and loads telegram configuration via SettingsStorage', async () => {
+      const { SettingsStorage } = await import('../src/storage/settings-store.js');
+      SettingsStorage.saveSettings({
+        telegram: {
+          enabled: true,
+          botToken: '987654:ABCDEF',
+          chatId: '12345678'
+        }
+      });
+
+      const loaded = SettingsStorage.loadSettings();
+      expect(loaded.telegram).toBeDefined();
+      expect(loaded.telegram?.botToken).toBe('987654:ABCDEF');
+      expect(loaded.telegram?.chatId).toBe('12345678');
+      expect(loaded.telegram?.enabled).toBe(true);
+
+      const resolved = getTelegramConfig();
+      expect(resolved.botToken).toBe('987654:ABCDEF');
+      expect(resolved.chatId).toBe('12345678');
+    });
   });
 
   describe('notify_message built-in tool', () => {

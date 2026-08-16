@@ -195,7 +195,11 @@ export async function sendTelegramMessage(options: TelegramSendOptions): Promise
 /**
  * Tests Telegram bot connectivity using `getMe` and optionally verifies sending a test message.
  */
-export async function testTelegramConnection(botToken?: string, chatId?: string): Promise<TelegramTestResult> {
+export async function testTelegramConnection(
+  botToken?: string,
+  chatId?: string,
+  sendTestMessage: boolean = true
+): Promise<TelegramTestResult> {
   const config = getTelegramConfig({ botToken, chatId });
   const token = config.botToken;
 
@@ -219,9 +223,9 @@ export async function testTelegramConnection(botToken?: string, chatId?: string)
     const botName = data.result?.first_name || 'Telegram Bot';
     const username = data.result?.username ? `@${data.result.username}` : undefined;
 
-    // If chatId is also provided, send a friendly test message
+    // If chatId is also provided and sendTestMessage is true, send a friendly test message
     const targetChatId = chatId || config.chatId;
-    if (targetChatId) {
+    if (targetChatId && sendTestMessage) {
       const sendRes = await sendTelegramMessage({
         botToken: token,
         chatId: targetChatId,
