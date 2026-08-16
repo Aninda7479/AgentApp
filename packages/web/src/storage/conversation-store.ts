@@ -4,6 +4,7 @@ export {
   readProject,
   saveProject,
   readChat,
+  readChatSteps,
   saveChat,
   deleteProject,
   deleteChat,

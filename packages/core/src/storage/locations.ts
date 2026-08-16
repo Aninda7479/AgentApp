@@ -22,7 +22,8 @@ export const STORAGE_DIRS = {
   plugins: 'plugins',
   connectors: 'connectors',
   logs: 'logs',
-  artifact: 'artifact',
+  artifacts: 'artifacts',
+  artifact: 'artifacts',
   threeD: '3d-studio',
   standalone: 'standalone'
 } as const;
@@ -90,9 +91,19 @@ export function getLogsDirectory(base: string = getUserDataDirectory()): string 
   return path.join(base, STORAGE_DIRS.logs);
 }
 
-/** Returns the artifacts directory (`~/.superagent/artifact`). */
+/** Returns the artifacts directory (`~/.superagent/artifacts`). */
 export function getArtifactDirectory(base: string = getUserDataDirectory()): string {
-  return path.join(base, STORAGE_DIRS.artifact);
+  const newPath = path.join(base, STORAGE_DIRS.artifacts);
+  const oldPath = path.join(base, 'artifact');
+  if (!fs.existsSync(newPath) && fs.existsSync(oldPath)) {
+    return oldPath;
+  }
+  return newPath;
+}
+
+/** Returns the artifacts directory (`~/.superagent/artifacts`). */
+export function getArtifactsDirectory(base: string = getUserDataDirectory()): string {
+  return getArtifactDirectory(base);
 }
 
 /**

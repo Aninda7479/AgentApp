@@ -25,6 +25,7 @@ import {
   Clock,
   WifiOff,
   ArrowUpCircle,
+  Package,
 } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { ThemeMode } from '../types';
@@ -46,6 +47,7 @@ interface TitleBarProps {
   // ── Real application-menu actions (no filler) ──
   onNewChat?: () => void;
   onOpenFolder?: () => void;
+  onOpenArtifacts?: () => void;
   onOpen3DStudio?: () => void;
   onOpenPartner?: () => void;
   onScheduleTask?: () => void;
@@ -102,6 +104,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onToggleMobileNav,
   onNewChat,
   onOpenFolder,
+  onOpenArtifacts,
   onOpen3DStudio,
   onOpenPartner,
   onScheduleTask,
@@ -159,6 +162,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         { label: 'New chat', icon: Plus, shortcut: 'Ctrl+N', onClick: () => onNewChat?.() },
         { label: 'Open folder…', icon: FolderOpen, onClick: () => onOpenFolder?.() },
         'sep',
+        { label: 'Artifacts', icon: Package, onClick: () => onOpenArtifacts?.() },
         { label: 'Open 3D Studio', icon: Box, onClick: () => onOpen3DStudio?.() },
         { label: 'Partner', icon: PersonStanding, onClick: () => onOpenPartner?.() },
         { label: 'Schedule Task', icon: Clock, onClick: () => onScheduleTask?.() },

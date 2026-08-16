@@ -162,3 +162,82 @@ describe('web IPC handler — triggers channels', () => {
   });
 });
 
+describe('web IPC handler — conversation and chat steps channels', () => {
+  it('handles chat-steps-read gracefully when chat does not exist or has no steps', async () => {
+    const res = mockRes();
+    await handleIpc(mockReq('chat-steps-read', { args: ['non-existent-chat-id'] }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toEqual([]);
+  });
+
+  it('handles chat-steps-read when no chatId is passed', async () => {
+    const res = mockRes();
+    await handleIpc(mockReq('chat-steps-read', { args: [] }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toEqual([]);
+  });
+
+  it('handles projects-read and chats-read', async () => {
+    const projRes = mockRes();
+    await handleIpc(mockReq('projects-read', { args: [] }), projRes);
+    expect(projRes.statusCode).toBe(200);
+    expect(Array.isArray(projRes.body.data)).toBe(true);
+
+    const chatRes = mockRes();
+    await handleIpc(mockReq('chats-read', { args: [] }), chatRes);
+    expect(chatRes.statusCode).toBe(200);
+    expect(Array.isArray(chatRes.body.data)).toBe(true);
+  });
+});
+
+describe('web IPC handler — kanban, skills, and agent channels', () => {
+  it('saves and loads kanban cards for global scope', async () => {
+    const cards = [
+      { id: 'c1', title: 'Task 1', description: 'Desc 1', column: 'todo', priority: 'medium', tags: [] }
+    ];
+    const saveRes = mockRes();
+    await handleIpc(mockReq('kanban-save', { args: [{ scope: 'global', cards }] }), saveRes);
+    expect(saveRes.statusCode).toBe(200);
+    expect(saveRes.body.data.success).toBe(true);
+
+    const loadRes = mockRes();
+    await handleIpc(mockReq('kanban-load', { args: [{ scope: 'global' }] }), loadRes);
+    expect(loadRes.statusCode).toBe(200);
+    expect(loadRes.body.data).toEqual(cards);
+  });
+
+  it('handles skills-save, skills-import-check, and skills-import-perform', async () => {
+    const saveRes = mockRes();
+    await handleIpc(
+      mockReq('skills-save', {
+        args: [{ name: 'Test Custom Skill', description: 'A test skill', instructions: 'Do something' }]
+      }),
+      saveRes
+    );
+    expect(saveRes.statusCode).toBe(200);
+    expect(saveRes.body.data.success).toBe(true);
+
+    const checkRes = mockRes();
+    await handleIpc(mockReq('skills-import-check', { args: [] }), checkRes);
+    expect(checkRes.statusCode).toBe(200);
+    expect(checkRes.body.data.canImport).toBe(false);
+
+    const performRes = mockRes();
+    await handleIpc(mockReq('skills-import-perform', { args: [] }), performRes);
+    expect(performRes.statusCode).toBe(200);
+    expect(performRes.body.data.success).toBe(true);
+  });
+
+  it('handles agent-permission-response and agent-compact', async () => {
+    const permRes = mockRes();
+    await handleIpc(mockReq('agent-permission-response', { args: [{ id: 'perm-1', approved: true }] }), permRes);
+    expect(permRes.statusCode).toBe(200);
+    expect(permRes.body.data.success).toBe(true);
+
+    const compactRes = mockRes();
+    await handleIpc(mockReq('agent-compact', { args: ['session-123'] }), compactRes);
+    expect(compactRes.statusCode).toBe(200);
+    expect(compactRes.body.data.compacted).toBe(false);
+  });
+});
+

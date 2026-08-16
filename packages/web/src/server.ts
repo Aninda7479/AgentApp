@@ -38,8 +38,8 @@ import {
 } from '@superagent/core';
 
 import { AgentEngine, AgentEngineConfig, AgentEvent } from './ai-engine.js';
-import { readConversationStore, writeConversationStore } from './storage/conversation-store.js';
-import { getChatDirectory } from './storage/paths.js';
+import { readConversationStore, writeConversationStore, readChatSteps } from './storage/conversation-store.js';
+import { getChatDirectory, getProjectDirectory } from './storage/paths.js';
 import * as PartnerStore from './partner-store.js';
 import {
   authGate,
@@ -630,6 +630,27 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         await writeConversationStore(args[0], userDataDir);
         result = null;
         break;
+      case 'chat-steps-read': {
+        const payload = args[0];
+        const chatId = typeof payload === 'string' ? payload : payload?.chatId;
+        const projectKey = typeof payload === 'object' ? payload?.projectKey : undefined;
+        if (!chatId) {
+          result = [];
+          break;
+        }
+        result = await readChatSteps(userDataDir, chatId, projectKey);
+        break;
+      }
+      case 'projects-read': {
+        const storeData = await readConversationStore(userDataDir);
+        result = storeData.projects ?? [];
+        break;
+      }
+      case 'chats-read': {
+        const storeData = await readConversationStore(userDataDir);
+        result = storeData.chats ?? [];
+        break;
+      }
       case 'settings-read':
         result = SettingsStorage.loadSettings();
         break;
@@ -786,6 +807,13 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
       case 'agent-list':
         result = { sessions: Array.from(activeSessions.keys()) };
         break;
+      case 'agent-permission-response':
+        result = { success: true };
+        break;
+      case 'agent-compact': {
+        result = { compacted: false, tokensBefore: 0, tokensAfter: 0 };
+        break;
+      }
 
       // ─── App version & catalogs (read-only, shared with desktop) ─────────────
       case 'app-version':
@@ -798,7 +826,7 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         result = SKILL_CATALOG;
         break;
 
-      // ─── Skills discovery (Composer slash autocomplete) ─────────────────────
+      // ─── Skills discovery & management (Composer slash autocomplete / settings) ─
       case 'skills-list': {
         const dir = typeof args[0] === 'object' && args[0] ? (args[0] as any).dir : undefined;
         const dirs: string[] = [];
@@ -819,6 +847,56 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
           description: s.metadata.description,
           instructions: s.instructions
         }));
+        break;
+      }
+      case 'skills-save': {
+        const { name, description, instructions } = args[0] || {};
+        if (!name) {
+          result = { success: false, error: 'Skill name is required' };
+          break;
+        }
+        const skillId = name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+        const skillDir = path.join(userDataDir, STORAGE_DIRS.skills, skillId);
+        fs.mkdirSync(skillDir, { recursive: true });
+        const content = `---\nname: ${name}\ndescription: ${description || ''}\n---\n\n${instructions || ''}\n`;
+        fs.writeFileSync(path.join(skillDir, 'SKILL.md'), content, 'utf-8');
+        result = { success: true };
+        break;
+      }
+      case 'skills-import-check': {
+        result = { canImport: false, skills: [] };
+        break;
+      }
+      case 'skills-import-perform': {
+        result = { success: true, importedCount: 0 };
+        break;
+      }
+
+      // ─── Kanban Tasks (Project and Global) ───────────────────────────────────
+      case 'kanban-load': {
+        const { scope, projectName } = args[0] || {};
+        const kanbanFile = scope === 'project' && projectName
+          ? path.join(getProjectDirectory(userDataDir, projectName), 'kanban-cards.json')
+          : path.join(userDataDir, 'kanban-cards.json');
+        if (fs.existsSync(kanbanFile)) {
+          try {
+            result = JSON.parse(fs.readFileSync(kanbanFile, 'utf-8'));
+          } catch {
+            result = [];
+          }
+        } else {
+          result = [];
+        }
+        break;
+      }
+      case 'kanban-save': {
+        const { scope, projectName, cards } = args[0] || {};
+        const kanbanFile = scope === 'project' && projectName
+          ? path.join(getProjectDirectory(userDataDir, projectName), 'kanban-cards.json')
+          : path.join(userDataDir, 'kanban-cards.json');
+        fs.mkdirSync(path.dirname(kanbanFile), { recursive: true });
+        fs.writeFileSync(kanbanFile, JSON.stringify(cards || [], null, 2), 'utf-8');
+        result = { success: true };
         break;
       }
 
@@ -1101,28 +1179,47 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         break;
 
       // ─── Artifacts (Micro-Apps) Manager ─────────────────────────────────────
+      // ─── Artifacts (Micro-Apps) Manager ─────────────────────────────────────
       case 'artifact:list':
       case 'artifact_list':
       case 'artifact-list': {
-        const artDir = path.join(userDataDir, 'artifact');
+        const getDir = () => {
+          const primary = path.join(userDataDir, 'artifacts');
+          const legacy = path.join(userDataDir, 'artifact');
+          if (!fs.existsSync(primary) && fs.existsSync(legacy)) return legacy;
+          return primary;
+        };
+        const artDir = getDir();
+        const dirsToScan = [artDir];
+        const legacy = path.join(userDataDir, 'artifact');
+        if (artDir !== legacy && fs.existsSync(legacy)) {
+          dirsToScan.push(legacy);
+        }
+
         const items: any[] = [];
-        if (fs.existsSync(artDir)) {
-          const entries = fs.readdirSync(artDir);
-          for (const folder of entries) {
-            const folderPath = path.join(artDir, folder);
-            if (fs.statSync(folderPath).isDirectory()) {
-              const manifestPath = path.join(folderPath, 'manifest.json');
-              if (fs.existsSync(manifestPath)) {
-                try {
-                  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-                  items.push({
-                    id: folder,
-                    manifest,
-                    status: 'stopped',
-                    path: folderPath
-                  });
-                } catch {}
-              }
+        const seenIds = new Set<string>();
+
+        for (const dir of dirsToScan) {
+          if (fs.existsSync(dir)) {
+            const entries = fs.readdirSync(dir);
+            for (const folder of entries) {
+              if (seenIds.has(folder)) continue;
+              const folderPath = path.join(dir, folder);
+              try {
+                if (fs.statSync(folderPath).isDirectory()) {
+                  const manifestPath = path.join(folderPath, 'manifest.json');
+                  if (fs.existsSync(manifestPath)) {
+                    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+                    seenIds.add(folder);
+                    items.push({
+                      id: folder,
+                      manifest,
+                      status: 'stopped',
+                      path: folderPath
+                    });
+                  }
+                }
+              } catch {}
             }
           }
         }
@@ -1132,7 +1229,7 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
       case 'artifact:openFolder':
       case 'artifact_open_folder':
       case 'artifact-open-folder': {
-        const artDir = path.join(userDataDir, 'artifact');
+        const artDir = path.join(userDataDir, 'artifacts');
         if (!fs.existsSync(artDir)) {
           fs.mkdirSync(artDir, { recursive: true });
         }
@@ -1157,7 +1254,11 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
       case 'artifact_open':
       case 'artifact-open': {
         const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
-        const artDir = path.join(userDataDir, 'artifact', artId || '');
+        let artDir = path.join(userDataDir, 'artifacts', artId || '');
+        if (!fs.existsSync(artDir)) {
+          const legacyDir = path.join(userDataDir, 'artifact', artId || '');
+          if (fs.existsSync(legacyDir)) artDir = legacyDir;
+        }
         const targetHtml = path.join(artDir, 'index.html');
         const targetPath = fs.existsSync(targetHtml) ? targetHtml : artDir;
         const cmd = process.platform === 'win32'
@@ -1189,9 +1290,140 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
       case 'artifact_delete':
       case 'artifact-delete': {
         const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
-        const artDir = path.join(userDataDir, 'artifact', artId || '');
+        const artDir = path.join(userDataDir, 'artifacts', artId || '');
+        const legacyDir = path.join(userDataDir, 'artifact', artId || '');
         if (fs.existsSync(artDir)) {
           fs.rmSync(artDir, { recursive: true, force: true });
+        }
+        if (fs.existsSync(legacyDir)) {
+          fs.rmSync(legacyDir, { recursive: true, force: true });
+        }
+        result = { success: true };
+        break;
+      }
+      case 'artifact:ensureSeeds':
+      case 'artifact_ensure_seeds':
+      case 'artifact-ensure-seeds': {
+        const artDir = path.join(userDataDir, 'artifacts');
+        if (!fs.existsSync(artDir)) {
+          fs.mkdirSync(artDir, { recursive: true });
+        }
+        const calcDir = path.join(artDir, 'quick-calc');
+        if (!fs.existsSync(calcDir)) {
+          fs.mkdirSync(calcDir, { recursive: true });
+          fs.writeFileSync(path.join(calcDir, 'manifest.json'), JSON.stringify({
+            id: 'quick-calc',
+            name: 'Quick Calculator',
+            description: 'Scientific mini-calculator micro-app',
+            version: '1.0.0',
+            type: 'static',
+            entry: 'index.html',
+            port: 3080,
+            createdAt: new Date().toISOString(),
+            tags: ['utility', 'calculator', 'math']
+          }, null, 2));
+          fs.writeFileSync(path.join(calcDir, 'index.html'), `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick Calculator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body { background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; }
+    .calc { background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; width: 100%; max-width: 320px; padding: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+    .display { background: #020617; border-radius: 12px; padding: 16px; text-align: right; font-size: 28px; font-weight: 600; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.08); min-height: 64px; overflow-x: auto; color: #38bdf8; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    button { background: rgba(51, 65, 85, 0.7); color: #f8fafc; border: 1px solid rgba(255,255,255,0.08); padding: 14px; font-size: 18px; font-weight: 600; border-radius: 10px; cursor: pointer; transition: all 0.15s ease; }
+    button:hover { background: rgba(71, 85, 105, 0.9); transform: translateY(-1px); }
+    button.op { background: rgba(14, 165, 233, 0.2); color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); }
+    button.eq { background: #0284c7; color: #fff; grid-column: span 2; }
+    button.clear { background: rgba(239, 68, 68, 0.2); color: #f87171; border-color: rgba(248, 113, 113, 0.3); }
+  </style>
+</head>
+<body>
+  <div class="calc">
+    <div class="display" id="display">0</div>
+    <div class="grid">
+      <button class="clear" onclick="clearDisplay()">C</button>
+      <button onclick="append('(')">(</button>
+      <button onclick="append(')')">)</button>
+      <button class="op" onclick="append('/')">÷</button>
+      <button onclick="append('7')">7</button>
+      <button onclick="append('8')">8</button>
+      <button onclick="append('9')">9</button>
+      <button class="op" onclick="append('*')">×</button>
+      <button onclick="append('4')">4</button>
+      <button onclick="append('5')">5</button>
+      <button onclick="append('6')">6</button>
+      <button class="op" onclick="append('-')">-</button>
+      <button onclick="append('1')">1</button>
+      <button onclick="append('2')">2</button>
+      <button onclick="append('3')">3</button>
+      <button class="op" onclick="append('+')">+</button>
+      <button onclick="append('0')">0</button>
+      <button onclick="append('.')">.</button>
+      <button class="eq" onclick="calculate()">=</button>
+    </div>
+  </div>
+  <script>
+    const display = document.getElementById('display');
+    let expr = '0';
+    function update() { display.innerText = expr || '0'; }
+    function append(v) { if (expr === '0' && v !== '.') expr = ''; expr += v; update(); }
+    function clearDisplay() { expr = '0'; update(); }
+    function calculate() { try { expr = String(Function('"use strict";return (' + expr + ')')()); } catch(e) { expr = 'Error'; } update(); }
+  </script>
+</body>
+</html>`);
+        }
+
+        const padDir = path.join(artDir, 'scratchpad');
+        if (!fs.existsSync(padDir)) {
+          fs.mkdirSync(padDir, { recursive: true });
+          fs.writeFileSync(path.join(padDir, 'manifest.json'), JSON.stringify({
+            id: 'scratchpad',
+            name: 'Super Scratchpad',
+            description: 'Persistent markdown & note-taking micro-app',
+            version: '1.0.0',
+            type: 'static',
+            entry: 'index.html',
+            port: 3081,
+            createdAt: new Date().toISOString(),
+            tags: ['notes', 'markdown', 'productivity']
+          }, null, 2));
+          fs.writeFileSync(path.join(padDir, 'index.html'), `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Super Scratchpad</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background: #0b0f19; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; padding: 16px; }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    h2 { font-size: 16px; color: #38bdf8; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+    .status { font-size: 11px; color: #94a3b8; }
+    textarea { flex: 1; background: #111827; color: #f3f4f6; border: 1px solid #1f2937; border-radius: 12px; padding: 16px; font-size: 14px; line-height: 1.6; resize: none; outline: none; }
+    textarea:focus { border-color: #38bdf8; }
+  </style>
+</head>
+<body>
+  <header>
+    <h2>📝 Super Scratchpad</h2>
+    <span class="status" id="status">Auto-saved locally</span>
+  </header>
+  <textarea id="note" placeholder="Type your ideas, snippets, or scratch notes here..."></textarea>
+  <script>
+    const ta = document.getElementById('note');
+    const st = document.getElementById('status');
+    ta.value = localStorage.getItem('scratch_note') || '';
+    ta.addEventListener('input', () => {
+      localStorage.setItem('scratch_note', ta.value);
+      st.innerText = 'Saved at ' + new Date().toLocaleTimeString();
+    });
+  </script>
+</body>
+</html>`);
         }
         result = { success: true };
         break;

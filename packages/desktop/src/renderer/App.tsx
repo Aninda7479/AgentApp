@@ -32,6 +32,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { usePartners } from './pages/Settings/companion/library';
 import { ThreeDStudio } from './pages/Studio/ThreeDStudio';
 import { PartnerPage } from './pages/Partner/PartnerPage';
+import { ArtifactsPage } from './pages/Artifacts/ArtifactsPage';
 import { StoredChat, StoredProject } from './types';
 import { resolveScopeSettings } from './logic/scopeSettings';
 import { SessionLoopManager, LoopTask } from './logic/loop';
@@ -84,6 +85,7 @@ const PAGE_LABELS: Record<string, string> = {
   trajectory: 'Workspace',
   scheduled: 'Scheduled',
   tasks: 'Tasks',
+  artifacts: 'Artifacts',
   'project-settings': 'Project Settings',
   'standalone-chat': 'Standalone Chat',
   studio: '3D Studio',
@@ -1327,40 +1329,47 @@ export const App: React.FC = () => {
         if (isWebMode || !ipc) {
           const res = await fetch('/api/health', { method: 'GET', cache: 'no-store' });
           if (isMounted) {
-            setIsBackendDisconnected(!res.ok);
+            const nextVal = !res.ok;
+            setIsBackendDisconnected((prev) => (prev !== nextVal ? nextVal : prev));
           }
         } else {
           // In Desktop mode (Tauri / Electron), check IPC connection
           const res = await ipc.invoke('system-info').catch(() => null);
           if (isMounted) {
-            setIsBackendDisconnected(res === null);
+            const nextVal = res === null;
+            setIsBackendDisconnected((prev) => (prev !== nextVal ? nextVal : prev));
           }
         }
       } catch {
         if (isMounted) {
-          setIsBackendDisconnected(true);
+          setIsBackendDisconnected((prev) => (prev !== true ? true : prev));
         }
       }
     };
 
     checkHealth();
-    const interval = setInterval(checkHealth, 2500);
+    const interval = setInterval(checkHealth, 3000);
 
     const onBackendStatus = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail && typeof detail.connected === 'boolean' && isMounted) {
-        setIsBackendDisconnected(!detail.connected);
+        const nextVal = !detail.connected;
+        setIsBackendDisconnected((prev) => (prev !== nextVal ? nextVal : prev));
       }
     };
+    const onOffline = () => {
+      if (isMounted) setIsBackendDisconnected((prev) => (prev !== true ? true : prev));
+    };
+
     window.addEventListener('backend-status', onBackendStatus);
-    window.addEventListener('offline', () => isMounted && setIsBackendDisconnected(true));
+    window.addEventListener('offline', onOffline);
     window.addEventListener('online', checkHealth);
 
     return () => {
       isMounted = false;
       clearInterval(interval);
       window.removeEventListener('backend-status', onBackendStatus);
-      window.removeEventListener('offline', () => setIsBackendDisconnected(true));
+      window.removeEventListener('offline', onOffline);
       window.removeEventListener('online', checkHealth);
     };
   }, [isWebMode, ipc]);
@@ -1481,6 +1490,7 @@ export const App: React.FC = () => {
         themeMode={themeMode}
         onNewChat={() => handleNewChat()}
         onOpenFolder={handleOpenFolder}
+        onOpenArtifacts={() => setActiveTab('artifacts')}
         onOpen3DStudio={() => setActiveTab('studio')}
         onOpenPartner={() => setActiveTab('partner')}
         onScheduleTask={() => setActiveTab('scheduled')}
@@ -1676,6 +1686,21 @@ export const App: React.FC = () => {
             <PartnerPage onBack={() => setActiveTab('trajectory')} />
           )}
 
+          {activeTab === 'artifacts' && (
+            <ArtifactsPage
+              ipc={ipc}
+              triggerToast={triggerToast}
+              onBack={() => setActiveTab('trajectory')}
+              onNewChat={(promptText) => {
+                handleNewChat();
+              }}
+              onOpenSettings={() => {
+                setActiveTab('settings');
+                setSettingsCategory('artifacts');
+              }}
+            />
+          )}
+
           {activeTab === 'settings' && (
             <SettingsView
               activeCategory={settingsCategory}
@@ -1739,7 +1764,7 @@ export const App: React.FC = () => {
           )}
 
           {/* Fallback to Workspace stage if no other tab matches, ensuring the body is never empty */}
-          {!['trajectory', 'scheduled', 'tasks', 'project-settings', 'standalone-chat', 'studio', 'settings', 'diff', 'partner', 'companion'].includes(activeTab) && (
+          {!['trajectory', 'scheduled', 'tasks', 'artifacts', 'project-settings', 'standalone-chat', 'studio', 'settings', 'diff', 'partner', 'companion'].includes(activeTab) && (
             <WorkspaceStage
               activeProject={activeProject}
               onViewDiff={handleViewDiff}

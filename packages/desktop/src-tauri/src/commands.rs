@@ -41,7 +41,15 @@ fn get_artifacts_dir() -> PathBuf {
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home).join(".superagent").join("artifact")
+    let new_dir = PathBuf::from(&home).join(".superagent").join("artifacts");
+    if new_dir.exists() {
+        return new_dir;
+    }
+    let old_dir = PathBuf::from(&home).join(".superagent").join("artifact");
+    if old_dir.exists() {
+        return old_dir;
+    }
+    new_dir
 }
 
 #[tauri::command]

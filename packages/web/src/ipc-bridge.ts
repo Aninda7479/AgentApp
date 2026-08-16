@@ -3,6 +3,14 @@
 const listeners = new Map<string, Set<Function>>();
 let socket: WebSocket | null = null;
 let socketQueue: string[] = [];
+let lastConnectedStatus: boolean | null = null;
+
+function dispatchBackendStatus(connected: boolean) {
+  if (typeof window === 'undefined') return;
+  if (lastConnectedStatus === connected) return;
+  lastConnectedStatus = connected;
+  window.dispatchEvent(new CustomEvent('backend-status', { detail: { connected } }));
+}
 
 // Initialize WebSocket for streaming events (like 'agent-event')
 /** Establishes a WebSocket connection for streaming events, with auto-reconnect. */
@@ -14,9 +22,7 @@ function connectWebSocket() {
 
   ws.onopen = () => {
     console.log('[IPC-Bridge] WebSocket connected.');
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('backend-status', { detail: { connected: true } }));
-    }
+    dispatchBackendStatus(true);
     // Flush queued messages
     while (socketQueue.length > 0) {
       const msg = socketQueue.shift();
@@ -41,17 +47,13 @@ function connectWebSocket() {
 
   socket.onclose = () => {
     console.warn('[IPC-Bridge] WebSocket closed. Reconnecting in 3 seconds...');
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('backend-status', { detail: { connected: false } }));
-    }
+    dispatchBackendStatus(false);
     setTimeout(connectWebSocket, 3000);
   };
 
   socket.onerror = (err) => {
     console.error('[IPC-Bridge] WebSocket error:', err);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('backend-status', { detail: { connected: false } }));
-    }
+    dispatchBackendStatus(false);
   };
 }
 
@@ -88,18 +90,14 @@ const mockIpcRenderer = {
       if (result.error) {
         throw new Error(result.error);
       }
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('backend-status', { detail: { connected: true } }));
-      }
+      dispatchBackendStatus(true);
       return result.data;
     };
 
     try {
       return await performFetch();
     } catch (err: any) {
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('backend-status', { detail: { connected: false } }));
-      }
+      dispatchBackendStatus(false);
       // Retry once for transient fetch/network errors (e.g. initial page load or SW updates)
       if (err instanceof TypeError && (err.message.includes('fetch') || err.message.includes('NetworkError'))) {
         try {

@@ -65,42 +65,50 @@ export class ArtifactRunner extends EventEmitter {
    */
   public async scanArtifacts(): Promise<ArtifactRuntimeState[]> {
     const storeDir = this.getStoreDirectory();
-    let entries: fs.Dirent[] = [];
-    try {
-      entries = fs.readdirSync(storeDir, { withFileTypes: true });
-    } catch {
-      return [];
+    const dirsToScan = [storeDir];
+    const legacyDir = path.join(path.dirname(storeDir), 'artifact');
+    if (fs.existsSync(legacyDir) && legacyDir !== storeDir) {
+      dirsToScan.push(legacyDir);
     }
 
     const currentIds = new Set<string>();
 
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const artifactId = entry.name;
-      const manifestPath = path.join(storeDir, artifactId, 'manifest.json');
-
-      if (!fs.existsSync(manifestPath)) continue;
-
+    for (const currentScanDir of dirsToScan) {
+      let entries: fs.Dirent[] = [];
       try {
-        const content = fs.readFileSync(manifestPath, 'utf-8');
-        const manifestObj = JSON.parse(content);
+        entries = fs.readdirSync(currentScanDir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
 
-        if (isValidArtifactManifest(manifestObj)) {
-          currentIds.add(manifestObj.id);
-          const existingState = this.states.get(manifestObj.id);
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        const artifactId = entry.name;
+        const manifestPath = path.join(currentScanDir, artifactId, 'manifest.json');
 
-          if (existingState) {
-            existingState.manifest = manifestObj;
-          } else {
-            this.states.set(manifestObj.id, {
-              id: manifestObj.id,
-              manifest: manifestObj,
-              status: 'stopped'
-            });
+        if (!fs.existsSync(manifestPath)) continue;
+
+        try {
+          const content = fs.readFileSync(manifestPath, 'utf-8');
+          const manifestObj = JSON.parse(content);
+
+          if (isValidArtifactManifest(manifestObj)) {
+            currentIds.add(manifestObj.id);
+            const existingState = this.states.get(manifestObj.id);
+
+            if (existingState) {
+              existingState.manifest = manifestObj;
+            } else {
+              this.states.set(manifestObj.id, {
+                id: manifestObj.id,
+                manifest: manifestObj,
+                status: 'stopped'
+              });
+            }
           }
+        } catch (err) {
+          // Skip invalid manifest
         }
-      } catch (err) {
-        // Skip invalid manifest
       }
     }
 

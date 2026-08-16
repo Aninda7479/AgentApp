@@ -75,4 +75,11 @@ describe('buildPath — emits canonical ids (never a friendly slug)', () => {
   it('omits the category for general', () => {
     expect(buildPath(state({ settingsCategory: 'general' }))).toBe('/settings');
   });
+
+  it('correctly builds and parses the /artifacts route', () => {
+    expect(buildPath({ activeTab: 'artifacts', activeChatId: null, settingsCategory: 'general' })).toBe('/artifacts');
+    withWindow('/artifacts', 'http:');
+    const route = getRouteFromLocation();
+    expect(route.activeTab).toBe('artifacts');
+  });
 });

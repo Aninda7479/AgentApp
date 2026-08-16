@@ -174,14 +174,17 @@ function getTauriInvoke(): ((cmd: string, args?: any) => Promise<any>) | null {
 export function invoke(channel: string, ...args: unknown[]): Promise<any> {
   const tauri = getTauriInvoke();
   if (tauri) {
-    const rustCmd = channel.replace(/-/g, '_');
-    const payload = args[0] && typeof args[0] === 'object' ? args[0] : (args[0] !== undefined ? { arg: args[0] } : undefined);
+    const rustCmd = channel.replace(/[:\-]/g, '_');
+    const payload = args[0] && typeof args[0] === 'object'
+      ? args[0]
+      : (args[0] !== undefined ? { id: args[0], arg: args[0] } : undefined);
     return wrapInvoke((_ch, a) => tauri(rustCmd, a))(channel, payload);
   }
   const api = superagent();
   if (api) return wrapInvoke((ch, ...a) => api.ipc.invoke(ch, ...a))(channel, ...args);
   const legacy = legacyRequireShim();
   if (!legacy) {
+    reportError('ipc:' + channel, 'IPC bridge unavailable');
     return Promise.resolve(null);
   }
   return wrapInvoke((ch, ...a) => legacy.ipcRenderer.invoke(ch, ...a))(channel, ...args);

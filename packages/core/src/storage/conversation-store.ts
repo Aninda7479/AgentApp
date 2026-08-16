@@ -557,6 +557,45 @@ export async function readChat(userDataDir: string, chatId: string, projectKey?:
   return readChatRecord(chatJsonPath, projectName, projectKey);
 }
 
+/**
+ * Reads the steps array for a specific chat from disk.
+ * Returns the `TrajectoryStep[]` stored in the chat record, or `[]` if not found.
+ */
+export async function readChatSteps(
+  userDataDir: string,
+  chatId: string,
+  projectKey?: string
+): Promise<any[]> {
+  if (!chatId) return [];
+
+  // If projectKey is explicitly provided, read directly
+  if (projectKey) {
+    const chat = await readChat(userDataDir, chatId, projectKey);
+    if (chat && Array.isArray(chat.steps)) return chat.steps;
+  }
+
+  // Try reading standalone chat first
+  const standalone = await readChat(userDataDir, chatId);
+  if (standalone && Array.isArray(standalone.steps)) return standalone.steps;
+
+  // Search across all project folders
+  const roots = getConversationRoots(userDataDir);
+  try {
+    const exists = await fsp.access(roots.projectsDir).then(() => true).catch(() => false);
+    if (exists) {
+      const projectFolders = await fsp.readdir(roots.projectsDir);
+      for (const folder of projectFolders) {
+        const chat = await readChat(userDataDir, chatId, folder);
+        if (chat && Array.isArray(chat.steps)) return chat.steps;
+      }
+    }
+  } catch {
+    /* ignore read errors */
+  }
+
+  return [];
+}
+
 /** Saves a chat record to disk, resolving its project association. */
 export async function saveChat(userDataDir: string, chat: StoredChat): Promise<void> {
   const roots = getConversationRoots(userDataDir);
