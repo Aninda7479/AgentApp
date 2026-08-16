@@ -64,14 +64,24 @@ const getWebDistDir = (): string => {
   const candidates = [
     path.join(serverDirname, 'web-dist'),
     path.join(serverDirname, 'node_modules', '@superagent', 'web', 'dist'),
-    path.join(serverDirname, '..', 'web', 'dist'),
-    path.join(process.cwd(), 'node_modules', '@superagent', 'web', 'dist'),
+    path.join(path.dirname(process.execPath), 'web-dist'),
     path.join(path.dirname(process.execPath), 'node_modules', '@superagent', 'web', 'dist'),
+    path.join(process.cwd(), 'web-dist'),
+    path.join(process.cwd(), 'node_modules', '@superagent', 'web', 'dist'),
+    path.join(serverDirname, '..', 'web', 'dist'),
+    path.join(serverDirname, 'dist'),
     serverDirname,
   ];
   for (const cand of candidates) {
     try {
       if (fs.existsSync(path.join(cand, 'login.html')) && fs.existsSync(path.join(cand, 'index.html'))) {
+        return cand;
+      }
+    } catch {}
+  }
+  for (const cand of candidates) {
+    try {
+      if (fs.existsSync(path.join(cand, 'login.html')) || fs.existsSync(path.join(cand, 'index.html'))) {
         return cand;
       }
     } catch {}
@@ -132,6 +142,14 @@ app.get('/api/auth/history', handleGetHistory);
 // Serve the standalone login/setup page (public; must stay before the gate).
 app.get('/login', (_req, res) => {
   const filePath = path.join(webDistDir, 'login.html');
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(content);
+      return;
+    }
+  } catch {}
   res.sendFile(filePath, (err) => {
     if (err && !res.headersSent) {
       console.error(`[Web] Error serving login.html from ${filePath}:`, err.message);
@@ -1523,6 +1541,14 @@ app.use(express.static(distPath));
 
 app.get('*', (req, res) => {
   const filePath = path.join(distPath, 'index.html');
+  try {
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(content);
+      return;
+    }
+  } catch {}
   res.sendFile(filePath, (err) => {
     if (err && !res.headersSent) {
       console.error(`[Web] Error serving index.html from ${filePath}:`, err.message);

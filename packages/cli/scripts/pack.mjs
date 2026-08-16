@@ -55,10 +55,14 @@ async function run() {
     name: 'superagent-cli-pack',
     version: cliPkg.version,
     private: true,
+    bin: 'bundle.cjs',
     pkg: {
+      scripts: [
+        'bundle.cjs'
+      ],
       assets: [
-        'node_modules/@superagent/web/dist/**/*',
-        'web-dist/**/*'
+        'web-dist/**/*',
+        'node_modules/@superagent/web/dist/**/*'
       ]
     },
     dependencies: {
@@ -255,13 +259,14 @@ if (process.pkg) {
     console.log(`[pack] Compiling binary for target: ${target.id} ...`);
     sh('npx', [
       'pkg',
-      bundleFile,
+      'bundle.cjs',
+      '--config', 'package.json',
       '--target', target.id,
       '--output', targetBinPath,
       '--no-bytecode',
       '--public',
       '--public-packages', '*'
-    ], { cwd: cliDir });
+    ], { cwd: packDir });
 
     // Also copy to 'superagent' / 'superagent.exe' so users can run superagent directly
     const stdBinaryName = target.platform === 'win' ? 'superagent.exe' : 'superagent';
