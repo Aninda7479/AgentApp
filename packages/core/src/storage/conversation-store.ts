@@ -250,7 +250,26 @@ async function readChatRecord(
   configPath?: string
 ): Promise<StoredChat | null> {
   try {
-    const chat = await readJson<StoredChat>(chatJsonPath);
+    let chat = await readJson<StoredChat>(chatJsonPath);
+    // If chat.json is missing or has empty steps, check if a .bak file exists with actual steps
+    if (!chat || !Array.isArray(chat.steps) || chat.steps.length === 0) {
+      const bakPath = `${chatJsonPath}.bak`;
+      try {
+        const bakRaw = (await fsp.readFile(bakPath, 'utf-8')).trim();
+        if (bakRaw) {
+          const bakChat = JSON.parse(bakRaw) as StoredChat;
+          if (bakChat && Array.isArray(bakChat.steps) && bakChat.steps.length > 0) {
+            if (!chat) {
+              chat = bakChat;
+            } else {
+              chat.steps = bakChat.steps;
+            }
+          }
+        }
+      } catch {
+        /* ignore backup parse failure */
+      }
+    }
     if (!chat) return null;
     const config = configPath ? await readJson<StoredChatConfig>(configPath) : null;
 
@@ -472,8 +491,21 @@ export async function writeConversationStore(data: StoreData, userDataDir: strin
     const targetChatDir = getChatDirectory(userDataDir, chat.id, targetProjectKey);
     await ensureDirectory(targetChatDir);
     const { chatFile, configFile } = splitChat(chat);
-    await writeJson(getChatJsonPath(userDataDir, chat.id, targetProjectKey), {
+    const chatJsonPath = getChatJsonPath(userDataDir, chat.id, targetProjectKey);
+
+    // If incoming in-memory chat has empty steps (e.g. dormant/evicted from RAM),
+    // preserve the existing steps stored on disk!
+    let stepsToSave = chatFile.steps;
+    if (!Array.isArray(stepsToSave) || stepsToSave.length === 0) {
+      const existing = await readChatRecord(chatJsonPath, matchedProject?.name || '', targetProjectKey);
+      if (existing && Array.isArray(existing.steps) && existing.steps.length > 0) {
+        stepsToSave = existing.steps;
+      }
+    }
+
+    await writeJson(chatJsonPath, {
       ...chatFile,
+      steps: stepsToSave ?? [],
       projectStorageKey: targetProjectKey
     });
     await writeJson(getChatConfigPath(userDataDir, chat.id, targetProjectKey), {
