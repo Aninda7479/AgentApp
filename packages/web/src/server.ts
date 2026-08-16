@@ -31,6 +31,7 @@ import {
   SKILL_CATALOG,
   SkillStore,
   providerHealth,
+  ArtifactRunner,
   writeWebServerLock,
   clearWebServerLock,
   readWebServerLock,
@@ -93,6 +94,8 @@ const triggerEngine = new TriggerEngine({
   storagePath: path.join(userDataDir, 'config', 'triggers.json')
 });
 triggerEngine.start();
+
+const artifactRunner = new ArtifactRunner(path.join(userDataDir, 'artifacts'));
 
 // Web build version, read from the package manifest at startup.
 const WEB_VERSION = (() => {
@@ -419,6 +422,49 @@ Please optimize these system instructions to:
 
 // ─── API Router mapping Electron IPC ─────────────────────────────────────────
 app.post('/api/ipc/:channel', (req, res) => { void handleIpc(req, res); });
+
+// ─── Artifacts Dedicated Web Viewer ─────────────────────────────────────────
+// Serves artifact static bundles directly with proper headers and isolated origins
+app.use('/api/artifacts/:id/view', (req, res) => {
+  const artifactId = req.params.id;
+  const artDir = path.join(userDataDir, 'artifacts', artifactId);
+  const legacyDir = path.join(userDataDir, 'artifact', artifactId);
+  const targetDir = fs.existsSync(artDir) ? artDir : fs.existsSync(legacyDir) ? legacyDir : null;
+
+  if (!targetDir) {
+    res.status(404).send(`Artifact "${artifactId}" not found in ~/.superagent/artifacts`);
+    return;
+  }
+
+  let subPath = req.path || '/';
+  if (subPath === '/' || !subPath) subPath = '/index.html';
+  if (subPath.startsWith('/')) subPath = subPath.slice(1);
+
+  const safeTargetDir = path.resolve(targetDir);
+  let filePath = path.resolve(safeTargetDir, subPath);
+
+  if (!filePath.startsWith(safeTargetDir + path.sep) && filePath !== safeTargetDir) {
+    res.status(403).send('Forbidden: Access outside artifact directory denied');
+    return;
+  }
+
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+    filePath = path.join(filePath, 'index.html');
+  }
+
+  if (!fs.existsSync(filePath)) {
+    // Fallback to index.html for SPAs
+    const fallback = path.join(safeTargetDir, 'index.html');
+    if (fs.existsSync(fallback)) {
+      filePath = fallback;
+    } else {
+      res.status(404).send('Not Found');
+      return;
+    }
+  }
+
+  res.sendFile(filePath);
+});
 
 // Provider connectivity proxy — forwards provider API calls server-side so the
 // web/VPS build (which reuses the *same* desktop renderer) can "Test & Connect"
@@ -1183,56 +1229,17 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
       case 'artifact:list':
       case 'artifact_list':
       case 'artifact-list': {
-        const getDir = () => {
-          const primary = path.join(userDataDir, 'artifacts');
-          const legacy = path.join(userDataDir, 'artifact');
-          if (!fs.existsSync(primary) && fs.existsSync(legacy)) return legacy;
-          return primary;
-        };
-        const artDir = getDir();
-        const dirsToScan = [artDir];
-        const legacy = path.join(userDataDir, 'artifact');
-        if (artDir !== legacy && fs.existsSync(legacy)) {
-          dirsToScan.push(legacy);
-        }
-
-        const items: any[] = [];
-        const seenIds = new Set<string>();
-
-        for (const dir of dirsToScan) {
-          if (fs.existsSync(dir)) {
-            const entries = fs.readdirSync(dir);
-            for (const folder of entries) {
-              if (seenIds.has(folder)) continue;
-              const folderPath = path.join(dir, folder);
-              try {
-                if (fs.statSync(folderPath).isDirectory()) {
-                  const manifestPath = path.join(folderPath, 'manifest.json');
-                  if (fs.existsSync(manifestPath)) {
-                    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-                    seenIds.add(folder);
-                    items.push({
-                      id: folder,
-                      manifest,
-                      status: 'stopped',
-                      path: folderPath
-                    });
-                  }
-                }
-              } catch {}
-            }
-          }
-        }
-        result = items;
+        const list = await artifactRunner.scanArtifacts();
+        result = list.map((a) => ({
+          ...a,
+          url: a.url || `/api/artifacts/${a.id}/view/`
+        }));
         break;
       }
       case 'artifact:openFolder':
       case 'artifact_open_folder':
       case 'artifact-open-folder': {
-        const artDir = path.join(userDataDir, 'artifacts');
-        if (!fs.existsSync(artDir)) {
-          fs.mkdirSync(artDir, { recursive: true });
-        }
+        const artDir = artifactRunner.getStoreDirectory();
         const winPath = artDir.replace(/\//g, '\\');
         const cmd = process.platform === 'win32'
           ? `cmd /c start "" "${winPath}"`
@@ -1254,178 +1261,52 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
       case 'artifact_open':
       case 'artifact-open': {
         const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
-        let artDir = path.join(userDataDir, 'artifacts', artId || '');
-        if (!fs.existsSync(artDir)) {
-          const legacyDir = path.join(userDataDir, 'artifact', artId || '');
-          if (fs.existsSync(legacyDir)) artDir = legacyDir;
+        try {
+          result = await artifactRunner.openArtifact(artId);
+        } catch (err: any) {
+          console.error('[Artifacts] Failed to open artifact:', err);
+          result = { ok: false, error: err.message };
         }
-        const targetHtml = path.join(artDir, 'index.html');
-        const targetPath = fs.existsSync(targetHtml) ? targetHtml : artDir;
-        const cmd = process.platform === 'win32'
-          ? `start "" "${targetPath}"`
-          : process.platform === 'darwin'
-          ? `open "${targetPath}"`
-          : `xdg-open "${targetPath}"`;
-        exec(cmd, (err) => {
-          if (err) console.error('[Artifacts] Failed to open artifact:', err);
-        });
-        result = { success: true, path: targetPath };
         break;
       }
       case 'artifact:start':
       case 'artifact_start':
       case 'artifact-start': {
         const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
-        result = { id: artId, status: 'running' };
+        result = await artifactRunner.startArtifact(artId);
         break;
       }
       case 'artifact:stop':
       case 'artifact_stop':
       case 'artifact-stop': {
         const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
-        result = { id: artId, status: 'stopped' };
+        result = await artifactRunner.stopArtifact(artId);
         break;
       }
       case 'artifact:delete':
       case 'artifact_delete':
       case 'artifact-delete': {
         const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
-        const artDir = path.join(userDataDir, 'artifacts', artId || '');
-        const legacyDir = path.join(userDataDir, 'artifact', artId || '');
-        if (fs.existsSync(artDir)) {
-          fs.rmSync(artDir, { recursive: true, force: true });
-        }
-        if (fs.existsSync(legacyDir)) {
-          fs.rmSync(legacyDir, { recursive: true, force: true });
-        }
+        await artifactRunner.deleteArtifact(artId);
         result = { success: true };
         break;
       }
       case 'artifact:ensureSeeds':
       case 'artifact_ensure_seeds':
       case 'artifact-ensure-seeds': {
-        const artDir = path.join(userDataDir, 'artifacts');
-        if (!fs.existsSync(artDir)) {
-          fs.mkdirSync(artDir, { recursive: true });
-        }
-        const calcDir = path.join(artDir, 'quick-calc');
-        if (!fs.existsSync(calcDir)) {
-          fs.mkdirSync(calcDir, { recursive: true });
-          fs.writeFileSync(path.join(calcDir, 'manifest.json'), JSON.stringify({
-            id: 'quick-calc',
-            name: 'Quick Calculator',
-            description: 'Scientific mini-calculator micro-app',
-            version: '1.0.0',
-            type: 'static',
-            entry: 'index.html',
-            port: 3080,
-            createdAt: new Date().toISOString(),
-            tags: ['utility', 'calculator', 'math']
-          }, null, 2));
-          fs.writeFileSync(path.join(calcDir, 'index.html'), `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quick Calculator</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
-    body { background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; }
-    .calc { background: rgba(30, 41, 59, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; width: 100%; max-width: 320px; padding: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
-    .display { background: #020617; border-radius: 12px; padding: 16px; text-align: right; font-size: 28px; font-weight: 600; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.08); min-height: 64px; overflow-x: auto; color: #38bdf8; }
-    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-    button { background: rgba(51, 65, 85, 0.7); color: #f8fafc; border: 1px solid rgba(255,255,255,0.08); padding: 14px; font-size: 18px; font-weight: 600; border-radius: 10px; cursor: pointer; transition: all 0.15s ease; }
-    button:hover { background: rgba(71, 85, 105, 0.9); transform: translateY(-1px); }
-    button.op { background: rgba(14, 165, 233, 0.2); color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); }
-    button.eq { background: #0284c7; color: #fff; grid-column: span 2; }
-    button.clear { background: rgba(239, 68, 68, 0.2); color: #f87171; border-color: rgba(248, 113, 113, 0.3); }
-  </style>
-</head>
-<body>
-  <div class="calc">
-    <div class="display" id="display">0</div>
-    <div class="grid">
-      <button class="clear" onclick="clearDisplay()">C</button>
-      <button onclick="append('(')">(</button>
-      <button onclick="append(')')">)</button>
-      <button class="op" onclick="append('/')">÷</button>
-      <button onclick="append('7')">7</button>
-      <button onclick="append('8')">8</button>
-      <button onclick="append('9')">9</button>
-      <button class="op" onclick="append('*')">×</button>
-      <button onclick="append('4')">4</button>
-      <button onclick="append('5')">5</button>
-      <button onclick="append('6')">6</button>
-      <button class="op" onclick="append('-')">-</button>
-      <button onclick="append('1')">1</button>
-      <button onclick="append('2')">2</button>
-      <button onclick="append('3')">3</button>
-      <button class="op" onclick="append('+')">+</button>
-      <button onclick="append('0')">0</button>
-      <button onclick="append('.')">.</button>
-      <button class="eq" onclick="calculate()">=</button>
-    </div>
-  </div>
-  <script>
-    const display = document.getElementById('display');
-    let expr = '0';
-    function update() { display.innerText = expr || '0'; }
-    function append(v) { if (expr === '0' && v !== '.') expr = ''; expr += v; update(); }
-    function clearDisplay() { expr = '0'; update(); }
-    function calculate() { try { expr = String(Function('"use strict";return (' + expr + ')')()); } catch(e) { expr = 'Error'; } update(); }
-  </script>
-</body>
-</html>`);
-        }
-
-        const padDir = path.join(artDir, 'scratchpad');
-        if (!fs.existsSync(padDir)) {
-          fs.mkdirSync(padDir, { recursive: true });
-          fs.writeFileSync(path.join(padDir, 'manifest.json'), JSON.stringify({
-            id: 'scratchpad',
-            name: 'Super Scratchpad',
-            description: 'Persistent markdown & note-taking micro-app',
-            version: '1.0.0',
-            type: 'static',
-            entry: 'index.html',
-            port: 3081,
-            createdAt: new Date().toISOString(),
-            tags: ['notes', 'markdown', 'productivity']
-          }, null, 2));
-          fs.writeFileSync(path.join(padDir, 'index.html'), `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Super Scratchpad</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
-    body { background: #0b0f19; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; padding: 16px; }
-    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    h2 { font-size: 16px; color: #38bdf8; display: flex; align-items: center; gap: 8px; font-weight: 600; }
-    .status { font-size: 11px; color: #94a3b8; }
-    textarea { flex: 1; background: #111827; color: #f3f4f6; border: 1px solid #1f2937; border-radius: 12px; padding: 16px; font-size: 14px; line-height: 1.6; resize: none; outline: none; }
-    textarea:focus { border-color: #38bdf8; }
-  </style>
-</head>
-<body>
-  <header>
-    <h2>📝 Super Scratchpad</h2>
-    <span class="status" id="status">Auto-saved locally</span>
-  </header>
-  <textarea id="note" placeholder="Type your ideas, snippets, or scratch notes here..."></textarea>
-  <script>
-    const ta = document.getElementById('note');
-    const st = document.getElementById('status');
-    ta.value = localStorage.getItem('scratch_note') || '';
-    ta.addEventListener('input', () => {
-      localStorage.setItem('scratch_note', ta.value);
-      st.innerText = 'Saved at ' + new Date().toLocaleTimeString();
-    });
-  </script>
-</body>
-</html>`);
-        }
-        result = { success: true };
+        await artifactRunner.ensureSeedArtifacts();
+        const list = await artifactRunner.scanArtifacts();
+        result = list.map((a) => ({
+          ...a,
+          url: a.url || `/api/artifacts/${a.id}/view/`
+        }));
+        break;
+      }
+      case 'artifact:logs':
+      case 'artifact_logs':
+      case 'artifact-logs': {
+        const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
+        result = artifactRunner.getArtifactLogs(artId, args[1] || 50);
         break;
       }
 

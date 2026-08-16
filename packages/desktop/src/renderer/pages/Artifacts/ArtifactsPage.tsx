@@ -206,15 +206,31 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
 
   // Open Live Preview modal
   const handleOpenPreview = async (art: ArtifactRuntimeState) => {
-    setPreviewArtifact(art);
+    let currentArt = art;
+    if (art.status !== 'running' && ipc) {
+      setActionLoading((prev) => ({ ...prev, [art.id]: true }));
+      try {
+        const started = await ipc.invoke('artifact:start', art.id);
+        if (started && started.status === 'running') {
+          currentArt = { ...art, ...started };
+          setArtifacts((prev) => prev.map((a) => (a.id === art.id ? currentArt : a)));
+        }
+      } catch (e) {
+        console.warn('[Artifacts] Auto-start on preview failed:', e);
+      } finally {
+        setActionLoading((prev) => ({ ...prev, [art.id]: false }));
+      }
+    }
+
+    setPreviewArtifact(currentArt);
     setPreviewTab('preview');
     setPreviewKey((k) => k + 1);
 
     // Try loading entry file content for code tab
-    if (ipc && art.path && art.manifest.entry) {
+    if (ipc && currentArt.path && currentArt.manifest.entry) {
       setLoadingEntry(true);
       try {
-        const entryFullPath = `${art.path}/${art.manifest.entry}`.replace(/\\/g, '/');
+        const entryFullPath = `${currentArt.path}/${currentArt.manifest.entry}`.replace(/\\/g, '/');
         const content = await ipc.invoke('read-file-base64', entryFullPath).catch(() => null);
         if (content) {
           try {
@@ -224,10 +240,10 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
             setEntryCode(content);
           }
         } else {
-          setEntryCode(`// Entry file: ${art.manifest.entry}\n// Located at: ${art.path}`);
+          setEntryCode(`// Entry file: ${currentArt.manifest.entry}\n// Located at: ${currentArt.path}`);
         }
       } catch {
-        setEntryCode(`// File path: ${art.path}/${art.manifest.entry}`);
+        setEntryCode(`// File path: ${currentArt.path}/${currentArt.manifest.entry}`);
       } finally {
         setLoadingEntry(false);
       }
@@ -589,6 +605,23 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
                         </span>
                       ))}
                     </div>
+
+                    {/* Live URL Pill (Click to copy / open) */}
+                    {(art.url || art.actualPort || art.manifest.port) && (
+                      <div className="mt-2.5 flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-brand-inner-bg/80 border border-brand-border/40 text-[11px] font-mono">
+                        <span className="text-brand-textMuted flex items-center gap-1.5 truncate">
+                          <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                          <span className="text-brand-textMain/90 truncate">{art.url || `http://127.0.0.1:${art.actualPort || art.manifest.port || 3080}`}</span>
+                        </span>
+                        <button
+                          onClick={() => handleCopyPath(art.url || `http://127.0.0.1:${art.actualPort || art.manifest.port || 3080}`, `url-${art.id}`)}
+                          className="text-brand-textMuted hover:text-brand-textMain flex items-center gap-1 hover:underline cursor-pointer"
+                          title="Copy HTTP URL"
+                        >
+                          {copiedId === `url-${art.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Card Bottom Actions Toolbar */}
@@ -751,6 +784,32 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
 
             {/* Modal Body */}
             <div className="flex-1 bg-brand-inner-bg relative overflow-hidden flex flex-col">
+              {/* Browser Address Bar */}
+              {previewTab === 'preview' && (
+                <div className="px-4 py-1.5 bg-brand-card/90 border-b border-brand-border/40 flex items-center justify-between gap-2 text-xs font-mono">
+                  <div className="flex items-center gap-2 flex-1 min-w-0 bg-brand-inner-bg px-3 py-1 rounded-md border border-brand-border/40">
+                    <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      HTTP
+                    </span>
+                    <span className="text-brand-textMain/90 truncate">
+                      {previewArtifact.url || `http://127.0.0.1:${previewArtifact.actualPort || previewArtifact.manifest.port || 3080}`}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() =>
+                      handleCopyPath(
+                        previewArtifact.url || `http://127.0.0.1:${previewArtifact.actualPort || previewArtifact.manifest.port || 3080}`,
+                        'modal-url'
+                      )
+                    }
+                    className="p-1.5 rounded-md hover:bg-[color:var(--brand-hover)] text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
+                    title="Copy live URL"
+                  >
+                    {copiedId === 'modal-url' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              )}
+
               {previewTab === 'preview' ? (
                 <iframe
                   key={previewKey}
@@ -758,9 +817,7 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
                   src={
                     previewArtifact.url
                       ? String(previewArtifact.url)
-                      : previewArtifact.path
-                      ? `file:///${previewArtifact.path.replace(/\\/g, '/')}/${previewArtifact.manifest.entry || 'index.html'}`
-                      : 'about:blank'
+                      : `/api/artifacts/${previewArtifact.id}/view/`
                   }
                   sandbox="allow-scripts allow-forms allow-modals allow-same-origin"
                   className="w-full h-full border-none bg-slate-950"

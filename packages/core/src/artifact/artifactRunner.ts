@@ -3,7 +3,7 @@ import path from 'path';
 import os from 'os';
 import http from 'http';
 import net from 'net';
-import { spawn, spawnSync, ChildProcess } from 'child_process';
+import { spawn, spawnSync, exec, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import {
   ArtifactManifest,
@@ -464,6 +464,9 @@ export class ArtifactRunner extends EventEmitter {
         state.actualPort = actualPort;
         state.url = `http://127.0.0.1:${actualPort}`;
         state.startedAt = new Date().toISOString();
+
+        // Non-blocking port readiness probe (up to 2 seconds)
+        await this.waitForPort(actualPort, 2000);
       }
 
       this.emit('stateChanged', state);
@@ -474,6 +477,39 @@ export class ArtifactRunner extends EventEmitter {
       this.emit('stateChanged', state);
       throw err;
     }
+  }
+
+  /**
+   * Starts the artifact (if not already running) and opens its dedicated HTTP URL in the system browser.
+   * NEVER opens raw file:// URLs.
+   */
+  public async openArtifact(id: string): Promise<{ ok: boolean; url: string; port?: number }> {
+    let state = this.states.get(id);
+    if (!state) {
+      await this.scanArtifacts();
+      state = this.states.get(id);
+    }
+    if (!state) {
+      throw new Error(`Artifact "${id}" not found`);
+    }
+
+    if (state.status !== 'running' || !state.url) {
+      state = await this.startArtifact(id);
+    }
+
+    const resolvedPort = Number(state.actualPort || state.manifest.port || 3080);
+    const liveUrl: string = state.url ? String(state.url) : `http://127.0.0.1:${resolvedPort}`;
+
+    // Launch dedicated HTTP URL in the OS default browser
+    if (process.platform === 'win32') {
+      exec(`cmd /c start "" "${liveUrl}"`);
+    } else if (process.platform === 'darwin') {
+      exec(`open "${liveUrl}"`);
+    } else {
+      exec(`xdg-open "${liveUrl}"`);
+    }
+
+    return { ok: true, url: liveUrl, port: state.actualPort ? Number(state.actualPort) : undefined };
   }
 
   /**
@@ -582,6 +618,32 @@ export class ArtifactRunner extends EventEmitter {
       };
       checkPort(startPort);
     });
+  }
+
+  /**
+   * Probes a port until a server responds or timeout is reached.
+   */
+  private async waitForPort(port: number, timeoutMs = 2500): Promise<boolean> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const active = await new Promise<boolean>((resolve) => {
+        const sock = net.createConnection({ port, host: '127.0.0.1' }, () => {
+          sock.destroy();
+          resolve(true);
+        });
+        sock.on('error', () => {
+          sock.destroy();
+          resolve(false);
+        });
+        sock.setTimeout(300, () => {
+          sock.destroy();
+          resolve(false);
+        });
+      });
+      if (active) return true;
+      await new Promise((r) => setTimeout(r, 80));
+    }
+    return false;
   }
 
   /**

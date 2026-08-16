@@ -5,15 +5,31 @@ use std::path::PathBuf;
 use sysinfo::System;
 use tauri::{AppHandle, Manager};
 
+fn default_artifact_type() -> String {
+    "static".to_string()
+}
+
+fn default_entry() -> String {
+    "index.html".to_string()
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ArtifactManifest {
     pub name: String,
+    #[serde(default)]
     pub description: String,
+    #[serde(default)]
     pub version: String,
-    #[serde(rename = "type")]
+    #[serde(rename = "type", default = "default_artifact_type")]
     pub artifact_type: String, // "web", "python", "node", "static"
-    pub icon: String,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub logo: Option<String>,
+    #[serde(default = "default_entry")]
     pub entry: String,
+    #[serde(default)]
+    pub port: Option<u16>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -69,12 +85,13 @@ pub fn artifact_list() -> Vec<ArtifactRuntimeState> {
                             .map(|s| s.to_string_lossy().to_string())
                             .unwrap_or_default();
 
+                        let port = manifest.port.unwrap_or(3080);
                         items.push(ArtifactRuntimeState {
                             id,
                             manifest,
                             status: "stopped".to_string(),
-                            port: None,
-                            url: None,
+                            port: Some(port),
+                            url: Some(format!("http://127.0.0.1:{}", port)),
                             path: path.to_string_lossy().to_string(),
                         });
                     }
@@ -91,6 +108,26 @@ pub fn artifact_start(id: String) -> Result<ArtifactRuntimeState, String> {
     let list = artifact_list();
     if let Some(mut art) = list.into_iter().find(|a| a.id == id) {
         art.status = "running".to_string();
+        let port = art.manifest.port.unwrap_or(3080);
+        let dir = get_artifacts_dir().join(&id);
+        let entry_path = dir.join(&art.manifest.entry);
+
+        if art.manifest.artifact_type == "node" {
+            let _ = std::process::Command::new("node")
+                .arg(&entry_path)
+                .current_dir(&dir)
+                .env("PORT", port.to_string())
+                .spawn();
+        } else if art.manifest.artifact_type == "python" {
+            let _ = std::process::Command::new("python")
+                .arg(&entry_path)
+                .current_dir(&dir)
+                .env("PORT", port.to_string())
+                .spawn();
+        }
+
+        art.port = Some(port);
+        art.url = Some(format!("http://127.0.0.1:{}", port));
         Ok(art)
     } else {
         Err(format!("Artifact {} not found", id))
@@ -111,28 +148,54 @@ pub fn artifact_stop(id: String) -> Result<ArtifactRuntimeState, String> {
 #[tauri::command]
 pub fn artifact_open(id: String) -> Result<(), String> {
     let dir = get_artifacts_dir().join(&id);
-    let target = dir.join("index.html");
-    let target_str = if target.exists() {
-        target.to_string_lossy().to_string()
-    } else {
-        dir.to_string_lossy().to_string()
-    };
+    let manifest_path = dir.join("manifest.json");
+    let mut port: u16 = 3080;
+
+    if let Ok(content) = fs::read_to_string(&manifest_path) {
+        if let Ok(manifest) = serde_json::from_str::<ArtifactManifest>(&content) {
+            if let Some(p) = manifest.port {
+                port = p;
+            }
+            let entry = if manifest.entry.is_empty() {
+                if manifest.artifact_type == "node" { "index.js".to_string() } else { "index.html".to_string() }
+            } else {
+                manifest.entry
+            };
+            let entry_path = dir.join(&entry);
+
+            if manifest.artifact_type == "node" {
+                let _ = std::process::Command::new("node")
+                    .arg(&entry_path)
+                    .current_dir(&dir)
+                    .env("PORT", port.to_string())
+                    .spawn();
+            } else if manifest.artifact_type == "python" {
+                let _ = std::process::Command::new("python")
+                    .arg(&entry_path)
+                    .current_dir(&dir)
+                    .env("PORT", port.to_string())
+                    .spawn();
+            }
+        }
+    }
+
+    let live_url = format!("http://127.0.0.1:{}", port);
 
     #[cfg(target_os = "windows")]
     {
         let _ = std::process::Command::new("cmd")
-            .args(["/C", "start", "", &target_str])
+            .args(["/C", "start", "", &live_url])
             .spawn();
     }
     #[cfg(target_os = "macos")]
     {
-        let _ = std::process::Command::new("open").arg(&target_str).spawn();
+        let _ = std::process::Command::new("open").arg(&live_url).spawn();
     }
     #[cfg(target_os = "linux")]
     {
-        let _ = std::process::Command::new("xdg-open").arg(&target_str).spawn();
+        let _ = std::process::Command::new("xdg-open").arg(&live_url).spawn();
     }
-    let _ = open::that(&target_str);
+    let _ = open::that(&live_url);
     Ok(())
 }
 
