@@ -142,14 +142,32 @@ describe('web IPC handler — triggers channels', () => {
     expect(toggleRes.statusCode).toBe(200);
     expect(toggleRes.body.data.enabled).toBe(false);
 
-    // 4. Run the trigger now
+    // 4. Update the trigger (name and prompt)
+    const updateRes = mockRes();
+    await handleIpc(
+      mockReq('triggers-update', {
+        args: [
+          {
+            id: triggerId,
+            name: 'Updated Test Trigger IPC',
+            prompt: 'Updated Prompt'
+          }
+        ]
+      }),
+      updateRes
+    );
+    expect(updateRes.statusCode).toBe(200);
+    expect(updateRes.body.data.name).toBe('Updated Test Trigger IPC');
+    expect(updateRes.body.data.prompt).toBe('Updated Prompt');
+
+    // 5. Run the trigger now
     const runRes = mockRes();
     await handleIpc(mockReq('triggers-run-now', { args: [triggerId] }), runRes);
     expect(runRes.statusCode).toBe(200);
     expect(runRes.body.data.success).toBe(true);
     expect(runRes.body.data.trigger.runCount).toBe(1);
 
-    // 5. Remove the trigger
+    // 6. Remove the trigger
     const removeRes = mockRes();
     await handleIpc(mockReq('triggers-remove', { args: [triggerId] }), removeRes);
     expect(removeRes.statusCode).toBe(200);
