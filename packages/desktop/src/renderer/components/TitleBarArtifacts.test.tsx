@@ -35,7 +35,6 @@ describe('ArtifactsPage Component', () => {
     );
     expect(html).toContain('Artifacts &amp; Micro-Apps');
     expect(html).toContain('~/.superagent/artifacts');
-    expect(html).toContain('Seed Starter Apps');
     expect(html).toContain('Open Folder');
   });
 });

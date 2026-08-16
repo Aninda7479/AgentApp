@@ -72,7 +72,8 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
   const ipc = propIpc || getIpc();
 
   const [artifacts, setArtifacts] = useState<ArtifactRuntimeState[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [initialLoaded, setInitialLoaded] = useState<boolean>(false);
   const [search, setSearch] = useState<string>('');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
@@ -86,29 +87,36 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
   const [entryCode, setEntryCode] = useState<string>('');
   const [loadingEntry, setLoadingEntry] = useState<boolean>(false);
 
-  const fetchArtifacts = useCallback(async () => {
+  const fetchArtifacts = useCallback(async (isManualRefresh = false) => {
     if (!ipc) {
       setLoading(false);
+      setInitialLoaded(true);
       return;
     }
-    setLoading(true);
+    if (isManualRefresh) {
+      setLoading(true);
+    }
     try {
       const list = await ipc.invoke('artifact:list');
       if (Array.isArray(list)) {
-        setArtifacts(list);
+        setArtifacts((prev) => (JSON.stringify(prev) === JSON.stringify(list) ? prev : list));
       } else {
         setArtifacts([]);
       }
     } catch (err: any) {
       console.error('[Artifacts] Failed to fetch artifacts:', err);
-      triggerToast?.('Failed to load artifacts', 'error');
     } finally {
       setLoading(false);
+      setInitialLoaded(true);
     }
-  }, [ipc, triggerToast]);
+  }, [ipc]);
 
+  const hasFetchedOnMount = React.useRef(false);
   useEffect(() => {
-    fetchArtifacts();
+    if (!hasFetchedOnMount.current) {
+      hasFetchedOnMount.current = true;
+      fetchArtifacts(false);
+    }
   }, [fetchArtifacts]);
 
   const handleStartArtifact = async (art: ArtifactRuntimeState) => {
@@ -117,7 +125,7 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
     try {
       await ipc.invoke('artifact:start', art.id);
       triggerToast?.(`Started "${art.manifest.name}"`);
-      await fetchArtifacts();
+      await fetchArtifacts(false);
     } catch (err: any) {
       console.error('[Artifacts] Failed to start artifact:', err);
       triggerToast?.(err.message || 'Failed to start artifact', 'error');
@@ -132,7 +140,7 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
     try {
       await ipc.invoke('artifact:stop', art.id);
       triggerToast?.(`Stopped "${art.manifest.name}"`);
-      await fetchArtifacts();
+      await fetchArtifacts(false);
     } catch (err: any) {
       console.error('[Artifacts] Failed to stop artifact:', err);
       triggerToast?.(err.message || 'Failed to stop artifact', 'error');
@@ -163,7 +171,7 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
       if (previewArtifact?.id === art.id) {
         setPreviewArtifact(null);
       }
-      await fetchArtifacts();
+      await fetchArtifacts(false);
     } catch (err: any) {
       console.error('[Artifacts] Failed to delete artifact:', err);
       triggerToast?.('Failed to delete artifact', 'error');
@@ -180,18 +188,6 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
     } catch (err: any) {
       console.error('[Artifacts] Failed to open folder:', err);
       triggerToast?.('Failed to open artifacts directory', 'error');
-    }
-  };
-
-  const handleEnsureSeeds = async () => {
-    if (!ipc) return;
-    try {
-      await ipc.invoke('artifact:ensureSeeds');
-      triggerToast?.('Starter micro-apps created in ~/.superagent/artifacts');
-      await fetchArtifacts();
-    } catch (err: any) {
-      console.error('[Artifacts] Failed to create seed artifacts:', err);
-      triggerToast?.('Could not initialize starter apps', 'error');
     }
   };
 
@@ -345,15 +341,6 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
         {/* Header Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={handleEnsureSeeds}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[color:var(--brand-hover)] border border-brand-border/40 hover:bg-[color:var(--brand-hover-strong)] text-brand-textMain transition-all cursor-pointer"
-            title="Create starter apps (Calculator & Scratchpad)"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>Seed Starter Apps</span>
-          </button>
-
-          <button
             onClick={handleOpenStorageFolder}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[color:var(--brand-hover)] border border-brand-border/40 hover:bg-[color:var(--brand-hover-strong)] text-brand-textMain transition-all cursor-pointer"
             title="Open ~/.superagent/artifacts in OS File Explorer"
@@ -363,7 +350,7 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
           </button>
 
           <button
-            onClick={fetchArtifacts}
+            onClick={() => fetchArtifacts(true)}
             disabled={loading}
             className={`p-2 rounded-lg bg-[color:var(--brand-hover)] border border-brand-border/40 hover:bg-[color:var(--brand-hover-strong)] text-brand-textMuted hover:text-brand-textMain transition-all cursor-pointer ${
               loading ? 'opacity-50 cursor-not-allowed' : ''
@@ -435,7 +422,7 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
 
       {/* ── Main Content Area: Cards Grid or Empty State ── */}
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
-        {loading && artifacts.length === 0 ? (
+        {!initialLoaded && artifacts.length === 0 ? (
           <div className="h-64 flex flex-col items-center justify-center text-center">
             <RefreshCw className="w-6 h-6 text-brand-textMuted animate-spin mb-3" />
             <p className="text-sm font-medium text-brand-textMain">Loading micro-apps...</p>
@@ -459,19 +446,11 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
 
                 <div className="flex items-center justify-center gap-3 flex-wrap mb-8">
                   <button
-                    onClick={handleEnsureSeeds}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-brand-highlight text-brand-highlight-text hover:bg-brand-highlight-hover transition-all shadow-md cursor-pointer"
-                  >
-                    <Sparkles className="w-4 h-4" />
-                    <span>Install Starter Apps</span>
-                  </button>
-
-                  <button
                     onClick={handleOpenStorageFolder}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium bg-brand-card border border-brand-border/60 text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all cursor-pointer"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-brand-card border border-brand-border/60 text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all cursor-pointer"
                   >
                     <FolderOpen className="w-4 h-4 text-brand-textMuted" />
-                    <span>Explore Folder</span>
+                    <span>Open Storage Folder</span>
                   </button>
                 </div>
 

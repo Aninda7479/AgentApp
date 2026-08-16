@@ -918,23 +918,27 @@ export const App: React.FC = () => {
   // ── Curated MCP + Plugin catalogs (sourced from Core) ──────────────────────
   useEffect(() => {
     if (!ipc) return;
-    ipc.invoke('mcp-catalog').then((list: any) => setMcpCatalog(Array.isArray(list) ? list : [])).catch(() => setMcpCatalog([]));
+    ipc.invoke('mcp-catalog').then((list: any) => {
+      const arr = Array.isArray(list) ? list : [];
+      setMcpCatalog((prev) => (JSON.stringify(prev) === JSON.stringify(arr) ? prev : arr));
+    }).catch(() => {});
+
     ipc
       .invoke('plugins-catalog')
       .then((list: any) => {
         const catalog = Array.isArray(list) ? list : [];
-        setPluginCatalog(catalog);
+        setPluginCatalog((prev) => (JSON.stringify(prev) === JSON.stringify(catalog) ? prev : catalog));
         ipc
           .invoke('settings-read')
           .then((current: any) => {
             const saved = (current?.plugins as Record<string, boolean>) || {};
             const state: Record<string, boolean> = {};
             for (const p of catalog) state[p.id] = saved[p.id] ?? p.defaultEnabled;
-            setPluginEnabled(state);
+            setPluginEnabled((prev) => (JSON.stringify(prev) === JSON.stringify(state) ? prev : state));
           })
-          .catch(() => { });
+          .catch(() => {});
       })
-      .catch(() => setPluginCatalog([]));
+      .catch(() => {});
   }, [ipc]);
 
   // ── 3D Studio visibility (depends on the user's 3D settings: enabled + mode) ──
@@ -960,10 +964,11 @@ export const App: React.FC = () => {
       .invoke('skills-list', { projectRoot: root })
       .then((res: any) => {
         const list = Array.isArray(res) ? res : (res?.skills ?? []);
-        setSkills(Array.isArray(list) ? list : []);
+        const cleanList = Array.isArray(list) ? list : [];
+        setSkills((prev) => (JSON.stringify(prev) === JSON.stringify(cleanList) ? prev : cleanList));
       })
-      .catch(() => setSkills([]));
-  }, [ipc, projects, activeProject]);
+      .catch(() => {});
+  }, [ipc, activeProject]);
 
   const handleToggleSkill = useCallback((id: string, enabled: boolean) => {
     if (!ipc) return;
