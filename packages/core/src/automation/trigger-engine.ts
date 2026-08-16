@@ -17,6 +17,8 @@ export interface TriggerConfig {
   lastStatus?: 'success' | 'error' | 'running';
   lastError?: string;
   runCount: number;
+  notifyTelegram?: boolean;
+  telegramChatId?: string;
 }
 
 export interface TriggerExecutionEvent {

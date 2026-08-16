@@ -239,6 +239,14 @@ export interface ChatTitleSettings {
   maxWords?: number;
 }
 
+/** Configuration for Telegram notifications & messaging. */
+export interface TelegramSettings {
+  enabled?: boolean;
+  botToken?: string;
+  chatId?: string;
+  parseMode?: 'Markdown' | 'HTML';
+}
+
 /** Top-level application settings object persisted to disk. */
 export interface AppSettings {
   theme?: ThemeSettings;
@@ -258,6 +266,7 @@ export interface AppSettings {
   circleSearch?: CircleSearchSettings;
   chatTitle?: ChatTitleSettings;
   artifact?: ArtifactSettings;
+  telegram?: TelegramSettings;
 }
 
 /** Resolved file system paths for user data and config files. */

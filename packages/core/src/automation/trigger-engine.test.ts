@@ -70,4 +70,25 @@ describe('TriggerEngine', () => {
     expect(list.length).toBe(1);
     expect(list[0].name).toBe('Persisted Trigger');
   });
+
+  it('should support and persist notifyTelegram configuration', () => {
+    const engine1 = new TriggerEngine({ storagePath: storageFile });
+    const added = engine1.addTrigger({
+      name: 'Daily Summary with Telegram',
+      type: 'cron',
+      enabled: true,
+      prompt: 'Summarize pull requests',
+      cronExpression: '0 9 * * 1-5',
+      notifyTelegram: true,
+      telegramChatId: '123456789'
+    });
+
+    expect(added.notifyTelegram).toBe(true);
+    expect(added.telegramChatId).toBe('123456789');
+
+    const engine2 = new TriggerEngine({ storagePath: storageFile });
+    const fetched = engine2.getTrigger(added.id);
+    expect(fetched?.notifyTelegram).toBe(true);
+    expect(fetched?.telegramChatId).toBe('123456789');
+  });
 });

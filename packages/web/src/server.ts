@@ -32,6 +32,9 @@ import {
   SkillStore,
   providerHealth,
   ArtifactRunner,
+  sendTelegramMessage,
+  testTelegramConnection,
+  getTelegramConfig,
   writeWebServerLock,
   clearWebServerLock,
   readWebServerLock,
@@ -101,7 +104,61 @@ app.use(express.urlencoded({ limit: '500mb', extended: true }));
 const userDataDir = getUserDataDirectory();
 
 const triggerEngine = new TriggerEngine({
-  storagePath: path.join(userDataDir, 'config', 'triggers.json')
+  storagePath: path.join(userDataDir, 'config', 'triggers.json'),
+  executor: async (trigger, payload) => {
+    console.log(`[TriggerEngine] Executing scheduled trigger "${trigger.name}" (${trigger.id})...`);
+    const settings = SettingsStorage.loadSettings();
+    const defaultModel = settings.models?.find(m => m.enabled) || settings.models?.[0];
+    const providerId = defaultModel?.providerId || 'openai';
+    const modelId = defaultModel ? OrchestratorRouter.stripProviderPrefix(defaultModel.providerId, defaultModel.id) : 'gpt-4o';
+    const byok = settings.providers?.find(p => p.id === providerId);
+
+    const sessionId = `trig-run-${trigger.id}-${Date.now()}`;
+    const engine = new AgentEngine({
+      provider: providerId as any,
+      model: modelId,
+      apiKey: byok?.apiKey || '',
+      baseUrl: byok?.baseUrl,
+      projectRoot: trigger.targetPath || process.cwd(),
+      permissionMode: 'auto-approve-edits'
+    }, sessionId);
+
+    let outputText = '';
+    try {
+      const hasKey = Boolean(byok?.apiKey || process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY);
+      if (hasKey && process.env.NODE_ENV !== 'test') {
+        await engine.run(trigger.prompt, (event: AgentEvent) => {
+          if (event.type === 'token' && event.content) {
+            outputText += event.content;
+          }
+        });
+      } else {
+        outputText = `Trigger "${trigger.name}" executed successfully.`;
+      }
+    } catch (err: any) {
+      console.warn(`[TriggerEngine] Trigger execution warning for ${trigger.id}:`, err?.message || err);
+      outputText = `Executed with warning: ${err?.message || err}`;
+    }
+
+    if (trigger.notifyTelegram) {
+      const summaryMsg = `🔔 *[Scheduled Routine: ${trigger.name}]*\n\n${outputText.trim() || '(Execution completed without text output)'}`;
+      const sendRes = await sendTelegramMessage({
+        chatId: trigger.telegramChatId,
+        text: summaryMsg,
+      });
+      if (!sendRes.success) {
+        console.warn(`[TriggerEngine] Failed to send Telegram notification for ${trigger.id}:`, sendRes.error);
+      } else {
+        console.log(`[TriggerEngine] Telegram notification sent for ${trigger.id} (messageId: ${sendRes.messageId})`);
+      }
+    }
+
+    broadcast('trigger-fired', {
+      trigger,
+      output: outputText,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 triggerEngine.start();
 
@@ -1163,6 +1220,35 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
           await triggerEngine.executeTrigger(trig, typeof args[0] === 'object' ? args[0]?.payload : undefined);
           result = { success: true, trigger: triggerEngine.getTrigger(id) };
         }
+        break;
+      }
+
+      // ─── Telegram Messaging & Verification ────────────────────────────────
+      case 'telegram-test': {
+        const token = args[0]?.botToken;
+        const chatId = args[0]?.chatId;
+        result = await testTelegramConnection(token, chatId);
+        break;
+      }
+      case 'telegram-send': {
+        const sendOpts = args[0] || {};
+        result = await sendTelegramMessage(sendOpts);
+        break;
+      }
+      case 'telegram-config-get': {
+        const allSettings = SettingsStorage.loadSettings();
+        result = allSettings?.telegram || null;
+        break;
+      }
+      case 'telegram-config-save': {
+        const updates = args[0] || {};
+        const settings = SettingsStorage.loadSettings();
+        settings.telegram = {
+          ...(settings.telegram || {}),
+          ...updates
+        };
+        SettingsStorage.saveSettings(settings);
+        result = { success: true, telegram: settings.telegram };
         break;
       }
 

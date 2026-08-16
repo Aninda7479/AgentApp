@@ -22,6 +22,7 @@ import { WebAppSettings } from './WebAppSettings';
 import { CircleSearchSettings } from './CircleSearchSettings';
 import { MemorySettings } from './MemorySettings';
 import { ArtifactSettings } from './ArtifactSettings';
+import { TelegramSettings } from './TelegramSettings';
 import { browserSafeFetch } from '../../web-fetch.js';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 
@@ -38,6 +39,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   voice: 'Voice & Mic',
   'circle-search': 'Circle Search',
   usage: 'AI Usage',
+  telegram: 'Telegram',
   skills: 'Skills',
   connectors: 'Connectors',
   plugins: 'Plugins',
@@ -431,6 +433,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         )}
         {activeCategory === 'voice' && <VoiceSettings />}
         {activeCategory === 'usage' && <UsageTrackerSettings />}
+        {activeCategory === 'telegram' && <TelegramSettings />}
         {(activeCategory === 'skills' ||
           activeCategory === 'connectors' ||
           activeCategory === 'plugins') && (

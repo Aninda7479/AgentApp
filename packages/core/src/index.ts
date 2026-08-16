@@ -74,6 +74,7 @@ export * from './integrations/catalog.js';
 export * from './integrations/partner-store.js';
 export * from './integrations/plugins.js';
 export * from './integrations/skills-catalog.js';
+export * from './integrations/telegram.js';
 
 export * from './media/router.js';
 export * from './media/image.js';
