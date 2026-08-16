@@ -73,12 +73,36 @@ export interface StoredProject {
   storageKey?: string;
 }
 
+export interface TrajectoryAttachment {
+  name: string;
+  path: string;
+  mediaType: 'image' | 'pdf' | 'ppt' | 'audio' | 'video' | 'code' | 'file';
+  size?: number;
+  url?: string;
+}
+
+export interface TrajectoryCodeBlock {
+  language: string;
+  code: string;
+  filename?: string;
+}
+
 export interface TrajectoryStepMetadata {
+  model?: string;
+  cwd?: string;
+  command?: string;
+  toolArgs?: Record<string, unknown>;
+  toolResult?: string;
+  exitCode?: number;
+  durationMs?: number;
   filename?: string;
   originalCode?: string;
   modifiedCode?: string;
-  mediaType?: 'image' | 'pdf' | 'ppt' | 'audio';
+  mediaType?: 'image' | 'pdf' | 'ppt' | 'audio' | 'video' | 'code' | 'file';
   mediaPath?: string;
+  attachments?: TrajectoryAttachment[];
+  codeBlocks?: TrajectoryCodeBlock[];
+  sandboxMode?: 'sandboxed' | 'full';
   addedLines?: number;
   removedLines?: number;
   filesExplored?: number;
@@ -95,6 +119,7 @@ export interface TrajectoryStep {
   timestamp?: string;
   status?: 'pending' | 'running' | 'success' | 'error';
   toolName?: string;
+  model?: string;
   metadata?: TrajectoryStepMetadata;
 }
 

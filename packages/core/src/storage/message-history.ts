@@ -2,15 +2,62 @@ import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { getUserDataDirectory } from './locations.js';
-import { getChatJsonPath } from './conversation-paths.js';
+import { getChatJsonPath, getConversationRoots } from './conversation-paths.js';
 import type { ChatMessage } from '../types/agent.js';
+import type { TrajectoryStep, TrajectoryAttachment, TrajectoryCodeBlock } from './conversation-types.js';
 
 function safeName(sessionId: string): string {
   return sessionId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 128) || 'session';
 }
 
-function filePathFor(sessionId: string): string {
-  return getChatJsonPath(getUserDataDirectory(), safeName(sessionId));
+async function resolveSessionFilePath(sessionId: string): Promise<string> {
+  const userDataDir = getUserDataDirectory();
+  const safeId = safeName(sessionId);
+  const standalone = getChatJsonPath(userDataDir, safeId);
+  if (fs.existsSync(standalone)) return standalone;
+
+  const roots = getConversationRoots(userDataDir);
+  try {
+    if (fs.existsSync(roots.projectsDir)) {
+      const projectFolders = await fsp.readdir(roots.projectsDir);
+      for (const p of projectFolders) {
+        const candidate = getChatJsonPath(userDataDir, safeId, p);
+        if (fs.existsSync(candidate)) return candidate;
+      }
+    }
+  } catch {
+    /* ignore search error */
+  }
+
+  return standalone;
+}
+
+function extractText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part: any) => {
+        if (typeof part === 'string') return part;
+        if (part?.type === 'text' && typeof part.text === 'string') return part.text;
+        if (part?.type === 'image_url') return `[Image attachment: ${part.image_url?.url ? 'image' : ''}]`;
+        return JSON.stringify(part);
+      })
+      .join('\n');
+  }
+  return content ? JSON.stringify(content) : '';
+}
+
+function extractCodeBlocks(text: string): TrajectoryCodeBlock[] {
+  const blocks: TrajectoryCodeBlock[] = [];
+  const regex = /```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    blocks.push({
+      language: match[1] || 'text',
+      code: match[2].trimEnd()
+    });
+  }
+  return blocks;
 }
 
 export class MessageHistoryStore {
@@ -43,7 +90,7 @@ export class MessageHistoryStore {
     this.timers.set(sessionId, t);
   }
 
-  /** Append buffered messages to the JSON transcript in ~/.superagent/conversation/chats/<id>/chat.json. */
+  /** Append buffered messages to the JSON transcript in ~/.superagent/conversation/chats/<id>/chat.json or projects. */
   public static async flush(sessionId: string): Promise<void> {
     const existing = this.inflight.get(sessionId);
     if (existing) return existing;
@@ -53,12 +100,13 @@ export class MessageHistoryStore {
       if (!buf || buf.length === 0) return;
       this.buffers.set(sessionId, []);
       try {
-        const file = filePathFor(sessionId);
+        const file = await resolveSessionFilePath(sessionId);
         await fsp.mkdir(path.dirname(file), { recursive: true });
 
-        let existingSteps: any[] = [];
+        let existingSteps: TrajectoryStep[] = [];
         let existingMessages: any[] = [];
         let title = sessionId;
+        let project = '';
         let timestamp = new Date().toISOString();
 
         if (fs.existsSync(file)) {
@@ -68,22 +116,111 @@ export class MessageHistoryStore {
             existingSteps = Array.isArray(parsed.steps) ? parsed.steps : [];
             existingMessages = Array.isArray(parsed.messages) ? parsed.messages : [];
             title = parsed.title || sessionId;
+            project = parsed.project || '';
             timestamp = parsed.timestamp || timestamp;
           } catch {
             /* ignore parse failure */
           }
         }
 
-        const newSteps = buf.map((m, i) => ({
-          id: (m as any).id || `msg-${Date.now()}-${i}`,
-          type: m.role as any,
-          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-          timestamp: new Date().toISOString()
-        }));
+        const newSteps: TrajectoryStep[] = [];
+        for (let i = 0; i < buf.length; i++) {
+          const m = buf[i];
+          const text = extractText(m.content);
+          const modelName = (m as any).model;
+          const ts = (m as any).timestamp || new Date().toISOString();
+
+          if (m.role === 'user') {
+            const rawAttachments = (m as any).attachments || [];
+            const attachments: TrajectoryAttachment[] = Array.isArray(rawAttachments)
+              ? rawAttachments.map((a: any) => ({
+                  name: a.name || a.filename || 'attachment',
+                  path: a.path || a.fullPath || '',
+                  mediaType: a.mediaType || (a.filename?.endsWith('.pdf') ? 'pdf' : 'file'),
+                  size: a.size,
+                  url: a.url
+                }))
+              : [];
+            newSteps.push({
+              id: (m as any).id || `msg-${Date.now()}-${i}`,
+              type: 'user',
+              content: text,
+              timestamp: ts,
+              model: modelName,
+              metadata: {
+                model: modelName,
+                attachments: attachments.length > 0 ? attachments : undefined,
+                sandboxMode: (m as any).sandboxMode
+              }
+            });
+          } else if (m.role === 'assistant') {
+            const codeBlocks = extractCodeBlocks(text);
+            newSteps.push({
+              id: (m as any).id || `msg-${Date.now()}-${i}`,
+              type: 'assistant',
+              content: text,
+              timestamp: ts,
+              model: modelName,
+              metadata: {
+                model: modelName,
+                codeBlocks: codeBlocks.length > 0 ? codeBlocks : undefined,
+                workedDuration: (m as any).workedDuration,
+                sandboxMode: (m as any).sandboxMode
+              }
+            });
+
+            if (m.toolCalls && Array.isArray(m.toolCalls)) {
+              for (const tc of m.toolCalls) {
+                const toolArgs = tc.args || {};
+                const cmd = toolArgs.CommandLine || toolArgs.command;
+                const cwd = toolArgs.Cwd || toolArgs.cwd;
+                newSteps.push({
+                  id: tc.id || `tool-${tc.toolName}-${Date.now()}`,
+                  type: 'tool_call',
+                  toolName: tc.toolName,
+                  content: `${tc.toolName}(${JSON.stringify(toolArgs)})`,
+                  status: tc.status === 'failed' ? 'error' : tc.status === 'completed' ? 'success' : 'running',
+                  timestamp: ts,
+                  model: modelName,
+                  metadata: {
+                    model: modelName,
+                    toolArgs,
+                    command: cmd,
+                    cwd,
+                    toolResult: tc.result
+                  }
+                });
+              }
+            }
+          } else if (m.role === 'tool') {
+            const toolName = (m as any).name || (m as any).toolName || 'tool';
+            const toolArgs = (m as any).toolArgs || {};
+            const cmd = toolArgs.CommandLine || toolArgs.command;
+            const cwd = toolArgs.Cwd || toolArgs.cwd;
+            newSteps.push({
+              id: (m as any).id || `tool-result-${Date.now()}-${i}`,
+              type: 'tool_result',
+              toolName,
+              content: text,
+              status: (m as any).isError ? 'error' : 'success',
+              timestamp: ts,
+              model: modelName,
+              metadata: {
+                model: modelName,
+                toolArgs: Object.keys(toolArgs).length > 0 ? toolArgs : undefined,
+                command: cmd,
+                cwd,
+                toolResult: text,
+                exitCode: (m as any).exitCode
+              }
+            });
+          }
+        }
 
         const newMessages = buf.map((m) => ({
           role: m.role,
-          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+          model: (m as any).model
         }));
 
         const allSteps = existingSteps.concat(newSteps);
@@ -99,7 +236,7 @@ export class MessageHistoryStore {
         const chatData = {
           id: safeName(sessionId),
           title,
-          project: '',
+          project,
           timestamp,
           steps: allSteps,
           messages: allMessages
@@ -129,7 +266,7 @@ export class MessageHistoryStore {
   /** Total persisted + buffered message count for a session. */
   public static async count(sessionId: string): Promise<number> {
     const buffered = this.buffers.get(sessionId)?.length ?? 0;
-    const file = filePathFor(sessionId);
+    const file = await resolveSessionFilePath(sessionId);
     if (!fs.existsSync(file)) return buffered;
     try {
       const data = await fsp.readFile(file, 'utf-8');
@@ -155,7 +292,7 @@ export class MessageHistoryStore {
     offset: number,
     limit: number
   ): Promise<ChatMessage[]> {
-    const file = filePathFor(sessionId);
+    const file = await resolveSessionFilePath(sessionId);
     const buffered = this.buffers.get(sessionId) ?? [];
     let persisted: ChatMessage[] = [];
     if (fs.existsSync(file)) {
@@ -192,7 +329,7 @@ export class MessageHistoryStore {
       clearTimeout(t);
       this.timers.delete(sessionId);
     }
-    const file = filePathFor(sessionId);
+    const file = await resolveSessionFilePath(sessionId);
     try {
       await fsp.unlink(file);
       const dir = path.dirname(file);

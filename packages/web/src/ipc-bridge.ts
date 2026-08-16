@@ -62,8 +62,52 @@ if (typeof window !== 'undefined') {
   connectWebSocket();
 }
 
+// Concurrency limiter & deduplication for web IPC bridge
+const MAX_CONCURRENT_FETCHES = 5;
+let activeFetchCount = 0;
+const fetchQueue: Array<() => void> = [];
+
+const inFlightReads = new Map<string, Promise<any>>();
+
+function isDeduplicatable(channel: string): boolean {
+  return (
+    channel.endsWith('-read') ||
+    channel.endsWith('-list') ||
+    channel.endsWith('-catalog') ||
+    channel === 'app-version' ||
+    channel === 'system-info' ||
+    channel === 'check-for-updates' ||
+    channel === 'store-read'
+  );
+}
+
+function processQueue() {
+  while (activeFetchCount < MAX_CONCURRENT_FETCHES && fetchQueue.length > 0) {
+    const next = fetchQueue.shift();
+    if (next) {
+      activeFetchCount++;
+      next();
+    }
+  }
+}
+
+async function enqueueFetch<T>(task: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    fetchQueue.push(() => {
+      task()
+        .then(resolve)
+        .catch(reject)
+        .finally(() => {
+          activeFetchCount--;
+          processQueue();
+        });
+    });
+    processQueue();
+  });
+}
+
 // Implement mock ipcRenderer
-/** Mock Electron ipcRenderer that routes IPC calls over HTTP fetch and WebSocket. */
+/** Mock Electron ipcRenderer that routes IPC calls over HTTP fetch and WebSocket with concurrency control. */
 const mockIpcRenderer = {
   invoke: async (channel: string, ...args: any[]): Promise<any> => {
     // `open-external` opens a URL in the OS shell on desktop. In the browser
@@ -74,42 +118,60 @@ const mockIpcRenderer = {
       return { ok: true };
     }
 
-    const performFetch = async () => {
-      const response = await fetch(`/api/ipc/${channel}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ args }),
-      });
-      // Session expired or unauthenticated — bounce to the login page cleanly.
-      if (response.status === 401) {
-        window.location.replace('/login');
-        return new Promise(() => {});
-      }
-      const result = await response.json();
-      if (result.error) {
-        throw new Error(result.error);
-      }
-      dispatchBackendStatus(true);
-      return result.data;
+    // Invalidate in-flight reads when writes happen
+    if (channel.endsWith('-write') || channel.endsWith('-save') || channel.endsWith('-delete')) {
+      inFlightReads.clear();
+    }
+
+    // In-flight read deduplication
+    const isRead = isDeduplicatable(channel);
+    const dedupeKey = isRead ? `${channel}:${JSON.stringify(args)}` : '';
+    if (isRead && inFlightReads.has(dedupeKey)) {
+      return inFlightReads.get(dedupeKey);
+    }
+
+    const executeCall = async () => {
+      const performFetch = async (retries = 2, delayMs = 150): Promise<any> => {
+        try {
+          const response = await fetch(`/api/ipc/${channel}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ args }),
+          });
+
+          // Session expired or unauthenticated — bounce to login
+          if (response.status === 401) {
+            window.location.replace('/login');
+            return new Promise(() => {});
+          }
+
+          const result = await response.json();
+          if (result.error) {
+            throw new Error(result.error);
+          }
+          return result.data;
+        } catch (err: any) {
+          if (retries > 0 && (err instanceof TypeError || err.message?.includes('fetch') || err.message?.includes('NetworkError'))) {
+            await new Promise((r) => setTimeout(r, delayMs));
+            return performFetch(retries - 1, delayMs * 2);
+          }
+          throw err;
+        }
+      };
+
+      return enqueueFetch(() => performFetch());
     };
 
-    try {
-      return await performFetch();
-    } catch (err: any) {
-      dispatchBackendStatus(false);
-      // Retry once for transient fetch/network errors (e.g. initial page load or SW updates)
-      if (err instanceof TypeError && (err.message.includes('fetch') || err.message.includes('NetworkError'))) {
-        try {
-          await new Promise((resolve) => setTimeout(resolve, 200));
-          return await performFetch();
-        } catch {
-          /* retry failed; surface final error below */
-        }
-      }
-      console.warn(`[IPC-Bridge] Channel "${channel}" fetch failed:`, err?.message || err);
-      throw err;
+    if (isRead) {
+      const promise = executeCall().finally(() => {
+        inFlightReads.delete(dedupeKey);
+      });
+      inFlightReads.set(dedupeKey, promise);
+      return promise;
     }
+
+    return executeCall();
   },
 
   on: (channel: string, callback: Function): void => {

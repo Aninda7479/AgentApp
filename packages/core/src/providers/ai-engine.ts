@@ -555,7 +555,13 @@ export class AgentEngine {
           role: 'assistant',
           content: fullContent,
           toolCalls: toolCalls.length > 0
-            ? toolCalls.map((tc) => ({ id: tc.id, toolName: tc.name, args: tc.args ?? {}, status: 'completed' as const }))
+            ? toolCalls.map((tc) => ({
+                id: tc.id,
+                toolName: tc.name,
+                args: tc.args ?? {},
+                status: 'completed' as const,
+                thoughtSignature: (tc as any).thoughtSignature
+              }))
             : undefined
         });
         emitContext();
@@ -695,8 +701,9 @@ export class AgentEngine {
             role: 'tool',
             content: historyResult,
             toolCallId: tc.id,
-            name: tc.name
-          });
+            name: tc.name,
+            thoughtSignature: (tc as any).thoughtSignature
+          } as any);
         }
 
         // Loop: continue with tool results fed back to model
@@ -1474,16 +1481,46 @@ export class AgentEngine {
         } else if (Array.isArray(m.content)) {
           for (const b of m.content) if (b.type === 'text' && b.text) parts.push({ text: b.text });
         }
-        for (const tc of m.toolCalls) {
-          parts.push({ functionCall: { name: tc.toolName, args: tc.args ?? {} } });
+
+        const hasAllThoughtSigs = m.toolCalls.every(tc => Boolean((tc as any).thoughtSignature || (tc as any).thought_signature));
+
+        if (hasAllThoughtSigs) {
+          for (const tc of m.toolCalls) {
+            const sig = (tc as any).thoughtSignature || (tc as any).thought_signature;
+            const fcObj: Record<string, unknown> = {
+              functionCall: { name: tc.toolName, args: tc.args ?? {} }
+            };
+            if (sig) {
+              fcObj.thought_signature = sig;
+            }
+            parts.push(fcObj);
+          }
+          contents.push({ role: 'model', parts });
+        } else {
+          for (const tc of m.toolCalls) {
+            parts.push({
+              text: `[Called tool ${tc.toolName} with arguments: ${JSON.stringify(tc.args ?? {})}]`
+            });
+          }
+          contents.push({ role: 'model', parts });
         }
-        contents.push({ role: 'model', parts });
       } else if (m.role === 'tool') {
         const text = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
-        contents.push({
-          role: 'user',
-          parts: [{ functionResponse: { name: m.name || 'tool', response: { result: text } } }]
-        });
+        const sig = (m as any).thoughtSignature || (m as any).thought_signature;
+        if (sig) {
+          contents.push({
+            role: 'user',
+            parts: [{
+              functionResponse: { name: m.name || 'tool', response: { result: text } },
+              thought_signature: sig
+            }]
+          });
+        } else {
+          contents.push({
+            role: 'user',
+            parts: [{ text: `[Tool result for ${m.name || 'tool'}]: ${text}` }]
+          });
+        }
       } else {
         const role = m.role === 'assistant' ? 'model' : 'user';
         const parts: Array<Record<string, unknown>> = [];
@@ -1510,15 +1547,23 @@ export class AgentEngine {
     }
     const systemInstruction = systemParts.length > 0 ? systemParts.join('\n\n') : undefined;
 
-    const tools = [{
-      functionDeclarations: this.tools.map(t => ({
-        name: t.name,
-        description: t.description,
-        parameters: sanitizeSchemaForGemini(t.parameters)
-      }))
-    }];
+    const toolNameMap = new Map<string, string>();
+    const tools = this.tools.length > 0 ? [{
+      functionDeclarations: this.tools.map(t => {
+        const sanitizedName = t.name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 63);
+        toolNameMap.set(sanitizedName, t.name);
+        return {
+          name: sanitizedName,
+          description: t.description,
+          parameters: sanitizeSchemaForGemini(t.parameters)
+        };
+      })
+    }] : undefined;
 
-    const payload: Record<string, unknown> = { contents, tools };
+    const payload: Record<string, unknown> = { contents };
+    if (tools) {
+      payload.tools = tools;
+    }
     if (systemInstruction) {
       payload.systemInstruction = { parts: [{ text: systemInstruction }] };
     }
@@ -1563,7 +1608,7 @@ export class AgentEngine {
     }
 
     let fullContent = '';
-    const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
+    const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown>; thoughtSignature?: string }> = [];
 
     if (response.body) {
       const reader = response.body.getReader();
@@ -1599,10 +1644,20 @@ export class AgentEngine {
                   onEvent({ type: 'token', sessionId: this.sessionId, content: part.text });
                 }
                 if (part.functionCall) {
+                  const rawName = part.functionCall.name;
+                  const originalName = toolNameMap.get(rawName) || rawName;
+                  const thoughtSig =
+                    (part as any).thought_signature ||
+                    (part as any).thoughtSignature ||
+                    (candidate as any).thought_signature ||
+                    (candidate as any).thoughtSignature ||
+                    (event as any).thought_signature ||
+                    (event as any).thoughtSignature;
                   toolCalls.push({
-                    id: `gemini-tc-${Date.now()}`,
-                    name: part.functionCall.name,
-                    args: part.functionCall.args || {}
+                    id: `gemini-tc-${Date.now()}-${toolCalls.length}`,
+                    name: originalName,
+                    args: part.functionCall.args || {},
+                    thoughtSignature: thoughtSig
                   });
                 }
               }

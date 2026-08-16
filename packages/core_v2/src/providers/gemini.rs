@@ -82,10 +82,7 @@ impl LlmProvider for GeminiProvider {
                             }
                             ContentBlock::ToolUse { name, input, .. } => {
                                 parts.push(json!({
-                                    "functionCall": {
-                                        "name": name,
-                                        "args": input
-                                    }
+                                    "text": format!("[Called tool: {} with arguments: {}]", name, input)
                                 }));
                             }
                             _ => {}
@@ -101,10 +98,7 @@ impl LlmProvider for GeminiProvider {
                     for block in &msg.content {
                         if let ContentBlock::ToolResult { tool_use_id, content, .. } = block {
                             parts.push(json!({
-                                "functionResponse": {
-                                    "name": tool_use_id,
-                                    "response": { "output": content }
-                                }
+                                "text": format!("[Tool result for {}]: {}", tool_use_id, content)
                             }));
                         }
                     }

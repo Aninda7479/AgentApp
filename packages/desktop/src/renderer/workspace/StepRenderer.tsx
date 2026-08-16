@@ -4,8 +4,27 @@
  */
 
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown, Terminal, CheckCircle2, AlertCircle, Copy, Check, Sparkles, Edit3, RotateCcw } from 'lucide-react';
-import type { TrajectoryStep } from '../core/types';
+import {
+  ChevronRight,
+  ChevronDown,
+  Terminal,
+  CheckCircle2,
+  AlertCircle,
+  Copy,
+  Check,
+  Sparkles,
+  Edit3,
+  RotateCcw,
+  Cpu,
+  Paperclip,
+  FileText,
+  Image as ImageIcon,
+  Music,
+  Video as VideoIcon,
+  FileCode,
+  File
+} from 'lucide-react';
+import type { TrajectoryStep, TrajectoryAttachment } from '../core/types';
 import { TrajectoryUtils } from '../services/TrajectoryUtils';
 
 interface StepRendererProps {
@@ -13,6 +32,24 @@ interface StepRendererProps {
   isWorking?: boolean;
   onUndoStep?: (stepId: string) => void;
   onEditStep?: (stepId: string, newContent: string) => void;
+}
+
+function renderAttachmentIcon(mediaType: string) {
+  switch (mediaType) {
+    case 'image':
+      return <ImageIcon size={13} className="text-cyan-400 shrink-0" />;
+    case 'video':
+      return <VideoIcon size={13} className="text-purple-400 shrink-0" />;
+    case 'audio':
+      return <Music size={13} className="text-pink-400 shrink-0" />;
+    case 'pdf':
+    case 'ppt':
+      return <FileText size={13} className="text-amber-400 shrink-0" />;
+    case 'code':
+      return <FileCode size={13} className="text-emerald-400 shrink-0" />;
+    default:
+      return <File size={13} className="text-slate-400 shrink-0" />;
+  }
 }
 
 export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onUndoStep, onEditStep }) => {
@@ -26,6 +63,9 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
+
+  const modelName = step.model || step.metadata?.model;
+  const attachments: TrajectoryAttachment[] = step.metadata?.attachments || [];
 
   if (step.type === 'user') {
     return (
@@ -93,9 +133,31 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
               </div>
             </div>
           ) : (
-            <div className="bg-blue-600/90 text-white rounded-2xl px-4 py-3 shadow-md backdrop-blur-sm border border-blue-500/30 w-full">
+            <div className="bg-blue-600/90 text-white rounded-2xl px-4 py-3 shadow-md backdrop-blur-sm border border-blue-500/30 w-full space-y-2">
+              {/* Attachments Pills */}
+              {attachments.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pb-1 border-b border-blue-400/30">
+                  {attachments.map((att, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-1 px-2 py-0.5 bg-blue-900/60 border border-blue-400/40 rounded-md text-[11px] text-blue-100"
+                    >
+                      {renderAttachmentIcon(att.mediaType)}
+                      <span className="font-mono truncate max-w-[180px]">{att.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="text-sm whitespace-pre-wrap break-words">{step.content}</div>
-              <div className="text-[10px] text-blue-200/70 text-right mt-1 font-mono flex items-center justify-end gap-2">
+
+              <div className="text-[10px] text-blue-200/70 text-right mt-1 font-mono flex items-center justify-end gap-2 flex-wrap">
+                {modelName && (
+                  <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-950/60 text-cyan-300 border border-cyan-500/20 text-[9px] font-semibold">
+                    <Cpu size={10} />
+                    <span>{modelName}</span>
+                  </span>
+                )}
                 {(step.metadata?.sandboxMode === 'sandboxed' || step.metadata?.sandboxMode === 'full') && (
                   <span className={`px-1 rounded-sm text-[8px] font-semibold uppercase tracking-wider ${
                     step.metadata.sandboxMode === 'sandboxed'
@@ -122,7 +184,15 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
         </div>
         <div className="flex-1 bg-brand-card/60 border border-brand-border rounded-2xl p-4 shadow-sm relative backdrop-blur-md">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-cyan-400 tracking-wide uppercase font-mono">Agent Assistant</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-cyan-400 tracking-wide uppercase font-mono">Agent Assistant</span>
+              {modelName && (
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-900 border border-cyan-500/20 text-[10px] font-mono text-cyan-300">
+                  <Cpu size={10} />
+                  <span>{modelName}</span>
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={handleCopy}
@@ -170,6 +240,9 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
   if (step.type === 'tool_call' || step.type === 'tool_result') {
     const summary = TrajectoryUtils.summarizeToolContent(step);
     const isError = step.status === 'error';
+    const toolArgs = (step.metadata?.toolArgs as any) || {};
+    const commandLine = step.metadata?.command || toolArgs?.CommandLine || toolArgs?.command;
+    const cwd = step.metadata?.cwd || toolArgs?.Cwd || toolArgs?.cwd;
 
     return (
       <div className="my-2 px-4">
@@ -185,6 +258,11 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
               <span className="text-brand-textMuted truncate">{summary}</span>
             </div>
             <div className="flex items-center gap-1.5 shrink-0 ml-2">
+              {modelName && (
+                <span className="px-1.5 py-0.5 rounded bg-slate-900 text-[9px] text-cyan-300 font-mono border border-cyan-500/20">
+                  {modelName}
+                </span>
+              )}
               {(step.metadata?.sandboxMode === 'sandboxed' || step.metadata?.sandboxMode === 'full') && (
                 <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
                   step.metadata.sandboxMode === 'sandboxed'
@@ -205,30 +283,29 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
           </button>
           {expanded && (
             <div className="p-3 text-xs font-mono bg-brand-bg/85 text-brand-textMuted border-t border-brand-border">
-              {(() => {
-                const toolArgs = step.metadata?.toolArgs as any;
-                const commandLine = toolArgs?.CommandLine || toolArgs?.command;
-                const cwd = toolArgs?.Cwd || toolArgs?.cwd;
-                return (
-                  <>
-                    {cwd && (
-                      <div className="mb-2 pb-2 border-b border-brand-border/40 text-[11px] text-brand-textMuted flex items-center gap-1.5">
-                        <span className="text-cyan-400/80">Directory:</span>
-                        <span className="text-brand-textMain font-semibold select-all">{cwd}</span>
-                      </div>
-                    )}
-                    {commandLine && (
-                      <div className="mb-2 pb-2 border-b border-brand-border/40 text-[11px] text-brand-textMuted flex items-center gap-1.5">
-                        <span className="text-cyan-400/80">Command:</span>
-                        <code className="text-brand-textMain bg-brand-card/60 px-1 py-0.5 rounded select-all font-semibold">{commandLine}</code>
-                      </div>
-                    )}
-                    <div className="overflow-x-auto whitespace-pre-wrap max-h-60 mt-2">
-                      {TrajectoryUtils.stripAnsi(step.content)}
-                    </div>
-                  </>
-                );
-              })()}
+              {cwd && (
+                <div className="mb-2 pb-2 border-b border-brand-border/40 text-[11px] text-brand-textMuted flex items-center gap-1.5">
+                  <span className="text-cyan-400/80 font-semibold">Directory (pwd):</span>
+                  <span className="text-brand-textMain font-mono select-all bg-brand-card/40 px-1.5 py-0.5 rounded">{cwd}</span>
+                </div>
+              )}
+              {commandLine && (
+                <div className="mb-2 pb-2 border-b border-brand-border/40 text-[11px] text-brand-textMuted flex items-center gap-1.5">
+                  <span className="text-cyan-400/80 font-semibold">Command:</span>
+                  <code className="text-brand-textMain bg-brand-card/60 px-1.5 py-0.5 rounded select-all font-semibold">{commandLine}</code>
+                </div>
+              )}
+              {Object.keys(toolArgs).length > 0 && !commandLine && (
+                <div className="mb-2 pb-2 border-b border-brand-border/40 text-[11px]">
+                  <span className="text-cyan-400/80 font-semibold block mb-1">Parameters:</span>
+                  <pre className="text-brand-textMuted bg-brand-card/40 p-1.5 rounded overflow-x-auto text-[10px]">
+                    {JSON.stringify(toolArgs, null, 2)}
+                  </pre>
+                </div>
+              )}
+              <div className="overflow-x-auto whitespace-pre-wrap max-h-60 mt-2">
+                {TrajectoryUtils.stripAnsi(step.content)}
+              </div>
             </div>
           )}
         </div>
@@ -243,6 +320,11 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
           <div className="flex items-center gap-2 mb-1 text-brand-textMuted font-semibold not-italic">
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping" />
             <span>Agent Thinking...</span>
+            {modelName && (
+              <span className="ml-auto px-1.5 py-0.5 rounded bg-slate-900 text-[9px] text-indigo-300 font-mono border border-indigo-500/20 not-italic">
+                {modelName}
+              </span>
+            )}
           </div>
           <div>{step.content}</div>
         </div>
@@ -252,3 +334,4 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
 
   return null;
 };
+

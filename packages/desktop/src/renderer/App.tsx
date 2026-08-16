@@ -882,7 +882,7 @@ export const App: React.FC = () => {
       if (!orchEnabled) {
         const currentModel = providerStore.getState().lastUsedModel;
         if (currentModel === 'Orchestrator' || currentModel === 'auto' || currentModel === 'Model Governance' || !currentModel) {
-          const firstModel = modelsCatalog.find((m) => m.enabled)?.name || providerStore.getState().models.find((m) => m.enabled)?.name || providerStore.getState().models[0]?.name || '';
+          const firstModel = providerStore.getState().models.find((m) => m.enabled)?.name || providerStore.getState().models[0]?.name || '';
           if (firstModel && firstModel !== currentModel) {
             console.log(`[App] Orchestrator disabled. Fallback to model: ${firstModel}`);
             providerStore.setLastUsedModel(firstModel);
@@ -901,7 +901,7 @@ export const App: React.FC = () => {
     return () => {
       ipc.removeListener('settings-changed', onSettingsChanged);
     };
-  }, [ipc, modelsCatalog]);
+  }, [ipc]);
 
   // Auto-close the mobile navigation drawer whenever the user navigates.
   useEffect(() => {
@@ -960,7 +960,7 @@ export const App: React.FC = () => {
         setShowStudio(cfg.enabled === true && cfg.mode === 'studio');
       })
       .catch(() => {});
-  }, [ipc, activeTab]);
+  }, [ipc]);
 
   // ── Discovered skills ──────────────────────────────────────────────────────
   const [importableSkills, setImportableSkills] = useState<{ id: string; name: string }[]>([]);
@@ -1208,9 +1208,7 @@ export const App: React.FC = () => {
     const unsubscribe = ErrorService.subscribe((context, message, stack) => {
       const lower = (message || '').toLowerCase();
       if (
-        lower.includes('failed to fetch') ||
         lower.includes('err_connection_refused') ||
-        lower.includes('networkerror') ||
         lower.includes('econnrefused')
       ) {
         setIsBackendDisconnected(true);

@@ -93,6 +93,18 @@ impl ConversationContext {
                     ContentBlock::ToolResult { content, .. } => {
                         total_chars += content.len();
                     }
+                    ContentBlock::Image { data, .. } => {
+                        total_chars += data.len().min(1000);
+                    }
+                    ContentBlock::Audio { data, .. } => {
+                        total_chars += data.len().min(1000);
+                    }
+                    ContentBlock::Video { data, .. } => {
+                        total_chars += data.len().min(1000);
+                    }
+                    ContentBlock::Document { filename, data, .. } => {
+                        total_chars += filename.len() + data.len().min(2000);
+                    }
                 }
             }
         }

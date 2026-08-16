@@ -13,6 +13,7 @@ export class SessionStreamBuffer {
   public stepId: string | null = null;
   public responseSeq: number = 0;
   public sandboxMode: 'sandboxed' | 'full' = 'sandboxed';
+  public modelName: string = '';
   private timerId: ReturnType<typeof setTimeout> | null = null;
   private startedAt: number = Date.now();
 
@@ -63,13 +64,22 @@ export class SessionStreamBuffer {
     const currentBuffer = this.buffer;
     const currentSeq = this.responseSeq;
     const currentSandbox = this.sandboxMode;
+    const currentModel = this.modelName;
     const duration = FormatUtils.formatWorkedDuration(Date.now() - this.startedAt);
 
     chatStore.updateSteps(this.chatId, (prev) => {
       const existingIdx = prev.findIndex((s) => s.id === currentStepId);
       if (existingIdx !== -1) {
         const updated = [...prev];
-        updated[existingIdx] = { ...updated[existingIdx], content: currentBuffer };
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          content: currentBuffer,
+          model: currentModel || updated[existingIdx].model,
+          metadata: {
+            ...updated[existingIdx].metadata,
+            model: currentModel || updated[existingIdx].metadata?.model,
+          },
+        };
         return updated;
       }
 
@@ -77,8 +87,10 @@ export class SessionStreamBuffer {
         id: currentStepId,
         type: 'assistant',
         content: currentBuffer,
+        model: currentModel || undefined,
         timestamp: FormatUtils.formatTimestamp(),
         metadata: {
+          model: currentModel || undefined,
           regenerationSeq: currentSeq,
           workedDuration: duration,
           sandboxMode: currentSandbox,
