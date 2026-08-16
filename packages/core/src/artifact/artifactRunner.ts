@@ -602,6 +602,95 @@ export class ArtifactRunner extends EventEmitter {
   }
 
   /**
+   * Returns the storage JSON path for an artifact: ~/.superagent/artifacts/<id>/data/storage.json
+   */
+  public getStorageFilePath(id: string): string {
+    const storeDir = this.getStoreDirectory();
+    const dataDir = path.join(storeDir, id, 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    return path.join(dataDir, 'storage.json');
+  }
+
+  /**
+   * Retrieves the full persistent storage object for an artifact.
+   */
+  public getStorage(id: string): Record<string, any> {
+    const filePath = this.getStorageFilePath(id);
+    if (!fs.existsSync(filePath)) {
+      return {};
+    }
+    try {
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return typeof parsed === 'object' && parsed !== null ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * Sets or merges full persistent storage for an artifact with atomic disk writes.
+   */
+  public setStorage(id: string, data: Record<string, any>, merge = false): Record<string, any> {
+    const current = merge ? this.getStorage(id) : {};
+    const updated = typeof data === 'object' && data !== null ? { ...current, ...data } : current;
+    const filePath = this.getStorageFilePath(id);
+    const tmpPath = `${filePath}.tmp.${Date.now()}`;
+    try {
+      fs.writeFileSync(tmpPath, JSON.stringify(updated, null, 2), 'utf-8');
+      fs.renameSync(tmpPath, filePath);
+    } catch (e) {
+      if (fs.existsSync(tmpPath)) {
+        try { fs.unlinkSync(tmpPath); } catch {}
+      }
+      fs.writeFileSync(filePath, JSON.stringify(updated, null, 2), 'utf-8');
+    }
+    this.emit('storageChanged', { id, data: updated });
+    return updated;
+  }
+
+  /**
+   * Retrieves a single key from persistent storage.
+   */
+  public getStorageKey(id: string, key: string): any {
+    const storage = this.getStorage(id);
+    return storage[key];
+  }
+
+  /**
+   * Sets a single key in persistent storage.
+   */
+  public setStorageKey(id: string, key: string, value: any): any {
+    const storage = this.getStorage(id);
+    storage[key] = value;
+    this.setStorage(id, storage, false);
+    return value;
+  }
+
+  /**
+   * Deletes a single key from persistent storage.
+   */
+  public deleteStorageKey(id: string, key: string): boolean {
+    const storage = this.getStorage(id);
+    if (key in storage) {
+      delete storage[key];
+      this.setStorage(id, storage, false);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Clears all persistent storage for an artifact.
+   */
+  public clearStorage(id: string): boolean {
+    this.setStorage(id, {}, false);
+    return true;
+  }
+
+  /**
    * Helper to check port availability.
    */
   private async findAvailablePort(startPort: number): Promise<number> {

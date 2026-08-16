@@ -466,6 +466,171 @@ app.use('/api/artifacts/:id/view', (req, res) => {
   res.sendFile(filePath);
 });
 
+// ─── Artifacts Universal Storage REST API & SDK ─────────────────────────────
+// Supports persistent storage across browsers, external devices, and iframe sandboxes
+const handleArtifactCors = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+};
+
+app.use('/api/artifacts/:id/storage', handleArtifactCors);
+app.use('/api/artifacts/storage', handleArtifactCors);
+
+// SDK script for seamless client storage
+app.get(['/api/artifacts/sdk.js', '/api/artifacts/:id/sdk.js'], (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.send(`
+(function (global) {
+  'use strict';
+  const pathname = window.location.pathname;
+  const inferredId = (pathname.match(/\\/api\\/artifacts\\/([^/]+)/) || [])[1] || '';
+  const artifactId = window.__ARTIFACT_ID__ || inferredId;
+  const origin = window.__SUPERAGENT_SERVER__ || window.location.origin;
+
+  const storage = {
+    get artifactId() { return artifactId; },
+    async get(key, defaultValue) {
+      if (defaultValue === undefined) defaultValue = null;
+      if (!artifactId) return defaultValue;
+      try {
+        const res = await fetch(origin + '/api/artifacts/' + encodeURIComponent(artifactId) + '/storage/' + encodeURIComponent(key));
+        if (!res.ok) return defaultValue;
+        const data = await res.json();
+        return data.value !== undefined ? data.value : defaultValue;
+      } catch (e) {
+        console.warn('[SuperAgentStorage] Get error, falling back to localStorage:', e);
+        try {
+          const local = localStorage.getItem('art_' + artifactId + '_' + key);
+          return local ? JSON.parse(local) : defaultValue;
+        } catch { return defaultValue; }
+      }
+    },
+    async set(key, value) {
+      if (!artifactId) return value;
+      try {
+        localStorage.setItem('art_' + artifactId + '_' + key, JSON.stringify(value));
+      } catch {}
+      try {
+        await fetch(origin + '/api/artifacts/' + encodeURIComponent(artifactId) + '/storage/' + encodeURIComponent(key), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value })
+        });
+      } catch (e) {
+        console.warn('[SuperAgentStorage] Set failed:', e);
+      }
+      return value;
+    },
+    async getAll() {
+      if (!artifactId) return {};
+      try {
+        const res = await fetch(origin + '/api/artifacts/' + encodeURIComponent(artifactId) + '/storage');
+        if (!res.ok) return {};
+        const json = await res.json();
+        return json.data || {};
+      } catch { return {}; }
+    },
+    async setAll(data) {
+      if (!artifactId) return data;
+      try {
+        await fetch(origin + '/api/artifacts/' + encodeURIComponent(artifactId) + '/storage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data })
+        });
+      } catch (e) {
+        console.warn('[SuperAgentStorage] SetAll failed:', e);
+      }
+      return data;
+    },
+    async remove(key) {
+      if (!artifactId) return false;
+      try { localStorage.removeItem('art_' + artifactId + '_' + key); } catch {}
+      try {
+        await fetch(origin + '/api/artifacts/' + encodeURIComponent(artifactId) + '/storage/' + encodeURIComponent(key), {
+          method: 'DELETE'
+        });
+        return true;
+      } catch { return false; }
+    },
+    async clear() {
+      if (!artifactId) return false;
+      try {
+        await fetch(origin + '/api/artifacts/' + encodeURIComponent(artifactId) + '/storage', {
+          method: 'DELETE'
+        });
+        return true;
+      } catch { return false; }
+    }
+  };
+
+  global.SuperAgent = global.SuperAgent || {};
+  global.SuperAgent.storage = storage;
+  global.artifactStorage = storage;
+})(window);
+  `);
+});
+
+// GET full storage
+app.get('/api/artifacts/:id/storage', (req, res) => {
+  const artifactId = req.params.id;
+  const data = artifactRunner.getStorage(artifactId);
+  res.json({ ok: true, id: artifactId, data });
+});
+
+// POST / PUT set or merge storage
+app.post('/api/artifacts/:id/storage', (req, res) => {
+  const artifactId = req.params.id;
+  const body = req.body || {};
+  const payload = body.data !== undefined ? body.data : body;
+  const updated = artifactRunner.setStorage(artifactId, payload, req.query.merge === 'true');
+  res.json({ ok: true, id: artifactId, data: updated });
+});
+
+app.put('/api/artifacts/:id/storage', (req, res) => {
+  const artifactId = req.params.id;
+  const body = req.body || {};
+  const payload = body.data !== undefined ? body.data : body;
+  const updated = artifactRunner.setStorage(artifactId, payload, false);
+  res.json({ ok: true, id: artifactId, data: updated });
+});
+
+// GET single key
+app.get('/api/artifacts/:id/storage/:key', (req, res) => {
+  const { id: artifactId, key } = req.params;
+  const value = artifactRunner.getStorageKey(artifactId, key);
+  res.json({ ok: true, id: artifactId, key, value });
+});
+
+// PUT single key
+app.put('/api/artifacts/:id/storage/:key', (req, res) => {
+  const { id: artifactId, key } = req.params;
+  const value = req.body?.value !== undefined ? req.body.value : req.body;
+  artifactRunner.setStorageKey(artifactId, key, value);
+  res.json({ ok: true, id: artifactId, key, value });
+});
+
+// DELETE single key
+app.delete('/api/artifacts/:id/storage/:key', (req, res) => {
+  const { id: artifactId, key } = req.params;
+  const deleted = artifactRunner.deleteStorageKey(artifactId, key);
+  res.json({ ok: true, id: artifactId, key, deleted });
+});
+
+// DELETE all storage
+app.delete('/api/artifacts/:id/storage', (req, res) => {
+  const artifactId = req.params.id;
+  artifactRunner.clearStorage(artifactId);
+  res.json({ ok: true, id: artifactId, cleared: true });
+});
+
 // Provider connectivity proxy — forwards provider API calls server-side so the
 // web/VPS build (which reuses the *same* desktop renderer) can "Test & Connect"
 // without being blocked by CORS. The desktop Electron shell does NOT use this
@@ -1307,6 +1472,45 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
       case 'artifact-logs': {
         const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
         result = artifactRunner.getArtifactLogs(artId, args[1] || 50);
+        break;
+      }
+      case 'artifact:getStorage':
+      case 'artifact_get_storage':
+      case 'artifact-get-storage': {
+        const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
+        result = artifactRunner.getStorage(artId);
+        break;
+      }
+      case 'artifact:setStorage':
+      case 'artifact_set_storage':
+      case 'artifact-set-storage': {
+        const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
+        const data = args[1] || args[0]?.data;
+        result = artifactRunner.setStorage(artId, data, false);
+        break;
+      }
+      case 'artifact:setStorageKey':
+      case 'artifact_set_storage_key':
+      case 'artifact-set-storage-key': {
+        const artId = args[0]?.id || args[0];
+        const key = args[0]?.key || args[1];
+        const value = args[0]?.value || args[2];
+        result = artifactRunner.setStorageKey(artId, key, value);
+        break;
+      }
+      case 'artifact:deleteStorageKey':
+      case 'artifact_delete_storage_key':
+      case 'artifact-delete-storage-key': {
+        const artId = args[0]?.id || args[0];
+        const key = args[0]?.key || args[1];
+        result = artifactRunner.deleteStorageKey(artId, key);
+        break;
+      }
+      case 'artifact:clearStorage':
+      case 'artifact_clear_storage':
+      case 'artifact-clear-storage': {
+        const artId = typeof args[0] === 'string' ? args[0] : args[0]?.id;
+        result = artifactRunner.clearStorage(artId);
         break;
       }
 
