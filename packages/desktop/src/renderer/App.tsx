@@ -1295,7 +1295,7 @@ export const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [activeChatId]);
+  }, [activeChatId, chats, ipc]);
 
   // ── Sandbox permission prompts (user-in-the-loop) ───────────────────────
   useEffect(() => {
@@ -1384,7 +1384,7 @@ export const App: React.FC = () => {
       window.removeEventListener('offline', onOffline);
       window.removeEventListener('online', checkHealth);
     };
-  }, [isWebMode, ipc]);
+  }, []);
 
   // ── Background Update Check on Mount ────────────────────────────────────
   useEffect(() => {
@@ -1420,7 +1420,7 @@ export const App: React.FC = () => {
       isMounted = false;
       clearInterval(updateInterval);
     };
-  }, [isWebMode, ipc]);
+  }, []);
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   if (loading) {

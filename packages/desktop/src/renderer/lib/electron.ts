@@ -64,15 +64,22 @@ function legacyRequireShim(): { ipcRenderer: any } | null {
  * Prefers the preload bridge; falls back to the legacy `window.require` shape.
  * Returns null when Electron is genuinely unavailable (pure web host).
  */
+let cachedBridge: any = null;
+
 export function getIpc(): any | null {
+  if (cachedBridge) return cachedBridge;
   const api = superagent();
   if (api) {
-    const bridge = makeIpcBridge(api.ipc, api.shell);
-    return bridge;
+    cachedBridge = makeIpcBridge(api.ipc, api.shell);
+    return cachedBridge;
   }
   // Legacy path (nodeIntegration still on / web shim).
   const legacy = legacyRequireShim();
-  return legacy ? makeIpcBridge(legacy.ipcRenderer) : null;
+  if (legacy) {
+    cachedBridge = makeIpcBridge(legacy.ipcRenderer);
+    return cachedBridge;
+  }
+  return null;
 }
 
 /**
