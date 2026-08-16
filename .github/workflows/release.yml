@@ -194,3 +194,24 @@ jobs:
           body_path: release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Step 4: Clean up draft release if pipeline fails or is cancelled ────────
+  cleanup-draft:
+    needs: [version, build-desktop, build-cli-binary, publish]
+    if: always() && (needs.build-desktop.result == 'failure' || needs.build-desktop.result == 'cancelled' || needs.build-cli-binary.result == 'failure' || needs.build-cli-binary.result == 'cancelled' || needs.publish.result == 'failure' || needs.publish.result == 'cancelled')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete orphaned draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ needs.version.outputs.version }}
+        run: |
+          echo "Pipeline failed or was cancelled. Checking for draft release: ${TAG}"
+          RELEASE_ID=$(gh api "repos/${{ github.repository }}/releases" --jq ".[] | select(.tag_name==\"${TAG}\" and .draft==true) | .id" | head -n 1)
+          if [ -n "$RELEASE_ID" ]; then
+            echo "Deleting orphaned draft release ID: $RELEASE_ID"
+            gh api --method DELETE "repos/${{ github.repository }}/releases/$RELEASE_ID" || true
+            echo "Orphaned draft release ${TAG} cleaned up successfully."
+          else
+            echo "No orphaned draft release found for ${TAG}."
+          fi
