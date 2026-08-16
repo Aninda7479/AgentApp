@@ -7,15 +7,11 @@ import type { AppContext } from './types';
 
 export class AccountService {
   /**
-   * Opens the account-management page. In web mode it navigates to `/account`;
-   * on the desktop app it shows an info toast (account management is web-only).
+   * Opens the account / web host management view in Settings.
    */
-  static open(ctx: AppContext, isWebMode: boolean): void {
-    if (isWebMode) {
-      window.location.href = '/account';
-    } else {
-      ctx.triggerToast('Account management is available in the web deployment.');
-    }
+  static open(ctx: AppContext, _isWebMode?: boolean): void {
+    ctx.setActiveTab('settings');
+    ctx.setSettingsCategory('web-app');
   }
 
   /**

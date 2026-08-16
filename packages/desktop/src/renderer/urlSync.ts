@@ -59,6 +59,9 @@ export function getRouteFromLocation(): RouteState {
   if (segments[0] === 'chat' && segments[1] && segments[1] !== DRAFT_CHAT_ID) {
     return { activeTab: 'trajectory', activeChatId: segments[1], settingsCategory: 'general' };
   }
+  if (segments[0] === 'account') {
+    return { activeTab: 'settings', activeChatId: null, settingsCategory: 'web-app' };
+  }
   if (segments[0] === 'settings') {
     const category = normalizeSettingsCategory(segments[1] || 'general');
     return { activeTab: 'settings', activeChatId: null, settingsCategory: category };

@@ -58,9 +58,6 @@ async function build() {
   fs.copyFileSync(path.join(webRoot, 'src/login.html'), path.join(distDir, 'login.html'));
   console.log('[Build] login.html copied.');
 
-  // 3c. Copy the standalone account (change password) page
-  fs.copyFileSync(path.join(webRoot, 'src/account.html'), path.join(distDir, 'account.html'));
-  console.log('[Build] account.html copied.');
 
   // 3c-2. Build tray.js and copy tray.html for Artifacts tray popup
   const rendererDistDir = path.join(distDir, 'renderer');

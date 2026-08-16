@@ -206,8 +206,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         ...(isWebMode
           ? [
               'sep' as const,
-              { label: 'Account', icon: Settings, onClick: () => onOpenAccount?.() },
-              { label: 'Log out', icon: Power, danger: true, onClick: () => onLogout?.() }
+              { label: 'Account', icon: User, onClick: () => onOpenAccount?.() },
+              { label: 'Log out', icon: LogOut, danger: true, onClick: () => onLogout?.() }
             ]
           : []),
         'sep',
@@ -362,38 +362,6 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         >
           {themeMode === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
         </button>
-
-        {/* About — opens the About settings page (same destination as Help ▸ About). */}
-        <button
-          onClick={onAbout}
-          className="atmo-btn w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
-          title="About SuperAgent"
-          aria-label="About SuperAgent"
-        >
-          <HelpCircle className="w-4 h-4" />
-        </button>
-
-        {/* Web-only: Account + Log out sit next to the theme toggle. */}
-        {isWebMode && (
-          <div className="hidden sm:flex items-center gap-1">
-            <button
-              onClick={onOpenAccount}
-              className="atmo-btn w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
-              title="Account / change password"
-              aria-label="Account"
-            >
-              <User className="w-4 h-4" />
-            </button>
-            <button
-              onClick={onLogout}
-              className="atmo-btn w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
-              title="Log out"
-              aria-label="Log out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        )}
 
         <button
           data-testid="byok-badge-trigger"

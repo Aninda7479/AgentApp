@@ -149,24 +149,16 @@ if (isAuthDisabled()) {
 } else if (AuthStore.isPasswordSet()) {
   console.log(`[Security] Login enabled — username "${AuthStore.getUsername()}". All routes require an authenticated session.`);
 } else {
-  console.log('[Security] Login enabled with the default password "admin" — set a custom one via `superagent password set` or the /account page.');
+  console.log('[Security] Login enabled with the default password "admin" — set a custom one via `superagent password set` or the Settings → Web App page.');
 }
 
 // Gate everything else behind a valid session.
 app.use(authGate);
 
-// Serve the account (change-password) page. Registered AFTER the gate so it
-// requires an authenticated session — an unauthenticated request is redirected
-// to /login by the gate above. (This page was previously registered BEFORE the
-// gate and was therefore reachable without authentication.)
+// Legacy /account route redirect: account management and password rotation
+// are now unified in the in-app Settings → Web App (/settings/web-app) panel.
 app.get('/account', (_req, res) => {
-  const filePath = path.join(webDistDir, 'account.html');
-  res.sendFile(filePath, (err) => {
-    if (err && !res.headersSent) {
-      console.error(`[Web] Error serving account.html from ${filePath}:`, err.message);
-      res.status(404).send('account.html not found');
-    }
-  });
+  res.redirect(302, '/settings/web-app');
 });
 
 // ─── WebSocket Event Hub ────────────────────────────────────────────────────

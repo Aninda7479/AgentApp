@@ -58,6 +58,14 @@ describe('getRouteFromLocation — settings slug normalization', () => {
     expect(route.activeChatId).toBe('abc123');
     expect(route.settingsCategory).toBe('general');
   });
+
+  it('resolves /account to the settings tab with web-app category', () => {
+    withWindow('/account', 'http:');
+    const route = getRouteFromLocation();
+    expect(route.activeTab).toBe('settings');
+    expect(route.activeChatId).toBeNull();
+    expect(route.settingsCategory).toBe('web-app');
+  });
 });
 
 describe('buildPath — emits canonical ids (never a friendly slug)', () => {

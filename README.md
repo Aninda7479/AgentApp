@@ -134,8 +134,8 @@ either side.
 
 **First-run setup (recommended):** start the server with no password, open
 `/login`, and you will be guided through creating the password. After that,
-`/login` is the normal sign-in page and `/account` lets you change the password
-and sign out.
+`/login` is the normal sign-in page and `Settings → Web App` (`/settings/web-app`)
+lets you manage host branding, change the password, inspect active sessions, and sign out.
 
 **Headless / Docker seeding:** provide the password via environment variables
 before the first start. The server seeds the store once and then the persisted
@@ -160,7 +160,7 @@ superagent password set      # set / overwrite the password (interactive)
 
 **Default password.** When no custom password has been configured, the login
 password defaults to `admin` — so you can sign in out of the box, then set a
-stronger one with `superagent password set` (or the web `/account` page). Once a
+stronger one with `superagent password set` (or the `Settings → Web App` page). Once a
 custom password is set, the default no longer works.
 
 | Variable | Description | Default |
