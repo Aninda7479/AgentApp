@@ -151,6 +151,7 @@ export const App: React.FC = () => {
   const [settingsCategory, setSettingsCategory] = useState<string>(initialRoute.settingsCategory);
   const [activeProject, setActiveProject] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isBackendDisconnected, setIsBackendDisconnected] = useState<boolean>(false);
   const [toastOpen, setToastOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
   const [toastType, setToastType] = useState<'info' | 'error'>('info');
@@ -1189,6 +1190,15 @@ export const App: React.FC = () => {
   useEffect(() => {
     ErrorService.install();
     const unsubscribe = ErrorService.subscribe((context, message, stack) => {
+      const lower = (message || '').toLowerCase();
+      if (
+        lower.includes('failed to fetch') ||
+        lower.includes('err_connection_refused') ||
+        lower.includes('networkerror') ||
+        lower.includes('econnrefused')
+      ) {
+        setIsBackendDisconnected(true);
+      }
       triggerToast(message, 'error');
       // Auto-popup GlobalErrorModal only for unhandled window/promise rejections or React render crashes
       if (context.startsWith('unhandled') || context.startsWith('react-render')) {
@@ -1212,7 +1222,7 @@ export const App: React.FC = () => {
       unsubscribe();
       cleanupAppError();
     };
-  }, [ipc]);
+  }, [ipc, triggerToast]);
 
   // Toast auto-dismiss.
   useEffect(() => {
@@ -1309,6 +1319,88 @@ export const App: React.FC = () => {
     return () => ipc.removeListener('update-status-changed', handleUpdateStatusChanged);
   }, [ipc]);
 
+  // ── Backend Core Health Check ───────────────────────────────────────────
+  useEffect(() => {
+    let isMounted = true;
+    const checkHealth = async () => {
+      try {
+        if (isWebMode || !ipc) {
+          const res = await fetch('/api/health', { method: 'GET', cache: 'no-store' });
+          if (isMounted) {
+            setIsBackendDisconnected(!res.ok);
+          }
+        } else {
+          // In Desktop mode (Tauri / Electron), check IPC connection
+          const res = await ipc.invoke('system-info').catch(() => null);
+          if (isMounted) {
+            setIsBackendDisconnected(res === null);
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setIsBackendDisconnected(true);
+        }
+      }
+    };
+
+    checkHealth();
+    const interval = setInterval(checkHealth, 2500);
+
+    const onBackendStatus = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail.connected === 'boolean' && isMounted) {
+        setIsBackendDisconnected(!detail.connected);
+      }
+    };
+    window.addEventListener('backend-status', onBackendStatus);
+    window.addEventListener('offline', () => isMounted && setIsBackendDisconnected(true));
+    window.addEventListener('online', checkHealth);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('backend-status', onBackendStatus);
+      window.removeEventListener('offline', () => setIsBackendDisconnected(true));
+      window.removeEventListener('online', checkHealth);
+    };
+  }, [isWebMode, ipc]);
+
+  // ── Background Update Check on Mount ────────────────────────────────────
+  useEffect(() => {
+    let isMounted = true;
+    const checkUpdatesSilently = async () => {
+      try {
+        if (isWebMode || !ipc) {
+          const res = await fetch('/api/update/check', { method: 'GET' });
+          if (res.ok) {
+            const data = await res.json();
+            if (isMounted && data.hasUpdate && data.latest) {
+              setUpdateStatus({
+                status: 'available',
+                version: data.latest,
+                message: `Version ${data.latest} is available.`
+              });
+            }
+          }
+        } else {
+          const res = await ipc.invoke('check-for-updates').catch(() => null);
+          if (isMounted && res?.status === 'available') {
+            setUpdateStatus(res);
+          }
+        }
+      } catch {
+        // Silent catch for background check
+      }
+    };
+
+    checkUpdatesSilently();
+    const updateInterval = setInterval(checkUpdatesSilently, 30 * 60 * 1000);
+    return () => {
+      isMounted = false;
+      clearInterval(updateInterval);
+    };
+  }, [isWebMode, ipc]);
+
   // ─── Render ─────────────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -1366,6 +1458,16 @@ export const App: React.FC = () => {
       </a>
       <TitleBar
         hasOpenAiKey={Boolean(byokKeys.openai)}
+        isBackendDisconnected={isBackendDisconnected}
+        updateAvailableVersion={
+          updateStatus?.status === 'available'
+            ? updateStatus.version || 'available'
+            : null
+        }
+        onOpenUpdates={() => {
+          setActiveTab('settings');
+          setSettingsCategory('updates');
+        }}
         onOpenProviders={() => {
           setActiveTab('settings');
           setSettingsCategory('providers');

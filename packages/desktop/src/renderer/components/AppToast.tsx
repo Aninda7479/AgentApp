@@ -24,27 +24,9 @@ export const AppToast: React.FC<AppToastProps> = ({ open, message, type = 'info'
 
   const isError = type === 'error' || message.toLowerCase().includes('error') || message.toLowerCase().includes('failed');
 
-  const isExcluded =
-    message.includes('Menu') ||
-    message.includes('Selector') ||
-    message.includes('Attached') ||
-    message.includes('pasted') ||
-    message.toLowerCase().includes('3d') ||
-    message.toLowerCase().includes('model') ||
-    message.toLowerCase().includes('mesh') ||
-    message.toLowerCase().includes('concept') ||
-    message.toLowerCase().includes('segmentation') ||
-    message.toLowerCase().includes('rigging') ||
-    message.toLowerCase().includes('polygon') ||
-    message.toLowerCase().includes('uv') ||
-    message.toLowerCase().includes('paint') ||
-    message.toLowerCase().includes('preset') ||
-    message.toLowerCase().includes('feedback') ||
-    message.toLowerCase().includes('color');
-
   return (
     <div
-      data-testid="toast-under-construction"
+      data-testid="app-toast"
       className={`fixed bottom-6 right-6 border rounded-xl py-3 px-4 text-brand-textMain shadow-2xl z-[3000] flex items-center gap-3 text-xs animate-fade-in glass-panel ${
         isError
           ? 'border-[color:var(--neon-destructive)]/30 bg-[color:var(--neon-destructive)]/10 shadow-[color:var(--neon-destructive)]/5'
@@ -57,12 +39,7 @@ export const AppToast: React.FC<AppToastProps> = ({ open, message, type = 'info'
         ) : (
           <Info size={14} className="text-violet-400 flex-shrink-0" />
         )}
-        <span className="font-sans font-medium">
-          {message}
-          {!isError && !isExcluded && (
-            <span className="text-brand-textMuted font-normal"> is currently under development.</span>
-          )}
-        </span>
+        <span className="font-sans font-medium">{message}</span>
       </div>
 
       <div className="flex items-center gap-1 border-l border-brand-border/40 pl-2.5 ml-1 select-none">

@@ -8,19 +8,46 @@ import type { AppContext } from './types';
 
 export class UpdateService {
   /**
-   * Triggers a manual update check. Outside the desktop app (no IPC) it reports
-   * "unsupported". Otherwise it navigates to the Updates panel, shows a
-   * "checking" status, invokes `check-for-updates`, and stores the result.
+   * Triggers a manual update check. In web mode it queries the /api/update/check endpoint.
+   * In desktop mode it invokes `check-for-updates` via IPC and stores the result.
    */
   static check(ctx: AppContext): void {
-    if (!ctx.ipc) {
-      ctx.setUpdateStatus({ status: 'unsupported', message: 'Updates are only available in the desktop app.' });
-      return;
-    }
     // Surface the Updates panel so the result is visible.
     ctx.setActiveTab('settings');
     ctx.setSettingsCategory('updates');
     ctx.setUpdateStatus({ status: 'checking', message: 'Checking for updates…' });
+
+    if (!ctx.ipc) {
+      if (typeof fetch !== 'undefined') {
+        fetch('/api/update/check')
+          .then(async (res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (data.hasUpdate && data.latest) {
+              ctx.setUpdateStatus({
+                status: 'available',
+                version: data.latest,
+                message: `Version ${data.latest} is available.`
+              });
+            } else {
+              ctx.setUpdateStatus({
+                status: 'not-available',
+                message: 'SuperAgent is up to date.'
+              });
+            }
+          })
+          .catch(() => {
+            ctx.setUpdateStatus({
+              status: 'unsupported',
+              message: 'Updates are only managed automatically in the desktop app.'
+            });
+          });
+      } else {
+        ctx.setUpdateStatus({ status: 'unsupported', message: 'Updates are only available in the desktop app.' });
+      }
+      return;
+    }
+
     ctx.ipc
       .invoke('check-for-updates')
       .then((res: import('./types').UpdateStatus | null) => {

@@ -23,6 +23,8 @@ import {
   Box,
   PersonStanding,
   Clock,
+  WifiOff,
+  ArrowUpCircle,
 } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { ThemeMode } from '../types';
@@ -64,6 +66,12 @@ interface TitleBarProps {
   onOpenAccount?: () => void;
   /** Logs the user out and returns to the login page (web build only). */
   onLogout?: () => void;
+  /** Warning state: backend core disconnected. */
+  isBackendDisconnected?: boolean;
+  /** Available update version string. Null/undefined if none. */
+  updateAvailableVersion?: string | null;
+  /** Action when clicking the update available badge. */
+  onOpenUpdates?: () => void;
 }
 
 const isElectron = WindowService.isElectron();
@@ -111,6 +119,9 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   isWebMode = false,
   onOpenAccount,
   onLogout,
+  isBackendDisconnected = false,
+  updateAvailableVersion = null,
+  onOpenUpdates,
 }) => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -313,6 +324,31 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         className="flex items-center gap-2 sm:gap-3 no-drag-window shrink-0"
         style={isElectron ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
       >
+        {/* Backend Disconnected Warning — only shown when backend core / daemon / server is unreachable */}
+        {isBackendDisconnected && (
+          <div
+            data-testid="backend-disconnected-warning"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium bg-rose-500/15 border border-rose-500/40 text-rose-400 shadow-sm animate-pulse"
+            title="Backend core disconnected. Please ensure the backend server or daemon process is running."
+          >
+            <WifiOff size={11} className="text-rose-400 shrink-0" />
+            <span>Backend Disconnected</span>
+          </div>
+        )}
+
+        {/* Update Available Badge — only shown when a new update is available */}
+        {updateAvailableVersion && (
+          <button
+            data-testid="update-available-badge"
+            onClick={onOpenUpdates || onCheckUpdates}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400 shadow-sm transition-all cursor-pointer active:scale-[0.98]"
+            title={`Update available (${updateAvailableVersion}). Click to view updates.`}
+          >
+            <ArrowUpCircle size={11} className="text-emerald-400 shrink-0 animate-bounce" />
+            <span>Update {updateAvailableVersion !== 'available' ? `v${updateAvailableVersion}` : 'Available'}</span>
+          </button>
+        )}
+
         {/* Theme toggle (all sizes) */}
         <button
           onClick={onToggleTheme}
