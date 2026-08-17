@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { prefersReducedMotion } from '../lib/motion.js'
 import { useCopy } from '../lib/useCopy.js'
+import { detectUserPlatform } from '../lib/useLatestRelease.js'
 import { INSTALL_SH, INSTALL_PS1 } from '../config.js'
 
 const COMMANDS = {
@@ -17,7 +18,12 @@ const BOOT = [
 ]
 
 export default function Terminal() {
-  const [os, setOs] = useState('powershell')
+  const [os, setOs] = useState(() => {
+    const p = detectUserPlatform().os
+    if (p === 'macos') return 'macos'
+    if (p === 'linux') return 'linux'
+    return 'powershell'
+  })
   const [typed, setTyped] = useState('')
   const [bootShown, setBootShown] = useState(BOOT.map(() => false))
   const [copied, copy] = useCopy()

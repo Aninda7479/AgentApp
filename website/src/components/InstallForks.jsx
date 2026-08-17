@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import Reveal from './Reveal.jsx'
 import { useCopy } from '../lib/useCopy.js'
-import { useLatestRelease } from '../lib/useLatestRelease.js'
+import { useLatestRelease, detectUserPlatform } from '../lib/useLatestRelease.js'
 import { INSTALL_SH, INSTALL_PS1 } from '../config.js'
 
 const COMMANDS = {
@@ -18,7 +18,10 @@ function Check() {
 }
 
 export function CliFork() {
-  const [shell, setShell] = useState('powershell')
+  const [shell, setShell] = useState(() => {
+    const p = detectUserPlatform().os
+    return p === 'windows' ? 'powershell' : 'bash'
+  })
   const [copied, copy] = useCopy()
   const release = useLatestRelease()
 
