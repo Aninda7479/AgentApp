@@ -238,6 +238,11 @@ export const TrayCardApp: React.FC = () => {
 
 const container = document.getElementById('root');
 if (container) {
+  if (process.env.NODE_ENV === 'production') {
+    window.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    }, { capture: true });
+  }
   const root = createRoot(container);
   root.render(<TrayCardApp />);
 }

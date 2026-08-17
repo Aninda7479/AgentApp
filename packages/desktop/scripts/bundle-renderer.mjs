@@ -46,7 +46,9 @@ const common = {
     // outside src/. esbuild resolves the alias before any other resolver.
     '@lily-model': resolve(ROOT, 'models/lily/index.ts')
   },
-  define: { 'process.env.NODE_ENV': '"production"' },
+  define: {
+    'process.env.NODE_ENV': WATCH ? '"development"' : '"production"',
+  },
   loader: { '.css': 'empty' },
   logLevel: 'info',
   metafile: true,

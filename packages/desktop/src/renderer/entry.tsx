@@ -4,6 +4,14 @@ import { App } from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { reportError } from './lib/errorReporter';
 
+// Disable default browser context menu in production / release builds.
+// In dev mode (process.env.NODE_ENV !== 'production'), right-click is enabled for inspection and devtools.
+if (process.env.NODE_ENV === 'production') {
+  window.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+  }, { capture: true });
+}
+
 // Global error handlers so async rejections or unhandled runtime errors are reported
 window.addEventListener('error', (event) => {
   reportError('unhandled-window-error', event.error || event.message);

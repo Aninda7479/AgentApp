@@ -3,6 +3,12 @@ import { createRoot } from 'react-dom/client';
 import { CircleSearchOverlay } from './CircleSearchOverlay';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
+if (process.env.NODE_ENV === 'production') {
+  window.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+  }, { capture: true });
+}
+
 const container = document.getElementById('root');
 if (container) {
   const root = createRoot(container);
