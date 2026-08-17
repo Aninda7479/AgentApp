@@ -1202,8 +1202,15 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
         break;
       }
       case 'trigger-update':
-        result = triggerEngine.updateTrigger(args[0].id, args[0].updates);
+      case 'triggers-update': {
+        const id = args[0]?.id;
+        const updates = args[0]?.updates !== undefined ? args[0].updates : { ...args[0] };
+        if (updates && typeof updates === 'object' && 'id' in updates) {
+          delete (updates as Record<string, unknown>).id;
+        }
+        result = triggerEngine.updateTrigger(id, updates);
         break;
+      }
       case 'triggers-toggle': {
         const id = args[0]?.id;
         const enabled = args[0]?.enabled;

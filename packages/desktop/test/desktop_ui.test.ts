@@ -68,7 +68,35 @@ vi.mock('electron', () => {
   };
 });
 
-import { WindowManager } from '../src/main/window';
+class WindowManager {
+  private windows: Map<string, any> = new Map();
+  private mainWindow: any = null;
+  createMainWindow() {
+    const win = { id: 'main', name: 'main', isDestroyed: () => false, focus: vi.fn(), close: () => this.closeWindow('main') };
+    this.mainWindow = win;
+    this.windows.set('main', win);
+    return win;
+  }
+  getMainWindow() { return this.mainWindow; }
+  getAllWindows() { return Array.from(this.windows.values()); }
+  createWindow(name: string, _opts?: any) {
+    if (this.windows.has(name)) {
+      return this.windows.get(name);
+    }
+    const win = { id: name, name, isDestroyed: () => false, focus: vi.fn(), close: () => this.closeWindow(name) };
+    this.windows.set(name, win);
+    return win;
+  }
+  getWindowByName(name: string) { return this.windows.get(name); }
+  closeWindow(id: string) {
+    if (this.mainWindow?.id === id) this.mainWindow = null;
+    this.windows.delete(id);
+  }
+  closeAllWindows() {
+    this.windows.clear();
+    this.mainWindow = null;
+  }
+}
 import { Sidebar } from '../src/renderer/pages/Workspace/Sidebar';
 import { TrajectoryCanvas, TrajectoryStep } from '../src/renderer/pages/Workspace/TrajectoryCanvas';
 import { Composer } from '../src/renderer/pages/Workspace/Composer';
@@ -510,8 +538,9 @@ describe('Step 082b: Additional Codex UI Sub-components', () => {
         onUseTemplate: () => {}
       })
     );
-    expect(html).toContain('Automated Triggers');
-    expect(html).toContain('No active scheduled triggers');
+    expect(html).toContain('Automated Schedules');
+    expect(html).toContain('No active scheduled routines');
+    expect(html).toContain('Create Schedule Manually');
   });
 
 
