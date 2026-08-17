@@ -165,6 +165,70 @@ export class UpdateService {
       } catch (err: any) {
         ctx.setUpdateStatus({ status: 'error', message: err?.message || 'Download failed' });
       }
+      return;
+    }
+
+    // 3. Web mode: trigger server-side CLI update via /api/update/apply
+    if (typeof fetch !== 'undefined') {
+      ctx.setUpdateStatus({
+        status: 'downloading',
+        message: 'Downloading and updating SuperAgent CLI on server...',
+        progress: { percent: 45, bytesPerSecond: 0, transferred: 0, total: 0 }
+      });
+
+      try {
+        const res = await fetch('/api/update/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+
+        ctx.setUpdateStatus({
+          status: 'downloading',
+          message: 'Update installed! Server is restarting automatically, reconnecting…',
+          progress: { percent: 90, bytesPerSecond: 0, transferred: 0, total: 0 }
+        });
+
+        // Automatically poll until the newly updated server comes back online, then reload seamlessly!
+        let attempts = 0;
+        const checkInterval = setInterval(async () => {
+          attempts++;
+          try {
+            const checkRes = await fetch('/api/update/check', { cache: 'no-store' });
+            if (checkRes.ok) {
+              const checkData = await checkRes.json();
+              clearInterval(checkInterval);
+              ctx.setUpdateStatus({
+                status: 'not-available',
+                version: checkData.current,
+                message: `SuperAgent CLI successfully updated to v${checkData.current} and online!`
+              });
+              setTimeout(() => {
+                if (typeof window !== 'undefined') {
+                  window.location.reload();
+                }
+              }, 1200);
+            }
+          } catch {
+            if (attempts > 30) {
+              clearInterval(checkInterval);
+              ctx.setUpdateStatus({
+                status: 'downloaded',
+                message: 'Update complete. Please reload your browser page.'
+              });
+            }
+          }
+        }, 1500);
+      } catch (err: any) {
+        ctx.setUpdateStatus({
+          status: 'error',
+          message: `Update failed: ${err?.message || String(err)}`
+        });
+      }
     }
   }
 
@@ -184,6 +248,11 @@ export class UpdateService {
 
     if (ctx.ipc) {
       ctx.ipc.invoke('quit-and-install');
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      window.location.reload();
     }
   }
 }

@@ -5,7 +5,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { exec } from 'child_process';
+import { exec, spawn, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -751,6 +751,73 @@ app.get('/api/update/check', (_req, res) => {
     req2.on('error', () => res.status(503).json({ error: 'Could not reach GitHub — check network connectivity' }));
     req2.setTimeout(8000, () => { req2.destroy(); res.status(504).json({ error: 'GitHub API timed out' }); });
   }).catch(() => res.status(500).json({ error: 'Internal error loading https module' }));
+});
+
+// POST /api/update/apply  (behind authGate)
+// Executes the CLI installer script to update the SuperAgent CLI binary on the host
+// and automatically restarts the background web server process without manual intervention.
+app.post('/api/update/apply', (_req, res) => {
+  const isWin = process.platform === 'win32';
+  const cmd = isWin ? 'powershell.exe' : 'sh';
+  const args = isWin
+    ? ['-ExecutionPolicy', 'Bypass', '-Command', 'irm https://aninda7479.github.io/AgentApp/install.ps1 | iex']
+    : ['-c', 'curl -fsSL https://aninda7479.github.io/AgentApp/install.sh | sh'];
+
+  try {
+    const result = spawnSync(cmd, args, {
+      stdio: 'pipe',
+      env: { ...process.env, FORCE: '1' },
+      timeout: 180000 // 3 minutes
+    });
+
+    if (result.status === 0) {
+      res.json({
+        ok: true,
+        message: 'SuperAgent CLI successfully updated! Server is restarting automatically...'
+      });
+
+      // Schedule automatic background process restart
+      setTimeout(() => {
+        try {
+          // Clear lock first so the newly spawned process can bind immediately
+          if (readWebServerLock()?.pid === process.pid) clearWebServerLock();
+
+          let targetBin = '';
+          if (isWin) {
+            targetBin = path.join(process.env.USERPROFILE || '', '.local', 'bin', 'superagent.exe');
+          } else {
+            targetBin = fs.existsSync('/usr/local/bin/superagent')
+              ? '/usr/local/bin/superagent'
+              : path.join(process.env.HOME || '', '.local', 'bin', 'superagent');
+          }
+
+          const execPath = fs.existsSync(targetBin) ? targetBin : process.execPath;
+          const port = process.env.PORT || '1469';
+
+          console.log(`[update] Auto-restarting SuperAgent CLI server with ${execPath} on port ${port}...`);
+
+          const child = spawn(execPath, ['--serve', '--serve-port', port], {
+            detached: true,
+            stdio: 'ignore',
+            env: { ...process.env }
+          });
+          child.unref();
+
+          process.exit(0);
+        } catch (err) {
+          console.error('[update] Error during auto-restart:', err);
+          process.exit(0);
+        }
+      }, 1000);
+    } else {
+      const errMsg = (result.stderr ? result.stderr.toString() : '') || (result.stdout ? result.stdout.toString() : '');
+      res.status(500).json({
+        error: `Update script exited with code ${result.status}: ${errMsg}`
+      });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: `Failed to execute update: ${err?.message || String(err)}` });
+  }
 });
 
 /**
