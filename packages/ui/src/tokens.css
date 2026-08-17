@@ -1,0 +1,122 @@
+/* SuperAgent UI Design Tokens
+ * Import this file in your app's CSS entry point.
+ * Set data-theme="dark" or data-theme="light" on :root. */
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Canvas & tonal elevation */
+  --brand-bg: #2c2d28;
+  --brand-sidebar: #111114;
+  --brand-card: #20211d;
+  --brand-popover: #262722;
+  --brand-inner-bg: #151613;
+
+  /* Hairlines */
+  --brand-border: rgba(255, 255, 255, 0.07);
+  --brand-border-strong: rgba(255, 255, 255, 0.13);
+
+  /* Typography */
+  --brand-text-main: #ECEDEF;
+  --brand-text-muted: #86868F;
+
+  /* Interaction fills */
+  --brand-hover: rgba(255, 255, 255, 0.05);
+  --brand-hover-strong: rgba(255, 255, 255, 0.09);
+  --brand-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+  --brand-shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.38);
+
+  /* Primary action */
+  --brand-highlight: #E6E6EA;
+  --brand-highlight-hover: #F4F4F6;
+  --brand-highlight-text: #2c2d28;
+  --brand-highlight-bg-subtle: rgba(230, 230, 234, 0.10);
+  --brand-highlight-border-subtle: rgba(230, 230, 234, 0.22);
+
+  /* Neon state accents */
+  --neon-constructive: #34d399;
+  --neon-destructive: #fb7185;
+  --neon-live: #38bdf8;
+  --neon-attention: #fbbf24;
+
+  /* Accent */
+  --brand-accent: #a5b4fc;
+  --brand-accent-strong: #818cf8;
+  --brand-accent-tint: rgba(129, 140, 248, 0.14);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --brand-bg: #f4eedf;
+  --brand-sidebar: #fbfbfc;
+  --brand-card: #ffffff;
+  --brand-popover: #faf9f6;
+  --brand-inner-bg: #e6dfcf;
+
+  --brand-border: rgba(0, 0, 0, 0.08);
+  --brand-border-strong: rgba(0, 0, 0, 0.15);
+
+  --brand-text-main: #16161a;
+  --brand-text-muted: #65656d;
+
+  --brand-hover: rgba(0, 0, 0, 0.04);
+  --brand-hover-strong: rgba(0, 0, 0, 0.07);
+  --brand-shadow: 0 18px 50px rgba(15, 23, 42, 0.14);
+  --brand-shadow-soft: 0 8px 22px rgba(15, 23, 42, 0.09);
+
+  --brand-highlight: #16161a;
+  --brand-highlight-hover: #000000;
+  --brand-highlight-text: #fafafa;
+  --brand-highlight-bg-subtle: rgba(22, 22, 26, 0.08);
+  --brand-highlight-border-subtle: rgba(22, 22, 26, 0.18);
+
+  --neon-constructive: #0fae7a;
+  --neon-destructive: #e11d48;
+  --neon-live: #0284c7;
+  --neon-attention: #d97706;
+
+  --brand-accent: #4f46e5;
+  --brand-accent-strong: #4338ca;
+  --brand-accent-tint: rgba(79, 70, 229, 0.09);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-25%); }
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--brand-border-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--brand-hover-strong);
+}
+
+/* Workspace canvas */
+.workspace-canvas {
+  background: var(--brand-bg);
+  color: var(--brand-text-main);
+  min-height: 100vh;
+}

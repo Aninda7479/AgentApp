@@ -1,6 +1,7 @@
 export * from './types.js';
 export * from './config.js';
 export * from './api/client.js';
+export * from './utils/index.js';
 export * from './components/Navbar.js';
 export * from './components/Sidebar.js';
 export * from './components/ChatView.js';
@@ -9,4 +10,5 @@ export * from './components/ModelSelector.js';
 export * from './components/ArtifactsViewer.js';
 export * from './components/SettingsModal.js';
 export * from './components/StudioView.js';
+export * from './components/chat/index.js';
 export * from './AppContainer.js';

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Navbar } from './components/Navbar.js';
 import { Sidebar } from './components/Sidebar.js';
 import { ChatView } from './components/ChatView.js';
@@ -6,7 +6,7 @@ import { ChatInput } from './components/ChatInput.js';
 import { StudioView } from './components/StudioView.js';
 import { SettingsModal } from './components/SettingsModal.js';
 import { ArtifactsViewer } from './components/ArtifactsViewer.js';
-import { ChatMessage, ChatSession, ModelConfig, ModelOption, ServerConfig, ArtifactItem } from './types.js';
+import { TrajectoryStep, ChatSession, ModelConfig, ModelOption, ServerConfig, ArtifactItem } from './types.js';
 import { DEFAULT_SERVER_CONFIG, AVAILABLE_MODELS } from './config.js';
 import { SuperAgentApiClient } from './api/client.js';
 
@@ -18,13 +18,13 @@ export interface AppContainerProps {
 export const AppContainer: React.FC<AppContainerProps> = ({ initialServerConfig }) => {
   const [serverConfig, setServerConfig] = useState<ServerConfig>({
     ...DEFAULT_SERVER_CONFIG,
-    ...initialServerConfig
+    ...initialServerConfig,
   });
 
   const [selectedModel, setSelectedModel] = useState<ModelOption>(AVAILABLE_MODELS[0]);
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
     provider: selectedModel.provider,
-    modelId: selectedModel.id
+    modelId: selectedModel.id,
   });
 
   const [activeTab, setActiveTab] = useState<'chat' | 'studio'>('chat');
@@ -33,11 +33,11 @@ export const AppContainer: React.FC<AppContainerProps> = ({ initialServerConfig 
   const [isArtifactsOpen, setIsArtifactsOpen] = useState(false);
 
   const [sessions, setSessions] = useState<ChatSession[]>([
-    { id: '1', title: 'Code Refactoring & Build Check', updatedAt: 'Just now', messageCount: 4 }
+    { id: '1', title: 'Code Refactoring & Build Check', updatedAt: 'Just now', messageCount: 4 },
   ]);
   const [activeSessionId, setActiveSessionId] = useState('1');
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [steps, setSteps] = useState<TrajectoryStep[]>([]);
   const [systemPrompt, setSystemPrompt] = useState(
     'You are SuperAgent, an autonomous AI assistant specialized in coding and software engineering tasks.'
   );
@@ -46,78 +46,127 @@ export const AppContainer: React.FC<AppContainerProps> = ({ initialServerConfig 
   const [artifacts, setArtifacts] = useState<ArtifactItem[]>([]);
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
 
+  const runStartTimeRef = useRef<number>(0);
   const apiClient = new SuperAgentApiClient(serverConfig);
 
   const handleSendMessage = async (text: string) => {
-    const userMsg: ChatMessage = {
-      id: String(Date.now()),
-      role: 'user',
-      content: [{ type: 'text', text }],
-      timestamp: new Date().toISOString()
+    const userStepId = String(Date.now());
+    const userStep: TrajectoryStep = {
+      id: userStepId,
+      type: 'user',
+      content: text,
+      timestamp: new Date().toISOString(),
+      status: 'success',
     };
 
-    const assistantMsgId = String(Date.now() + 1);
-    const assistantMsg: ChatMessage = {
-      id: assistantMsgId,
-      role: 'assistant',
-      content: [{ type: 'text', text: '' }],
-      timestamp: new Date().toISOString()
+    const assistantStepId = String(Date.now() + 1);
+    const assistantStep: TrajectoryStep = {
+      id: assistantStepId,
+      type: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString(),
+      status: 'running',
     };
 
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    setSteps(prev => [...prev, userStep, assistantStep]);
     setIsStreaming(true);
+    runStartTimeRef.current = Date.now();
 
     let accumulatedText = '';
 
-    await apiClient.streamAgentRun(text, modelConfig, systemPrompt, (evt) => {
+    await apiClient.streamAgentRun(text, modelConfig, systemPrompt, evt => {
+      const elapsedSec = ((Date.now() - runStartTimeRef.current) / 1000).toFixed(1) + 's';
+
       if (evt.type === 'token') {
         accumulatedText += evt.data?.text || '';
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMsgId
-              ? { ...msg, content: [{ type: 'text', text: accumulatedText }] }
-              : msg
+        setSteps(prev =>
+          prev.map(s =>
+            s.id === assistantStepId
+              ? {
+                  ...s,
+                  content: accumulatedText,
+                  status: 'running',
+                  metadata: {
+                    ...s.metadata,
+                    workedDuration: elapsedSec,
+                  },
+                }
+              : s
           )
         );
       } else if (evt.type === 'tool_call') {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMsgId
-              ? {
-                  ...msg,
-                  content: [
-                    ...msg.content,
-                    {
-                      type: 'tool_use',
-                      id: evt.data.id || String(Date.now()),
-                      name: evt.data.name || 'tool',
-                      input: evt.data.input || {}
-                    }
-                  ]
-                }
-              : msg
-          )
-        );
+        const toolCallStep: TrajectoryStep = {
+          id: evt.data.id || String(Date.now()),
+          type: 'tool_call',
+          content: '',
+          toolName: evt.data.name || 'tool',
+          status: 'running',
+          timestamp: new Date().toISOString(),
+          metadata: {
+            toolArgs: evt.data.input || {},
+            workedDuration: elapsedSec,
+            filename: evt.data.input?.path || evt.data.input?.filePath || evt.data.input?.filename,
+          },
+        };
+
+        setSteps(prev => {
+          // Insert tool call step before the final assistant step
+          const withoutLastAssistant = prev.filter(s => s.id !== assistantStepId);
+          const currentAssistant = prev.find(s => s.id === assistantStepId) || assistantStep;
+          return [...withoutLastAssistant, toolCallStep, currentAssistant];
+        });
       } else if (evt.type === 'tool_output') {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMsgId
+        const toolUseId = evt.data.tool_use_id;
+        const toolOutputStep: TrajectoryStep = {
+          id: String(Date.now()),
+          type: 'tool_result',
+          content: evt.data.output || '',
+          status: evt.data.is_error ? 'error' : 'success',
+          timestamp: new Date().toISOString(),
+          metadata: {
+            toolResult: evt.data.output || '',
+            workedDuration: elapsedSec,
+          },
+        };
+
+        setSteps(prev => {
+          // Also update the matching tool_call status if found
+          const updated = prev.map(s => {
+            if (s.id === toolUseId && s.type === 'tool_call') {
+              return {
+                ...s,
+                status: (evt.data.is_error ? 'error' : 'success') as 'error' | 'success',
+                metadata: {
+                  ...s.metadata,
+                  toolResult: evt.data.output,
+                  workedDuration: elapsedSec,
+                },
+              };
+            }
+            return s;
+          });
+
+          // Insert result before the final assistant step
+          const withoutLastAssistant = updated.filter(s => s.id !== assistantStepId);
+          const currentAssistant = updated.find(s => s.id === assistantStepId) || assistantStep;
+          return [...withoutLastAssistant, toolOutputStep, currentAssistant];
+        });
+      } else if (evt.type === 'finished' || evt.type === 'error') {
+        const finalDuration = ((Date.now() - runStartTimeRef.current) / 1000).toFixed(1) + 's';
+        setSteps(prev =>
+          prev.map(s =>
+            s.id === assistantStepId
               ? {
-                  ...msg,
-                  content: [
-                    ...msg.content,
-                    {
-                      type: 'tool_result',
-                      tool_use_id: evt.data.tool_use_id || '',
-                      content: evt.data.output || '',
-                      is_error: evt.data.is_error
-                    }
-                  ]
+                  ...s,
+                  status: (evt.type === 'error' ? 'error' : 'success') as 'error' | 'success',
+                  metadata: {
+                    ...s.metadata,
+                    workedDuration: finalDuration,
+                  },
                 }
-              : msg
+              : s
           )
         );
-      } else if (evt.type === 'finished' || evt.type === 'error') {
         setIsStreaming(false);
       }
     });
@@ -132,7 +181,7 @@ export const AppContainer: React.FC<AppContainerProps> = ({ initialServerConfig 
   };
 
   return (
-    <div className="h-screen w-screen bg-slate-950 text-slate-100 flex flex-col font-sans overflow-hidden">
+    <div className="h-screen w-screen bg-[color:var(--brand-bg,#0a0a0f)] text-[color:var(--brand-text-main,#ecedef)] flex flex-col font-sans overflow-hidden">
       {/* Top Navbar */}
       <Navbar
         serverConfig={serverConfig}
@@ -153,18 +202,18 @@ export const AppContainer: React.FC<AppContainerProps> = ({ initialServerConfig 
           activeSessionId={activeSessionId}
           onSelectSession={setActiveSessionId}
           onNewSession={() => {
-            setMessages([]);
+            setSteps([]);
             setActiveSessionId(String(Date.now()));
           }}
           onOpenSettings={() => setIsSettingsOpen(true)}
         />
 
         {/* Center Main View Area */}
-        <main className="flex-1 flex flex-col overflow-hidden bg-slate-950 relative">
+        <main className="flex-1 flex flex-col overflow-hidden bg-[color:var(--brand-bg,#0a0a0f)] relative">
           {activeTab === 'chat' ? (
             <>
               <ChatView
-                messages={messages}
+                steps={steps}
                 isStreaming={isStreaming}
                 onCopyText={handleCopyText}
               />
@@ -173,9 +222,9 @@ export const AppContainer: React.FC<AppContainerProps> = ({ initialServerConfig 
                 isStreaming={isStreaming}
                 onStopStreaming={() => setIsStreaming(false)}
                 selectedModel={selectedModel}
-                onSelectModel={(m) => {
+                onSelectModel={m => {
                   setSelectedModel(m);
-                  setModelConfig((prev) => ({ ...prev, provider: m.provider, modelId: m.id }));
+                  setModelConfig(prev => ({ ...prev, provider: m.provider, modelId: m.id }));
                 }}
               />
             </>

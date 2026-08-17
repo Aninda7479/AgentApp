@@ -7,7 +7,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Bot, Square, Loader2, RefreshCw, AlertTriangle, ChevronRight, ChevronDown } from 'lucide-react';
 import { useTrajectory } from '../hooks/useTrajectory';
 import { useAgent } from '../hooks/useAgent';
-import { StepRenderer } from './StepRenderer';
+import { TrajectoryCanvas } from '../pages/Workspace/TrajectoryCanvas';
 import { chatStore, useChatStore } from '../stores/chatStore';
 import { ChatRepository } from '../services/ChatRepository';
 
@@ -16,6 +16,9 @@ interface MessageCanvasProps {
   onClosePanel?: () => void;
   onUndoStep?: (stepId: string) => void;
   onEditStep?: (stepId: string, newContent: string) => void;
+  onViewDiff?: (filename: string, originalCode: string, modifiedCode: string) => void;
+  onRegenerate?: (turnId: string, content: string) => void;
+  onRetryLast?: () => void;
 }
 
 export const MessageCanvas: React.FC<MessageCanvasProps> = ({
@@ -23,67 +26,38 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({
   onClosePanel,
   onUndoStep,
   onEditStep,
+  onViewDiff,
+  onRegenerate,
+  onRetryLast,
 }) => {
   const steps = useTrajectory(chatId);
   const { isRunning, lastError, contextUsage, stopRun } = useAgent(chatId);
   const chat = useChatStore((s) => s.chats.find((c) => c.id === chatId));
   const draftProject = useChatStore((s) => s.draftProject);
   const displayProject = chatId === 'draft-chat' ? (draftProject || 'No Project') : (chat?.project || 'No Project');
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const userScrolledUpRef = useRef(false);
-
-  const [menuOpen, setMenuOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const popupRef = useRef<HTMLDivElement>(null);
-
-  const handleScroll = () => {
-    if (!scrollContainerRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 80;
-    userScrolledUpRef.current = !isAtBottom;
-  };
-
-  useEffect(() => {
-    if (!userScrolledUpRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: 'auto' });
-    }
-  }, [steps, isRunning]);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (!triggerRef.current?.contains(target) && !popupRef.current?.contains(target)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [menuOpen]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Panel Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-slate-900/60 border-b border-slate-800/60 select-none">
-        <div className="flex items-center gap-1.5 min-w-0 text-slate-400 text-xs">
-          <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-sm shadow-cyan-500/50 shrink-0 mr-1" />
-          <span className="hover:text-slate-200 transition-colors">Workspace</span>
-          <ChevronRight size={12} className="shrink-0 text-slate-500" />
-          <span className="px-2 py-0.5 bg-slate-950/80 border border-slate-800/60 rounded-md text-[10px] font-medium text-slate-300 truncate max-w-[150px]">
+      <div className="flex items-center justify-between px-4 py-3 bg-[color:var(--brand-card)] border-b border-[color:var(--brand-border)] select-none">
+        <div className="flex items-center gap-1.5 min-w-0 text-[color:var(--brand-text-muted)] text-xs">
+          <div className="w-2.5 h-2.5 rounded-full bg-[color:var(--neon-live)] shadow-sm shadow-[color:var(--neon-live)]/50 shrink-0 mr-1" />
+          <span className="hover:text-[color:var(--brand-text-main)] transition-colors">Workspace</span>
+          <ChevronRight size={12} className="shrink-0 text-[color:var(--brand-text-muted)] opacity-60" />
+          <span className="px-2 py-0.5 bg-[color:var(--brand-inner-bg)] border border-[color:var(--brand-border)] rounded-md text-[10px] font-medium text-[color:var(--brand-text-main)] truncate max-w-[150px]">
             {displayProject}
           </span>
-          <ChevronRight size={12} className="shrink-0 text-slate-500" />
-          <span className="font-semibold text-sm text-slate-100 truncate">
+          <ChevronRight size={12} className="shrink-0 text-[color:var(--brand-text-muted)] opacity-60" />
+          <span className="font-semibold text-sm text-[color:var(--brand-text-main)] truncate">
             {chat?.title || 'Active Session'}
           </span>
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
           {contextUsage && (
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-mono bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800">
+            <div className="flex items-center gap-1.5 text-xs text-[color:var(--brand-text-muted)] font-mono bg-[color:var(--brand-inner-bg)] px-2.5 py-1 rounded-lg border border-[color:var(--brand-border)]">
               <span>Ctx:</span>
-              <span className={contextUsage.pct > 80 ? 'text-amber-400 font-bold' : 'text-cyan-400'}>
+              <span className={contextUsage.pct > 80 ? 'text-[color:var(--neon-attention)] font-bold' : 'text-[color:var(--neon-live)]'}>
                 {contextUsage.pct}%
               </span>
             </div>
@@ -92,7 +66,7 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({
           {isRunning && (
             <button
               onClick={stopRun}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-colors"
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[color:var(--neon-destructive)]/10 hover:bg-[color:var(--neon-destructive)]/20 text-[color:var(--neon-destructive)] border border-[color:var(--neon-destructive)]/30 transition-colors"
             >
               <Square size={12} className="fill-current" />
               <span>Stop Run</span>
@@ -102,7 +76,7 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({
           {onClosePanel && (
             <button
               onClick={onClosePanel}
-              className="text-slate-400 hover:text-slate-200 transition-colors p-1 rounded-lg hover:bg-slate-800"
+              className="text-[color:var(--brand-text-muted)] hover:text-[color:var(--brand-text-main)] transition-colors p-1 rounded-lg hover:bg-[color:var(--brand-hover)]"
               title="Close Panel"
             >
               ✕
@@ -111,45 +85,18 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({
         </div>
       </div>
 
-      {/* Messages Scroll Area */}
-      <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-thin scrollbar-thumb-slate-800">
-        {steps.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center p-8 select-none">
-            <div className="w-14 h-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 mb-4 shadow-lg shadow-cyan-500/10">
-              <Bot size={28} />
-            </div>
-            <h3 className="text-base font-semibold text-slate-200 mb-1">SuperAgent Session Ready</h3>
-            <p className="text-xs text-slate-400 max-w-sm">
-              Type your task prompt below. SuperAgent will autonomously edit files, run terminal commands, and inspect results.
-            </p>
-          </div>
-        ) : (
-          steps.map((step) => (
-            <StepRenderer
-              key={step.id}
-              step={step}
-              isWorking={isRunning}
-              onUndoStep={onUndoStep}
-              onEditStep={onEditStep}
-            />
-          ))
-        )}
-
-        {isRunning && (
-          <div className="flex items-center gap-2.5 px-4 py-2 text-xs font-mono text-cyan-400 animate-pulse">
-            <Loader2 size={14} className="animate-spin" />
-            <span>Agent executing turn...</span>
-          </div>
-        )}
-
-        {lastError && (
-          <div className="mx-4 my-2 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
-            <AlertTriangle size={16} className="shrink-0 text-red-400" />
-            <span className="break-words">{lastError}</span>
-          </div>
-        )}
-
-        <div ref={bottomRef} />
+      {/* Trajectory Canvas */}
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0 relative">
+        <TrajectoryCanvas
+          steps={steps}
+          isStreaming={isRunning}
+          lastError={lastError}
+          onUndoStep={onUndoStep}
+          onEditStep={onEditStep}
+          onViewDiff={onViewDiff}
+          onRegenerate={onRegenerate}
+          onRetryLast={onRetryLast}
+        />
       </div>
     </div>
   );

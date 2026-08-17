@@ -66,6 +66,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
                 chatId={activeChatId}
                 onUndoStep={onUndoStep}
                 onEditStep={onEditStep}
+                onViewDiff={onViewDiff}
               />
             </div>
             {/* Global composer bar at the bottom */}
