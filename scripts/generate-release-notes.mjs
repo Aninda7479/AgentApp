@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // scripts/generate-release-notes.mjs
-// Generates a release body matching the TinyTools style:
+// Generates a release body matching clean download styling:
+//   - Quick direct text links for Windows, macOS, Linux, Server
 //   - Desktop installer download table
-//   - Server / HomeLab tarball download table
+//   - Standalone CLI & Headless Web Server table
+//   - Quick start commands
 // Output file: release-notes.md (read by the release workflow as --body-path)
 
-import { readFileSync, writeFileSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'fs';
+import { resolve, dirname, join, basename } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -21,35 +23,78 @@ if (!version) {
 const REPO = 'Aninda7479/AgentApp';
 const BASE = `https://github.com/${REPO}/releases/download/v${version}`;
 
+// Helper to find downloaded artifact files in artifacts directory if present
+const findArtifactFile = (pattern) => {
+  const artifactsDir = resolve(ROOT, 'artifacts');
+  const cliArtifactsDir = resolve(ROOT, 'cli-artifacts');
+  const searchDirs = [artifactsDir, cliArtifactsDir].filter(d => existsSync(d));
+  
+  const collect = (dir) => {
+    let results = [];
+    const entries = readdirSync(dir);
+    for (const e of entries) {
+      const full = join(dir, e);
+      if (statSync(full).isDirectory()) {
+        results = results.concat(collect(full));
+      } else {
+        results.push(basename(full));
+      }
+    }
+    return results;
+  };
+
+  for (const dir of searchDirs) {
+    const files = collect(dir);
+    const match = files.find(f => pattern.test(f));
+    if (match) return match;
+  }
+  return null;
+};
+
+// ── Resolve filenames ────────────────────────────────────────────────────────
+const winExeName = findArtifactFile(/^SuperAgent.*x64.*\.exe$/i) || `SuperAgent_${version}_x64-setup.exe`;
+const winMsiName = findArtifactFile(/^SuperAgent.*\.msi$/i) || `SuperAgent_${version}_x64_en-US.msi`;
+const macArmDmgName = findArtifactFile(/^SuperAgent.*(aarch64|arm64).*\.dmg$/i) || `SuperAgent_${version}_aarch64.dmg`;
+const macIntelDmgName = findArtifactFile(/^SuperAgent.*(x64|x86_64).*\.dmg$/i) || `SuperAgent_${version}_x64.dmg`;
+const linuxAppImageName = findArtifactFile(/^SuperAgent.*\.AppImage$/i) || `SuperAgent_${version}_amd64.AppImage`;
+const linuxDebName = findArtifactFile(/^SuperAgent.*\.deb$/i) || `SuperAgent_${version}_amd64.deb`;
+const linuxRpmName = findArtifactFile(/^SuperAgent.*\.rpm$/i) || `SuperAgent-${version}-1.x86_64.rpm`;
+
+// CLI / Standalone Server binaries
+const cliWinZip = `superagent-cli-v${version}-windows-x64.zip`;
+const cliMacArmZip = `superagent-cli-v${version}-macos-arm64.zip`;
+const cliMacIntelZip = `superagent-cli-v${version}-macos-x64.zip`;
+const cliLinuxX64Tar = `superagent-cli-v${version}-linux-x64.tar.gz`;
+const cliLinuxArmTar = `superagent-cli-v${version}-linux-arm64.tar.gz`;
+
 // ── Desktop installer rows ───────────────────────────────────────────────────
-// Tauri generates these artifact names automatically based on tauri.conf.json
-// productName + version + target.
 const desktopRows = [
   {
     os: '🪟 **Windows**',
     links: [
-      `[Download Installer (EXE)](${BASE}/SuperAgent_${version}_x64-setup.exe)`,
-      `[Download MSI](${BASE}/SuperAgent_${version}_x64_en-US.msi)`,
-    ].join(' <br> '),
-    desc: 'NSIS Installer or MSI — Windows x64',
+      `[Download Installer (.exe)](${BASE}/${encodeURIComponent(winExeName)})`,
+      `[Download MSI (.msi)](${BASE}/${encodeURIComponent(winMsiName)})`,
+    ].join(' &bull; '),
+    desc: 'NSIS Installer / MSI (Windows 10 / 11 x64)',
   },
   {
     os: '🍎 **macOS (Apple Silicon)**',
-    links: `[Download DMG](${BASE}/SuperAgent_${version}_aarch64.dmg)`,
-    desc: 'macOS Disk Image — M1/M2/M3 (arm64)',
+    links: `[Download DMG (.dmg)](${BASE}/${encodeURIComponent(macArmDmgName)})`,
+    desc: 'Apple Silicon M1 / M2 / M3 / M4 (arm64)',
   },
   {
     os: '🍎 **macOS (Intel)**',
-    links: `[Download DMG](${BASE}/SuperAgent_${version}_x64.dmg)`,
-    desc: 'macOS Disk Image — Intel x86_64',
+    links: `[Download DMG (.dmg)](${BASE}/${encodeURIComponent(macIntelDmgName)})`,
+    desc: 'Intel 64-bit Mac (x86_64)',
   },
   {
     os: '🐧 **Linux**',
     links: [
-      `[Download AppImage](${BASE}/SuperAgent_${version}_amd64.AppImage)`,
-      `[Download DEB](${BASE}/SuperAgent_${version}_amd64.deb)`,
-    ].join(' <br> '),
-    desc: 'Portable AppImage or Debian/Ubuntu package',
+      `[Download AppImage](${BASE}/${encodeURIComponent(linuxAppImageName)})`,
+      `[Download DEB](${BASE}/${encodeURIComponent(linuxDebName)})`,
+      `[Download RPM](${BASE}/${encodeURIComponent(linuxRpmName)})`,
+    ].join(' &bull; '),
+    desc: 'Universal AppImage, Debian / Ubuntu .deb, Fedora / RHEL .rpm',
   },
 ];
 
@@ -57,65 +102,80 @@ const desktopRows = [
 const cliRows = [
   {
     os: '🐧 **Linux (x64)**',
-    link: `[superagent-cli-v${version}-linux-x64.tar.gz](${BASE}/superagent-cli-v${version}-linux-x64.tar.gz)`,
+    link: `[${cliLinuxX64Tar}](${BASE}/${cliLinuxX64Tar})`,
+    desc: 'Server / Headless / CLI for Linux x64',
   },
   {
-    os: '🐧 **Linux (arm64)**',
-    link: `[superagent-cli-v${version}-linux-arm64.tar.gz](${BASE}/superagent-cli-v${version}-linux-arm64.tar.gz)`,
+    os: '🐧 **Linux (ARM64)**',
+    link: `[${cliLinuxArmTar}](${BASE}/${cliLinuxArmTar})`,
+    desc: 'Server / Raspberry Pi / ARM64 Linux',
   },
   {
     os: '🪟 **Windows (x64)**',
-    link: `[superagent-cli-v${version}-windows-x64.zip](${BASE}/superagent-cli-v${version}-windows-x64.zip)`,
+    link: `[${cliWinZip}](${BASE}/${cliWinZip})`,
+    desc: 'Standalone Command-line & Local Web Server',
   },
   {
     os: '🍎 **macOS (Apple Silicon)**',
-    link: `[superagent-cli-v${version}-macos-arm64.zip](${BASE}/superagent-cli-v${version}-macos-arm64.zip)`,
+    link: `[${cliMacArmZip}](${BASE}/${cliMacArmZip})`,
+    desc: 'Standalone CLI / Server for M-series Macs',
   },
   {
     os: '🍎 **macOS (Intel)**',
-    link: `[superagent-cli-v${version}-macos-x64.zip](${BASE}/superagent-cli-v${version}-macos-x64.zip)`,
+    link: `[${cliMacIntelZip}](${BASE}/${cliMacIntelZip})`,
+    desc: 'Standalone CLI / Server for Intel Macs',
   },
 ];
 
 // ── Previous version for changelog link ──────────────────────────────────────
-// Read from package.json and compute previous minor (simple heuristic).
 let prevVersion = '0.0.0';
 try {
   const pkg = JSON.parse(readFileSync(resolve(ROOT, 'package.json'), 'utf8'));
   const [maj, min, pat] = pkg.version.split('.').map(Number);
-  // Previous version: if patch > 0 decrement patch, else decrement minor.
   if (pat > 0) prevVersion = `${maj}.${min}.${pat - 1}`;
   else if (min > 0) prevVersion = `${maj}.${min - 1}.0`;
   else prevVersion = `${maj - 1}.0.0`;
 } catch { /* ignore */ }
 
 const desktopTable = [
-  '| OS / Platform | Direct Download | Description |',
+  '| Platform | Direct Downloads | Description |',
   '| :--- | :--- | :--- |',
   ...desktopRows.map(r => `| ${r.os} | ${r.links} | ${r.desc} |`),
 ].join('\n');
 
 const cliTable = [
-  '| OS / Architecture | Direct Download |',
-  '| :--- | :--- |',
-  ...cliRows.map(r => `| ${r.os} | ${r.link} |`),
+  '| Architecture / OS | Direct Archive Link | Details |',
+  '| :--- | :--- | :--- |',
+  ...cliRows.map(r => `| ${r.os} | ${r.link} | ${r.desc} |`),
 ].join('\n');
 
 const notes = `\
-### 🚀 Quick Download Links
+### ⚡ Quick Direct Download Links
+
+* 🪟 **Windows**: [Installer (.exe)](${BASE}/${encodeURIComponent(winExeName)}) &bull; [MSI (.msi)](${BASE}/${encodeURIComponent(winMsiName)}) &bull; [Standalone Server/CLI (.zip)](${BASE}/${cliWinZip})
+* 🍎 **macOS (Apple Silicon)**: [DMG (.dmg)](${BASE}/${encodeURIComponent(macArmDmgName)}) &bull; [Standalone Server/CLI (.zip)](${BASE}/${cliMacArmZip})
+* 🍎 **macOS (Intel)**: [DMG (.dmg)](${BASE}/${encodeURIComponent(macIntelDmgName)}) &bull; [Standalone Server/CLI (.zip)](${BASE}/${cliMacIntelZip})
+* 🐧 **Linux**: [AppImage (.AppImage)](${BASE}/${encodeURIComponent(linuxAppImageName)}) &bull; [Debian/Ubuntu (.deb)](${BASE}/${encodeURIComponent(linuxDebName)}) &bull; [Fedora/RHEL (.rpm)](${BASE}/${encodeURIComponent(linuxRpmName)}) &bull; [Standalone (.tar.gz)](${BASE}/${cliLinuxX64Tar})
+* 🌐 **Headless Server / HomeLab**: [Linux x64](${BASE}/${cliLinuxX64Tar}) &bull; [Linux ARM64](${BASE}/${cliLinuxArmTar}) &bull; [macOS ARM64](${BASE}/${cliMacArmZip}) &bull; [Windows x64](${BASE}/${cliWinZip})
+
+---
+
+### 🖥️ Desktop Application Installers
 
 ${desktopTable}
 
 ---
 
-#### 🖥️ SuperAgent Standalone Binary (CLI & Web Server)
+### 🌐 Standalone Server & CLI (Zero-Dependency)
 
-Zero-dependency executable (no Node.js required):
+Run SuperAgent anywhere as a lightweight local web server or terminal CLI with zero runtime dependencies (no Node.js or Rust required):
 
 \`\`\`bash
-./superagent --serve
-# or with custom port:
-./superagent --serve --serve-port 8080
+# Start the local web UI & API server on port 3000
+./superagent --serve --serve-port 3000
+
+# Or launch interactive terminal agent mode
+./superagent
 \`\`\`
 
 ${cliTable}
@@ -126,5 +186,6 @@ ${cliTable}
 `;
 
 writeFileSync(resolve(ROOT, 'release-notes.md'), notes, 'utf8');
-console.log('[generate-release-notes] Written release-notes.md');
+console.log('[generate-release-notes] Successfully written release-notes.md');
 console.log(notes);
+
