@@ -18,6 +18,7 @@ import { ProjectInstructionsParser } from '../memory/instructions.js';
 import { ArtifactRunner } from '../artifact/artifactRunner.js';
 import { getStandaloneWorkspace } from '../storage/locations.js';
 import { sendTelegramMessage } from '../integrations/telegram.js';
+import { WebSearchTool } from '../automation/search.js';
 
 const execAsync = promisify(exec);
 const artifactRunner = new ArtifactRunner();
@@ -506,6 +507,43 @@ export function createBuiltinTools(
           return `HTTP ${response.status} ${response.statusText}\n\n${truncated}`;
         } catch (err: unknown) {
           return `Error fetching ${url}: ${(err as Error).message}`;
+        }
+      }
+    },
+    {
+      name: 'web_search',
+      description: 'Search the live web for current news, articles, documentation, or facts using search query keywords. Returns top search results with titles, snippets, and source URLs.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'The search query or keywords to look up' },
+          numResults: { type: 'number', description: 'Maximum number of results to return (default 5, max 10)' }
+        },
+        required: ['query'],
+        additionalProperties: false
+      },
+      execute: async ({ query, numResults }) => {
+        try {
+          enforceNetworkAllowed(
+            { kind: 'search', method: 'GET' },
+            getInternetLevel ? getInternetLevel() : undefined
+          );
+        } catch (err: unknown) {
+          return `Blocked by Internet Access policy: ${(err as Error).message}`;
+        }
+        try {
+          const searcher = new WebSearchTool();
+          const limit = Math.min(10, Math.max(1, Number(numResults) || 5));
+          const res = await searcher.search(query as string, { limit });
+          if (!res.results || res.results.length === 0) {
+            return `No search results found for query "${query}".`;
+          }
+          const formatted = res.results.map((r, i) =>
+            `${i + 1}. **${r.title}**\n   URL: ${r.url}\n   Snippet: ${r.snippet}`
+          ).join('\n\n');
+          return `Search Results for "${query}" (via ${res.provider}):\n\n${formatted}`;
+        } catch (err: unknown) {
+          return `Error executing web search for "${query}": ${(err as Error).message}`;
         }
       }
     },

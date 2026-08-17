@@ -1,5 +1,5 @@
 /** Supported web search provider backends. */
-export type SearchProvider = 'serper' | 'tavily' | 'searxng' | 'mock';
+export type SearchProvider = 'duckduckgo' | 'serper' | 'tavily' | 'searxng' | 'mock';
 
 /** A single search result from any provider. */
 export interface SearchResultItem {
@@ -56,6 +56,8 @@ export class WebSearchTool {
         return this.searchTavily(query, limit, options.apiKey);
       case 'searxng':
         return this.searchSearxng(query, limit, options.baseUrl);
+      case 'duckduckgo':
+        return this.searchDuckDuckGo(query, limit);
       case 'mock':
       default:
         return this.searchMock(query, limit);
@@ -66,7 +68,57 @@ export class WebSearchTool {
     if (process.env.SERPER_API_KEY) return 'serper';
     if (process.env.TAVILY_API_KEY) return 'tavily';
     if (process.env.SEARXNG_URL) return 'searxng';
-    return 'mock';
+    return 'duckduckgo';
+  }
+
+  private async searchDuckDuckGo(query: string, limit: number): Promise<SearchResponse> {
+    try {
+      const response = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (!response.ok) {
+        throw new Error(`DuckDuckGo search failed with status ${response.status}`);
+      }
+
+      const html = await response.text();
+      const results: SearchResultItem[] = [];
+      const resultBlocks = html.split(/class="[^"]*web-result[^"]*"/);
+
+      for (let i = 1; i < resultBlocks.length && results.length < limit; i++) {
+        const block = resultBlocks[i];
+        const titleMatch = block.match(/<a class="result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/i);
+        const headingMatch = block.match(/<h2[^>]*class="result__title"[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i);
+        const urlMatch = block.match(/<a class="result__url"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+        const uddgMatch = block.match(/href="[^"]*uddg=([^&"]+)/i);
+
+        const title = headingMatch ? headingMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+        const snippet = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+        let link = urlMatch ? urlMatch[2].replace(/<[^>]+>/g, '').trim() : '';
+        if (uddgMatch && uddgMatch[1]) {
+          try {
+            link = decodeURIComponent(uddgMatch[1]);
+          } catch {}
+        } else if (link && !link.startsWith('http')) {
+          link = 'https://' + link;
+        }
+
+        if (title && (snippet || link)) {
+          results.push({ title, snippet, url: link });
+        }
+      }
+
+      if (results.length > 0) {
+        return { query, results, provider: 'duckduckgo', totalResults: results.length };
+      }
+    } catch {
+      // Fall back to mock if DuckDuckGo HTML was unreachable or blocked
+    }
+    return this.searchMock(query, limit);
   }
 
   private async searchSerper(query: string, limit: number, apiKey?: string): Promise<SearchResponse> {
