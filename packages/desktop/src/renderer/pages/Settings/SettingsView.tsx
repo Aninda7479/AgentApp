@@ -86,6 +86,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   bootstrapping,
   appVersion,
   onCheckForUpdates,
+  onDownloadUpdate,
+  onRestartApp,
   updateStatus
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -491,6 +493,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             appVersion={appVersion}
             updateStatus={updateStatus ?? null}
             onCheckForUpdates={onCheckForUpdates ?? (() => {})}
+            onDownloadUpdate={onDownloadUpdate}
+            onRestartApp={onRestartApp}
             checking={updateStatus?.status === 'checking'}
           />
         )}

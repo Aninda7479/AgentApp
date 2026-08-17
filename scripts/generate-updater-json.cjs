@@ -9,69 +9,123 @@ if (!version) {
 
 const artifactsDir = path.join(__dirname, '../artifacts');
 if (!fs.existsSync(artifactsDir)) {
-  console.error('Artifacts directory does not exist:', artifactsDir);
-  process.exit(1);
+  fs.mkdirSync(artifactsDir, { recursive: true });
 }
-
-const updater = {
-  version: version,
-  notes: `Changelog for v${version} is available on GitHub release page.`,
-  pub_date: new Date().toISOString(),
-  platforms: {}
-};
 
 const repo = 'Aninda7479/AgentApp';
 
-const getAllFiles = (dir, fileList = []) => {
-  const files = fs.readdirSync(dir);
-  for (const file of files) {
-    const filePath = path.join(dir, file);
-    if (fs.statSync(filePath).isDirectory()) {
-      getAllFiles(filePath, fileList);
-    } else {
-      fileList.push(filePath);
+async function main() {
+  const updater = {
+    version: version,
+    notes: `Changelog for v${version} is available on GitHub release page.`,
+    pub_date: new Date().toISOString(),
+    platforms: {}
+  };
+
+  // 1. Try local files first
+  const fileMap = {};
+  const getAllFiles = (dir, fileList = []) => {
+    if (!fs.existsSync(dir)) return fileList;
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const filePath = path.join(dir, file);
+      if (fs.statSync(filePath).isDirectory()) {
+        getAllFiles(filePath, fileList);
+      } else {
+        fileList.push(filePath);
+      }
+    }
+    return fileList;
+  };
+
+  const allFilePaths = getAllFiles(artifactsDir);
+  for (const filePath of allFilePaths) {
+    fileMap[path.basename(filePath)] = filePath;
+  }
+
+  let localSigFound = false;
+  for (const file of Object.keys(fileMap)) {
+    if (file.endsWith('.sig')) {
+      localSigFound = true;
+      const targetFile = file.slice(0, -4);
+      if (!fileMap[targetFile]) continue;
+
+      const sigContent = fs.readFileSync(fileMap[file], 'utf8').trim();
+      const url = `https://github.com/${repo}/releases/download/v${version}/${targetFile}`;
+      mapPlatformSignature(updater, targetFile, sigContent, url);
     }
   }
-  return fileList;
-};
 
-const allFilePaths = getAllFiles(artifactsDir);
-const fileMap = {};
-for (const filePath of allFilePaths) {
-  fileMap[path.basename(filePath)] = filePath;
+  // 2. If local signatures were not found (e.g. uploaded directly to GitHub release draft), fetch from GitHub API
+  if (!localSigFound || Object.keys(updater.platforms).length === 0) {
+    console.log('[generate-updater-json] Fetching release assets from GitHub API for v' + version + '...');
+    const headers = { 'User-Agent': 'superagent-release' };
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    if (token) headers['Authorization'] = `token ${token}`;
+
+    try {
+      let releaseRes = await fetch(`https://api.github.com/repos/${repo}/releases/tags/v${version}`, { headers });
+      if (!releaseRes.ok) {
+        // Fallback to releases list for draft releases
+        const listRes = await fetch(`https://api.github.com/repos/${repo}/releases`, { headers });
+        if (listRes.ok) {
+          const releases = await listRes.json();
+          const draft = releases.find(r => r.tag_name === `v${version}` || r.name?.includes(version));
+          if (draft) releaseRes = { ok: true, json: async () => draft };
+        }
+      }
+
+      if (releaseRes.ok) {
+        const release = await releaseRes.json();
+        const assets = release.assets || [];
+        console.log(`[generate-updater-json] Found ${assets.length} release assets on GitHub.`);
+
+        for (const asset of assets) {
+          if (asset.name.endsWith('.sig')) {
+            const targetFileName = asset.name.slice(0, -4);
+            const targetAsset = assets.find(a => a.name === targetFileName);
+            if (!targetAsset) continue;
+
+            const sigRes = await fetch(asset.browser_download_url, { headers });
+            if (sigRes.ok) {
+              const sigContent = (await sigRes.text()).trim();
+              mapPlatformSignature(updater, targetFileName, sigContent, targetAsset.browser_download_url);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[generate-updater-json] Could not query GitHub release assets:', err);
+    }
+  }
+
+  fs.writeFileSync(path.join(artifactsDir, 'updater.json'), JSON.stringify(updater, null, 2) + '\n', 'utf8');
+  console.log('[generate-updater-json] Successfully generated updater.json:');
+  console.log(JSON.stringify(updater, null, 2));
 }
 
-const filenames = Object.keys(fileMap);
+function mapPlatformSignature(updater, targetFileName, signature, url) {
+  const lower = targetFileName.toLowerCase();
 
-for (const file of filenames) {
-  if (file.endsWith('.sig')) {
-    const targetFile = file.slice(0, -4);
-    if (!filenames.includes(targetFile)) continue;
-
-    const sigContent = fs.readFileSync(fileMap[file], 'utf8').trim();
-    const url = `https://github.com/${repo}/releases/download/v${version}/${targetFile}`;
-
-    let platform = '';
-    const lowerFile = file.toLowerCase();
-
-    if (lowerFile.includes('aarch64') || lowerFile.includes('arm64') || (lowerFile.includes('app.tar.gz') && !lowerFile.includes('x64') && !lowerFile.includes('x86_64'))) {
-      platform = 'darwin-aarch64';
-    } else if ((lowerFile.includes('x64') || lowerFile.includes('x86_64')) && (lowerFile.includes('tar.gz') || lowerFile.includes('app') || lowerFile.includes('dmg')) && (lowerFile.includes('darwin') || lowerFile.includes('macos'))) {
-      platform = 'darwin-x86_64';
-    } else if ((lowerFile.includes('x64') || lowerFile.includes('x86_64')) && (lowerFile.includes('zip') || lowerFile.includes('msi') || lowerFile.includes('exe') || lowerFile.includes('nsis'))) {
-      platform = 'windows-x86_64';
-    } else if ((lowerFile.includes('amd64') || lowerFile.includes('x86_64') || lowerFile.includes('x64')) && (lowerFile.includes('appimage') || lowerFile.includes('deb') || lowerFile.includes('tar.gz'))) {
-      platform = 'linux-x86_64';
-    }
-
-    if (platform) {
-      updater.platforms[platform] = {
-        signature: sigContent,
-        url: url
-      };
-    }
+  // macOS Apple Silicon (arm64 / aarch64) - must be app.tar.gz for in-place auto-update
+  if ((lower.includes('aarch64') || lower.includes('arm64')) && lower.includes('app.tar.gz')) {
+    updater.platforms['darwin-aarch64'] = { signature, url };
+  }
+  // macOS Intel (x64 / x86_64) - must be app.tar.gz
+  else if ((lower.includes('x64') || lower.includes('x86_64')) && lower.includes('app.tar.gz')) {
+    updater.platforms['darwin-x86_64'] = { signature, url };
+  }
+  // Windows (x64) - NSIS setup exe or nsis.zip (exclude .msi for in-place updater)
+  else if (lower.includes('x64') && (lower.endsWith('-setup.exe') || lower.endsWith('.nsis.zip') || (lower.endsWith('.exe') && !lower.includes('cli')))) {
+    updater.platforms['windows-x86_64'] = { signature, url };
+  }
+  // Linux (x64) - AppImage or AppImage.tar.gz (exclude .deb and .rpm)
+  else if ((lower.includes('amd64') || lower.includes('x86_64') || lower.includes('x64')) && (lower.endsWith('.appimage') || lower.includes('appimage.tar.gz'))) {
+    updater.platforms['linux-x86_64'] = { signature, url };
   }
 }
 
-fs.writeFileSync(path.join(artifactsDir, 'updater.json'), JSON.stringify(updater, null, 2) + '\n', 'utf8');
-console.log('[generate-updater-json] Successfully generated updater.json:', JSON.stringify(updater, null, 2));
+main().catch((err) => {
+  console.error('[generate-updater-json] Fatal error:', err);
+  process.exit(1);
+});

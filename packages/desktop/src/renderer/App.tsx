@@ -822,6 +822,8 @@ export const App: React.FC = () => {
 
   // ── Updates ────────────────────────────────────────────────────────────────
   const handleCheckForUpdates = () => UpdateService.check(ctx);
+  const handleDownloadUpdate = () => UpdateService.downloadAndInstall(ctx);
+  const handleRestartApp = () => UpdateService.quitAndInstall(ctx);
 
   // ── Web-mode account actions (delegate to AccountService) ───────────────────
   const handleOpenAccount = () => AccountService.open(ctx, isWebMode);
@@ -1756,6 +1758,8 @@ export const App: React.FC = () => {
               bootstrapping={bootstrapping}
               appVersion={appVersion}
               onCheckForUpdates={handleCheckForUpdates}
+              onDownloadUpdate={handleDownloadUpdate}
+              onRestartApp={handleRestartApp}
               updateStatus={updateStatus}
             />
           )}

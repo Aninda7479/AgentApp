@@ -88,5 +88,7 @@ export interface SettingsViewProps {
   bootstrapping?: boolean;
   appVersion?: string;
   onCheckForUpdates?: () => void;
+  onDownloadUpdate?: () => void;
+  onRestartApp?: () => void;
   updateStatus?: UpdateStatus | null;
 }

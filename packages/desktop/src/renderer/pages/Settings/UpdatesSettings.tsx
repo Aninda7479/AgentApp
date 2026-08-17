@@ -18,6 +18,8 @@ interface UpdatesSettingsProps {
   appVersion?: string;
   updateStatus: UpdateStatus | null;
   onCheckForUpdates: () => void;
+  onDownloadUpdate?: () => void;
+  onRestartApp?: () => void;
   checking: boolean;
 }
 
@@ -25,13 +27,15 @@ const REPO_URL = 'https://github.com/Aninda7479/AgentApp';
 
 /** Renders the current version and a "Check for updates" action. */
 import React, { useState } from 'react';
-import { RefreshCw, CheckCircle2, AlertTriangle, Info, ExternalLink } from 'lucide-react';
+import { RefreshCw, CheckCircle2, AlertTriangle, Info, ExternalLink, Download } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
 import { getIpc } from '../../lib/electron';
 export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
   appVersion,
   updateStatus,
   onCheckForUpdates,
+  onDownloadUpdate,
+  onRestartApp,
   checking
 }) => {
   const [githubUrl] = useState(REPO_URL);
@@ -67,8 +71,20 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
     }
   };
 
+  const handleDownload = () => {
+    if (onDownloadUpdate) {
+      onDownloadUpdate();
+    } else if (ipc) {
+      ipc.invoke('download-update');
+    }
+  };
+
   const handleRestart = () => {
-    if (ipc) ipc.invoke('quit-and-install');
+    if (onRestartApp) {
+      onRestartApp();
+    } else if (ipc) {
+      ipc.invoke('quit-and-install');
+    }
   };
 
   const openInBrowser = (url: string) => {
@@ -123,6 +139,17 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
             )}
           </div>
         </div>
+        {updateStatus.status === 'available' && (
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="ui-btn ui-btn-primary btn-sm flex items-center gap-1.5"
+            >
+              <Download size={13} /> Download and Install
+            </button>
+          </div>
+        )}
         {updateStatus.status === 'downloaded' && (
           <div className="flex justify-end pt-1">
             <button
