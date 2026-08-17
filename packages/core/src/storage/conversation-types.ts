@@ -209,6 +209,7 @@ export const CHAT_FILE_KEYS = [
   'project',
   'timestamp',
   'steps',
+  'messages',
   'projectStorageKey',
   'isRunning',
   'startedAt',

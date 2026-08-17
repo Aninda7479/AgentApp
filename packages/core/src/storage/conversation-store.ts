@@ -493,19 +493,26 @@ export async function writeConversationStore(data: StoreData, userDataDir: strin
     const { chatFile, configFile } = splitChat(chat);
     const chatJsonPath = getChatJsonPath(userDataDir, chat.id, targetProjectKey);
 
-    // If incoming in-memory chat has empty steps (e.g. dormant/evicted from RAM),
-    // preserve the existing steps stored on disk!
+    // If incoming in-memory chat has empty steps or messages (e.g. dormant/evicted from RAM),
+    // preserve the existing steps and messages stored on disk!
     let stepsToSave = chatFile.steps;
-    if (!Array.isArray(stepsToSave) || stepsToSave.length === 0) {
-      const existing = await readChatRecord(chatJsonPath, matchedProject?.name || '', targetProjectKey);
-      if (existing && Array.isArray(existing.steps) && existing.steps.length > 0) {
-        stepsToSave = existing.steps;
+    let messagesToSave = (chatFile as any).messages;
+    if (!Array.isArray(stepsToSave) || stepsToSave.length === 0 || !Array.isArray(messagesToSave) || messagesToSave.length === 0) {
+      const existing = await readJson<any>(chatJsonPath);
+      if (existing) {
+        if ((!Array.isArray(stepsToSave) || stepsToSave.length === 0) && Array.isArray(existing.steps) && existing.steps.length > 0) {
+          stepsToSave = existing.steps;
+        }
+        if ((!Array.isArray(messagesToSave) || messagesToSave.length === 0) && Array.isArray(existing.messages) && existing.messages.length > 0) {
+          messagesToSave = existing.messages;
+        }
       }
     }
 
     await writeJson(chatJsonPath, {
       ...chatFile,
       steps: stepsToSave ?? [],
+      ...(messagesToSave && messagesToSave.length > 0 ? { messages: messagesToSave } : {}),
       projectStorageKey: targetProjectKey
     });
     await writeJson(getChatConfigPath(userDataDir, chat.id, targetProjectKey), {

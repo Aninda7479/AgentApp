@@ -310,8 +310,9 @@ async function getMainBrowser(): Promise<PlaywrightBrowserEngine> {
 }
 
 // ─── AI Orchestrator ────────────────────────────────────────────────────────
-  // Map of active agent sessions by session ID
-  const activeSessions = new Map<string, AgentEngine>();
+// Map of active agent sessions by session ID (bounded LRU-style cache)
+const MAX_ACTIVE_SESSIONS = 50;
+const activeSessions = new Map<string, AgentEngine>();
 
 /** Creates or reuses an AgentEngine for a session and runs it with streaming events. */
 async function runAgentEngine(
@@ -321,74 +322,83 @@ async function runAgentEngine(
   currentAttachments?: string[]
 ) {
   try {
+    const finalConfig = { ...config };
+    // Auto-route model if set to 'auto', 'Orchestrator' or 'Model Governance'
+    if (config.model === 'auto' || config.model === 'Orchestrator' || config.model === 'Model Governance') {
+      const settings = SettingsStorage.loadSettings();
+      const orchestratorCfg = settings.orchestrator || settings.modelGov;
+      if (orchestratorCfg?.enabled === false) {
+        throw new Error('AI Orchestrator is disabled in Settings. Please select a specific model or enable Orchestrator in Settings → Orchestrator.');
+      }
+      // Build a proper RouterModel[] pool (providerId + capability/access
+      // signals) from the user's configured models. routeModelForTask reads
+      // RouterModel fields that raw settings.models don't always carry.
+      const enabledModels = buildRouterPool(settings.models ?? []).filter((m) => m.enabled);
+      try {
+        const routed = OrchestratorRouter.routeModelForTask(prompt, enabledModels, buildRequest(prompt, currentAttachments));
+        if (routed && routed.model) {
+          finalConfig.provider = routed.provider as any;
+          finalConfig.model = routed.model;
+          const byok = settings.providers?.find(p => p.id === routed.provider);
+          if (byok) {
+            finalConfig.apiKey = byok.apiKey;
+            finalConfig.baseUrl = byok.baseUrl;
+          } else if (!finalConfig.apiKey) {
+            console.warn(`[web] Orchestrator routed to '${routed.provider}' but no API key is configured for it; the reply may fail.`);
+          }
+        } else {
+          throw new Error('Orchestrator could not select a model for this task.');
+        }
+      } catch (routeErr: any) {
+        // Never go silently empty: fall back to the first enabled model so the
+        // user still gets a real reply instead of a blank turn.
+        const fallback = enabledModels[0];
+        if (fallback) {
+          console.warn(`[web] Orchestrator routing failed (${routeErr?.message}); falling back to ${fallback.providerId}/${fallback.id}.`);
+          finalConfig.provider = fallback.providerId as any;
+          finalConfig.model = OrchestratorRouter.stripProviderPrefix(fallback.providerId, fallback.id);
+          const byok = settings.providers?.find(p => p.id === fallback.providerId);
+          if (byok) {
+            finalConfig.apiKey = byok.apiKey;
+            finalConfig.baseUrl = byok.baseUrl;
+          }
+        } else {
+          // No model configured/enabled — surface a clear, actionable error
+          // instead of forwarding the literal 'auto' string to the provider.
+          broadcast('agent-event', {
+            type: 'error',
+            sessionId,
+            error: routeErr?.message || String(routeErr)
+          });
+          return;
+        }
+      }
+    }
+
+    // Resolve model display names to actual IDs for the upstream API
+    if (finalConfig.model && /\s/.test(finalConfig.model) && finalConfig.provider) {
+      const settings = SettingsStorage.loadSettings();
+      const match = (settings.models || []).find(
+        m => m.providerId === finalConfig.provider && m.name === finalConfig.model
+      );
+      if (match) {
+        finalConfig.model = match.id.replace(`${finalConfig.provider}-`, '');
+      }
+    }
+
     let engine = activeSessions.get(sessionId);
-    if (!engine) {
-      const finalConfig = { ...config };
-      // Auto-route model if set to 'auto', 'Orchestrator' or 'Model Governance'
-      if (config.model === 'auto' || config.model === 'Orchestrator' || config.model === 'Model Governance') {
-        const settings = SettingsStorage.loadSettings();
-        const orchestratorCfg = settings.orchestrator || settings.modelGov;
-        if (orchestratorCfg?.enabled === false) {
-          throw new Error('AI Orchestrator is disabled in Settings. Please select a specific model or enable Orchestrator in Settings → Orchestrator.');
-        }
-        // Build a proper RouterModel[] pool (providerId + capability/access
-        // signals) from the user's configured models. routeModelForTask reads
-        // RouterModel fields that raw settings.models don't always carry.
-        const enabledModels = buildRouterPool(settings.models ?? []).filter((m) => m.enabled);
-        try {
-          const routed = OrchestratorRouter.routeModelForTask(prompt, enabledModels, buildRequest(prompt, currentAttachments));
-          if (routed && routed.model) {
-            finalConfig.provider = routed.provider as any;
-            finalConfig.model = routed.model;
-            const byok = settings.providers?.find(p => p.id === routed.provider);
-            if (byok) {
-              finalConfig.apiKey = byok.apiKey;
-              finalConfig.baseUrl = byok.baseUrl;
-            } else if (!finalConfig.apiKey) {
-              console.warn(`[web] Orchestrator routed to '${routed.provider}' but no API key is configured for it; the reply may fail.`);
-            }
-          } else {
-            throw new Error('Orchestrator could not select a model for this task.');
-          }
-        } catch (routeErr: any) {
-          // Never go silently empty: fall back to the first enabled model so the
-          // user still gets a real reply instead of a blank turn.
-          const fallback = enabledModels[0];
-          if (fallback) {
-            console.warn(`[web] Orchestrator routing failed (${routeErr?.message}); falling back to ${fallback.providerId}/${fallback.id}.`);
-            finalConfig.provider = fallback.providerId as any;
-            finalConfig.model = OrchestratorRouter.stripProviderPrefix(fallback.providerId, fallback.id);
-            const byok = settings.providers?.find(p => p.id === fallback.providerId);
-            if (byok) {
-              finalConfig.apiKey = byok.apiKey;
-              finalConfig.baseUrl = byok.baseUrl;
-            }
-          } else {
-            // No model configured/enabled — surface a clear, actionable error
-            // instead of forwarding the literal 'auto' string to the provider.
-            broadcast('agent-event', {
-              type: 'error',
-              sessionId,
-              error: routeErr?.message || String(routeErr)
-            });
-            activeSessions.delete(sessionId);
-            return;
-          }
-        }
-      }
-
-        // Resolve model display names to actual IDs for the upstream API
-        if (finalConfig.model && /\s/.test(finalConfig.model) && finalConfig.provider) {
-        const settings = SettingsStorage.loadSettings();
-        const match = (settings.models || []).find(
-          m => m.providerId === finalConfig.provider && m.name === finalConfig.model
-        );
-        if (match) {
-          finalConfig.model = match.id.replace(`${finalConfig.provider}-`, '');
-        }
-      }
-
+    if (engine) {
+      engine.updateConfig(finalConfig);
+      // Touch session in map for LRU ordering
+      activeSessions.delete(sessionId);
+      activeSessions.set(sessionId, engine);
+    } else {
       engine = new AgentEngine(finalConfig, sessionId);
+      await engine.rehydrateFromStore();
+      if (activeSessions.size >= MAX_ACTIVE_SESSIONS) {
+        const oldestKey = activeSessions.keys().next().value;
+        if (oldestKey) activeSessions.delete(oldestKey);
+      }
       activeSessions.set(sessionId, engine);
     }
 
@@ -401,8 +411,6 @@ async function runAgentEngine(
       }
       broadcast('agent-event', agentEvent);
     }, currentAttachments);
-
-    activeSessions.delete(sessionId);
   } catch (err: any) {
     console.error(`[Agent Run Fail] Session ${sessionId}:`, err);
     broadcast('agent-event', {
@@ -410,7 +418,6 @@ async function runAgentEngine(
       sessionId,
       error: err.message || String(err)
     });
-    activeSessions.delete(sessionId);
   }
 }
 

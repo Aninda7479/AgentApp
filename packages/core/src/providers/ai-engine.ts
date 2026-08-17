@@ -161,8 +161,8 @@ export class AgentEngine {
     const rootHint = hasExplicitProject
       ? `\n\n<workspace>\nProject root: ${effectiveRoot}\nWhen using file/directory tools, use "." to refer to the project root, or paths relative to it.\n</workspace>`
       : `\n\n<workspace>\nStandalone Mode: No host project folder is attached to this chat. Your workspace directory is an isolated sandbox: ${effectiveRoot}\nFile and terminal operations are confined to this isolated directory.\n</workspace>`;
-    this.record({ role: 'system', content: sysPrompt + dateHint + rootHint });
-    this.contextWindow = config.contextWindow ?? 128000;
+    this.history = [{ role: 'system', content: sysPrompt + dateHint + rootHint }];
+    this.contextWindow = config.contextWindow ?? (capabilityRegistry.getCapability(config.model)?.contextWindow ?? 128000);
 
     // Register in the global registry so every live agent is supervised
     // (count / abortAll / enumeration), even those we did not create via
@@ -191,7 +191,14 @@ export class AgentEngine {
     if (partial.model !== undefined) c.model = partial.model;
     if (partial.internetAccess !== undefined) (c as { internetAccess?: unknown }).internetAccess = partial.internetAccess;
     if (partial.permissionMode !== undefined) (c as { permissionMode?: unknown }).permissionMode = partial.permissionMode;
-    if (partial.contextWindow !== undefined) this.contextWindow = partial.contextWindow ?? this.contextWindow;
+    if (partial.contextWindow !== undefined) {
+      this.contextWindow = partial.contextWindow ?? this.contextWindow;
+    } else if (partial.model && partial.model !== c.model) {
+      const cap = capabilityRegistry.getCapability(partial.model);
+      if (cap?.contextWindow) {
+        this.contextWindow = cap.contextWindow;
+      }
+    }
   }
 
   private estimateTokens(text: string): number {
@@ -298,13 +305,16 @@ export class AgentEngine {
 
   /**
    * Rebuild the bounded working set from the on-disk transcript (resume).
-   * Loads the full canonical transcript but immediately compacts it, so RAM
-   * stays bounded regardless of how long the original chat was.
+   * Loads the full canonical transcript, filters out duplicate system instructions,
+   * merges with the active system prompt, and compacts if needed.
    */
   public async rehydrateFromStore(): Promise<void> {
     const full = await MessageHistoryStore.loadFull(this.sessionId);
     if (full.length === 0) return;
-    this.history = full;
+    const currentSys = this.history.find((m) => m.role === 'system');
+    const dialogue = full.filter((m) => m.role !== 'system');
+    if (dialogue.length === 0) return;
+    this.history = currentSys ? [currentSys, ...dialogue] : dialogue;
     this.rollingCompact();
   }
 
@@ -479,6 +489,11 @@ export class AgentEngine {
       } else {
         mappedAttachments = attachments as ImageAttachment[];
       }
+    }
+
+    // If this engine only has the initial system prompt (or empty), rehydrate prior turns from store
+    if (this.history.filter((m) => m.role !== 'system').length === 0) {
+      await this.rehydrateFromStore();
     }
 
     // Build the user message.
@@ -746,6 +761,7 @@ export class AgentEngine {
       // Drop from the global registry once the agent is no longer running so
       // `count` / `abortAll` / `list` stay accurate under heavy concurrency.
       multiAgentManager.unregister(this.sessionId);
+      await MessageHistoryStore.flush(this.sessionId);
     }
   }
 

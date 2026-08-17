@@ -120,7 +120,7 @@ export class ProvidersService {
           name: m.name,
           providerId: d.id,
           enabled: false,
-          contextLimit: 'n/a'
+          contextLimit: (m as any).contextLimit || 'n/a'
         });
       }
     }

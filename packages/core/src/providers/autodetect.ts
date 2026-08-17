@@ -1,12 +1,27 @@
 import http from 'http';
 import https from 'https';
 
+/** Helper to format numeric token count into human-readable contextLimit string (e.g. 2000000 -> '2M', 128000 -> '128k'). */
+export function formatTokensLimit(num?: number | null): string | undefined {
+  if (!num || num <= 0) return undefined;
+  if (num >= 1_000_000) {
+    const m = num / 1_000_000;
+    return m % 1 === 0 ? `${m}M` : `${m.toFixed(1)}M`;
+  }
+  if (num >= 1_000) {
+    const k = num / 1_000;
+    return k % 1 === 0 ? `${k}k` : `${k.toFixed(1)}k`;
+  }
+  return String(num);
+}
+
 /**
  * A model exposed by a provider.
  */
 export interface DetectedModel {
   id: string;
   name: string;
+  contextLimit?: string;
 }
 
 /**
@@ -62,7 +77,11 @@ export class ProviderAutoDetector {
       envKey: 'OPENAI_API_KEY',
       modelsUrl: 'https://api.openai.com/v1/models',
       authHeader: (k) => ({ Authorization: `Bearer ${k}` }),
-      parseModels: (d) => (d?.data ?? []).map((m: any) => ({ id: m.id, name: m.id }))
+      parseModels: (d) => (d?.data ?? []).map((m: any) => ({
+        id: m.id,
+        name: m.id,
+        contextLimit: m.context_window || m.context_length ? formatTokensLimit(m.context_window || m.context_length) : undefined
+      }))
     },
     {
       id: 'deepseek',
@@ -70,7 +89,11 @@ export class ProviderAutoDetector {
       envKey: 'DEEPSEEK_API_KEY',
       modelsUrl: 'https://api.deepseek.com/models',
       authHeader: (k) => ({ Authorization: `Bearer ${k}` }),
-      parseModels: (d) => (d?.data ?? []).map((m: any) => ({ id: m.id, name: m.id }))
+      parseModels: (d) => (d?.data ?? []).map((m: any) => ({
+        id: m.id,
+        name: m.id,
+        contextLimit: m.context_window || m.context_length ? formatTokensLimit(m.context_window || m.context_length) : undefined
+      }))
     },
     {
       id: 'deepinfra',
@@ -80,7 +103,14 @@ export class ProviderAutoDetector {
       authHeader: (k) => ({ Authorization: `Bearer ${k}` }),
       parseModels: (d) => {
         const list = Array.isArray(d) ? d : (d?.data ?? []);
-        return list.map((m: any) => ({ id: m.model_name ?? m.id, name: m.model_name ?? m.id }));
+        return list.map((m: any) => {
+          const rawCtx = m.context_length ?? m.max_tokens ?? m.context_window;
+          return {
+            id: m.model_name ?? m.id,
+            name: m.model_name ?? m.id,
+            contextLimit: rawCtx ? formatTokensLimit(rawCtx) : undefined
+          };
+        });
       }
     },
     {
@@ -89,7 +119,11 @@ export class ProviderAutoDetector {
       envKey: 'GROQ_API_KEY',
       modelsUrl: 'https://api.groq.com/openai/v1/models',
       authHeader: (k) => ({ Authorization: `Bearer ${k}` }),
-      parseModels: (d) => (d?.data ?? []).map((m: any) => ({ id: m.id, name: m.id }))
+      parseModels: (d) => (d?.data ?? []).map((m: any) => ({
+        id: m.id,
+        name: m.id,
+        contextLimit: m.context_window ? formatTokensLimit(m.context_window) : undefined
+      }))
     },
     {
       id: 'google',
@@ -100,7 +134,8 @@ export class ProviderAutoDetector {
       parseModels: (d) =>
         (d?.models ?? []).map((m: any) => ({
           id: String(m.name).replace('models/', ''),
-          name: m.displayName ?? m.name
+          name: m.displayName ?? m.name,
+          contextLimit: m.inputTokenLimit ? formatTokensLimit(m.inputTokenLimit) : undefined
         }))
     }
   ];

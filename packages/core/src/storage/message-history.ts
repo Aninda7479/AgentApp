@@ -60,6 +60,36 @@ function extractCodeBlocks(text: string): TrajectoryCodeBlock[] {
   return blocks;
 }
 
+/** Reconstructs LLM ChatMessage[] from TrajectoryStep[] when messages array is absent. */
+export function stepsToChatMessages(steps: any[]): ChatMessage[] {
+  const result: ChatMessage[] = [];
+  for (const s of steps) {
+    if (!s) continue;
+    if (s.type === 'user') {
+      result.push({
+        role: 'user',
+        content: s.content || ''
+      });
+    } else if (s.type === 'assistant') {
+      const toolCalls = s.metadata?.toolCalls || (Array.isArray(s.toolCalls) ? s.toolCalls : undefined);
+      result.push({
+        role: 'assistant',
+        content: s.content || '',
+        toolCalls: toolCalls
+      });
+    } else if (s.type === 'tool_result' || s.type === 'tool') {
+      result.push({
+        role: 'tool',
+        content: s.content || '',
+        toolCallId: s.metadata?.toolCallId || s.id || 'tool-result',
+        name: s.toolName || s.metadata?.toolName || 'tool'
+      });
+    }
+    // Note: 'thought', 'status', 'error', 'attachment' are UI-only timeline steps and are omitted from dialogue history
+  }
+  return result;
+}
+
 export class MessageHistoryStore {
   /** Per-session append buffer (not yet persisted). */
   private static buffers = new Map<string, ChatMessage[]>();
@@ -165,7 +195,8 @@ export class MessageHistoryStore {
                 model: modelName,
                 codeBlocks: codeBlocks.length > 0 ? codeBlocks : undefined,
                 workedDuration: (m as any).workedDuration,
-                sandboxMode: (m as any).sandboxMode
+                sandboxMode: (m as any).sandboxMode,
+                toolCalls: m.toolCalls
               }
             });
 
@@ -211,7 +242,8 @@ export class MessageHistoryStore {
                 command: cmd,
                 cwd,
                 toolResult: text,
-                exitCode: (m as any).exitCode
+                exitCode: (m as any).exitCode,
+                toolCallId: m.toolCallId
               }
             });
           }
@@ -220,7 +252,10 @@ export class MessageHistoryStore {
         const newMessages = buf.map((m) => ({
           role: m.role,
           content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-          model: (m as any).model
+          model: (m as any).model,
+          toolCalls: m.toolCalls,
+          toolCallId: m.toolCallId,
+          name: m.name
         }));
 
         const allSteps = existingSteps.concat(newSteps);
@@ -299,13 +334,10 @@ export class MessageHistoryStore {
       try {
         const data = await fsp.readFile(file, 'utf-8');
         const parsed = JSON.parse(data);
-        if (Array.isArray(parsed.messages)) {
+        if (Array.isArray(parsed.messages) && parsed.messages.length > 0) {
           persisted = parsed.messages as ChatMessage[];
-        } else if (Array.isArray(parsed.steps)) {
-          persisted = parsed.steps.map((s: any) => ({
-            role: s.type === 'user' ? 'user' : s.type === 'assistant' ? 'assistant' : 'system',
-            content: s.content || ''
-          })) as ChatMessage[];
+        } else if (Array.isArray(parsed.steps) && parsed.steps.length > 0) {
+          persisted = stepsToChatMessages(parsed.steps);
         }
       } catch {
         persisted = [];

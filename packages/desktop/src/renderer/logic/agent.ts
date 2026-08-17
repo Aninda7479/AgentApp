@@ -15,6 +15,7 @@ import { SettingsService } from './settings';
 import { AttachmentService } from './attachments';
 import { AgentSimulator } from './simulation';
 import { resolveScopeSettings, approvalToPermissionMode } from './scopeSettings';
+import { parseContextLimit } from './context';
 import type { SlashResult } from './slash';
 import { runManager } from './runManager';
 
@@ -381,6 +382,11 @@ export class AgentService {
       const unsandboxed = ctx.getFullAccess(); // composer sandbox badge (per-send)
       const permissionMode = approvalToPermissionMode(composerApproval, unsandboxed);
 
+      const selectedModelConfig =
+        ctx.getModelsCatalog().find((m) => m.providerId === activeProvider?.id && m.name === selectedModelName && m.enabled) ||
+        ctx.getModelsCatalog().find((m) => m.providerId === activeProvider?.id && m.name === selectedModelName);
+      const parsedCtxWindow = parseContextLimit(selectedModelConfig?.contextLimit);
+
       const agentConfig = {
         // Resolve the engine-facing provider id. Cloud providers connected via an
         // env var / API key keep their real id. Everything else (type 'custom')
@@ -398,6 +404,7 @@ export class AgentService {
         apiKey: activeProvider.apiKey,
         baseUrl: activeProvider.baseUrl || undefined,
         model: resolvedModel,
+        contextWindow: parsedCtxWindow,
         projectRoot: resolvedProjectRoot,
         allowedCommands: activeProjectConfig?.allowedCommands,
         // ── Sandbox wiring ── the desktop engine routes every command
