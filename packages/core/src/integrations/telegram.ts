@@ -52,10 +52,10 @@ export function getTelegramConfig(override?: Partial<TelegramSettings>): Telegra
   }
 
   return {
-    enabled: override?.enabled ?? stored.enabled ?? true,
-    botToken: override?.botToken || stored.botToken || process.env.TELEGRAM_BOT_TOKEN || '',
-    chatId: override?.chatId || stored.chatId || process.env.TELEGRAM_CHAT_ID || '',
-    parseMode: override?.parseMode || stored.parseMode || 'Markdown',
+    enabled: override?.enabled !== undefined ? override.enabled : (stored.enabled ?? true),
+    botToken: override?.botToken !== undefined ? override.botToken : (stored.botToken || process.env.TELEGRAM_BOT_TOKEN || ''),
+    chatId: override?.chatId !== undefined ? String(override.chatId) : (stored.chatId || process.env.TELEGRAM_CHAT_ID || ''),
+    parseMode: override?.parseMode !== undefined ? override.parseMode : (stored.parseMode || 'Markdown'),
   };
 }
 

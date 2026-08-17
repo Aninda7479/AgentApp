@@ -117,6 +117,11 @@ export class ConversationService {
       ctx.setActiveChatId('draft-chat');
       ctx.setDraftProject(project);
       ctx.setTrajectorySteps([]);
+      chatStore.setActiveProject(project);
+      chatStore.setDraftProject(project);
+      chatStore.setActiveChatId('draft-chat');
+      chatStore.setSteps('draft-chat', []);
+      chatStore.setState(() => ({ activePanels: ['draft-chat'], activeChatId: 'draft-chat' }));
     }
   }
 
@@ -148,8 +153,11 @@ export class ConversationService {
     if (newActiveId) {
       StoreService.openChat(ctx, newActiveId, { setTab: true });
     } else {
-      ctx.setActiveChatId(null);
+      ctx.setActiveChatId('draft-chat');
       ctx.setTrajectorySteps([]);
+      chatStore.setActiveChatId('draft-chat');
+      chatStore.setSteps('draft-chat', []);
+      chatStore.setState(() => ({ activePanels: ['draft-chat'], activeChatId: 'draft-chat' }));
     }
   }
 
@@ -219,12 +227,13 @@ export class ConversationService {
     const targetProject = typeof forProject === 'string' ? forProject : ctx.getActiveProject();
     ctx.setActiveProject(targetProject || '');
     ctx.setDraftProject(targetProject || '');
-    chatStore.setActiveProject(targetProject || '');
-    chatStore.setDraftProject(targetProject || '');
     ctx.setActiveChatId('draft-chat');
     ctx.setTrajectorySteps([]);
+    chatStore.setActiveProject(targetProject || '');
+    chatStore.setDraftProject(targetProject || '');
+    chatStore.setActiveChatId('draft-chat');
     chatStore.setSteps('draft-chat', []);
-    chatStore.setState(() => ({ activePanels: ['draft-chat'] }));
+    chatStore.setState(() => ({ activePanels: ['draft-chat'], activeChatId: 'draft-chat' }));
     ctx.setActiveTab('trajectory');
   }
 
