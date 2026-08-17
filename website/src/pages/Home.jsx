@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import Terminal from '../components/Terminal.jsx'
 import InstallForks from '../components/InstallForks.jsx'
 import Features from '../components/Features.jsx'
@@ -16,8 +17,8 @@ export default function Home() {
             <h1 className="h-display">An autonomous agent, <span className="accent">running on your terms.</span></h1>
             <p className="lead">SuperAgent codes, drives your browser, generates media, and runs terminal workflows — all on your machine. One command and it’s awake, working, and entirely yours.</p>
             <div className="hero-cta">
-              <a className="btn btn-primary" href="/cli">Install the CLI</a>
-              <a className="btn btn-ghost" href="/desktop">Download the app</a>
+              <Link className="btn btn-primary" to="/cli">Install the CLI</Link>
+              <Link className="btn btn-ghost" to="/desktop">Download the app</Link>
             </div>
             <div className="stat-strip">
               <span>GPL-3.0 / AGPL-3.0</span>

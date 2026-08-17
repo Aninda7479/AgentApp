@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import Reveal from './Reveal.jsx'
 import { useCopy } from '../lib/useCopy.js'
-import { INSTALL_SH, INSTALL_PS1, DL, SERVER_DL, RELEASES_LATEST } from '../config.js'
+import { useLatestRelease } from '../lib/useLatestRelease.js'
+import { INSTALL_SH, INSTALL_PS1 } from '../config.js'
 
 const COMMANDS = {
   powershell: `irm ${INSTALL_PS1} | iex`,
@@ -19,6 +20,7 @@ function Check() {
 export function CliFork() {
   const [shell, setShell] = useState('powershell')
   const [copied, copy] = useCopy()
+  const release = useLatestRelease()
 
   return (
     <Reveal className="fork">
@@ -92,19 +94,20 @@ export function CliFork() {
       {/* Server / HomeLab download links */}
       <details style={{ marginTop: '14px' }}>
         <summary style={{ cursor: 'pointer', fontSize: '0.82rem', color: 'var(--muted)', userSelect: 'none' }}>
-          🖥️ Server / HomeLab direct downloads
+          🖥️ Server / HomeLab direct downloads {release.version ? `(v${release.version})` : ''}
         </summary>
         <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           {[
-            { label: '🐧 Linux (x64)', href: SERVER_DL.linux },
-            { label: '🪟 Windows (x64)', href: SERVER_DL.windows },
-            { label: '🍎 macOS (Apple Silicon)', href: SERVER_DL.mac },
-          ].map(({ label, href }) => (
+            { label: '🐧 Linux (x64 tar.gz)', href: release.server.linux },
+            { label: '🐧 Linux (ARM64 tar.gz)', href: release.server.linuxArm },
+            { label: '🪟 Windows (x64 zip)', href: release.server.windows },
+            { label: '🍎 macOS (Apple Silicon zip)', href: release.server.mac },
+            { label: '🍎 macOS (Intel zip)', href: release.server.macIntel },
+          ].filter(item => item.href).map(({ label, href }) => (
             <a
-              key={href}
+              key={label}
               href={href}
-              target="_blank"
-              rel="noopener"
+              download
               style={{
                 fontSize: '0.8rem', color: 'var(--accent)',
                 textDecoration: 'none', fontFamily: 'var(--font-mono)'
@@ -122,26 +125,70 @@ export function CliFork() {
 }
 
 export function DesktopFork() {
+  const release = useLatestRelease()
+  const [activeOs, setActiveOs] = useState(null)
+
+  const currentOs = activeOs || release.userOs || 'windows'
+
   return (
     <Reveal className="fork">
-      <span className="fork-tag"><b>Core</b> + Desktop + Web</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+        <span className="fork-tag"><b>Core</b> + Desktop + Web</span>
+        {release.version && (
+          <span style={{
+            fontFamily: 'var(--font-mono)', fontSize: '0.72rem',
+            color: 'var(--accent)', background: 'rgba(217, 160, 102, 0.1)',
+            padding: '2px 8px', borderRadius: '6px', border: '1px solid rgba(217, 160, 102, 0.2)'
+          }}>
+            v{release.version}
+          </span>
+        )}
+      </div>
+
       <h3>The Desktop App</h3>
       <p>A native OS client featuring the visual workspace and your always-on-top 3D companion pet window.</p>
       
-      <div className="dl-row" style={{ marginTop: '27px' }}>
-        <a className="dl-btn" href={DL.win} target="_blank" rel="noopener">
+      <div className="dl-row" style={{ marginTop: '20px', marginBottom: '10px' }}>
+        <a 
+          className="dl-btn" 
+          href={release.desktop.win} 
+          download
+          style={{
+            borderColor: currentOs === 'windows' ? 'var(--accent)' : 'var(--line-2)',
+            background: currentOs === 'windows' ? 'rgba(217, 160, 102, 0.08)' : undefined
+          }}
+          onClick={() => setActiveOs('windows')}
+        >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ marginRight: '4px' }}>
             <path d="M0 3.449L9.75 2.1v9.45H0V3.449zM0 12.45h9.75v9.45L0 20.551v-8.1zM10.8 1.95L24 0v11.55H10.8V1.95zM10.8 12.45H24v11.55l-13.2-1.95v-9.6z" />
           </svg>
           Windows
         </a>
-        <a className="dl-btn" href={DL.mac} target="_blank" rel="noopener">
+        <a 
+          className="dl-btn" 
+          href={release.desktop.mac} 
+          download
+          style={{
+            borderColor: currentOs === 'macos' ? 'var(--accent)' : 'var(--line-2)',
+            background: currentOs === 'macos' ? 'rgba(217, 160, 102, 0.08)' : undefined
+          }}
+          onClick={() => setActiveOs('macos')}
+        >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ marginRight: '4px' }}>
             <path d="M17.05 20.28c-.98.95-2.05 1.88-3.08 1.88-1.02 0-1.4-.62-2.55-.62-1.14 0-1.57.6-2.52.62-1.02.02-2.18-.98-3.18-1.93-2.02-1.96-3.57-5.52-3.57-8.87 0-5.3 3.43-8.1 6.8-8.1 1.05 0 2.05.65 2.7.65.63 0 1.83-.78 3.1-.78 1.34 0 2.56.55 3.32 1.48-3.18 1.88-2.65 6.13.52 7.42-1.22 2.92-2.8 5.75-4.14 7.28zM12.03 4.3c.72-1.1 1.48-2.5 1.13-4.3-1.53.08-3.23 1.07-3.9 2.1-1.12 1.55-1.1 2.9-.8 4.3 1.6.02 2.95-.9 3.57-2.1z" />
           </svg>
           macOS
         </a>
-        <a className="dl-btn" href={DL.linux} target="_blank" rel="noopener">
+        <a 
+          className="dl-btn" 
+          href={release.desktop.linux} 
+          download
+          style={{
+            borderColor: currentOs === 'linux' ? 'var(--accent)' : 'var(--line-2)',
+            background: currentOs === 'linux' ? 'rgba(217, 160, 102, 0.08)' : undefined
+          }}
+          onClick={() => setActiveOs('linux')}
+        >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginRight: '4px' }}>
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
             <line x1="8" y1="21" x2="16" y2="21" />
@@ -150,9 +197,55 @@ export function DesktopFork() {
           Linux
         </a>
       </div>
+
+      {/* Direct sub-options for the active OS */}
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center',
+        padding: '7px 12px', background: 'rgba(0, 0, 0, 0.25)',
+        borderRadius: '8px', border: '1px solid var(--line)', marginBottom: '14px'
+      }}>
+        <span style={{ fontSize: '0.74rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>Package:</span>
+        {currentOs === 'windows' && (
+          <>
+            <a href={release.desktop.win} download style={{ fontSize: '0.74rem', color: 'var(--accent)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
+              ↓ Installer (.exe)
+            </a>
+            <span style={{ color: 'var(--line-2)' }}>•</span>
+            <a href={release.desktop.winMsi} download style={{ fontSize: '0.74rem', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
+              ↓ MSI (.msi)
+            </a>
+          </>
+        )}
+        {currentOs === 'macos' && (
+          <>
+            <a href={release.desktop.macArm} download style={{ fontSize: '0.74rem', color: 'var(--accent)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
+              ↓ Apple Silicon (.dmg)
+            </a>
+            <span style={{ color: 'var(--line-2)' }}>•</span>
+            <a href={release.desktop.macIntel} download style={{ fontSize: '0.74rem', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
+              ↓ Intel (.dmg)
+            </a>
+          </>
+        )}
+        {currentOs === 'linux' && (
+          <>
+            <a href={release.desktop.linux} download style={{ fontSize: '0.74rem', color: 'var(--accent)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
+              ↓ AppImage
+            </a>
+            <span style={{ color: 'var(--line-2)' }}>•</span>
+            <a href={release.desktop.linuxDeb} download style={{ fontSize: '0.74rem', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
+              ↓ DEB (.deb)
+            </a>
+            <span style={{ color: 'var(--line-2)' }}>•</span>
+            <a href={release.desktop.linuxRpm} download style={{ fontSize: '0.74rem', color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}>
+              ↓ RPM (.rpm)
+            </a>
+          </>
+        )}
+      </div>
       
-      <p className="dl-all" style={{ marginTop: '4px' }}>
-        <a href={RELEASES_LATEST} target="_blank" rel="noopener">All releases &amp; version history →</a>
+      <p className="dl-all" style={{ marginTop: '0', marginBottom: '16px' }}>
+        <a href={release.allReleasesUrl} target="_blank" rel="noopener">All releases &amp; version history →</a>
       </p>
 
       <ul>
