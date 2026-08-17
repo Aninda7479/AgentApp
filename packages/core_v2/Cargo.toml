@@ -1,6 +1,6 @@
 [package]
 name = "superagent-core-v2"
-version = "0.6.0"
+version = "0.7.0"
 description = "SuperAgent core_v2 - Pure Rust Agent Intelligence Engine"
 authors = ["SuperAgent Contributors"]
 edition = "2021"
