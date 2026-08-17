@@ -10,8 +10,13 @@ const getPkg = () => {
       return require('../../package.json');
     }
   } catch {}
-  const requireFn = createRequire(import.meta.url);
-  return requireFn('../../package.json');
+  try {
+    if (typeof import.meta !== 'undefined' && import.meta.url) {
+      const requireFn = createRequire(import.meta.url);
+      return requireFn('../../package.json');
+    }
+  } catch {}
+  return { name: '@superagent/cli', version: '0.4.0' };
 };
 const pkg = getPkg() as { name: string; version: string };
 
