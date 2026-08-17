@@ -2,13 +2,16 @@ import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 import { build } from 'esbuild';
 
+const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const cliDir = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(cliDir, '..', '..');
 const packDir = path.resolve(repoRoot, '..', '.superagent-cli-pack');
 const outDir = path.resolve(cliDir, 'dist-release-cli');
+const pkgBin = require.resolve('@yao-pkg/pkg/lib-es5/bin.js');
 
 function rmrf(p) {
   if (fs.existsSync(p)) {
@@ -233,7 +236,8 @@ if (process.pkg) {
       'yoga-wasm-web/auto': 'yoga-wasm-web/asm'
     },
     define: {
-      'process.env.NODE_ENV': '"production"'
+      'process.env.NODE_ENV': '"production"',
+      'import.meta.url': 'undefined'
     },
     banner: {
       js: bannerJs
@@ -257,8 +261,8 @@ if (process.pkg) {
     fs.mkdirSync(targetReleaseDir, { recursive: true });
 
     console.log(`[pack] Compiling binary for target: ${target.id} ...`);
-    sh('npx', [
-      'pkg',
+    sh(process.execPath, [
+      pkgBin,
       'bundle.cjs',
       '--config', 'package.json',
       '--target', target.id,
@@ -266,7 +270,7 @@ if (process.pkg) {
       '--no-bytecode',
       '--public',
       '--public-packages', '*'
-    ], { cwd: packDir });
+    ], { cwd: packDir, shell: false });
 
     // Also copy to 'superagent' / 'superagent.exe' so users can run superagent directly
     const stdBinaryName = target.platform === 'win' ? 'superagent.exe' : 'superagent';
@@ -314,8 +318,12 @@ if (process.pkg) {
     console.log(`[pack] Creating archive for target: ${target.releaseDirName}...`);
     if (target.ext === 'zip') {
       const zipPath = path.join(outDir, `${archiveName}.zip`);
-      const targetPattern = path.join(targetReleaseDir, '*');
-      sh('powershell', ['Compress-Archive', '-Path', `"${targetPattern}"`, '-DestinationPath', `"${zipPath}"`, '-Force'], { cwd: outDir });
+      if (process.platform === 'win32') {
+        const targetPattern = path.join(targetReleaseDir, '*');
+        sh('powershell', ['Compress-Archive', '-Path', `"${targetPattern}"`, '-DestinationPath', `"${zipPath}"`, '-Force'], { cwd: outDir });
+      } else {
+        sh('zip', ['-r', zipPath, '.'], { cwd: targetReleaseDir });
+      }
     } else {
       sh('tar', ['-czf', `${archiveName}.tar.gz`, '-C', targetReleaseDir, '.'], { cwd: outDir });
     }
