@@ -304,10 +304,12 @@
   .dl-btn:hover{border-color:var(--accent-hover);color:var(--accent-hover);transform:translateY(-1px);}
 
   .fork ul{list-style:none;margin:0 0 18px;padding:0;display:flex;flex-direction:column;gap:10px;}
-  .fork li{display:flex;gap:10px;font-size:.92rem;color:var(--text-2);}
-  .fork li svg{flex:none;margin-top:4px;color:var(--ok);}
-  .fork .best{margin-top:auto;font-family:var(--font-mono);font-size:.72rem;color:var(--muted);letter-spacing:.02em;}
-  .fork .best b{color:var(--text-2);font-weight:500;}
+  .fork ul li{display:flex;gap:10px;font-size:.92rem;color:var(--text-2);line-height:1.5;}
+  .fork ul li svg{flex:none;margin-top:4px;color:var(--ok);}
+  .fork ol{margin:0 0 18px;padding-left:22px;display:flex;flex-direction:column;gap:10px;}
+  .fork ol li{display:list-item;font-size:.92rem;color:var(--text-2);line-height:1.6;}
+  .fork .best{margin-top:auto;font-family:var(--font-mono);font-size:.76rem;color:var(--muted);letter-spacing:.02em;background:rgba(255,255,255,0.02);padding:10px 14px;border-radius:8px;border:1px solid var(--line-2);}
+  .fork .best b{color:var(--text-2);font-weight:600;}
 
   .stack-note{
     margin-top:26px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:10px;

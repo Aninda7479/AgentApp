@@ -50,6 +50,7 @@
     "pub:core": "npm publish --workspace=@superagent/core --access public",
     "pub:cli": "npm publish --workspace=@superagent/cli --access public",
     "pub:web": "npm publish --workspace=@superagent/web --access public",
+    "pack:ext": "npm run build:ext && node packages/browser-extension/scripts/pack.js",
     "pack:desktop": "npm run pack --workspace=@superagent/desktop",
     "pack:desktop-win": "npm run pack --workspace=@superagent/desktop -- --win",
     "pack:desktop-mac": "npm run pack --workspace=@superagent/desktop -- --mac",

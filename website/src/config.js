@@ -40,3 +40,7 @@ export const SERVER_DL = {
   windows: `${REPO}/releases/latest/download/superagent-server-v${VERSION}-windows-x64.zip`,
   mac:     `${REPO}/releases/latest/download/superagent-server-v${VERSION}-macos-arm64.zip`,
 }
+
+// Browser extension release package (.zip)
+export const EXTENSION_DL = `${REPO}/releases/latest/download/superagent-browser-extension-v${VERSION}.zip`
+

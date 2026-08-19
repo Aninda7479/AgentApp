@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { REPO, VERSION, DL, SERVER_DL, RELEASES_LATEST } from '../config.js'
+import { REPO, VERSION, DL, SERVER_DL, EXTENSION_DL, RELEASES_LATEST } from '../config.js'
 
 // Detect Client OS and Arch in browser
 export function detectUserPlatform() {
@@ -50,6 +50,7 @@ export function useLatestRelease() {
     userOsLabel: platformInfo.osLabel,
     isArm: platformInfo.isArm,
     allReleasesUrl: RELEASES_LATEST,
+    extension: EXTENSION_DL,
     desktop: {
       win: DL.win,
       winMsi: DL.winMsi,
@@ -122,11 +123,15 @@ export function useLatestRelease() {
         const cliMacArm = findUrl(/^superagent-cli.*macos-arm64.*\.zip$/i) || `${REPO}/releases/download/${tag}/superagent-cli-v${cleanVer}-macos-arm64.zip`
         const cliMacIntel = findUrl(/^superagent-cli.*macos-x64.*\.zip$/i) || `${REPO}/releases/download/${tag}/superagent-cli-v${cleanVer}-macos-x64.zip`
 
+        // Browser Extension zip package
+        const extensionZip = findUrl(/^superagent-browser-extension.*\.zip$/i) || `${REPO}/releases/download/${tag}/superagent-browser-extension-v${cleanVer}.zip`
+
         const releaseData = {
           version: cleanVer,
           tagName: tag,
           publishedAt: data.published_at,
           allReleasesUrl: data.html_url || RELEASES_LATEST,
+          extension: extensionZip,
           desktop: {
             win: winExe,
             winMsi: winMsi,
