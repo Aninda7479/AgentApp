@@ -2,6 +2,9 @@
 
 > An open-source autonomous AI agent for modern coding, browser automation, multimodal media generation, and terminal workflows — cross-platform on Desktop and Web, with a responsive UI that works on phones, tablets, and desktops.
 
+🌐 **Website:** [https://aninda7479.github.io/AgentApp/](https://aninda7479.github.io/AgentApp/)
+
+[![Website](https://img.shields.io/badge/Website-Visit%20Official%20Site-2563eb?style=for-the-badge&logo=globe&logoColor=white)](https://aninda7479.github.io/AgentApp/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
