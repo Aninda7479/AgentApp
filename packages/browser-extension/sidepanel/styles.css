@@ -428,6 +428,66 @@ body {
   border-radius: 8px;
 }
 
+/* ─── Collapsible Thinking Process Bubble ─────────────────────────────────── */
+.thought-container {
+  align-self: stretch;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 8px;
+  font-size: 12px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  margin: 4px 0;
+}
+
+.thought-container[open] {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.thought-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  font-size: 11.5px;
+  color: #fbbf24;
+  outline: none;
+  list-style: none;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.thought-summary::-webkit-details-marker {
+  display: none;
+}
+
+.thought-summary .thought-chevron {
+  margin-left: auto;
+  font-size: 9px;
+  transition: transform 0.2s ease;
+  color: var(--text-muted);
+}
+
+.thought-container[open] .thought-summary .thought-chevron {
+  transform: rotate(180deg);
+}
+
+.thought-content {
+  padding: 8px 10px;
+  border-top: 1px dashed rgba(245, 158, 11, 0.2);
+  color: #cbd5e1;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
 .tool-header {
   font-weight: 600;
   color: #38bdf8;

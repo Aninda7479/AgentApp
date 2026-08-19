@@ -42,4 +42,15 @@ describe('Browser Extension Markdown Renderer', () => {
     expect(output).toContain('<a href="https://oracle.com" target="_blank" rel="noopener noreferrer" class="md-link">Oracle Cloud</a>');
     expect(output).toContain('<img src="https://img.shields.io/badge" alt="Badge" class="md-image" loading="lazy" />');
   });
+
+  it('separates <think> tags into a collapsible thought container', () => {
+    const input = '<think>\nAnalyze the question step by step.\n1. Push negation inward.\n</think>\n\nThe solution is **Ex[Ay[(P(x)^~R(x,y))]]**';
+    const output = renderMarkdown(input);
+    expect(output).toContain('<details class="thought-container">');
+    expect(output).toContain('Thinking Process');
+    expect(output).toContain('Analyze the question step by step.');
+    expect(output).toContain('<strong>Ex[Ay[(P(x)^~R(x,y))]]</strong>');
+    expect(output).not.toContain('<think>');
+    expect(output).not.toContain('</think>');
+  });
 });

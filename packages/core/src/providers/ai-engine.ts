@@ -78,7 +78,9 @@ import {
   buildBridgeRequest,
   sanitizeSchemaForGemini,
   isContextOverflowError,
-  detectRepetitiveLoop
+  detectRepetitiveLoop,
+  ThoughtStreamParser,
+  extractThoughtAndAnswer
 } from './ai-engine-helpers.js';
 
 import { createBuiltinTools } from './builtin-tools.js';
@@ -1207,7 +1209,29 @@ export class AgentEngine {
     }
 
     let fullContent = '';
-    const toolCallAccumulators: Map<number, { id: string; name: string; argsJson: string }> = new Map();
+    const toolCallAccumulators = new Map<number, { id: string; name: string; argsJson: string }>();
+
+    const thoughtParser = new ThoughtStreamParser(
+      (token) => {
+        fullContent += token;
+        const loopCheck = detectRepetitiveLoop(fullContent);
+        if (loopCheck.isLoop) {
+          fullContent = loopCheck.cleanText;
+          onEvent({ type: 'replace_tokens', sessionId: this.sessionId, content: loopCheck.cleanText });
+          loopHalted = true;
+          try { reader.cancel(); } catch {}
+          return;
+        }
+        onEvent({ type: 'token', sessionId: this.sessionId, content: token });
+      },
+      (thought) => {
+        onEvent({ type: 'thought', sessionId: this.sessionId, content: thought });
+      }
+    );
+
+    let reader: any;
+    let loopHalted = false;
+
     // Intra-stream tool call flood guard: tracks how many times identical tool
     // calls appear within a SINGLE streamed response. Some reasoning proxies
     // (e.g. oc/big-pickle) emit the same tool call hundreds of times in one
@@ -1216,10 +1240,9 @@ export class AgentEngine {
     const intraStreamToolSigs = new Map<string, number>();
 
     if (response.body) {
-      const reader = response.body.getReader();
+      reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let loopHalted = false;
 
       while (!loopHalted) {
         const { value, done } = await reader.read();
@@ -1246,7 +1269,7 @@ export class AgentEngine {
 
             if (!delta) continue;
 
-            // ── Separate reasoning/thinking tokens from response content ──
+            // ── Separate API reasoning tokens from response content ──
             const reasoningChunk = delta.reasoning || delta.reasoning_content || delta.thought || '';
             if (reasoningChunk) {
               onEvent({ type: 'thought', sessionId: this.sessionId, content: reasoningChunk });
@@ -1254,16 +1277,7 @@ export class AgentEngine {
 
             const contentChunk = typeof delta === 'string' ? delta : (delta.content || '');
             if (contentChunk) {
-              fullContent += contentChunk;
-              const loopCheck = detectRepetitiveLoop(fullContent);
-              if (loopCheck.isLoop) {
-                fullContent = loopCheck.cleanText;
-                onEvent({ type: 'replace_tokens', sessionId: this.sessionId, content: loopCheck.cleanText });
-                loopHalted = true;
-                try { await reader.cancel(); } catch {}
-                break;
-              }
-              onEvent({ type: 'token', sessionId: this.sessionId, content: contentChunk });
+              thoughtParser.push(contentChunk);
             }
 
             if (delta.tool_calls) {
@@ -1326,8 +1340,7 @@ export class AgentEngine {
           }
           const contentChunk = typeof delta === 'string' ? delta : (delta.content || '');
           if (contentChunk) {
-            fullContent += contentChunk;
-            onEvent({ type: 'token', sessionId: this.sessionId, content: contentChunk });
+            thoughtParser.push(contentChunk);
           }
           if (delta.tool_calls) {
             for (const tc of delta.tool_calls) {
@@ -1339,6 +1352,7 @@ export class AgentEngine {
           }
         }
       }
+      thoughtParser.flush();
     }
 
     const rawToolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
@@ -1440,11 +1454,31 @@ export class AgentEngine {
     let currentToolName = '';
     let currentToolInputJson = '';
 
+    let reader: any;
+    let loopHalted = false;
+
+    const thoughtParser = new ThoughtStreamParser(
+      (token) => {
+        fullContent += token;
+        const loopCheck = detectRepetitiveLoop(fullContent);
+        if (loopCheck.isLoop) {
+          fullContent = loopCheck.cleanText;
+          onEvent({ type: 'replace_tokens', sessionId: this.sessionId, content: loopCheck.cleanText });
+          loopHalted = true;
+          try { reader.cancel(); } catch {}
+          return;
+        }
+        onEvent({ type: 'token', sessionId: this.sessionId, content: token });
+      },
+      (thought) => {
+        onEvent({ type: 'thought', sessionId: this.sessionId, content: thought });
+      }
+    );
+
     if (response.body) {
-      const reader = response.body.getReader();
+      reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let loopHalted = false;
 
       while (!loopHalted) {
         const { value, done } = await reader.read();
@@ -1459,17 +1493,13 @@ export class AgentEngine {
           try {
             const event = JSON.parse(line.slice(6));
             if (event.type === 'content_block_delta') {
-              if (event.delta?.type === 'text_delta') {
-                fullContent += event.delta.text;
-                const loopCheck = detectRepetitiveLoop(fullContent);
-                if (loopCheck.isLoop) {
-                  fullContent = loopCheck.cleanText;
-                  onEvent({ type: 'replace_tokens', sessionId: this.sessionId, content: loopCheck.cleanText });
-                  loopHalted = true;
-                  try { await reader.cancel(); } catch {}
-                  break;
+              if (event.delta?.type === 'thinking_delta') {
+                const thinkText = event.delta.thinking || '';
+                if (thinkText) {
+                  onEvent({ type: 'thought', sessionId: this.sessionId, content: thinkText });
                 }
-                onEvent({ type: 'token', sessionId: this.sessionId, content: event.delta.text });
+              } else if (event.delta?.type === 'text_delta') {
+                thoughtParser.push(event.delta.text);
               }
               if (event.delta?.type === 'input_json_delta') {
                 currentToolInputJson += event.delta.partial_json;
@@ -1497,6 +1527,8 @@ export class AgentEngine {
           }
         }
       }
+
+      thoughtParser.flush();
     }
 
     return { fullContent, toolCalls };
@@ -1650,11 +1682,31 @@ export class AgentEngine {
     let fullContent = '';
     const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown>; thoughtSignature?: string }> = [];
 
+    let reader: any;
+    let loopHalted = false;
+
+    const thoughtParser = new ThoughtStreamParser(
+      (token) => {
+        fullContent += token;
+        const loopCheck = detectRepetitiveLoop(fullContent);
+        if (loopCheck.isLoop) {
+          fullContent = loopCheck.cleanText;
+          onEvent({ type: 'replace_tokens', sessionId: this.sessionId, content: loopCheck.cleanText });
+          loopHalted = true;
+          try { reader.cancel(); } catch {}
+          return;
+        }
+        onEvent({ type: 'token', sessionId: this.sessionId, content: token });
+      },
+      (thought) => {
+        onEvent({ type: 'thought', sessionId: this.sessionId, content: thought });
+      }
+    );
+
     if (response.body) {
-      const reader = response.body.getReader();
+      reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let loopHalted = false;
 
       while (!loopHalted) {
         const { value, done } = await reader.read();
@@ -1672,16 +1724,11 @@ export class AgentEngine {
             for (const candidate of candidates) {
               for (const part of (candidate.content?.parts || [])) {
                 if (part.text) {
-                  fullContent += part.text;
-                  const loopCheck = detectRepetitiveLoop(fullContent);
-                  if (loopCheck.isLoop) {
-                    fullContent = loopCheck.cleanText;
-                    onEvent({ type: 'replace_tokens', sessionId: this.sessionId, content: loopCheck.cleanText });
-                    loopHalted = true;
-                    try { await reader.cancel(); } catch {}
-                    break;
+                  if ((part as any).thought || (part as any).thought === true) {
+                    onEvent({ type: 'thought', sessionId: this.sessionId, content: part.text });
+                  } else {
+                    thoughtParser.push(part.text);
                   }
-                  onEvent({ type: 'token', sessionId: this.sessionId, content: part.text });
                 }
                 if (part.functionCall) {
                   const rawName = part.functionCall.name;
@@ -1709,6 +1756,8 @@ export class AgentEngine {
           }
         }
       }
+
+      thoughtParser.flush();
     }
 
     return { fullContent, toolCalls };
@@ -1801,10 +1850,30 @@ export class AgentEngine {
     let fullContent = '';
     const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
 
+    let reader: any;
+    let loopHalted = false;
+
+    const thoughtParser = new ThoughtStreamParser(
+      (token) => {
+        fullContent += token;
+        const loopCheck = detectRepetitiveLoop(fullContent);
+        if (loopCheck.isLoop) {
+          fullContent = loopCheck.cleanText;
+          onEvent({ type: 'replace_tokens', sessionId: this.sessionId, content: loopCheck.cleanText });
+          loopHalted = true;
+          try { reader.cancel(); } catch {}
+          return;
+        }
+        onEvent({ type: 'token', sessionId: this.sessionId, content: token });
+      },
+      (thought) => {
+        onEvent({ type: 'thought', sessionId: this.sessionId, content: thought });
+      }
+    );
+
     if (response.body) {
-      const reader = response.body.getReader();
+      reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let loopHalted = false;
 
       while (!loopHalted) {
         const { value, done } = await reader.read();
@@ -1814,18 +1883,14 @@ export class AgentEngine {
           if (!line.trim()) continue;
           try {
             const event = JSON.parse(line);
+            // Ollama reasoning/thinking field support
+            const thinking = event.message?.thinking || event.message?.reasoning_content || '';
+            if (thinking) {
+              onEvent({ type: 'thought', sessionId: this.sessionId, content: thinking });
+            }
             const token = event.message?.content || '';
             if (token) {
-              fullContent += token;
-              const loopCheck = detectRepetitiveLoop(fullContent);
-              if (loopCheck.isLoop) {
-                fullContent = loopCheck.cleanText;
-                onEvent({ type: 'replace_tokens', sessionId: this.sessionId, content: loopCheck.cleanText });
-                loopHalted = true;
-                try { await reader.cancel(); } catch {}
-                break;
-              }
-              onEvent({ type: 'token', sessionId: this.sessionId, content: token });
+              thoughtParser.push(token);
             }
             // Ollama tool calls come as an array on message.tool_calls
             if (Array.isArray(event.message?.tool_calls)) {
@@ -1842,6 +1907,8 @@ export class AgentEngine {
           }
         }
       }
+
+      thoughtParser.flush();
     }
 
     return { fullContent, toolCalls };

@@ -40,9 +40,30 @@ function renderInline(text: string): string {
 export function renderMarkdown(raw: string): string {
   if (!raw) return '';
 
-  // Extract fenced code blocks first so inner characters aren't touched
+  // Extract <think>...</think> and <thought>...</thought> reasoning blocks first
+  const thoughtBlocks: string[] = [];
+  let processed = raw.replace(/<(?:think|thought)>([\s\S]*?)<\/(?:think|thought)>/gi, (_match, thought) => {
+    const placeholder = `%%THOUGHT_BLOCK_${thoughtBlocks.length}%%`;
+    const escapedThought = escapeHtml(thought.trim());
+    thoughtBlocks.push(
+      `<details class="thought-container"><summary class="thought-summary"><span class="thought-icon">💭</span><span class="thought-title">Thinking Process</span><span class="thought-chevron">▼</span></summary><div class="thought-content">${escapedThought}</div></details>`
+    );
+    return placeholder;
+  });
+
+  // Also handle unclosed <think> tag (e.g. while still streaming)
+  processed = processed.replace(/<(?:think|thought)>([\s\S]*)$/i, (_match, thought) => {
+    const placeholder = `%%THOUGHT_BLOCK_${thoughtBlocks.length}%%`;
+    const escapedThought = escapeHtml(thought.trim());
+    thoughtBlocks.push(
+      `<details class="thought-container" open><summary class="thought-summary"><span class="thought-icon">💭</span><span class="thought-title">Thinking Process</span><span class="thought-chevron">▼</span></summary><div class="thought-content">${escapedThought}</div></details>`
+    );
+    return placeholder;
+  });
+
+  // Extract fenced code blocks so inner characters aren't touched
   const codeBlocks: string[] = [];
-  let processed = raw.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_match, lang, code) => {
+  processed = processed.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_match, lang, code) => {
     const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
     const escapedCode = escapeHtml(code.trimEnd());
     const langLabel = lang ? `<span class="code-lang">${escapeHtml(lang)}</span>` : '';
@@ -98,6 +119,14 @@ export function renderMarkdown(raw: string): string {
       continue;
     }
 
+    // Thought block placeholder
+    if (/^%%THOUGHT_BLOCK_\d+%%$/.test(trimmed)) {
+      closeList();
+      closeTable();
+      htmlChunks.push(trimmed);
+      continue;
+    }
+
     // Horizontal Rule
     if (/^(---|___|\*\*\*)$/.test(trimmed)) {
       closeList();
@@ -117,42 +146,35 @@ export function renderMarkdown(raw: string): string {
     }
 
     // Headings
-    if (trimmed.startsWith('### ')) {
+    if (/^#{1,6}\s+/.test(trimmed)) {
       closeList();
-      htmlChunks.push(`<h3 class="md-h3">${renderInline(trimmed.slice(4))}</h3>`);
-      continue;
-    }
-    if (trimmed.startsWith('## ')) {
-      closeList();
-      htmlChunks.push(`<h2 class="md-h2">${renderInline(trimmed.slice(3))}</h2>`);
-      continue;
-    }
-    if (trimmed.startsWith('# ')) {
-      closeList();
-      htmlChunks.push(`<h1 class="md-h1">${renderInline(trimmed.slice(2))}</h1>`);
+      const level = trimmed.match(/^#+/)?.[0].length || 1;
+      const headingText = trimmed.replace(/^#+\s+/, '');
+      htmlChunks.push(`<h${level} class="md-h${level}">${renderInline(headingText)}</h${level}>`);
       continue;
     }
 
     // Blockquote
-    if (trimmed.startsWith('> ') || trimmed === '>') {
+    if (trimmed.startsWith('>')) {
       closeList();
-      htmlChunks.push(`<blockquote class="md-blockquote">${renderInline(trimmed.slice(2))}</blockquote>`);
+      const quoteText = trimmed.replace(/^>\s*/, '');
+      htmlChunks.push(`<blockquote class="md-blockquote">${renderInline(quoteText)}</blockquote>`);
       continue;
     }
 
-    // Unordered List
-    if (/^[-*+]\s+/.test(trimmed)) {
+    // Unordered List (- or *)
+    if (/^[-*]\s+/.test(trimmed)) {
       if (inList !== 'ul') {
         closeList();
         inList = 'ul';
         htmlChunks.push('<ul class="md-ul">');
       }
-      const content = trimmed.replace(/^[-*+]\s+/, '');
+      const content = trimmed.replace(/^[-*]\s+/, '');
       htmlChunks.push(`<li class="md-li">${renderInline(content)}</li>`);
       continue;
     }
 
-    // Ordered List
+    // Ordered List (1. 2.)
     if (/^\d+\.\s+/.test(trimmed)) {
       if (inList !== 'ol') {
         closeList();
@@ -183,6 +205,11 @@ export function renderMarkdown(raw: string): string {
   // Put back code blocks
   codeBlocks.forEach((codeBlock, idx) => {
     finalHtml = finalHtml.replace(`__CODE_BLOCK_${idx}__`, codeBlock);
+  });
+
+  // Put back thought blocks
+  thoughtBlocks.forEach((thoughtBlock, idx) => {
+    finalHtml = finalHtml.replace(`%%THOUGHT_BLOCK_${idx}%%`, thoughtBlock);
   });
 
   return finalHtml;

@@ -183,4 +183,145 @@ export function detectRepetitiveLoop(text: string): { isLoop: boolean; cleanText
   return { isLoop: false, cleanText: text };
 }
 
+// ─── Thought / Reasoning Stream Separator ─────────────────────────────────────
+
+/**
+ * Parses a streaming token feed, separating inline `<think>...</think>` or
+ * `<thought>...</thought>` reasoning tags from the clean final user answer.
+ * Handles split chunks across tag boundaries and emits separate `onThought`
+ * and `onToken` callbacks in real time.
+ */
+export class ThoughtStreamParser {
+  private inThought = false;
+  private buffer = '';
+  private fullThought = '';
+  private fullAnswer = '';
+
+  constructor(
+    private onToken: (token: string) => void,
+    private onThought: (thought: string) => void
+  ) {}
+
+  /**
+   * Process an incoming text token/chunk.
+   */
+  public push(chunk: string): void {
+    if (!chunk) return;
+    this.buffer += chunk;
+
+    let progress = true;
+    while (progress && this.buffer.length > 0) {
+      progress = false;
+
+      if (!this.inThought) {
+        // Look for start tag <think> or <thought>
+        const match = this.buffer.match(/<(?:think|thought)>/i);
+        if (match && match.index !== undefined) {
+          const before = this.buffer.slice(0, match.index);
+          if (before) {
+            this.fullAnswer += before;
+            this.onToken(before);
+          }
+          this.buffer = this.buffer.slice(match.index + match[0].length);
+          this.inThought = true;
+          progress = true;
+        } else {
+          // Check if buffer ends with a partial prefix of <think> or <thought>
+          const partialMatch = this.buffer.match(/<(?:\/?t(?:h(?:i(?:n(?:k)?)?)?|h(?:o(?:u(?:g(?:h(?:t)?)?)?)?)?)?)?$/i);
+          if (partialMatch && partialMatch.index !== undefined) {
+            const safeText = this.buffer.slice(0, partialMatch.index);
+            if (safeText) {
+              this.fullAnswer += safeText;
+              this.onToken(safeText);
+              this.buffer = this.buffer.slice(partialMatch.index);
+            }
+          } else {
+            this.fullAnswer += this.buffer;
+            this.onToken(this.buffer);
+            this.buffer = '';
+          }
+        }
+      } else {
+        // Look for end tag </think> or </thought>
+        const match = this.buffer.match(/<\/(?:think|thought)>/i);
+        if (match && match.index !== undefined) {
+          const thoughtChunk = this.buffer.slice(0, match.index);
+          if (thoughtChunk) {
+            this.fullThought += thoughtChunk;
+            this.onThought(thoughtChunk);
+          }
+          this.buffer = this.buffer.slice(match.index + match[0].length);
+          this.inThought = false;
+          progress = true;
+        } else {
+          // Check if buffer ends with a partial prefix of </think> or </thought>
+          const partialMatch = this.buffer.match(/<\/(?:t(?:h(?:i(?:n(?:k)?)?)?|h(?:o(?:u(?:g(?:h(?:t)?)?)?)?)?)?)?$/i);
+          if (partialMatch && partialMatch.index !== undefined) {
+            const safeText = this.buffer.slice(0, partialMatch.index);
+            if (safeText) {
+              this.fullThought += safeText;
+              this.onThought(safeText);
+              this.buffer = this.buffer.slice(partialMatch.index);
+            }
+          } else {
+            this.fullThought += this.buffer;
+            this.onThought(this.buffer);
+            this.buffer = '';
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Flush any remaining buffered characters at the end of the stream.
+   */
+  public flush(): { fullThought: string; fullAnswer: string } {
+    if (this.buffer.length > 0) {
+      if (this.inThought) {
+        this.fullThought += this.buffer;
+        this.onThought(this.buffer);
+      } else {
+        this.fullAnswer += this.buffer;
+        this.onToken(this.buffer);
+      }
+      this.buffer = '';
+    }
+    return {
+      fullThought: this.fullThought,
+      fullAnswer: this.fullAnswer
+    };
+  }
+
+  public getAnswer(): string {
+    return this.fullAnswer;
+  }
+
+  public getThought(): string {
+    return this.fullThought;
+  }
+}
+
+/**
+ * Extracts inline thinking and clean answer from static text.
+ */
+export function extractThoughtAndAnswer(text: string): { thought: string; answer: string } {
+  let thought = '';
+  const thinkRegex = /<(?:think|thought)>([\s\S]*?)<\/(?:think|thought)>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = thinkRegex.exec(text)) !== null) {
+    if (match[1]) {
+      thought += (thought ? '\n' : '') + match[1].trim();
+    }
+  }
+  let answer = text.replace(thinkRegex, '').trim();
+  const unclosedMatch = answer.match(/^<(?:think|thought)>([\s\S]*)$/i);
+  if (unclosedMatch) {
+    thought += (thought ? '\n' : '') + unclosedMatch[1].trim();
+    answer = '';
+  }
+  return { thought, answer };
+}
+
+
 

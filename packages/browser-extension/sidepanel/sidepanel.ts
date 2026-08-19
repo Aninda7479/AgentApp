@@ -13,6 +13,9 @@ class SidePanelController {
   private isGenerating = false;
   private currentAssistantBubble: HTMLElement | null = null;
   private currentAssistantText = '';
+  private currentThoughtBubble: HTMLElement | null = null;
+  private currentThoughtBox: HTMLElement | null = null;
+  private currentThoughtText = '';
 
   // Models State (Dynamically fetched from backend settings-read)
   private availableModels: ModelOption[] = [];
@@ -118,6 +121,12 @@ class SidePanelController {
 
     if (evt.type === 'token' && (evt.content !== undefined || evt.text !== undefined)) {
       const text = evt.content !== undefined ? evt.content : evt.text;
+      // Close active thought accumulation so new thoughts create a new block if needed
+      if (this.currentThoughtBubble) {
+        this.currentThoughtBubble = null;
+        this.currentThoughtBox = null;
+        this.currentThoughtText = '';
+      }
       if (!this.currentAssistantBubble) {
         this.currentAssistantText = '';
         this.currentAssistantBubble = this.appendMessage('assistant', '');
@@ -133,20 +142,28 @@ class SidePanelController {
       this.currentAssistantBubble.innerHTML = renderMarkdown(this.currentAssistantText);
       this.scrollToBottom();
     } else if (evt.type === 'thought' && evt.content) {
-      this.renderThought(evt.content);
+      this.appendThoughtChunk(evt.content);
     } else if (evt.type === 'tool_call' || evt.type === 'tool_use') {
       this.currentAssistantBubble = null;
+      this.currentThoughtBubble = null;
       this.renderToolCall(evt);
     } else if (evt.type === 'tool_result' || evt.type === 'tool_output') {
       this.currentAssistantBubble = null;
+      this.currentThoughtBubble = null;
       this.renderToolResult(evt);
     } else if (evt.type === 'finished' || evt.type === 'done') {
       this.setGenerating(false);
       this.currentAssistantBubble = null;
+      this.currentThoughtBubble = null;
+      this.currentThoughtBox = null;
+      this.currentThoughtText = '';
     } else if (evt.type === 'error') {
       this.appendMessage('assistant', `⚠️ ${evt.error || evt.message || 'Agent execution failed'}`);
       this.setGenerating(false);
       this.currentAssistantBubble = null;
+      this.currentThoughtBubble = null;
+      this.currentThoughtBox = null;
+      this.currentThoughtText = '';
     }
   }
 
@@ -738,20 +755,31 @@ class SidePanelController {
     return bubble;
   }
 
-  private renderThought(thoughtText: string): void {
-    const bubble = document.createElement('div');
-    bubble.className = 'message-bubble tool';
-    bubble.style.borderStyle = 'dotted';
-    bubble.style.opacity = '0.85';
+  private appendThoughtChunk(thoughtChunk: string): void {
+    if (!this.currentThoughtBubble) {
+      const details = document.createElement('details');
+      details.className = 'thought-container';
+      details.open = true;
 
-    bubble.innerHTML = `
-      <div class="tool-header" style="color: var(--super);">
-        <span>💭 Thinking</span>
-      </div>
-      <div class="tool-output-box" style="font-family: inherit; font-style: italic;">${thoughtText}</div>
-    `;
+      details.innerHTML = `
+        <summary class="thought-summary">
+          <span class="thought-icon">💭</span>
+          <span class="thought-title">Thinking Process</span>
+          <span class="thought-chevron">▼</span>
+        </summary>
+        <div class="thought-content"></div>
+      `;
 
-    this.messagesContainer.appendChild(bubble);
+      this.messagesContainer.appendChild(details);
+      this.currentThoughtBubble = details;
+      this.currentThoughtBox = details.querySelector('.thought-content');
+      this.currentThoughtText = '';
+    }
+
+    this.currentThoughtText += thoughtChunk;
+    if (this.currentThoughtBox) {
+      this.currentThoughtBox.textContent = this.currentThoughtText;
+    }
     this.scrollToBottom();
   }
 
