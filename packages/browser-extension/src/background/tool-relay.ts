@@ -134,20 +134,25 @@ export class ToolRelay {
     try {
       // 1. Try active tab in last focused window first
       let tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-      let validTab = tabs.find((t) => t.id && t.url && t.url.match(/^https?:\/\//i));
+      let validTab = tabs.find((t) => t.id && (t.url || (t as any).pendingUrl)?.match(/^https?:\/\//i));
       if (validTab?.id) return validTab.id;
 
       // 2. Try active tab in current window
       tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      validTab = tabs.find((t) => t.id && t.url && t.url.match(/^https?:\/\//i));
+      validTab = tabs.find((t) => t.id && (t.url || (t as any).pendingUrl)?.match(/^https?:\/\//i));
       if (validTab?.id) return validTab.id;
 
       // 3. Fallback to any active HTTP/HTTPS tab anywhere
       tabs = await chrome.tabs.query({ active: true });
-      validTab = tabs.find((t) => t.id && t.url && t.url.match(/^https?:\/\//i));
+      validTab = tabs.find((t) => t.id && (t.url || (t as any).pendingUrl)?.match(/^https?:\/\//i));
       if (validTab?.id) return validTab.id;
 
-      // 4. Ultimate fallback (exclude browser-internal urls)
+      // 4. If all active tabs are internal browser pages (e.g. edge://extensions), search ALL open tabs across all windows for a valid webpage!
+      const allTabs = await chrome.tabs.query({});
+      const anyWebTab = allTabs.find((t) => t.id && (t.url || (t as any).pendingUrl)?.match(/^https?:\/\//i));
+      if (anyWebTab?.id) return anyWebTab.id;
+
+      // 5. Ultimate fallback (exclude browser-internal urls)
       const fallbackTab = tabs.find((t) => t.id && t.url && !t.url.match(/^(chrome|edge|devtools|chrome-extension|about|view-source):/i));
       return fallbackTab?.id || tabs[0]?.id;
     } catch {

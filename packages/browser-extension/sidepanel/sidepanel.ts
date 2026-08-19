@@ -7,6 +7,7 @@
 import { MessageBus } from '../src/shared/message-bus.js';
 import { ActiveTabContext, AuthState, ModelOption, SectionContextData } from '../src/shared/types.js';
 import { renderMarkdown } from '../src/shared/markdown.js';
+import { ExtensionSessionStore } from '../src/shared/session-store.js';
 
 class SidePanelController {
   private currentSessionId: string = `ext-chat-${Date.now()}`;
@@ -82,10 +83,26 @@ class SidePanelController {
     this.checkAuthStatus();
     this.loadRealModels();
     this.listenToAgentEvents();
+    this.initSessionId();
 
     // Periodic heartbeat check to detect server drops and automatic reconnects
     setInterval(() => this.checkAuthStatus(), 5000);
     window.addEventListener('focus', () => this.checkAuthStatus());
+  }
+
+  private async initSessionId(): Promise<void> {
+    try {
+      const persistedId = await ExtensionSessionStore.getCurrentSessionId();
+      this.currentSessionId = persistedId;
+      // Sync with the server for this session on startup
+      MessageBus.send({
+        type: 'SYNC_SESSION',
+        payload: {
+          sessionId: this.currentSessionId,
+          lastSeq: 0
+        }
+      }).catch(() => {});
+    } catch {}
   }
 
   // ─── Agent Streaming Events ────────────────────────────────────────────────
@@ -695,8 +712,9 @@ class SidePanelController {
     }
   }
 
-  private startNewChat(): void {
+  private async startNewChat(): Promise<void> {
     this.currentSessionId = `ext-chat-${Date.now()}`;
+    await ExtensionSessionStore.setCurrentSessionId(this.currentSessionId);
     this.seenEventSeqs.clear();
     this.messagesContainer.innerHTML = '';
     this.agentStepsContainer.innerHTML = '';

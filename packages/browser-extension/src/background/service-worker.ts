@@ -100,20 +100,25 @@ async function getActiveWebTab(): Promise<chrome.tabs.Tab | null> {
   try {
     // 1. Try active tab in last focused window first
     let tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    let validTab = tabs.find((t) => t.id && t.url && t.url.match(/^https?:\/\//i));
+    let validTab = tabs.find((t) => t.id && (t.url || (t as any).pendingUrl)?.match(/^https?:\/\//i));
     if (validTab) return validTab;
 
     // 2. Try active tab in current window
     tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    validTab = tabs.find((t) => t.id && t.url && t.url.match(/^https?:\/\//i));
+    validTab = tabs.find((t) => t.id && (t.url || (t as any).pendingUrl)?.match(/^https?:\/\//i));
     if (validTab) return validTab;
 
     // 3. Fallback to any active HTTP/HTTPS tab anywhere
     tabs = await chrome.tabs.query({ active: true });
-    validTab = tabs.find((t) => t.id && t.url && t.url.match(/^https?:\/\//i));
+    validTab = tabs.find((t) => t.id && (t.url || (t as any).pendingUrl)?.match(/^https?:\/\//i));
     if (validTab) return validTab;
 
-    // 4. Ultimate fallback (exclude browser-internal urls)
+    // 4. If all active tabs are internal browser pages (e.g. edge://extensions), search ALL open tabs across all windows for a valid webpage!
+    const allTabs = await chrome.tabs.query({});
+    const anyWebTab = allTabs.find((t) => t.id && (t.url || (t as any).pendingUrl)?.match(/^https?:\/\//i));
+    if (anyWebTab) return anyWebTab;
+
+    // 5. Ultimate fallback (exclude browser-internal urls)
     const fallbackTab = tabs.find((t) => t.id && t.url && !t.url.match(/^(chrome|edge|devtools|chrome-extension|about|view-source):/i));
     return fallbackTab || tabs[0] || null;
   } catch {
