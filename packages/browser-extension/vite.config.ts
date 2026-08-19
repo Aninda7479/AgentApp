@@ -3,18 +3,20 @@ import { resolve } from 'path';
 import fs from 'fs';
 
 export default defineConfig({
+  base: './',
   build: {
     outDir: 'dist',
     emptyOutDir: true,
     sourcemap: false,
+    modulePreload: false,
     rollupOptions: {
       input: {
         'service-worker': resolve(__dirname, 'src/background/service-worker.ts'),
         'content-script': resolve(__dirname, 'src/content/content-script.ts'),
         'main-world': resolve(__dirname, 'src/content/main-world.ts'),
-        sidepanel: resolve(__dirname, 'src/sidepanel/sidepanel.html'),
-        popup: resolve(__dirname, 'src/popup/popup.html'),
-        options: resolve(__dirname, 'src/options/options.html'),
+        sidepanel: resolve(__dirname, 'sidepanel/sidepanel.html'),
+        popup: resolve(__dirname, 'popup/popup.html'),
+        options: resolve(__dirname, 'options/options.html'),
       },
       output: {
         entryFileNames: (chunkInfo) => {
@@ -41,23 +43,6 @@ export default defineConfig({
         const manifestSrc = resolve(__dirname, 'manifest.json');
         if (fs.existsSync(manifestSrc)) {
           fs.copyFileSync(manifestSrc, resolve(distDir, 'manifest.json'));
-        }
-
-        // Copy HTML folders if nested under src
-        const srcNested = resolve(distDir, 'src');
-        if (fs.existsSync(srcNested)) {
-          for (const folder of ['sidepanel', 'popup', 'options']) {
-            const srcFolder = resolve(srcNested, folder);
-            const targetFolder = resolve(distDir, folder);
-            if (fs.existsSync(srcFolder)) {
-              if (!fs.existsSync(targetFolder)) {
-                fs.mkdirSync(targetFolder, { recursive: true });
-              }
-              for (const file of fs.readdirSync(srcFolder)) {
-                fs.copyFileSync(resolve(srcFolder, file), resolve(targetFolder, file));
-              }
-            }
-          }
         }
 
         // Copy icons directory

@@ -4,8 +4,8 @@
  * and composer controls matching Desktop/Web Workspace.
  */
 
-import { MessageBus } from '../shared/message-bus.js';
-import { ActiveTabContext, AuthState, ModelOption } from '../shared/types.js';
+import { MessageBus } from '../src/shared/message-bus.js';
+import { ActiveTabContext, AuthState, ModelOption } from '../src/shared/types.js';
 
 class SidePanelController {
   private currentSessionId: string = `ext-chat-${Date.now()}`;

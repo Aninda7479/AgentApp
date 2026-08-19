@@ -2,8 +2,8 @@
  * SuperAgent Browser Extension — Options Controller
  */
 
-import { MessageBus } from '../shared/message-bus.js';
-import { AuthState, ServerConfig } from '../shared/types.js';
+import { MessageBus } from '../src/shared/message-bus.js';
+import { AuthState, ServerConfig } from '../src/shared/types.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const serverBaseUrl = document.getElementById('serverBaseUrl') as HTMLInputElement;

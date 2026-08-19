@@ -2,8 +2,8 @@
  * SuperAgent Browser Extension — Quick Popup Controller
  */
 
-import { MessageBus } from '../shared/message-bus.js';
-import { AuthState } from '../shared/types.js';
+import { MessageBus } from '../src/shared/message-bus.js';
+import { AuthState } from '../src/shared/types.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const popupDot = document.getElementById('popupDot') as HTMLElement;

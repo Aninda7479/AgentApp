@@ -43,6 +43,16 @@ chrome.runtime.onStartup.addListener(() => {
 
 // ─── Context Menu Listener ──────────────────────────────────────────────────
 
+function safeBroadcast(message: any): void {
+  try {
+    chrome.runtime.sendMessage(message, () => {
+      // Accessing chrome.runtime.lastError marks it as handled and prevents
+      // "Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist."
+      const _err = chrome.runtime.lastError;
+    });
+  } catch {}
+}
+
 if (chrome.contextMenus?.onClicked) {
   chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     if (info.menuItemId === 'superagent-ask-selection' && info.selectionText) {
@@ -51,14 +61,14 @@ if (chrome.contextMenus?.onClicked) {
         await chrome.sidePanel.open({ tabId: tab.id }).catch(() => {});
       }
       // Broadcast prompt event to side panel
-      chrome.runtime.sendMessage({
+      safeBroadcast({
         type: 'AGENT_RUN_START',
         payload: {
           prompt: `Regarding this selected text: "${info.selectionText}"\n\nPlease analyze or answer.`,
           sessionId: `ext-chat-${Date.now()}`,
           modelConfig: {}
         }
-      }).catch(() => {});
+      });
     }
   });
 }
@@ -66,11 +76,9 @@ if (chrome.contextMenus?.onClicked) {
 // ─── WebSocket Event Relay to Sidepanel/Popup ───────────────────────────────
 
 apiClient.onWebSocketEvent((event) => {
-  chrome.runtime.sendMessage({
+  safeBroadcast({
     type: 'AGENT_EVENT',
     payload: event
-  }).catch(() => {
-    // Side panel might be closed, harmless
   });
 });
 
@@ -127,6 +135,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
         try {
           const tabRes = await new Promise<any>((resolve) => {
             chrome.tabs.sendMessage(activeTab.id!, { type: 'GET_SELECTION' }, (r) => {
+              const _err = chrome.runtime.lastError;
               resolve(r || {});
             });
           });
