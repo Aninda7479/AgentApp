@@ -43,6 +43,29 @@ apiClient.onWebSocketEvent(async (event) => {
         result: { success: false, error: err.message || String(err) }
       });
     }
+  } else if (event.channel === 'session-sync' && event.data?.pendingTool) {
+    const { id, sessionId, tool, input } = event.data.pendingTool;
+    try {
+      const activeTab = await getActiveWebTab();
+      const res = await ToolRelay.execute({
+        tool,
+        input: input || {},
+        tabId: activeTab?.id
+      });
+      apiClient.sendWebSocket({
+        action: 'CLIENT_TOOL_RESULT',
+        id,
+        sessionId,
+        result: res
+      });
+    } catch (err: any) {
+      apiClient.sendWebSocket({
+        action: 'CLIENT_TOOL_RESULT',
+        id,
+        sessionId,
+        result: { success: false, error: err.message || String(err) }
+      });
+    }
   }
 });
 
@@ -75,13 +98,24 @@ chrome.runtime.onStartup.addListener(() => {
 
 async function getActiveWebTab(): Promise<chrome.tabs.Tab | null> {
   try {
+    // 1. Try active tab in last focused window first
     let tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    let validTab = tabs.find((t) => t.id && t.url && !t.url.startsWith('chrome-extension://') && !t.url.startsWith('chrome://'));
+    let validTab = tabs.find((t) => t.id && t.url && t.url.match(/^https?:\/\//i));
     if (validTab) return validTab;
 
+    // 2. Try active tab in current window
+    tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    validTab = tabs.find((t) => t.id && t.url && t.url.match(/^https?:\/\//i));
+    if (validTab) return validTab;
+
+    // 3. Fallback to any active HTTP/HTTPS tab anywhere
     tabs = await chrome.tabs.query({ active: true });
-    validTab = tabs.find((t) => t.id && t.url && !t.url.startsWith('chrome-extension://') && !t.url.startsWith('chrome://'));
-    return validTab || tabs[0] || null;
+    validTab = tabs.find((t) => t.id && t.url && t.url.match(/^https?:\/\//i));
+    if (validTab) return validTab;
+
+    // 4. Ultimate fallback (exclude browser-internal urls)
+    const fallbackTab = tabs.find((t) => t.id && t.url && !t.url.match(/^(chrome|edge|devtools|chrome-extension|about|view-source):/i));
+    return fallbackTab || tabs[0] || null;
   } catch {
     return null;
   }

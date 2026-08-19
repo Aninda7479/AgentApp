@@ -301,17 +301,38 @@ function recordSessionEvent(sessionId: string, event: AgentEvent) {
   }
 }
 
-const pendingClientTools = new Map<string, { resolve: (val: any) => void; reject: (err: any) => void; timer: NodeJS.Timeout }>();
+interface PendingClientToolEntry {
+  id: string;
+  tool: string;
+  input: any;
+  resolve: (val: any) => void;
+  reject: (err: any) => void;
+  timer: NodeJS.Timeout;
+}
+
+const pendingClientTools = new Map<string, PendingClientToolEntry>();
+const pendingSessionTools = new Map<string, PendingClientToolEntry>();
 
 function executeClientToolOnExtension(sessionId: string, tool: string, input: Record<string, any>): Promise<any> {
   return new Promise((resolve, reject) => {
+    // If there is already a pending tool execution for this session, clear it
+    const existing = pendingSessionTools.get(sessionId);
+    if (existing) {
+      clearTimeout(existing.timer);
+      pendingClientTools.delete(existing.id);
+      pendingSessionTools.delete(sessionId);
+    }
+
     const id = `tool-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const timer = setTimeout(() => {
       pendingClientTools.delete(id);
+      pendingSessionTools.delete(sessionId);
       resolve({ success: false, error: `Browser tool "${tool}" timed out after 15s.` });
     }, 15000);
 
-    pendingClientTools.set(id, { resolve, reject, timer });
+    const entry: PendingClientToolEntry = { id, tool, input, resolve, reject, timer };
+    pendingClientTools.set(id, entry);
+    pendingSessionTools.set(sessionId, entry);
 
     broadcast('execute-client-tool', {
       id,
@@ -331,6 +352,9 @@ wss.on('connection', (ws) => {
       const msg = JSON.parse(String(raw));
       if (msg.action === 'SYNC_SESSION' && msg.sessionId) {
         const entry = sessionStateStore.get(msg.sessionId);
+        const pending = pendingSessionTools.get(msg.sessionId);
+        const pendingTool = pending ? { id: pending.id, sessionId: msg.sessionId, tool: pending.tool, input: pending.input } : null;
+
         if (entry) {
           const lastSeq = typeof msg.lastSeq === 'number' ? msg.lastSeq : 0;
           const replayEvents = entry.events.filter((e) => (e.seq ?? 0) > lastSeq);
@@ -342,7 +366,8 @@ wss.on('connection', (ws) => {
                 isRunning: entry.isRunning,
                 replayEvents,
                 fullAssistantText: entry.fullAssistantText,
-                fullThoughtText: entry.fullThoughtText
+                fullThoughtText: entry.fullThoughtText,
+                pendingTool
               }
             })
           );
@@ -355,7 +380,8 @@ wss.on('connection', (ws) => {
                 isRunning: false,
                 replayEvents: [],
                 fullAssistantText: '',
-                fullThoughtText: ''
+                fullThoughtText: '',
+                pendingTool
               }
             })
           );
@@ -365,6 +391,12 @@ wss.on('connection', (ws) => {
         if (pending) {
           clearTimeout(pending.timer);
           pendingClientTools.delete(msg.id);
+          for (const [sessId, entry] of pendingSessionTools.entries()) {
+            if (entry.id === msg.id) {
+              pendingSessionTools.delete(sessId);
+              break;
+            }
+          }
           pending.resolve(msg.result);
         }
       } else if (msg.action === 'PING') {

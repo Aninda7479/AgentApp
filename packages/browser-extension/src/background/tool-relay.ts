@@ -131,8 +131,28 @@ export class ToolRelay {
   }
 
   private static async getActiveTabId(): Promise<number | undefined> {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    return tabs[0]?.id;
+    try {
+      // 1. Try active tab in last focused window first
+      let tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      let validTab = tabs.find((t) => t.id && t.url && t.url.match(/^https?:\/\//i));
+      if (validTab?.id) return validTab.id;
+
+      // 2. Try active tab in current window
+      tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      validTab = tabs.find((t) => t.id && t.url && t.url.match(/^https?:\/\//i));
+      if (validTab?.id) return validTab.id;
+
+      // 3. Fallback to any active HTTP/HTTPS tab anywhere
+      tabs = await chrome.tabs.query({ active: true });
+      validTab = tabs.find((t) => t.id && t.url && t.url.match(/^https?:\/\//i));
+      if (validTab?.id) return validTab.id;
+
+      // 4. Ultimate fallback (exclude browser-internal urls)
+      const fallbackTab = tabs.find((t) => t.id && t.url && !t.url.match(/^(chrome|edge|devtools|chrome-extension|about|view-source):/i));
+      return fallbackTab?.id || tabs[0]?.id;
+    } catch {
+      return undefined;
+    }
   }
 
   private static async getTab(tabId: number): Promise<chrome.tabs.Tab | undefined> {
