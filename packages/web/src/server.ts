@@ -433,14 +433,22 @@ async function runAgentEngine(
     }
 
     let replyLogged = false;
+    let didEmitDone = false;
     await engine.run(prompt, (agentEvent: AgentEvent) => {
       // Log the first reply token on the web connection (device-tagged).
       if (agentEvent.type === 'token' && !replyLogged) {
         replyLogged = true;
         console.log(`[web] message RECEIVED — connection device: ${os.hostname()} | session: ${sessionId}`);
       }
+      if (agentEvent.type === 'done' || agentEvent.type === 'error') {
+        didEmitDone = true;
+      }
       broadcast('agent-event', agentEvent);
     }, currentAttachments);
+
+    if (!didEmitDone) {
+      broadcast('agent-event', { type: 'done', sessionId });
+    }
   } catch (err: any) {
     console.error(`[Agent Run Fail] Session ${sessionId}:`, err);
     broadcast('agent-event', {

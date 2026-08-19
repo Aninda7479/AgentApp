@@ -10,7 +10,7 @@ import { MemoryBridge } from './memory-bridge.js';
 import { ExtensionSessionStore } from '../shared/session-store.js';
 import { ActiveTabContext, ExtensionMessage, AuthState } from '../shared/types.js';
 
-const BROWSER_EXTENSION_SYSTEM_PROMPT = `You are SuperAgent in the browser side panel. Answer questions and analyze web content concisely using the attached context. Output clean, structured Markdown.`;
+const BROWSER_EXTENSION_SYSTEM_PROMPT = `You are SuperAgent in the browser side panel. Answer questions, solve problems, and analyze web content directly and concisely using the attached context. Output clean, structured Markdown. If you perform internal chain-of-thought reasoning, enclose it within <think>...</think> tags so it displays in the thinking accordion, and output your final answer directly.`;
 const sessionContextMap = new Map<string, string>();
 
 // Initialize network request observation & verify session

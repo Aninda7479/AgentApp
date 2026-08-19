@@ -133,14 +133,15 @@ export function isContextOverflowError(message: string): boolean {
  * of any substring (2–200 chars) are found in the trailing 1000-char window.
  */
 export function detectRepetitiveLoop(text: string): { isLoop: boolean; cleanText: string } {
-  if (!text || text.length < 6) return { isLoop: false, cleanText: text };
+  if (!text || text.length < 15) return { isLoop: false, cleanText: text };
 
   const windowSize = Math.min(4000, text.length);
   const window = text.slice(-windowSize);
 
-  const maxLen = Math.min(1000, Math.floor(windowSize / 3));
+  const minLen = 4;
+  const maxLen = Math.min(600, Math.floor(windowSize / 3));
 
-  for (let len = 2; len <= maxLen; len++) {
+  for (let len = minLen; len <= maxLen; len++) {
     const maxOffset = Math.min(len - 1, 30);
     for (let offset = 0; offset <= maxOffset; offset++) {
       const endIdx = window.length - offset;
@@ -148,7 +149,7 @@ export function detectRepetitiveLoop(text: string): { isLoop: boolean; cleanText
       if (startIdx < 0) continue;
 
       const sub = window.slice(startIdx, endIdx);
-      if (!sub.trim()) continue;
+      if (!sub.trim() || sub.trim().length < 3) continue;
 
       let occurrences = 0;
       let idx = endIdx;
@@ -161,10 +162,13 @@ export function detectRepetitiveLoop(text: string): { isLoop: boolean; cleanText
         }
       }
 
-      if (occurrences >= 3) {
+      // 4 repetitions for short phrases (>= 4 chars), 3 for longer sentences (>= 20 chars)
+      const requiredOccurrences = len < 20 ? 4 : 3;
+
+      if (occurrences >= requiredOccurrences) {
         const pattern = sub;
-        const triplePattern = pattern + pattern + pattern;
-        const firstIdx = text.indexOf(triplePattern);
+        const repeatPattern = pattern.repeat(requiredOccurrences);
+        const firstIdx = text.indexOf(repeatPattern);
         if (firstIdx !== -1) {
           if (firstIdx === 0) {
             return { isLoop: true, cleanText: pattern.trim() };
