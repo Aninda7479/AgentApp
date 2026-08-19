@@ -126,6 +126,11 @@ export interface AgentEngineConfig {
   compactSummaryMaxChars?: number;
   /** Maximum run iterations (turns) to prevent runaway loops. Defaults to 30. */
   maxIterations?: number;
+  /** When true, the engine skips ALL builtin tools (file, shell, browser,
+   *  artifacts, subagents) and operates as a pure chat assistant. Used by the
+   *  browser extension side panel where workspace tools are unnecessary and
+   *  their schemas alone can exceed a small model's token budget. */
+  chatOnly?: boolean;
 }
 
 /** A single parallel candidate for best-of-N orchestration. Extends the base

@@ -338,8 +338,7 @@ export class ElementPicker {
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => line.length > 0)
-      .join('\n')
-      .slice(0, 15000);
+      .join('\n');
   }
 
   private static showSuccessFlash(data: SectionContextData): void {

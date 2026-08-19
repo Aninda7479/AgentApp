@@ -119,10 +119,10 @@ export function isCommandAllowed(command: string, allowedCommands?: string[]): b
   });
 }
 
-/** Returns true when the API error message indicates context limit overflow. */
+/** Returns true when the API error message indicates context limit overflow or token rate limits. */
 export function isContextOverflowError(message: string): boolean {
   if (!message) return false;
-  return /context length|context window|maximum context|max.*context|token limit|too many tokens|request too large|exceeds.{0,24}context|context.{0,12}exceed|prompt is too long|input.{0,12}too long|input length|sequence too long/i.test(
+  return /context length|context window|maximum context|max.*context|token limit|too many tokens|request too large|exceeds.{0,24}context|context.{0,12}exceed|prompt is too long|input.{0,12}too long|input length|sequence too long|tokens per minute|tpm.*limit|reduce your message size|ratelimitexceeded/i.test(
     message
   );
 }

@@ -47,6 +47,7 @@ export interface AgentEngineConfig {
     projectRoot?: string;
     maxTokens?: number;
     temperature?: number;
+    chatOnly?: boolean;
 }
 export declare class AgentEngine {
     private config;

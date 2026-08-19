@@ -10,18 +10,7 @@ import { MemoryBridge } from './memory-bridge.js';
 import { ExtensionSessionStore } from '../shared/session-store.js';
 import { ActiveTabContext, ExtensionMessage, AuthState } from '../shared/types.js';
 
-const BROWSER_EXTENSION_SYSTEM_PROMPT = `You are SuperAgent, an intelligent AI assistant and autonomous agent integrated into the user's browser side panel.
-
-<identity>
-You assist the user with browsing, research, page analysis, coding, web navigation, and data extraction directly from their active browser window.
-</identity>
-
-<browser_context_instructions>
-1. **Live Page Context**: When the user prompt includes a \`[Current Web Page Context]\` block, the user's active webpage URL, Title, and readable text content are ALREADY EXTRACTED and provided directly to you.
-2. **Direct Answers & Summaries**: Always use the provided page content immediately to answer questions, explain concepts, summarize, or extract data.
-3. **No Unnecessary Scraping**: DO NOT attempt to run shell commands or external headless browser tools to fetch the page — you already have the live content in front of you.
-4. **Formatting**: Present your answers in clear, structured, well-formatted Markdown with headings, bullet points, and concise highlights.
-</browser_context_instructions>`;
+const BROWSER_EXTENSION_SYSTEM_PROMPT = `You are SuperAgent in the browser side panel. Answer questions and analyze web content concisely using the attached context. Output clean, structured Markdown.`;
 
 // Initialize network request observation & verify session
 NetworkObserver.initialize();
@@ -53,6 +42,20 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.runtime.onStartup.addListener(() => {
   AuthBridge.verifySession().then(updateBadge);
 });
+
+async function getActiveWebTab(): Promise<chrome.tabs.Tab | null> {
+  try {
+    let tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    let validTab = tabs.find((t) => t.id && t.url && !t.url.startsWith('chrome-extension://') && !t.url.startsWith('chrome://'));
+    if (validTab) return validTab;
+
+    tabs = await chrome.tabs.query({ active: true });
+    validTab = tabs.find((t) => t.id && t.url && !t.url.startsWith('chrome-extension://') && !t.url.startsWith('chrome://'));
+    return validTab || tabs[0] || null;
+  } catch {
+    return null;
+  }
+}
 
 // ─── Context Menu Listener ──────────────────────────────────────────────────
 
@@ -184,18 +187,20 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
         let finalPrompt = prompt;
 
         if (includePageContext && pageContextMode !== 'none') {
-          const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-          const activeTab = tabs[0];
+          const activeTab = await getActiveWebTab();
           if (activeTab?.id && activeTab.url) {
             let pageText = '';
-            let storageContext = '';
-            let networkContext = '';
+            let headerInfo = '[Current Web Page Context]';
 
             if (pageContextMode === 'section' && selectedSection?.text) {
-              pageText = `[Attached Section: ${selectedSection.selector || 'DOM Element'}]\n${selectedSection.text}`;
+              const rawSection = selectedSection.text.trim();
+              headerInfo = `[Current Web Page Section: ${selectedSection.selector || 'DOM Element'}]`;
+              pageText = `--- SECTION CONTENT (${selectedSection.selector || 'Element'}) ---\n${rawSection}\n--- END SECTION ---`;
             } else if (pageContextMode === 'selection' && selectedSection?.text) {
-              pageText = `[Attached Selected Text]\n${selectedSection.text}`;
-            } else {
+              const rawSelection = selectedSection.text.trim();
+              headerInfo = `[Current Web Page: Highlighted Selection]`;
+              pageText = `--- SELECTED TEXT ---\n${rawSelection}\n--- END SELECTED TEXT ---`;
+            } else if (pageContextMode === 'full') {
               try {
                 const res = await ToolRelay.execute({
                   tool: 'extract_page_content',
@@ -203,70 +208,13 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
                   tabId: activeTab.id
                 });
                 if (res.success && res.result?.text) {
-                  pageText = res.result.text.slice(0, 20000);
+                  const rawFull = res.result.text.trim();
+                  pageText = `--- PAGE CONTENT ---\n${rawFull}\n--- END PAGE CONTENT ---`;
                 }
               } catch {}
             }
 
-            const promptLower = (prompt || '').toLowerCase();
-
-            // Storage, Session & Cookies Context
-            if (
-              promptLower.includes('storage') ||
-              promptLower.includes('cookie') ||
-              promptLower.includes('session') ||
-              promptLower.includes('token') ||
-              promptLower.includes('auth') ||
-              promptLower.includes('state') ||
-              promptLower.includes('inspect')
-            ) {
-              try {
-                const [localRes, sessionRes, cookieRes] = await Promise.all([
-                  ToolRelay.execute({ tool: 'get_local_storage', input: {}, tabId: activeTab.id }),
-                  ToolRelay.execute({ tool: 'get_session_storage', input: {}, tabId: activeTab.id }),
-                  ToolRelay.execute({ tool: 'get_cookies', input: {}, tabId: activeTab.id })
-                ]);
-
-                storageContext = `\n--- SITE STORAGE & COOKIES ---\n` +
-                  `localStorage: ${JSON.stringify(localRes.result || {}, null, 2)}\n` +
-                  `sessionStorage: ${JSON.stringify(sessionRes.result || {}, null, 2)}\n` +
-                  `Cookies: ${JSON.stringify((cookieRes.result || []).map((c: any) => ({ name: c.name, value: c.value, domain: c.domain, secure: c.secure })), null, 2)}\n` +
-                  `--- END SITE STORAGE ---\n`;
-              } catch {}
-            }
-
-            // Network Requests & Failed Status Codes Context
-            if (
-              promptLower.includes('network') ||
-              promptLower.includes('request') ||
-              promptLower.includes('api') ||
-              promptLower.includes('fetch') ||
-              promptLower.includes('failed') ||
-              promptLower.includes('error') ||
-              promptLower.includes('http') ||
-              promptLower.includes('inspect')
-            ) {
-              try {
-                const [networkRes, failedRes] = await Promise.all([
-                  ToolRelay.execute({ tool: 'get_network_requests', input: {}, tabId: activeTab.id }),
-                  ToolRelay.execute({ tool: 'get_failed_requests', input: {}, tabId: activeTab.id })
-                ]);
-
-                const recent = (networkRes.result || []).slice(-15);
-                const failed = failedRes.result || [];
-
-                networkContext = `\n--- CAPTURED NETWORK TELEMETRY ---\n` +
-                  `Recent Requests (${recent.length}): ${JSON.stringify(recent, null, 2)}\n` +
-                  `Failed Requests (4xx/5xx): ${JSON.stringify(failed, null, 2)}\n` +
-                  `--- END NETWORK TELEMETRY ---\n`;
-              } catch {}
-            }
-
-            const headerInfo = pageContextMode === 'section' && selectedSection?.selector
-              ? `[Current Web Page Section Context: ${selectedSection.selector}]`
-              : `[Current Web Page Context]`;
-
-            finalPrompt = `${headerInfo}\nURL: ${activeTab.url}\nTitle: ${activeTab.title || ''}\n${pageText ? `\n--- CONTEXT CONTENT START ---\n${pageText}\n--- CONTEXT CONTENT END ---\n` : ''}${storageContext}${networkContext}\n[User Instruction]\n${prompt}`;
+            finalPrompt = `${headerInfo}\nURL: ${activeTab.url}\nTitle: ${activeTab.title || ''}\n\n${pageText}\n\n[User Instruction]\n${prompt}`;
           }
         }
 
@@ -274,6 +222,7 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
 
         const finalModelConfig = {
           systemPrompt: BROWSER_EXTENSION_SYSTEM_PROMPT,
+          chatOnly: true,  // Skip all 30 builtin tool schemas (~7k tokens) — browser chat doesn't need file/shell/artifact tools
           ...modelConfig
         };
 

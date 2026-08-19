@@ -119,27 +119,34 @@ export class AgentEngine {
       requestApproval: config.requestApproval
     });
 
-    this.tools = [
-      ...createBuiltinTools(
-        this.sandbox,
-        effectiveRoot,
-        // Wire the per-run internet policy: when the caller set config.internetAccess
-        // (via a project/chat override), it governs web-fetch; otherwise the
-        // global persisted setting applies. Raw shell `curl`/`wget` are NOT gated
-        // by this — documented limitation, scoped separately from the sandbox.
-        () => config.internetAccess,
-        {
-          provider: config.provider,
-          apiKey: config.apiKey,
-          baseUrl: config.baseUrl,
-          model: config.model,
-          projectRoot: hasExplicitProject ? config.projectRoot : undefined,
-          permissionMode: config.permissionMode,
-        },
-        config.allowSubagents ?? true
-      ),
-      ...(config.extraTools ?? [])
-    ];
+    if (config.chatOnly) {
+      // Chat-only mode: skip all 30 builtin tools to save ~7,000 tokens.
+      // Used by the browser extension side panel where workspace tools are
+      // unnecessary and their schemas alone can exceed a small model's budget.
+      this.tools = [...(config.extraTools ?? [])];
+    } else {
+      this.tools = [
+        ...createBuiltinTools(
+          this.sandbox,
+          effectiveRoot,
+          // Wire the per-run internet policy: when the caller set config.internetAccess
+          // (via a project/chat override), it governs web-fetch; otherwise the
+          // global persisted setting applies. Raw shell `curl`/`wget` are NOT gated
+          // by this — documented limitation, scoped separately from the sandbox.
+          () => config.internetAccess,
+          {
+            provider: config.provider,
+            apiKey: config.apiKey,
+            baseUrl: config.baseUrl,
+            model: config.model,
+            projectRoot: hasExplicitProject ? config.projectRoot : undefined,
+            permissionMode: config.permissionMode,
+          },
+          config.allowSubagents ?? true
+        ),
+        ...(config.extraTools ?? [])
+      ];
+    }
     this.history = [];
 
     // System prompt — inspired by Anthropic Claude's layered system prompt design.
@@ -158,10 +165,15 @@ export class AgentEngine {
     const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const dateHint = `\n\n<current_time>\nToday's date: ${dateStr}\nCurrent time: ${timeStr}\n</current_time>`;
 
-    const rootHint = hasExplicitProject
-      ? `\n\n<workspace>\nProject root: ${effectiveRoot}\nWhen using file/directory tools, use "." to refer to the project root, or paths relative to it.\n</workspace>`
-      : `\n\n<workspace>\nStandalone Mode: No host project folder is attached to this chat. Your workspace directory is an isolated sandbox: ${effectiveRoot}\nFile and terminal operations are confined to this isolated directory.\n</workspace>`;
-    this.history = [{ role: 'system', content: sysPrompt + dateHint + rootHint }];
+    if (config.chatOnly) {
+      // Minimal system message for chat-only mode — no workspace hints
+      this.history = [{ role: 'system', content: sysPrompt + dateHint }];
+    } else {
+      const rootHint = hasExplicitProject
+        ? `\n\n<workspace>\nProject root: ${effectiveRoot}\nWhen using file/directory tools, use "." to refer to the project root, or paths relative to it.\n</workspace>`
+        : `\n\n<workspace>\nStandalone Mode: No host project folder is attached to this chat. Your workspace directory is an isolated sandbox: ${effectiveRoot}\nFile and terminal operations are confined to this isolated directory.\n</workspace>`;
+      this.history = [{ role: 'system', content: sysPrompt + dateHint + rootHint }];
+    }
     this.contextWindow = config.contextWindow ?? (capabilityRegistry.getCapability(config.model)?.contextWindow ?? 128000);
 
     // Register in the global registry so every live agent is supervised
@@ -553,10 +565,22 @@ export class AgentEngine {
           const msg = (streamErr as Error).message || String(streamErr);
           if (
             isContextOverflowError(msg) &&
-            autoCompactions < MAX_AUTO_COMPACTIONS &&
-            this.history.length > 6
+            autoCompactions < MAX_AUTO_COMPACTIONS
           ) {
-            this.compactHistory();
+            if (this.history.length > 2) {
+              this.compactHistory();
+            } else {
+              // First turn prompt is too large for the model/provider token tier (e.g. Groq 8k TPM limit)
+              const lastUserIdx = this.history.map((m) => m.role).lastIndexOf('user');
+              if (lastUserIdx >= 0) {
+                const userMsg = this.history[lastUserIdx];
+                const raw = typeof userMsg.content === 'string' ? userMsg.content : extractTextContent(userMsg.content);
+                if (raw.length > 1500) {
+                  const shortened = raw.slice(0, Math.floor(raw.length * 0.5)) + '\n\n[...content trimmed to fit within provider token budget]';
+                  this.history[lastUserIdx] = { role: 'user', content: shortened };
+                }
+              }
+            }
             autoCompactions++;
             emitContext();
             continue; // retry this turn with compacted history
