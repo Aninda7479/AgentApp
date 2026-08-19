@@ -48,7 +48,7 @@ export function renderMarkdown(raw: string): string {
     thoughtBlocks.push(
       `<details class="thought-container"><summary class="thought-summary"><span class="thought-icon">💭</span><span class="thought-title">Thinking Process</span><span class="thought-chevron">▼</span></summary><div class="thought-content">${escapedThought}</div></details>`
     );
-    return placeholder;
+    return `\n\n${placeholder}\n\n`;
   });
 
   // Also handle unclosed <think> tag (e.g. while still streaming)
@@ -56,9 +56,9 @@ export function renderMarkdown(raw: string): string {
     const placeholder = `%%THOUGHT_BLOCK_${thoughtBlocks.length}%%`;
     const escapedThought = escapeHtml(thought.trim());
     thoughtBlocks.push(
-      `<details class="thought-container" open><summary class="thought-summary"><span class="thought-icon">💭</span><span class="thought-title">Thinking Process</span><span class="thought-chevron">▼</span></summary><div class="thought-content">${escapedThought}</div></details>`
+      `<details class="thought-container" open><summary class="thought-summary"><span class="thought-icon">💭</span><span class="thought-title">Thinking Process</span><span class="thinking-dots"><span class="thinking-dot"></span><span class="thinking-dot"></span><span class="thinking-dot"></span></span><span class="thought-chevron">▼</span></summary><div class="thought-content">${escapedThought}</div></details>`
     );
-    return placeholder;
+    return `\n\n${placeholder}\n\n`;
   });
 
   // Extract fenced code blocks so inner characters aren't touched

@@ -290,31 +290,39 @@ export class ExtensionApiClient {
   private connectPromise: Promise<void> | null = null;
 
   public async connectWebSocket(): Promise<void> {
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       return;
     }
     if (this.connectPromise) {
       return this.connectPromise;
     }
 
-    this.connectPromise = (async () => {
+    this.connectPromise = new Promise<void>(async (resolve) => {
       try {
         const auth = await this.getAuthStatus();
         if (!auth.connected) {
+          console.warn('[ApiClient] Server is not connected; skipping WS connection');
           this.notifyConnectionChange(false);
           this.scheduleReconnect();
-          return;
-        }
-
-        if (!auth.authenticated && auth.authRequired) {
-          await ExtensionSessionStore.clearAuthToken();
-          this.disconnectWebSocket();
+          resolve();
           return;
         }
 
         const baseUrl = await this.getBaseUrl();
+        const isLocalhost = baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1');
+
+        if (!auth.authenticated && auth.authRequired && !isLocalhost) {
+          console.warn('[ApiClient] Session is not authenticated; clearing auth token');
+          await ExtensionSessionStore.clearAuthToken();
+          this.disconnectWebSocket();
+          resolve();
+          return;
+        }
+
         const token = await ExtensionSessionStore.getAuthToken();
-        if (auth.authRequired && !token) {
+        if (auth.authRequired && !token && !isLocalhost) {
+          console.warn('[ApiClient] Auth required but no token found in store');
+          resolve();
           return;
         }
 
@@ -331,14 +339,22 @@ export class ExtensionApiClient {
         }
 
         const wsUrl = baseUrl.replace(/^http/, 'ws') + '/api/ws' + (token ? `?token=${encodeURIComponent(token)}` : '');
+        console.log('[ApiClient] Connecting WebSocket to:', wsUrl.replace(/token=[^&]+/, 'token=***'));
 
         const ws = new WebSocket(wsUrl);
         this.ws = ws;
 
+        const openTimeout = setTimeout(() => {
+          console.warn('[ApiClient] WebSocket connection handshake timed out (2500ms)');
+          resolve();
+        }, 2500);
+
         ws.onopen = () => {
+          clearTimeout(openTimeout);
           if (this.ws !== ws) return;
-          console.log('[ApiClient] WebSocket connected to SuperAgent server');
+          console.log('[ApiClient] WebSocket successfully CONNECTED to SuperAgent server');
           this.notifyConnectionChange(true);
+          resolve();
         };
 
         ws.onmessage = (event) => {
@@ -351,27 +367,35 @@ export class ExtensionApiClient {
           }
         };
 
-        ws.onclose = () => {
+        ws.onclose = (ev) => {
+          clearTimeout(openTimeout);
           if (this.ws === ws) {
+            console.warn(`[ApiClient] WebSocket closed. Code: ${ev.code}, Clean: ${ev.wasClean}`);
             this.ws = null;
             this.notifyConnectionChange(false);
             this.scheduleReconnect();
+            resolve();
           }
         };
 
-        ws.onerror = () => {
+        ws.onerror = (ev) => {
+          clearTimeout(openTimeout);
           if (this.ws === ws) {
+            console.error('[ApiClient] WebSocket error occurred');
             this.notifyConnectionChange(false);
             try { ws.close(); } catch {}
+            resolve();
           }
         };
-      } catch {
+      } catch (err: any) {
+        console.error('[ApiClient] Error establishing WebSocket:', err);
         this.notifyConnectionChange(false);
         this.scheduleReconnect();
+        resolve();
       } finally {
         this.connectPromise = null;
       }
-    })();
+    });
 
     return this.connectPromise;
   }

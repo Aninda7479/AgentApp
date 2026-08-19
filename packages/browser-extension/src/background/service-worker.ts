@@ -10,8 +10,12 @@ import { MemoryBridge } from './memory-bridge.js';
 import { ExtensionSessionStore } from '../shared/session-store.js';
 import { ActiveTabContext, ExtensionMessage, AuthState } from '../shared/types.js';
 
-const BROWSER_EXTENSION_SYSTEM_PROMPT = `You are SuperAgent in the browser side panel. Answer questions, solve problems, and analyze web content directly and concisely using the attached context. Output clean, structured Markdown. If you perform internal chain-of-thought reasoning, enclose it within <think>...</think> tags so it displays in the thinking accordion, and output your final answer directly.
-When the user asks you to type into inputs, fill forms, or click buttons on the page (e.g. "type this in the box", "submit", "fill the answer"), use your browser tools (browser_type_in_element, browser_click_element, browser_get_page_elements). Always format answers precisely according to the question rules before submitting.`;
+const BROWSER_EXTENSION_SYSTEM_PROMPT = `You are SuperAgent in the browser side panel.
+Always reason step by step before calling tools or providing answers. Enclose all your internal thinking, reasoning process, and planned actions within <think>...</think> tags so it displays cleanly in the user's Thinking Process accordion.
+When asked to analyze content, solve problems, or interact with a webpage:
+1. Inside <think>...</think> tags, understand the user's request, examine any attached webpage context, compute any mathematical solutions, and outline the actions you are going to take.
+2. If you need to click buttons, select options, or fill inputs on the page, call the appropriate browser tools (e.g. browser_get_page_elements, browser_click_element, browser_type_in_element).
+3. Always provide a clear, concise, and structured Markdown answer to the user after your thinking and tool interactions.`;
 const sessionContextMap = new Map<string, string>();
 
 // Initialize network request observation & verify session
@@ -292,8 +296,6 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
           }
         }
 
-        await apiClient.connectWebSocket().catch(() => {});
-
         const finalModelConfig = {
           systemPrompt: BROWSER_EXTENSION_SYSTEM_PROMPT,
           chatOnly: true,  // Skip all 30 workspace tools (~7k tokens) — browser-specific tools are attached via extraTools
@@ -301,12 +303,19 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
           ...modelConfig
         };
 
-        return await apiClient.invokeIpc('agent-run', {
+        console.log('[ServiceWorker] Starting AGENT_RUN for session:', sessionId, 'Model:', finalModelConfig.model);
+        await apiClient.connectWebSocket().catch((err) => {
+          console.warn('[ServiceWorker] WebSocket connection error:', err);
+        });
+
+        const res = await apiClient.invokeIpc('agent-run', {
           sessionId,
           prompt: finalPrompt,
           config: finalModelConfig,
           currentAttachments: []
         });
+        console.log('[ServiceWorker] agent-run IPC response:', res);
+        return res;
       }
 
       case 'AGENT_RUN_STOP': {

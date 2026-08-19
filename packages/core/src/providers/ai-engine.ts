@@ -1653,6 +1653,20 @@ export class AgentEngine {
       payload.systemInstruction = { parts: [{ text: systemInstruction }] };
     }
 
+    const isGeminiThinking =
+      model.toLowerCase().includes('thinking') ||
+      model.toLowerCase().includes('gemini-2.5') ||
+      model.toLowerCase().includes('gemini-3');
+
+    if (isGeminiThinking || this.config.thinkingBudget !== undefined) {
+      payload.generationConfig = {
+        ...(payload.generationConfig as any || {}),
+        thinkingConfig: {
+          includeThoughts: true
+        }
+      };
+    }
+
     let response: Response | undefined;
     let attempt = 0;
     const maxRetries = 3;

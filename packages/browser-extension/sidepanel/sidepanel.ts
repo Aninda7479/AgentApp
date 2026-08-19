@@ -145,20 +145,31 @@ class SidePanelController {
 
     if (channel === 'session-sync' || evt.type === 'session_sync') {
       const payload = evt.data || evt;
-      const { sessionId, isRunning, replayEvents, fullAssistantText } = payload;
+      const { sessionId, isRunning, replayEvents, fullAssistantText, fullThoughtText } = payload;
       if (sessionId && sessionId !== this.currentSessionId) return;
 
       if (Array.isArray(replayEvents) && replayEvents.length > 0) {
         for (const reEvt of replayEvents) {
           this.handleAgentEvent({ channel: 'agent-event', data: reEvt });
         }
-      } else if (fullAssistantText && !this.currentAssistantText) {
-        if (!this.currentAssistantBubble) {
-          this.currentAssistantBubble = this.appendMessage('assistant', '');
+      } else {
+        if (fullThoughtText && !this.currentThoughtText) {
+          this.appendThoughtChunk(fullThoughtText);
+          if (this.currentThoughtBubble) {
+            const dots = this.currentThoughtBubble.querySelector('.thinking-dots');
+            if (dots) dots.remove();
+            this.currentThoughtBubble = null;
+            this.currentThoughtBox = null;
+          }
         }
-        this.currentAssistantText = fullAssistantText;
-        this.currentAssistantBubble.innerHTML = renderMarkdown(this.currentAssistantText);
-        this.scrollToBottom();
+        if (fullAssistantText && !this.currentAssistantText) {
+          if (!this.currentAssistantBubble) {
+            this.currentAssistantBubble = this.appendMessage('assistant', '');
+          }
+          this.currentAssistantText = fullAssistantText;
+          this.currentAssistantBubble.innerHTML = renderMarkdown(this.currentAssistantText);
+          this.scrollToBottom();
+        }
       }
 
       if (isRunning === false) {
@@ -177,6 +188,8 @@ class SidePanelController {
       }
       this.seenEventSeqs.add(evt.seq);
     }
+
+    console.log(`[SidePanel] Agent event "${evt.type}" for session ${this.currentSessionId}:`, evt);
 
     if (evt.type === 'token' && (evt.content !== undefined || evt.text !== undefined)) {
       const text = evt.content !== undefined ? evt.content : evt.text;
@@ -205,12 +218,24 @@ class SidePanelController {
     } else if (evt.type === 'thought' && evt.content) {
       this.appendThoughtChunk(evt.content);
     } else if (evt.type === 'tool_call' || evt.type === 'tool_use') {
+      if (this.currentThoughtBubble) {
+        const dots = this.currentThoughtBubble.querySelector('.thinking-dots');
+        if (dots) dots.remove();
+        this.currentThoughtBubble = null;
+        this.currentThoughtBox = null;
+        this.currentThoughtText = '';
+      }
       this.currentAssistantBubble = null;
-      this.currentThoughtBubble = null;
       this.renderToolCall(evt);
     } else if (evt.type === 'tool_result' || evt.type === 'tool_output') {
+      if (this.currentThoughtBubble) {
+        const dots = this.currentThoughtBubble.querySelector('.thinking-dots');
+        if (dots) dots.remove();
+        this.currentThoughtBubble = null;
+        this.currentThoughtBox = null;
+        this.currentThoughtText = '';
+      }
       this.currentAssistantBubble = null;
-      this.currentThoughtBubble = null;
       this.renderToolResult(evt);
     } else if (evt.type === 'finished' || evt.type === 'done') {
       this.setGenerating(false);
@@ -670,9 +695,12 @@ class SidePanelController {
   private async checkAuthStatus(): Promise<void> {
     try {
       const state: AuthState = await MessageBus.send({ type: 'GET_AUTH_STATE' });
+      const config = await ExtensionSessionStore.getServerConfig();
+      const isLocalhost = config.baseUrl.includes('localhost') || config.baseUrl.includes('127.0.0.1');
+
       if (!state.connected) {
         this.setOfflineState();
-      } else if (state.authenticated || !state.authRequired) {
+      } else if (state.authenticated || !state.authRequired || isLocalhost) {
         this.statusDot.className = 'status-dot connected';
         this.statusText.textContent = 'Online';
         this.loginModal.classList.remove('active');

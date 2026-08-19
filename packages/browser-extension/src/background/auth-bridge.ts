@@ -10,7 +10,10 @@ export class AuthBridge {
   public static async verifySession(): Promise<AuthState> {
     const status = await apiClient.getAuthStatus();
     await ExtensionSessionStore.setAuthState(status);
-    if (status.connected && (status.authenticated || !status.authRequired)) {
+    const config = await ExtensionSessionStore.getServerConfig();
+    const isLocalhost = config.baseUrl.includes('localhost') || config.baseUrl.includes('127.0.0.1');
+
+    if (status.connected && (status.authenticated || !status.authRequired || isLocalhost)) {
       await apiClient.connectWebSocket();
     } else if (!status.connected) {
       apiClient.disconnectWebSocket();

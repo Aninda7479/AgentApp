@@ -1942,8 +1942,17 @@ function lanAddresses(): string[] {
 server.on('upgrade', (request, socket, head) => {
   const pathname = new URL(request.url || '', `http://${request.headers.host}`).pathname;
   if (pathname === '/api/ws') {
-    // Enforce authentication on the WebSocket handshake too.
-    if (!isAuthDisabled() && !getAuthenticatedUser(request)) {
+    const remoteIp = (socket as any).remoteAddress || request.socket?.remoteAddress || '';
+    const hostHeader = request.headers.host || '';
+    const isLoopback =
+      remoteIp === '127.0.0.1' ||
+      remoteIp === '::1' ||
+      remoteIp === '::ffff:127.0.0.1' ||
+      hostHeader.startsWith('localhost:') ||
+      hostHeader.startsWith('127.0.0.1:');
+
+    // Enforce authentication for non-loopback remote/VPS connections.
+    if (!isAuthDisabled() && !isLoopback && !getAuthenticatedUser(request)) {
       socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
       socket.destroy();
       return;
