@@ -6,6 +6,7 @@
 
 import { MessageBus } from '../src/shared/message-bus.js';
 import { ActiveTabContext, AuthState, ModelOption } from '../src/shared/types.js';
+import { renderMarkdown } from '../src/shared/markdown.js';
 
 class SidePanelController {
   private currentSessionId: string = `ext-chat-${Date.now()}`;
@@ -104,14 +105,14 @@ class SidePanelController {
         this.currentAssistantBubble = this.appendMessage('assistant', '');
       }
       this.currentAssistantText += text;
-      this.currentAssistantBubble.textContent = this.currentAssistantText;
+      this.currentAssistantBubble.innerHTML = renderMarkdown(this.currentAssistantText);
       this.scrollToBottom();
     } else if (evt.type === 'replace_tokens' && evt.content !== undefined) {
       if (!this.currentAssistantBubble) {
         this.currentAssistantBubble = this.appendMessage('assistant', '');
       }
       this.currentAssistantText = evt.content;
-      this.currentAssistantBubble.textContent = this.currentAssistantText;
+      this.currentAssistantBubble.innerHTML = renderMarkdown(this.currentAssistantText);
       this.scrollToBottom();
     } else if (evt.type === 'thought' && evt.content) {
       this.renderThought(evt.content);
@@ -484,7 +485,11 @@ class SidePanelController {
   private appendMessage(role: 'user' | 'assistant', text: string): HTMLElement {
     const bubble = document.createElement('div');
     bubble.className = `message-bubble ${role}`;
-    bubble.textContent = text;
+    if (role === 'assistant' && text) {
+      bubble.innerHTML = renderMarkdown(text);
+    } else {
+      bubble.textContent = text;
+    }
     this.messagesContainer.appendChild(bubble);
     this.scrollToBottom();
     return bubble;
