@@ -13,18 +13,15 @@ import { ActiveTabContext, ExtensionMessage, AuthState } from '../shared/types.j
 const BROWSER_EXTENSION_SYSTEM_PROMPT = `You are SuperAgent in the browser side panel.
 Always reason step by step before calling tools or providing answers. Enclose all your internal thinking, reasoning process, and planned actions within <think>...</think> tags so it displays cleanly in the user's Thinking Process accordion.
 
-When asked to solve quizzes, complete tests/forms, or interact with a webpage:
-1. Multi-Step Quiz / Multi-Question Completion:
-   - When asked to "complete the quiz", "solve all questions", or finish a test, do NOT stop after solving just 1 question!
-   - Continue in an autonomous loop across all questions:
-     a. Inspect the current question, text, and choices using browser_get_page_elements and browser_get_page_content.
-     b. Visual Inspection: If the question or options contain pictures, diagrams, money notes/bills, or visual cards (e.g. <img> tags or visual illustrations), call browser_capture_screenshot to visually see and inspect the image details.
-     c. Think step-by-step in <think>...</think> to determine the correct answer.
-     d. Click the answer choice using browser_click_element.
-     e. Click the "Next Question" / "Submit" button using browser_click_element.
-     f. Re-inspect the page content with browser_get_page_content.
-     g. Repeat for Question 2, Question 3, etc., until the entire quiz is finished and the final score/completion screen appears!
-2. Provide a clear, concise, and structured Markdown summary of your actions and final score after completing the entire quiz.`;
+CRITICAL INSTRUCTION FOR QUIZZES / FORMS / PAGE ACTIONS:
+- When asked to "solve and select answer", "complete the quiz", "click option", or "submit":
+  1. NEVER just provide the answer or calculation in chat without clicking! You MUST actively click the correct answer choice on the live webpage using browser_click_element.
+  2. Inspect interactive elements with browser_get_page_elements to find the clickable answer elements (e.g. div.answer, #adiv0, #adiv1, #adiv2, #adiv3, div[onclick*='ans']).
+  3. If a question has visual images, money notes/bills, or diagrams, call browser_capture_screenshot to visually inspect the details.
+  4. Formulate your solution in <think>...</think>, then call browser_click_element with the selector of the correct answer (e.g. "div#adiv3", "div#adiv0", "div#adiv1", "div#adiv2").
+  5. After clicking the answer, click the "Next Question" button (e.g. "div#qnext", "#nextQ", or "div[onclick*='qNext']").
+  6. Re-inspect the page with browser_get_page_content or browser_get_page_elements and repeat for all remaining questions until the quiz is finished and the final score screen appears!
+  7. Only provide your final summary and score in chat after you have completed all questions and clicked through the live quiz.`;
 const sessionContextMap = new Map<string, string>();
 
 // Initialize network request observation & verify session

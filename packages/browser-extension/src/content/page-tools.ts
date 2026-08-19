@@ -88,7 +88,38 @@ export class ContentPageTools {
 
   public static clickElement(selector: string): { clicked: boolean; tag?: string } {
     if (typeof document === 'undefined') return { clicked: true, tag: 'button' };
-    const el = document.querySelector(selector) as HTMLElement;
+
+    let el: HTMLElement | null = null;
+
+    if (selector.startsWith('text=')) {
+      const targetText = selector.slice(5).trim().toLowerCase();
+      const allClickables = document.querySelectorAll('button, a, div[onclick], div[class*="answer"], div[class*="choice"], span[onclick], input[type="button"], input[type="submit"], [role="button"]');
+      for (const item of Array.from(allClickables)) {
+        const itemText = (item.textContent || (item as HTMLInputElement).value || '').trim().toLowerCase();
+        if (itemText === targetText || itemText.includes(targetText)) {
+          el = item as HTMLElement;
+          break;
+        }
+      }
+    } else {
+      try {
+        el = document.querySelector(selector) as HTMLElement;
+      } catch {}
+      if (!el && selector.includes('contains(')) {
+        const match = selector.match(/contains\(['"]([^'"]+)['"]\)/);
+        if (match) {
+          const targetText = match[1].toLowerCase();
+          const allClickables = document.querySelectorAll('button, a, div, span');
+          for (const item of Array.from(allClickables)) {
+            if ((item.textContent || '').toLowerCase().includes(targetText)) {
+              el = item as HTMLElement;
+              break;
+            }
+          }
+        }
+      }
+    }
+
     if (!el) {
       throw new Error(`Element not found for selector: "${selector}"`);
     }

@@ -20,7 +20,7 @@ export interface ElementInspectionSummary {
 }
 
 export class ContentElementTools {
-  public static queryElements(selector: string, limit: number = 20): ElementInspectionSummary[] {
+  public static queryElements(selector: string, limit: number = 35): ElementInspectionSummary[] {
     if (typeof document === 'undefined') {
       return [{
         tag: 'body',
@@ -32,8 +32,17 @@ export class ContentElementTools {
         attributes: {}
       }];
     }
-    const nodes = Array.from(document.querySelectorAll(selector)).slice(0, limit);
-    return nodes.map((node) => {
+
+    let allNodes: Element[] = [];
+    try {
+      allNodes = Array.from(document.querySelectorAll(selector));
+    } catch {
+      allNodes = Array.from(document.querySelectorAll('input, textarea, button, a, div[onclick], .answer, [class*="option"], [class*="choice"], [id^="adiv"], [id*="next"]'));
+    }
+
+    const summaries: ElementInspectionSummary[] = [];
+
+    for (const node of allNodes) {
       const el = node as HTMLElement;
       const rect = typeof el.getBoundingClientRect === 'function' 
         ? el.getBoundingClientRect() 
@@ -48,7 +57,7 @@ export class ContentElementTools {
         attrs[attr.name] = attr.value;
       }
 
-      return {
+      summaries.push({
         tag: el.tagName.toLowerCase(),
         id: el.id || '',
         classes: Array.from(el.classList || []),
@@ -62,8 +71,13 @@ export class ContentElementTools {
           height: Math.round(rect.height)
         },
         attributes: attrs
-      };
-    });
+      });
+    }
+
+    // Sort visible elements first so interactive UI cards are not crowded out by invisible ads/header links
+    summaries.sort((a, b) => (b.visible ? 1 : 0) - (a.visible ? 1 : 0));
+
+    return summaries.slice(0, limit);
   }
 
   public static getElementStyles(selector: string): Record<string, string> | null {

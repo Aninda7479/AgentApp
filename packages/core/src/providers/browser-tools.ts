@@ -94,23 +94,23 @@ export function createBrowserAutomationTools(executor: BrowserToolExecutor): Too
     },
     {
       name: 'browser_get_page_elements',
-      description: 'Discover interactive elements (inputs, textareas, buttons, links, clickable divs) on the active webpage with their CSS selectors, text labels, and placeholders.',
+      description: 'Discover interactive elements (inputs, textareas, buttons, links, clickable divs, answer options) on the active webpage with their CSS selectors, text labels, and placeholders.',
       parameters: {
         type: 'object',
         properties: {
           selector: {
             type: 'string',
-            description: 'Optional CSS selector filter. Defaults to "input, textarea, button, a, [role=\'button\']".'
+            description: 'Optional CSS selector filter. Defaults to "input, textarea, button, a, [role=\'button\'], [role=\'radio\'], [role=\'option\'], [onclick], [class*=\'answer\'], [class*=\'choice\'], [class*=\'option\'], [id^=\'adiv\'], [id*=\'next\'], .answer, .btn".'
           },
           limit: {
             type: 'number',
-            description: 'Maximum number of elements to return. Defaults to 20.'
+            description: 'Maximum number of elements to return. Defaults to 25.'
           }
         }
       },
       execute: async (args: Record<string, any>) => {
-        const selector = args.selector ? String(args.selector) : 'input, textarea, button, a, [role="button"]';
-        const limit = typeof args.limit === 'number' ? args.limit : 20;
+        const selector = args.selector ? String(args.selector) : 'input, textarea, button, a, [role="button"], [role="radio"], [role="option"], [onclick], [class*="answer"], [class*="choice"], [class*="option"], [id^="adiv"], [id*="next"], .answer, .btn';
+        const limit = typeof args.limit === 'number' ? args.limit : 25;
         return await executor('query_elements', { selector, limit });
       }
     }
