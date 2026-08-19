@@ -12,6 +12,41 @@ export interface BrowserToolExecutor {
 export function createBrowserAutomationTools(executor: BrowserToolExecutor): ToolDefinition[] {
   return [
     {
+      name: 'browser_get_page_content',
+      description: 'Extract and read the updated text content, questions, choices, and structure of the active webpage. Call this whenever the page updates, after clicking buttons/links, or when advancing to the next question in a quiz.',
+      parameters: {
+        type: 'object',
+        properties: {
+          maxLength: {
+            type: 'number',
+            description: 'Maximum characters of page content to return. Defaults to 5000.'
+          }
+        }
+      },
+      execute: async (args: Record<string, any>) => {
+        const maxLength = typeof args.maxLength === 'number' ? args.maxLength : 5000;
+        return await executor('extract_page_content', { maxLength });
+      }
+    },
+    {
+      name: 'browser_capture_screenshot',
+      description: 'Capture a visual screenshot of the current webpage viewport. Use this when questions contain images, money notes/coins, diagrams, charts, or visual options that cannot be fully understood from HTML text alone.',
+      parameters: {
+        type: 'object',
+        properties: {
+          format: {
+            type: 'string',
+            enum: ['png', 'jpeg'],
+            description: 'Image format of the screenshot. Defaults to png.'
+          }
+        }
+      },
+      execute: async (args: Record<string, any>) => {
+        const format = args.format === 'jpeg' ? 'jpeg' : 'png';
+        return await executor('capture_screenshot', { format });
+      }
+    },
+    {
       name: 'browser_type_in_element',
       description: 'Type text into an input or textarea element on the active webpage identified by a CSS selector (e.g. "textarea", "input[type=\'text\']", "#answer-input").',
       parameters: {
@@ -59,7 +94,7 @@ export function createBrowserAutomationTools(executor: BrowserToolExecutor): Too
     },
     {
       name: 'browser_get_page_elements',
-      description: 'Discover interactive elements (inputs, textareas, buttons, links) on the active webpage with their CSS selectors, text labels, and placeholders.',
+      description: 'Discover interactive elements (inputs, textareas, buttons, links, clickable divs) on the active webpage with their CSS selectors, text labels, and placeholders.',
       parameters: {
         type: 'object',
         properties: {

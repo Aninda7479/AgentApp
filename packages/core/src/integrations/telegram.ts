@@ -124,8 +124,8 @@ export async function sendTelegramMessage(options: TelegramSendOptions): Promise
     parseMode: options.parseMode,
   });
 
-  const botToken = config.botToken;
-  const chatId = options.chatId ? String(options.chatId) : config.chatId;
+  const botToken = options.botToken !== undefined ? String(options.botToken).trim() : config.botToken;
+  const chatId = options.chatId !== undefined ? String(options.chatId).trim() : config.chatId;
 
   if (!botToken) {
     return {

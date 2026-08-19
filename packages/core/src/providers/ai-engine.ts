@@ -1592,27 +1592,61 @@ export class AgentEngine {
       } else if (m.role === 'tool') {
         const text = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
         const sig = (m as any).thoughtSignature || (m as any).thought_signature;
+
+        let toolDataUrl: string | undefined;
+        try {
+          const parsed = typeof m.content === 'object' ? m.content : JSON.parse(m.content);
+          if (parsed?.result?.dataUrl) {
+            toolDataUrl = parsed.result.dataUrl;
+          } else if (parsed?.dataUrl) {
+            toolDataUrl = parsed.dataUrl;
+          }
+        } catch {}
+
+        const toolParts: Array<Record<string, unknown>> = [];
         if (sig) {
-          contents.push({
-            role: 'user',
-            parts: [{
-              functionResponse: { name: m.name || 'tool', response: { result: text } },
-              thought_signature: sig
-            }]
+          toolParts.push({
+            functionResponse: { name: m.name || 'tool', response: { result: text } },
+            thought_signature: sig
           });
         } else {
-          contents.push({
-            role: 'user',
-            parts: [{ text: `[Tool result for ${m.name || 'tool'}]: ${text}` }]
-          });
+          toolParts.push({ text: `[Tool result for ${m.name || 'tool'}]: ${text}` });
         }
+
+        if (toolDataUrl) {
+          const match = toolDataUrl.match(/^data:([^;]+);base64,(.+)$/);
+          if (match) {
+            toolParts.push({
+              inlineData: {
+                mimeType: match[1],
+                data: match[2]
+              }
+            });
+          }
+        }
+
+        contents.push({ role: 'user', parts: toolParts });
       } else {
         const role = m.role === 'assistant' ? 'model' : 'user';
         const parts: Array<Record<string, unknown>> = [];
         if (typeof m.content === 'string') {
           if (m.content) parts.push({ text: m.content });
         } else if (Array.isArray(m.content)) {
-          for (const b of m.content) if (b.type === 'text' && b.text) parts.push({ text: b.text });
+          for (const b of m.content) {
+            if (b.type === 'text' && b.text) {
+              parts.push({ text: b.text });
+            } else if (b.type === 'image_url' && b.image_url?.url) {
+              const match = b.image_url.url.match(/^data:([^;]+);base64,(.+)$/);
+              if (match) {
+                parts.push({
+                  inlineData: {
+                    mimeType: match[1],
+                    data: match[2]
+                  }
+                });
+              }
+            }
+          }
         }
         if (parts.length === 0) parts.push({ text: '' });
         contents.push({ role, parts });
@@ -1658,7 +1692,7 @@ export class AgentEngine {
       model.toLowerCase().includes('gemini-2.5') ||
       model.toLowerCase().includes('gemini-3');
 
-    if (isGeminiThinking || this.config.thinkingBudget !== undefined) {
+    if (isGeminiThinking || (this.config as any).thinkingBudget !== undefined) {
       payload.generationConfig = {
         ...(payload.generationConfig as any || {}),
         thinkingConfig: {
