@@ -57,13 +57,44 @@
       <div class="composer-card">
         <!-- Active Context Chips Row -->
         <div id="composerChips" class="composer-chips">
-          <div id="chipPageContext" class="chip active" title="Toggle Page Context">
-            <span>🌐</span>
-            <span>Page Context Attached</span>
-          </div>
-          <div id="chipApproval" class="chip" title="Approval Mode">
-            <span>🛡️</span>
-            <span id="chipApprovalLabel">Ask for approval</span>
+          <div class="context-dropdown-container">
+            <div id="chipPageContext" class="chip active" title="Change or Detach Context">
+              <span id="chipContextIcon">🌐</span>
+              <span id="chipContextLabel">Full Page</span>
+              <svg class="chip-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+              <button id="btnRemoveContext" class="chip-remove" title="Detach context" type="button">✕</button>
+            </div>
+            <div id="contextMenu" class="context-menu">
+              <div class="context-option active" data-mode="full">
+                <span class="context-option-icon">🌐</span>
+                <div class="context-option-info">
+                  <span class="context-option-title">Full Page Context</span>
+                  <span class="context-option-desc">Extract readable text of the entire active page</span>
+                </div>
+              </div>
+              <div class="context-option" data-mode="inspect">
+                <span class="context-option-icon">🎯</span>
+                <div class="context-option-info">
+                  <span class="context-option-title">Inspect & Select Section...</span>
+                  <span class="context-option-desc">Hover & click a div, article, or section to save tokens</span>
+                </div>
+              </div>
+              <div class="context-option" data-mode="selection">
+                <span class="context-option-icon">📝</span>
+                <div class="context-option-info">
+                  <span class="context-option-title">Selected Text on Page</span>
+                  <span class="context-option-desc">Attach only text currently highlighted with cursor</span>
+                </div>
+              </div>
+              <div class="context-option-divider"></div>
+              <div class="context-option danger" data-mode="none">
+                <span class="context-option-icon">🚫</span>
+                <div class="context-option-info">
+                  <span class="context-option-title">Detach Context</span>
+                  <span class="context-option-desc">No webpage context attached</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -83,7 +114,7 @@
         <div class="composer-toolbar">
           <!-- Left Actions -->
           <div class="toolbar-left">
-            <button id="btnAttachContext" class="btn-icon" title="Add page context / selection" style="padding: 3px 6px;">
+            <button id="btnAttachContext" class="btn-icon" title="Select context mode / inspect section" style="padding: 3px 6px;">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
             </button>
 
@@ -158,10 +189,11 @@
       </div>
 
       <div class="inspector-section">
-        <div class="section-title">DOM Elements Query</div>
-        <div style="display: flex; gap: 6px;">
-          <input type="text" id="selectorInput" class="login-input" style="flex: 1; padding: 4px 8px; font-size: 11px;" placeholder="CSS Selector (e.g. button, form, input)" value="button, a">
+        <div class="section-title">DOM Elements Query & Section Picker</div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <input type="text" id="selectorInput" class="login-input" style="flex: 1; min-width: 140px; padding: 4px 8px; font-size: 11px;" placeholder="CSS Selector (e.g. button, form, input)" value="button, a">
           <button id="btnQueryElements" class="btn-action">Query</button>
+          <button id="btnInspectPicker" class="btn-action" style="background: rgba(255, 178, 62, 0.15); border-color: rgba(255, 178, 62, 0.4); color: #ffb23e;" title="Visually click a section on the active page">🎯 Pick Section</button>
         </div>
         <pre id="elementOutput" class="inspector-output">// Results will appear here</pre>
       </div>

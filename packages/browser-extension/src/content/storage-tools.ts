@@ -10,7 +10,7 @@ export class ContentStorageTools {
   private static isBridgeReady = false;
 
   public static initialize(): void {
-    if (this.isBridgeReady) return;
+    if (typeof window === 'undefined' || this.isBridgeReady) return;
     this.isBridgeReady = true;
 
     window.addEventListener('message', (event) => {

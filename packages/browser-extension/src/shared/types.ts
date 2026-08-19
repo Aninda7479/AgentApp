@@ -137,7 +137,17 @@ export interface NetworkLogEntry {
 
 // ─── Runtime Messages ───────────────────────────────────────────────────────
 
+export interface SectionContextData {
+  selector: string;
+  tag?: string;
+  id?: string;
+  classes?: string[];
+  text: string;
+  charCount?: number;
+}
+
 export type ExtensionMessage =
+  | { type: 'PING' }
   | { type: 'GET_AUTH_STATE' }
   | { type: 'AUTH_STATE_CHANGED'; payload: AuthState }
   | { type: 'LOGIN_REQUEST'; payload: { password: string; baseUrl?: string } }
@@ -146,7 +156,23 @@ export type ExtensionMessage =
   | { type: 'GET_ACTIVE_TAB_CONTEXT' }
   | { type: 'ACTIVE_TAB_CONTEXT_RESPONSE'; payload: ActiveTabContext }
   | { type: 'EXECUTE_TOOL'; payload: ToolExecutionRequest }
-  | { type: 'AGENT_RUN_START'; payload: { prompt: string; sessionId: string; modelConfig: any; includePageContext?: boolean; approvalMode?: string } }
+  | { type: 'START_ELEMENT_PICKER' }
+  | { type: 'CANCEL_ELEMENT_PICKER' }
+  | { type: 'ELEMENT_PICKED'; payload: SectionContextData }
+  | { type: 'ELEMENT_PICKER_CANCELLED' }
+  | { type: 'SELECTION_CHANGED'; payload: { text: string } }
+  | {
+      type: 'AGENT_RUN_START';
+      payload: {
+        prompt: string;
+        sessionId: string;
+        modelConfig: any;
+        includePageContext?: boolean;
+        pageContextMode?: 'full' | 'section' | 'selection' | 'none';
+        selectedSection?: SectionContextData;
+        approvalMode?: string;
+      };
+    }
   | { type: 'AGENT_RUN_STOP'; payload: { sessionId: string } }
   | { type: 'AGENT_EVENT'; payload: any }
   | { type: 'CONNECTION_STATE_CHANGED'; payload: { connected: boolean } }

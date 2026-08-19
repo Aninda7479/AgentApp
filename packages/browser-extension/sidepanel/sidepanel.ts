@@ -5,7 +5,7 @@
  */
 
 import { MessageBus } from '../src/shared/message-bus.js';
-import { ActiveTabContext, AuthState, ModelOption } from '../src/shared/types.js';
+import { ActiveTabContext, AuthState, ModelOption, SectionContextData } from '../src/shared/types.js';
 import { renderMarkdown } from '../src/shared/markdown.js';
 
 class SidePanelController {
@@ -18,7 +18,8 @@ class SidePanelController {
   private availableModels: ModelOption[] = [];
   private selectedModelId: string = '';
   private approvalMode: 'ask' | 'always' | 'never' = 'ask';
-  private includePageContext: boolean = true;
+  private contextMode: 'full' | 'section' | 'selection' | 'none' | 'picking' = 'full';
+  private selectedSection: SectionContextData | null = null;
 
   // Header Elements
   private statusDot = document.getElementById('statusDot') as HTMLElement;
@@ -43,8 +44,10 @@ class SidePanelController {
   private chatInput = document.getElementById('chatInput') as HTMLTextAreaElement;
   private btnSend = document.getElementById('btnSend') as HTMLButtonElement;
   private chipPageContext = document.getElementById('chipPageContext') as HTMLElement;
-  private chipApproval = document.getElementById('chipApproval') as HTMLElement;
-  private chipApprovalLabel = document.getElementById('chipApprovalLabel') as HTMLElement;
+  private chipContextIcon = document.getElementById('chipContextIcon') as HTMLElement;
+  private chipContextLabel = document.getElementById('chipContextLabel') as HTMLElement;
+  private contextMenu = document.getElementById('contextMenu') as HTMLElement;
+  private btnRemoveContext = document.getElementById('btnRemoveContext') as HTMLButtonElement;
   private btnAttachContext = document.getElementById('btnAttachContext') as HTMLButtonElement;
 
   // Approval Dropdown
@@ -92,6 +95,13 @@ class SidePanelController {
           this.setOfflineState();
         } else {
           this.checkAuthStatus();
+        }
+      } else if (msg.type === 'ELEMENT_PICKED' && msg.payload) {
+        this.setContextMode('section', msg.payload);
+        this.switchTab('chat');
+      } else if (msg.type === 'ELEMENT_PICKER_CANCELLED') {
+        if (this.contextMode === 'picking') {
+          this.setContextMode('full');
         }
       }
     });
@@ -170,15 +180,47 @@ class SidePanelController {
       this.chatInput.style.height = `${Math.min(this.chatInput.scrollHeight, 140)}px`;
     });
 
-    // Page Context Chip Toggle
-    this.chipPageContext.addEventListener('click', () => {
-      this.includePageContext = !this.includePageContext;
-      this.chipPageContext.classList.toggle('active', this.includePageContext);
+    // Page Context Dropdown & Remove Actions
+    this.chipPageContext.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.contextMenu.classList.toggle('open');
+      this.approvalMenu.classList.remove('open');
+      this.modelMenu.classList.remove('open');
     });
 
-    this.btnAttachContext.addEventListener('click', () => {
-      this.includePageContext = true;
-      this.chipPageContext.classList.add('active');
+    this.btnRemoveContext.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this.contextMode !== 'none') {
+        this.setContextMode('none');
+      } else {
+        this.setContextMode('full');
+      }
+      this.contextMenu.classList.remove('open');
+    });
+
+    this.btnAttachContext.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.contextMenu.classList.toggle('open');
+      this.approvalMenu.classList.remove('open');
+      this.modelMenu.classList.remove('open');
+    });
+
+    // Context Options Menu
+    document.querySelectorAll('.context-option').forEach((opt) => {
+      opt.addEventListener('click', async () => {
+        const mode = (opt as HTMLElement).getAttribute('data-mode') as 'full' | 'inspect' | 'selection' | 'none';
+        this.contextMenu.classList.remove('open');
+
+        if (mode === 'full') {
+          this.setContextMode('full');
+        } else if (mode === 'inspect') {
+          await this.startElementPicker();
+        } else if (mode === 'selection') {
+          await this.attachSelectedTextContext();
+        } else if (mode === 'none') {
+          this.setContextMode('none');
+        }
+      });
     });
 
     // Approval Mode Dropdown
@@ -186,10 +228,11 @@ class SidePanelController {
       e.stopPropagation();
       this.approvalMenu.classList.toggle('open');
       this.modelMenu.classList.remove('open');
+      this.contextMenu.classList.remove('open');
     });
 
     document.querySelectorAll('.approval-option').forEach((opt) => {
-      opt.addEventListener('click', (e) => {
+      opt.addEventListener('click', () => {
         const val = (opt as HTMLElement).getAttribute('data-value') as 'ask' | 'always' | 'never';
         this.setApprovalMode(val);
         this.approvalMenu.classList.remove('open');
@@ -201,10 +244,12 @@ class SidePanelController {
       e.stopPropagation();
       this.modelMenu.classList.toggle('open');
       this.approvalMenu.classList.remove('open');
+      this.contextMenu.classList.remove('open');
     });
 
     // Click away to close popovers
     document.addEventListener('click', () => {
+      this.contextMenu.classList.remove('open');
       this.approvalMenu.classList.remove('open');
       this.modelMenu.classList.remove('open');
     });
@@ -241,19 +286,182 @@ class SidePanelController {
     document.getElementById('btnInspectNetwork')?.addEventListener('click', () => this.inspectNetwork(false));
     document.getElementById('btnInspectFailedNetwork')?.addEventListener('click', () => this.inspectNetwork(true));
     document.getElementById('btnQueryElements')?.addEventListener('click', () => this.inspectElements());
+    document.getElementById('btnInspectPicker')?.addEventListener('click', () => this.inspectPickerAction());
   }
 
   private setApprovalMode(mode: 'ask' | 'always' | 'never'): void {
     this.approvalMode = mode;
     if (mode === 'ask') {
       this.currentApprovalText.textContent = 'Ask';
-      this.chipApprovalLabel.textContent = 'Ask for approval';
     } else if (mode === 'always') {
       this.currentApprovalText.textContent = 'Always';
-      this.chipApprovalLabel.textContent = 'Always approve';
     } else {
       this.currentApprovalText.textContent = 'Never';
-      this.chipApprovalLabel.textContent = 'Never approve';
+    }
+  }
+
+  private async getActiveWebTab(): Promise<chrome.tabs.Tab | null> {
+    if (typeof chrome === 'undefined' || !chrome.tabs?.query) return null;
+    try {
+      let tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      let validTab = tabs.find((t) => t.id && t.url && !t.url.startsWith('chrome-extension://') && !t.url.startsWith('chrome://'));
+      if (validTab) return validTab;
+
+      tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      validTab = tabs.find((t) => t.id && t.url && !t.url.startsWith('chrome-extension://') && !t.url.startsWith('chrome://'));
+      if (validTab) return validTab;
+
+      tabs = await chrome.tabs.query({ active: true });
+      validTab = tabs.find((t) => t.id && t.url && !t.url.startsWith('chrome-extension://') && !t.url.startsWith('chrome://'));
+      return validTab || tabs[0] || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async ensureTabReady(tabId: number): Promise<boolean> {
+    try {
+      const isAlive = await new Promise((resolve) => {
+        chrome.tabs.sendMessage(tabId, { type: 'PING' }, (res) => {
+          if (chrome.runtime.lastError) resolve(false);
+          else resolve(res?.pong === true);
+        });
+      });
+      if (isAlive) return true;
+
+      if (chrome.scripting?.executeScript) {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ['content-script.js']
+        });
+        await new Promise((r) => setTimeout(r, 120));
+        return true;
+      }
+    } catch (e) {
+      console.warn('[SidePanel] ensureTabReady error:', e);
+    }
+    return false;
+  }
+
+  public setContextMode(mode: 'full' | 'section' | 'selection' | 'none' | 'picking', section?: SectionContextData | null): void {
+    this.contextMode = mode;
+    this.selectedSection = section || null;
+
+    document.querySelectorAll('.context-option').forEach((opt) => {
+      const optMode = opt.getAttribute('data-mode');
+      const isTarget = (mode === 'section' && optMode === 'inspect') || (mode === 'picking' && optMode === 'inspect') || optMode === mode;
+      opt.classList.toggle('active', isTarget);
+    });
+
+    if (mode === 'full') {
+      this.chipPageContext.className = 'chip active';
+      this.chipContextIcon.textContent = '🌐';
+      this.chipContextLabel.textContent = 'Full Page';
+      this.btnRemoveContext.setAttribute('title', 'Detach context');
+    } else if (mode === 'picking') {
+      this.chipPageContext.className = 'chip section-mode picking';
+      this.chipContextIcon.textContent = '🎯';
+      this.chipContextLabel.textContent = 'Click section on page...';
+      this.btnRemoveContext.setAttribute('title', 'Cancel inspect');
+    } else if (mode === 'section' && section) {
+      this.chipPageContext.className = 'chip section-mode';
+      this.chipContextIcon.textContent = '🎯';
+      const charStr = section.charCount ? ` (${section.charCount}c)` : '';
+      this.chipContextLabel.textContent = `${section.selector || 'Section'}${charStr}`;
+      this.btnRemoveContext.setAttribute('title', 'Clear selected section');
+    } else if (mode === 'selection') {
+      this.chipPageContext.className = 'chip active selection-mode';
+      this.chipContextIcon.textContent = '📝';
+      const count = section?.charCount || section?.text?.length || 0;
+      this.chipContextLabel.textContent = count > 0 ? `Selected Text (${count}c)` : 'Selected Text (Highlight on page)';
+      this.btnRemoveContext.setAttribute('title', 'Clear text selection');
+    } else {
+      this.chipPageContext.className = 'chip none-mode';
+      this.chipContextIcon.textContent = '🚫';
+      this.chipContextLabel.textContent = 'No Context';
+      this.btnRemoveContext.setAttribute('title', 'Attach full page context');
+    }
+  }
+
+  private async startElementPicker(): Promise<void> {
+    try {
+      const activeTab = await this.getActiveWebTab();
+      if (!activeTab?.id) {
+        this.appendMessage('assistant', '⚠️ No active web page found. Open a webpage in your browser and try again.');
+        return;
+      }
+
+      await this.ensureTabReady(activeTab.id);
+
+      // Set picking state on sidepanel UI
+      this.setContextMode('picking');
+
+      chrome.tabs.sendMessage(activeTab.id, { type: 'START_ELEMENT_PICKER' }, (res) => {
+        const err = chrome.runtime.lastError;
+        if (err) {
+          console.warn('[SidePanel] START_ELEMENT_PICKER error:', err.message);
+          this.setContextMode('full');
+        }
+      });
+    } catch (e) {
+      console.warn('[SidePanel] Failed to start element picker:', e);
+      this.setContextMode('full');
+    }
+  }
+
+  private async attachSelectedTextContext(): Promise<void> {
+    try {
+      const activeTab = await this.getActiveWebTab();
+      if (!activeTab?.id) {
+        this.setContextMode('selection', { selector: 'Selected Text', text: '', charCount: 0 });
+        return;
+      }
+
+      await this.ensureTabReady(activeTab.id);
+
+      const tabRes = await new Promise<any>((resolve) => {
+        chrome.tabs.sendMessage(activeTab.id!, { type: 'GET_SELECTION' }, (r) => {
+          const _err = chrome.runtime.lastError;
+          resolve(r || {});
+        });
+      });
+
+      const text = (tabRes?.selectedText || '').trim();
+      this.setContextMode('selection', {
+        selector: 'Selected Text',
+        text,
+        charCount: text.length
+      });
+    } catch (e) {
+      this.setContextMode('selection', {
+        selector: 'Selected Text',
+        text: '',
+        charCount: 0
+      });
+    }
+  }
+
+  private async inspectPickerAction(): Promise<void> {
+    this.elementOutput.textContent = 'Hover and click any element on the active page...';
+    try {
+      const activeTab = await this.getActiveWebTab();
+      if (!activeTab?.id) {
+        this.elementOutput.textContent = 'Error: No active web page tab found.';
+        return;
+      }
+
+      await this.ensureTabReady(activeTab.id);
+      this.setContextMode('picking');
+
+      chrome.tabs.sendMessage(activeTab.id, { type: 'START_ELEMENT_PICKER' }, (r) => {
+        const err = chrome.runtime.lastError;
+        if (err) {
+          this.elementOutput.textContent = `Error: ${err.message}`;
+          this.setContextMode('full');
+        }
+      });
+    } catch (err: any) {
+      this.elementOutput.textContent = `Error: ${err?.message || err}`;
     }
   }
 
@@ -454,6 +662,24 @@ class SidePanelController {
         }
       : {};
 
+    if (this.contextMode === 'selection' && (!this.selectedSection || !this.selectedSection.text)) {
+      try {
+        const activeTab = await this.getActiveWebTab();
+        if (activeTab?.id) {
+          const tabRes = await new Promise<any>((resolve) => {
+            chrome.tabs.sendMessage(activeTab.id!, { type: 'GET_SELECTION' }, (r) => {
+              const _err = chrome.runtime.lastError;
+              resolve(r || {});
+            });
+          });
+          const text = (tabRes?.selectedText || '').trim();
+          if (text) {
+            this.selectedSection = { selector: 'Selected Text', text, charCount: text.length };
+          }
+        }
+      } catch {}
+    }
+
     try {
       await MessageBus.send({
         type: 'AGENT_RUN_START',
@@ -461,7 +687,9 @@ class SidePanelController {
           prompt,
           sessionId: this.currentSessionId,
           modelConfig,
-          includePageContext: this.includePageContext,
+          includePageContext: this.contextMode !== 'none',
+          pageContextMode: this.contextMode,
+          selectedSection: this.selectedSection || undefined,
           approvalMode: this.approvalMode
         }
       });

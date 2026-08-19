@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ExtensionSessionStore } from '../src/shared/session-store.js';
 import { ContentPageTools } from '../src/content/page-tools.js';
 import { ContentElementTools } from '../src/content/element-tools.js';
+import { ElementPicker } from '../src/content/content-script.js';
 import { ToolRelay } from '../src/background/tool-relay.js';
 
 describe('SuperAgent Browser Extension Test Suite', () => {
@@ -84,6 +85,22 @@ describe('SuperAgent Browser Extension Test Suite', () => {
       const tree = ContentElementTools.getElementTree('body', 2);
       expect(tree).toBeDefined();
       expect(tree.tag).toBe('body');
+    });
+  });
+
+  describe('Element Picker & Section Context', () => {
+    it('should start and complete element picking gracefully in mock environment', () => {
+      let result: any = null;
+      ElementPicker.start((res) => {
+        result = res;
+      });
+      expect(result).toBeDefined();
+      expect(result.selector).toBeDefined();
+      expect(result.text).toBeDefined();
+    });
+
+    it('should handle cancel without error', () => {
+      expect(() => ElementPicker.cancel()).not.toThrow();
     });
   });
 

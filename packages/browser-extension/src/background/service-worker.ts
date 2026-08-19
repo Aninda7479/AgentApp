@@ -180,10 +180,10 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
       }
 
       case 'AGENT_RUN_START': {
-        const { prompt, sessionId, modelConfig, includePageContext } = message.payload;
+        const { prompt, sessionId, modelConfig, includePageContext, pageContextMode, selectedSection } = message.payload;
         let finalPrompt = prompt;
 
-        if (includePageContext) {
+        if (includePageContext && pageContextMode !== 'none') {
           const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
           const activeTab = tabs[0];
           if (activeTab?.id && activeTab.url) {
@@ -191,16 +191,22 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
             let storageContext = '';
             let networkContext = '';
 
-            try {
-              const res = await ToolRelay.execute({
-                tool: 'extract_page_content',
-                input: {},
-                tabId: activeTab.id
-              });
-              if (res.success && res.result?.text) {
-                pageText = res.result.text.slice(0, 20000);
-              }
-            } catch {}
+            if (pageContextMode === 'section' && selectedSection?.text) {
+              pageText = `[Attached Section: ${selectedSection.selector || 'DOM Element'}]\n${selectedSection.text}`;
+            } else if (pageContextMode === 'selection' && selectedSection?.text) {
+              pageText = `[Attached Selected Text]\n${selectedSection.text}`;
+            } else {
+              try {
+                const res = await ToolRelay.execute({
+                  tool: 'extract_page_content',
+                  input: {},
+                  tabId: activeTab.id
+                });
+                if (res.success && res.result?.text) {
+                  pageText = res.result.text.slice(0, 20000);
+                }
+              } catch {}
+            }
 
             const promptLower = (prompt || '').toLowerCase();
 
@@ -256,7 +262,11 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
               } catch {}
             }
 
-            finalPrompt = `[Current Web Page Context]\nURL: ${activeTab.url}\nTitle: ${activeTab.title || ''}\n${pageText ? `\n--- PAGE CONTENT START ---\n${pageText}\n--- PAGE CONTENT END ---\n` : ''}${storageContext}${networkContext}\n[User Instruction]\n${prompt}`;
+            const headerInfo = pageContextMode === 'section' && selectedSection?.selector
+              ? `[Current Web Page Section Context: ${selectedSection.selector}]`
+              : `[Current Web Page Context]`;
+
+            finalPrompt = `${headerInfo}\nURL: ${activeTab.url}\nTitle: ${activeTab.title || ''}\n${pageText ? `\n--- CONTEXT CONTENT START ---\n${pageText}\n--- CONTEXT CONTENT END ---\n` : ''}${storageContext}${networkContext}\n[User Instruction]\n${prompt}`;
           }
         }
 
