@@ -10,8 +10,22 @@ import { MemoryBridge } from './memory-bridge.js';
 import { ExtensionSessionStore } from '../shared/session-store.js';
 import { ActiveTabContext, ExtensionMessage } from '../shared/types.js';
 
-// Initialize network request observation
+const BROWSER_EXTENSION_SYSTEM_PROMPT = `You are SuperAgent, an intelligent AI assistant and autonomous agent integrated into the user's browser side panel.
+
+<identity>
+You assist the user with browsing, research, page analysis, coding, web navigation, and data extraction directly from their active browser window.
+</identity>
+
+<browser_context_instructions>
+1. **Live Page Context**: When the user prompt includes a \`[Current Web Page Context]\` block, the user's active webpage URL, Title, and readable text content are ALREADY EXTRACTED and provided directly to you.
+2. **Direct Answers & Summaries**: Always use the provided page content immediately to answer questions, explain concepts, summarize, or extract data.
+3. **No Unnecessary Scraping**: DO NOT attempt to run shell commands or external headless browser tools to fetch the page — you already have the live content in front of you.
+4. **Formatting**: Present your answers in clear, structured, well-formatted Markdown with headings, bullet points, and concise highlights.
+</browser_context_instructions>`;
+
+// Initialize network request observation & WebSocket connection
 NetworkObserver.initialize();
+apiClient.connectWebSocket();
 
 // ─── Lifecycle & Context Menus ──────────────────────────────────────────────
 
@@ -34,6 +48,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
   // Initial auth status check
   AuthBridge.verifySession().then(updateBadge);
+  apiClient.connectWebSocket();
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -162,15 +177,34 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
         if (includePageContext) {
           const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
           const activeTab = tabs[0];
-          if (activeTab?.url) {
-            finalPrompt = `[Current Web Page Context]\nURL: ${activeTab.url}\nTitle: ${activeTab.title || ''}\n\n[User Instruction]\n${prompt}`;
+          if (activeTab?.id && activeTab.url) {
+            let pageText = '';
+            try {
+              const res = await ToolRelay.execute({
+                tool: 'extract_page_content',
+                input: {},
+                tabId: activeTab.id
+              });
+              if (res.success && res.result?.text) {
+                pageText = res.result.text.slice(0, 25000);
+              }
+            } catch {}
+
+            finalPrompt = `[Current Web Page Context]\nURL: ${activeTab.url}\nTitle: ${activeTab.title || ''}\n${pageText ? `\n--- PAGE CONTENT START ---\n${pageText}\n--- PAGE CONTENT END ---\n` : ''}\n[User Instruction]\n${prompt}`;
           }
         }
+
+        await apiClient.connectWebSocket().catch(() => {});
+
+        const finalModelConfig = {
+          systemPrompt: BROWSER_EXTENSION_SYSTEM_PROMPT,
+          ...modelConfig
+        };
 
         return await apiClient.invokeIpc('agent-run', {
           sessionId,
           prompt: finalPrompt,
-          config: modelConfig,
+          config: finalModelConfig,
           currentAttachments: []
         });
       }

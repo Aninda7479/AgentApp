@@ -78,6 +78,59 @@ class SidePanelController {
     this.listenToAgentEvents();
   }
 
+  // ─── Agent Streaming Events ────────────────────────────────────────────────
+
+  private listenToAgentEvents(): void {
+    MessageBus.onMessage((msg) => {
+      if (msg.type === 'AGENT_EVENT' && msg.payload) {
+        this.handleAgentEvent(msg.payload);
+      }
+    });
+  }
+
+  private handleAgentEvent(event: any): void {
+    const { channel, data } = event;
+    const evt = data || event;
+    if (!evt || typeof evt !== 'object') return;
+
+    if (evt.sessionId && evt.sessionId !== this.currentSessionId) {
+      return;
+    }
+
+    if (evt.type === 'token' && (evt.content !== undefined || evt.text !== undefined)) {
+      const text = evt.content !== undefined ? evt.content : evt.text;
+      if (!this.currentAssistantBubble) {
+        this.currentAssistantText = '';
+        this.currentAssistantBubble = this.appendMessage('assistant', '');
+      }
+      this.currentAssistantText += text;
+      this.currentAssistantBubble.textContent = this.currentAssistantText;
+      this.scrollToBottom();
+    } else if (evt.type === 'replace_tokens' && evt.content !== undefined) {
+      if (!this.currentAssistantBubble) {
+        this.currentAssistantBubble = this.appendMessage('assistant', '');
+      }
+      this.currentAssistantText = evt.content;
+      this.currentAssistantBubble.textContent = this.currentAssistantText;
+      this.scrollToBottom();
+    } else if (evt.type === 'thought' && evt.content) {
+      this.renderThought(evt.content);
+    } else if (evt.type === 'tool_call' || evt.type === 'tool_use') {
+      this.currentAssistantBubble = null;
+      this.renderToolCall(evt);
+    } else if (evt.type === 'tool_result' || evt.type === 'tool_output') {
+      this.currentAssistantBubble = null;
+      this.renderToolResult(evt);
+    } else if (evt.type === 'finished' || evt.type === 'done') {
+      this.setGenerating(false);
+      this.currentAssistantBubble = null;
+    } else if (evt.type === 'error') {
+      this.appendMessage('assistant', `⚠️ ${evt.error || evt.message || 'Agent execution failed'}`);
+      this.setGenerating(false);
+      this.currentAssistantBubble = null;
+    }
+  }
+
   private bindEvents(): void {
     // Tab switching
     this.tabChat.addEventListener('click', () => this.switchTab('chat'));
@@ -374,10 +427,8 @@ class SidePanelController {
     this.chatInput.style.height = '42px';
 
     this.setGenerating(true);
-
-    // Prepare assistant bubble for streaming
     this.currentAssistantText = '';
-    this.currentAssistantBubble = this.appendMessage('assistant', '');
+    this.currentAssistantBubble = null;
 
     const selectedModel = this.availableModels.find((m) => m.id === this.selectedModelId || m.name === this.selectedModelId) || this.availableModels[0];
 
@@ -430,42 +481,6 @@ class SidePanelController {
     }
   }
 
-  // ─── Agent Streaming Events ────────────────────────────────────────────────
-
-  private listenToAgentEvents(): void {
-    MessageBus.onMessage((msg) => {
-      if (msg.type === 'AGENT_EVENT' && msg.payload) {
-        this.handleAgentEvent(msg.payload);
-      }
-    });
-  }
-
-  private handleAgentEvent(event: any): void {
-    const { channel, data } = event;
-
-    if (channel === 'agent-event' || event.type) {
-      const evt = data || event;
-
-      if (evt.type === 'token' && (evt.content || evt.text)) {
-        const text = evt.content || evt.text;
-        this.currentAssistantText += text;
-        if (this.currentAssistantBubble) {
-          this.currentAssistantBubble.textContent = this.currentAssistantText;
-          this.scrollToBottom();
-        }
-      } else if (evt.type === 'tool_call' || evt.type === 'tool_use') {
-        this.renderToolCall(evt);
-      } else if (evt.type === 'tool_result' || evt.type === 'tool_output') {
-        this.renderToolResult(evt);
-      } else if (evt.type === 'finished' || evt.type === 'done') {
-        this.setGenerating(false);
-      } else if (evt.type === 'error') {
-        this.appendMessage('assistant', `⚠️ ${evt.error || evt.message || 'Agent execution failed'}`);
-        this.setGenerating(false);
-      }
-    }
-  }
-
   private appendMessage(role: 'user' | 'assistant', text: string): HTMLElement {
     const bubble = document.createElement('div');
     bubble.className = `message-bubble ${role}`;
@@ -475,11 +490,28 @@ class SidePanelController {
     return bubble;
   }
 
+  private renderThought(thoughtText: string): void {
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble tool';
+    bubble.style.borderStyle = 'dotted';
+    bubble.style.opacity = '0.85';
+
+    bubble.innerHTML = `
+      <div class="tool-header" style="color: var(--super);">
+        <span>💭 Thinking</span>
+      </div>
+      <div class="tool-output-box" style="font-family: inherit; font-style: italic;">${thoughtText}</div>
+    `;
+
+    this.messagesContainer.appendChild(bubble);
+    this.scrollToBottom();
+  }
+
   private renderToolCall(toolEvt: any): void {
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble tool';
-    const name = toolEvt.name || toolEvt.tool || 'browser_tool';
-    const input = toolEvt.input || toolEvt.args || {};
+    const name = toolEvt.toolName || toolEvt.name || toolEvt.tool || 'tool';
+    const input = toolEvt.toolArgs || toolEvt.args || toolEvt.input || {};
 
     bubble.innerHTML = `
       <div class="tool-header">
@@ -496,13 +528,14 @@ class SidePanelController {
   private renderToolResult(resultEvt: any): void {
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble tool';
-    const output = resultEvt.output || resultEvt.result || '';
+    const name = resultEvt.toolName || resultEvt.name || 'tool';
+    const output = resultEvt.toolResult !== undefined ? resultEvt.toolResult : (resultEvt.content || resultEvt.output || resultEvt.result || '');
 
     bubble.innerHTML = `
       <div class="tool-header" style="color: var(--accent-success);">
-        <span>✓ Tool Result Received</span>
+        <span>✓ Tool Result: <strong>${name}</strong></span>
       </div>
-      <div class="tool-output-box">${typeof output === 'object' ? JSON.stringify(output, null, 2) : String(output).slice(0, 500)}</div>
+      <div class="tool-output-box">${typeof output === 'object' ? JSON.stringify(output, null, 2) : String(output).slice(0, 2000)}</div>
     `;
 
     this.messagesContainer.appendChild(bubble);

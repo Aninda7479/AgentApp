@@ -391,14 +391,28 @@ async function runAgentEngine(
       }
     }
 
-    // Resolve model display names to actual IDs for the upstream API
-    if (finalConfig.model && /\s/.test(finalConfig.model) && finalConfig.provider) {
-      const settings = SettingsStorage.loadSettings();
+    const settings = SettingsStorage.loadSettings();
+
+    // Resolve model display names or IDs to actual upstream IDs and providers
+    if (finalConfig.model && finalConfig.model !== 'Orchestrator' && finalConfig.model !== 'auto') {
       const match = (settings.models || []).find(
-        m => m.providerId === finalConfig.provider && m.name === finalConfig.model
+        m => m.name === finalConfig.model || m.id === finalConfig.model || m.id === `${finalConfig.provider}-${finalConfig.model}`
       );
       if (match) {
-        finalConfig.model = match.id.replace(`${finalConfig.provider}-`, '');
+        finalConfig.provider = (match.providerId || finalConfig.provider) as any;
+        const prefix = `${match.providerId}-`;
+        finalConfig.model = match.id.startsWith(prefix) ? match.id.slice(prefix.length) : match.id;
+      }
+    }
+
+    // Resolve API key and Base URL from providers
+    if (finalConfig.provider && !finalConfig.apiKey) {
+      const prov = (settings.providers || []).find(
+        p => p.id === finalConfig.provider || (finalConfig.provider === 'gemini' && p.id === 'google') || (finalConfig.provider === 'google' && p.id === 'gemini')
+      );
+      if (prov) {
+        finalConfig.apiKey = prov.apiKey;
+        if (prov.baseUrl) finalConfig.baseUrl = prov.baseUrl;
       }
     }
 
