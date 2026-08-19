@@ -99,6 +99,16 @@ class SidePanelController {
           this.setOfflineState();
         } else {
           this.checkAuthStatus();
+          if (this.isGenerating) {
+            const maxSeq = this.seenEventSeqs.size > 0 ? Math.max(...Array.from(this.seenEventSeqs)) : 0;
+            MessageBus.send({
+              type: 'SYNC_SESSION',
+              payload: {
+                sessionId: this.currentSessionId,
+                lastSeq: maxSeq
+              }
+            }).catch(() => {});
+          }
         }
       } else if (msg.type === 'ELEMENT_PICKED' && msg.payload) {
         this.setContextMode('section', msg.payload);
@@ -115,6 +125,30 @@ class SidePanelController {
     const { channel, data } = event;
     const evt = data || event;
     if (!evt || typeof evt !== 'object') return;
+
+    if (channel === 'session-sync' || evt.type === 'session_sync') {
+      const payload = evt.data || evt;
+      const { sessionId, isRunning, replayEvents, fullAssistantText } = payload;
+      if (sessionId && sessionId !== this.currentSessionId) return;
+
+      if (Array.isArray(replayEvents) && replayEvents.length > 0) {
+        for (const reEvt of replayEvents) {
+          this.handleAgentEvent({ channel: 'agent-event', data: reEvt });
+        }
+      } else if (fullAssistantText && !this.currentAssistantText) {
+        if (!this.currentAssistantBubble) {
+          this.currentAssistantBubble = this.appendMessage('assistant', '');
+        }
+        this.currentAssistantText = fullAssistantText;
+        this.currentAssistantBubble.innerHTML = renderMarkdown(this.currentAssistantText);
+        this.scrollToBottom();
+      }
+
+      if (isRunning === false) {
+        this.setGenerating(false);
+      }
+      return;
+    }
 
     if (evt.sessionId && evt.sessionId !== this.currentSessionId) {
       return;

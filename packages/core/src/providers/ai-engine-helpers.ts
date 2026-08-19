@@ -133,12 +133,12 @@ export function isContextOverflowError(message: string): boolean {
  * of any substring (2–200 chars) are found in the trailing 1000-char window.
  */
 export function detectRepetitiveLoop(text: string): { isLoop: boolean; cleanText: string } {
-  if (!text || text.length < 15) return { isLoop: false, cleanText: text };
+  if (!text || text.length < 30) return { isLoop: false, cleanText: text };
 
   const windowSize = Math.min(4000, text.length);
   const window = text.slice(-windowSize);
 
-  const minLen = 4;
+  const minLen = 5;
   const maxLen = Math.min(600, Math.floor(windowSize / 3));
 
   for (let len = minLen; len <= maxLen; len++) {
@@ -149,7 +149,12 @@ export function detectRepetitiveLoop(text: string): { isLoop: boolean; cleanText
       if (startIdx < 0) continue;
 
       const sub = window.slice(startIdx, endIdx);
-      if (!sub.trim() || sub.trim().length < 3) continue;
+      const trimmed = sub.trim();
+      if (!trimmed || trimmed.length < 3) continue;
+
+      // Skip substrings that are purely numbers, spaces, or syntax punctuation
+      // (e.g. lists, table lines, truth table rows, code brackets, dashes)
+      if (/^[\s\d\-\*\>\,\.\:\;\(\)\[\]\{\}\|\=\<\>\/\\]+$/.test(sub)) continue;
 
       let occurrences = 0;
       let idx = endIdx;
@@ -162,8 +167,11 @@ export function detectRepetitiveLoop(text: string): { isLoop: boolean; cleanText
         }
       }
 
-      // 4 repetitions for short phrases (>= 4 chars), 3 for longer sentences (>= 20 chars)
-      const requiredOccurrences = len < 20 ? 4 : 3;
+      // Thresholds to ensure truth tables and math proofs never get cut off:
+      // Short tokens (< 15 chars): 8 repetitions
+      // Medium phrases (15..40 chars): 5 repetitions
+      // Long sentences (>= 40 chars): 4 repetitions
+      const requiredOccurrences = len < 15 ? 8 : (len < 40 ? 5 : 4);
 
       if (occurrences >= requiredOccurrences) {
         const pattern = sub;

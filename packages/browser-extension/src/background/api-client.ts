@@ -405,6 +405,18 @@ export class ExtensionApiClient {
     this.wsListeners.add(listener);
     return () => this.wsListeners.delete(listener);
   }
+
+  public sendWebSocket(data: any): boolean {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(typeof data === 'string' ? data : JSON.stringify(data));
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
 }
 
 export const apiClient = new ExtensionApiClient();

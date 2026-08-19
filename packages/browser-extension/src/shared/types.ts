@@ -180,4 +180,5 @@ export type ExtensionMessage =
   | { type: 'SET_SERVER_CONFIG'; payload: Partial<ServerConfig> }
   | { type: 'PING_SERVER' }
   | { type: 'GET_MEMORY_PROFILE' }
-  | { type: 'GET_LEARNED_INSIGHTS' };
+  | { type: 'GET_LEARNED_INSIGHTS' }
+  | { type: 'SYNC_SESSION'; payload: { sessionId: string; lastSeq?: number } };

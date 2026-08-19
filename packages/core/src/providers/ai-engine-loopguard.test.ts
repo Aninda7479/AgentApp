@@ -126,7 +126,7 @@ import { detectRepetitiveLoop } from './ai-engine-helpers.js';
 
 describe('detectRepetitiveLoop helper', () => {
   it('detects long pattern repetitions in window', () => {
-    const pattern = " This is a simple response manner manner manner manner manner manner manner";
+    const pattern = " This is a simple response manner manner manner manner manner manner manner manner";
     const result = detectRepetitiveLoop(pattern);
     expect(result.isLoop).toBe(true);
     expect(result.cleanText).toBe("This is a simple response");
@@ -148,7 +148,7 @@ describe('Provider-agnostic streaming loop guard', () => {
   it('triggers replace_tokens on Anthropic repetitive streaming tokens', async () => {
     const anthropicSse =
       `data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello there! "}}\n` +
-      `data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"user said user said user said user said "}}\n`;
+      `data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"user said user said user said user said user said user said user said user said "}}\n`;
 
     vi.stubGlobal(
       'fetch',
@@ -178,7 +178,7 @@ describe('Provider-agnostic streaming loop guard', () => {
   it('triggers replace_tokens on Gemini repetitive streaming tokens', async () => {
     const geminiSse =
       `data: {"candidates":[{"content":{"parts":[{"text":"Greetings! "}]}}]}\n` +
-      `data: {"candidates":[{"content":{"parts":[{"text":"manner manner manner manner "}]}}]}\n`;
+      `data: {"candidates":[{"content":{"parts":[{"text":"manner manner manner manner manner manner manner manner "}]}}]}\n`;
 
     vi.stubGlobal(
       'fetch',

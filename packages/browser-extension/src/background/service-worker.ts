@@ -244,6 +244,15 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
         return await apiClient.invokeIpc('agent-stop', message.payload.sessionId);
       }
 
+      case 'SYNC_SESSION': {
+        const sent = apiClient.sendWebSocket({
+          action: 'SYNC_SESSION',
+          sessionId: message.payload?.sessionId,
+          lastSeq: message.payload?.lastSeq
+        });
+        return { success: sent };
+      }
+
       case 'GET_SERVER_CONFIG': {
         return await ExtensionSessionStore.getServerConfig();
       }

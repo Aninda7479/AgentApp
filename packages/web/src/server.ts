@@ -252,12 +252,97 @@ app.get('/account', (_req, res) => {
   res.redirect(302, '/settings/web-app');
 });
 
-// ─── WebSocket Event Hub ────────────────────────────────────────────────────
+// ─── WebSocket Event Hub & Session Resiliency Buffer ─────────────────────────
 const connectedSockets = new Set<WebSocket>();
+
+interface SessionStateEntry {
+  events: AgentEvent[];
+  isRunning: boolean;
+  fullAssistantText: string;
+  fullThoughtText: string;
+  lastUpdated: number;
+}
+
+const sessionStateStore = new Map<string, SessionStateEntry>();
+const MAX_STORED_SESSIONS = 50;
+
+function recordSessionEvent(sessionId: string, event: AgentEvent) {
+  let entry = sessionStateStore.get(sessionId);
+  if (!entry) {
+    if (sessionStateStore.size >= MAX_STORED_SESSIONS) {
+      const oldest = sessionStateStore.keys().next().value;
+      if (oldest) sessionStateStore.delete(oldest);
+    }
+    entry = {
+      events: [],
+      isRunning: true,
+      fullAssistantText: '',
+      fullThoughtText: '',
+      lastUpdated: Date.now()
+    };
+    sessionStateStore.set(sessionId, entry);
+  }
+
+  entry.lastUpdated = Date.now();
+  entry.events.push(event);
+  if (entry.events.length > 2000) {
+    entry.events.shift();
+  }
+
+  if (event.type === 'token' && event.content) {
+    entry.fullAssistantText += event.content;
+  } else if (event.type === 'replace_tokens' && event.content) {
+    entry.fullAssistantText = event.content;
+  } else if (event.type === 'thought' && event.content) {
+    entry.fullThoughtText += event.content;
+  } else if (event.type === 'done' || event.type === 'error' || event.type === 'abort') {
+    entry.isRunning = false;
+  }
+}
 
 wss.on('connection', (ws) => {
   connectedSockets.add(ws);
   console.log(`[WebSocket] Client connected. Active clients: ${connectedSockets.size}`);
+
+  ws.on('message', (raw) => {
+    try {
+      const msg = JSON.parse(String(raw));
+      if (msg.action === 'SYNC_SESSION' && msg.sessionId) {
+        const entry = sessionStateStore.get(msg.sessionId);
+        if (entry) {
+          const lastSeq = typeof msg.lastSeq === 'number' ? msg.lastSeq : 0;
+          const replayEvents = entry.events.filter((e) => (e.seq ?? 0) > lastSeq);
+          ws.send(
+            JSON.stringify({
+              channel: 'session-sync',
+              data: {
+                sessionId: msg.sessionId,
+                isRunning: entry.isRunning,
+                replayEvents,
+                fullAssistantText: entry.fullAssistantText,
+                fullThoughtText: entry.fullThoughtText
+              }
+            })
+          );
+        } else {
+          ws.send(
+            JSON.stringify({
+              channel: 'session-sync',
+              data: {
+                sessionId: msg.sessionId,
+                isRunning: false,
+                replayEvents: [],
+                fullAssistantText: '',
+                fullThoughtText: ''
+              }
+            })
+          );
+        }
+      } else if (msg.action === 'PING') {
+        ws.send(JSON.stringify({ action: 'PONG', timestamp: Date.now() }));
+      }
+    } catch {}
+  });
 
   ws.on('close', () => {
     connectedSockets.delete(ws);
@@ -443,19 +528,24 @@ async function runAgentEngine(
       if (agentEvent.type === 'done' || agentEvent.type === 'error') {
         didEmitDone = true;
       }
+      recordSessionEvent(sessionId, agentEvent);
       broadcast('agent-event', agentEvent);
     }, currentAttachments);
 
     if (!didEmitDone) {
-      broadcast('agent-event', { type: 'done', sessionId });
+      const doneEvt: AgentEvent = { type: 'done', sessionId };
+      recordSessionEvent(sessionId, doneEvt);
+      broadcast('agent-event', doneEvt);
     }
   } catch (err: any) {
     console.error(`[Agent Run Fail] Session ${sessionId}:`, err);
-    broadcast('agent-event', {
+    const errEvt: AgentEvent = {
       type: 'error',
       sessionId,
       error: err.message || String(err)
-    });
+    };
+    recordSessionEvent(sessionId, errEvt);
+    broadcast('agent-event', errEvt);
   }
 }
 
