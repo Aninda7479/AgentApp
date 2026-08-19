@@ -70,24 +70,64 @@ export class ToolRelay {
       }
 
       // 4. Content Script Tools (DOM, Page, Storage in Isolated/Main World)
-      const response = await new Promise<ToolExecutionResponse>((resolve) => {
-        chrome.tabs.sendMessage(
-          targetTabId,
-          { type: 'EXECUTE_TOOL', payload: request },
-          (res) => {
-            if (chrome.runtime.lastError) {
-              resolve({ success: false, error: chrome.runtime.lastError.message });
-            } else {
-              resolve(res || { success: false, error: 'No response from page content script' });
-            }
+      const tab = await this.getTab(targetTabId);
+      if (tab?.url) {
+        const lower = tab.url.toLowerCase();
+        if (
+          lower.startsWith('chrome://') ||
+          lower.startsWith('edge://') ||
+          lower.startsWith('chrome-extension://') ||
+          lower.startsWith('about:') ||
+          lower.startsWith('devtools://')
+        ) {
+          return {
+            success: false,
+            error: `Cannot inspect browser-internal pages (${tab.url.split('/')[0]}//). Please switch to a regular website (e.g. https://google.com) to inspect its storage, DOM, or network.`
+          };
+        }
+      }
+
+      let response = await this.sendMessageToTab(targetTabId, request);
+
+      // Auto-heal: If content script was disconnected or not yet injected, inject dynamically and retry!
+      if (!response.success && response.error && response.error.includes('Receiving end does not exist')) {
+        try {
+          if (chrome.scripting?.executeScript) {
+            await chrome.scripting.executeScript({
+              target: { tabId: targetTabId },
+              files: ['content-script.js']
+            });
+            await new Promise((r) => setTimeout(r, 100));
+            response = await this.sendMessageToTab(targetTabId, request);
           }
-        );
-      });
+        } catch (injectErr: any) {
+          return {
+            success: false,
+            error: `Could not connect to page content script: ${injectErr?.message || response.error}. Try refreshing the webpage.`
+          };
+        }
+      }
 
       return response;
     } catch (err: any) {
       return { success: false, error: err?.message || 'Tool execution encountered an internal error' };
     }
+  }
+
+  private static sendMessageToTab(tabId: number, request: ToolExecutionRequest): Promise<ToolExecutionResponse> {
+    return new Promise<ToolExecutionResponse>((resolve) => {
+      chrome.tabs.sendMessage(
+        tabId,
+        { type: 'EXECUTE_TOOL', payload: request },
+        (res) => {
+          if (chrome.runtime.lastError) {
+            resolve({ success: false, error: chrome.runtime.lastError.message });
+          } else {
+            resolve(res || { success: false, error: 'No response from page content script' });
+          }
+        }
+      );
+    });
   }
 
   private static async getActiveTabId(): Promise<number | undefined> {

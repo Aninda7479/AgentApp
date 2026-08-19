@@ -23,9 +23,9 @@ You assist the user with browsing, research, page analysis, coding, web navigati
 4. **Formatting**: Present your answers in clear, structured, well-formatted Markdown with headings, bullet points, and concise highlights.
 </browser_context_instructions>`;
 
-// Initialize network request observation & WebSocket connection
+// Initialize network request observation & verify session
 NetworkObserver.initialize();
-apiClient.connectWebSocket();
+AuthBridge.verifySession().then(updateBadge);
 
 // ─── Lifecycle & Context Menus ──────────────────────────────────────────────
 
@@ -48,12 +48,10 @@ chrome.runtime.onInstalled.addListener(() => {
 
   // Initial auth status check
   AuthBridge.verifySession().then(updateBadge);
-  apiClient.connectWebSocket();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   AuthBridge.verifySession().then(updateBadge);
-  apiClient.connectWebSocket();
 });
 
 // ─── Context Menu Listener ──────────────────────────────────────────────────
@@ -179,6 +177,9 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
           const activeTab = tabs[0];
           if (activeTab?.id && activeTab.url) {
             let pageText = '';
+            let storageContext = '';
+            let networkContext = '';
+
             try {
               const res = await ToolRelay.execute({
                 tool: 'extract_page_content',
@@ -186,11 +187,65 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
                 tabId: activeTab.id
               });
               if (res.success && res.result?.text) {
-                pageText = res.result.text.slice(0, 25000);
+                pageText = res.result.text.slice(0, 20000);
               }
             } catch {}
 
-            finalPrompt = `[Current Web Page Context]\nURL: ${activeTab.url}\nTitle: ${activeTab.title || ''}\n${pageText ? `\n--- PAGE CONTENT START ---\n${pageText}\n--- PAGE CONTENT END ---\n` : ''}\n[User Instruction]\n${prompt}`;
+            const promptLower = (prompt || '').toLowerCase();
+
+            // Storage, Session & Cookies Context
+            if (
+              promptLower.includes('storage') ||
+              promptLower.includes('cookie') ||
+              promptLower.includes('session') ||
+              promptLower.includes('token') ||
+              promptLower.includes('auth') ||
+              promptLower.includes('state') ||
+              promptLower.includes('inspect')
+            ) {
+              try {
+                const [localRes, sessionRes, cookieRes] = await Promise.all([
+                  ToolRelay.execute({ tool: 'get_local_storage', input: {}, tabId: activeTab.id }),
+                  ToolRelay.execute({ tool: 'get_session_storage', input: {}, tabId: activeTab.id }),
+                  ToolRelay.execute({ tool: 'get_cookies', input: {}, tabId: activeTab.id })
+                ]);
+
+                storageContext = `\n--- SITE STORAGE & COOKIES ---\n` +
+                  `localStorage: ${JSON.stringify(localRes.result || {}, null, 2)}\n` +
+                  `sessionStorage: ${JSON.stringify(sessionRes.result || {}, null, 2)}\n` +
+                  `Cookies: ${JSON.stringify((cookieRes.result || []).map((c: any) => ({ name: c.name, value: c.value, domain: c.domain, secure: c.secure })), null, 2)}\n` +
+                  `--- END SITE STORAGE ---\n`;
+              } catch {}
+            }
+
+            // Network Requests & Failed Status Codes Context
+            if (
+              promptLower.includes('network') ||
+              promptLower.includes('request') ||
+              promptLower.includes('api') ||
+              promptLower.includes('fetch') ||
+              promptLower.includes('failed') ||
+              promptLower.includes('error') ||
+              promptLower.includes('http') ||
+              promptLower.includes('inspect')
+            ) {
+              try {
+                const [networkRes, failedRes] = await Promise.all([
+                  ToolRelay.execute({ tool: 'get_network_requests', input: {}, tabId: activeTab.id }),
+                  ToolRelay.execute({ tool: 'get_failed_requests', input: {}, tabId: activeTab.id })
+                ]);
+
+                const recent = (networkRes.result || []).slice(-15);
+                const failed = failedRes.result || [];
+
+                networkContext = `\n--- CAPTURED NETWORK TELEMETRY ---\n` +
+                  `Recent Requests (${recent.length}): ${JSON.stringify(recent, null, 2)}\n` +
+                  `Failed Requests (4xx/5xx): ${JSON.stringify(failed, null, 2)}\n` +
+                  `--- END NETWORK TELEMETRY ---\n`;
+              } catch {}
+            }
+
+            finalPrompt = `[Current Web Page Context]\nURL: ${activeTab.url}\nTitle: ${activeTab.title || ''}\n${pageText ? `\n--- PAGE CONTENT START ---\n${pageText}\n--- PAGE CONTENT END ---\n` : ''}${storageContext}${networkContext}\n[User Instruction]\n${prompt}`;
           }
         }
 

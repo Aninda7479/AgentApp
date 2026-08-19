@@ -65,18 +65,56 @@ export class ContentStorageTools {
   }
 
   public static async getLocalStorage(key?: string): Promise<any> {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        if (key) {
+          return window.localStorage.getItem(key);
+        }
+        const all: Record<string, string> = {};
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const k = window.localStorage.key(i);
+          if (k) all[k] = window.localStorage.getItem(k) || '';
+        }
+        return all;
+      }
+    } catch {}
     return await this.invokeMainWorld('GET_LOCAL_STORAGE', { key });
   }
 
   public static async setLocalStorage(key: string, value: any): Promise<any> {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(key, String(value));
+        return { success: true, key };
+      }
+    } catch {}
     return await this.invokeMainWorld('SET_LOCAL_STORAGE', { key, value });
   }
 
   public static async getSessionStorage(key?: string): Promise<any> {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        if (key) {
+          return window.sessionStorage.getItem(key);
+        }
+        const all: Record<string, string> = {};
+        for (let i = 0; i < window.sessionStorage.length; i++) {
+          const k = window.sessionStorage.key(i);
+          if (k) all[k] = window.sessionStorage.getItem(k) || '';
+        }
+        return all;
+      }
+    } catch {}
     return await this.invokeMainWorld('GET_SESSION_STORAGE', { key });
   }
 
   public static async setSessionStorage(key: string, value: any): Promise<any> {
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem(key, String(value));
+        return { success: true, key };
+      }
+    } catch {}
     return await this.invokeMainWorld('SET_SESSION_STORAGE', { key, value });
   }
 

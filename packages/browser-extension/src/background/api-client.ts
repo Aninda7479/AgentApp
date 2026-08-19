@@ -250,8 +250,19 @@ export class ExtensionApiClient {
     }
 
     try {
+      const auth = await this.getAuthStatus();
+      if (!auth.authenticated && auth.authRequired) {
+        await ExtensionSessionStore.clearAuthToken();
+        this.disconnectWebSocket();
+        return;
+      }
+
       const baseUrl = await this.getBaseUrl();
       const token = await ExtensionSessionStore.getAuthToken();
+      if (auth.authRequired && !token) {
+        return;
+      }
+
       const wsUrl = baseUrl.replace(/^http/, 'ws') + '/api/ws' + (token ? `?token=${encodeURIComponent(token)}` : '');
 
       this.ws = new WebSocket(wsUrl);
@@ -271,15 +282,13 @@ export class ExtensionApiClient {
 
       this.ws.onclose = () => {
         this.ws = null;
-        this.scheduleReconnect();
       };
 
-      this.ws.onerror = (err) => {
-        console.warn('[ApiClient] WebSocket error:', err);
+      this.ws.onerror = () => {
         try { this.ws?.close(); } catch {}
       };
-    } catch (e) {
-      this.scheduleReconnect();
+    } catch {
+      // Ignored if server is unreachable
     }
   }
 

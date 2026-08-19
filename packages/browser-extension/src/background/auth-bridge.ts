@@ -10,6 +10,12 @@ export class AuthBridge {
   public static async verifySession(): Promise<AuthState> {
     const status = await apiClient.getAuthStatus();
     await ExtensionSessionStore.setAuthState(status);
+    if (status.authenticated || !status.authRequired) {
+      await apiClient.connectWebSocket();
+    } else {
+      await ExtensionSessionStore.clearAuthToken();
+      apiClient.disconnectWebSocket();
+    }
     return status;
   }
 
