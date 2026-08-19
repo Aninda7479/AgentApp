@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SuperAgent Side Panel</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">
+      <img src="../icons/icon-32.png" alt="SuperAgent" class="brand-icon">
+      <span>SuperAgent</span>
+    </div>
+
+    <div class="header-actions">
+      <div id="statusBadge" class="status-badge">
+        <div id="statusDot" class="status-dot"></div>
+        <span id="statusText">Checking...</span>
+      </div>
+
+      <div id="tabPill" class="tab-pill" title="Active Tab">
+        <span>🌐</span>
+        <span id="tabTitleText">Active Tab</span>
+      </div>
+
+      <button id="btnNewChat" class="btn-icon" title="New Chat">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+
+      <button id="btnSettings" class="btn-icon" title="Settings & Memory">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="nav-tabs">
+    <button id="tabChat" class="tab-btn active">Chat</button>
+    <button id="tabAgent" class="tab-btn">Agent View</button>
+    <button id="tabInspector" class="tab-btn">Site Inspector</button>
+  </nav>
+
+  <!-- Chat Panel -->
+  <main id="chatPanel" class="panel active">
+    <!-- Messages Canvas -->
+    <div id="messagesContainer" class="messages-container">
+      <div id="emptyState" class="empty-state">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <p>Ask anything about this page or instruct SuperAgent to perform autonomous tasks.</p>
+        <div class="quick-actions">
+          <button class="quick-btn" data-prompt="Summarize the key information on this page.">📄 Summarize page</button>
+          <button class="quick-btn" data-prompt="Extract all input fields, buttons, and forms from this page.">🔍 Inspect form elements</button>
+          <button class="quick-btn" data-prompt="Check localStorage, cookies, and network requests on this site for issues.">🗄️ Audit storage & network</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- The Compose Div (Matching Composer / ComposerBar from Web & Desktop) -->
+    <div class="composer-container">
+      <div class="composer-card">
+        <!-- Active Context Chips Row -->
+        <div id="composerChips" class="composer-chips">
+          <div id="chipPageContext" class="chip active" title="Toggle Page Context">
+            <span>🌐</span>
+            <span>Page Context Attached</span>
+          </div>
+          <div id="chipApproval" class="chip" title="Approval Mode">
+            <span>🛡️</span>
+            <span id="chipApprovalLabel">Ask for approval</span>
+          </div>
+        </div>
+
+        <!-- Textarea Input -->
+        <textarea
+          id="chatInput"
+          class="composer-textarea"
+          data-testid="composer-input"
+          placeholder="Ask anything — or type / for skills, commands & tools"
+          rows="1"
+        ></textarea>
+
+        <!-- Enter / Shift+Enter hint -->
+        <div class="composer-hint">Enter to send · Shift+Enter for new line</div>
+
+        <!-- Integrated Toolbar Row -->
+        <div class="composer-toolbar">
+          <!-- Left Actions -->
+          <div class="toolbar-left">
+            <button id="btnAttachContext" class="btn-icon" title="Add page context / selection" style="padding: 3px 6px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+
+            <!-- Approval Mode Dropdown Pill -->
+            <div class="approval-dropdown-container">
+              <button id="btnApprovalTrigger" class="pill-btn" type="button">
+                <span id="currentApprovalText">Ask</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              <div id="approvalMenu" class="approval-menu">
+                <div class="approval-option" data-value="ask">🛡️ Ask for approval</div>
+                <div class="approval-option" data-value="always">⚡ Always approve</div>
+                <div class="approval-option" data-value="never">🚫 Never approve</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Actions (Model Selector + Send Button) -->
+          <div class="toolbar-right">
+            <!-- Dynamic Model Selector Popover -->
+            <div class="model-dropdown-container">
+              <button id="btnModelTrigger" class="model-trigger-btn" type="button">
+                <span id="modelIcon">⚡</span>
+                <span id="modelTriggerLabel" class="model-name-text">Loading models...</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              <div id="modelMenu" class="model-menu">
+                <!-- Dynamically populated from backend settings-read -->
+              </div>
+            </div>
+
+            <!-- Send / Stop Button -->
+            <button id="btnSend" class="btn-send" title="Send Message">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Agent View Panel -->
+  <section id="agentPanel" class="panel">
+    <div class="messages-container" id="agentStepsContainer">
+      <div class="empty-state">
+        <p>No active agent trajectory yet. Start a run in Chat to see step-by-step tool execution, memory retrieval, and planning here.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Inspector Panel (Direct Storage, Network & Element inspection) -->
+  <section id="inspectorPanel" class="panel">
+    <div class="inspector-container">
+      <div class="inspector-section">
+        <div class="section-title">Site Storage Access</div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button id="btnInspectLocalStorage" class="btn-action">localStorage</button>
+          <button id="btnInspectSessionStorage" class="btn-action">sessionStorage</button>
+          <button id="btnInspectCookies" class="btn-action">Cookies</button>
+          <button id="btnInspectIndexedDB" class="btn-action">IndexedDB</button>
+        </div>
+        <pre id="storageOutput" class="inspector-output">// Click a button above to inspect storage</pre>
+      </div>
+
+      <div class="inspector-section">
+        <div class="section-title">Network Activity</div>
+        <div style="display: flex; gap: 6px;">
+          <button id="btnInspectNetwork" class="btn-action">Recent Requests</button>
+          <button id="btnInspectFailedNetwork" class="btn-action">Failed (4xx/5xx)</button>
+        </div>
+        <pre id="networkOutput" class="inspector-output">// Click to view captured requests</pre>
+      </div>
+
+      <div class="inspector-section">
+        <div class="section-title">DOM Elements Query</div>
+        <div style="display: flex; gap: 6px;">
+          <input type="text" id="selectorInput" class="login-input" style="flex: 1; padding: 4px 8px; font-size: 11px;" placeholder="CSS Selector (e.g. button, form, input)" value="button, a">
+          <button id="btnQueryElements" class="btn-action">Query</button>
+        </div>
+        <pre id="elementOutput" class="inspector-output">// Results will appear here</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Login Modal Overlay -->
+  <div id="loginModal" class="modal-overlay">
+    <div class="login-card">
+      <div class="login-title">Sign in to SuperAgent</div>
+      <p style="font-size: 12px; color: var(--text-secondary); text-align: center;">
+        Connect to your core_v2 backend session (default password: <code>admin</code>)
+      </p>
+      <input type="password" id="loginPassword" class="login-input" placeholder="Admin Password">
+      <div id="loginError" class="login-error">Invalid password. Please try again.</div>
+      <button id="btnLoginSubmit" class="login-btn">Connect Session</button>
+    </div>
+  </div>
+
+  <script type="module" src="./sidepanel.ts"></script>
+</body>
+</html>

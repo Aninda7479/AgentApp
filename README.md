@@ -39,6 +39,14 @@ Download an installer for your OS from the [desktop download page](https://anind
 or the [latest GitHub release](https://github.com/Aninda7479/AgentApp/releases/latest).
 Installers auto-update in place.
 
+**Option 3 — Core + Browser Extension** (Manifest V3 for Chrome / Edge / Brave):
+
+Build and load the extension into your browser for persistent on-the-way side panel chat, site storage access, and DOM element/network inspection:
+```bash
+npm run build:ext
+```
+Then load `packages/browser-extension/dist` as an unpacked extension at `chrome://extensions` (Developer Mode). See the [Extension Setup Guide](https://aninda7479.github.io/AgentApp/extension).
+
 > Building from source? See **Quick Start** below.
 
 ---

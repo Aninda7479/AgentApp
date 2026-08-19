@@ -48,5 +48,17 @@ export const faqs = [
     a: (
       <p>A small companion that reacts to what the agent is doing — thinking, working, celebrating, or snoozing. On Desktop it’s a 3D character in an always-on-top window; on Web it’s a 2D companion. It’s fully open: author a <code style={code}>partner.json</code> and share it.</p>
     )
+  },
+  {
+    q: 'How does the Browser Extension work?',
+    a: (
+      <p>The SuperAgent browser extension is a Manifest V3 add-on for Chrome, Edge, and Brave. It provides a persistent side-panel chat interface that stays open across tabs and page navigations, connected to your local backend (<code style={code}>localhost:1469</code>). It can inspect active page DOM elements, read/write site <code style={code}>localStorage</code> and cookies, capture network logs, and automate web tasks with your permission.</p>
+    )
+  },
+  {
+    q: 'How do I set up and load the Browser Extension?',
+    a: (
+      <p>Run <code style={code}>npm run build:ext</code> to compile the extension to <code style={code}>packages/browser-extension/dist</code>. Then navigate to <code style={code}>chrome://extensions</code>, turn on <b>Developer mode</b>, click <b>Load unpacked</b>, and select the <code style={code}>dist</code> folder. Start the backend with <code style={code}>npm run dev:web</code> and open the side panel.</p>
+    )
   }
 ]

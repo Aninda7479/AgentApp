@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import Reveal from './Reveal.jsx'
 import { useCopy } from '../lib/useCopy.js'
 import { useLatestRelease, detectUserPlatform } from '../lib/useLatestRelease.js'
@@ -261,24 +262,76 @@ export function DesktopFork() {
   )
 }
 
+export function ExtensionFork() {
+  const [copied, copy] = useCopy()
+
+  return (
+    <Reveal className="fork">
+      <span className="fork-tag"><b>Core</b> + Extension + Browser</span>
+      <h3>The Browser Extension</h3>
+      <p>Persistent on-the-way chat side panel and autonomous browser automation for Chrome, Edge, and Brave.</p>
+
+      <div style={{
+        background: 'rgba(0, 0, 0, 0.25)',
+        border: '1px solid var(--line)',
+        borderRadius: '8px',
+        padding: '10px 14px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '14px'
+      }}>
+        <code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--super-2)' }}>npm run build:ext</code>
+        <button
+          onClick={() => copy('npm run build:ext')}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: copied ? 'var(--ok)' : 'var(--text-2)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.74rem',
+            cursor: 'pointer'
+          }}
+        >
+          {copied ? '✓ copied' : 'copy'}
+        </button>
+      </div>
+
+      <div style={{ marginBottom: '16px' }}>
+        <Link className="btn btn-primary btn-sm" to="/extension" style={{ width: '100%', justifyContent: 'center' }}>
+          Extension Setup Guide →
+        </Link>
+      </div>
+
+      <ul>
+        <li><Check /> Side panel chat with streaming token response</li>
+        <li><Check /> Site storage access: localStorage, cookies, IndexedDB</li>
+        <li><Check /> Deep DOM inspection, styles, and network request observer</li>
+      </ul>
+      <p className="best" style={{ marginTop: 'auto' }}>Best for <b>in-browser coding, web debugging &amp; research</b></p>
+    </Reveal>
+  )
+}
+
 export default function InstallForks() {
   return (
     <>
       <Reveal className="sec-head">
-        <p className="eyebrow">Two ways in</p>
-        <h2 className="h-section">Pick your build</h2>
-        <p className="lead">Both installation methods share the same underlying autonomous core engine. The CLI adds a lightweight command line tool; the Desktop app adds a native desktop shell window and your visual companion. The web UI is included with both.</p>
+        <p className="eyebrow">Three ways in</p>
+        <h2 className="h-section">Pick your surface</h2>
+        <p className="lead">All clients share the same underlying autonomous core engine and memory. The CLI adds a lightweight terminal tool; the Desktop app adds a native window and 3D companion; the Extension embeds directly in your browser.</p>
       </Reveal>
 
-      <div className="fork-grid">
+      <div className="fork-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
         <CliFork />
         <DesktopFork />
+        <ExtensionFork />
       </div>
 
       <Reveal className="stack-note" aria-label="What is inside each build">
         <span className="chip core">Core</span>
         <span className="plus">+</span>
-        <span className="chip">CLI</span><span className="plus">/</span><span className="chip">Desktop</span>
+        <span className="chip">CLI</span><span className="plus">/</span><span className="chip">Desktop</span><span className="plus">/</span><span className="chip">Extension</span>
         <span className="plus">+</span>
         <span className="chip">Web</span>
       </Reveal>

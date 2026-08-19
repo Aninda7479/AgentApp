@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SuperAgent Extension Settings</title>
+  <link rel="stylesheet" href="./options.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img src="../icons/icon-48.png" alt="SuperAgent">
+      <div>
+        <h2 style="margin: 0;">SuperAgent Extension Settings</h2>
+        <span style="font-size: 12px; color: var(--text-secondary);">Configure core_v2 backend connectivity, global memory, and authentication.</span>
+      </div>
+    </div>
+
+    <!-- Server Connection Card -->
+    <div class="card">
+      <div class="card-title">Backend Connection</div>
+      <div class="form-group">
+        <label for="serverBaseUrl">SuperAgent Core / Web Server URL</label>
+        <input type="text" id="serverBaseUrl" placeholder="http://localhost:1469" value="http://localhost:1469">
+      </div>
+      <button id="btnSaveServer" class="btn">Save & Test Connection</button>
+      <div id="connectionStatus" style="font-size: 12px; color: var(--accent-success); display: none;"></div>
+    </div>
+
+    <!-- Authentication Card -->
+    <div class="card">
+      <div class="card-title">Authentication & Session</div>
+      <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
+        Shares the single-admin session login with your desktop and web clients.
+      </p>
+      <div class="form-group">
+        <label for="authPassword">Admin Password</label>
+        <input type="password" id="authPassword" placeholder="Enter password (default: admin)">
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button id="btnLogin" class="btn">Sign In</button>
+        <button id="btnLogout" class="btn" style="background-color: var(--bg-tertiary);">Sign Out</button>
+      </div>
+      <div id="authStatusText" style="font-size: 12px;"></div>
+    </div>
+
+    <!-- Global Memory Diagnostics -->
+    <div class="card">
+      <div class="card-title">Global Memory & Insights Access</div>
+      <p style="font-size: 12px; color: var(--text-secondary); margin: 0;">
+        Live inspection of persistent User Profile facts and Learned Workflow Insights loaded from the core engine.
+      </p>
+      <button id="btnRefreshMemory" class="btn" style="background-color: var(--bg-tertiary);">Fetch Global Memory</button>
+      <pre id="memoryOutput" class="memory-list">// Click "Fetch Global Memory" to inspect synced profile & insights</pre>
+    </div>
+  </div>
+
+  <script type="module" src="./options.ts"></script>
+</body>
+</html>

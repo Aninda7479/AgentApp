@@ -159,12 +159,14 @@ function buildSetCookie(value: string, maxAgeMs: number): string {
 }
 
 /** Issues a fresh session cookie for the given user and registers the session record. */
-export function setSessionCookie(res: Response, username: string, req?: Request): void {
+export function setSessionCookie(res: Response, username: string, req?: Request): string {
   const sid = randomBytes(16).toString('hex');
   const ip = req ? clientIp(req) : '127.0.0.1';
   const ua = (req ? (req.headers['user-agent'] as string) : null) || 'Web Browser';
   AuthStore.registerSession(sid, username, ip, ua);
-  res.setHeader('Set-Cookie', buildSetCookie(createSessionToken(username, sid), sessionTtlMs()));
+  const token = createSessionToken(username, sid);
+  res.setHeader('Set-Cookie', buildSetCookie(token, sessionTtlMs()));
+  return token;
 }
 
 /** Clears the session cookie (logout). */
@@ -174,6 +176,25 @@ export function clearSessionCookie(res: Response): void {
 
 /** Returns the authenticated username for a raw request, or null. */
 export function getAuthenticatedUser(req: IncomingMessage): string | null {
+  // 1. Check Authorization: Bearer <token>
+  const authHeader = req.headers.authorization;
+  if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7).trim();
+    const user = verifySessionToken(token);
+    if (user) return user;
+  }
+
+  // 2. Check query param ?token= or ?sa_session= (useful for WebSocket upgrades)
+  try {
+    const url = new URL(req.url || '', 'http://localhost');
+    const tokenParam = url.searchParams.get('token') || url.searchParams.get('sa_session');
+    if (tokenParam) {
+      const user = verifySessionToken(tokenParam);
+      if (user) return user;
+    }
+  } catch {}
+
+  // 3. Fall back to cookie
   const cookies = parseCookies(req.headers.cookie);
   return verifySessionToken(cookies[COOKIE_NAME]);
 }
@@ -360,9 +381,9 @@ export function handleSetup(req: Request, res: Response): void {
   }
 
   // Log the admin in immediately.
-  setSessionCookie(res, AuthStore.getUsername(), req);
+  const token = setSessionCookie(res, AuthStore.getUsername(), req);
   AuthStore.recordLoginAttempt(clientIp(req), req.headers['user-agent'] || 'Unknown Device', 'success');
-  res.json({ ok: true });
+  res.json({ ok: true, token });
 }
 
 /** POST /api/auth/login — verifies credentials and issues a session cookie. */
@@ -390,9 +411,9 @@ export function handleLogin(req: Request, res: Response): void {
 
   if (AuthStore.verifyPassword(password)) {
     clearAttempts(req);
-    setSessionCookie(res, AuthStore.getUsername(), req);
+    const token = setSessionCookie(res, AuthStore.getUsername(), req);
     AuthStore.recordLoginAttempt(clientIp(req), req.headers['user-agent'] || 'Unknown Device', 'success');
-    res.json({ ok: true });
+    res.json({ ok: true, token });
     return;
   }
 

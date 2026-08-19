@@ -27,6 +27,7 @@ export default function Nav() {
         <nav className="nav-links" aria-label="Primary">
           <NavLink to="/cli">CLI</NavLink>
           <NavLink to="/desktop">Desktop</NavLink>
+          <NavLink to="/extension">Extension</NavLink>
           <NavLink to="/#features">Features</NavLink>
           <NavLink to="/faq">FAQ</NavLink>
           <a href={`${GH}/blob/main/README.md`} target="_blank" rel="noopener">Docs</a>
@@ -57,6 +58,7 @@ export default function Nav() {
         <nav className="mobile-menu" aria-label="Mobile">
           <Link to="/cli" onClick={close}>CLI</Link>
           <Link to="/desktop" onClick={close}>Desktop</Link>
+          <Link to="/extension" onClick={close}>Extension</Link>
           <Link to="/#features" onClick={close}>Features</Link>
           <Link to="/faq" onClick={close}>FAQ</Link>
           <a href={`${GH}/blob/main/README.md`} target="_blank" rel="noopener" onClick={close}>Docs</a>

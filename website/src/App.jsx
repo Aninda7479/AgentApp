@@ -6,6 +6,7 @@ import Home from './pages/Home.jsx'
 import FaqPage from './pages/FaqPage.jsx'
 import CliPage from './pages/CliPage.jsx'
 import DesktopPage from './pages/DesktopPage.jsx'
+import ExtensionPage from './pages/ExtensionPage.jsx'
 import NotFound from './pages/NotFound.jsx'
 
 // On navigation: jump to the hash target if present, otherwise scroll to top.
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/cli" element={<CliPage />} />
           <Route path="/desktop" element={<DesktopPage />} />
+          <Route path="/extension" element={<ExtensionPage />} />
           <Route path="/faq" element={<FaqPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

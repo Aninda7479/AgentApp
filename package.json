@@ -20,7 +20,8 @@
     "packages/ui",
     "packages/cli",
     "packages/desktop",
-    "packages/web"
+    "packages/web",
+    "packages/browser-extension"
   ],
   "scripts": {
     "install:all": "npm install && npm install --prefix website",
@@ -29,6 +30,7 @@
     "dev:app": "npm run dev --workspace=@superagent/desktop",
     "dev:web": "npm run dev --workspace=@superagent/web",
     "dev:cli": "npm run start --workspace=@superagent/cli --",
+    "dev:ext": "npm run dev --workspace=@superagent/browser-extension",
     "dev:core": "cargo run --manifest-path packages/core_v2/Cargo.toml --bin superagent-core-daemon",
     "dev:site": "cd website && npm run dev",
     "start:app": "npm run start --workspace=@superagent/desktop",
@@ -36,10 +38,12 @@
     "start:cli": "npm run start --workspace=@superagent/cli --",
     "build:ts-core": "npm run build --workspace=@superagent/core",
     "build:ui": "npm run build --workspace=@superagent/ui",
+    "build:ext": "npm run build --workspace=@superagent/browser-extension",
     "build:core": "cargo build --manifest-path packages/core_v2/Cargo.toml --release",
     "build": "npm run build:ts-core && npm run build:ui && npm run build --workspace=@superagent/web && npm run build:core",
     "test:ui": "npm test --workspace=@superagent/ui",
     "test:web": "npm test --workspace=@superagent/web",
+    "test:ext": "npm test --workspace=@superagent/browser-extension",
     "test:core": "cargo test --manifest-path packages/core_v2/Cargo.toml",
     "test": "npm run test:ui && npm run test:web && npm run test:core",
     "version:bump": "node scripts/bump-version.js",
