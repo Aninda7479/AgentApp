@@ -38,6 +38,7 @@ import {
   writeWebServerLock,
   clearWebServerLock,
   readWebServerLock,
+  createBrowserAutomationTools,
   type WebServerLauncher
 } from '@superagent/core';
 
@@ -300,6 +301,27 @@ function recordSessionEvent(sessionId: string, event: AgentEvent) {
   }
 }
 
+const pendingClientTools = new Map<string, { resolve: (val: any) => void; reject: (err: any) => void; timer: NodeJS.Timeout }>();
+
+function executeClientToolOnExtension(sessionId: string, tool: string, input: Record<string, any>): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const id = `tool-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const timer = setTimeout(() => {
+      pendingClientTools.delete(id);
+      resolve({ success: false, error: `Browser tool "${tool}" timed out after 15s.` });
+    }, 15000);
+
+    pendingClientTools.set(id, { resolve, reject, timer });
+
+    broadcast('execute-client-tool', {
+      id,
+      sessionId,
+      tool,
+      input
+    });
+  });
+}
+
 wss.on('connection', (ws) => {
   connectedSockets.add(ws);
   console.log(`[WebSocket] Client connected. Active clients: ${connectedSockets.size}`);
@@ -337,6 +359,13 @@ wss.on('connection', (ws) => {
               }
             })
           );
+        }
+      } else if (msg.action === 'CLIENT_TOOL_RESULT' && msg.id) {
+        const pending = pendingClientTools.get(msg.id);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pendingClientTools.delete(msg.id);
+          pending.resolve(msg.result);
         }
       } else if (msg.action === 'PING') {
         ws.send(JSON.stringify({ action: 'PONG', timestamp: Date.now() }));
@@ -499,6 +528,13 @@ async function runAgentEngine(
         finalConfig.apiKey = prov.apiKey;
         if (prov.baseUrl) finalConfig.baseUrl = prov.baseUrl;
       }
+    }
+
+    if (sessionId.startsWith('ext-') || (finalConfig as any).browserTools) {
+      finalConfig.extraTools = [
+        ...(finalConfig.extraTools || []),
+        ...createBrowserAutomationTools((tool, input) => executeClientToolOnExtension(sessionId, tool, input))
+      ];
     }
 
     let engine = activeSessions.get(sessionId);

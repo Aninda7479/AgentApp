@@ -10,12 +10,41 @@ import { MemoryBridge } from './memory-bridge.js';
 import { ExtensionSessionStore } from '../shared/session-store.js';
 import { ActiveTabContext, ExtensionMessage, AuthState } from '../shared/types.js';
 
-const BROWSER_EXTENSION_SYSTEM_PROMPT = `You are SuperAgent in the browser side panel. Answer questions, solve problems, and analyze web content directly and concisely using the attached context. Output clean, structured Markdown. If you perform internal chain-of-thought reasoning, enclose it within <think>...</think> tags so it displays in the thinking accordion, and output your final answer directly.`;
+const BROWSER_EXTENSION_SYSTEM_PROMPT = `You are SuperAgent in the browser side panel. Answer questions, solve problems, and analyze web content directly and concisely using the attached context. Output clean, structured Markdown. If you perform internal chain-of-thought reasoning, enclose it within <think>...</think> tags so it displays in the thinking accordion, and output your final answer directly.
+When the user asks you to type into inputs, fill forms, or click buttons on the page (e.g. "type this in the box", "submit", "fill the answer"), use your browser tools (browser_type_in_element, browser_click_element, browser_get_page_elements). Always format answers precisely according to the question rules before submitting.`;
 const sessionContextMap = new Map<string, string>();
 
 // Initialize network request observation & verify session
 NetworkObserver.initialize();
 AuthBridge.verifySession().then(updateBadge);
+
+// Handle autonomous browser tool execution from the server
+apiClient.onWebSocketEvent(async (event) => {
+  if (event.channel === 'execute-client-tool' && event.data) {
+    const { id, sessionId, tool, input } = event.data;
+    try {
+      const activeTab = await getActiveWebTab();
+      const res = await ToolRelay.execute({
+        tool,
+        input: input || {},
+        tabId: activeTab?.id
+      });
+      apiClient.sendWebSocket({
+        action: 'CLIENT_TOOL_RESULT',
+        id,
+        sessionId,
+        result: res
+      });
+    } catch (err: any) {
+      apiClient.sendWebSocket({
+        action: 'CLIENT_TOOL_RESULT',
+        id,
+        sessionId,
+        result: { success: false, error: err.message || String(err) }
+      });
+    }
+  }
+});
 
 // ─── Lifecycle & Context Menus ──────────────────────────────────────────────
 
@@ -228,7 +257,8 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
 
         const finalModelConfig = {
           systemPrompt: BROWSER_EXTENSION_SYSTEM_PROMPT,
-          chatOnly: true,  // Skip all 30 builtin tool schemas (~7k tokens) — browser chat doesn't need file/shell/artifact tools
+          chatOnly: true,  // Skip all 30 workspace tools (~7k tokens) — browser-specific tools are attached via extraTools
+          browserTools: true,
           ...modelConfig
         };
 

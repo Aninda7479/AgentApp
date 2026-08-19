@@ -230,7 +230,7 @@ export class ThoughtStreamParser {
         const match = this.buffer.match(/<(?:think|thought)>/i);
         const matchEnd = this.buffer.match(/<\/(?:think|thought)>/i);
 
-        if (match && match.index !== undefined && (!matchEnd || match.index < matchEnd.index)) {
+        if (match && match.index !== undefined && (!matchEnd || match.index < (matchEnd.index ?? 0))) {
           const before = this.buffer.slice(0, match.index);
           if (before) {
             this.fullAnswer += before;

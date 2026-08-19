@@ -12,6 +12,7 @@ export * from './providers/custom.js';
 export * from './providers/models.js';
 export * from './providers/provider-meta.js';
 export * from './providers/connection.js';
+export * from './providers/browser-tools.js';
 export * from './orchestrator/router.js';
 export * from './orchestrator/provider-health.js';
 export * from './orchestrator/task-classifier.js';

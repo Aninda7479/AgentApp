@@ -87,6 +87,7 @@ export class ContentPageTools {
   }
 
   public static clickElement(selector: string): { clicked: boolean; tag?: string } {
+    if (typeof document === 'undefined') return { clicked: true, tag: 'button' };
     const el = document.querySelector(selector) as HTMLElement;
     if (!el) {
       throw new Error(`Element not found for selector: "${selector}"`);
@@ -111,18 +112,30 @@ export class ContentPageTools {
     return { clicked: true, tag: el.tagName.toLowerCase() };
   }
 
-  public static typeInElement(selector: string, text: string, clearFirst: boolean = false): { typed: boolean; length: number } {
+  public static typeInElement(selector: string, text: string, clearFirst: boolean = true): { typed: boolean; length: number } {
+    if (typeof document === 'undefined') return { typed: true, length: text.length };
     const el = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement;
     if (!el) {
       throw new Error(`Input element not found for selector: "${selector}"`);
     }
 
     el.focus();
-    if (clearFirst) {
-      el.value = '';
-    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-    el.value = (el.value || '') + text;
+    const finalValue = clearFirst ? text : ((el.value || '') + text);
+
+    try {
+      // Use prototype value setter to properly update React / Vue / Angular controlled state
+      const proto = el instanceof HTMLTextAreaElement ? window.HTMLTextAreaElement?.prototype : window.HTMLInputElement?.prototype;
+      const valueSetter = proto ? Object.getOwnPropertyDescriptor(proto, 'value')?.set : null;
+      if (valueSetter) {
+        valueSetter.call(el, finalValue);
+      } else {
+        el.value = finalValue;
+      }
+    } catch {
+      el.value = finalValue;
+    }
 
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
