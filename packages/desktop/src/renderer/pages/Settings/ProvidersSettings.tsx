@@ -160,7 +160,11 @@ export const ProviderLogo: React.FC<{ providerId: string; org?: string; logoUrl?
   const iconSize = size - 6;
 
   // Render the vector SVG directly for known providers so it is offline-first and CORS-safe!
-  const knownProviders = new Set(['chatgpt', 'openai', 'claude', 'anthropic', 'google', 'gemini', 'vertex', 'ollama', 'deepseek', 'openrouter', 'groq', 'nvidia', 'omniroute']);
+  const knownProviders = new Set([
+    'chatgpt', 'openai', 'claude', 'anthropic', 'google', 'gemini', 'vertex',
+    'ollama', 'deepseek', 'openrouter', 'groq', 'nvidia', 'omniroute',
+    'kimi', 'moonshot', 'deepinfra'
+  ]);
   const isKnown = [...knownProviders].some(p => key.includes(p));
 
   if (isKnown) {

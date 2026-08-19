@@ -15,12 +15,14 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Simple fetch pass-through for static PWA assets with safety catch
-  e.respondWith(
-    fetch(e.request).catch((err) => {
-      console.warn('[PWA SW] Static asset fetch failed:', e.request.url, err);
-      return Response.error();
-    })
-  );
+  // For SPA navigation requests (e.g. /settings/models), attempt network fetch and fallback to /index.html
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request).catch(() => {
+        return fetch('/index.html');
+      })
+    );
+    return;
+  }
 });
 
