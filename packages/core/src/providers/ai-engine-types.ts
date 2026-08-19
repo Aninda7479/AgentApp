@@ -27,6 +27,7 @@ export type AgentEventType =
 export interface AgentEvent {
   type: AgentEventType;
   sessionId: string;
+  seq?: number;
   content?: string;
   toolName?: string;
   toolArgs?: Record<string, unknown>;

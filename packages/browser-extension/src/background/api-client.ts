@@ -287,63 +287,93 @@ export class ExtensionApiClient {
 
   // ─── WebSocket Connection for Realtime Streaming ───────────────────────────
 
+  private connectPromise: Promise<void> | null = null;
+
   public async connectWebSocket(): Promise<void> {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
-
-    try {
-      const auth = await this.getAuthStatus();
-      if (!auth.connected) {
-        this.notifyConnectionChange(false);
-        this.scheduleReconnect();
-        return;
-      }
-
-      if (!auth.authenticated && auth.authRequired) {
-        await ExtensionSessionStore.clearAuthToken();
-        this.disconnectWebSocket();
-        return;
-      }
-
-      const baseUrl = await this.getBaseUrl();
-      const token = await ExtensionSessionStore.getAuthToken();
-      if (auth.authRequired && !token) {
-        return;
-      }
-
-      const wsUrl = baseUrl.replace(/^http/, 'ws') + '/api/ws' + (token ? `?token=${encodeURIComponent(token)}` : '');
-
-      this.ws = new WebSocket(wsUrl);
-
-      this.ws.onopen = () => {
-        console.log('[ApiClient] WebSocket connected to SuperAgent server');
-        this.notifyConnectionChange(true);
-      };
-
-      this.ws.onmessage = (event) => {
-        try {
-          const parsed = JSON.parse(event.data);
-          this.wsListeners.forEach((fn) => fn(parsed));
-        } catch (e) {
-          console.warn('[ApiClient] Failed to parse WebSocket payload:', event.data);
-        }
-      };
-
-      this.ws.onclose = () => {
-        this.ws = null;
-        this.notifyConnectionChange(false);
-        this.scheduleReconnect();
-      };
-
-      this.ws.onerror = () => {
-        this.notifyConnectionChange(false);
-        try { this.ws?.close(); } catch {}
-      };
-    } catch {
-      this.notifyConnectionChange(false);
-      this.scheduleReconnect();
+    if (this.connectPromise) {
+      return this.connectPromise;
     }
+
+    this.connectPromise = (async () => {
+      try {
+        const auth = await this.getAuthStatus();
+        if (!auth.connected) {
+          this.notifyConnectionChange(false);
+          this.scheduleReconnect();
+          return;
+        }
+
+        if (!auth.authenticated && auth.authRequired) {
+          await ExtensionSessionStore.clearAuthToken();
+          this.disconnectWebSocket();
+          return;
+        }
+
+        const baseUrl = await this.getBaseUrl();
+        const token = await ExtensionSessionStore.getAuthToken();
+        if (auth.authRequired && !token) {
+          return;
+        }
+
+        // Clean up any existing stale socket
+        if (this.ws) {
+          try {
+            this.ws.onmessage = null;
+            this.ws.onopen = null;
+            this.ws.onclose = null;
+            this.ws.onerror = null;
+            this.ws.close();
+          } catch {}
+          this.ws = null;
+        }
+
+        const wsUrl = baseUrl.replace(/^http/, 'ws') + '/api/ws' + (token ? `?token=${encodeURIComponent(token)}` : '');
+
+        const ws = new WebSocket(wsUrl);
+        this.ws = ws;
+
+        ws.onopen = () => {
+          if (this.ws !== ws) return;
+          console.log('[ApiClient] WebSocket connected to SuperAgent server');
+          this.notifyConnectionChange(true);
+        };
+
+        ws.onmessage = (event) => {
+          if (this.ws !== ws) return;
+          try {
+            const parsed = JSON.parse(event.data);
+            this.wsListeners.forEach((fn) => fn(parsed));
+          } catch (e) {
+            console.warn('[ApiClient] Failed to parse WebSocket payload:', event.data);
+          }
+        };
+
+        ws.onclose = () => {
+          if (this.ws === ws) {
+            this.ws = null;
+            this.notifyConnectionChange(false);
+            this.scheduleReconnect();
+          }
+        };
+
+        ws.onerror = () => {
+          if (this.ws === ws) {
+            this.notifyConnectionChange(false);
+            try { ws.close(); } catch {}
+          }
+        };
+      } catch {
+        this.notifyConnectionChange(false);
+        this.scheduleReconnect();
+      } finally {
+        this.connectPromise = null;
+      }
+    })();
+
+    return this.connectPromise;
   }
 
   public disconnectWebSocket(): void {
@@ -352,7 +382,13 @@ export class ExtensionApiClient {
       this.reconnectTimer = null;
     }
     if (this.ws) {
-      try { this.ws.close(); } catch {}
+      try {
+        this.ws.onmessage = null;
+        this.ws.onopen = null;
+        this.ws.onclose = null;
+        this.ws.onerror = null;
+        this.ws.close();
+      } catch {}
       this.ws = null;
     }
   }

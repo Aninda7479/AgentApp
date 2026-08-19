@@ -38,8 +38,8 @@ export class OpenAIAdapter implements BaseProviderAdapter {
       })),
       temperature: request.temperature ?? 0.7,
       max_tokens: request.maxTokens,
-      frequency_penalty: request.frequencyPenalty ?? 0.3,
-      presence_penalty: request.presencePenalty ?? 0.3,
+      ...(request.frequencyPenalty !== undefined ? { frequency_penalty: request.frequencyPenalty } : {}),
+      ...(request.presencePenalty !== undefined ? { presence_penalty: request.presencePenalty } : {}),
       stream: false
     };
 
@@ -111,8 +111,8 @@ export class OpenAIAdapter implements BaseProviderAdapter {
       })),
       temperature: request.temperature ?? 0.7,
       stream: true,
-      frequency_penalty: request.frequencyPenalty ?? 0.3,
-      presence_penalty: request.presencePenalty ?? 0.3
+      ...(request.frequencyPenalty !== undefined ? { frequency_penalty: request.frequencyPenalty } : {}),
+      ...(request.presencePenalty !== undefined ? { presence_penalty: request.presencePenalty } : {})
     };
 
     applyReasoningEffort(payload, this.provider, request.reasoningEffort, request.maxTokens);

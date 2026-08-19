@@ -470,6 +470,15 @@ export class AgentEngine {
     onEvent: (event: AgentEvent) => void,
     attachments?: ImageAttachment[] | string[]
   ): Promise<void> {
+    let streamSeq = 0;
+    const rawOnEvent = onEvent;
+    onEvent = (event: AgentEvent) => {
+      if (event.seq === undefined) {
+        event.seq = ++streamSeq;
+      }
+      rawOnEvent(event);
+    };
+
     this.abortController = new AbortController();
     // (Re)register so reused/persistent engines stay visible while active.
     multiAgentManager.register(this);
@@ -1130,8 +1139,12 @@ export class AgentEngine {
     if (!isStrictModel && !isOmniRoute) {
       payload.temperature = this.config.temperature ?? 0.7;
       payload.max_tokens = this.config.maxTokens ?? 4096;
-      payload.frequency_penalty = this.config.frequencyPenalty ?? 0.3;
-      payload.presence_penalty = this.config.presencePenalty ?? 0.3;
+      if (this.config.frequencyPenalty !== undefined) {
+        payload.frequency_penalty = this.config.frequencyPenalty;
+      }
+      if (this.config.presencePenalty !== undefined) {
+        payload.presence_penalty = this.config.presencePenalty;
+      }
     } else if (this.config.maxTokens) {
       payload.max_completion_tokens = this.config.maxTokens;
     }
@@ -1797,11 +1810,10 @@ export class AgentEngine {
       tools,
       stream: true,
       options: {
-        temperature: this.config.temperature ?? 0.4,
+        temperature: this.config.temperature ?? 0.7,
         num_predict: this.config.maxTokens ?? 4096,
-        repeat_penalty: 1.1,
-        frequency_penalty: this.config.frequencyPenalty ?? 0.3,
-        presence_penalty: this.config.presencePenalty ?? 0.3
+        ...(this.config.frequencyPenalty !== undefined ? { frequency_penalty: this.config.frequencyPenalty } : {}),
+        ...(this.config.presencePenalty !== undefined ? { presence_penalty: this.config.presencePenalty } : {})
       }
     };
 

@@ -11,6 +11,7 @@ import { ExtensionSessionStore } from '../shared/session-store.js';
 import { ActiveTabContext, ExtensionMessage, AuthState } from '../shared/types.js';
 
 const BROWSER_EXTENSION_SYSTEM_PROMPT = `You are SuperAgent in the browser side panel. Answer questions and analyze web content concisely using the attached context. Output clean, structured Markdown.`;
+const sessionContextMap = new Map<string, string>();
 
 // Initialize network request observation & verify session
 NetworkObserver.initialize();
@@ -186,7 +187,12 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
         const { prompt, sessionId, modelConfig, includePageContext, pageContextMode, selectedSection } = message.payload;
         let finalPrompt = prompt;
 
-        if (includePageContext && pageContextMode !== 'none') {
+        const currentContextKey = `${pageContextMode}:${selectedSection?.text || 'full'}`;
+        const previousContextKey = sessionContextMap.get(sessionId);
+        const shouldAttachContext = includePageContext && pageContextMode !== 'none' && (!previousContextKey || previousContextKey !== currentContextKey);
+
+        if (shouldAttachContext) {
+          sessionContextMap.set(sessionId, currentContextKey);
           const activeTab = await getActiveWebTab();
           if (activeTab?.id && activeTab.url) {
             let pageText = '';

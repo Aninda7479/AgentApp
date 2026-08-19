@@ -23,6 +23,7 @@ class SidePanelController {
   private approvalMode: 'ask' | 'always' | 'never' = 'ask';
   private contextMode: 'full' | 'section' | 'selection' | 'none' | 'picking' = 'full';
   private selectedSection: SectionContextData | null = null;
+  private seenEventSeqs = new Set<number>();
 
   // Header Elements
   private statusDot = document.getElementById('statusDot') as HTMLElement;
@@ -119,10 +120,19 @@ class SidePanelController {
       return;
     }
 
+    if (evt.seq !== undefined) {
+      if (this.seenEventSeqs.has(evt.seq)) {
+        return; // Drop duplicate event delivery
+      }
+      this.seenEventSeqs.add(evt.seq);
+    }
+
     if (evt.type === 'token' && (evt.content !== undefined || evt.text !== undefined)) {
       const text = evt.content !== undefined ? evt.content : evt.text;
       // Close active thought accumulation so new thoughts create a new block if needed
       if (this.currentThoughtBubble) {
+        const dots = this.currentThoughtBubble.querySelector('.thinking-dots');
+        if (dots) dots.remove();
         this.currentThoughtBubble = null;
         this.currentThoughtBox = null;
         this.currentThoughtText = '';
@@ -502,8 +512,18 @@ class SidePanelController {
 
       this.chatInput.placeholder = 'Ask anything — or type / for skills, commands & tools';
 
-      // Set selected model
-      const selected = data?.selectedModel || models[0].id;
+      // Preserve previously selected model from memory or local storage
+      let savedModelId = this.selectedModelId;
+      if (!savedModelId && typeof chrome !== 'undefined' && chrome.storage?.local) {
+        try {
+          const stored = await chrome.storage.local.get('selectedModelId');
+          if (stored?.selectedModelId) savedModelId = stored.selectedModelId;
+        } catch {}
+      }
+
+      const validModel = models.find((m) => m.id === savedModelId || m.name === savedModelId);
+      const selected = validModel ? (validModel.name || validModel.id) : (data?.selectedModel || models[0].id);
+
       this.selectModel(selected);
       this.renderModelMenu(models);
     } catch (e) {
@@ -525,7 +545,7 @@ class SidePanelController {
 
     models.forEach((m) => {
       const item = document.createElement('div');
-      item.className = `model-menu-item${m.id === this.selectedModelId ? ' selected' : ''}`;
+      item.className = `model-menu-item${m.id === this.selectedModelId || m.name === this.selectedModelId ? ' selected' : ''}`;
 
       const isOrchestrator = m.isAutoRoute || m.id === 'Orchestrator';
       const icon = isOrchestrator ? '⚡' : m.provider === 'openai' ? '🟢' : m.provider === 'anthropic' ? '🟣' : m.provider === 'gemini' ? '🔵' : '🧠';
@@ -539,7 +559,7 @@ class SidePanelController {
       `;
 
       item.addEventListener('click', () => {
-        this.selectModel(m.id);
+        this.selectModel(m.name || m.id);
         this.modelMenu.classList.remove('open');
       });
 
@@ -549,6 +569,10 @@ class SidePanelController {
 
   private selectModel(modelId: string): void {
     this.selectedModelId = modelId;
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      chrome.storage.local.set({ selectedModelId: modelId }).catch(() => {});
+    }
+
     const match = this.availableModels.find((m) => m.id === modelId || m.name === modelId);
 
     if (match) {
@@ -561,7 +585,7 @@ class SidePanelController {
     // Update active highlight in menu
     this.modelMenu.querySelectorAll('.model-menu-item').forEach((el, idx) => {
       const m = this.availableModels[idx];
-      el.classList.toggle('selected', m && (m.id === modelId || m.name === modelId));
+      el.classList.toggle('selected', Boolean(m && (m.id === modelId || m.name === modelId)));
     });
   }
 
@@ -639,6 +663,7 @@ class SidePanelController {
 
   private startNewChat(): void {
     this.currentSessionId = `ext-chat-${Date.now()}`;
+    this.seenEventSeqs.clear();
     this.messagesContainer.innerHTML = '';
     this.agentStepsContainer.innerHTML = '';
     this.messagesContainer.appendChild(this.emptyState);
@@ -667,6 +692,7 @@ class SidePanelController {
     this.chatInput.style.height = '42px';
 
     this.setGenerating(true);
+    this.seenEventSeqs.clear();
     this.currentAssistantText = '';
     this.currentAssistantBubble = null;
 
@@ -765,6 +791,11 @@ class SidePanelController {
         <summary class="thought-summary">
           <span class="thought-icon">💭</span>
           <span class="thought-title">Thinking Process</span>
+          <span class="thinking-dots">
+            <span class="thinking-dot"></span>
+            <span class="thinking-dot"></span>
+            <span class="thinking-dot"></span>
+          </span>
           <span class="thought-chevron">▼</span>
         </summary>
         <div class="thought-content"></div>

@@ -216,7 +216,9 @@ export class ThoughtStreamParser {
       if (!this.inThought) {
         // Look for start tag <think> or <thought>
         const match = this.buffer.match(/<(?:think|thought)>/i);
-        if (match && match.index !== undefined) {
+        const matchEnd = this.buffer.match(/<\/(?:think|thought)>/i);
+
+        if (match && match.index !== undefined && (!matchEnd || match.index < matchEnd.index)) {
           const before = this.buffer.slice(0, match.index);
           if (before) {
             this.fullAnswer += before;
@@ -224,6 +226,15 @@ export class ThoughtStreamParser {
           }
           this.buffer = this.buffer.slice(match.index + match[0].length);
           this.inThought = true;
+          progress = true;
+        } else if (matchEnd && matchEnd.index !== undefined) {
+          // Orphan closing tag without start tag — strip it cleanly
+          const before = this.buffer.slice(0, matchEnd.index);
+          if (before) {
+            this.fullAnswer += before;
+            this.onToken(before);
+          }
+          this.buffer = this.buffer.slice(matchEnd.index + matchEnd[0].length);
           progress = true;
         } else {
           // Check if buffer ends with a partial prefix of <think> or <thought>
