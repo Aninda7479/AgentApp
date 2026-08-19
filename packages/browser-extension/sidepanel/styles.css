@@ -96,7 +96,8 @@ body {
   background-color: var(--accent-success);
 }
 
-.status-dot.connecting {
+.status-dot.connecting,
+.status-dot.locked {
   background-color: var(--accent-warning);
 }
 

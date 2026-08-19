@@ -76,7 +76,7 @@ export class ExtensionSessionStore {
 
   public static async getAuthState(): Promise<AuthState> {
     const state = await getStorageItem<AuthState>(STORAGE_KEYS.AUTH_STATE, 'session');
-    return state || { authenticated: false, authRequired: true };
+    return state || { connected: false, authenticated: false, authRequired: true };
   }
 
   public static async setAuthState(state: AuthState): Promise<void> {

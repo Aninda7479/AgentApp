@@ -28,7 +28,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (e) {}
 
   function updateAuthDisplay(auth: AuthState) {
-    if (auth.authenticated || !auth.authRequired) {
+    if (!auth.connected) {
+      authStatusText.style.color = '#ef4444';
+      authStatusText.textContent = '⚠️ Server is offline. Please check server URL and ensure backend is running.';
+    } else if (auth.authenticated || !auth.authRequired) {
       authStatusText.style.color = 'var(--accent-success)';
       authStatusText.textContent = `✓ Authenticated as "${auth.username || 'admin'}"`;
     } else {

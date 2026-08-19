@@ -8,7 +8,7 @@ import { ToolRelay } from './tool-relay.js';
 import { apiClient } from './api-client.js';
 import { MemoryBridge } from './memory-bridge.js';
 import { ExtensionSessionStore } from '../shared/session-store.js';
-import { ActiveTabContext, ExtensionMessage } from '../shared/types.js';
+import { ActiveTabContext, ExtensionMessage, AuthState } from '../shared/types.js';
 
 const BROWSER_EXTENSION_SYSTEM_PROMPT = `You are SuperAgent, an intelligent AI assistant and autonomous agent integrated into the user's browser side panel.
 
@@ -95,15 +95,26 @@ apiClient.onWebSocketEvent((event) => {
   });
 });
 
+apiClient.onConnectionChange((connected) => {
+  safeBroadcast({
+    type: 'CONNECTION_STATE_CHANGED',
+    payload: { connected }
+  });
+  AuthBridge.verifySession().then(updateBadge);
+});
+
 // ─── Status Badge Updater ───────────────────────────────────────────────────
 
-function updateBadge(auth: { authenticated: boolean; authRequired: boolean }): void {
-  if (auth.authenticated || !auth.authRequired) {
+function updateBadge(auth: AuthState): void {
+  if (!auth.connected) {
+    chrome.action.setBadgeText({ text: 'OFF' });
+    chrome.action.setBadgeBackgroundColor({ color: '#64748b' }); // Slate Gray
+  } else if (auth.authenticated || !auth.authRequired) {
     chrome.action.setBadgeText({ text: 'ON' });
     chrome.action.setBadgeBackgroundColor({ color: '#22c55e' }); // Emerald Green
   } else {
     chrome.action.setBadgeText({ text: 'LOCK' });
-    chrome.action.setBadgeBackgroundColor({ color: '#ef4444' }); // Amber/Red
+    chrome.action.setBadgeBackgroundColor({ color: '#f59e0b' }); // Amber
   }
 }
 

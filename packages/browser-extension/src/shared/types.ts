@@ -52,11 +52,13 @@ export interface ServerConfig {
 }
 
 export interface AuthState {
+  connected: boolean;
   authenticated: boolean;
   authRequired: boolean;
   username?: string;
   token?: string;
   lastChecked?: number;
+  error?: string;
 }
 
 export interface ActiveTabContext {
@@ -147,6 +149,7 @@ export type ExtensionMessage =
   | { type: 'AGENT_RUN_START'; payload: { prompt: string; sessionId: string; modelConfig: any; includePageContext?: boolean; approvalMode?: string } }
   | { type: 'AGENT_RUN_STOP'; payload: { sessionId: string } }
   | { type: 'AGENT_EVENT'; payload: any }
+  | { type: 'CONNECTION_STATE_CHANGED'; payload: { connected: boolean } }
   | { type: 'GET_SERVER_CONFIG' }
   | { type: 'SET_SERVER_CONFIG'; payload: Partial<ServerConfig> }
   | { type: 'PING_SERVER' }

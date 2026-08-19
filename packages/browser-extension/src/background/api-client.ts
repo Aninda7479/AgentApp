@@ -11,10 +11,22 @@ export type EventCallback = (event: {
   data: any;
 }) => void;
 
+export type ConnectionCallback = (connected: boolean) => void;
+
 export class ExtensionApiClient {
   private ws: WebSocket | null = null;
   private wsListeners: Set<EventCallback> = new Set();
+  private connectionListeners: Set<ConnectionCallback> = new Set();
   private reconnectTimer: any = null;
+
+  public onConnectionChange(listener: ConnectionCallback): () => void {
+    this.connectionListeners.add(listener);
+    return () => this.connectionListeners.delete(listener);
+  }
+
+  private notifyConnectionChange(connected: boolean): void {
+    this.connectionListeners.forEach((fn) => fn(connected));
+  }
 
   private async getBaseUrl(): Promise<string> {
     const config = await ExtensionSessionStore.getServerConfig();
@@ -37,7 +49,7 @@ export class ExtensionApiClient {
     try {
       const baseUrl = await this.getBaseUrl();
       const res = await fetch(`${baseUrl}/api/health`, {
-        signal: AbortSignal.timeout(3000)
+        signal: AbortSignal.timeout(2000)
       });
       return res.ok;
     } catch {
@@ -51,20 +63,44 @@ export class ExtensionApiClient {
       const headers = await this.getHeaders();
       const res = await fetch(`${baseUrl}/api/auth/status`, {
         headers,
-        signal: AbortSignal.timeout(3000)
+        signal: AbortSignal.timeout(2500)
       });
-      if (!res.ok) {
-        return { authenticated: false, authRequired: true };
+
+      if (res.status === 401) {
+        return {
+          connected: true,
+          authenticated: false,
+          authRequired: true,
+          lastChecked: Date.now()
+        };
       }
+
+      if (!res.ok) {
+        return {
+          connected: false,
+          authenticated: false,
+          authRequired: false,
+          lastChecked: Date.now(),
+          error: `HTTP ${res.status}: ${res.statusText}`
+        };
+      }
+
       const data = await res.json();
       return {
+        connected: true,
         authenticated: Boolean(data.authenticated),
         authRequired: Boolean(data.authRequired),
         username: data.ownerName || 'admin',
         lastChecked: Date.now()
       };
-    } catch {
-      return { authenticated: false, authRequired: true };
+    } catch (err: any) {
+      return {
+        connected: false,
+        authenticated: false,
+        authRequired: false,
+        lastChecked: Date.now(),
+        error: err?.message || 'Server unreachable'
+      };
     }
   }
 
@@ -74,7 +110,8 @@ export class ExtensionApiClient {
       const res = await fetch(`${baseUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
+        body: JSON.stringify({ password }),
+        signal: AbortSignal.timeout(3000)
       });
 
       const data = await res.json().catch(() => ({}));
@@ -83,6 +120,7 @@ export class ExtensionApiClient {
           await ExtensionSessionStore.setAuthToken(data.token);
         }
         await ExtensionSessionStore.setAuthState({
+          connected: true,
           authenticated: true,
           authRequired: true,
           token: data.token,
@@ -103,13 +141,16 @@ export class ExtensionApiClient {
       const headers = await this.getHeaders();
       await fetch(`${baseUrl}/api/auth/logout`, {
         method: 'POST',
-        headers
+        headers,
+        signal: AbortSignal.timeout(2000)
       });
     } catch {}
     await ExtensionSessionStore.clearAuthToken();
     await ExtensionSessionStore.setAuthState({
+      connected: true,
       authenticated: false,
-      authRequired: true
+      authRequired: true,
+      lastChecked: Date.now()
     });
     this.disconnectWebSocket();
   }
@@ -126,8 +167,10 @@ export class ExtensionApiClient {
 
     if (res.status === 401) {
       await ExtensionSessionStore.setAuthState({
+        connected: true,
         authenticated: false,
-        authRequired: true
+        authRequired: true,
+        lastChecked: Date.now()
       });
       throw new Error('Unauthorized: Session expired or invalid password');
     }
@@ -251,6 +294,12 @@ export class ExtensionApiClient {
 
     try {
       const auth = await this.getAuthStatus();
+      if (!auth.connected) {
+        this.notifyConnectionChange(false);
+        this.scheduleReconnect();
+        return;
+      }
+
       if (!auth.authenticated && auth.authRequired) {
         await ExtensionSessionStore.clearAuthToken();
         this.disconnectWebSocket();
@@ -269,6 +318,7 @@ export class ExtensionApiClient {
 
       this.ws.onopen = () => {
         console.log('[ApiClient] WebSocket connected to SuperAgent server');
+        this.notifyConnectionChange(true);
       };
 
       this.ws.onmessage = (event) => {
@@ -282,13 +332,17 @@ export class ExtensionApiClient {
 
       this.ws.onclose = () => {
         this.ws = null;
+        this.notifyConnectionChange(false);
+        this.scheduleReconnect();
       };
 
       this.ws.onerror = () => {
+        this.notifyConnectionChange(false);
         try { this.ws?.close(); } catch {}
       };
     } catch {
-      // Ignored if server is unreachable
+      this.notifyConnectionChange(false);
+      this.scheduleReconnect();
     }
   }
 

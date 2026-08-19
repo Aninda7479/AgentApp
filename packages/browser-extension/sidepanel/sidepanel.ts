@@ -23,7 +23,6 @@ class SidePanelController {
   // Header Elements
   private statusDot = document.getElementById('statusDot') as HTMLElement;
   private statusText = document.getElementById('statusText') as HTMLElement;
-  private tabTitleText = document.getElementById('tabTitleText') as HTMLElement;
   private btnNewChat = document.getElementById('btnNewChat') as HTMLButtonElement;
   private btnSettings = document.getElementById('btnSettings') as HTMLButtonElement;
 
@@ -74,9 +73,12 @@ class SidePanelController {
   constructor() {
     this.bindEvents();
     this.checkAuthStatus();
-    this.updateActiveTabContext();
     this.loadRealModels();
     this.listenToAgentEvents();
+
+    // Periodic heartbeat check to detect server drops and automatic reconnects
+    setInterval(() => this.checkAuthStatus(), 5000);
+    window.addEventListener('focus', () => this.checkAuthStatus());
   }
 
   // ─── Agent Streaming Events ────────────────────────────────────────────────
@@ -85,6 +87,12 @@ class SidePanelController {
     MessageBus.onMessage((msg) => {
       if (msg.type === 'AGENT_EVENT' && msg.payload) {
         this.handleAgentEvent(msg.payload);
+      } else if (msg.type === 'CONNECTION_STATE_CHANGED') {
+        if (!msg.payload?.connected) {
+          this.setOfflineState();
+        } else {
+          this.checkAuthStatus();
+        }
       }
     });
   }
@@ -352,25 +360,32 @@ class SidePanelController {
 
   // ─── Authentication & Tab Context ──────────────────────────────────────────
 
+  private setOfflineState(): void {
+    this.statusDot.className = 'status-dot';
+    this.statusText.textContent = 'Offline';
+    this.loginModal.classList.remove('active');
+    this.modelTriggerLabel.textContent = 'Server Offline';
+  }
+
   private async checkAuthStatus(): Promise<void> {
     try {
-      this.statusDot.className = 'status-dot connecting';
-      this.statusText.textContent = 'Connecting...';
-
       const state: AuthState = await MessageBus.send({ type: 'GET_AUTH_STATE' });
-      if (state.authenticated || !state.authRequired) {
+      if (!state.connected) {
+        this.setOfflineState();
+      } else if (state.authenticated || !state.authRequired) {
         this.statusDot.className = 'status-dot connected';
         this.statusText.textContent = 'Online';
         this.loginModal.classList.remove('active');
-        this.loadRealModels();
+        if (this.availableModels.length === 0 || this.modelTriggerLabel.textContent === 'Server Offline') {
+          this.loadRealModels();
+        }
       } else {
         this.statusDot.className = 'status-dot';
         this.statusText.textContent = 'Locked';
         this.loginModal.classList.add('active');
       }
     } catch {
-      this.statusDot.className = 'status-dot';
-      this.statusText.textContent = 'Offline';
+      this.setOfflineState();
     }
   }
 
@@ -397,17 +412,6 @@ class SidePanelController {
     }
   }
 
-  private async updateActiveTabContext(): Promise<void> {
-    try {
-      const ctx: ActiveTabContext = await MessageBus.send({ type: 'GET_ACTIVE_TAB_CONTEXT' });
-      if (ctx?.title) {
-        const displayTitle = ctx.title.length > 18 ? ctx.title.slice(0, 18) + '...' : ctx.title;
-        this.tabTitleText.textContent = displayTitle;
-        this.tabTitleText.parentElement?.setAttribute('title', `${ctx.title}\n${ctx.url}`);
-      }
-    } catch {}
-  }
-
   private startNewChat(): void {
     this.currentSessionId = `ext-chat-${Date.now()}`;
     this.messagesContainer.innerHTML = '';
@@ -421,6 +425,16 @@ class SidePanelController {
   private async sendMessage(): Promise<void> {
     const prompt = this.chatInput.value.trim();
     if (!prompt || this.isGenerating) return;
+
+    if (this.statusText.textContent === 'Offline') {
+      this.emptyState.style.display = 'none';
+      this.appendMessage('user', prompt);
+      this.chatInput.value = '';
+      this.chatInput.style.height = '42px';
+      this.appendMessage('assistant', '⚠️ SuperAgent backend server is offline (http://localhost:1469). Please ensure the backend is running and try again.');
+      this.checkAuthStatus();
+      return;
+    }
 
     this.emptyState.style.display = 'none';
     this.appendMessage('user', prompt);
@@ -454,6 +468,7 @@ class SidePanelController {
     } catch (err: any) {
       this.appendMessage('assistant', `⚠️ Error starting agent: ${err?.message || err}`);
       this.setGenerating(false);
+      this.checkAuthStatus();
     }
   }
 

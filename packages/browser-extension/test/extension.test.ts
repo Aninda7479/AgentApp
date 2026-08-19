@@ -42,6 +42,24 @@ describe('SuperAgent Browser Extension Test Suite', () => {
       const retrieved = await ExtensionSessionStore.getCurrentSessionId();
       expect(retrieved).toBe('custom-sid-777');
     });
+
+    it('should return connected: false by default when not initialized', async () => {
+      const auth = await ExtensionSessionStore.getAuthState();
+      expect(auth.connected).toBe(false);
+    });
+
+    it('should store and update auth state with connected flag', async () => {
+      await ExtensionSessionStore.setAuthState({
+        connected: true,
+        authenticated: true,
+        authRequired: true,
+        username: 'admin'
+      });
+      const auth = await ExtensionSessionStore.getAuthState();
+      expect(auth.connected).toBe(true);
+      expect(auth.authenticated).toBe(true);
+      expect(auth.username).toBe('admin');
+    });
   });
 
   describe('Page Tools', () => {

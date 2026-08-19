@@ -14,7 +14,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try {
     const auth: AuthState = await MessageBus.send({ type: 'GET_AUTH_STATE' });
-    if (auth.authenticated || !auth.authRequired) {
+    if (!auth.connected) {
+      popupDot.className = 'dot';
+      popupStatus.textContent = 'Offline';
+    } else if (auth.authenticated || !auth.authRequired) {
       popupDot.className = 'dot connected';
       popupStatus.textContent = 'Connected';
     } else {

@@ -10,8 +10,10 @@ export class AuthBridge {
   public static async verifySession(): Promise<AuthState> {
     const status = await apiClient.getAuthStatus();
     await ExtensionSessionStore.setAuthState(status);
-    if (status.authenticated || !status.authRequired) {
+    if (status.connected && (status.authenticated || !status.authRequired)) {
       await apiClient.connectWebSocket();
+    } else if (!status.connected) {
+      apiClient.disconnectWebSocket();
     } else {
       await ExtensionSessionStore.clearAuthToken();
       apiClient.disconnectWebSocket();
@@ -30,6 +32,6 @@ export class AuthBridge {
 
   public static async ensureAuthenticated(): Promise<boolean> {
     const state = await this.verifySession();
-    return state.authenticated || !state.authRequired;
+    return state.connected && (state.authenticated || !state.authRequired);
   }
 }
