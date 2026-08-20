@@ -61,6 +61,7 @@ export class LaptopScreenAnimator {
   update(behavior: Behavior, t: number, dt: number) {
     if (typeof document === 'undefined') return;
     const ctx = this.ctx;
+    if (!ctx) return;
     const w = this.canvas.width;
     const h = this.canvas.height;
 

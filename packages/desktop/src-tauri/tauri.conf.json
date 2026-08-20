@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "SuperAgent — Autonomous AI Agent",
+        "url": "index.html",
         "width": 1280,
         "height": 830,
         "minWidth": 900,

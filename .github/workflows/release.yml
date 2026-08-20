@@ -150,9 +150,38 @@ jobs:
           path: packages/cli/dist-release-cli/superagent-cli-v*.*
           if-no-files-found: error
 
+  # ── Step 2b: Build Browser Extension (.zip release bundle) ───────────────────
+  build-extension:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & Package Browser Extension
+        run: |
+          npm run pack:ext
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-artifacts
+          path: packages/browser-extension/release/superagent-browser-extension-v*.zip
+          if-no-files-found: error
+
   # ── Step 3: Generate updater.json + release notes, publish final release ──
   publish:
-    needs: [version, build-desktop, build-cli-binary]
+    needs: [version, build-desktop, build-cli-binary, build-extension]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -175,6 +204,12 @@ jobs:
           name: cli-binary-artifacts
           path: cli-artifacts
 
+      - name: Download Browser Extension release archive
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-artifacts
+          path: extension-artifacts
+
       - name: Generate updater.json
         env:
           RELEASE_VERSION: ${{ needs.version.outputs.version }}
@@ -194,6 +229,7 @@ jobs:
           draft: false
           files: |
             cli-artifacts/*
+            extension-artifacts/*
             artifacts/updater.json
           body_path: release-notes.md
         env:
@@ -201,8 +237,8 @@ jobs:
 
   # ── Step 4: Clean up draft release if pipeline fails or is cancelled ────────
   cleanup-draft:
-    needs: [version, build-desktop, build-cli-binary, publish]
-    if: always() && (needs.build-desktop.result == 'failure' || needs.build-desktop.result == 'cancelled' || needs.build-cli-binary.result == 'failure' || needs.build-cli-binary.result == 'cancelled' || needs.publish.result == 'failure' || needs.publish.result == 'cancelled')
+    needs: [version, build-desktop, build-cli-binary, build-extension, publish]
+    if: always() && (needs.build-desktop.result == 'failure' || needs.build-desktop.result == 'cancelled' || needs.build-cli-binary.result == 'failure' || needs.build-cli-binary.result == 'cancelled' || needs.build-extension.result == 'failure' || needs.build-extension.result == 'cancelled' || needs.publish.result == 'failure' || needs.publish.result == 'cancelled')
     runs-on: ubuntu-latest
     steps:
       - name: Delete orphaned draft release

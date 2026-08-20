@@ -5,10 +5,14 @@ const THEME_STORAGE_KEY = 'superagent.theme';
 
 /** Reads the persisted theme from localStorage, defaulting to 'dark'. */
 export const getInitialTheme = (): ThemeMode => {
-  if (typeof window === 'undefined') return 'dark';
+  if (typeof window === 'undefined' || !window.localStorage) return 'dark';
 
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'dark';
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'dark';
+  } catch {
+    return 'dark';
+  }
 };
 
 function resolveTheme(themeMode: ThemeMode): 'light' | 'dark' {

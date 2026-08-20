@@ -75,11 +75,11 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
 
   // Gamification & Companion Stats (persisted in localStorage)
   const [affection, setAffection] = useState<number>(() => {
-    const val = localStorage.getItem('partner_affection');
+    const val = typeof localStorage !== 'undefined' ? localStorage.getItem('partner_affection') : null;
     return val ? parseInt(val, 10) : 60;
   });
   const [energy, setEnergy] = useState<number>(() => {
-    const val = localStorage.getItem('partner_energy');
+    const val = typeof localStorage !== 'undefined' ? localStorage.getItem('partner_energy') : null;
     return val ? parseInt(val, 10) : 85;
   });
 

@@ -67,6 +67,9 @@ const cliMacIntelZip = `superagent-cli-v${version}-macos-x64.zip`;
 const cliLinuxX64Tar = `superagent-cli-v${version}-linux-x64.tar.gz`;
 const cliLinuxArmTar = `superagent-cli-v${version}-linux-arm64.tar.gz`;
 
+// Browser Extension bundle
+const extZipName = findArtifactFile(/^superagent-browser-extension.*\.zip$/i) || `superagent-browser-extension-v${version}.zip`;
+
 // ── Desktop installer rows ───────────────────────────────────────────────────
 const desktopRows = [
   {
@@ -156,6 +159,7 @@ const notes = `\
 * 🍎 **macOS (Apple Silicon)**: [DMG (.dmg)](${BASE}/${encodeURIComponent(macArmDmgName)}) &bull; [Standalone Server/CLI (.zip)](${BASE}/${cliMacArmZip})
 * 🍎 **macOS (Intel)**: [DMG (.dmg)](${BASE}/${encodeURIComponent(macIntelDmgName)}) &bull; [Standalone Server/CLI (.zip)](${BASE}/${cliMacIntelZip})
 * 🐧 **Linux**: [AppImage (.AppImage)](${BASE}/${encodeURIComponent(linuxAppImageName)}) &bull; [Debian/Ubuntu (.deb)](${BASE}/${encodeURIComponent(linuxDebName)}) &bull; [Fedora/RHEL (.rpm)](${BASE}/${encodeURIComponent(linuxRpmName)}) &bull; [Standalone (.tar.gz)](${BASE}/${cliLinuxX64Tar})
+* 🧩 **Browser Extension**: [Extension Bundle (.zip)](${BASE}/${encodeURIComponent(extZipName)}) *(Chrome, Edge, Brave, Arc)*
 * 🌐 **Headless Server / HomeLab**: [Linux x64](${BASE}/${cliLinuxX64Tar}) &bull; [Linux ARM64](${BASE}/${cliLinuxArmTar}) &bull; [macOS ARM64](${BASE}/${cliMacArmZip}) &bull; [Windows x64](${BASE}/${cliWinZip})
 
 ---
@@ -163,6 +167,23 @@ const notes = `\
 ### 🖥️ Desktop Application Installers
 
 ${desktopTable}
+
+---
+
+### 🧩 Browser Extension
+
+Bring autonomous AI agent capabilities, page summarization, and DOM inspection directly into your browser side panel:
+
+| Package | Direct Download Link | Supported Browsers |
+| :--- | :--- | :--- |
+| 🧩 **Browser Extension ZIP** | [${extZipName}](${BASE}/${encodeURIComponent(extZipName)}) | Chrome, Edge, Brave, Arc, Opera |
+
+#### Quick Install Instructions:
+1. Download **[${extZipName}](${BASE}/${encodeURIComponent(extZipName)})** and unzip it to a folder.
+2. Open \`chrome://extensions/\` (or \`edge://extensions/\` / \`brave://extensions/\`).
+3. Turn on **Developer mode** toggle in the top-right corner.
+4. Click **Load unpacked** and choose the unzipped extension directory.
+5. Click the SuperAgent icon in your browser toolbar to open the Side Panel!
 
 ---
 
