@@ -430,8 +430,8 @@ class SidePanelController {
     }
   }
 
-  private handleToolApprovalRequest(payload: { id: string; sessionId: string; tool: string; input: any }): void {
-    const { id, sessionId, tool, input } = payload;
+  private handleToolApprovalRequest(payload: { id: string; sessionId: string; tool: string; input: any; elementSummary?: any }): void {
+    const { id, sessionId, tool, input, elementSummary } = payload;
     if (sessionId && sessionId !== this.currentSessionId) return;
 
     this.currentPendingApprovalId = id;
@@ -439,19 +439,30 @@ class SidePanelController {
     let actionBadge = 'Action';
     let description = '';
 
-    if (tool === 'click_element') {
+    const labelText = (elementSummary?.text || elementSummary?.value || elementSummary?.ariaLabel || elementSummary?.placeholder || '').trim();
+    const labelDisplay = labelText ? `"${labelText.length > 80 ? labelText.slice(0, 80) + '…' : labelText}"` : '';
+
+    if (tool === 'click_element' || tool === 'browser_click_element') {
       actionBadge = 'Click Element';
-      description = `Click element: "${input.selector || 'button'}"`;
-    } else if (tool === 'type_in_element') {
+      if (labelDisplay) {
+        description = `Click on-screen: ${labelDisplay}\n(Selector: ${input.selector || 'button'})`;
+      } else {
+        description = `Click element: ${input.selector || 'button'}`;
+      }
+    } else if (tool === 'type_in_element' || tool === 'browser_type_in_element') {
       actionBadge = 'Type Text';
-      description = `Type "${input.text || ''}" into: "${input.selector || 'input'}"`;
+      if (labelDisplay) {
+        description = `Type "${input.text || ''}" into field ${labelDisplay}\n(Selector: ${input.selector || 'input'})`;
+      } else {
+        description = `Type "${input.text || ''}" into: ${input.selector || 'input'}`;
+      }
     } else {
       actionBadge = tool.replace(/_/g, ' ');
       description = `Execute ${tool} with: ${JSON.stringify(input)}`;
     }
 
     if (this.approvalCardBadge) this.approvalCardBadge.textContent = actionBadge;
-    if (this.approvalCardDesc) this.approvalCardDesc.textContent = description;
+    if (this.approvalCardDesc) this.approvalCardDesc.innerText = description;
 
     // Switch composer layout to approval card
     if (this.chatInput) this.chatInput.style.display = 'none';
@@ -461,7 +472,7 @@ class SidePanelController {
     if (toolbar) toolbar.style.display = 'none';
     if (this.approvalCard) this.approvalCard.style.display = 'flex';
 
-    // Also add a visible prompt in chat
+    // Also add a visible prompt in chat with clean on-screen label
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble tool';
     bubble.style.borderColor = '#fbbf24';
@@ -469,7 +480,7 @@ class SidePanelController {
       <div class="tool-header" style="color: #fbbf24;">
         <span>🛡️ Action Approval Required: <strong>${actionBadge}</strong></span>
       </div>
-      <div class="tool-output-box">${description}</div>
+      <div class="tool-output-box" style="white-space: pre-wrap;">${description}</div>
     `;
     this.messagesContainer.appendChild(bubble);
     this.scrollToBottom();
@@ -1023,9 +1034,16 @@ class SidePanelController {
     const name = toolEvt.toolName || toolEvt.name || toolEvt.tool || 'tool';
     const input = toolEvt.toolArgs || toolEvt.args || toolEvt.input || {};
 
+    let extraBadge = '';
+    if ((name === 'browser_click_element' || name === 'click_element') && input?.selector) {
+      extraBadge = `<span style="font-size: 11px; opacity: 0.85; margin-left: 6px; font-weight: normal;">(Target: <code>${input.selector}</code>)</span>`;
+    } else if ((name === 'browser_type_in_element' || name === 'type_in_element') && input?.selector) {
+      extraBadge = `<span style="font-size: 11px; opacity: 0.85; margin-left: 6px; font-weight: normal;">(Target: <code>${input.selector}</code>, text: "${input.text || ''}")</span>`;
+    }
+
     bubble.innerHTML = `
       <div class="tool-header">
-        <span>⚡ Tool Executing: <strong>${name}</strong></span>
+        <span>⚡ Tool Executing: <strong>${name}</strong>${extraBadge}</span>
       </div>
       <div class="tool-output-box">${JSON.stringify(input, null, 2)}</div>
     `;
@@ -1041,9 +1059,18 @@ class SidePanelController {
     const name = resultEvt.toolName || resultEvt.name || 'tool';
     const output = resultEvt.toolResult !== undefined ? resultEvt.toolResult : (resultEvt.content || resultEvt.output || resultEvt.result || '');
 
+    let extraBadge = '';
+    if (typeof output === 'object' && output !== null) {
+      if (output.clicked && output.text) {
+        extraBadge = `<span style="font-size: 11px; color: #10b981; margin-left: 6px; font-weight: normal;">[Clicked on-screen: "<strong>${output.text}</strong>"]</span>`;
+      } else if (output.typed && output.label) {
+        extraBadge = `<span style="font-size: 11px; color: #10b981; margin-left: 6px; font-weight: normal;">[Typed into: "<strong>${output.label}</strong>"]</span>`;
+      }
+    }
+
     bubble.innerHTML = `
       <div class="tool-header" style="color: var(--accent-success);">
-        <span>✓ Tool Result: <strong>${name}</strong></span>
+        <span>✓ Tool Result: <strong>${name}</strong>${extraBadge}</span>
       </div>
       <div class="tool-output-box">${typeof output === 'object' ? JSON.stringify(output, null, 2) : String(output).slice(0, 2000)}</div>
     `;

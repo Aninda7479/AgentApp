@@ -56,11 +56,33 @@ async function requestToolApproval(id: string, sessionId: string, tool: string, 
   }
 
   // Modifying tools (click_element, type_in_element, etc.) request user approval in sidepanel
+  let elementSummary: { text?: string; tag?: string; value?: string; placeholder?: string; ariaLabel?: string } | null = null;
+  try {
+    const activeTab = await getActiveWebTab();
+    if (activeTab?.id && input?.selector) {
+      const res = await ToolRelay.execute({
+        tool: 'query_elements',
+        input: { selector: input.selector, limit: 1 },
+        tabId: activeTab.id
+      });
+      if (res.success && Array.isArray(res.result) && res.result.length > 0) {
+        const first = res.result[0];
+        elementSummary = {
+          text: first.text || '',
+          tag: first.tag || '',
+          value: first.value || '',
+          placeholder: first.attributes?.placeholder || '',
+          ariaLabel: first.attributes?.['aria-label'] || ''
+        };
+      }
+    }
+  } catch {}
+
   return new Promise<boolean>((resolve) => {
     pendingApprovals.set(id, resolve);
     safeBroadcast({
       type: 'REQUEST_TOOL_APPROVAL',
-      payload: { id, sessionId, tool, input }
+      payload: { id, sessionId, tool, input, elementSummary }
     });
 
     // 3 minute fallback timeout

@@ -86,8 +86,8 @@ export class ContentPageTools {
     return results;
   }
 
-  public static clickElement(selector: string): { clicked: boolean; tag?: string } {
-    if (typeof document === 'undefined') return { clicked: true, tag: 'button' };
+  public static clickElement(selector: string): { clicked: boolean; tag?: string; id?: string; text?: string } {
+    if (typeof document === 'undefined') return { clicked: true, tag: 'button', text: 'Mock Element' };
 
     let el: HTMLElement | null = null;
 
@@ -140,11 +140,17 @@ export class ContentPageTools {
       el.click();
     }
 
-    return { clicked: true, tag: el.tagName.toLowerCase() };
+    const text = (el.innerText || el.textContent || (el as HTMLInputElement).value || el.getAttribute('aria-label') || el.getAttribute('title') || '').trim();
+    return {
+      clicked: true,
+      tag: el.tagName.toLowerCase(),
+      id: el.id || undefined,
+      text: text ? (text.length > 100 ? text.slice(0, 100) + '…' : text) : undefined
+    };
   }
 
-  public static typeInElement(selector: string, text: string, clearFirst: boolean = true): { typed: boolean; length: number } {
-    if (typeof document === 'undefined') return { typed: true, length: text.length };
+  public static typeInElement(selector: string, text: string, clearFirst: boolean = true): { typed: boolean; length: number; text: string; label?: string } {
+    if (typeof document === 'undefined') return { typed: true, length: text.length, text };
     const el = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement;
     if (!el) {
       throw new Error(`Input element not found for selector: "${selector}"`);
@@ -171,6 +177,12 @@ export class ContentPageTools {
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
 
-    return { typed: true, length: el.value.length };
+    const label = (el.getAttribute('placeholder') || el.getAttribute('aria-label') || el.getAttribute('name') || el.id || '').trim();
+    return {
+      typed: true,
+      length: el.value.length,
+      text: finalValue,
+      label: label ? (label.length > 80 ? label.slice(0, 80) + '…' : label) : undefined
+    };
   }
 }

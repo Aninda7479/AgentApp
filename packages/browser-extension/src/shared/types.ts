@@ -182,7 +182,7 @@ export type ExtensionMessage =
   | { type: 'GET_MEMORY_PROFILE' }
   | { type: 'GET_LEARNED_INSIGHTS' }
   | { type: 'SYNC_SESSION'; payload: { sessionId: string; lastSeq?: number } }
-  | { type: 'REQUEST_TOOL_APPROVAL'; payload: { id: string; sessionId: string; tool: string; input: any } }
+  | { type: 'REQUEST_TOOL_APPROVAL'; payload: { id: string; sessionId: string; tool: string; input: any; elementSummary?: any } }
   | { type: 'TOOL_APPROVAL_RESPONSE'; payload: { id: string; approved: boolean } }
   | { type: 'GET_APPROVAL_MODE' }
   | { type: 'SET_APPROVAL_MODE'; payload: { mode: 'ask' | 'always' | 'never' } };
