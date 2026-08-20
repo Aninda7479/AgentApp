@@ -1,6 +1,8 @@
 import { Command } from 'commander';
 import { SettingsStorage, resolveConnection } from '@superagent/core';
 import { runUpdate } from '../commands/update.js';
+import { getSystemStatus, formatSystemStatus } from '../commands/status.js';
+import { handleStartupCommand } from '../commands/startup.js';
 
 /** Parsed CLI flags and options for the chat command. */
 export interface CliOptions {
@@ -24,15 +26,39 @@ export function createCliProgram(onExecute?: (options: CliOptions, prompt?: stri
   program
     .name('superagent')
     .description('SuperAgent Terminal CLI — Powered by BYOK AI Models')
-    .version('0.1.0')
+    .version('0.10.0')
     .exitOverride()
     .option('--models', 'List all available model IDs for easy copying')
     .option('--start-web', 'Start the SuperAgent web server and host the web app (same as `npm start:web`)')
     .option('--serve', 'Alias for --start-web — start the web server (homelab/server shorthand)')
     .option('--stop-web', 'Stop the running SuperAgent web server (even one started by the Desktop app)')
     .option('--web-status', 'Print whether the SuperAgent web server is running, and who started it')
+    .option('--status', 'Print full SuperAgent system status (CLI version, --serve status & port, connected devices)')
     .option('--web-port <port>', 'Port for the web server when using --start-web / --serve', '1469')
     .option('--serve-port <port>', 'Alias for --web-port — port for the web server', '1469');
+
+  program
+    .command('status')
+    .description('Display SuperAgent CLI version, web server (--serve) status & port, and connected devices')
+    .action(async () => {
+      const status = await getSystemStatus();
+      console.log(formatSystemStatus(status));
+      process.exit(0);
+    });
+
+  program
+    .command('startup [action]')
+    .description('Manage OS auto-start on boot (enable, disable, status)')
+    .option('--desktop', 'Target Desktop application instead of CLI server', false)
+    .option('--port <port>', 'Custom port for CLI server', '1469')
+    .action(async (action, options) => {
+      const args = [action || 'status'];
+      if (options.desktop) args.push('--desktop');
+      if (options.port) args.push(options.port);
+      const res = await handleStartupCommand(args);
+      console.log(res.message);
+      process.exit(res.success ? 0 : 1);
+    });
 
   program
     .command('chat [prompt]', { isDefault: true })
@@ -68,7 +94,6 @@ export function createCliProgram(onExecute?: (options: CliOptions, prompt?: stri
     });
 
   // `superagent update` — self-update the Core + CLI + Web install from npm
-  // (Option 1). Mirrors the desktop's in-app "Check for Updates" flow.
   program
     .command('update')
     .description('Update the SuperAgent CLI and web server to the latest published npm version')

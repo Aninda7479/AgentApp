@@ -18,13 +18,23 @@ echo "${CYAN}SuperAgent installer — Core + CLI + Web${NC}"
 echo "Checking latest release…"
 
 # 1. Primary: Extract version from web redirect (bypasses api.github.com 60 req/hr rate limits)
-VERSION=$(curl -sI -H "User-Agent: SuperAgent-Installer" "https://github.com/${REPO}/releases/latest" 2>/dev/null | grep -i '^location:' | sed 's/.*\/tag\/v\?//' | tr -d '\r\n')
+VERSION=$(curl -sI -H "User-Agent: SuperAgent-Installer" "https://github.com/${REPO}/releases/latest" 2>/dev/null | grep -i '^location:' | head -1 | tr -d '\r\n' | sed -e 's|.*/tag/||' -e 's|^v||' -e 's|^[ \t]*||' -e 's|[ \t]*$||')
+
+# Validate version format (must start with digit)
+case "$VERSION" in
+  [0-9]*.[0-9]*) ;;
+  *) VERSION="" ;;
+esac
 
 # 2. Fallback: Query GitHub API
 LATEST_JSON=""
 if [ -z "$VERSION" ]; then
   LATEST_JSON=$(curl -fsSL -H "User-Agent: SuperAgent-Installer" "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null || echo "")
-  VERSION=$(echo "$LATEST_JSON" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"v\?\([^"]*\)".*/\1/' || echo "")
+  VERSION=$(echo "$LATEST_JSON" | grep '"tag_name"' | head -1 | sed -e 's/.*"tag_name": *"[vV]\?\([^"]*\)".*/\1/' -e 's|^v||' || echo "")
+  case "$VERSION" in
+    [0-9]*.[0-9]*) ;;
+    *) VERSION="" ;;
+  esac
 fi
 
 if [ -z "$VERSION" ]; then
@@ -55,14 +65,14 @@ else
   fi
 fi
 
-ASSET="superagent-cli-${PLATFORM_KEY}.${EXT}"
+ASSET="superagent-cli-v${VERSION}-${PLATFORM_KEY}.${EXT}"
 URL=""
 if [ -n "$LATEST_JSON" ]; then
   URL=$(echo "$LATEST_JSON" | grep '"browser_download_url"' | grep "$PLATFORM_KEY" | head -1 | sed 's/.*"browser_download_url": *"\([^"]*\)".*/\1/')
 fi
 
 if [ -z "$URL" ]; then
-  URL="https://github.com/${REPO}/releases/download/v${VERSION}/superagent-cli-v${VERSION}-${PLATFORM_KEY}.${EXT}"
+  URL="https://github.com/${REPO}/releases/download/v${VERSION}/${ASSET}"
 fi
 
 if [ -w "/usr/local/bin" ]; then
@@ -181,19 +191,36 @@ fi
 rm -rf "$TMP"
 chmod +x "$TARGET_BIN"
 
+if [ "$OS" = "Darwin" ]; then
+  xattr -d com.apple.quarantine "$TARGET_BIN" 2>/dev/null || true
+  xattr -cr "$TARGET_BIN" 2>/dev/null || true
+fi
+
 # ── Update PATH in RC files if needed ────────────────────────────────────────
 PATH_ADDED=0
 PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
 case ":$PATH:" in
   *":$LAUNCHER_DIR:"*) ;;
   *)
-    for RC in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
-      if [ -f "$RC" ] && ! grep -q '\.local/bin' "$RC"; then
-        echo "" >> "$RC"
-        echo "$PATH_LINE" >> "$RC"
-        PATH_ADDED=1
+    RC_FOUND=0
+    for RC in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+      if [ -f "$RC" ]; then
+        RC_FOUND=1
+        if ! grep -q '\.local/bin' "$RC"; then
+          echo "" >> "$RC"
+          echo "$PATH_LINE" >> "$RC"
+          PATH_ADDED=1
+        fi
       fi
     done
+    if [ "$RC_FOUND" -eq 0 ]; then
+      if [ "$OS" = "Darwin" ]; then
+        echo "$PATH_LINE" >> "$HOME/.zshrc"
+      else
+        echo "$PATH_LINE" >> "$HOME/.bashrc"
+      fi
+      PATH_ADDED=1
+    fi
     ;;
 esac
 
@@ -204,9 +231,15 @@ echo ""
 case ":$PATH:" in
   *":$LAUNCHER_DIR:"*) ;;
   *)
-    echo "${CYAN}Note: Please update your current terminal's PATH by running:${NC}"
-    echo "    source ~/.bashrc"
-    echo ""
+    if [ "$OS" = "Darwin" ]; then
+      echo "${CYAN}Note: Please update your current terminal's PATH by running:${NC}"
+      echo "    source ~/.zshrc"
+      echo ""
+    else
+      echo "${CYAN}Note: Please update your current terminal's PATH by running:${NC}"
+      echo "    source ~/.bashrc"
+      echo ""
+    fi
     ;;
 esac
 

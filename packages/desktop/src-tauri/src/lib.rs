@@ -16,7 +16,12 @@ fn position_artifacts_window(window: &WebviewWindow) {
         let window_height = (540.0 * scale_factor) as i32;
 
         let x = (monitor_size.width as i32) - window_width - 16;
-        let y = (monitor_size.height as i32) - window_height - 56;
+
+        #[cfg(target_os = "macos")]
+        let y = (32.0 * scale_factor) as i32; // Drops down directly from macOS top menu bar
+
+        #[cfg(not(target_os = "macos"))]
+        let y = (monitor_size.height as i32) - window_height - 56; // Above bottom taskbar on Windows/Linux
 
         let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
     }
@@ -35,9 +40,29 @@ pub fn run() {
                 if let WindowEvent::Focused(false) = event {
                     let _ = window.hide();
                 }
+            } else if window.label() == "main" {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    // Minimize to tray instead of killing the entire app process
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .setup(|app| {
+            let args: Vec<String> = std::env::args().collect();
+            let is_dormant = args.iter().any(|arg| {
+                arg == "--autostart" || arg == "--hidden" || arg == "--minimized" || arg == "--background" || arg == "--dormant"
+            });
+
+            if let Some(main_window) = app.get_webview_window("main") {
+                if is_dormant {
+                    let _ = main_window.hide();
+                } else {
+                    let _ = main_window.show();
+                    let _ = main_window.set_focus();
+                }
+            }
+
             let show_item = MenuItemBuilder::with_id("show", "Show Main App").build(app)?;
             let artifacts_item = MenuItemBuilder::with_id("artifacts", "Artifacts Inspector").build(app)?;
             let quit_item = MenuItemBuilder::with_id("quit", "Quit SuperAgent").build(app)?;
@@ -125,8 +150,12 @@ pub fn run() {
             partner_import_json,
             partner_remove,
             partner_pick_model_file,
-            partner_pick_model_folder
+            partner_pick_model_folder,
+            autostart_enable,
+            autostart_disable,
+            autostart_is_enabled
         ])
         .run(tauri::generate_context!())
         .expect("error while running SuperAgent tauri application");
 }
+

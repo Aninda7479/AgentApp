@@ -42,6 +42,8 @@ Download an installer for your OS from the [desktop download page](https://anind
 or the [latest GitHub release](https://github.com/Aninda7479/AgentApp/releases/latest).
 Installers auto-update in place.
 
+> 💡 **macOS tip**: If macOS Gatekeeper shows *"SuperAgent is damaged and can't be opened"*, clear the quarantine flag by running: `xattr -cr /Applications/SuperAgent.app` (or click **Open Anyway** in **System Settings → Privacy & Security**).
+
 **Option 3 — Core + Browser Extension** (Manifest V3 for Chrome / Edge / Brave):
 
 Build and load the extension into your browser for persistent on-the-way side panel chat, site storage access, and DOM element/network inspection:

@@ -14,7 +14,8 @@ import {
   Monitor,
   Bot,
   Laptop,
-  CheckCircle
+  CheckCircle,
+  Power
 } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { getIpc } from '../lib/electron';
@@ -45,6 +46,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete, 
   const [confirmShellCommands, setConfirmShellCommands] = useState(true);
   const [unsandboxedActions, setUnsandboxedActions] = useState(false);
   const [internetAccessLevel, setInternetAccessLevel] = useState<'all' | 'observation' | 'none'>('all');
+  const [runOnStartup, setRunOnStartup] = useState(true);
+  const [closeToTray, setCloseToTray] = useState(true);
 
   const ipc = getIpc();
 
@@ -65,7 +68,9 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete, 
         workMode,
         confirmShellCommands,
         autoReviewPlan: true,
-        unsandboxedActions
+        unsandboxedActions,
+        openAtLogin: runOnStartup,
+        closeToTray: closeToTray
       },
       internetAccess: { level: internetAccessLevel }
     };
@@ -77,6 +82,13 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete, 
           ...currentSettings,
           ...settings
         });
+
+        // Register or unregister OS startup key
+        if (runOnStartup) {
+          await ipc.invoke('autostart-enable').catch(() => {});
+        } else {
+          await ipc.invoke('autostart-disable').catch(() => {});
+        }
       } catch (err) {
         console.error('Failed to write settings during onboarding:', err);
       }
@@ -378,6 +390,44 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete, 
                   </div>
                 </div>
 
+                {/* Background Service & System Startup */}
+                <div className="space-y-3 p-4 rounded-xl border border-brand-border bg-brand-bg/20">
+                  <div className="flex items-start gap-3">
+                    <Power size={20} className="text-[color:var(--brand-accent)] shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold block">Background Service &amp; OS Startup</span>
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-[color:var(--brand-accent-tint)] text-[color:var(--brand-accent)] border border-[color:var(--brand-accent-border)]">
+                          Recommended
+                        </span>
+                      </div>
+                      <p className="text-xs text-brand-textMuted">
+                        Automatically launch SuperAgent on system boot. SuperAgent stays dormant in the background with the system tray icon always accessible for instant AI actions, Voice dictation, and Artifacts.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-2.5 pt-2">
+                    <label className="flex items-center gap-2.5 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={runOnStartup}
+                        onChange={e => setRunOnStartup(e.target.checked)}
+                        className="rounded border-brand-border accent-[color:var(--brand-accent)]"
+                      />
+                      <span className="text-xs text-brand-textMain font-medium">Launch dormant on system startup (System tray available)</span>
+                    </label>
+                    <label className="flex items-center gap-2.5 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={closeToTray}
+                        onChange={e => setCloseToTray(e.target.checked)}
+                        className="rounded border-brand-border accent-[color:var(--brand-accent)]"
+                      />
+                      <span className="text-xs text-brand-textMain font-medium">Minimize to system tray when closing window</span>
+                    </label>
+                  </div>
+                </div>
+
                 {/* Internet access */}
                 <div className="space-y-2 p-4 rounded-xl border border-brand-border bg-brand-bg/20">
                   <div className="flex items-center gap-2">
@@ -428,6 +478,10 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete, 
                 <div className="flex justify-between">
                   <span>Safety Confirmations:</span>
                   <span className="font-semibold text-brand-textMain">{confirmShellCommands ? 'Enabled' : 'Disabled'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Run on Startup:</span>
+                  <span className="font-semibold text-brand-textMain">{runOnStartup ? 'Enabled (Dormant in Tray)' : 'Disabled'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Configured Providers:</span>

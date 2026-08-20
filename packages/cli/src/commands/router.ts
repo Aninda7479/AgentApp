@@ -159,7 +159,8 @@ export async function processSlashCommand(input: string, context: SessionContext
     return handleModelCommand(args, context).message;
   }
   if (cmd === 'status') {
-    return handleStatusCommand(args, context).message;
+    const res = await handleStatusCommand(args, context);
+    return res.message;
   }
   if (cmd === 'theme') {
     return handleThemeCommand(args, context).message;

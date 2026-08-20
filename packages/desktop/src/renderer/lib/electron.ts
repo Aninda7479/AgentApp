@@ -144,6 +144,12 @@ const SILENT_IPC_CHANNELS = new Set<string>([
   'telegram-config-get',
   'telegram-config-save',
   'telegram-send',
+  'autostart-enable',
+  'autostart-disable',
+  'autostart-is-enabled',
+  'autostart_enable',
+  'autostart_disable',
+  'autostart_is_enabled',
 ]);
 
 function wrapInvoke(fn: (channel: string, ...args: any[]) => Promise<any>) {

@@ -32,6 +32,14 @@ export interface UpdateOptions {
 /** Fetches the latest GitHub release version via web redirect or API fallback. */
 function getLatestGitHubVersion(): Promise<string | null> {
   return new Promise<string | null>((resolve) => {
+    let resolved = false;
+    const done = (val: string | null) => {
+      if (!resolved) {
+        resolved = true;
+        resolve(val);
+      }
+    };
+
     // 1. Primary: Extract version from web redirect (bypasses api.github.com 60 req/hr rate limit)
     const req = https.request(
       `https://github.com/${REPO}/releases/latest`,
@@ -41,40 +49,54 @@ function getLatestGitHubVersion(): Promise<string | null> {
         if (location) {
           const match = location.match(/\/tag\/v?([^/]+)$/);
           if (match && match[1]) {
-            return resolve(match[1].trim());
+            return done(match[1].trim());
           }
         }
-        fetchViaApi().then(resolve);
+        fetchViaApi().then(done);
       }
     );
-    req.on('error', () => fetchViaApi().then(resolve));
-    req.setTimeout(4000, () => { req.destroy(); fetchViaApi().then(resolve); });
+    req.on('error', () => fetchViaApi().then(done));
+    req.setTimeout(4000, () => {
+      req.destroy();
+      fetchViaApi().then(done);
+    });
     req.end();
   });
 }
 
 function fetchViaApi(): Promise<string | null> {
   return new Promise<string | null>((resolve) => {
+    let resolved = false;
+    const done = (val: string | null) => {
+      if (!resolved) {
+        resolved = true;
+        resolve(val);
+      }
+    };
+
     const req = https.get(
       RELEASES_API,
       { headers: { 'User-Agent': 'superagent-cli', Accept: 'application/vnd.github+json' } },
       (res) => {
-        if (res.statusCode !== 200) return resolve(null);
+        if (res.statusCode !== 200) return done(null);
         let data = '';
         res.on('data', (chunk) => { data += chunk; });
         res.on('end', () => {
           try {
             const json = JSON.parse(data);
             const tag = json.tag_name as string | undefined;
-            resolve(tag ? tag.replace(/^v/, '') : null);
+            done(tag ? tag.replace(/^v/, '') : null);
           } catch {
-            resolve(null);
+            done(null);
           }
         });
       }
     );
-    req.on('error', () => resolve(null));
-    req.setTimeout(4000, () => { req.destroy(); resolve(null); });
+    req.on('error', () => done(null));
+    req.setTimeout(4000, () => {
+      req.destroy();
+      done(null);
+    });
   });
 }
 
