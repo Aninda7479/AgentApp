@@ -55,10 +55,16 @@ class SidePanelController {
   private btnRemoveContext = document.getElementById('btnRemoveContext') as HTMLButtonElement;
   private btnAttachContext = document.getElementById('btnAttachContext') as HTMLButtonElement;
 
-  // Approval Dropdown
+  // Approval Dropdown & Action Approval Card
   private btnApprovalTrigger = document.getElementById('btnApprovalTrigger') as HTMLButtonElement;
   private approvalMenu = document.getElementById('approvalMenu') as HTMLElement;
   private currentApprovalText = document.getElementById('currentApprovalText') as HTMLElement;
+  private approvalCard = document.getElementById('approvalCard') as HTMLElement;
+  private approvalCardBadge = document.getElementById('approvalCardBadge') as HTMLElement;
+  private approvalCardDesc = document.getElementById('approvalCardDesc') as HTMLElement;
+  private btnApproveAction = document.getElementById('btnApproveAction') as HTMLButtonElement;
+  private btnDenyAction = document.getElementById('btnDenyAction') as HTMLButtonElement;
+  private currentPendingApprovalId: string | null = null;
 
   // Dynamic Model Selector Popover
   private btnModelTrigger = document.getElementById('btnModelTrigger') as HTMLButtonElement;
@@ -80,6 +86,7 @@ class SidePanelController {
 
   constructor() {
     this.bindEvents();
+    this.initApprovalMode();
     this.checkAuthStatus();
     this.loadRealModels();
     this.listenToAgentEvents();
@@ -88,6 +95,13 @@ class SidePanelController {
     // Periodic heartbeat check to detect server drops and automatic reconnects
     setInterval(() => this.checkAuthStatus(), 5000);
     window.addEventListener('focus', () => this.checkAuthStatus());
+  }
+
+  private async initApprovalMode(): Promise<void> {
+    try {
+      const mode = await ExtensionSessionStore.getApprovalMode();
+      this.setApprovalMode(mode, false);
+    } catch {}
   }
 
   private async initSessionId(): Promise<void> {
@@ -111,6 +125,8 @@ class SidePanelController {
     MessageBus.onMessage((msg) => {
       if (msg.type === 'AGENT_EVENT' && msg.payload) {
         this.handleAgentEvent(msg.payload);
+      } else if (msg.type === 'REQUEST_TOOL_APPROVAL' && msg.payload) {
+        this.handleToolApprovalRequest(msg.payload);
       } else if (msg.type === 'CONNECTION_STATE_CHANGED') {
         if (!msg.payload?.connected) {
           this.setOfflineState();
@@ -380,6 +396,10 @@ class SidePanelController {
       if (e.key === 'Enter') this.handleLogin();
     });
 
+    // Approval Action Buttons (in composer approval card)
+    this.btnApproveAction?.addEventListener('click', () => this.respondToApproval(true));
+    this.btnDenyAction?.addEventListener('click', () => this.respondToApproval(false));
+
     // Inspector Action Buttons
     document.getElementById('btnInspectLocalStorage')?.addEventListener('click', () => this.inspectStorage('get_local_storage'));
     document.getElementById('btnInspectSessionStorage')?.addEventListener('click', () => this.inspectStorage('get_session_storage'));
@@ -392,7 +412,7 @@ class SidePanelController {
     document.getElementById('btnInspectPicker')?.addEventListener('click', () => this.inspectPickerAction());
   }
 
-  private setApprovalMode(mode: 'ask' | 'always' | 'never'): void {
+  private setApprovalMode(mode: 'ask' | 'always' | 'never', persist: boolean = true): void {
     this.approvalMode = mode;
     if (mode === 'ask') {
       this.currentApprovalText.textContent = 'Ask';
@@ -401,6 +421,90 @@ class SidePanelController {
     } else {
       this.currentApprovalText.textContent = 'Never';
     }
+    if (persist) {
+      ExtensionSessionStore.setApprovalMode(mode);
+      MessageBus.send({
+        type: 'SET_APPROVAL_MODE',
+        payload: { mode }
+      }).catch(() => {});
+    }
+  }
+
+  private handleToolApprovalRequest(payload: { id: string; sessionId: string; tool: string; input: any }): void {
+    const { id, sessionId, tool, input } = payload;
+    if (sessionId && sessionId !== this.currentSessionId) return;
+
+    this.currentPendingApprovalId = id;
+
+    let actionBadge = 'Action';
+    let description = '';
+
+    if (tool === 'click_element') {
+      actionBadge = 'Click Element';
+      description = `Click element: "${input.selector || 'button'}"`;
+    } else if (tool === 'type_in_element') {
+      actionBadge = 'Type Text';
+      description = `Type "${input.text || ''}" into: "${input.selector || 'input'}"`;
+    } else {
+      actionBadge = tool.replace(/_/g, ' ');
+      description = `Execute ${tool} with: ${JSON.stringify(input)}`;
+    }
+
+    if (this.approvalCardBadge) this.approvalCardBadge.textContent = actionBadge;
+    if (this.approvalCardDesc) this.approvalCardDesc.textContent = description;
+
+    // Switch composer layout to approval card
+    if (this.chatInput) this.chatInput.style.display = 'none';
+    const hint = document.querySelector('.composer-hint') as HTMLElement;
+    if (hint) hint.style.display = 'none';
+    const toolbar = document.querySelector('.composer-toolbar') as HTMLElement;
+    if (toolbar) toolbar.style.display = 'none';
+    if (this.approvalCard) this.approvalCard.style.display = 'flex';
+
+    // Also add a visible prompt in chat
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble tool';
+    bubble.style.borderColor = '#fbbf24';
+    bubble.innerHTML = `
+      <div class="tool-header" style="color: #fbbf24;">
+        <span>🛡️ Action Approval Required: <strong>${actionBadge}</strong></span>
+      </div>
+      <div class="tool-output-box">${description}</div>
+    `;
+    this.messagesContainer.appendChild(bubble);
+    this.scrollToBottom();
+  }
+
+  private respondToApproval(approved: boolean): void {
+    if (!this.currentPendingApprovalId) return;
+    const id = this.currentPendingApprovalId;
+    this.currentPendingApprovalId = null;
+
+    MessageBus.send({
+      type: 'TOOL_APPROVAL_RESPONSE',
+      payload: { id, approved }
+    }).catch(() => {});
+
+    // Restore standard composer textarea layout
+    if (this.approvalCard) this.approvalCard.style.display = 'none';
+    if (this.chatInput) this.chatInput.style.display = 'block';
+    const hint = document.querySelector('.composer-hint') as HTMLElement;
+    if (hint) hint.style.display = 'block';
+    const toolbar = document.querySelector('.composer-toolbar') as HTMLElement;
+    if (toolbar) toolbar.style.display = 'flex';
+
+    // Chat status notification
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble tool';
+    if (approved) {
+      bubble.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+      bubble.innerHTML = `<div class="tool-header" style="color: #10b981;"><span>✓ Action Approved: Executing on webpage...</span></div>`;
+    } else {
+      bubble.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+      bubble.innerHTML = `<div class="tool-header" style="color: #ef4444;"><span>✕ Action Denied by User</span></div>`;
+    }
+    this.messagesContainer.appendChild(bubble);
+    this.scrollToBottom();
   }
 
   private async getActiveWebTab(): Promise<chrome.tabs.Tab | null> {
@@ -748,6 +852,16 @@ class SidePanelController {
     this.agentStepsContainer.innerHTML = '';
     this.messagesContainer.appendChild(this.emptyState);
     this.emptyState.style.display = 'flex';
+
+    if (this.currentPendingApprovalId) {
+      this.currentPendingApprovalId = null;
+      if (this.approvalCard) this.approvalCard.style.display = 'none';
+      if (this.chatInput) this.chatInput.style.display = 'block';
+      const hint = document.querySelector('.composer-hint') as HTMLElement;
+      if (hint) hint.style.display = 'block';
+      const toolbar = document.querySelector('.composer-toolbar') as HTMLElement;
+      if (toolbar) toolbar.style.display = 'flex';
+    }
   }
 
   // ─── Sending & Executing ────────────────────────────────────────────────────
@@ -845,6 +959,15 @@ class SidePanelController {
       this.btnSend.innerHTML = `
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
       `;
+      if (this.currentPendingApprovalId) {
+        this.currentPendingApprovalId = null;
+        if (this.approvalCard) this.approvalCard.style.display = 'none';
+        if (this.chatInput) this.chatInput.style.display = 'block';
+        const hint = document.querySelector('.composer-hint') as HTMLElement;
+        if (hint) hint.style.display = 'block';
+        const toolbar = document.querySelector('.composer-toolbar') as HTMLElement;
+        if (toolbar) toolbar.style.display = 'flex';
+      }
     }
   }
 

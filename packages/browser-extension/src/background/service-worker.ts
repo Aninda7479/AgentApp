@@ -23,6 +23,55 @@ CRITICAL INSTRUCTION FOR QUIZZES / FORMS / PAGE ACTIONS:
   6. Re-inspect the page with browser_get_page_content or browser_get_page_elements and repeat for all remaining questions until the quiz is finished and the final score screen appears!
   7. Only provide your final summary and score in chat after you have completed all questions and clicked through the live quiz.`;
 const sessionContextMap = new Map<string, string>();
+const pendingApprovals = new Map<string, (approved: boolean) => void>();
+
+async function requestToolApproval(id: string, sessionId: string, tool: string, input: any): Promise<boolean> {
+  const approvalMode = await ExtensionSessionStore.getApprovalMode();
+  if (approvalMode === 'always') return true;
+  if (approvalMode === 'never') return false;
+
+  // Read-only inspection tools are auto-approved in 'ask' mode
+  const readOnlyTools = [
+    'extract_page_content',
+    'query_elements',
+    'capture_screenshot',
+    'get_page_metadata',
+    'find_on_page',
+    'get_element_styles',
+    'get_element_tree',
+    'get_element_attributes',
+    'measure_element',
+    'get_cookies',
+    'get_network_requests',
+    'get_failed_requests',
+    'capture_network_har',
+    'get_local_storage',
+    'get_session_storage',
+    'list_indexeddb_databases',
+    'query_indexeddb',
+    'get_cache_storage'
+  ];
+  if (readOnlyTools.includes(tool)) {
+    return true;
+  }
+
+  // Modifying tools (click_element, type_in_element, etc.) request user approval in sidepanel
+  return new Promise<boolean>((resolve) => {
+    pendingApprovals.set(id, resolve);
+    safeBroadcast({
+      type: 'REQUEST_TOOL_APPROVAL',
+      payload: { id, sessionId, tool, input }
+    });
+
+    // 3 minute fallback timeout
+    setTimeout(() => {
+      if (pendingApprovals.has(id)) {
+        pendingApprovals.delete(id);
+        resolve(false);
+      }
+    }, 180000);
+  });
+}
 
 // Initialize network request observation & verify session
 NetworkObserver.initialize();
@@ -33,6 +82,17 @@ apiClient.onWebSocketEvent(async (event) => {
   if (event.channel === 'execute-client-tool' && event.data) {
     const { id, sessionId, tool, input } = event.data;
     try {
+      const approved = await requestToolApproval(id, sessionId, tool, input || {});
+      if (!approved) {
+        apiClient.sendWebSocket({
+          action: 'CLIENT_TOOL_RESULT',
+          id,
+          sessionId,
+          result: { success: false, error: 'User denied the action on the webpage' }
+        });
+        return;
+      }
+
       const activeTab = await getActiveWebTab();
       const res = await ToolRelay.execute({
         tool,
@@ -56,6 +116,17 @@ apiClient.onWebSocketEvent(async (event) => {
   } else if (event.channel === 'session-sync' && event.data?.pendingTool) {
     const { id, sessionId, tool, input } = event.data.pendingTool;
     try {
+      const approved = await requestToolApproval(id, sessionId, tool, input || {});
+      if (!approved) {
+        apiClient.sendWebSocket({
+          action: 'CLIENT_TOOL_RESULT',
+          id,
+          sessionId,
+          result: { success: false, error: 'User denied the action on the webpage' }
+        });
+        return;
+      }
+
       const activeTab = await getActiveWebTab();
       const res = await ToolRelay.execute({
         tool,
@@ -359,6 +430,25 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendRes
 
       case 'GET_LEARNED_INSIGHTS': {
         return await MemoryBridge.getLearnedInsights();
+      }
+
+      case 'TOOL_APPROVAL_RESPONSE': {
+        const { id, approved } = message.payload || {};
+        if (id && pendingApprovals.has(id)) {
+          const resolver = pendingApprovals.get(id);
+          pendingApprovals.delete(id);
+          resolver?.(Boolean(approved));
+        }
+        return { success: true };
+      }
+
+      case 'GET_APPROVAL_MODE': {
+        return await ExtensionSessionStore.getApprovalMode();
+      }
+
+      case 'SET_APPROVAL_MODE': {
+        await ExtensionSessionStore.setApprovalMode(message.payload?.mode || 'ask');
+        return { success: true };
       }
 
       default:

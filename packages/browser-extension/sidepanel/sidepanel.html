@@ -98,6 +98,30 @@
           </div>
         </div>
 
+        <!-- Approval Request Card (shown in 'ask' mode when action tool requires user confirmation) -->
+        <div id="approvalCard" class="composer-approval-card" style="display: none;">
+          <div class="approval-card-header">
+            <span class="approval-card-icon">🛡️</span>
+            <div class="approval-card-title-group">
+              <span class="approval-card-title">Action Approval Required</span>
+              <span id="approvalCardBadge" class="approval-card-badge">Click Element</span>
+            </div>
+          </div>
+          <div id="approvalCardDesc" class="approval-card-desc">
+            <!-- Dynamically populated: e.g. "Click element: div#adiv1" -->
+          </div>
+          <div class="approval-card-actions">
+            <button id="btnApproveAction" class="btn-approval-approve" type="button">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+              Approve
+            </button>
+            <button id="btnDenyAction" class="btn-approval-deny" type="button">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              Deny
+            </button>
+          </div>
+        </div>
+
         <!-- Textarea Input -->
         <textarea
           id="chatInput"

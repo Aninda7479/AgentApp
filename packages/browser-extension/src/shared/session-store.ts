@@ -83,6 +83,15 @@ export class ExtensionSessionStore {
     await setStorageItem(STORAGE_KEYS.AUTH_STATE, state, 'session');
   }
 
+  public static async getApprovalMode(): Promise<'ask' | 'always' | 'never'> {
+    const mode = await getStorageItem<'ask' | 'always' | 'never'>(STORAGE_KEYS.APPROVAL_MODE, 'local');
+    return mode || 'ask';
+  }
+
+  public static async setApprovalMode(mode: 'ask' | 'always' | 'never'): Promise<void> {
+    await setStorageItem(STORAGE_KEYS.APPROVAL_MODE, mode, 'local');
+  }
+
   public static async getCurrentSessionId(): Promise<string> {
     const id = await getStorageItem<string>(STORAGE_KEYS.CURRENT_SESSION_ID, 'local');
     if (!id) {
