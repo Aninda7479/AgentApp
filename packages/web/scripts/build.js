@@ -87,24 +87,45 @@ async function build() {
   fs.copyFileSync(path.join(webRoot, 'src/sw.js'), path.join(distDir, 'sw.js'));
   fs.copyFileSync(path.join(webRoot, 'src/icon.png'), path.join(distDir, 'icon.png'));
   fs.copyFileSync(path.join(webRoot, 'src/icon.svg'), path.join(distDir, 'icon.svg'));
-  console.log('[Build] PWA assets and brand logos copied to dist.');
-
-  // 4. Resolve and Copy CSS (use desktop index.css or built desktop/dist/index.css)
+  // 4. Resolve and Compile Tailwind CSS
   const desktopBuiltCss = path.join(desktopRoot, 'dist/index.css');
   const desktopSrcCss = path.join(desktopRoot, 'src/index.css');
   const destCss = path.join(distDir, 'index.css');
 
-  if (fs.existsSync(desktopBuiltCss)) {
-    fs.copyFileSync(desktopBuiltCss, destCss);
-    console.log('[Build] Copied compiled Tailwind CSS from desktop build.');
-  } else if (fs.existsSync(desktopSrcCss)) {
-    // If not compiled, copy raw CSS file as fallback
-    fs.copyFileSync(desktopSrcCss, destCss);
-    console.log('[Build] Copied raw index.css.');
-  } else {
-    // Write an empty CSS file if not found
-    fs.writeFileSync(destCss, '/* Tailored CSS */');
-    console.log('[Build] Created placeholder index.css.');
+  let compiled = false;
+  try {
+    const { execSync } = await import('child_process');
+    console.log('[Build] Compiling Tailwind CSS for web client...');
+    execSync(`npx @tailwindcss/cli -i "${desktopSrcCss}" -o "${destCss}" --minify`, {
+      cwd: desktopRoot,
+      stdio: 'inherit',
+    });
+    compiled = true;
+    console.log('[Build] ✅ Tailwind CSS successfully compiled to dist/index.css.');
+  } catch (err) {
+    console.warn('[Build] ⚠️ Tailwind CLI compile error, checking for pre-built CSS:', err.message);
+  }
+
+  if (!compiled) {
+    if (fs.existsSync(desktopBuiltCss)) {
+      fs.copyFileSync(desktopBuiltCss, destCss);
+      console.log('[Build] Copied pre-compiled Tailwind CSS from desktop build.');
+    } else if (fs.existsSync(desktopSrcCss)) {
+      fs.copyFileSync(desktopSrcCss, destCss);
+      console.warn('[Build] ⚠️ Copied raw index.css.');
+    } else {
+      fs.writeFileSync(destCss, '/* Tailored CSS */');
+      console.log('[Build] Created placeholder index.css.');
+    }
+  }
+
+  // 4b. Copy desktop static assets to web dist
+  const desktopAssetsDir = path.join(desktopRoot, 'assets');
+  const webAssetsDir = path.join(distDir, 'assets');
+  if (fs.existsSync(desktopAssetsDir)) {
+    fs.mkdirSync(webAssetsDir, { recursive: true });
+    fs.cpSync(desktopAssetsDir, webAssetsDir, { recursive: true });
+    console.log('[Build] Copied desktop static assets to web dist.');
   }
 
   console.log('[Build] Complete build successful.');

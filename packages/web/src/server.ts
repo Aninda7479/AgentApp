@@ -1901,9 +1901,24 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
 
 // ─── Static Web Asset Serving ────────────────────────────────────────────────
 const distPath = webDistDir;
-app.use(express.static(distPath));
+app.use(express.static(distPath, {
+  maxAge: '1d',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    } else if (filePath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    }
+  }
+}));
 
 app.get('*', (req, res) => {
+  // If requesting a static asset file with an extension that was not found, return 404
+  if (/\.(css|js|map|png|svg|ico|json|woff|woff2|ttf|eot)$/i.test(req.path)) {
+    res.status(404).send(`File not found: ${req.path}`);
+    return;
+  }
+
   const filePath = path.join(distPath, 'index.html');
   try {
     if (fs.existsSync(filePath)) {

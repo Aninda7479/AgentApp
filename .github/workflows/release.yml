@@ -134,9 +134,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build core & web packages
+      - name: Build core, desktop UI, web & cli packages
         run: |
           npm run build --workspace=@superagent/core
+          npm run build:desktop-ui
           npm run build --workspace=@superagent/web
           npm run build --workspace=@superagent/cli
 
