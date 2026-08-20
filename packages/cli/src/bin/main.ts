@@ -54,6 +54,30 @@ if (process.argv.includes('--web-status')) {
   process.exit(0);
 }
 
+if (process.argv[2] === 'status' || process.argv.includes('--status')) {
+  const { getSystemStatus, formatSystemStatus } = await import('../commands/status.js');
+  const status = await getSystemStatus();
+  console.log(formatSystemStatus(status));
+  process.exit(0);
+}
+
+if (
+  process.argv[2] === 'startup' ||
+  process.argv.includes('--startup-enable') ||
+  process.argv.includes('--startup-disable') ||
+  process.argv.includes('--startup-status')
+) {
+  const { handleStartupCommand } = await import('../commands/startup.js');
+  const startupIdx = process.argv.indexOf('startup');
+  let args = startupIdx !== -1 ? process.argv.slice(startupIdx + 1) : [];
+  if (process.argv.includes('--startup-enable')) args = ['enable'];
+  if (process.argv.includes('--startup-disable')) args = ['disable'];
+  if (process.argv.includes('--startup-status')) args = ['status'];
+  const res = await handleStartupCommand(args);
+  console.log(res.message);
+  process.exit(res.success ? 0 : 1);
+}
+
 // `superagent --start-web` / `superagent --serve` launches the self-hosted web
 // server (the same host build the Web package runs) and keeps the CLI process
 // alive as its parent. Intercept before commander parses so the chat TUI never renders.

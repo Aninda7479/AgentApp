@@ -111,4 +111,5 @@ export * from './studio/3d/index.js';
 export * from './providers/simple-chat.js';
 export * from './providers/title-generator.js';
 export * from './prompts/index.js';
+export * from './startup/autostart.js';
 

@@ -661,3 +661,139 @@ pub async fn partner_pick_model_folder(app: AppHandle) -> Result<Option<String>,
 
     rx.await.map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn autostart_enable() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(current_exe) = std::env::current_exe() {
+            let exe_str = current_exe.to_string_lossy().to_string();
+            let val = format!("\"{}\" --autostart", exe_str);
+            let status = std::process::Command::new("reg")
+                .args(["add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "SuperAgentDesktop", "/t", "REG_SZ", "/d", &val, "/f"])
+                .status()
+                .map_err(|e| e.to_string())?;
+            if status.success() {
+                return Ok("Autostart enabled for Windows".to_string());
+            } else {
+                return Err("Failed to register Windows startup key".to_string());
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let plist_dir = std::path::PathBuf::from(&home).join("Library/LaunchAgents");
+            let _ = fs::create_dir_all(&plist_dir);
+            let plist_file = plist_dir.join("com.opensource.agentapp.desktop.plist");
+            if let Ok(current_exe) = std::env::current_exe() {
+                let exe_str = current_exe.to_string_lossy().to_string();
+                let content = format!(
+                    r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.opensource.agentapp.desktop</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>{}</string>
+      <string>--autostart</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+  </dict>
+</plist>"#,
+                    exe_str
+                );
+                fs::write(plist_file, content).map_err(|e| e.to_string())?;
+                return Ok("Autostart enabled for macOS".to_string());
+            }
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let autostart_dir = std::path::PathBuf::from(&home).join(".config/autostart");
+            let _ = fs::create_dir_all(&autostart_dir);
+            let desktop_file = autostart_dir.join("superagent.desktop");
+            if let Ok(current_exe) = std::env::current_exe() {
+                let exe_str = current_exe.to_string_lossy().to_string();
+                let content = format!(
+                    "[Desktop Entry]\nType=Application\nExec=\"{}\" --autostart\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nName=SuperAgent\nComment=SuperAgent AI Assistant\n",
+                    exe_str
+                );
+                fs::write(desktop_file, content).map_err(|e| e.to_string())?;
+                return Ok("Autostart enabled for Linux".to_string());
+            }
+        }
+    }
+    Ok("Autostart enabled".to_string())
+}
+
+#[tauri::command]
+pub fn autostart_disable() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("reg")
+            .args(["delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "SuperAgentDesktop", "/f"])
+            .status();
+        return Ok("Autostart disabled for Windows".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let plist_file = std::path::PathBuf::from(&home).join("Library/LaunchAgents/com.opensource.agentapp.desktop.plist");
+            if plist_file.exists() {
+                let _ = fs::remove_file(plist_file);
+            }
+        }
+        return Ok("Autostart disabled for macOS".to_string());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let desktop_file = std::path::PathBuf::from(&home).join(".config/autostart/superagent.desktop");
+            if desktop_file.exists() {
+                let _ = fs::remove_file(desktop_file);
+            }
+        }
+        return Ok("Autostart disabled for Linux".to_string());
+    }
+    #[allow(unreachable_code)]
+    Ok("Autostart disabled".to_string())
+}
+
+#[tauri::command]
+pub fn autostart_is_enabled() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(output) = std::process::Command::new("reg")
+            .args(["query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "SuperAgentDesktop"])
+            .output()
+        {
+            let out_str = String::from_utf8_lossy(&output.stdout);
+            return out_str.contains("SuperAgentDesktop");
+        }
+        return false;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let plist_file = std::path::PathBuf::from(&home).join("Library/LaunchAgents/com.opensource.agentapp.desktop.plist");
+            return plist_file.exists();
+        }
+        return false;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let desktop_file = std::path::PathBuf::from(&home).join(".config/autostart/superagent.desktop");
+            return desktop_file.exists();
+        }
+        return false;
+    }
+    #[allow(unreachable_code)]
+    false
+}
+

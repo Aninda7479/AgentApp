@@ -33,7 +33,7 @@ import { handlePermissionsCommand } from './permissions.js';
 import { handleBtwCommand } from './btw.js';
 import { handleVerifyCommand } from './verify.js';
 import { PermissionLevel } from '../shortcuts/permissions.js';
-
+import { registerStartupCommand } from './startup.js';
 
 /** Converts a CLICommandResult into the router's SlashCommandResult shape. */
 function toSlashResult(command: string, res: CLICommandResult): SlashCommandResult {
@@ -116,6 +116,7 @@ export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRou
   registerLastCommand(router, { getMessages });
   registerExecSlashCommand(router, { permission });
   registerAttachCommand(router, { pendingAttachments });
+  registerStartupCommand(router);
 
   router.register(
     'model',
@@ -129,11 +130,11 @@ export function buildSlashCommandRouter(deps: SlashCommandDeps): SlashCommandRou
 
   router.register(
     'status',
-    (ctx: SlashCommandContext) => toSlashResult('status', handleStatusCommand(ctx.args, session)),
+    async (ctx: SlashCommandContext) => toSlashResult('status', await handleStatusCommand(ctx.args, session)),
     {
       description: 'Show session status and token usage meter',
       aliases: ['stat'],
-      usage: '/status'
+      usage: '/status [system]'
     }
   );
 

@@ -89,3 +89,45 @@ export async function closeAppWindow(): Promise<void> {
     (window as any).electron.closeWindow();
   }
 }
+
+export async function enableAutostart(): Promise<boolean> {
+  if (isTauriEnv()) {
+    try {
+      await invokeCommand('autostart_enable');
+      return true;
+    } catch {
+      return false;
+    }
+  } else if (typeof window !== 'undefined' && (window as any).electron?.ipcRenderer) {
+    return (window as any).electron.ipcRenderer.invoke('autostart-enable');
+  }
+  return false;
+}
+
+export async function disableAutostart(): Promise<boolean> {
+  if (isTauriEnv()) {
+    try {
+      await invokeCommand('autostart_disable');
+      return true;
+    } catch {
+      return false;
+    }
+  } else if (typeof window !== 'undefined' && (window as any).electron?.ipcRenderer) {
+    return (window as any).electron.ipcRenderer.invoke('autostart-disable');
+  }
+  return false;
+}
+
+export async function isAutostartEnabled(): Promise<boolean> {
+  if (isTauriEnv()) {
+    try {
+      return await invokeCommand<boolean>('autostart_is_enabled');
+    } catch {
+      return false;
+    }
+  } else if (typeof window !== 'undefined' && (window as any).electron?.ipcRenderer) {
+    return (window as any).electron.ipcRenderer.invoke('autostart-is-enabled');
+  }
+  return false;
+}
+

@@ -218,7 +218,15 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = (props) => {
   };
 
   const updateGeneralSetting = (key: string, value: boolean) => {
-    if (key === 'openAtLogin') setOpenAtLogin(value);
+    if (key === 'openAtLogin') {
+      setOpenAtLogin(value);
+      const ipc = getIpc();
+      if (value) {
+        ipc?.invoke('autostart-enable').catch((err: any) => console.error('Failed enabling OS autostart:', err));
+      } else {
+        ipc?.invoke('autostart-disable').catch((err: any) => console.error('Failed disabling OS autostart:', err));
+      }
+    }
     if (key === 'closeToTray') setCloseToTray(value);
 
     const ipc = getIpc();
