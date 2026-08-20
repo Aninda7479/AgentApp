@@ -60,5 +60,11 @@ export const faqs = [
     a: (
       <p>Run <code style={code}>npm run build:ext</code> to compile the extension to <code style={code}>packages/browser-extension/dist</code>. Then navigate to <code style={code}>chrome://extensions</code>, turn on <b>Developer mode</b>, click <b>Load unpacked</b>, and select the <code style={code}>dist</code> folder. Start the backend with <code style={code}>npm run dev:web</code> and open the side panel.</p>
     )
+  },
+  {
+    q: 'macOS says "SuperAgent is damaged and can\'t be opened" — how do I open it?',
+    a: (
+      <p>Because SuperAgent is an open-source application, it is distributed without paid Apple Developer ID notarization. Modern macOS (Sonoma, Sequoia, Ventura) automatically flags downloaded apps with a quarantine attribute. To clear it and run SuperAgent immediately, open Terminal and run: <code style={code}>xattr -cr /Applications/SuperAgent.app</code>. Alternatively, go to <b>System Settings → Privacy &amp; Security</b> and click <b>Open Anyway</b>.</p>
+    )
   }
 ]

@@ -16,7 +16,12 @@ fn position_artifacts_window(window: &WebviewWindow) {
         let window_height = (540.0 * scale_factor) as i32;
 
         let x = (monitor_size.width as i32) - window_width - 16;
-        let y = (monitor_size.height as i32) - window_height - 56;
+
+        #[cfg(target_os = "macos")]
+        let y = (32.0 * scale_factor) as i32; // Drops down directly from macOS top menu bar
+
+        #[cfg(not(target_os = "macos"))]
+        let y = (monitor_size.height as i32) - window_height - 56; // Above bottom taskbar on Windows/Linux
 
         let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
     }

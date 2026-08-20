@@ -168,6 +168,12 @@ const notes = `\
 
 ${desktopTable}
 
+> 💡 **macOS Notice**: If macOS Gatekeeper shows *"SuperAgent is damaged and can't be opened"*, run in Terminal:
+> ```bash
+> xattr -cr /Applications/SuperAgent.app
+> ```
+> Or go to **System Settings → Privacy & Security** and click **Open Anyway**.
+
 ---
 
 ### 🧩 Browser Extension

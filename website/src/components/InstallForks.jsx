@@ -131,6 +131,7 @@ export function CliFork() {
 export function DesktopFork() {
   const release = useLatestRelease()
   const [activeOs, setActiveOs] = useState(null)
+  const [copied, copy] = useCopy()
 
   const currentOs = activeOs || release.userOs || 'windows'
 
@@ -245,6 +246,37 @@ export function DesktopFork() {
               ↓ RPM (.rpm)
             </a>
           </>
+        )}
+        {currentOs === 'macos' && (
+          <div style={{
+            width: '100%', marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed var(--line-2)',
+            display: 'flex', flexDirection: 'column', gap: '4px'
+          }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
+              💡 If macOS Gatekeeper says "app is damaged", run in Terminal:
+            </span>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'rgba(0, 0, 0, 0.4)', borderRadius: '6px', padding: '4px 8px',
+              border: '1px solid var(--line)'
+            }}>
+              <code style={{ fontSize: '0.72rem', color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
+                xattr -cr /Applications/SuperAgent.app
+              </code>
+              <button
+                type="button"
+                onClick={() => copy('xattr -cr /Applications/SuperAgent.app')}
+                style={{
+                  background: 'transparent', border: 'none', color: copied ? 'var(--accent)' : 'var(--muted)',
+                  cursor: 'pointer', fontSize: '0.68rem', fontFamily: 'var(--font-mono)',
+                  padding: '2px 6px', borderRadius: '4px'
+                }}
+                title="Copy terminal command"
+              >
+                {copied ? 'copied ✓' : 'copy'}
+              </button>
+            </div>
+          </div>
         )}
       </div>
       

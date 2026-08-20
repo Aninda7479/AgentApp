@@ -908,10 +908,7 @@ app.delete('/api/artifacts/:id/storage', (req, res) => {
 // so only authenticated sessions can reach it; restricted to http(s) urls.
 app.post('/api/provider-proxy', (req, res) => { void handleProviderProxy(req, res); });
 
-// ─── Update-check API ─────────────────────────────────────────────────────────
-// GET /api/update/check  (behind authGate)
-// Returns { current, latest, hasUpdate, releaseUrl } by querying GitHub Releases.
-app.get('/api/update/check', (_req, res) => {
+app.get('/api/update/check', async (_req, res) => {
   const REPO = 'Aninda7479/AgentApp';
 
   // Read the running version from this package's own package.json.
@@ -931,29 +928,64 @@ app.get('/api/update/check', (_req, res) => {
     return 0;
   };
 
-  // Dynamic import so the ESM module graph doesn't need https at the top level.
-  import('https').then(({ default: httpsModule }) => {
-    const req2 = httpsModule.get(
-      `https://api.github.com/repos/${REPO}/releases/latest`,
-      { headers: { 'User-Agent': 'superagent-web-server', 'Accept': 'application/vnd.github+json' } },
-      (upstream) => {
-        let raw = '';
-        upstream.on('data', (chunk: Buffer) => { raw += chunk; });
-        upstream.on('end', () => {
-          try {
-            const json = JSON.parse(raw) as { tag_name?: string };
-            const latest = (json.tag_name ?? '').replace(/^v/, '');
-            const hasUpdate = latest ? compareVer(latest, current) > 0 : false;
-            res.json({ current, latest: latest || null, hasUpdate, releaseUrl: `https://github.com/${REPO}/releases/latest` });
-          } catch {
-            res.status(502).json({ error: 'Failed to parse GitHub response' });
-          }
-        });
+  try {
+    let latest: string | null = null;
+
+    // 1. Primary: Extract version from web redirect (fast, no rate limits)
+    try {
+      const redirectRes = await fetch(`https://github.com/${REPO}/releases/latest`, {
+        method: 'HEAD',
+        redirect: 'manual',
+        headers: { 'User-Agent': 'superagent-web-server' },
+        signal: AbortSignal.timeout(5000)
+      });
+      const location = redirectRes.headers.get('location');
+      if (location) {
+        const match = location.match(/\/tag\/v?([^/]+)$/);
+        if (match && match[1]) {
+          latest = match[1].trim();
+        }
       }
-    );
-    req2.on('error', () => res.status(503).json({ error: 'Could not reach GitHub — check network connectivity' }));
-    req2.setTimeout(8000, () => { req2.destroy(); res.status(504).json({ error: 'GitHub API timed out' }); });
-  }).catch(() => res.status(500).json({ error: 'Internal error loading https module' }));
+    } catch {
+      // Fall through to API lookup
+    }
+
+    // 2. Fallback: Query GitHub Releases API
+    if (!latest) {
+      const apiRes = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+        headers: {
+          'User-Agent': 'superagent-web-server',
+          'Accept': 'application/vnd.github+json'
+        },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (apiRes.ok) {
+        const json = (await apiRes.json()) as { tag_name?: string };
+        latest = (json.tag_name ?? '').replace(/^v/, '');
+      }
+    }
+
+    const hasUpdate = latest ? compareVer(latest, current) > 0 : false;
+
+    if (!res.headersSent) {
+      res.json({
+        current,
+        latest: latest || null,
+        hasUpdate,
+        releaseUrl: `https://github.com/${REPO}/releases/latest`
+      });
+    }
+  } catch {
+    // Graceful fallback if offline or API unreachable — never throw or crash the server
+    if (!res.headersSent) {
+      res.json({
+        current,
+        latest: null,
+        hasUpdate: false,
+        releaseUrl: `https://github.com/${REPO}/releases/latest`
+      });
+    }
+  }
 });
 
 // POST /api/update/apply  (behind authGate)
