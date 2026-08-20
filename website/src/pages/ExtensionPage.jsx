@@ -4,6 +4,7 @@ import Atmosphere from '../components/Atmosphere.jsx'
 import Reveal from '../components/Reveal.jsx'
 import { useCopy } from '../lib/useCopy.js'
 import { useLatestRelease } from '../lib/useLatestRelease.js'
+import { VERSION } from '../config.js'
 
 const codeStyle = { fontFamily: 'var(--font-mono)' }
 
@@ -66,7 +67,7 @@ export default function ExtensionPage() {
   const [browserTab, setBrowserTab] = useState('chrome')
 
   const extensionUrl = release?.extension || 'https://github.com/Aninda7479/AgentApp/releases/latest'
-  const versionLabel = release?.version ? `v${release.version}` : 'v0.9.0'
+  const versionLabel = release?.version ? `v${release.version}` : `v${VERSION}`
 
   return (
     <div style={{ position: 'relative', overflow: 'hidden' }}>

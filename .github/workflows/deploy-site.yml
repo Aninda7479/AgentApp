@@ -8,6 +8,8 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/deploy-site.yml'
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:

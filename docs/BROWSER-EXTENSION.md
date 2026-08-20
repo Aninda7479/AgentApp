@@ -49,10 +49,10 @@ npm run pack:ext
 ```
 This builds TypeScript & Vite into `packages/browser-extension/dist/` and archives it to:
 ```
-packages/browser-extension/release/superagent-browser-extension-v0.9.0.zip
+packages/browser-extension/release/superagent-browser-extension-v<version>.zip
 ```
 
 ### 2. Store Submission
-* **Chrome Web Store**: Upload `superagent-browser-extension-v0.9.0.zip` to the [Chrome Developer Dashboard](https://chrome.google.com/webstore/devconsole).
+* **Chrome Web Store**: Upload `superagent-browser-extension-v<version>.zip` to the [Chrome Developer Dashboard](https://chrome.google.com/webstore/devconsole).
 * **Microsoft Edge Add-ons**: Upload the zip archive to the [Microsoft Partner Center](https://partner.microsoft.com/dashboard/microsoftedge).
 * **GitHub Releases**: Attach the `.zip` to the release assets.

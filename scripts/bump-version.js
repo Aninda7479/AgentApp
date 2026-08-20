@@ -170,6 +170,14 @@ updatePackageJson('packages/desktop/package.json', (data) => {
   data.version = newVersion;
 });
 
+updatePackageJson('packages/browser-extension/package.json', (data) => {
+  data.version = newVersion;
+});
+
+updateJsonFile('packages/browser-extension/manifest.json', (data) => {
+  data.version = newVersion;
+});
+
 updateJsonFile('packages/desktop/src-tauri/tauri.conf.json', (data) => {
   data.version = newVersion;
 });

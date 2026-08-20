@@ -12,9 +12,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const pkgDir = path.resolve(__dirname, '..');
+const pkg = JSON.parse(fs.readFileSync(path.resolve(pkgDir, 'package.json'), 'utf8'));
+const version = pkg.version || '0.10.0';
 const distDir = path.resolve(pkgDir, 'dist');
 const releaseDir = path.resolve(pkgDir, 'release');
-const zipFile = path.resolve(releaseDir, 'superagent-browser-extension-v0.9.0.zip');
+const zipFile = path.resolve(releaseDir, `superagent-browser-extension-v${version}.zip`);
 
 if (!fs.existsSync(distDir)) {
   console.error('❌ dist/ folder not found. Run "npm run build:ext" first.');
