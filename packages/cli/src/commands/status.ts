@@ -66,12 +66,17 @@ export interface SystemStatusInfo {
 /** Resolves CLI version safely from package.json. */
 export function getCliVersion(): string {
   try {
-    // Attempt resolving from package.json relative to this file
-    const currentDir = path.dirname(fileURLToPath(import.meta.url));
+    const currentDir =
+      typeof import.meta !== 'undefined' && import.meta.url
+        ? path.dirname(fileURLToPath(import.meta.url))
+        : typeof __dirname !== 'undefined'
+        ? __dirname
+        : process.cwd();
     const candidatePaths = [
       path.join(currentDir, '..', '..', 'package.json'),
       path.join(currentDir, '..', 'package.json'),
-      path.join(currentDir, 'package.json')
+      path.join(currentDir, 'package.json'),
+      path.join(process.cwd(), 'package.json')
     ];
 
     for (const p of candidatePaths) {
