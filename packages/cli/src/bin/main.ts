@@ -15,6 +15,8 @@ import {
 } from '@superagent/core';
 import type { CliOptions } from './commander.js';
 import { ModelSwitcher } from '../commands/model.js';
+import { getSystemStatus, formatSystemStatus } from '../commands/status.js';
+import { handleStartupCommand } from '../commands/startup.js';
 
 if (process.argv.includes('--models')) {
   console.log(ModelSwitcher.formatModelIdsList());
@@ -55,10 +57,13 @@ if (process.argv.includes('--web-status')) {
 }
 
 if (process.argv[2] === 'status' || process.argv.includes('--status')) {
-  const { getSystemStatus, formatSystemStatus } = await import('../commands/status.js');
-  const status = await getSystemStatus();
-  console.log(formatSystemStatus(status));
-  process.exit(0);
+  getSystemStatus().then((status) => {
+    console.log(formatSystemStatus(status));
+    process.exit(0);
+  }).catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 }
 
 if (
@@ -67,15 +72,18 @@ if (
   process.argv.includes('--startup-disable') ||
   process.argv.includes('--startup-status')
 ) {
-  const { handleStartupCommand } = await import('../commands/startup.js');
   const startupIdx = process.argv.indexOf('startup');
   let args = startupIdx !== -1 ? process.argv.slice(startupIdx + 1) : [];
   if (process.argv.includes('--startup-enable')) args = ['enable'];
   if (process.argv.includes('--startup-disable')) args = ['disable'];
   if (process.argv.includes('--startup-status')) args = ['status'];
-  const res = await handleStartupCommand(args);
-  console.log(res.message);
-  process.exit(res.success ? 0 : 1);
+  handleStartupCommand(args).then((res) => {
+    console.log(res.message);
+    process.exit(res.success ? 0 : 1);
+  }).catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 }
 
 // `superagent --start-web` / `superagent --serve` launches the self-hosted web
