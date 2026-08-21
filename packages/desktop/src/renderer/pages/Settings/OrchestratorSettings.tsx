@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { ModelConfig, ProviderConnection } from './types';
 import { Scale, Check, RefreshCw, AlertCircle, FileText, CheckSquare, Square, Sliders, Settings, Award, Sparkles, Coins, Cpu, Layers, Zap, Bot, Brain, Activity, Search, Circle } from 'lucide-react';
 import { Button, Select, Toggle } from '../../components/ui';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 
 /** Props for the Orchestrator settings panel. */
 interface OrchestratorSettingsProps {

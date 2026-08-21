@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Save, RefreshCw, AlertCircle, Info, Sparkles, Smile, ShieldCheck } from 'lucide-react';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 
 /** Self-contained 3D model-generation & studio settings panel.
  * Reads/writes through IPC `settings-read` / `settings-write`.

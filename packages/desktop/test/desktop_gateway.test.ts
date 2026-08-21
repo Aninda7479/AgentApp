@@ -9,8 +9,6 @@ import { ReleaseInstallerBuilder } from '../src/builder/installer';
 import { IncomingMessage } from '../src/gateway/channels/types';
 import fs from 'fs';
 
-vi.mock('electron', () => ({}));
-
 describe('Desktop Gateway Suite (Steps 094 - 100)', () => {
   describe('Step 094: System Tray Background Daemon Process', () => {
     it('should initialize system tray stub in headless test environment', () => {
@@ -37,7 +35,7 @@ describe('Desktop Gateway Suite (Steps 094 - 100)', () => {
       expect(trayManager.getMenuItems()).toEqual(menuItems);
     });
 
-    it('should handle mock electron tray provider cleanly', () => {
+    it('should handle mock tray provider cleanly', () => {
       const existsSpy = vi.spyOn(fs, 'existsSync').mockImplementation((p) => {
         if (p === 'test/icon.png') return true;
         return false;
@@ -268,7 +266,7 @@ describe('Desktop Gateway Suite (Steps 094 - 100)', () => {
   });
 
   describe('Step 100: Complete End-to-End Build & Release Installer', () => {
-    it('should generate valid electron-builder configuration', () => {
+    it('should generate valid desktop release installer configuration', () => {
       const builder = new ReleaseInstallerBuilder({
         appId: 'com.superagent.app',
         productName: 'SuperAgent Suite'

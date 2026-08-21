@@ -29,7 +29,7 @@ import {
   Globe,
   Radio
 } from 'lucide-react';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 
 export interface ScheduledViewProps {
   onCreateTask?: (taskType: string) => void;

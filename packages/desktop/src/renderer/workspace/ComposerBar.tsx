@@ -8,7 +8,7 @@ import { Send, Paperclip, ShieldCheck, X, Sparkles, Terminal, Mic, MicOff } from
 import { ModelPicker } from './ModelPicker';
 import { useSlashCommands } from '../hooks/useSlashCommands';
 import type { ComposerOptions, ComposerAttachment } from '../core/types';
-import { getIpc } from '../lib/electron';
+import { getIpc } from '../lib/ipc';
 import { useLastUsedModel, providerStore } from '../stores/providerStore';
 
 interface ComposerBarProps {

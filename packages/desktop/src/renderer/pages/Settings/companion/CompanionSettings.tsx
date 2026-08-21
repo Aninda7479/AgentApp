@@ -6,7 +6,7 @@ import { PetControls } from './PetControls';
 import { DEFAULT_PARTNERS } from './defaultPartners';
 import { usePartners } from './library';
 import type { PartnerManifest } from '../../../partner-popup/types';
-import { getIpc, invoke, openExternalPath } from '../../../lib/electron';
+import { getIpc, invoke, openExternalPath } from '../../../lib/ipc';
 
 function openDocs(): void {
   const url = 'https://github.com/Aninda7479/AgentApp/blob/main/docs/Partner-Pet.md';
@@ -14,7 +14,7 @@ function openDocs(): void {
 }
 
 /**
- * Picks a 3D model file. Uses native Tauri or Electron dialogs when available;
+ * Picks a 3D model file. Uses native desktop dialogs when available;
  * in the web build it falls back to an <input type="file"> filtered to model types.
  * Returns the chosen path/object URL, or null if cancelled.
  */
@@ -48,7 +48,7 @@ async function windowPickModelFile(): Promise<string | null> {
 }
 
 /**
- * Picks a 3D model *folder*. Uses native Tauri or Electron folder dialogs when
+ * Picks a 3D model *folder*. Uses native desktop folder dialogs when
  * available; in the web build it falls back to an `<input webkitdirectory>`
  * (folder) selection and returns the chosen folder path/object URL, or null.
  */

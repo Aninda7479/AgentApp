@@ -24,7 +24,7 @@ import {
   Info,
   Maximize2
 } from 'lucide-react';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 
 export interface ArtifactManifest {
   id: string;

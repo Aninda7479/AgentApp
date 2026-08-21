@@ -5,8 +5,7 @@ import { browserSafeFetch } from './web-fetch.js';
  * Locks in the web/VPS CORS fix: every settings-screen provider call (model
  * catalog, NVIDIA catalog, connectivity tests) must route through the
  * server-side /api/provider-proxy in the web shell instead of a direct browser
- * fetch that providers block with CORS. In node, `navigator` is undefined so
- * IS_ELECTRON_SHELL is false (web mode) — exactly the path that was broken.
+ * fetch that providers block with CORS. In node/web mode, calls are routed to proxy.
  * We stub `window.fetch` to capture the proxied call and assert the envelope
  * is forwarded and the upstream JSON is adapted back into a Response shape.
  */

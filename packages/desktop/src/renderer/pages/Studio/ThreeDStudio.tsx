@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Eye, Smile, ShieldCheck, Sparkles, Printer, Factory, Gamepad2, Wand2 } from 'lucide-react';
 import type { PartnerController } from '../../logic/agentStream';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 
 import { StageNavigation } from './components/StageNavigation';
 import { ActionPanel } from './components/ActionPanel';

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getIpc, invoke } from '../../../lib/electron';
+import { getIpc, invoke } from '../../../lib/ipc';
 import {
   DEFAULT_PARTNERS
 } from './defaultPartners';
@@ -13,7 +13,7 @@ import {
 /**
  * Storage abstraction for the open Partner ecosystem.
  *
- * In the Electron desktop app or Tauri app this talks to the main process / Rust backend,
+ * In the desktop app (Tauri) this talks to the Rust backend,
  * reading/writing `partner.json` folders under the user-data `partners/` directory.
  * In the web build (or under test) there is no IPC, so it degrades gracefully
  * to localStorage — the UI stays fully functional and the same code path is
@@ -23,7 +23,6 @@ import {
 const LS_INSTALLED = 'superagent.partners.installed';
 const LS_ACTIVE = 'superagent.partners.active';
 
-/** Lazily resolves the Electron ipcRenderer, or null outside the desktop shell. */
 function lsReadInstalled(): PartnerManifest[] {
   if (typeof window === 'undefined') return [];
   try {

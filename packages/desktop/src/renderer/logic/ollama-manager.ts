@@ -5,9 +5,9 @@
  * and delete.
  *
  * All requests go through `browserSafeFetch`, which is a privileged `fetch` in
- * the Electron shell (CORS-exempt, so localhost works) and proxies through the
+ * the desktop shell (CORS-exempt, so localhost works) and proxies through the
  * server in the web build. Pull streaming relies on a real `Response.body`
- * ReadableStream, which exists in the Electron shell; the page degrades to a
+ * ReadableStream, which exists in the desktop shell; the page degrades to a
  * non-streaming pull elsewhere.
  */
 import { browserSafeFetch } from '../web-fetch';
@@ -150,7 +150,7 @@ export async function pullModel(
     throw new Error(`Ollama pull failed [${res.status}]: ${text}`);
   }
 
-  // Streaming path (Electron shell): parse NDJSON lines from the body.
+  // Streaming path (desktop shell): parse NDJSON lines from the body.
   const body: any = (res as any).body;
   if (body && typeof body.getReader === 'function') {
     const reader = body.getReader();

@@ -1,6 +1,6 @@
 /**
  * Unified IPC & Platform Bridge for SuperAgent UI.
- * Gracefully adapts between Tauri v2 Rust IPC and Electron IPC.
+ * Adapts between Tauri v2 Rust IPC and Web HTTP IPC.
  */
 
 export interface SystemInfo {
@@ -26,8 +26,8 @@ export async function invokeCommand<T>(command: string, args?: Record<string, un
       console.error(`[TauriBridge] Command error (${command}):`, err);
       throw err;
     }
-  } else if (typeof window !== 'undefined' && (window as any).electron?.ipcRenderer) {
-    return (window as any).electron.ipcRenderer.invoke(command, args);
+  } else if (typeof window !== 'undefined' && (window as any).superagent?.ipc) {
+    return (window as any).superagent.ipc.invoke(command, args);
   } else if (typeof window !== 'undefined' && typeof fetch === 'function') {
     try {
       const res = await fetch(`/api/ipc/${command}`, {
@@ -52,8 +52,6 @@ export async function invokeCommand<T>(command: string, args?: Record<string, un
 export async function getSystemInfo(): Promise<SystemInfo> {
   if (isTauriEnv()) {
     return await invokeCommand<SystemInfo>('get_system_info');
-  } else if (typeof window !== 'undefined' && (window as any).electron?.getSystemInfo) {
-    return await (window as any).electron.getSystemInfo();
   }
   return {
     os_name: 'Browser',
@@ -69,24 +67,18 @@ export async function getSystemInfo(): Promise<SystemInfo> {
 export async function minimizeAppWindow(): Promise<void> {
   if (isTauriEnv()) {
     await invokeCommand('minimize_window');
-  } else if (typeof window !== 'undefined' && (window as any).electron?.minimizeWindow) {
-    (window as any).electron.minimizeWindow();
   }
 }
 
 export async function toggleAppWindowMaximize(): Promise<void> {
   if (isTauriEnv()) {
     await invokeCommand('toggle_window_maximize');
-  } else if (typeof window !== 'undefined' && (window as any).electron?.toggleWindowMaximize) {
-    (window as any).electron.toggleWindowMaximize();
   }
 }
 
 export async function closeAppWindow(): Promise<void> {
   if (isTauriEnv()) {
     await invokeCommand('close_window');
-  } else if (typeof window !== 'undefined' && (window as any).electron?.closeWindow) {
-    (window as any).electron.closeWindow();
   }
 }
 
@@ -98,8 +90,6 @@ export async function enableAutostart(): Promise<boolean> {
     } catch {
       return false;
     }
-  } else if (typeof window !== 'undefined' && (window as any).electron?.ipcRenderer) {
-    return (window as any).electron.ipcRenderer.invoke('autostart-enable');
   }
   return false;
 }
@@ -112,8 +102,6 @@ export async function disableAutostart(): Promise<boolean> {
     } catch {
       return false;
     }
-  } else if (typeof window !== 'undefined' && (window as any).electron?.ipcRenderer) {
-    return (window as any).electron.ipcRenderer.invoke('autostart-disable');
   }
   return false;
 }
@@ -125,9 +113,6 @@ export async function isAutostartEnabled(): Promise<boolean> {
     } catch {
       return false;
     }
-  } else if (typeof window !== 'undefined' && (window as any).electron?.ipcRenderer) {
-    return (window as any).electron.ipcRenderer.invoke('autostart-is-enabled');
   }
   return false;
 }
-

@@ -61,7 +61,7 @@ interface TitleBarProps {
   onOpenDocs?: () => void;
   onOpenShortcuts?: () => void;
   onOpenDoctor?: () => void;
-  /** True when running in the browser/web build (no Electron). */
+  /** True when running in the browser/web build. */
   isWebMode?: boolean;
   /** Opens the account/settings page (web build only). */
   onOpenAccount?: () => void;
@@ -75,7 +75,7 @@ interface TitleBarProps {
   onOpenUpdates?: () => void;
 }
 
-const isElectron = WindowService.isElectron();
+const isDesktop = WindowService.isDesktop();
 const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent || navigator.platform || '');
 
 interface MenuItem {
@@ -243,12 +243,12 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     <div
       data-testid="title-bar"
       className="title-bar h-10 flex items-center justify-between px-3 select-none drag-window z-100"
-      style={isElectron ? ({ WebkitAppRegion: 'drag' } as React.CSSProperties) : undefined}
+      style={isDesktop ? ({ WebkitAppRegion: 'drag' } as React.CSSProperties) : undefined}
     >
       {/* Left side: Logo, Nav History, and Application Menu */}
       <div
-        className={`flex items-center gap-2 sm:gap-3 no-drag-window min-w-0 ${isMac && isElectron ? 'pl-[72px]' : ''}`}
-        style={isElectron ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
+        className={`flex items-center gap-2 sm:gap-3 no-drag-window min-w-0 ${isMac && isDesktop ? 'pl-[72px]' : ''}`}
+        style={isDesktop ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
         ref={menuRef}
       >
         {/* Mobile nav toggle (hamburger) */}
@@ -325,7 +325,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       {/* Right side: theme, BYOK status, menu (mobile), and custom Window controls */}
       <div
         className="flex items-center gap-2 sm:gap-3 no-drag-window shrink-0"
-        style={isElectron ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
+        style={isDesktop ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
       >
         {/* Backend Disconnected Warning — only shown when backend core / daemon / server is unreachable */}
         {isBackendDisconnected && (
@@ -388,8 +388,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           )}
         </div>
 
-        {/* Custom Window Controls — Electron desktop only, hidden on small screens */}
-        {isElectron && !isMac && (
+        {/* Custom Window Controls — Desktop only, hidden on small screens */}
+        {isDesktop && !isMac && (
           <div className="hidden lg:flex items-center pl-1">
             <button
               data-testid="win-minimize"

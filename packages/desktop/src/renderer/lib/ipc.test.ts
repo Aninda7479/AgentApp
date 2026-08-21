@@ -1,15 +1,10 @@
 /**
- * Tests for the canonical renderer IPC bridge (../lib/electron).
- *
- * The bridge must: route calls through the preload `window.superagent` API,
- * apply the crash-safe error envelope (report toasts, resolve null on error),
- * and gracefully no-op when neither the bridge nor `window.require` is present.
+ * Tests for the canonical renderer IPC bridge (../lib/ipc).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 function makeSuperagent() {
   return {
-    isElectron: true,
     ipc: {
       invoke: vi.fn(async (ch: string, ..._a: any[]) => ({ ok: true, ch })) as any,
       send: vi.fn(),
@@ -21,7 +16,7 @@ function makeSuperagent() {
   };
 }
 
-describe('renderer/lib/electron bridge', () => {
+describe('renderer/lib/ipc bridge', () => {
   const realWindow = (globalThis as any).window;
   const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -33,10 +28,10 @@ describe('renderer/lib/electron bridge', () => {
     consoleError.mockClear();
   });
 
-  it('invokes through the preload superagent API', async () => {
+  it('invokes through the superagent API', async () => {
     const sa = makeSuperagent();
     (globalThis as any).window = { superagent: sa } as any;
-    const { invoke } = await import('../lib/electron.js');
+    const { invoke } = await import('../lib/ipc.js');
     const res = await invoke('settings-read', 1, 2);
     expect(sa.ipc.invoke).toHaveBeenCalledWith('settings-read', 1, 2);
     expect(res).toEqual({ ok: true, ch: 'settings-read' });
@@ -46,7 +41,7 @@ describe('renderer/lib/electron bridge', () => {
     const sa = makeSuperagent();
     sa.ipc.invoke = vi.fn(async () => ({ __ipcError: true, error: 'boom', channel: 'x' }));
     (globalThis as any).window = { superagent: sa } as any;
-    const { invoke } = await import('../lib/electron.js');
+    const { invoke } = await import('../lib/ipc.js');
     const res = await invoke('x');
     expect(res).toBeNull();
     expect(consoleError).toHaveBeenCalled();
@@ -56,7 +51,7 @@ describe('renderer/lib/electron bridge', () => {
     const sa = makeSuperagent();
     sa.ipc.invoke = vi.fn(async () => ({ ok: false, error: 'nope' }));
     (globalThis as any).window = { superagent: sa } as any;
-    const { invoke } = await import('../lib/electron.js');
+    const { invoke } = await import('../lib/ipc.js');
     const res = await invoke('y');
     expect(res).toEqual({ ok: false, error: 'nope' });
     expect(consoleError).toHaveBeenCalled();
@@ -68,7 +63,7 @@ describe('renderer/lib/electron bridge', () => {
       throw new Error('kaboom');
     });
     (globalThis as any).window = { superagent: sa } as any;
-    const { invoke } = await import('../lib/electron.js');
+    const { invoke } = await import('../lib/ipc.js');
     expect(await invoke('z')).toBeNull();
     expect(consoleError).toHaveBeenCalled();
   });
@@ -76,7 +71,7 @@ describe('renderer/lib/electron bridge', () => {
   it('send/on/off delegate to the bridge', async () => {
     const sa = makeSuperagent();
     (globalThis as any).window = { superagent: sa } as any;
-    const { send, on, off } = await import('../lib/electron.js');
+    const { send, on, off } = await import('../lib/ipc.js');
     const fn = () => {};
     on('circle-search-submit', fn);
     expect(sa.ipc.on).toHaveBeenCalledWith('circle-search-submit', fn);
@@ -89,26 +84,17 @@ describe('renderer/lib/electron bridge', () => {
   it('openExternalPath / readLoopPrompt route to the bridge', async () => {
     const sa = makeSuperagent();
     (globalThis as any).window = { superagent: sa } as any;
-    const { openExternalPath, readLoopPrompt } = await import('../lib/electron.js');
+    const { openExternalPath, readLoopPrompt } = await import('../lib/ipc.js');
     await openExternalPath('/tmp/x');
     expect(sa.shell.openPath).toHaveBeenCalledWith('/tmp/x');
     await readLoopPrompt('/ws');
     expect(sa.loop.read).toHaveBeenCalledWith('/ws');
   });
 
-  it('degrades gracefully when no bridge and no window.require', async () => {
+  it('degrades gracefully when no bridge is present', async () => {
     (globalThis as any).window = {} as any;
-    const { invoke, getIpc } = await import('../lib/electron.js');
+    const { invoke, getIpc } = await import('../lib/ipc.js');
     expect(await invoke('settings-read')).toBeNull();
     expect(await getIpc().invoke('settings-read')).toBeNull();
-    expect(consoleError).toHaveBeenCalled();
-  });
-
-  it('legacy shim falls back to window.require when bridge absent', async () => {
-    const fakeIpc = { invoke: vi.fn(async () => 'legacy'), send: vi.fn(), on: vi.fn(), off: vi.fn() };
-    (globalThis as any).window = { require: () => ({ ipcRenderer: fakeIpc }) } as any;
-    const { invoke, getIpc } = await import('../lib/electron.js');
-    expect(await invoke('settings-read')).toBe('legacy');
-    expect(getIpc()).not.toBeNull();
   });
 });

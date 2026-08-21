@@ -45,7 +45,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     const selected = await ProjectService.selectProjectFolders();
 
     if (selected === null) {
-      // Not running in Electron — fall back to mock folders (e.g. tests)
+      // Not running in desktop shell — fall back to mock folders (e.g. tests)
       const mockPath = `d:/Project/MockProject-${folders.length + 1}`;
       setFolders(prev => [...prev, mockPath]);
       if (!projectName) {

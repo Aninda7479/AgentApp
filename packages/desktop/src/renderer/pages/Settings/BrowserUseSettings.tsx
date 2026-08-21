@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { MonitorSmartphone, Save, RefreshCw, AlertCircle, Eye, EyeOff, Play, Globe, Network, ShieldAlert, Cpu } from 'lucide-react';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 
 /** Props for the Browser Use settings panel. */
 interface BrowserUseSettingsProps {

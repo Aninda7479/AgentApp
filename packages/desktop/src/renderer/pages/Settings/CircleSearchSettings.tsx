@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Sparkles, Key, CheckCircle2, AlertTriangle, Camera } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 
 export const CircleSearchSettings: React.FC = () => {
   const ipc = getIpc();

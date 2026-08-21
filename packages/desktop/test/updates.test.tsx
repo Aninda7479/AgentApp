@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { UpdatesSettings } from '../src/renderer/pages/Settings/UpdatesSettings';
 
-// Mock getIpc since we are not in Electron environment during tests
-vi.mock('../src/renderer/lib/electron', () => ({
+// Mock getIpc since we are not in desktop environment during tests
+vi.mock('../src/renderer/lib/ipc', () => ({
   getIpc: () => ({
     invoke: vi.fn().mockResolvedValue({ general: { releaseChannel: 'stable' } }),
     on: vi.fn(),

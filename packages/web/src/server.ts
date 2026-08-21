@@ -690,7 +690,7 @@ Please optimize these system instructions to:
   return optimizedContent;
 }
 
-// ─── API Router mapping Electron IPC ─────────────────────────────────────────
+// ─── API Router mapping Desktop IPC ─────────────────────────────────────────
 app.post('/api/ipc/:channel', (req, res) => { void handleIpc(req, res); });
 
 // ─── Artifacts Dedicated Web Viewer ─────────────────────────────────────────
@@ -903,7 +903,7 @@ app.delete('/api/artifacts/:id/storage', (req, res) => {
 
 // Provider connectivity proxy — forwards provider API calls server-side so the
 // web/VPS build (which reuses the *same* desktop renderer) can "Test & Connect"
-// without being blocked by CORS. The desktop Electron shell does NOT use this
+// without being blocked by CORS. The native desktop shell does NOT use this
 // (its renderer fetch is privileged and CORS-exempt). Registered behind authGate
 // so only authenticated sessions can reach it; restricted to http(s) urls.
 app.post('/api/provider-proxy', (req, res) => { void handleProviderProxy(req, res); });
@@ -1060,8 +1060,8 @@ app.post('/api/update/apply', (_req, res) => {
  * provider connection without being blocked by CORS (the browser cannot call
  * api.anthropic.com / api.openai.com / etc. directly). Returns a normalized
  * envelope `{ ok, status, statusText, data }` that the renderer adapts into a
- * Response-shaped object. Only ever exercised from the web shell; the desktop
- * Electron shell keeps its privileged, CORS-exempt direct fetch.
+ * Response-shaped object. Only ever exercised from the web shell; the native
+ * desktop shell keeps its privileged, CORS-exempt direct fetch.
  *
  * Exported so it can be unit-tested without booting a listener.
  */
@@ -1145,7 +1145,7 @@ function isPrivateHost(hostname: string): boolean {
 }
 
 /**
- * Handles a single IPC channel invocation over HTTP (mirrors the Electron IPC
+ * Handles a single IPC channel invocation over HTTP (mirrors the desktop IPC
  * surface for the web/VPS build). Exported so it can be unit-tested without
  * booting a listener.
  */
@@ -1167,7 +1167,7 @@ export async function handleIpc(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: `Channel "${channel}" requires a payload argument.` });
     return;
   }
-  // Channels that exist only in the Electron desktop build (native file pickers,
+  // Channels that exist only in the native desktop build (native file pickers,
   // 3D model generation, MCP subprocess management, auto-updater, and the 3D pet
   // window). The web build ships the *same* desktop renderer, so it still invokes
   // them — respond with a clear, non-error payload instead of a 404 so the UI

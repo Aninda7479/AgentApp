@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X, Sparkles } from 'lucide-react';
 import { PetSprite } from './PetSprite';
 import { moodReaction, type PartnerManifest, type PartnerMood } from './types';
-import { getIpc } from '../lib/electron';
+import { getIpc } from '../lib/ipc';
 
 export interface PartnerOverlayProps {
   /** The active Partner to display, or null to hide the creature. */

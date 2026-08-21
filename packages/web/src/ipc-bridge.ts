@@ -1,4 +1,4 @@
-// Client-side IPC bridge to mock Electron API in standard browsers
+// Client-side IPC bridge for standard web browsers
 
 const listeners = new Map<string, Set<Function>>();
 let socket: WebSocket | null = null;
@@ -36,7 +36,6 @@ function connectWebSocket() {
       const channelListeners = listeners.get(channel);
       if (channelListeners) {
         channelListeners.forEach((callback) => {
-          // Electron ipcRenderer.on passes (event, data)
           callback({}, data);
         });
       }
@@ -62,39 +61,40 @@ if (typeof window !== 'undefined') {
   connectWebSocket();
 }
 
-// Concurrency limiter & deduplication for web IPC bridge
-const MAX_CONCURRENT_FETCHES = 5;
+// Concurrency control: max 6 parallel in-flight HTTP calls to prevent socket exhaustion
+const MAX_CONCURRENT_FETCHES = 6;
 let activeFetchCount = 0;
 const fetchQueue: Array<() => void> = [];
 
-const inFlightReads = new Map<string, Promise<any>>();
-
-function isDeduplicatable(channel: string): boolean {
-  return (
-    channel.endsWith('-read') ||
-    channel.endsWith('-list') ||
-    channel.endsWith('-catalog') ||
-    channel === 'app-version' ||
-    channel === 'system-info' ||
-    channel === 'check-for-updates' ||
-    channel === 'store-read'
-  );
-}
-
 function processQueue() {
   while (activeFetchCount < MAX_CONCURRENT_FETCHES && fetchQueue.length > 0) {
-    const next = fetchQueue.shift();
-    if (next) {
+    const nextTask = fetchQueue.shift();
+    if (nextTask) {
       activeFetchCount++;
-      next();
+      nextTask();
     }
   }
 }
 
-async function enqueueFetch<T>(task: () => Promise<T>): Promise<T> {
+// In-flight read request deduplication cache
+const inFlightReads = new Map<string, Promise<any>>();
+
+const DEDUPLICATABLE_PREFIXES = [
+  'settings-read',
+  'store-read',
+  'chat-steps-read',
+  'get_system_info',
+  'system-info',
+];
+
+function isDeduplicatable(channel: string): boolean {
+  return DEDUPLICATABLE_PREFIXES.some((prefix) => channel === prefix || channel.startsWith(prefix + ':'));
+}
+
+async function enqueueFetch<T>(fn: () => Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     fetchQueue.push(() => {
-      task()
+      fn()
         .then(resolve)
         .catch(reject)
         .finally(() => {
@@ -106,8 +106,8 @@ async function enqueueFetch<T>(task: () => Promise<T>): Promise<T> {
   });
 }
 
-// Implement mock ipcRenderer
-/** Mock Electron ipcRenderer that routes IPC calls over HTTP fetch and WebSocket with concurrency control. */
+// Implement mock IPC bridge
+/** Web IPC bridge that routes IPC calls over HTTP fetch and WebSocket with concurrency control. */
 const mockIpcRenderer = {
   invoke: async (channel: string, ...args: any[]): Promise<any> => {
     // `open-external` opens a URL in the OS shell on desktop. In the browser
@@ -199,7 +199,7 @@ const mockIpcRenderer = {
     // Route window commands to browser; everything else goes over WebSocket
     if (channel.startsWith('window-')) {
       console.log(`[IPC-Bridge] Intercepted desktop window command: ${channel}`);
-      return; // Ignore desktop minimize/maximize/close on the web
+      return;
     }
     
     const payload = JSON.stringify({ channel, args });
@@ -211,18 +211,19 @@ const mockIpcRenderer = {
   }
 };
 
-// Expose window.require Mock
+// Expose window.superagent API for web clients
 if (typeof window !== 'undefined') {
-  (window as any).require = (moduleName: string) => {
-    if (moduleName === 'electron') {
-      return {
-        ipcRenderer: mockIpcRenderer,
-        shell: {
-          openExternal: (url: string) => window.open(url, '_blank')
-        }
-      };
+  (window as any).superagent = {
+    ipc: mockIpcRenderer,
+    shell: {
+      openPath: (targetPath: string) => {
+        window.open(targetPath, '_blank');
+        return Promise.resolve('');
+      }
+    },
+    loop: {
+      read: async () => null
     }
-    throw new Error(`[IPC-Bridge] Module "${moduleName}" is not available in the browser.`);
   };
   
   // Also expose exports object for CommonJS compatibility

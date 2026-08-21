@@ -3,7 +3,7 @@ import {
   Send, CheckCircle2, AlertCircle, Eye, EyeOff,
   RefreshCw, Key, MessageSquare, Shield, Wifi, WifiOff, Loader2, Bot
 } from 'lucide-react';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 
 interface ConnectionInfo {
   botName: string;

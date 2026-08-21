@@ -186,13 +186,28 @@
     const previewImg = document.getElementById('previewImg');
     const removeThumbBtn = document.getElementById('removeThumbBtn');
 
+    const getOverlayIpc = () => {
+      const w = window;
+      if (w.superagent?.ipc) return w.superagent.ipc;
+      if (w.ipcAPI) return w.ipcAPI;
+      if (w.__TAURI_INTERNALS__?.invoke) {
+        return {
+          invoke: (ch, args) => w.__TAURI_INTERNALS__.invoke(ch.replace(/[:\-]/g, '_'), args),
+          send: (ch, args) => { w.__TAURI_INTERNALS__.invoke(ch.replace(/[:\-]/g, '_'), args).catch(() => {}); },
+          on: () => {}
+        };
+      }
+      return null;
+    };
+    const ipc = getOverlayIpc();
+
     let currentScreenImage = null;
 
     async function triggerScreenCapture() {
       statusText.textContent = 'Capturing screen...';
       try {
-        if (window.electronAPI && window.electronAPI.invoke) {
-          const imgData = await window.electronAPI.invoke('overlay-capture-screen');
+        if (ipc && ipc.invoke) {
+          const imgData = await ipc.invoke('overlay-capture-screen');
           if (imgData) {
             currentScreenImage = imgData;
             previewImg.src = imgData;
@@ -214,8 +229,8 @@
       statusText.textContent = 'Ready';
     });
 
-    if (window.electronAPI && window.electronAPI.on) {
-      window.electronAPI.on('overlay-trigger-capture', () => {
+    if (ipc && ipc.on) {
+      ipc.on('overlay-trigger-capture', () => {
         triggerScreenCapture();
       });
     }
@@ -226,8 +241,8 @@
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        if (window.electronAPI && window.electronAPI.send) {
-          window.electronAPI.send('overlay-hide');
+        if (ipc && ipc.send) {
+          ipc.send('overlay-hide');
         }
       } else if (e.ctrlKey && e.shiftKey && (e.key === 'S' || e.key === 's')) {
         e.preventDefault();
@@ -240,8 +255,8 @@
         const text = input.value.trim() || (currentScreenImage ? 'Analyze this screen snippet' : '');
         statusText.textContent = 'Processing...';
         try {
-          if (window.electronAPI && window.electronAPI.invoke) {
-            await window.electronAPI.invoke('overlay-submit-prompt', { prompt: text, image: currentScreenImage });
+          if (ipc && ipc.invoke) {
+            await ipc.invoke('overlay-submit-prompt', { prompt: text, image: currentScreenImage });
           }
           input.value = '';
           currentScreenImage = null;
@@ -249,8 +264,8 @@
           statusText.textContent = 'Task dispatched!';
           setTimeout(() => {
             statusText.textContent = 'Ready';
-            if (window.electronAPI && window.electronAPI.send) {
-              window.electronAPI.send('overlay-hide');
+            if (ipc && ipc.send) {
+              ipc.send('overlay-hide');
             }
           }, 600);
         } catch (err) {

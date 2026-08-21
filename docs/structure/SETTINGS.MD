@@ -12,7 +12,7 @@ SuperAgent segregates configurations into two files in the user's config directo
 2. **`models.json`**: Stores the list of discovered and configured AI models, their parameters (context limits, pricing, modalities), and active toggles.
 
 ### Path Resolution
-Unlike standard Electron applications that write to OS-specific cache directories (like AppData or Application Support), SuperAgent uses an OS-agnostic design. All directories are resolved relative to the user's home directory (`os.homedir()`):
+SuperAgent uses an OS-agnostic design. All directories are resolved relative to the user's home directory (`os.homedir()`):
 
 **Global Configuration Path**: `~/.superagent/config/`
 * **Windows**: `C:\Users\<username>\.superagent\config\`
@@ -147,4 +147,4 @@ Registers the IPC handlers for reading and writing configs. Whenever settings ar
 
 ### Renderer Process (Frontend UI)
 * Reads settings once on startup via `SettingsService.readInto` to hydrate the React state.
-* Persists changes reactively: each UI setting toggle calls `SettingsService.write*` which pushes a patch over Electron IPC.
+* Persists changes reactively: each UI setting toggle calls `SettingsService.write*` which pushes a patch over Desktop IPC.

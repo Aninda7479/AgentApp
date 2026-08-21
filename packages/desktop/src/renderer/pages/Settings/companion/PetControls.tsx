@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Play, Square, PawPrint } from 'lucide-react';
 import type { PartnerManifest } from '../../../partner-popup/types';
-import { getIpc } from '../../../lib/electron';
+import { getIpc } from '../../../lib/ipc';
 
-/** Lazily resolves the Electron ipcRenderer. */
 export interface PetControlsProps {
   /** The currently active Partner (used for the preview + label). */
   activePet?: PartnerManifest | null;

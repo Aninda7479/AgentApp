@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { MousePointer2, Save, RefreshCw, AlertCircle, Play, Camera } from 'lucide-react';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 
 /** Props for the Computer Use settings panel. */
 interface ComputerUseSettingsProps {

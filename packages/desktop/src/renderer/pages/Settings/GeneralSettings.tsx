@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Check, Code2, MessageSquare, Moon, Sun, Monitor, Globe, Eye, Ban, Cpu } from 'lucide-react';
+import { Check, Code2, MessageSquare, Moon, Sun, Monitor, Globe, Eye, Ban, Cpu, Copy, Server, HardDrive, Layers } from 'lucide-react';
 import { ThemeMode } from '../../types';
 import { InternetAccessLevel, ModelConfig, ProviderConnection } from './types';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 import { SearchableSelect, SearchableSelectOption } from '../../components/ui/SearchableSelect';
 
 /**
@@ -85,6 +85,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = (props) => {
   } = props;
   const [openAtLogin, setOpenAtLogin] = useState(false);
   const [closeToTray, setCloseToTray] = useState(true);
+  const [copiedCli, setCopiedCli] = useState(false);
 
   const [chatTitleMode, setChatTitleMode] = useState<'active_model' | 'custom_model' | 'simple' | 'disabled'>('active_model');
   const [chatTitleProvider, setChatTitleProvider] = useState<string>('');
@@ -324,21 +325,75 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = (props) => {
       <section className="mb-8">
         <h3 className="settings-section-title mb-3">Background Service &amp; OS Startup</h3>
         <p className="settings-section-sub mb-3 text-xs leading-relaxed text-brand-textMuted">
-          Control how SuperAgent runs in the background to continuously serve Voice-to-Text dictation, Circle Search capture, Spotlight overlay, and Artifacts.
+          Control how SuperAgent runs in the background to host the Web App server (<code className="text-brand-textMain font-mono">--serve</code>), execute Artifacts micro-apps, and power Voice dictation and Circle Search.
         </p>
+
+        {/* Runtime Overview Badge */}
+        <div className="mb-3 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+          <div className="flex items-center gap-2.5 rounded-xl border border-brand-border/60 bg-brand-bg/40 p-3">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+              <Server size={15} />
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-brand-textMain">Web Server</div>
+              <div className="text-[11px] text-brand-textMuted font-mono">--serve :1469</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5 rounded-xl border border-brand-border/60 bg-brand-bg/40 p-3">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
+              <HardDrive size={15} />
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-brand-textMain">Artifacts Runtime</div>
+              <div className="text-[11px] text-brand-textMuted">Micro-apps &amp; Daemons</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5 rounded-xl border border-brand-border/60 bg-brand-bg/40 p-3">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-500/10 text-sky-400">
+              <Layers size={15} />
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-brand-textMain">Voice &amp; Spotlight</div>
+              <div className="text-[11px] text-brand-textMuted">Always-on shortcuts</div>
+            </div>
+          </div>
+        </div>
+
         <div className="settings-section px-5 py-1">
           <ToggleRow
             label="Launch on System Startup"
-            description="Automatically launch SuperAgent as a background service when your computer boots up."
+            description="Automatically start SuperAgent background services (Web server and Artifacts runtime) when your computer boots up."
             value={openAtLogin}
             onChange={(val) => updateGeneralSetting('openAtLogin', val)}
           />
           <ToggleRow
-            label="Minimize to System Tray on Close"
-            description="Closing the window keeps background services (Voice typing, Circle Search, Spotlight overlay, and Artifacts) active in the system tray."
+            label="Keep Background Services Active on Window Close"
+            description="Closing the window keeps the backend server, web dashboard, and active artifacts running seamlessly in the background."
             value={closeToTray}
             onChange={(val) => updateGeneralSetting('closeToTray', val)}
           />
+        </div>
+
+        {/* CLI Reference callout */}
+        <div className="mt-3 flex items-center justify-between rounded-xl border border-brand-border/60 bg-brand-card/50 px-4 py-2.5 text-xs text-brand-textMuted">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-brand-textMain">CLI Background Daemon:</span>
+            <code className="font-mono text-brand-textMain bg-brand-bg px-2 py-0.5 rounded border border-brand-border/60">
+              superagent --serve --web-port 1469
+            </code>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText('superagent --serve --web-port 1469');
+              setCopiedCli(true);
+              setTimeout(() => setCopiedCli(false), 2000);
+            }}
+            className="flex items-center gap-1 text-[11px] font-semibold text-brand-accent hover:text-brand-accent-hover cursor-pointer"
+          >
+            {copiedCli ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+            {copiedCli ? 'Copied' : 'Copy'}
+          </button>
         </div>
       </section>
 

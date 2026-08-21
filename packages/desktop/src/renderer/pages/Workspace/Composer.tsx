@@ -1,6 +1,6 @@
 import React, { useState, KeyboardEvent, useEffect, useRef, useMemo } from 'react';
 import { Select } from '../../components/ui';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 import {
   Plus,
   Cpu,
@@ -138,7 +138,7 @@ export interface ComposerProps {
   /** Sandbox / full-access execution mode (bound to real settings). */
   sandbox?: boolean;
   onSandboxChange?: (value: boolean) => void;
-  /** Invoked when the browser/Electron lacks the Web Speech API. */
+  /** Invoked when the environment lacks the Web Speech API. */
   onMicUnavailable?: () => void;
   /** Surfaces a user-facing mic notice (errors, setup hints) as a toast. */
   onMicNotice?: (message: string) => void;
