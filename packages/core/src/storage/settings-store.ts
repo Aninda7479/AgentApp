@@ -142,7 +142,7 @@ export interface ThreeDSettings {
  *     - `auto`    — use the configured STT model when a provider + model are
  *                   available, otherwise fall back to the browser Web Speech API.
  *     - `browser` — always use the browser's Web Speech API (no model needed,
- *                   but unreliable inside Electron).
+ *                   but dependent on OS/browser support).
  *     - `model`   — always transcribe through the selected cloud STT model.
  * - `providerId` — id of the connected provider (matches `ProviderSettings.id`)
  *   whose API key/base URL is used for model transcription.

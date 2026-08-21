@@ -1,9 +1,9 @@
 import type { StoredProject } from '../types';
 import { FormatService } from './format';
-import { getIpc } from '../lib/electron';
+import { getIpc } from '../lib/ipc';
 
 /**
- * Backend / Electron boundary helpers for project (folder) selection and
+ * Backend / Desktop boundary helpers for project (folder) selection and
  * project-object construction. Kept in the logic layer so the project
  * modals (`CreateProjectModal`, `ConfigureProjectModal`) stay thin design
  * shells that only wire the results into local state.
@@ -12,7 +12,7 @@ export class ProjectService {
   /**
    * Opens the native folder picker through the `select-project-folders` IPC
    * channel. Returns the chosen absolute paths, or `null` when running
-   * outside the Electron shell (so callers can fall back to mock data).
+   * outside the desktop shell (so callers can fall back to mock data).
    * An empty array means the picker opened but the user cancelled.
    */
   static async selectProjectFolders(): Promise<string[] | null> {

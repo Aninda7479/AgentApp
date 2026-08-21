@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, RefreshCw, Check, AlertCircle } from 'lucide-react';
-import { getIpc } from '../lib/electron';
+import { getIpc } from '../lib/ipc';
 
 const ipc = getIpc();
 

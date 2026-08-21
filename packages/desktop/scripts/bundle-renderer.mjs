@@ -1,29 +1,10 @@
-// Bundles the three Electron renderer entry points (main UI + 3D pet +
-// circle-search) with esbuild.
+// Bundles the desktop renderer entry points (main UI + 3D pet +
+// circle-search + tray card) with esbuild.
 //
-// Why this exists: electron-builder only walks the MAIN process (main.js) require
-// graph when deciding which node_modules files to ship. The renderer processes
-// (ui.html -> entry.tsx, pet.html -> entry.ts, circle-search.html -> entry.tsx)
-// load separately via BrowserWindow and are never traced, so renderer-only
-// dependencies — notably three's `examples/jsm/*` addons (OrbitControls,
-// GLTFLoader, RoomEnvironment, meshopt_decoder) — get pruned out of the asar and
-// the renderer crashes on load (black screen). Bundling inlines every renderer
-// dependency (react, three, the three addons, lucide-react, app source) into a
-// single self-contained file under dist/, which electron-builder packages
-// automatically. `electron` is kept external because the renderer reaches it
-// only via the preload `contextBridge`, never via a static import.
+// Bundling inlines renderer dependencies (react, three, lucide-react, app source)
+// into self-contained IIFE files under dist/.
 //
-// `format: 'iife'` (not 'cjs'): the HTML now loads the bundle with a plain
-// <script src> tag (nodeIntegration is OFF), so there is no `require`/CommonJS
-// host to evaluate a CJS bundle — an IIFE is self-executing.
-//
-// Output file name is `entry.bundle.js` (NOT `entry.js`): the project's `tsc`
-// also compiles the renderer entry points and would emit a bare CommonJS
-// `entry.js` into the same folder. If the two shared a name, `tsc -w` (run by
-// `npm run dev`) would clobber the IIFE bundle on every save and the renderer
-// would fail to boot (blank screen). Using a distinct name keeps the bundle
-// owned exclusively by esbuild. Pass `--watch` to keep the bundles in sync with
-// source changes during development.
+// Pass `--watch` to keep the bundles in sync with source changes during development.
 import { build, context } from 'esbuild';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -40,7 +21,6 @@ const common = {
   platform: 'browser',
   jsx: 'automatic',
   target: 'es2020',
-  external: ['electron'],
   alias: {
     // Allow renderer code to import the Lily 3D model from models/ which lives
     // outside src/. esbuild resolves the alias before any other resolver.
@@ -97,4 +77,3 @@ console.log(
     WATCH ? ' (watching)' : ''
   }`
 );
-

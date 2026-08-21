@@ -313,7 +313,7 @@ export function authGate(req: Request, res: Response, next: NextFunction): void 
   if (isAuthDisabled()) return next();
   if (PUBLIC_PATHS.has(req.path)) return next();
 
-  // Allow local desktop app IPC calls over loopback (Tauri / Electron desktop clients)
+  // Allow local desktop app IPC calls over loopback (Tauri desktop clients)
   if (req.path.startsWith('/api/ipc/') && isLoopbackReq(req)) {
     return next();
   }

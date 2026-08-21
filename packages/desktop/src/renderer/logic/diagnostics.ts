@@ -14,14 +14,13 @@ export interface DiagnosticCheck {
 /** Builds the Doctor diagnostic checklist from config inputs + runtime versions. */
 export class DiagnosticsService {
   /**
-   * Reads the Electron / Node / Chrome versions from `process.versions`,
-   * falling back to `'unknown'` in non-Electron (web) environments.
+   * Reads runtime environment info, falling back gracefully in web environments.
    */
-  static environmentVersions(): { node: string; chrome: string; electron: string } {
-    const node = (typeof process !== 'undefined' && process.versions?.node) || 'unknown';
-    const chrome = (typeof process !== 'undefined' && process.versions?.chrome) || 'unknown';
-    const electron = (typeof process !== 'undefined' && process.versions?.electron) || 'unknown';
-    return { node, chrome, electron };
+  static environmentVersions(): { runtime: string; userAgent: string } {
+    const isTauri = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
+    const runtime = isTauri ? 'Tauri v2 Desktop Host' : 'Web Browser SPA';
+    const userAgent = typeof navigator !== 'undefined' ? (navigator.userAgent || 'unknown') : 'unknown';
+    return { runtime, userAgent };
   }
 
   /**
@@ -33,13 +32,13 @@ export class DiagnosticsService {
     modelsCount: number,
     unsandboxedActions: boolean
   ): DiagnosticCheck[] {
-    const { node, chrome, electron } = DiagnosticsService.environmentVersions();
+    const { runtime } = DiagnosticsService.environmentVersions();
     const results: DiagnosticCheck[] = [];
 
     results.push({
-      name: 'App Runtime Environments',
+      name: 'App Runtime Environment',
       status: 'pass',
-      detail: `Electron v${electron} | Node v${node} | Chrome v${chrome}`
+      detail: runtime
     });
 
     const count = Object.values(byokKeys).filter(Boolean).length;

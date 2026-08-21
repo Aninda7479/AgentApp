@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Check, Code2, MessageSquare, Moon, Sun, Monitor, Globe, Eye, Ban, Cpu } from 'lucide-react';
 import { ThemeMode } from '../../types';
 import { InternetAccessLevel, ModelConfig, ProviderConnection } from './types';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 import { SearchableSelect, SearchableSelectOption } from '../../components/ui/SearchableSelect';
 
 /**

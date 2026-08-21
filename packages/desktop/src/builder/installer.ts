@@ -37,8 +37,8 @@ export interface ResolvedInstallerConfigOptions {
   asar: boolean;
 }
 
-/** Complete electron-builder configuration object. */
-export interface ElectronBuilderConfiguration {
+/** Complete desktop release installer configuration object. */
+export interface DesktopReleaseInstallerConfiguration {
   appId: string;
   productName: string;
   copyright: string;
@@ -74,11 +74,11 @@ export interface ElectronBuilderConfiguration {
 export interface BuildResult {
   success: boolean;
   artifacts: string[];
-  config: ElectronBuilderConfiguration;
+  config: DesktopReleaseInstallerConfiguration;
   logs: string[];
 }
 
-/** Generates and validates electron-builder configurations for multi-platform releases. */
+/** Generates and validates installer configurations for multi-platform releases. */
 export class ReleaseInstallerBuilder {
   private options: ResolvedInstallerConfigOptions;
 
@@ -101,7 +101,7 @@ export class ReleaseInstallerBuilder {
     };
   }
 
-  public generateBuildConfig(): ElectronBuilderConfiguration {
+  public generateBuildConfig(): DesktopReleaseInstallerConfiguration {
     return {
       appId: this.options.appId,
       productName: this.options.productName,
@@ -138,7 +138,7 @@ export class ReleaseInstallerBuilder {
     };
   }
 
-  public validateConfig(config: ElectronBuilderConfiguration): { valid: boolean; errors: string[] } {
+  public validateConfig(config: DesktopReleaseInstallerConfiguration): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
     if (!config.appId) errors.push('Missing appId');

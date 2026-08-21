@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 import {
   Cpu,
   HardDrive,

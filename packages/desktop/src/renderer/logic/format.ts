@@ -19,7 +19,7 @@ export class FormatService {
    * Generates a collision-resistant storage ID of the form `XXXX-XXXX-XXXX-XXXX`
    * where each `X` is drawn from [[STORAGE_ID_CHARS]] (`1-9A-Z`). Used for chat
    * and project folder names so duplicate titles can never collide on disk.
-   * Uses `crypto.getRandomValues` (available in the browser/Electron renderer).
+   * Uses `crypto.getRandomValues` (available in modern browser and desktop webviews).
    */
   static generateStorageId(): string {
     const groups: string[] = [];

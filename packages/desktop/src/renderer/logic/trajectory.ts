@@ -1,8 +1,8 @@
 import type { TrajectoryStep } from './types';
-import { getIpc } from '../lib/electron';
+import { getIpc } from '../lib/ipc';
 
 /**
- * Pure rendering-support transforms and the Electron image-read boundary
+ * Pure rendering-support transforms and the desktop image-read boundary
  * for the trajectory canvas. None of these hold React state — they are
  * imported by `TrajectoryCanvas.tsx` so the component's JSX stays a thin
  * view layer that only renders what this service computes.
@@ -67,9 +67,9 @@ export class TrajectoryService {
   }
 
   /**
-   * Reads a local image file as a base64 data URL via the Electron
+   * Reads a local image file as a base64 data URL via the
    * `read-file-base64` IPC channel. Returns `null` when running outside
-   * the Electron shell (so the component can show its loading placeholder).
+   * the desktop shell (so the component can show its loading placeholder).
    */
   static readLocalImageBase64(filePath: string): Promise<string | null> {
     const ipc = getIpc();

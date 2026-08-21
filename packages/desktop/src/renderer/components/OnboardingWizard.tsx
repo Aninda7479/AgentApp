@@ -18,7 +18,7 @@ import {
   Power
 } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
-import { getIpc } from '../lib/electron';
+import { getIpc } from '../lib/ipc';
 import { ProviderConnection, ModelConfig } from '../pages/Settings/types';
 
 interface OnboardingWizardProps {

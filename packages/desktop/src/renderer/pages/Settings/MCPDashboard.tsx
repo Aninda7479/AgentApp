@@ -4,7 +4,7 @@ import { Terminal, Globe, Sparkles, Plus, RefreshCw, Server, Trash2, Search } fr
 import { McpInstallModal } from './McpInstallModal';
 import { McpService } from '../../logic/mcp';
 import { EmptyState } from '../../components/EmptyState';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 
 /** Information about a connected MCP server. */
 export interface MCPServerInfo {

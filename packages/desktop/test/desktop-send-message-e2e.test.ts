@@ -7,7 +7,7 @@ import { AgentEngine, type AgentEvent } from '../src/main/ai-engine';
 /**
  * CERTAIN-3 smoke test: Desktop send message end-to-end.
  *
- * Proves the desktop message lifecycle works without a real Electron shell:
+ * Proves the desktop message lifecycle works without a real desktop shell:
  *   1. User types a prompt in the Composer.
  *   2. Renderer prepares an IPC `agent-run` invocation.
  *   3. Main process creates an AgentEngine and calls engine.run().

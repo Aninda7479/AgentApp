@@ -20,7 +20,7 @@ import {
 import { SearchableSelect, SearchableSelectOption } from '../../components/ui/SearchableSelect';
 import { ModelPricing, ProviderConnection, ModelConfig } from './types';
 import { errorMessage } from '../../lib/errorReporter';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 
 type Engine = 'auto' | 'model' | 'local';
 type WhisperSize = 'tiny' | 'base' | 'small' | 'medium' | 'large';

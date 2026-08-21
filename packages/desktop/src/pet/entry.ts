@@ -87,9 +87,30 @@ const d2r = (deg: number) => (deg * Math.PI) / 180;
 type Vec3 = [number, number, number];
 type Pose = { rot: Record<string, Vec3>; pos: Record<string, Vec3>; screen: number; laptopFallen: boolean };
 
-// ── Electron IPC ──────────────────────────────────────────────────────────────
-const electron = (window as any).require('electron');
-const ipc = electron.ipcRenderer;
+// ── Desktop IPC ──────────────────────────────────────────────────────────────
+function getPetIpc() {
+  if (typeof window === 'undefined') return { send: () => {}, on: () => {}, invoke: async () => null };
+  const w = window as any;
+  if (w.superagent?.ipc) return w.superagent.ipc;
+  if (w.__TAURI_INTERNALS__?.invoke || w.__TAURI__?.core?.invoke) {
+    const tauri = w.__TAURI_INTERNALS__?.invoke || w.__TAURI__?.core?.invoke;
+    return {
+      send: (ch: string, arg?: any) => {
+        const cmd = ch.replace(/[:\-]/g, '_');
+        const payload = arg && typeof arg === 'object' ? arg : (arg !== undefined ? { id: arg, arg } : undefined);
+        tauri(cmd, payload).catch(() => {});
+      },
+      on: (_ch: string, _fn: any) => {},
+      invoke: (ch: string, arg?: any) => {
+        const cmd = ch.replace(/[:\-]/g, '_');
+        const payload = arg && typeof arg === 'object' ? arg : (arg !== undefined ? { id: arg, arg } : undefined);
+        return tauri(cmd, payload);
+      }
+    };
+  }
+  return { send: () => {}, on: () => {}, invoke: async () => null };
+}
+const ipc = getPetIpc();
 
 // ── Error logging for the pet window ────────────────────────────────────────────
 // The pet window has no own toast UI; errors go to its console and (when possible)

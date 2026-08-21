@@ -286,10 +286,31 @@ pub fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+#[tauri::command]
+pub fn system_info() -> SystemInfoResponse {
+    get_system_info()
+}
+
+#[tauri::command]
+pub fn app_version() -> String {
+    get_app_version()
+}
+
 fn get_user_data_dir() -> PathBuf {
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home).join(".superagent")
+}
+
+fn get_config_dir() -> PathBuf {
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_else(|_| ".".to_string());
+    let cfg = PathBuf::from(&home).join(".superagent").join("config");
+    if cfg.exists() {
+        return cfg;
+    }
     PathBuf::from(home).join(".superagent")
 }
 
@@ -308,15 +329,299 @@ pub fn write_global_memory(content: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn read_settings_file() -> String {
-    let p = get_user_data_dir().join("settings.json");
-    fs::read_to_string(p).unwrap_or_else(|_| "{}".to_string())
+    let p_cfg = get_config_dir().join("settings.json");
+    if let Ok(c) = fs::read_to_string(&p_cfg) {
+        return c;
+    }
+    let p_root = get_user_data_dir().join("settings.json");
+    fs::read_to_string(p_root).unwrap_or_else(|_| "{}".to_string())
 }
 
 #[tauri::command]
 pub fn write_settings_file(content: String) -> Result<(), String> {
-    let dir = get_user_data_dir();
-    let _ = fs::create_dir_all(&dir);
-    fs::write(dir.join("settings.json"), content).map_err(|e| e.to_string())
+    let config_dir = get_config_dir();
+    let _ = fs::create_dir_all(&config_dir);
+    let p_cfg = config_dir.join("settings.json");
+    fs::write(&p_cfg, &content).map_err(|e| e.to_string())?;
+    let _ = fs::write(get_user_data_dir().join("settings.json"), &content);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn settings_read() -> serde_json::Value {
+    let raw = read_settings_file();
+    let mut val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({}));
+    
+    // Merge models from models.json if present
+    let models_file = get_config_dir().join("models.json");
+    if let Ok(m_str) = fs::read_to_string(&models_file) {
+        if let Ok(m_val) = serde_json::from_str::<serde_json::Value>(&m_str) {
+            if let Some(obj) = val.as_object_mut() {
+                if !obj.contains_key("models") || obj.get("models").map(|v| v.as_array().map(|a| a.is_empty()).unwrap_or(true)).unwrap_or(true) {
+                    obj.insert("models".to_string(), m_val);
+                }
+            }
+        }
+    }
+    val
+}
+
+#[tauri::command]
+pub fn settings_write(content: Option<serde_json::Value>, data: Option<serde_json::Value>, settings: Option<serde_json::Value>) -> Result<(), String> {
+    let val = content.or(data).or(settings).unwrap_or_else(|| serde_json::json!({}));
+    let json_str = serde_json::to_string_pretty(&val).map_err(|e| e.to_string())?;
+    write_settings_file(json_str)
+}
+
+#[tauri::command]
+pub fn store_read() -> serde_json::Value {
+    let settings_val = settings_read();
+    let providers = settings_val.get("providers").cloned().unwrap_or_else(|| serde_json::json!([]));
+    let models = settings_val.get("models").cloned().unwrap_or_else(|| serde_json::json!([]));
+
+    let conv_dir = get_user_data_dir().join("conversation");
+    let mut projects = Vec::new();
+    let mut chats = Vec::new();
+
+    let chats_dir = conv_dir.join("Chats");
+    if let Ok(entries) = fs::read_dir(&chats_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let meta_file = path.join("meta.json");
+                let chat_file = path.join("chat.json");
+                if let Ok(c) = fs::read_to_string(&meta_file).or_else(|_| fs::read_to_string(&chat_file)) {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&c) {
+                        chats.push(v);
+                    }
+                }
+            }
+        }
+    }
+
+    let projects_dir = conv_dir.join("Projects");
+    if let Ok(entries) = fs::read_dir(&projects_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let meta_file = path.join("meta.json");
+                let proj_file = path.join("project.json");
+                if let Ok(c) = fs::read_to_string(&meta_file).or_else(|_| fs::read_to_string(&proj_file)) {
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&c) {
+                        projects.push(v);
+                    }
+                }
+            }
+        }
+    }
+
+    serde_json::json!({
+        "connectedProviders": providers,
+        "modelsCatalog": models,
+        "projects": projects,
+        "chats": chats
+    })
+}
+
+#[tauri::command]
+pub fn store_write(data: Option<serde_json::Value>, content: Option<serde_json::Value>) -> Result<(), String> {
+    let val = data.or(content).unwrap_or_else(|| serde_json::json!({}));
+    if let Some(obj) = val.as_object() {
+        if obj.contains_key("connectedProviders") || obj.contains_key("modelsCatalog") {
+            let mut current = settings_read();
+            if let Some(c_obj) = current.as_object_mut() {
+                if let Some(p) = obj.get("connectedProviders") {
+                    if p.as_array().map(|a| !a.is_empty()).unwrap_or(false) {
+                        c_obj.insert("providers".to_string(), p.clone());
+                    }
+                }
+                if let Some(m) = obj.get("modelsCatalog") {
+                    if m.as_array().map(|a| !a.is_empty()).unwrap_or(false) {
+                        c_obj.insert("models".to_string(), m.clone());
+                    }
+                }
+            }
+            let _ = settings_write(Some(current), None, None);
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn chat_steps_read(chat_id: Option<String>, id: Option<String>, payload: Option<serde_json::Value>) -> Vec<serde_json::Value> {
+    let target_id = chat_id.or(id).or_else(|| {
+        payload.and_then(|p| {
+            if let Some(s) = p.as_str() {
+                Some(s.to_string())
+            } else {
+                p.get("chatId").and_then(|v| v.as_str()).map(|s| s.to_string())
+            }
+        })
+    });
+    if let Some(cid) = target_id {
+        let chat_dir = get_user_data_dir().join("conversation").join("Chats").join(&cid);
+        let steps_file = chat_dir.join("steps.json");
+        if let Ok(content) = fs::read_to_string(&steps_file) {
+            if let Ok(steps) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
+                return steps;
+            }
+        }
+    }
+    Vec::new()
+}
+
+#[tauri::command]
+pub fn window_minimize(app: AppHandle) -> Result<(), String> {
+    minimize_window(app)
+}
+
+#[tauri::command]
+pub fn window_maximize(app: AppHandle) -> Result<(), String> {
+    toggle_window_maximize(app)
+}
+
+#[tauri::command]
+pub fn window_close(app: AppHandle) -> Result<(), String> {
+    close_window(app)
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DetectedProvider {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub provider_type: String,
+    #[serde(rename = "apiKey", default)]
+    pub api_key: String,
+    #[serde(rename = "baseUrl", default)]
+    pub base_url: String,
+}
+
+#[tauri::command]
+pub fn auto_detect_providers() -> Vec<DetectedProvider> {
+    let mut detected = Vec::new();
+
+    if check_ollama_port() {
+        detected.push(DetectedProvider {
+            id: "ollama".to_string(),
+            name: "Ollama (Local)".to_string(),
+            provider_type: "custom".to_string(),
+            api_key: "".to_string(),
+            base_url: "http://localhost:11434".to_string(),
+        });
+    }
+
+    if let Ok(key) = std::env::var("OPENAI_API_KEY") {
+        if !key.trim().is_empty() {
+            detected.push(DetectedProvider {
+                id: "chatgpt".to_string(),
+                name: "OpenAI (ChatGPT)".to_string(),
+                provider_type: "env".to_string(),
+                api_key: key,
+                base_url: "https://api.openai.com/v1".to_string(),
+            });
+        }
+    }
+
+    if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
+        if !key.trim().is_empty() {
+            detected.push(DetectedProvider {
+                id: "claude".to_string(),
+                name: "Anthropic Claude".to_string(),
+                provider_type: "env".to_string(),
+                api_key: key,
+                base_url: "https://api.anthropic.com".to_string(),
+            });
+        }
+    }
+
+    if let Ok(key) = std::env::var("GEMINI_API_KEY").or_else(|_| std::env::var("GOOGLE_API_KEY")) {
+        if !key.trim().is_empty() {
+            detected.push(DetectedProvider {
+                id: "gemini".to_string(),
+                name: "Google Gemini".to_string(),
+                provider_type: "env".to_string(),
+                api_key: key,
+                base_url: "https://generativelanguage.googleapis.com".to_string(),
+            });
+        }
+    }
+
+    detected
+}
+
+#[tauri::command]
+pub fn skills_catalog() -> Vec<serde_json::Value> {
+    Vec::new()
+}
+
+#[tauri::command]
+pub fn mcp_catalog() -> Vec<serde_json::Value> {
+    Vec::new()
+}
+
+#[tauri::command]
+pub fn plugins_catalog() -> Vec<serde_json::Value> {
+    Vec::new()
+}
+
+#[tauri::command]
+pub fn skills_list(_payload: Option<serde_json::Value>) -> Vec<serde_json::Value> {
+    let mut skills = Vec::new();
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_else(|_| ".".to_string());
+    let skills_dir = std::path::PathBuf::from(home).join(".superagent").join("skills");
+    if let Ok(entries) = fs::read_dir(&skills_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let desc_file = path.join("SKILL.md");
+                let instructions = fs::read_to_string(&desc_file).unwrap_or_default();
+                skills.push(serde_json::json!({
+                    "id": name,
+                    "name": name,
+                    "description": instructions.lines().next().unwrap_or("User skill"),
+                    "instructions": instructions,
+                    "scope": "global"
+                }));
+            }
+        }
+    }
+    skills
+}
+
+#[tauri::command]
+pub fn skills_save(name: String, description: Option<String>, instructions: Option<String>) -> serde_json::Value {
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_else(|_| ".".to_string());
+    let skill_dir = std::path::PathBuf::from(home).join(".superagent").join("skills").join(&name);
+    let _ = fs::create_dir_all(&skill_dir);
+    let content = instructions.unwrap_or_else(|| description.unwrap_or_default());
+    let _ = fs::write(skill_dir.join("SKILL.md"), content);
+    serde_json::json!({ "success": true })
+}
+
+#[tauri::command]
+pub fn skills_import_check(_payload: Option<serde_json::Value>) -> serde_json::Value {
+    serde_json::json!({ "canImport": false, "skills": [] })
+}
+
+#[tauri::command]
+pub fn skills_import_perform(_payload: Option<serde_json::Value>) -> serde_json::Value {
+    serde_json::json!({ "success": true, "importedCount": 0 })
+}
+
+#[tauri::command]
+pub fn kanban_load(_payload: Option<serde_json::Value>) -> serde_json::Value {
+    serde_json::json!({ "columns": [] })
+}
+
+#[tauri::command]
+pub fn kanban_save(_payload: Option<serde_json::Value>) -> serde_json::Value {
+    serde_json::json!({ "success": true })
 }
 
 #[tauri::command]

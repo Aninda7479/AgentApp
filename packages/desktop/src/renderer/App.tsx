@@ -39,7 +39,7 @@ import { resolveScopeSettings } from './logic/scopeSettings';
 import { SessionLoopManager, LoopTask } from './logic/loop';
 import { useThemeMode } from './theme';
 import { getRouteFromLocation, pushRoute, subscribeRouteChange, buildPath } from './urlSync';
-import { getIpc } from './lib/electron';
+import { getIpc } from './lib/ipc';
 import { BrandLogo } from './BrandLogo';
 
 import { WorkspaceStage } from './workspace/WorkspaceStage';
@@ -231,9 +231,9 @@ export const App: React.FC = () => {
   const [skills, setSkills] = useState<(SkillInfo & { instructions?: string })[]>([]);
   // Curated "under development" skills (Settings → Skills only; never the slash surface).
   const [skillCatalog, setSkillCatalog] = useState<any[]>([]);
-  // Resolve ipcRenderer safely
+  // Resolve IPC bridge safely
   const ipc = getIpc();
-  const isElectron = typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '');
+  const isDesktopApp = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
 
   const [enabledSkills, setEnabledSkills] = useState<Record<string, boolean>>({});
 
@@ -465,7 +465,7 @@ export const App: React.FC = () => {
     setFullAccess(resolvedScope.unsandboxed);
   }, [resolvedScope.unsandboxed]);
   const resolvedDefaultApproval = resolvedScope.approval;
-  const isWebMode = !isElectron;
+  const isWebMode = !isDesktopApp;
   const slashCommands = useMemo(() => builtinSuggestions(), []);
 
   // Skill catalog offered to the Project Settings + Standalone Chat pages as
@@ -777,7 +777,7 @@ export const App: React.FC = () => {
       AttachmentService.fromFiles(ctx, filePaths);
       return;
     }
-    // Web/VPS build has no native file dialog (Electron's select-files IPC is
+    // Web/VPS build has no native file dialog (select-files IPC is
     // absent). Fall back to a hidden <input type="file"> and route the chosen
     // File objects through fromPaste, which reads them into buffers — the same
     // path clipboard paste uses in the web build. Without this, the Attach
@@ -853,7 +853,7 @@ export const App: React.FC = () => {
   // Startup: load persisted data, then auto-detect new providers.
   useEffect(() => {
     if (!ipc) {
-      // No Electron IPC (web/test) — nothing to hydrate; settle immediately.
+      // No Desktop IPC (web/test) — nothing to hydrate; settle immediately.
       setBootstrapping(false);
       return;
     }
@@ -1348,7 +1348,7 @@ export const App: React.FC = () => {
             setIsBackendDisconnected((prev) => (prev !== nextVal ? nextVal : prev));
           }
         } else {
-          // In Desktop mode (Tauri / Electron), check IPC connection
+          // In Desktop mode (Tauri), check IPC connection
           const res = await ipc.invoke('system-info').catch(() => null);
           if (isMounted) {
             const nextVal = res === null;

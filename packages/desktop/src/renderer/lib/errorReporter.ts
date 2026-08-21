@@ -4,12 +4,8 @@
  * `reportError` logs to the console AND notifies subscribers (App.tsx wires a
  * subscriber that shows a red toast). `safeInvoke` is a crash-safe IPC invoke
  * for callers that want an explicit promise (it delegates to the canonical
- * bridge in `./electron`, which already wraps every `invoke` with the same
+ * bridge in `./ipc`, which already wraps every `invoke` with the same
  * error envelope).
- *
- * Note: this module no longer patches the live `ipcRenderer.invoke`. Under
- * `contextIsolation: true` the preload's `contextBridge` object is frozen and
- * cannot be mutated; the envelope now lives permanently in `./electron`.
  */
 
 export interface IpcErrorEnvelope {
@@ -65,26 +61,20 @@ export function subscribeError(fn: ErrorListener): () => void {
 /** Resolves the renderer ipc surface via the canonical bridge. */
 function getIpc(): any | null {
   // Lazy import avoids a hard dependency cycle at module init.
-  const { getIpc: bridge } = require('./electron') as typeof import('./electron');
+  const { getIpc: bridge } = require('./ipc') as typeof import('./ipc');
   return bridge();
 }
 
-/**
- * Historically patched the live `ipcRenderer.invoke` so every call in the
- * renderer was crash-safe. Under `contextIsolation` the preload bridge is
- * frozen and the envelope is applied permanently in `./electron`, so this is
- * now a no-op kept for API compatibility.
- */
 export function installSafeInvoke(): void {
-  /* envelope is applied in ./electron for every invoke */
+  /* envelope is applied in ./ipc for every invoke */
 }
 
 /**
- * Explicitly safe IPC invoke for new code. Returns null on failure instead of
- * throwing. Delegates to `./electron.invoke`, which already applies the
+ * Explicitly safe IPC invoke. Returns null on failure instead of
+ * throwing. Delegates to `./ipc.invoke`, which already applies the
  * error envelope (reports toasts, resolves null on error).
  */
 export async function safeInvoke<T = unknown>(channel: string, ...args: unknown[]): Promise<T | null> {
-  const { invoke } = await import('./electron.js');
+  const { invoke } = await import('./ipc.js');
   return (await invoke(channel, ...args)) as T | null;
 }

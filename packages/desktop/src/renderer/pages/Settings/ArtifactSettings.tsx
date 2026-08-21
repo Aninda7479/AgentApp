@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HardDrive, RefreshCw, Trash2, FolderOpen, AlertTriangle, CheckCircle2, Sliders } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 import { ArtifactRuntimeState } from '@superagent/core';
 
 export const ArtifactSettings: React.FC = () => {

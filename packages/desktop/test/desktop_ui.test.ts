@@ -2,72 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 
-// Mock Electron module before importing WindowManager
-vi.mock('electron', () => {
-  class MockBrowserWindow {
-    id: number;
-    static idCounter = 1;
-    destroyed = false;
-    opts: any;
-    listeners: Record<string, Function[]> = {};
-
-    constructor(options: any) {
-      this.id = MockBrowserWindow.idCounter++;
-      this.opts = options;
-    }
-
-    loadFile(path: string) {
-      return Promise.resolve();
-    }
-
-    on(event: string, fn: Function) {
-      if (!this.listeners[event]) this.listeners[event] = [];
-      this.listeners[event].push(fn);
-    }
-
-    emit(event: string) {
-      if (this.listeners[event]) {
-        this.listeners[event].forEach((fn) => fn());
-      }
-    }
-
-    isDestroyed() {
-      return this.destroyed;
-    }
-
-    close() {
-      this.destroyed = true;
-      this.emit('closed');
-    }
-
-    isMinimized() {
-      return false;
-    }
-
-    restore() {}
-    focus() {}
-    minimize() {}
-    maximize() {}
-    unmaximize() {}
-    isMaximized() {
-      return false;
-    }
-  }
-
-  return {
-    BrowserWindow: MockBrowserWindow,
-    app: {
-      whenReady: () => Promise.resolve(),
-      on: vi.fn(),
-      quit: vi.fn(),
-      getAppPath: () => '/mock-app-path'
-    },
-    ipcMain: {
-      on: vi.fn()
-    }
-  };
-});
-
 class WindowManager {
   private windows: Map<string, any> = new Map();
   private mainWindow: any = null;
@@ -110,7 +44,7 @@ import { IntegrationsSettings } from '../src/renderer/pages/Settings/Integration
 import { McpInstallModal } from '../src/renderer/pages/Settings/McpInstallModal';
 import { App } from '../src/renderer/App';
 
-describe('Step 081: Electron Main Process & Multi-Window Manager', () => {
+describe('Step 081: Desktop Multi-Window Manager & UI Components', () => {
   let wm: WindowManager;
 
   beforeEach(() => {

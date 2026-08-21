@@ -7,9 +7,9 @@ SuperAgent ships in **two** builds that share the same autonomous core:
 | Option | Packages | Installed via | Updates via |
 | :--- | :--- | :--- | :--- |
 | **1. Core + CLI + Web** | `@superagent/core`, `@superagent/cli`, `@superagent/web` | `npm install -g` (one-liner from the site) | `superagent update` (npm) |
-| **2. Core + Desktop + Web** | `@superagent/core` + Electron app | native installer (Win/macOS/Linux) | in-app auto-update (GitHub Releases) |
+| **2. Core + Desktop + Web** | `@superagent/core` + Tauri v2 Desktop app | native installer (Win/macOS/Linux) | in-app auto-update (GitHub Releases) |
 
-All four packages share one version number (`0.1.0` today). Keep them in lockstep.
+All packages share one version number. Keep them in lockstep.
 
 ---
 
@@ -23,7 +23,7 @@ All four packages share one version number (`0.1.0` today). Keep them in lockste
 - A maintainer with push access to `main` (release tags are cut there).
 
 No extra secret is needed for desktop publishing — the built-in `GITHUB_TOKEN`
-(with `contents: write`) lets `electron-builder` create the release and upload
+(with `contents: write`) lets the release workflow create the release and upload
 assets.
 
 ---
@@ -133,12 +133,7 @@ intervention required beyond cutting the tag.
 
 ### Option 2 — Desktop (GitHub Releases auto-update)
 
-The in-app auto-updater (`electron-updater`) reads the `github` publish feed
-configured in `packages/desktop/package.json`:
-
-```json
-"publish": [{ "provider": "github", "owner": "Aninda7479", "repo": "AgentApp" }]
-```
+The desktop auto-updater reads the GitHub release feed directly or via Tauri plugin-updater.
 
 #### Release Channels (Stable vs Beta):
 The user can select their preferred update stream in the UI under **Settings → Updates**:

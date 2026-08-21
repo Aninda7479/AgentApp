@@ -46,7 +46,7 @@ export interface StartWebServerOptions {
  * Resolves the absolute path to the web server's compiled entry point.
  * Resolution order (first hit wins):
  *   1. `SUPERAGENT_WEB_SERVER_PATH` env override (explicit path to server.js).
- *   2. Packaged Electron build: `<resourcesPath>/web/server.js`.
+ *   2. Packaged Desktop build: `<resourcesPath>/web/server.js`.
  *   3. Monorepo dev layout: walk up from this file to find
  *      `packages/web/dist/server.js`.
  *   4. Published package resolution: `require.resolve('@superagent/web')`.
@@ -60,7 +60,7 @@ export function locateWebServerEntry(): string | null {
     return envOverride;
   }
 
-  // Packaged Electron build bundles the web server under resources/web.
+  // Packaged Desktop build bundles the web server under resources/web.
   const resourcesPath = (process as any).resourcesPath as string | undefined;
   if (resourcesPath) {
     const packed = path.join(resourcesPath, 'web', 'server.js');
@@ -156,9 +156,6 @@ export function startWebServer(options: StartWebServerOptions = {}): ChildProces
         'Build the web package first with `npm run build --workspace=@superagent/web`.'
     );
   }
-
-  // If launching from an Electron executable, force it to run as a node child process.
-  env.ELECTRON_RUN_AS_NODE = '1';
 
   const child = spawn(process.execPath, [entry], {
     env,

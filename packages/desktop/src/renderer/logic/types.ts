@@ -76,7 +76,7 @@ export interface UpdateStatus {
  * globals. Methods receive this as their final argument.
  */
 export interface AppContext {
-  /** The Electron ipcRenderer, or null outside the desktop shell. */
+  /** The desktop IPC bridge, or null outside the desktop shell. */
   ipc: any | null;
 
   // ── live getters (always read current state via refs) ──

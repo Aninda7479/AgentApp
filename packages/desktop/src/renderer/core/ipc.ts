@@ -1,30 +1,30 @@
 /**
  * Strongly Typed IPC Bridge Wrapper for SuperAgent Desktop
- * Delegates to the canonical getIpc and isElectron helpers from lib/electron.
+ * Delegates to the canonical getIpc and isDesktopApp helpers from lib/ipc.
  */
 
 import type { ProviderConnection, ModelConfig, StoredProject, StoredChat, TrajectoryStep } from './types';
-import { getIpc, isElectron } from '../lib/electron';
+import { getIpc, isDesktopApp } from '../lib/ipc';
 
-export interface ElectronIpcBridge {
+export interface DesktopIpcBridge {
   invoke(channel: string, ...args: unknown[]): Promise<unknown>;
   on(channel: string, listener: (event: unknown, ...args: unknown[]) => void): void;
   removeListener(channel: string, listener: (event: unknown, ...args: unknown[]) => void): void;
 }
 
 export class IpcBridge {
-  static getIpc(): ElectronIpcBridge | null {
+  static getIpc(): DesktopIpcBridge | null {
     return getIpc();
   }
 
   static isDesktop(): boolean {
-    return isElectron();
+    return isDesktopApp();
   }
 
   static async invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
     const ipc = IpcBridge.getIpc();
     if (!ipc) {
-      throw new Error(`[IPC Error] Environment is not Desktop Electron. Channel: ${channel}`);
+      throw new Error(`[IPC Error] Environment is not Desktop app. Channel: ${channel}`);
     }
     const res = (await ipc.invoke(channel, ...args)) as { __ipcError?: boolean; error?: string } | T;
     if (res && typeof res === 'object' && '__ipcError' in res && res.__ipcError) {

@@ -11,7 +11,7 @@ export class UpdateService {
   /**
    * Triggers a manual update check.
    * - In Tauri (desktop app): uses @tauri-apps/plugin-updater.
-   * - In Web / Electron: queries IPC or API endpoint.
+   * - In Web / Fallback: queries IPC or API endpoint.
    */
   static async check(ctx: AppContext): Promise<void> {
     ctx.setActiveTab('settings');
@@ -61,7 +61,7 @@ export class UpdateService {
       return;
     }
 
-    // 2. Electron / Legacy IPC Environment
+    // 2. Web / Desktop IPC Environment
     if (ctx.ipc) {
       try {
         const res = await ctx.ipc.invoke('check-for-updates');

@@ -26,7 +26,7 @@ const DEFAULT_SLIDES: SlideData[] = [
     content: [
       'Next-generation software engineering automation',
       'Unified media suite for Images, Audio, Video, PDF & PPT',
-      'Zero-latency electron integration with local execution',
+      'Zero-latency desktop integration with local execution',
     ],
     notes: 'Introduce the main platform highlights and architectural principles.',
     bgGradient: 'linear-gradient(135deg, #1e1b4b 0%, #311042 100%)',

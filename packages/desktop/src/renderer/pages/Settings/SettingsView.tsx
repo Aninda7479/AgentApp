@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SettingsViewProps, ModelConfig, ModelPricing, UpdateStatus, InternetAccessLevel } from './types';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 export type { ProviderConnection, ModelConfig } from './types';
 import { SettingsSidebar } from './SettingsSidebar';
 import { GeneralSettings } from './GeneralSettings';

@@ -1,27 +1,21 @@
 /**
  * Browser-safe fetch shared by every settings screen that talks to a provider
- * API (Providers, Models, Integrations). The desktop Electron shell may call
- * provider APIs (api.anthropic.com, api.openai.com, build.nvidia.com, ...) directly
- * — its renderer fetch is privileged and CORS-exempt. The web/VPS build runs the
- * *same* renderer in a browser, where those calls are blocked by CORS (providers
- * don't send Access-Control-Allow-Origin for browser requests). In the web shell
- * we forward the request through the server-side proxy (/api/provider-proxy),
- * which performs the upstream call server-side and returns a Response-shaped object.
- *
- * Centralised here so the CORS workaround lives in exactly one place and every
- * settings screen routes through it (the earlier fix only patched ProvidersSettings'
- * connection-test call sites and missed the model-catalog + NVIDIA catalog fetches).
+ * API (Providers, Models, Integrations). The native desktop shell may call
+ * provider APIs directly — its renderer fetch is privileged and CORS-exempt.
+ * The web build runs the same renderer in a browser, where those calls are blocked
+ * by CORS, so we forward the request through the server-side proxy (/api/provider-proxy).
  */
-import { getIpc } from './lib/electron';
-export const IS_ELECTRON_SHELL =
-  typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '');
+import { getIpc } from './lib/ipc';
+
+export const IS_DESKTOP_SHELL =
+  typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
 
 export async function browserSafeFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const isLocalUrl = /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0|::1)(:\d+)?/i.test(url);
   const isTauri = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
 
-  // If in Electron shell or native Tauri with local/loopback URLs, direct fetch is CORS-free
-  if (IS_ELECTRON_SHELL || (isTauri && isLocalUrl)) {
+  // If in native desktop shell or local/loopback URLs, direct fetch is CORS-free
+  if (isTauri || isLocalUrl) {
     try {
       return await window.fetch(url, init);
     } catch {
@@ -29,7 +23,7 @@ export async function browserSafeFetch(url: string, init: RequestInit = {}): Pro
     }
   }
 
-  // If running in Electron with preload provider-proxy bridge
+  // If running with preload provider-proxy bridge
   if (typeof window !== 'undefined' && (window as any).superagent?.ipc) {
     try {
       const payload = await (window as any).superagent.ipc.invoke('provider-proxy', {
@@ -69,7 +63,6 @@ export async function browserSafeFetch(url: string, init: RequestInit = {}): Pro
         body: JSON.stringify({ method: init.method ?? 'GET', url, headers: init.headers ?? {} }),
       });
     } catch (err: any) {
-      // If web proxy fetch failed and this is a local loopback server, attempt direct fetch
       if (isLocalUrl) {
         try {
           return await window.fetch(url, init);
@@ -103,7 +96,7 @@ export async function browserSafeFetch(url: string, init: RequestInit = {}): Pro
     } as unknown as Response;
   }
 
-  // Direct fetch fallback for Tauri
+  // Direct fetch fallback for desktop
   try {
     return await window.fetch(url, init);
   } catch (err: any) {

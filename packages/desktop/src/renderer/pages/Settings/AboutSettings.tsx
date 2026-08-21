@@ -1,7 +1,7 @@
 import React from 'react';
 import { ExternalLink, BookOpen, Bug, Cpu, Plug, Sparkles, Boxes, FolderGit2, LucideIcon } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 
 /** Props for the About settings panel. */
 interface AboutSettingsProps {
@@ -35,7 +35,7 @@ const HIGHLIGHTS: { icon: LucideIcon; title: string; body: string }[] = [
 ];
 
 /** Stack acknowledgements — quiet, not a brag wall. */
-const BUILT_WITH = ['Electron', 'React', 'Three.js', 'Tailwind CSS', 'Lucide'];
+const BUILT_WITH = ['Tauri', 'Rust', 'React', 'Three.js', 'Tailwind CSS', 'Lucide'];
 
 const LINKS: { icon: LucideIcon; label: string; href: string }[] = [
   { icon: FolderGit2, label: 'GitHub Repository', href: REPO_URL },

@@ -51,7 +51,7 @@ interface EnvProviderSpec {
 /**
  * ProviderAutoDetector — shared provider discovery used by Desktop and Web.
  *
- * Previously this logic was copy-pasted into both the Electron main process and
+ * Previously this logic was duplicated between the desktop backend and
  * the Express server. It now lives in `@superagent/core` so both surfaces call
  * the exact same implementation (`ProviderAutoDetector.detect()`), keeping
  * behavior identical everywhere and removing duplication.

@@ -29,7 +29,7 @@ const REPO_URL = 'https://github.com/Aninda7479/AgentApp';
 import React, { useState } from 'react';
 import { RefreshCw, CheckCircle2, AlertTriangle, Info, ExternalLink, Download } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
   appVersion,
   updateStatus,

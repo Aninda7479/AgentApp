@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 import {
   RefreshCw,
   Trash2,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Globe, Play, Square, KeyRound, CheckCircle2, AlertTriangle, ExternalLink, RotateCw, Copy, Check, ShieldCheck, User } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
-import { getIpc } from '../../lib/electron';
+import { getIpc } from '../../lib/ipc';
 
 /** Status payload returned by the main-process `web-status` IPC. */
 interface WebStatus {
