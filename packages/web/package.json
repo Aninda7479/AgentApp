@@ -18,7 +18,7 @@
     "build:server": "tsc",
     "build": "npm run build:client && npm run build:server",
     "start": "node dist/server.js",
-    "dev": "npm run build:client && concurrently -n \"tsc,server\" -c \"green,magenta\" \"tsc -w\" \"nodemon --watch dist/server.js dist/server.js\"",
+    "dev": "concurrently -n \"client,tsc,server\" -c \"cyan,green,magenta\" \"node scripts/build.js --watch\" \"tsc -w\" \"nodemon --watch dist/server.js dist/server.js\"",
     "prepublishOnly": "npm run build",
     "test": "vitest run"
   },

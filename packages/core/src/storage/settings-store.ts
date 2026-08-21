@@ -64,6 +64,14 @@ export interface InternetAccessSettings {
   level?: InternetAccessLevel;
 }
 
+/** Persistent state tracking completed onboarding steps and modular feature setups. */
+export interface SetupState {
+  completed?: boolean;
+  version?: number;
+  completedSteps?: string[];
+  dismissedFeatures?: string[];
+}
+
 /** General application-level preferences. */
 export interface GeneralAppSettings {
   workMode?: 'coding' | 'everyday';
@@ -77,6 +85,7 @@ export interface GeneralAppSettings {
   globalMemory?: string;
   ownerName?: string;
   releaseChannel?: 'stable' | 'beta';
+  setupState?: SetupState;
 }
 
 /** Orchestrator settings: enabled models, routing strategy, optimization goal, and free-only mode. */

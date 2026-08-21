@@ -15,11 +15,23 @@ if (!fs.existsSync(distDir)) {
   fs.mkdirSync(distDir, { recursive: true });
 }
 
+const isWatch = process.argv.includes('--watch');
+
+async function compileBundle(cfg) {
+  if (isWatch) {
+    const ctx = await esbuild.context(cfg);
+    await ctx.watch();
+    return ctx;
+  } else {
+    return await esbuild.build(cfg);
+  }
+}
+
 async function build() {
   console.log('[Build] Starting web client compilation...');
 
   // 1. Build client-side IPC bridge
-  await esbuild.build({
+  await compileBundle({
     entryPoints: [path.join(webRoot, 'src/ipc-bridge.ts')],
     bundle: true,
     outfile: path.join(distDir, 'ipc-bridge.js'),
@@ -29,13 +41,13 @@ async function build() {
   console.log('[Build] ipc-bridge.js compiled.');
 
   // 2. Build React SPA Client
-  await esbuild.build({
+  await compileBundle({
     entryPoints: [path.join(desktopRoot, 'src/renderer/entry.tsx')],
     bundle: true,
     outfile: path.join(distDir, 'client.js'),
     format: 'iife',
-    minify: process.env.NODE_ENV === 'production',
-    sourcemap: process.env.NODE_ENV !== 'production',
+    minify: !isWatch && process.env.NODE_ENV === 'production',
+    sourcemap: isWatch || process.env.NODE_ENV !== 'production',
     loader: {
       '.png': 'dataurl',
       '.svg': 'dataurl',
@@ -45,7 +57,7 @@ async function build() {
       '.ttf': 'file',
     },
     define: {
-      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+      'process.env.NODE_ENV': JSON.stringify(isWatch ? 'development' : (process.env.NODE_ENV || 'production')),
     },
   });
   console.log('[Build] React client.js compiled.');
@@ -58,24 +70,23 @@ async function build() {
   fs.copyFileSync(path.join(webRoot, 'src/login.html'), path.join(distDir, 'login.html'));
   console.log('[Build] login.html copied.');
 
-
   // 3c-2. Build tray.js and copy tray.html for Artifacts tray popup
   const rendererDistDir = path.join(distDir, 'renderer');
   if (!fs.existsSync(rendererDistDir)) {
     fs.mkdirSync(rendererDistDir, { recursive: true });
   }
-  await esbuild.build({
+  await compileBundle({
     entryPoints: [path.join(desktopRoot, 'src/renderer/trayCard/TrayCardApp.tsx')],
     bundle: true,
     outfile: path.join(rendererDistDir, 'tray.js'),
     format: 'iife',
-    minify: process.env.NODE_ENV === 'production',
+    minify: !isWatch && process.env.NODE_ENV === 'production',
     loader: {
       '.png': 'dataurl',
       '.svg': 'dataurl',
     },
     define: {
-      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+      'process.env.NODE_ENV': JSON.stringify(isWatch ? 'development' : (process.env.NODE_ENV || 'production')),
     },
   });
   console.log('[Build] renderer/tray.js compiled.');
@@ -87,6 +98,7 @@ async function build() {
   fs.copyFileSync(path.join(webRoot, 'src/sw.js'), path.join(distDir, 'sw.js'));
   fs.copyFileSync(path.join(webRoot, 'src/icon.png'), path.join(distDir, 'icon.png'));
   fs.copyFileSync(path.join(webRoot, 'src/icon.svg'), path.join(distDir, 'icon.svg'));
+
   // 4. Resolve and Compile Tailwind CSS
   const desktopBuiltCss = path.join(desktopRoot, 'dist/index.css');
   const desktopSrcCss = path.join(desktopRoot, 'src/index.css');
@@ -96,7 +108,7 @@ async function build() {
   try {
     const { execSync } = await import('child_process');
     console.log('[Build] Compiling Tailwind CSS for web client...');
-    execSync(`npx @tailwindcss/cli -i "${desktopSrcCss}" -o "${destCss}" --minify`, {
+    execSync(`npx @tailwindcss/cli -i "${desktopSrcCss}" -o "${destCss}" ${isWatch ? '' : '--minify'}`, {
       cwd: desktopRoot,
       stdio: 'inherit',
     });
@@ -128,7 +140,7 @@ async function build() {
     console.log('[Build] Copied desktop static assets to web dist.');
   }
 
-  console.log('[Build] Complete build successful.');
+  console.log(`[Build] Complete build successful${isWatch ? ' (watching)' : ''}.`);
 }
 
 build().catch((err) => {

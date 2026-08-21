@@ -200,6 +200,7 @@ export const App: React.FC = () => {
   // panels must show a loading state rather than a false "nothing connected".
   const [bootstrapping, setBootstrapping] = useState<boolean>(true);
   const [onboardingDismissed, setOnboardingDismissed] = useState<boolean>(false);
+  const [setupCompleted, setSetupCompleted] = useState<boolean>(false);
 
   // Trajectory steps (the canvas)
   const [trajectorySteps, setTrajectorySteps] = useState<TrajectoryStep[]>([
@@ -242,6 +243,9 @@ export const App: React.FC = () => {
     ipc.invoke('settings-read')
       .then((current: any) => {
         setEnabledSkills(current?.skills || {});
+        if (current?.general?.setupState?.completed) {
+          setSetupCompleted(true);
+        }
       })
       .catch(() => {});
   }, [ipc]);
@@ -1844,9 +1848,12 @@ export const App: React.FC = () => {
       <VoiceIndicator />
 
       {/* Onboarding Wizard for first-run users */}
-      {!bootstrapping && connectedProviders.length === 0 && !onboardingDismissed && (
+      {!bootstrapping && !setupCompleted && connectedProviders.length === 0 && !onboardingDismissed && (
         <OnboardingWizard
-          onComplete={() => setOnboardingDismissed(true)}
+          onComplete={() => {
+            setOnboardingDismissed(true);
+            setSetupCompleted(true);
+          }}
           onConnectProvider={handleConnectProvider}
         />
       )}
