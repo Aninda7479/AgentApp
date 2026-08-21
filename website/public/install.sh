@@ -194,6 +194,12 @@ chmod +x "$TARGET_BIN"
 if [ "$OS" = "Darwin" ]; then
   xattr -d com.apple.quarantine "$TARGET_BIN" 2>/dev/null || true
   xattr -cr "$TARGET_BIN" 2>/dev/null || true
+  if [ -d "$LAUNCHER_DIR/node_modules" ]; then
+    xattr -cr "$LAUNCHER_DIR/node_modules" 2>/dev/null || true
+  fi
+  if command -v codesign >/dev/null 2>&1; then
+    codesign --force --deep -s - "$TARGET_BIN" 2>/dev/null || true
+  fi
 fi
 
 # ── Update PATH in RC files if needed ────────────────────────────────────────

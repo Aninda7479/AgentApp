@@ -312,16 +312,15 @@ export class SessionTracker {
 }
 
 /** Handles `/status` slash command in interactive chat. */
-export async function handleStatusCommand(args: string[], context: SessionContext): Promise<CLICommandResult> {
+export function handleStatusCommand(args: string[], context: SessionContext): CLICommandResult | Promise<CLICommandResult> {
   const sub = args[0]?.toLowerCase();
 
   if (sub === 'system' || sub === 'all' || sub === '--system') {
-    const systemStatus = await getSystemStatus();
-    return {
+    return getSystemStatus().then((systemStatus) => ({
       success: true,
       message: formatSystemStatus(systemStatus),
       data: systemStatus
-    };
+    }));
   }
 
   const tracker = new SessionTracker();
@@ -343,9 +342,6 @@ export async function handleStatusCommand(args: string[], context: SessionContex
   return {
     success: true,
     message: sessionReport + serverSnippet,
-    data: {
-      session: tracker.getStatusReport(context),
-      system: { running, port: lock?.port, deviceCount: sessions.length }
-    }
+    data: tracker.getStatusReport(context)
   };
 }

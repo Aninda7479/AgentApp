@@ -100,7 +100,7 @@ describe('renderer/lib/electron bridge', () => {
     (globalThis as any).window = {} as any;
     const { invoke, getIpc } = await import('../lib/electron.js');
     expect(await invoke('settings-read')).toBeNull();
-    expect(getIpc()).toBeNull();
+    expect(await getIpc().invoke('settings-read')).toBeNull();
     expect(consoleError).toHaveBeenCalled();
   });
 

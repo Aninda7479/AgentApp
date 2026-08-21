@@ -66,7 +66,7 @@ function legacyRequireShim(): { ipcRenderer: any } | null {
  */
 let cachedBridge: any = null;
 
-export function getIpc(): any | null {
+export function getIpc(): any {
   if (cachedBridge) return cachedBridge;
   const api = superagent();
   if (api) {
@@ -79,7 +79,39 @@ export function getIpc(): any | null {
     cachedBridge = makeIpcBridge(legacy.ipcRenderer);
     return cachedBridge;
   }
-  return null;
+  // Tauri IPC path (native Tauri runtime on macOS, Windows, Linux).
+  const tauri = getTauriInvoke();
+  if (tauri) {
+    const tauriSurface = {
+      invoke: (channel: string, ...args: any[]) => {
+        const rustCmd = channel.replace(/[:\-]/g, '_');
+        const payload = args[0] && typeof args[0] === 'object'
+          ? args[0]
+          : (args[0] !== undefined ? { id: args[0], arg: args[0] } : undefined);
+        return tauri(rustCmd, payload);
+      },
+      send: (channel: string, ...args: any[]) => {
+        const rustCmd = channel.replace(/[:\-]/g, '_');
+        const payload = args[0] && typeof args[0] === 'object'
+          ? args[0]
+          : (args[0] !== undefined ? { id: args[0], arg: args[0] } : undefined);
+        tauri(rustCmd, payload).catch(() => {});
+      },
+      on: (_channel: string, _fn: any) => () => {},
+      off: (_channel: string, _fn: any) => {}
+    };
+    cachedBridge = makeIpcBridge(tauriSurface);
+    return cachedBridge;
+  }
+  // Safe web fallback surface — prevents "null is not an object" crashes in browser/react renders
+  const fallbackSurface = {
+    invoke: async () => null,
+    send: () => {},
+    on: () => () => {},
+    off: () => {}
+  };
+  cachedBridge = makeIpcBridge(fallbackSurface);
+  return cachedBridge;
 }
 
 /**
@@ -126,7 +158,17 @@ function makeIpcBridge(
 
 /** True when running inside the Electron shell (preload bridge present). */
 export function isElectron(): boolean {
-  return !!superagent();
+  return !!superagent() || !!legacyRequireShim();
+}
+
+/** True when running inside the Tauri native desktop runtime. */
+export function isTauri(): boolean {
+  return Boolean(getTauriInvoke());
+}
+
+/** True when running inside any native desktop shell (Electron or Tauri). */
+export function isDesktopApp(): boolean {
+  return isElectron() || isTauri();
 }
 
 const SILENT_IPC_CHANNELS = new Set<string>([

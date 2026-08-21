@@ -17,6 +17,8 @@
     "build": "npm run build:ui && npx @tauri-apps/cli build",
     "tauri:dev": "npm run dev",
     "tauri:build": "npx @tauri-apps/cli build",
+    "check": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "check:rust": "cargo check --manifest-path src-tauri/Cargo.toml",
     "test": "vitest run"
   },
   "dependencies": {

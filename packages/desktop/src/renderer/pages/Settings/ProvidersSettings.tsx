@@ -418,6 +418,70 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         if (!key) {
           setTestingStatus('Connected (no API key — model listing only, chat will fail without a key)');
         }
+      } else if (modalProviderId === 'ollama') {
+        const base = (url || 'http://localhost:11434').replace(/\/+$/, '');
+        const authHeaders: Record<string, string> = {};
+        if (key) authHeaders['Authorization'] = `Bearer ${key}`;
+
+        let fetchSucceeded = false;
+
+        // Try both localhost and 127.0.0.1 for local host environments
+        const candidateHosts = [base];
+        if (base.includes('localhost')) {
+          candidateHosts.push(base.replace('localhost', '127.0.0.1'));
+        } else if (base.includes('127.0.0.1')) {
+          candidateHosts.push(base.replace('127.0.0.1', 'localhost'));
+        }
+
+        for (const host of candidateHosts) {
+          // 1. Try Ollama native /api/tags endpoint
+          try {
+            const res = await browserSafeFetch(`${host}/api/tags`, { headers: authHeaders });
+            if (res.ok) {
+              const data = await res.json();
+              const modelsList = data.models ?? [];
+              if (modelsList.length > 0) {
+                rawModels = modelsList.map((m: any) => ({
+                  id: m.name || m.model || String(m),
+                  name: m.name || m.model || String(m),
+                  contextLimit: m.details?.parameter_size ? `~${m.details.parameter_size}` : undefined,
+                  free: true
+                }));
+                fetchSucceeded = true;
+                break;
+              }
+            }
+          } catch {
+            /* try /v1/models */
+          }
+
+          // 2. Fallback to /v1/models (OpenAI compatibility endpoint)
+          try {
+            const v1Url = host.endsWith('/v1') ? `${host}/models` : `${host}/v1/models`;
+            const res = await browserSafeFetch(v1Url, { headers: authHeaders });
+            if (res.ok) {
+              const data = await res.json();
+              const modelsList = data.data ?? [];
+              if (modelsList.length > 0) {
+                rawModels = modelsList.map((m: any) => ({
+                  id: m.id,
+                  name: m.id,
+                  free: true
+                }));
+                fetchSucceeded = true;
+                break;
+              }
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+
+        if (!fetchSucceeded && rawModels.length === 0) {
+          throw new Error(
+            `Could not reach Ollama at ${base}. Make sure Ollama is running ('ollama serve' or Ollama desktop app), or click "Add Without Testing".`
+          );
+        }
       } else {
         const defaultUrl = POPULAR_PROVIDERS.find(p => p.id === modalProviderId)?.defaultUrl || 'https://api.openai.com/v1';
         let base = (url || defaultUrl).replace(/\/+$/, '');
