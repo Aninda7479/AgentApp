@@ -1,23 +1,39 @@
 {
   "name": "@superagent/ui",
-  "version": "0.14.0",
-  "description": "100% Shared Responsive React UI for SuperAgent (HomeLab Web, Tauri Desktop, Mobile)",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "version": "0.12.2",
+  "description": "SuperAgent — Full production React UI shared across Desktop (Tauri), Web (Express), and future platforms.",
+  "type": "module",
+  "main": "dist/renderer/entry.bundle.js",
+  "types": "dist/renderer/entry.d.ts",
   "license": "GPL-3.0-or-later",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc -w",
+    "build": "node scripts/build-ui.mjs",
+    "watch": "node scripts/build-ui.mjs --watch",
+    "dev": "node scripts/build-ui.mjs --watch",
+    "build:tsc": "tsc",
     "test": "vitest run"
   },
   "dependencies": {
+    "@superagent/core": "file:../core",
+    "@tauri-apps/api": "^2.2.0",
+    "@tauri-apps/plugin-process": "^2.2.0",
+    "@tauri-apps/plugin-updater": "^2.2.1",
+    "@huggingface/transformers": "^3.5.2",
     "lucide-react": "^1.22.0",
+    "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "three": "^0.160.1",
+    "three-vrm": "npm:@pixiv/three-vrm@^3"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.2",
+    "@types/node": "^20.14.9",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@types/three": "^0.160.0",
+    "esbuild": "^0.25.0",
+    "tailwindcss": "^4.3.2",
     "typescript": "^5.6.0",
     "vitest": "^4.1.9"
   }

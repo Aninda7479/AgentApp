@@ -1,4 +1,4 @@
-import esbuild from 'esbuild';
+﻿import esbuild from 'esbuild';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -9,7 +9,8 @@ const __dirname = dirname(__filename);
 
 const webRoot = path.resolve(__dirname, '..');
 const distDir = path.join(webRoot, 'dist');
-const desktopRoot = path.resolve(webRoot, '../desktop');
+// All UI source now lives in packages/ui
+const uiRoot = path.resolve(webRoot, '../ui');
 
 if (!fs.existsSync(distDir)) {
   fs.mkdirSync(distDir, { recursive: true });
@@ -40,14 +41,17 @@ async function build() {
   });
   console.log('[Build] ipc-bridge.js compiled.');
 
-  // 2. Build React SPA Client
+  // 2. Build React SPA Client (entry point now in packages/ui)
   await compileBundle({
-    entryPoints: [path.join(desktopRoot, 'src/renderer/entry.tsx')],
+    entryPoints: [path.join(uiRoot, 'src/renderer/entry.tsx')],
     bundle: true,
     outfile: path.join(distDir, 'client.js'),
     format: 'iife',
     minify: !isWatch && process.env.NODE_ENV === 'production',
     sourcemap: isWatch || process.env.NODE_ENV !== 'production',
+    alias: {
+      '@lily-model': path.join(uiRoot, 'models/lily/index.ts'),
+    },
     loader: {
       '.png': 'dataurl',
       '.svg': 'dataurl',
@@ -62,7 +66,7 @@ async function build() {
   });
   console.log('[Build] React client.js compiled.');
 
-  // 3. Copy index.html
+  // 3. Copy index.html (from packages/web/src — web-specific shell HTML)
   fs.copyFileSync(path.join(webRoot, 'src/index.html'), path.join(distDir, 'index.html'));
   console.log('[Build] index.html copied.');
 
@@ -70,17 +74,20 @@ async function build() {
   fs.copyFileSync(path.join(webRoot, 'src/login.html'), path.join(distDir, 'login.html'));
   console.log('[Build] login.html copied.');
 
-  // 3c-2. Build tray.js and copy tray.html for Artifacts tray popup
+  // 3c. Build tray.js and copy tray.html (from packages/ui)
   const rendererDistDir = path.join(distDir, 'renderer');
   if (!fs.existsSync(rendererDistDir)) {
     fs.mkdirSync(rendererDistDir, { recursive: true });
   }
   await compileBundle({
-    entryPoints: [path.join(desktopRoot, 'src/renderer/trayCard/TrayCardApp.tsx')],
+    entryPoints: [path.join(uiRoot, 'src/renderer/trayCard/TrayCardApp.tsx')],
     bundle: true,
     outfile: path.join(rendererDistDir, 'tray.js'),
     format: 'iife',
     minify: !isWatch && process.env.NODE_ENV === 'production',
+    alias: {
+      '@lily-model': path.join(uiRoot, 'models/lily/index.ts'),
+    },
     loader: {
       '.png': 'dataurl',
       '.svg': 'dataurl',
@@ -90,8 +97,12 @@ async function build() {
     },
   });
   console.log('[Build] renderer/tray.js compiled.');
-  fs.copyFileSync(path.join(desktopRoot, 'src/tray.html'), path.join(distDir, 'tray.html'));
-  console.log('[Build] tray.html copied.');
+
+  const uiTrayHtml = path.join(uiRoot, 'src/tray.html');
+  if (fs.existsSync(uiTrayHtml)) {
+    fs.copyFileSync(uiTrayHtml, path.join(distDir, 'tray.html'));
+    console.log('[Build] tray.html copied.');
+  }
 
   // 3d. Copy PWA Assets (manifest.json, sw.js, icon.png, icon.svg)
   fs.copyFileSync(path.join(webRoot, 'src/manifest.json'), path.join(distDir, 'manifest.json'));
@@ -99,17 +110,17 @@ async function build() {
   fs.copyFileSync(path.join(webRoot, 'src/icon.png'), path.join(distDir, 'icon.png'));
   fs.copyFileSync(path.join(webRoot, 'src/icon.svg'), path.join(distDir, 'icon.svg'));
 
-  // 4. Resolve and Compile Tailwind CSS
-  const desktopBuiltCss = path.join(desktopRoot, 'dist/index.css');
-  const desktopSrcCss = path.join(desktopRoot, 'src/index.css');
+  // 4. Compile Tailwind CSS (source now in packages/ui/src/styles/)
+  const uiSrcCss = path.join(uiRoot, 'src/styles/index.css');
+  const uiBuiltCss = path.join(uiRoot, 'dist/index.css');
   const destCss = path.join(distDir, 'index.css');
 
   let compiled = false;
   try {
     const { execSync } = await import('child_process');
     console.log('[Build] Compiling Tailwind CSS for web client...');
-    execSync(`npx @tailwindcss/cli -i "${desktopSrcCss}" -o "${destCss}" ${isWatch ? '' : '--minify'}`, {
-      cwd: desktopRoot,
+    execSync(`npx @tailwindcss/cli -i "${uiSrcCss}" -o "${destCss}" ${isWatch ? '' : '--minify'}`, {
+      cwd: uiRoot,
       stdio: 'inherit',
     });
     compiled = true;
@@ -119,11 +130,11 @@ async function build() {
   }
 
   if (!compiled) {
-    if (fs.existsSync(desktopBuiltCss)) {
-      fs.copyFileSync(desktopBuiltCss, destCss);
-      console.log('[Build] Copied pre-compiled Tailwind CSS from desktop build.');
-    } else if (fs.existsSync(desktopSrcCss)) {
-      fs.copyFileSync(desktopSrcCss, destCss);
+    if (fs.existsSync(uiBuiltCss)) {
+      fs.copyFileSync(uiBuiltCss, destCss);
+      console.log('[Build] Copied pre-compiled Tailwind CSS from ui build.');
+    } else if (fs.existsSync(uiSrcCss)) {
+      fs.copyFileSync(uiSrcCss, destCss);
       console.warn('[Build] ⚠️ Copied raw index.css.');
     } else {
       fs.writeFileSync(destCss, '/* Tailored CSS */');
@@ -131,13 +142,13 @@ async function build() {
     }
   }
 
-  // 4b. Copy desktop static assets to web dist
-  const desktopAssetsDir = path.join(desktopRoot, 'assets');
+  // 4b. Copy UI static assets to web dist
+  const uiAssetsDir = path.join(uiRoot, 'assets');
   const webAssetsDir = path.join(distDir, 'assets');
-  if (fs.existsSync(desktopAssetsDir)) {
+  if (fs.existsSync(uiAssetsDir)) {
     fs.mkdirSync(webAssetsDir, { recursive: true });
-    fs.cpSync(desktopAssetsDir, webAssetsDir, { recursive: true });
-    console.log('[Build] Copied desktop static assets to web dist.');
+    fs.cpSync(uiAssetsDir, webAssetsDir, { recursive: true });
+    console.log('[Build] Copied ui static assets to web dist.');
   }
 
   console.log(`[Build] Complete build successful${isWatch ? ' (watching)' : ''}.`);

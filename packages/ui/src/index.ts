@@ -1,14 +1,6 @@
-export * from './types.js';
-export * from './config.js';
-export * from './api/client.js';
+// @superagent/ui — Public API
+// The production renderer is the source of truth.
+// Consumers (desktop shell, web shell, tests) import from here.
+export * from './renderer/core/types.js';
+export * from './renderer/types.js';
 export * from './utils/index.js';
-export * from './components/Navbar.js';
-export * from './components/Sidebar.js';
-export * from './components/ChatView.js';
-export * from './components/ChatInput.js';
-export * from './components/ModelSelector.js';
-export * from './components/ArtifactsViewer.js';
-export * from './components/SettingsModal.js';
-export * from './components/StudioView.js';
-export * from './components/chat/index.js';
-export * from './AppContainer.js';

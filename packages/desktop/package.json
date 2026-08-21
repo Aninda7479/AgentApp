@@ -1,7 +1,7 @@
-{
+﻿{
   "name": "@superagent/desktop",
-  "version": "0.14.0",
-  "description": "SuperAgent Desktop App — Powered by Tauri v2 and Rust Host",
+  "version": "0.12.2",
+  "description": "SuperAgent Desktop — Tauri v2 host shell. All UI is in @superagent/ui.",
   "license": "GPL-3.0-or-later",
   "repository": {
     "type": "git",
@@ -23,29 +23,13 @@
   },
   "dependencies": {
     "@superagent/core": "file:../core",
-    "@superagent/ui": "file:../ui",
-    "@tauri-apps/api": "^2.2.0",
-    "@tauri-apps/plugin-process": "^2.2.0",
-    "@tauri-apps/plugin-updater": "^2.2.1",
-    "@huggingface/transformers": "^3.5.2",
-    "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4",
-    "esbuild": "^0.25.0",
-    "lucide-react": "^1.22.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "three": "^0.160.1",
-    "three-vrm": "npm:@pixiv/three-vrm@^3"
+    "@superagent/ui": "file:../ui"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.2.0",
-    "@tailwindcss/cli": "^4.3.2",
     "@types/node": "^20.14.9",
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "@types/three": "^0.160.0",
     "concurrently": "^10.0.3",
     "jsdom": "^29.1.1",
-    "tailwindcss": "^4.3.2",
     "typescript": "^5.6.0",
     "vitest": "^4.1.9"
   }

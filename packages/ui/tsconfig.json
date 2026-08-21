@@ -7,11 +7,15 @@
     "declaration": true,
     "declarationMap": true,
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "@lily-model": ["./models/lily/index.ts"],
+      "@lily-model/*": ["./models/lily/*"]
+    }
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "models/**/*"]
 }
