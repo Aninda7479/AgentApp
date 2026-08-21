@@ -243,7 +243,7 @@ export const App: React.FC = () => {
     ipc.invoke('settings-read')
       .then((current: any) => {
         setEnabledSkills(current?.skills || {});
-        if (current?.general?.setupState?.completed) {
+        if (current?.general?.setupState?.completed || (Array.isArray(current?.providers) && current.providers.length > 0)) {
           setSetupCompleted(true);
         }
       })

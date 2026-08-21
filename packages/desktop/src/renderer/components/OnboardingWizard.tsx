@@ -175,6 +175,82 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
 
   const ipc = getIpc();
 
+  // ── Hydrate State from Saved Settings and Store on Mount ────────────────────
+  useEffect(() => {
+    if (!ipc) return;
+    Promise.all([
+      ipc.invoke('settings-read').catch(() => null),
+      ipc.invoke('store-read').catch(() => null)
+    ]).then(([settings, storeData]) => {
+      if (settings?.general?.ownerName) setOwnerName(settings.general.ownerName);
+      if (settings?.theme?.desktop) setTheme(settings.theme.desktop);
+      if (settings?.general?.confirmShellCommands !== undefined) setConfirmShellCommands(settings.general.confirmShellCommands);
+      if (settings?.general?.unsandboxedActions !== undefined) setUnsandboxedActions(settings.general.unsandboxedActions);
+      if (settings?.general?.autoReviewPlan !== undefined) setAutoReviewPlan(settings.general.autoReviewPlan);
+      if (settings?.internetAccess?.level) setInternetAccessLevel(settings.internetAccess.level);
+      if (settings?.general?.openAtLogin !== undefined) setRunOnStartup(settings.general.openAtLogin);
+      if (settings?.general?.closeToTray !== undefined) setKeepBackgroundAlive(settings.general.closeToTray);
+
+      if (settings?.telegram) {
+        if (settings.telegram.botToken) setTelegramToken(settings.telegram.botToken);
+        if (settings.telegram.chatId) setTelegramChatId(settings.telegram.chatId);
+        if (settings.telegram.botToken) {
+          setTelegramVerified({
+            botName: 'Configured Telegram Bot',
+            message: 'Configured from saved settings'
+          });
+        }
+      }
+
+      // Merge saved providers and models
+      const savedProviders: ProviderConnection[] = settings?.providers || storeData?.connectedProviders || [];
+      const savedModels: ModelConfig[] = settings?.models || storeData?.modelsCatalog || [];
+
+      if (savedProviders.length > 0) {
+        setProviderList(prev => {
+          const knownIds = new Set(prev.map(p => p.id));
+          const updated = prev.map(p => {
+            const match = savedProviders.find(sp => sp.id === p.id);
+            if (!match) return p;
+            const pModels = savedModels.filter(m => m.providerId === p.id);
+            const hasKey = Boolean(match.apiKey?.trim());
+            const isLocal = p.id === 'ollama' || p.id === 'omniroute';
+            const isConn = hasKey || isLocal || pModels.length > 0;
+            return {
+              ...p,
+              apiKey: match.apiKey || '',
+              url: match.baseUrl || p.defaultUrl,
+              status: isConn ? 'connected' : p.status,
+              statusMessage: pModels.length > 0 ? `Loaded ${pModels.length} saved model${pModels.length === 1 ? '' : 's'}` : p.statusMessage,
+              models: pModels.length > 0 ? pModels : p.models
+            };
+          });
+
+          // Add any custom providers that are not in default list
+          const customProviders: ProviderItem[] = savedProviders
+            .filter(sp => !knownIds.has(sp.id))
+            .map(sp => {
+              const pModels = savedModels.filter(m => m.providerId === sp.id);
+              return {
+                id: sp.id,
+                name: sp.name || 'Custom LLM Server',
+                category: 'custom',
+                defaultUrl: sp.baseUrl || 'http://localhost:8000/v1',
+                url: sp.baseUrl || 'http://localhost:8000/v1',
+                apiKey: sp.apiKey || '',
+                desc: 'Configured custom LLM server',
+                status: 'connected',
+                statusMessage: pModels.length > 0 ? `Loaded ${pModels.length} saved model${pModels.length === 1 ? '' : 's'}` : 'Connected',
+                models: pModels
+              };
+            });
+
+          return [...customProviders, ...updated];
+        });
+      }
+    });
+  }, [ipc]);
+
   // ── Auto-Scan Local Ollama & Local OmniRoute on Mount ────────────────────────
   const scanLocalProviders = useCallback(async () => {
     setScanningLocal(true);
@@ -245,8 +321,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
           }
           return {
             ...p,
-            status: 'idle',
-            statusMessage: 'Ollama is not running locally.'
+            status: p.status === 'connected' ? 'connected' : 'idle',
+            statusMessage: p.status === 'connected' ? p.statusMessage : 'Ollama is not running locally.'
           };
         }
         if (p.id === 'omniroute') {
@@ -611,10 +687,10 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
       }
     }
 
-    // Connect all tested providers that have fetched models or entered credentials
+    // Connect all tested or saved providers
     for (const p of providerList) {
       const hasKey = Boolean(p.apiKey.trim());
-      const isLocalConnected = (p.id === 'ollama' || p.id === 'omniroute') && p.status === 'connected' && p.models.length > 0;
+      const isLocalConnected = (p.id === 'ollama' || p.id === 'omniroute') && (p.status === 'connected' || p.models.length > 0);
       if (hasKey || isLocalConnected) {
         const conn: ProviderConnection = {
           id: p.id,
@@ -641,7 +717,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
   }, [providerList, providerCategory, providerSearch]);
 
   const configuredProviders = providerList.filter(
-    p => (p.apiKey.trim().length > 0 && p.status === 'connected') || ((p.id === 'ollama' || p.id === 'omniroute') && p.status === 'connected')
+    p => (p.apiKey.trim().length > 0 && (p.status === 'connected' || p.models.length > 0)) || ((p.id === 'ollama' || p.id === 'omniroute') && (p.status === 'connected' || p.models.length > 0))
   );
 
   return (

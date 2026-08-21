@@ -363,11 +363,17 @@ export class SettingsStorage {
       console.error('Failed to parse settings.json, trying backup...', e);
     }
 
-    if (!settings || Object.keys(settings).length === 0) {
+    if (!settings || Object.keys(settings).length === 0 || (!settings.providers || settings.providers.length === 0)) {
       try {
         const backup = readJsonFile<AppSettings>(backupFilePath);
-        if (backup) {
-          settings = backup;
+        if (backup && Object.keys(backup).length > 0) {
+          if (!settings || Object.keys(settings).length === 0) {
+            settings = backup;
+          } else if (!settings.providers || settings.providers.length === 0) {
+            if (backup.providers && backup.providers.length > 0) {
+              settings.providers = backup.providers;
+            }
+          }
         }
       } catch (e) {
         console.error('Failed to parse backup settings.json.bak:', e);
@@ -382,7 +388,7 @@ export class SettingsStorage {
       console.error('Failed to parse models.json, trying backup...', e);
     }
 
-    if (!models) {
+    if (!models || models.length === 0) {
       try {
         models = readModelsFile(modelsBackupFilePath);
       } catch (e) {
@@ -390,7 +396,7 @@ export class SettingsStorage {
       }
     }
 
-    if (models) {
+    if (models && models.length > 0) {
       settings.models = models;
     }
 
@@ -405,11 +411,17 @@ export class SettingsStorage {
       fs.mkdirSync(configDirectory, { recursive: true });
 
       const current = this.loadSettings();
-      const newModels = settings.models !== undefined ? (settings.models === null ? undefined : settings.models) : current.models;
+      const newModels = settings.models !== undefined 
+        ? (settings.models === null ? undefined : (Array.isArray(settings.models) && settings.models.length === 0 && current.models && current.models.length > 0 ? current.models : settings.models)) 
+        : current.models;
+
+      const newProviders = settings.providers !== undefined
+        ? (settings.providers === null ? undefined : (Array.isArray(settings.providers) && settings.providers.length === 0 && current.providers && current.providers.length > 0 ? current.providers : settings.providers))
+        : current.providers;
 
       const updated: AppSettings = {
         theme: settings.theme !== undefined ? (settings.theme === null ? undefined : { ...current.theme, ...settings.theme }) : current.theme,
-        providers: settings.providers !== undefined ? (settings.providers === null ? undefined : settings.providers) : current.providers,
+        providers: newProviders,
         models: newModels,
         lastUsedModel: settings.lastUsedModel !== undefined ? (settings.lastUsedModel === null ? undefined : { ...current.lastUsedModel, ...settings.lastUsedModel }) : current.lastUsedModel,
         general: settings.general !== undefined ? (settings.general === null ? undefined : { ...current.general, ...settings.general }) : current.general,
