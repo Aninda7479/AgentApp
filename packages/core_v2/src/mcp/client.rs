@@ -12,16 +12,35 @@ use tokio::sync::Mutex;
 use crate::mcp::protocol::*;
 use crate::tools::r#trait::Tool;
 
-/// Model Context Protocol (MCP) Client managing stdio connection and JSON-RPC 2.0 communication.
+pub const DEFAULT_MCP_PROTOCOL_VERSION: &str = "2024-11-05";
+
+pub enum McpTransport {
+    Stdio {
+        _child: Child,
+        stdin: ChildStdin,
+        reader: BufReader<ChildStdout>,
+    },
+    Http {
+        url: String,
+        headers: HashMap<String, String>,
+        client: reqwest::Client,
+    },
+    Sse {
+        sse_url: String,
+        post_url: String,
+        headers: HashMap<String, String>,
+        client: reqwest::Client,
+    },
+}
+
+/// Model Context Protocol (MCP) Client managing Stdio, HTTP, or SSE transport communication.
 pub struct McpClient {
-    _child: Child,
-    stdin: ChildStdin,
-    reader: BufReader<ChildStdout>,
+    transport: McpTransport,
     request_id: AtomicU64,
 }
 
 impl McpClient {
-    /// Spawns a new MCP server process using stdio transport.
+    /// Spawns a new MCP server process using Stdio transport.
     pub fn spawn(
         command: &str,
         args: &[&str],
@@ -54,149 +73,219 @@ impl McpClient {
         let reader = BufReader::new(stdout);
 
         Ok(Self {
-            _child: child,
-            stdin,
-            reader,
+            transport: McpTransport::Stdio {
+                _child: child,
+                stdin,
+                reader,
+            },
             request_id: AtomicU64::new(1),
         })
+    }
+
+    /// Connects to a remote MCP server via HTTP JSON-RPC endpoint.
+    pub fn connect_http(url: &str, headers: Option<HashMap<String, String>>) -> Self {
+        Self {
+            transport: McpTransport::Http {
+                url: url.to_string(),
+                headers: headers.unwrap_or_default(),
+                client: reqwest::Client::new(),
+            },
+            request_id: AtomicU64::new(1),
+        }
+    }
+
+    /// Connects to a remote MCP server via Server-Sent Events (SSE) transport.
+    pub fn connect_sse(
+        sse_url: &str,
+        post_url: Option<&str>,
+        headers: Option<HashMap<String, String>>,
+    ) -> Self {
+        let post_endpoint = post_url.unwrap_or(sse_url).to_string();
+        Self {
+            transport: McpTransport::Sse {
+                sse_url: sse_url.to_string(),
+                post_url: post_endpoint,
+                headers: headers.unwrap_or_default(),
+                client: reqwest::Client::new(),
+            },
+            request_id: AtomicU64::new(1),
+        }
     }
 
     /// Sends a JSON-RPC 2.0 request and waits for matching response by ID.
     pub async fn send_request(&mut self, method: &str, params: Option<Value>) -> Result<Value> {
         let id = self.request_id.fetch_add(1, Ordering::SeqCst);
         let req = JsonRpcRequest::new(id, method, params);
-        let payload = serde_json::to_string(&req)? + "\n";
 
-        self.stdin.write_all(payload.as_bytes()).await?;
-        self.stdin.flush().await?;
+        match &mut self.transport {
+            McpTransport::Stdio { stdin, reader, .. } => {
+                let payload = serde_json::to_string(&req)? + "\n";
+                stdin.write_all(payload.as_bytes()).await?;
+                stdin.flush().await?;
 
-        let target_id = Value::Number(id.into());
-
-        let mut line = String::new();
-        loop {
-            line.clear();
-            let bytes_read = self.reader.read_line(&mut line).await?;
-            if bytes_read == 0 {
-                anyhow::bail!("MCP server process closed connection unexpectedly");
-            }
-
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-
-            if let Ok(response) = serde_json::from_str::<JsonRpcResponse>(trimmed) {
-                if response.id == target_id {
-                    if let Some(err) = response.error {
-                        anyhow::bail!("MCP JSON-RPC Error [code {}]: {}", err.code, err.message);
+                let target_id = Value::Number(id.into());
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    let bytes_read = reader.read_line(&mut line).await?;
+                    if bytes_read == 0 {
+                        anyhow::bail!("MCP server process closed connection unexpectedly");
                     }
-                    return Ok(response.result.unwrap_or(Value::Null));
+
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+
+                    if let Ok(response) = serde_json::from_str::<JsonRpcResponse>(trimmed) {
+                        if response.id == target_id {
+                            if let Some(err) = response.error {
+                                anyhow::bail!("MCP JSON-RPC Error [code {}]: {}", err.code, err.message);
+                            }
+                            return Ok(response.result.unwrap_or(Value::Null));
+                        }
+                    }
                 }
             }
-            // Skip notifications or unrelated responses
+            McpTransport::Http { url, headers, client }
+            | McpTransport::Sse { post_url: url, headers, client, .. } => {
+                let mut builder = client.post(url.as_str()).json(&req);
+                for (k, v) in headers {
+                    builder = builder.header(k.as_str(), v.as_str());
+                }
+
+                let resp = builder.send().await?;
+                if !resp.status().is_success() {
+                    anyhow::bail!("MCP HTTP error status: {}", resp.status());
+                }
+
+                let rpc_res: JsonRpcResponse = resp.json().await?;
+                if let Some(err) = rpc_res.error {
+                    anyhow::bail!("MCP JSON-RPC Error [code {}]: {}", err.code, err.message);
+                }
+
+                Ok(rpc_res.result.unwrap_or(Value::Null))
+            }
         }
     }
 
-    /// Sends a JSON-RPC 2.0 notification.
-    pub async fn send_notification(&mut self, method: &str, params: Option<Value>) -> Result<()> {
-        let notif = JsonRpcNotification::new(method, params);
-        let payload = serde_json::to_string(&notif)? + "\n";
-
-        self.stdin.write_all(payload.as_bytes()).await?;
-        self.stdin.flush().await?;
-        Ok(())
-    }
-
-    /// Performs MCP handshake initialization.
-    pub async fn initialize(&mut self) -> Result<InitializeResult> {
-        let init_params = json!({
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
+    /// Performs the MCP initialization handshake.
+    pub async fn initialize(
+        &mut self,
+        client_name: &str,
+        client_version: &str,
+    ) -> Result<InitializeResult> {
+        let params = json!({
+            "protocolVersion": DEFAULT_MCP_PROTOCOL_VERSION,
+            "capabilities": {
+                "roots": { "listChanged": true },
+                "sampling": {}
+            },
             "clientInfo": {
-                "name": "superagent-core-v2",
-                "version": "0.1.0"
+                "name": client_name,
+                "version": client_version
             }
         });
 
-        let res_val = self.send_request("initialize", Some(init_params)).await?;
-        let init_result: InitializeResult = serde_json::from_value(res_val)?;
-
-        // Send notifications/initialized as required by MCP spec
-        self.send_notification("notifications/initialized", None).await?;
-
+        let res = self.send_request("initialize", Some(params)).await?;
+        let init_result: InitializeResult = serde_json::from_value(res)?;
         Ok(init_result)
     }
 
-    /// Queries the MCP server for available tools (`tools/list`).
+    /// Queries the MCP server for its list of available tools.
     pub async fn list_tools(&mut self) -> Result<Vec<McpTool>> {
-        let res_val = self.send_request("tools/list", None).await?;
-        let list_result: ListToolsResult = serde_json::from_value(res_val)?;
-        Ok(list_result.tools)
+        let res = self.send_request("tools/list", None).await?;
+        let tools_list: ListToolsResult = serde_json::from_value(res)?;
+        Ok(tools_list.tools)
     }
 
-    /// Executes a tool on the MCP server (`tools/call`).
-    pub async fn call_tool(&mut self, name: &str, arguments: Option<Value>) -> Result<CallToolResult> {
+    /// Invokes a specific tool on the MCP server.
+    pub async fn call_tool(
+        &mut self,
+        name: &str,
+        arguments: Option<HashMap<String, Value>>,
+    ) -> Result<CallToolResult> {
         let params = json!({
             "name": name,
-            "arguments": arguments.unwrap_or(json!({}))
+            "arguments": arguments.unwrap_or_default()
         });
 
-        let res_val = self.send_request("tools/call", Some(params)).await?;
-        let call_result: CallToolResult = serde_json::from_value(res_val)?;
+        let res = self.send_request("tools/call", Some(params)).await?;
+        let call_result: CallToolResult = serde_json::from_value(res)?;
         Ok(call_result)
     }
 }
 
-/// Adapter wrapping an MCP Tool to implement the agent's core `Tool` trait.
+/// Dynamic wrapper bridging remote MCP tools into SuperAgent's internal `Tool` trait.
 pub struct McpToolWrapper {
     client: Arc<Mutex<McpClient>>,
-    tool_info: McpTool,
+    info: McpTool,
 }
 
 impl McpToolWrapper {
-    pub fn new(client: Arc<Mutex<McpClient>>, tool_info: McpTool) -> Self {
-        Self { client, tool_info }
+    pub fn new(client: Arc<Mutex<McpClient>>, info: McpTool) -> Self {
+        Self { client, info }
     }
 }
 
 #[async_trait]
 impl Tool for McpToolWrapper {
     fn name(&self) -> &str {
-        &self.tool_info.name
+        &self.info.name
     }
 
     fn description(&self) -> &str {
-        self.tool_info
-            .description
-            .as_deref()
-            .unwrap_or("No description provided by MCP server.")
+        self.info.description.as_deref().unwrap_or("MCP external tool")
     }
 
     fn parameters_schema(&self) -> Value {
-        self.tool_info.input_schema.clone()
+        self.info.input_schema.clone()
     }
 
     async fn execute(&self, input: Value) -> Result<String> {
-        let mut client = self.client.lock().await;
-        let result = client.call_tool(&self.tool_info.name, Some(input)).await?;
+        let args = if let Value::Object(map) = input {
+            Some(map.into_iter().collect())
+        } else {
+            None
+        };
 
-        if result.is_error.unwrap_or(false) {
-            let error_text = result
-                .content
-                .iter()
-                .filter_map(|c| c.text.as_deref())
-                .collect::<Vec<&str>>()
-                .join("\n");
-            anyhow::bail!("MCP tool execution failed: {}", error_text);
+        let result = {
+            let mut client = self.client.lock().await;
+            client.call_tool(&self.info.name, args).await?
+        };
+
+        let mut output = String::new();
+        for content in result.content {
+            if let Some(text) = content.text {
+                output.push_str(&text);
+                output.push('\n');
+            } else if let Some(mime) = content.mime_type {
+                output.push_str(&format!("[Media: {}]\n", mime));
+            } else {
+                output.push_str(&format!("[Content: {}]\n", content.r#type));
+            }
         }
 
-        let output = result
-            .content
-            .iter()
-            .filter_map(|c| c.text.as_deref())
-            .collect::<Vec<&str>>()
-            .join("\n");
+        if result.is_error.unwrap_or(false) {
+            anyhow::bail!("MCP tool '{}' returned error: {}", self.info.name, output.trim());
+        }
 
-        Ok(output)
+        Ok(output.trim().to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mcp_client_creation_http_and_sse() {
+        let http_client = McpClient::connect_http("http://localhost:8080/mcp", None);
+        assert_eq!(http_client.request_id.load(Ordering::SeqCst), 1);
+
+        let mut headers = HashMap::new();
+        headers.insert("Authorization".to_string(), "Bearer token".to_string());
+        let sse_client = McpClient::connect_sse("http://localhost:8080/sse", None, Some(headers));
+        assert_eq!(sse_client.request_id.load(Ordering::SeqCst), 1);
     }
 }

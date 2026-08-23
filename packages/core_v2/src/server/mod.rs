@@ -18,12 +18,14 @@ use axum::{
     Json, Router,
 };
 use futures_util::{stream::Stream, StreamExt};
-
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
+use crate::artifact::{ArtifactRunner, ArtifactRuntimeState};
+use crate::automation::{BrowserNavigateTool, BrowserScreenshotTool, WebSearchTool};
+use crate::media::{GeneratePdfTool, GeneratePresentationTool};
 use crate::orchestrator::AgentEngine;
 use crate::storage::{
     auth::AuthStore,
@@ -42,6 +44,7 @@ pub struct AppState {
     pub settings_store: Arc<SettingsStore>,
     pub auth_store: Arc<AuthStore>,
     pub chat_storage: Arc<ChatStorage>,
+    pub artifact_runner: Arc<ArtifactRunner>,
     pub tool_registry: Arc<ToolRegistry>,
 }
 
@@ -94,6 +97,9 @@ pub fn create_router(state: AppState) -> Router {
             "/api/conversations/:id",
             get(get_conversation).delete(delete_conversation),
         )
+        .route("/api/artifacts", get(list_artifacts))
+        .route("/api/artifacts/:id/start", post(start_artifact))
+        .route("/api/artifacts/:id/stop", post(stop_artifact))
         .route("/api/tools", get(list_tools))
         .route("/api/chat/stream", post(handle_chat_stream))
         .route("/ws/agent", get(handle_agent_ws))
@@ -170,7 +176,6 @@ async fn get_conversation(
         .map_err(|_| StatusCode::NOT_FOUND)
 }
 
-
 async fn save_conversation(
     State(state): State<AppState>,
     Json(record): Json<ChatSession>,
@@ -189,6 +194,37 @@ async fn delete_conversation(
     state
         .chat_storage
         .delete_session(&id)
+        .map(|_| Json(serde_json::json!({ "success": true })))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn list_artifacts(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<ArtifactRuntimeState>>, StatusCode> {
+    let list = state.artifact_runner.scan_artifacts();
+    Ok(Json(list))
+}
+
+async fn start_artifact(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<ArtifactRuntimeState>, StatusCode> {
+    state
+        .artifact_runner
+        .start_artifact(&id)
+        .await
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn stop_artifact(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    state
+        .artifact_runner
+        .stop_artifact(&id)
+        .await
         .map(|_| Json(serde_json::json!({ "success": true })))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
@@ -297,8 +333,10 @@ pub async fn start_server(port: u16, workspace_root: PathBuf) -> Result<()> {
     let settings_store = Arc::new(SettingsStore::new());
     let auth_store = Arc::new(AuthStore::new(superagent_dir.join("auth")));
     let chat_storage = Arc::new(ChatStorage::new());
+    let artifact_runner = Arc::new(ArtifactRunner::new());
 
     let mut registry = ToolRegistry::new();
+    // Builtin Filesystem Tools
     registry.register(ReadFileTool::new(workspace_root.clone()));
     registry.register(WriteFileTool::new(workspace_root.clone()));
     registry.register(EditFileTool::new(workspace_root.clone()));
@@ -306,11 +344,21 @@ pub async fn start_server(port: u16, workspace_root: PathBuf) -> Result<()> {
     registry.register(RunCommandTool::new(workspace_root.clone()));
     registry.register(GrepSearchTool::new(workspace_root.clone()));
 
+    // Multimodal Media Generation Tools
+    registry.register(GeneratePdfTool::new(workspace_root.clone()));
+    registry.register(GeneratePresentationTool::new(workspace_root.clone()));
+
+    // Browser Automation & Search Tools
+    registry.register(BrowserNavigateTool::new());
+    registry.register(BrowserScreenshotTool::new(workspace_root.clone()));
+    registry.register(WebSearchTool::new());
+
     let state = AppState {
         workspace_root,
         settings_store,
         auth_store,
         chat_storage,
+        artifact_runner,
         tool_registry: Arc::new(registry),
     };
 
@@ -341,6 +389,7 @@ mod tests {
             settings_store: Arc::new(SettingsStore::with_path(temp_dir.join("settings.json"))),
             auth_store: Arc::new(AuthStore::new(temp_dir.join("auth"))),
             chat_storage: Arc::new(ChatStorage::with_dir(temp_dir.join("chats"))),
+            artifact_runner: Arc::new(ArtifactRunner::with_dir(temp_dir.join("artifacts"))),
             tool_registry: Arc::new(ToolRegistry::new()),
         };
 
@@ -367,6 +416,7 @@ mod tests {
             settings_store: Arc::new(SettingsStore::with_path(temp_dir.join("settings.json"))),
             auth_store: Arc::new(AuthStore::new(temp_dir.join("auth"))),
             chat_storage: Arc::new(ChatStorage::with_dir(temp_dir.join("chats"))),
+            artifact_runner: Arc::new(ArtifactRunner::with_dir(temp_dir.join("artifacts"))),
             tool_registry: Arc::new(ToolRegistry::new()),
         };
 
@@ -383,4 +433,3 @@ mod tests {
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
-
