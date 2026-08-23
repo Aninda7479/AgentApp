@@ -1,4 +1,4 @@
-﻿// Bundles the renderer entry points (main UI + 3D pet +
+// Bundles the renderer entry points (main UI + 3D pet +
 // circle-search + tray card) with esbuild.
 //
 // Bundling inlines renderer dependencies (react, three, lucide-react, app source)

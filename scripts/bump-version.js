@@ -4,6 +4,12 @@ const { execSync } = require('child_process');
 
 const rootDir = path.resolve(__dirname, '..');
 
+// Helper to safely read and parse JSON files (stripping UTF-8 BOM if present)
+function readJsonFileSafe(absolutePath) {
+  const raw = fs.readFileSync(absolutePath, 'utf8').replace(/^\uFEFF/, '');
+  return JSON.parse(raw);
+}
+
 // Helper to load, update, and save JSON
 function updatePackageJson(filePath, updater) {
   const absolutePath = path.join(rootDir, filePath);
@@ -11,7 +17,7 @@ function updatePackageJson(filePath, updater) {
     console.warn(`⚠️ Warning: file not found: ${filePath}`);
     return;
   }
-  const data = JSON.parse(fs.readFileSync(absolutePath, 'utf8'));
+  const data = readJsonFileSafe(absolutePath);
   updater(data);
   fs.writeFileSync(absolutePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
   console.log(`✅ Updated ${filePath}`);
@@ -20,7 +26,7 @@ function updatePackageJson(filePath, updater) {
 function getDesktopVersion() {
   const desktopPkgPath = path.join(rootDir, 'packages/desktop/package.json');
   if (fs.existsSync(desktopPkgPath)) {
-    const pkg = JSON.parse(fs.readFileSync(desktopPkgPath, 'utf8'));
+    const pkg = readJsonFileSafe(desktopPkgPath);
     return pkg.version || '0.1.0';
   }
   return '0.1.0';
@@ -133,7 +139,7 @@ function updateJsonFile(filePath, updater) {
     console.warn(`⚠️ Warning: file not found: ${filePath}`);
     return;
   }
-  const data = JSON.parse(fs.readFileSync(absolutePath, 'utf8'));
+  const data = readJsonFileSafe(absolutePath);
   updater(data);
   fs.writeFileSync(absolutePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
   console.log(`✅ Updated ${filePath}`);

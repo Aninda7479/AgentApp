@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 /**
  * SuperAgent UI — Build Script
  * Compiles Tailwind CSS, copies HTML and assets into dist/, and bundles esbuild renderers.
