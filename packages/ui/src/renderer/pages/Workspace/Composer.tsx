@@ -744,7 +744,7 @@ export const Composer: React.FC<ComposerProps> = ({
     <div
       data-testid="composer-container"
       onContextMenu={handleRightClickPaste}
-      className="px-4 pt-2 pb-4 max-w-235 w-full mx-auto flex flex-col gap-2 box-border relative z-10"
+      className="px-4 pt-2 pb-4 max-w-235 w-full mx-auto flex flex-col gap-2 box-border relative z-10 shrink-0"
     >
       {/* The main input composer card */}
       <div className="glass-panel rounded-xl p-3 flex flex-col shadow-sm relative transition-all duration-300 focus-within:border-brand-border-strong focus-within:ring-2 focus-within:ring-brand-hover-strong">

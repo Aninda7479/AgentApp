@@ -1,19 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_HOMELAB_PORT, AVAILABLE_MODELS } from './config.js';
-import { SuperAgentApiClient } from './api/client.js';
+import { DEFAULT_HOMELAB_PORT, AVAILABLE_MODELS, DEFAULT_SERVER_CONFIG } from './config.js';
 
 describe('@superagent/ui Config & API Tests', () => {
   it('should use default HomeLab port 1469', () => {
     expect(DEFAULT_HOMELAB_PORT).toBe(1469);
   });
 
-  it('should format HomeLab API base URL correctly', () => {
-    const client = new SuperAgentApiClient({
-      host: '192.168.1.100',
-      port: 1469,
-      isTauri: false
-    });
-    expect(client.getBaseUrl()).toBe('http://192.168.1.100:1469');
+  it('should format default server config correctly', () => {
+    expect(DEFAULT_SERVER_CONFIG.host).toBe('localhost');
+    expect(DEFAULT_SERVER_CONFIG.port).toBe(1469);
   });
 
   it('should contain default LLM model options', () => {

@@ -90,5 +90,14 @@ if (isWatch) {
     cwd: ROOT,
     stdio: 'inherit',
   });
+
+  // 6. Sync built UI assets to desktop/dist if desktop package exists
+  const desktopDist = path.resolve(ROOT, '../desktop/dist');
+  try {
+    fs.mkdirSync(desktopDist, { recursive: true });
+    fs.cpSync(distDir, desktopDist, { recursive: true });
+    console.log('[build-ui] ✅ Synced UI assets -> packages/desktop/dist');
+  } catch {}
+
   console.log('[build-ui] ✅ UI build finished.');
 }
