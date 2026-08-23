@@ -2,11 +2,15 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
+
 use serde::{Deserialize, Serialize};
 
 use superagent_core_v2::orchestrator::AgentEngine;
-use superagent_core_v2::tools::builtin::{GrepSearchTool, ReadFileTool, RunCommandTool, WriteFileTool};
+use superagent_core_v2::server::start_server;
+use superagent_core_v2::tools::builtin::{
+    EditFileTool, GrepSearchTool, ListDirTool, ReadFileTool, RunCommandTool, WriteFileTool,
+};
 use superagent_core_v2::tools::ToolRegistry;
 use superagent_core_v2::types::{ModelConfig, ProviderType};
 
@@ -24,72 +28,89 @@ pub struct AgentRunRequest {
     pub working_dir: Option<String>,
 }
 
+pub enum CliMode {
+    Server { port: u16, workspace_root: PathBuf },
+    Run(AgentRunRequest),
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing subscriber for logging
     tracing_subscriber::fmt::init();
 
     let args: Vec<String> = std::env::args().collect();
-    let request = parse_request(&args)?;
+    let mode = parse_cli_mode(&args)?;
 
-    let provider = request.provider.unwrap_or(ProviderType::OpenAI);
-    let model_id = request
-        .model_id
-        .unwrap_or_else(|| match provider {
-            ProviderType::Anthropic => "claude-3-5-sonnet-20241022".to_string(),
-            ProviderType::Gemini => "gemini-1.5-pro".to_string(),
-            ProviderType::Ollama => "llama3".to_string(),
-            _ => "gpt-4o".to_string(),
-        });
+    match mode {
+        CliMode::Server { port, workspace_root } => {
+            println!("🚀 Starting SuperAgent Core v2 Daemon on port {}...", port);
+            start_server(port, workspace_root).await?;
+        }
+        CliMode::Run(request) => {
+            let provider = request.provider.unwrap_or(ProviderType::OpenAI);
+            let model_id = request
+                .model_id
+                .unwrap_or_else(|| match provider {
+                    ProviderType::Anthropic => "claude-3-5-sonnet-20241022".to_string(),
+                    ProviderType::Gemini => "gemini-1.5-pro".to_string(),
+                    ProviderType::Ollama => "llama3".to_string(),
+                    _ => "gpt-4o".to_string(),
+                });
 
-    let mut model_config = ModelConfig::new(provider, model_id);
-    model_config.api_key = request.api_key.or_else(|| match model_config.provider {
-        ProviderType::OpenAI => std::env::var("OPENAI_API_KEY").ok(),
-        ProviderType::Anthropic => std::env::var("ANTHROPIC_API_KEY").ok(),
-        ProviderType::Gemini => std::env::var("GEMINI_API_KEY").ok(),
-        ProviderType::OpenRouter => std::env::var("OPENROUTER_API_KEY").ok(),
-        ProviderType::DeepSeek => std::env::var("DEEPSEEK_API_KEY").ok(),
-        ProviderType::Groq => std::env::var("GROQ_API_KEY").ok(),
-        _ => None,
-    });
-    model_config.base_url = request.base_url;
-    model_config.temperature = request.temperature;
-    model_config.max_tokens = request.max_tokens;
+            let mut model_config = ModelConfig::new(provider, model_id);
+            model_config.api_key = request.api_key.or_else(|| match model_config.provider {
+                ProviderType::OpenAI => std::env::var("OPENAI_API_KEY").ok(),
+                ProviderType::Anthropic => std::env::var("ANTHROPIC_API_KEY").ok(),
+                ProviderType::Gemini => std::env::var("GEMINI_API_KEY").ok(),
+                ProviderType::OpenRouter => std::env::var("OPENROUTER_API_KEY").ok(),
+                ProviderType::DeepSeek => std::env::var("DEEPSEEK_API_KEY").ok(),
+                ProviderType::Groq => std::env::var("GROQ_API_KEY").ok(),
+                _ => None,
+            });
+            model_config.base_url = request.base_url;
+            model_config.temperature = request.temperature;
+            model_config.max_tokens = request.max_tokens;
 
-    let workspace_root = request
-        .working_dir
-        .map(PathBuf::from)
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+            let workspace_root = request
+                .working_dir
+                .map(PathBuf::from)
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
-    // Register built-in workspace tools
-    let mut registry = ToolRegistry::new();
-    registry.register(ReadFileTool::new(workspace_root.clone()));
-    registry.register(WriteFileTool::new(workspace_root.clone()));
-    registry.register(RunCommandTool::new(workspace_root.clone()));
-    registry.register(GrepSearchTool::new(workspace_root.clone()));
+            // Register built-in workspace tools
+            let mut registry = ToolRegistry::new();
+            registry.register(ReadFileTool::new(workspace_root.clone()));
+            registry.register(WriteFileTool::new(workspace_root.clone()));
+            registry.register(EditFileTool::new(workspace_root.clone()));
+            registry.register(ListDirTool::new(workspace_root.clone()));
+            registry.register(RunCommandTool::new(workspace_root.clone()));
+            registry.register(GrepSearchTool::new(workspace_root.clone()));
 
-    let engine = AgentEngine::new(Arc::new(registry));
-    let system_prompt = request.system_prompt.unwrap_or_default();
+            let engine = AgentEngine::new(Arc::new(registry));
+            let system_prompt = request.system_prompt.unwrap_or_default();
 
-    let mut rx = engine
-        .run_loop(&model_config, &system_prompt, &request.user_prompt)
-        .await?;
+            let mut rx = engine
+                .run_loop(&model_config, &system_prompt, &request.user_prompt)
+                .await?;
 
-    let stdout = io::stdout();
-    let mut handle = stdout.lock();
+            let stdout = io::stdout();
+            let mut handle = stdout.lock();
 
-    while let Some(event) = rx.recv().await {
-        if let Ok(json_line) = serde_json::to_string(&event) {
-            let _ = writeln!(handle, "{}", json_line);
-            let _ = handle.flush();
+            while let Some(event) = rx.recv().await {
+                if let Ok(json_line) = serde_json::to_string(&event) {
+                    let _ = writeln!(handle, "{}", json_line);
+                    let _ = handle.flush();
+                }
+            }
         }
     }
 
     Ok(())
 }
 
-/// Parses CLI flags or stdin JSON payload into an `AgentRunRequest`.
-fn parse_request(args: &[String]) -> Result<AgentRunRequest> {
+/// Parses CLI flags into `CliMode`.
+fn parse_cli_mode(args: &[String]) -> Result<CliMode> {
+    let mut is_server = false;
+    let mut server_port: u16 = 1469;
     let mut user_prompt = None;
     let mut system_prompt = None;
     let mut provider_str = None;
@@ -106,21 +127,34 @@ fn parse_request(args: &[String]) -> Result<AgentRunRequest> {
                 println!("SuperAgent Core v2 Daemon");
                 println!();
                 println!("USAGE:");
+                println!("    superagent-core-daemon --server [--port 1469]");
                 println!("    superagent-core-daemon --prompt <PROMPT> [OPTIONS]");
                 println!("    superagent-core-daemon --json '<JSON_STRING>'");
-                println!("    cat request.json | superagent-core-daemon");
                 println!();
                 println!("OPTIONS:");
-                println!("    -p, --prompt <PROMPT>       User prompt instruction for the agent");
+                println!("    -d, --server, --daemon      Run as background HTTP/WebSocket daemon");
+                println!("    --port <PORT>               Port for the server (default: 1469)");
+                println!("    -p, --prompt <PROMPT>       User prompt instruction for one-shot execution");
                 println!("    -s, --system <SYSTEM>       Optional system prompt");
                 println!("    --provider <PROVIDER>       openai | anthropic | gemini | ollama | openrouter | deepseek | groq");
-                println!("    -m, --model <MODEL_ID>      Model ID (e.g. gpt-4o, claude-3-5-sonnet-20241022, gemini-1.5-pro)");
+                println!("    -m, --model <MODEL_ID>      Model ID (e.g. gpt-4o, claude-3-5-sonnet-20241022)");
                 println!("    --api-key <KEY>             API key override");
                 println!("    --base-url <URL>            API base URL override");
                 println!("    -w, --workspace <PATH>      Workspace root directory");
                 println!("    --json <JSON_STRING>        JSON payload string matching AgentRunRequest");
                 println!("    -h, --help                  Print help information");
                 std::process::exit(0);
+            }
+            "--server" | "--daemon" | "-d" => {
+                is_server = true;
+            }
+            "--port" => {
+                if i + 1 < args.len() {
+                    if let Ok(p) = args[i + 1].parse::<u16>() {
+                        server_port = p;
+                    }
+                    i += 1;
+                }
             }
             "--json" => {
                 if i + 1 < args.len() {
@@ -175,9 +209,20 @@ fn parse_request(args: &[String]) -> Result<AgentRunRequest> {
         i += 1;
     }
 
+    let workspace = working_dir
+        .map(PathBuf::from)
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+    if is_server {
+        return Ok(CliMode::Server {
+            port: server_port,
+            workspace_root: workspace,
+        });
+    }
+
     if let Some(raw) = json_raw {
         let req: AgentRunRequest = serde_json::from_str(&raw)?;
-        return Ok(req);
+        return Ok(CliMode::Run(req));
     }
 
     if let Some(prompt) = user_prompt {
@@ -185,7 +230,7 @@ fn parse_request(args: &[String]) -> Result<AgentRunRequest> {
             serde_json::from_value::<ProviderType>(serde_json::Value::String(p.to_lowercase())).ok()
         });
 
-        return Ok(AgentRunRequest {
+        return Ok(CliMode::Run(AgentRunRequest {
             provider,
             model_id,
             api_key,
@@ -194,11 +239,13 @@ fn parse_request(args: &[String]) -> Result<AgentRunRequest> {
             max_tokens: None,
             system_prompt,
             user_prompt: prompt,
-            working_dir,
-        });
+            working_dir: Some(workspace.to_string_lossy().to_string()),
+        }));
     }
 
-    Err(anyhow!(
-        "No prompt or request provided. Run 'superagent-core-daemon --help' for usage instructions."
-    ))
+    // Default to daemon server mode if no prompt provided
+    Ok(CliMode::Server {
+        port: server_port,
+        workspace_root: workspace,
+    })
 }

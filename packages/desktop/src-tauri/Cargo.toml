@@ -21,3 +21,6 @@ serde_json = "1.0"
 tokio = { version = "1.0", features = ["full"] }
 sysinfo = "0.30"
 open = "5"
+superagent-core-v2 = { path = "../../core_v2" }
+
+

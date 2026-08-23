@@ -112,4 +112,6 @@ export * from './providers/simple-chat.js';
 export * from './providers/title-generator.js';
 export * from './prompts/index.js';
 export * from './startup/autostart.js';
+export * from './core-v2-client.js';
+
 
