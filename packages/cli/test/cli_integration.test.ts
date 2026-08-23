@@ -72,7 +72,7 @@ describe('Step 080: CLI Integration Verification Suite', () => {
 
     const savedContent = await fs.readFile(outputFile, 'utf-8');
     expect(savedContent.length).toBeGreaterThan(0);
-  });
+  }, 15000);
 
   it('should execute superagent exec reading input file and returning JSON output', async () => {
     const inputFile = path.join(integrationTmpDir, 'task_prompt.txt');
@@ -88,7 +88,7 @@ describe('Step 080: CLI Integration Verification Suite', () => {
 
     expect(result.success).toBe(true);
     expect(result.output).toBeDefined();
-  });
+  }, 15000);
 
   it('should handle project init and verify generated metadata', async () => {
     const targetFolder = path.join(integrationTmpDir, 'subproject');

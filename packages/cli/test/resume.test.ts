@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, afterAll, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import os from 'node:os';
@@ -64,6 +64,7 @@ describe('session resume', () => {
       pause: () => {},
       resume: () => {},
     };
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const instance = render(React.createElement(App, { sessionId: id, initialMessages: loaded ?? undefined }), {
       stdout: stdout as any,
       stdin,
@@ -77,5 +78,6 @@ describe('session resume', () => {
     expect(out).toContain('Got it — the magic word is zebra.');
     expect(out).toContain('Resumed session');
     instance.unmount();
+    errSpy.mockRestore();
   });
 });

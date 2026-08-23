@@ -19,6 +19,7 @@ function makeSuperagent() {
 describe('renderer/lib/ipc bridge', () => {
   const realWindow = (globalThis as any).window;
   const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const consoleDebug = vi.spyOn(console, 'debug').mockImplementation(() => {});
 
   beforeEach(() => {
     (globalThis as any).window = {} as any;
@@ -26,6 +27,7 @@ describe('renderer/lib/ipc bridge', () => {
   afterEach(() => {
     (globalThis as any).window = realWindow;
     consoleError.mockClear();
+    consoleDebug.mockClear();
   });
 
   it('invokes through the superagent API', async () => {
