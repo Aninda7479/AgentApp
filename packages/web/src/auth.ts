@@ -293,14 +293,12 @@ const PUBLIC_PATHS = new Set([
   '/favicon.ico'
 ]);
 
-function isLoopbackReq(req: Request): boolean {
+export function isLoopbackReq(req: Request): boolean {
   const ip = req.socket.remoteAddress || '';
   return (
     ip === '127.0.0.1' ||
     ip === '::1' ||
-    ip === '::ffff:127.0.0.1' ||
-    req.hostname === 'localhost' ||
-    req.hostname === '127.0.0.1'
+    ip === '::ffff:127.0.0.1'
   );
 }
 
@@ -424,6 +422,10 @@ export function handleLogin(req: Request, res: Response): void {
 
 /** GET /api/auth/devices — lists active sessions/devices. */
 export function handleGetDevices(req: Request, res: Response): void {
+  if (!isAuthDisabled() && !getAuthenticatedUser(req)) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
   const cookies = parseCookies(req.headers.cookie);
   const currentSid = getSessionIdFromToken(cookies[COOKIE_NAME]);
   const sessions = AuthStore.getActiveSessions().map((s) => ({
@@ -435,6 +437,10 @@ export function handleGetDevices(req: Request, res: Response): void {
 
 /** DELETE /api/auth/devices/:sessionId — revokes a specific device session. */
 export function handleDeleteDevice(req: Request, res: Response): void {
+  if (!isAuthDisabled() && !getAuthenticatedUser(req)) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
   const sessionId = req.params.sessionId || (req.query.sessionId as string);
   if (!sessionId) {
     res.status(400).json({ error: 'Session ID is required.' });
@@ -445,7 +451,11 @@ export function handleDeleteDevice(req: Request, res: Response): void {
 }
 
 /** GET /api/auth/history — retrieves recent login history. */
-export function handleGetHistory(_req: Request, res: Response): void {
+export function handleGetHistory(req: Request, res: Response): void {
+  if (!isAuthDisabled() && !getAuthenticatedUser(req)) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
   const history = AuthStore.getLoginHistory(50);
   res.json({ history });
 }

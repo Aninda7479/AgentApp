@@ -7,7 +7,11 @@ import {
   checkRateLimit,
   recordFailedAttempt,
   clearAttempts,
-  validateChangePasswordInput
+  validateChangePasswordInput,
+  isLoopbackReq,
+  handleGetDevices,
+  handleDeleteDevice,
+  handleGetHistory
 } from '../src/auth.js';
 import { AuthStore } from '@superagent/core';
 
@@ -179,5 +183,63 @@ describe('auth: password change invalidates other sessions', () => {
     const token = createSessionToken(AuthStore.getUsername());
     // Simulate re-reading the persisted store (fresh process-equivalent state).
     expect(verifySessionToken(token)).toBe(AuthStore.getUsername());
+  });
+});
+
+describe('auth: loopback spoofing protection', () => {
+  it('identifies true loopback socket addresses', () => {
+    expect(isLoopbackReq({ socket: { remoteAddress: '127.0.0.1' }, hostname: 'example.com' } as any)).toBe(true);
+    expect(isLoopbackReq({ socket: { remoteAddress: '::1' }, hostname: 'example.com' } as any)).toBe(true);
+    expect(isLoopbackReq({ socket: { remoteAddress: '::ffff:127.0.0.1' }, hostname: 'example.com' } as any)).toBe(true);
+  });
+
+  it('rejects remote IPs even if Host header is localhost or 127.0.0.1', () => {
+    expect(isLoopbackReq({ socket: { remoteAddress: '203.0.113.195' }, hostname: 'localhost' } as any)).toBe(false);
+    expect(isLoopbackReq({ socket: { remoteAddress: '192.168.1.50' }, hostname: '127.0.0.1' } as any)).toBe(false);
+    expect(isLoopbackReq({ socket: { remoteAddress: '10.0.0.5' }, hostname: 'localhost' } as any)).toBe(false);
+  });
+});
+
+describe('auth: protected endpoints require session', () => {
+  function createMockRes() {
+    let statusCode = 200;
+    let jsonBody: any = null;
+    const res: any = {
+      status(code: number) {
+        statusCode = code;
+        return res;
+      },
+      json(body: any) {
+        jsonBody = body;
+        return res;
+      },
+      getStatus: () => statusCode,
+      getBody: () => jsonBody
+    };
+    return res;
+  }
+
+  it('rejects unauthenticated handleGetDevices with 401', () => {
+    const req = { headers: {}, socket: { remoteAddress: '127.0.0.1' } } as any;
+    const res = createMockRes();
+    handleGetDevices(req, res);
+    expect(res.getStatus()).toBe(401);
+    expect(res.getBody().error).toContain('Authentication required');
+  });
+
+  it('rejects unauthenticated handleDeleteDevice with 401', () => {
+    const req = { params: { sessionId: 'some-id' }, headers: {}, socket: { remoteAddress: '127.0.0.1' } } as any;
+    const res = createMockRes();
+    handleDeleteDevice(req, res);
+    expect(res.getStatus()).toBe(401);
+    expect(res.getBody().error).toContain('Authentication required');
+  });
+
+  it('rejects unauthenticated handleGetHistory with 401', () => {
+    const req = { headers: {}, socket: { remoteAddress: '127.0.0.1' } } as any;
+    const res = createMockRes();
+    handleGetHistory(req, res);
+    expect(res.getStatus()).toBe(401);
+    expect(res.getBody().error).toContain('Authentication required');
   });
 });

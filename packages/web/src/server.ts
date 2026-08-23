@@ -102,12 +102,43 @@ const wss = new WebSocketServer({ noServer: true });
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
+function isTrustedOrigin(origin: string, reqHost?: string): boolean {
+  try {
+    const url = new URL(origin);
+    // Local loopback hostnames
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]') {
+      return true;
+    }
+    // Browser extensions and desktop webviews
+    if (
+      url.protocol === 'chrome-extension:' ||
+      url.protocol === 'moz-extension:' ||
+      url.protocol === 'tauri:' ||
+      url.protocol === 'vscode-webview:'
+    ) {
+      return true;
+    }
+    // Same host
+    if (reqHost) {
+      const hostWithoutPort = reqHost.split(':')[0];
+      if (url.hostname === hostWithoutPort) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 // CORS middleware for Browser Extensions, Desktop, and Web
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    if (isTrustedOrigin(origin, req.headers.host)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Cookie');
   }
@@ -203,15 +234,11 @@ if (!isAuthDisabled() && AuthStore.ensureSeededFromEnv()) {
 // Lightweight health check (always public).
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-// Auth endpoints (must be registered before the gate).
+// Public auth endpoints (must be registered before the gate).
 app.post('/api/auth/setup', handleSetup);
 app.post('/api/auth/login', handleLogin);
 app.post('/api/auth/logout', handleLogout);
 app.get('/api/auth/status', handleStatus);
-app.post('/api/auth/change-password', handleChangePassword);
-app.get('/api/auth/devices', handleGetDevices);
-app.delete('/api/auth/devices/:sessionId', handleDeleteDevice);
-app.get('/api/auth/history', handleGetHistory);
 
 // Serve the standalone login/setup page (public; must stay before the gate).
 app.get('/login', (_req, res) => {
@@ -232,10 +259,6 @@ app.get('/login', (_req, res) => {
   });
 });
 
-// NOTE: the account (change-password) page is registered AFTER `app.use(authGate)`
-// below, so it is actually session-protected. It was previously registered here
-// (before the gate) and was therefore reachable without authentication.
-
 if (isAuthDisabled()) {
   console.log('[Security Warning] SUPERAGENT_DISABLE_AUTH=true — running in OPEN mode with NO authentication.');
 } else if (AuthStore.isPasswordSet()) {
@@ -246,6 +269,12 @@ if (isAuthDisabled()) {
 
 // Gate everything else behind a valid session.
 app.use(authGate);
+
+// Protected auth endpoints
+app.post('/api/auth/change-password', handleChangePassword);
+app.get('/api/auth/devices', handleGetDevices);
+app.delete('/api/auth/devices/:sessionId', handleDeleteDevice);
+app.get('/api/auth/history', handleGetHistory);
 
 // Legacy /account route redirect: account management and password rotation
 // are now unified in the in-app Settings → Web App (/settings/web-app) panel.
@@ -1987,16 +2016,13 @@ function lanAddresses(): string[] {
 }
 
 server.on('upgrade', (request, socket, head) => {
-  const pathname = new URL(request.url || '', `http://${request.headers.host}`).pathname;
+  const pathname = new URL(request.url || '', `http://${request.headers.host || 'localhost'}`).pathname;
   if (pathname === '/api/ws') {
     const remoteIp = (socket as any).remoteAddress || request.socket?.remoteAddress || '';
-    const hostHeader = request.headers.host || '';
     const isLoopback =
       remoteIp === '127.0.0.1' ||
       remoteIp === '::1' ||
-      remoteIp === '::ffff:127.0.0.1' ||
-      hostHeader.startsWith('localhost:') ||
-      hostHeader.startsWith('127.0.0.1:');
+      remoteIp === '::ffff:127.0.0.1';
 
     // Enforce authentication for non-loopback remote/VPS connections.
     if (!isAuthDisabled() && !isLoopback && !getAuthenticatedUser(request)) {
