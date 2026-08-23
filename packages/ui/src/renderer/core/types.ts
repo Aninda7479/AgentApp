@@ -114,7 +114,7 @@ export interface TrajectoryStepMetadata {
 
 export interface TrajectoryStep {
   id: string;
-  type: 'user' | 'assistant' | 'tool_call' | 'tool_result' | 'thought';
+  type: 'user' | 'assistant' | 'tool_call' | 'tool_result' | 'thought' | 'handover' | 'subagent_start' | 'subagent_finish' | 'workflow_progress';
   content: string;
   timestamp?: string;
   status?: 'pending' | 'running' | 'success' | 'error';
@@ -221,3 +221,128 @@ export interface ContextUsage {
   limit: number;
   pct: number;
 }
+
+export type CapabilityTier =
+  | 'deep_reasoning'
+  | 'high_throughput'
+  | 'long_context'
+  | 'local_privacy'
+  | 'multimodal_media';
+
+export interface PersonaModelConfig {
+  provider: string;
+  model_id: string;
+  api_key?: string;
+  base_url?: string;
+  temperature?: number;
+  max_tokens?: number;
+}
+
+export interface AgentPersona {
+  id: string;
+  name: string;
+  roleTitle: string;
+  description: string;
+  systemPrompt: string;
+  capabilityTier: CapabilityTier;
+  modelConfig: PersonaModelConfig;
+  allowedTools: string[];
+  isCoordinator?: boolean;
+  maxTurns?: number;
+  avatarEmoji?: string;
+  isBuiltin?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type RoutineTriggerType = 'cron' | 'interval' | 'webhook';
+
+export interface RoutineTrigger {
+  id: string;
+  name: string;
+  description?: string;
+  triggerType: RoutineTriggerType;
+  enabled: boolean;
+  cronExpression?: string;
+  intervalSeconds?: number;
+  personaId: string;
+  prompt: string;
+  webhookToken?: string;
+  notifyTelegram?: boolean;
+  telegramChatId?: string;
+  lastRunAt?: string;
+  lastStatus?: string;
+  lastError?: string;
+  runCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface RoutineExecutionLog {
+  logId: string;
+  routineId: string;
+  triggeredAt: string;
+  completedAt: string;
+  status: string;
+  output: string;
+  error?: string;
+  durationMs: number;
+}
+
+export interface WorkflowStep {
+  stepId: string;
+  name: string;
+  personaId: string;
+  promptTemplate: string;
+  passPreviousOutput?: boolean;
+  timeoutSeconds?: number;
+}
+
+export interface WorkflowDefinition {
+  id: string;
+  name: string;
+  description: string;
+  steps: WorkflowStep[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WorkflowStepResult {
+  stepId: string;
+  stepName: string;
+  personaId: string;
+  output: string;
+  isError: boolean;
+  durationMs: number;
+}
+
+export interface WorkflowExecutionResult {
+  workflowId: string;
+  workflowName: string;
+  success: boolean;
+  stepResults: WorkflowStepResult[];
+  finalOutput: string;
+  totalDurationMs: number;
+}
+
+export interface SynthesizedSkill {
+  id: string;
+  name: string;
+  description: string;
+  parametersSchema: Record<string, unknown>;
+  executionScript: string;
+  language: string;
+  createdAt: string;
+}
+
+export interface IntegrationEntry {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  icon: string;
+  isAvailable: boolean;
+  transport: string;
+  requiredKeys: string[];
+}
+

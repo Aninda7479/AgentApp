@@ -1,15 +1,17 @@
 /**
  * Composer Bar Component (Pure TailwindCSS)
- * Prompt input composer with slash command autocomplete, file attachments, and send controls.
+ * Prompt input composer with slash command autocomplete, @agent mention dispatching, file attachments, and send controls.
  */
 
 import React, { useState, KeyboardEvent, useRef, useEffect } from 'react';
-import { Send, Paperclip, ShieldCheck, X, Sparkles, Terminal, Mic, MicOff } from 'lucide-react';
+import { Send, Paperclip, ShieldCheck, X, Sparkles, Terminal, Mic, MicOff, Video, Bot, Users } from 'lucide-react';
 import { ModelPicker } from './ModelPicker';
 import { useSlashCommands } from '../hooks/useSlashCommands';
+import { useAgentMentions } from '../hooks/useAgentMentions';
+import { TaskRecorderModal } from './TaskRecorderModal';
 import type { ComposerOptions, ComposerAttachment } from '../core/types';
 import { getIpc } from '../lib/ipc';
-import { useLastUsedModel, providerStore } from '../stores/providerStore';
+import { useLastUsedModel } from '../stores/providerStore';
 
 interface ComposerBarProps {
   onSend: (prompt: string, options: ComposerOptions, attachments: ComposerAttachment[]) => void;
@@ -28,6 +30,8 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
   const [approvalMode, setApprovalMode] = useState<'ask' | 'always' | 'never'>('ask');
   const [sandbox, setSandbox] = useState(true);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [cursorPos, setCursorPos] = useState(0);
+  const [isRecorderOpen, setIsRecorderOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Workspace Voice Typing setting
@@ -40,6 +44,13 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
   const basePromptRef = useRef<string>('');
 
   const { isOpen: isSlashOpen, suggestions: slashSuggestions } = useSlashCommands(prompt);
+  const {
+    isOpen: isMentionOpen,
+    filteredPersonas,
+    selectedIndex: mentionIndex,
+    applyMention,
+    handleKeyDown: handleMentionKeyDown,
+  } = useAgentMentions(prompt, cursorPos);
 
   useEffect(() => {
     const ipcRenderer = getIpc();
@@ -48,8 +59,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
 
     const applySettings = (settings: any) => {
       if (!active) return;
-      
-      // Voice dictation typing target
+
       const voice = settings?.voice || {};
       const tTarget = voice.typingTarget;
       const tEnabled = voice.typingEnabled;
@@ -63,13 +73,12 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
       }
       setWorkspaceVoiceEnabled(voiceEnabled);
 
-      // Orchestrator enabled status
       const gov = settings?.orchestrator || settings?.modelGov || {};
       const orchEnabled = gov.enabled !== undefined ? !!gov.enabled : true;
       setOrchestratorEnabled(orchEnabled);
     };
 
-    ipcRenderer.invoke('settings-read').then(applySettings).catch(() => { /* leave defaults */ });
+    ipcRenderer.invoke('settings-read').then(applySettings).catch(() => {});
 
     const onSettingsChanged = (_e: any, settings: any) => {
       applySettings(settings);
@@ -149,6 +158,18 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle @agent mention navigation first
+    if (isMentionOpen) {
+      const handled = handleMentionKeyDown(e, prompt, setPrompt, (pos) => {
+        setCursorPos(pos);
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          textareaRef.current.setSelectionRange(pos, pos);
+        }
+      });
+      if (handled) return;
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -173,32 +194,34 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
     }
 
     e.preventDefault();
-    navigator.clipboard.readText().then((clipText) => {
-      if (!clipText) return;
+    navigator.clipboard
+      .readText()
+      .then((clipText) => {
+        if (!clipText) return;
 
-      const textarea = textareaRef.current;
-      if (textarea) {
-        const start = textarea.selectionStart ?? textarea.value.length;
-        const end = textarea.selectionEnd ?? textarea.value.length;
-        const text = textarea.value;
-        const before = text.substring(0, start);
-        const after = text.substring(end, text.length);
-        const newText = before + clipText + after;
+        const textarea = textareaRef.current;
+        if (textarea) {
+          const start = textarea.selectionStart ?? textarea.value.length;
+          const end = textarea.selectionEnd ?? textarea.value.length;
+          const text = textarea.value;
+          const before = text.substring(0, start);
+          const after = text.substring(end, text.length);
+          const newText = before + clipText + after;
 
-        setPrompt(newText);
+          setPrompt(newText);
 
-        // Focus and set cursor position after paste
-        const newCursorPos = start + clipText.length;
-        requestAnimationFrame(() => {
-          textarea.focus();
-          textarea.setSelectionRange(newCursorPos, newCursorPos);
-        });
-      } else {
-        setPrompt(prompt + clipText);
-      }
-    }).catch((err) => {
-      console.error('Failed to read clipboard text on right click:', err);
-    });
+          const newCursorPos = start + clipText.length;
+          requestAnimationFrame(() => {
+            textarea.focus();
+            textarea.setSelectionRange(newCursorPos, newCursorPos);
+          });
+        } else {
+          setPrompt(prompt + clipText);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to read clipboard text on right click:', err);
+      });
   };
 
   return (
@@ -218,117 +241,159 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
             >
               <div className="flex items-center gap-2">
                 <Terminal size={14} className="text-cyan-400" />
-                <span className="font-semibold text-cyan-300">/{item.name}</span>
+                <span className="font-semibold text-slate-200">/{item.name}</span>
+                <span className="text-slate-400 text-[11px]">{item.description}</span>
               </div>
-              <span className="text-slate-400 text-[11px] truncate max-w-xs">{item.description}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* @agent Mention Autocomplete Popover */}
+      {isMentionOpen && (
+        <div className="absolute bottom-full mb-2 left-4 right-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-1.5 z-50 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800">
+          <div className="px-3 py-1 text-[10px] font-mono text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+            <Users size={12} />
+            <span>Delegate to Digital Employee Persona</span>
+          </div>
+          {filteredPersonas.map((persona, idx) => (
+            <div
+              key={persona.id}
+              onClick={() => {
+                applyMention(persona, prompt, setPrompt, (pos) => {
+                  setCursorPos(pos);
+                  if (textareaRef.current) {
+                    textareaRef.current.focus();
+                    textareaRef.current.setSelectionRange(pos, pos);
+                  }
+                });
+              }}
+              className={`flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer text-xs transition-colors ${
+                idx === mentionIndex ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/20' : 'hover:bg-slate-800/80 text-slate-200'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="text-base">{persona.avatarEmoji || '🤖'}</span>
+                <div>
+                  <div className="font-bold text-slate-100 flex items-center gap-1.5">
+                    <span>{persona.name}</span>
+                    <span className="text-[11px] font-mono text-cyan-400 font-normal">@{persona.id}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400">{persona.roleTitle}</div>
+                </div>
+              </div>
+              <span className="text-[10px] font-mono text-slate-500 px-2 py-0.5 rounded bg-slate-950">
+                {persona.capabilityTier.replace('_', ' ')}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Attachments Preview Pill Bar */}
+      {attachments.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 px-4 py-2 bg-slate-900/90 border-t border-x border-slate-800 rounded-t-2xl">
+          {attachments.map((att, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950 text-xs text-slate-300 border border-slate-800"
+            >
+              <Paperclip size={12} className="text-cyan-400" />
+              <span className="truncate max-w-[120px]">{att.filename}</span>
+              <button
+                type="button"
+                onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                className="hover:text-red-400 transition-colors"
+              >
+                <X size={12} />
+              </button>
             </div>
           ))}
         </div>
       )}
 
       {/* Main Composer Box */}
-      <div className="bg-brand-card/90 border border-brand-border rounded-2xl p-3 shadow-2xl backdrop-blur-xl transition-all focus-within:border-cyan-500/50 focus-within:ring-2 focus-within:ring-cyan-500/20">
-        {/* Attachment Chips */}
-        {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2">
-            {attachments.map((att, idx) => (
-              <div
-                key={idx}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-brand-bg/85 border border-brand-border text-xs text-brand-textMain font-mono"
-              >
-                <Paperclip size={12} className="text-cyan-400" />
-                <span className="truncate max-w-[120px]">{att.filename}</span>
-                <button
-                  onClick={() => setAttachments(attachments.filter((_, i) => i !== idx))}
-                  className="hover:text-red-400 transition-colors ml-1"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Text Area Input */}
-        <div className="relative flex items-center">
-          <textarea
-            ref={textareaRef}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={listening ? "Listening... Speak clearly." : "Ask SuperAgent anything, paste code, or type / for commands..."}
-            rows={2}
-            className="w-full bg-transparent text-brand-textMain placeholder-brand-textMuted/60 text-sm resize-none focus:outline-none pr-10 scrollbar-thin scrollbar-thumb-brand-border"
-          />
-          {/* Inline Speech dictation button */}
-          {workspaceVoiceEnabled && SpeechRecognitionCtor && (
-            <button
-              type="button"
-              onClick={toggleListening}
-              className={`absolute right-2 top-2 p-2 rounded-xl transition-all hover:bg-brand-bg/85 cursor-pointer ${
-                listening
-                  ? 'text-red-500 bg-red-500/10 animate-pulse border border-red-500/25'
-                  : 'text-brand-textMuted hover:text-brand-textMain'
-              }`}
-              title={listening ? "Listening (click to stop)" : "Voice to Text"}
-            >
-              {listening ? <MicOff size={16} /> : <Mic size={16} />}
-            </button>
-          )}
-        </div>
+      <div className="bg-slate-950/85 backdrop-blur-2xl border border-slate-800 rounded-3xl p-3 shadow-2xl flex flex-col gap-2">
+        <textarea
+          ref={textareaRef}
+          value={prompt}
+          onChange={(e) => {
+            setPrompt(e.target.value);
+            setCursorPos(e.target.selectionStart);
+            e.target.style.height = 'auto';
+            e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+          }}
+          onKeyUp={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart)}
+          onClick={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart)}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask a question, instruct your AI workforce, or type @ to delegate to a specialist..."
+          rows={1}
+          disabled={disabled}
+          className="w-full bg-transparent resize-none text-slate-100 placeholder:text-slate-500 text-xs sm:text-sm px-2 py-1.5 focus:outline-none scrollbar-thin scrollbar-thumb-slate-800"
+        />
 
         {/* Toolbar Controls */}
-        <div className="flex items-center justify-between pt-2 border-t border-brand-border select-none">
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-900">
+          <div className="flex items-center gap-2">
             <ModelPicker
               selectedModel={lastUsedModel}
-              onSelectModel={(model) => providerStore.setLastUsedModel(model)}
+              onSelectModel={() => {}}
               orchestratorEnabled={orchestratorEnabled}
             />
 
-            <label className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-brand-bg hover:bg-brand-bg/80 text-brand-textMuted hover:text-brand-textMain text-xs cursor-pointer border border-brand-border transition-colors">
-              <Paperclip size={14} />
-              <span>Attach</span>
+            {/* Teach a Task Button */}
+            <button
+              type="button"
+              onClick={() => setIsRecorderOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/20 text-xs font-semibold transition-colors cursor-pointer"
+              title="Teach a Task (Demonstration Workflow Recorder)"
+            >
+              <Video size={13} />
+              <span className="hidden sm:inline">Teach Task</span>
+            </button>
+
+            {/* File Attachment */}
+            <label className="p-2 rounded-xl hover:bg-slate-900 text-slate-400 hover:text-slate-200 cursor-pointer transition-colors">
+              <Paperclip size={15} />
               <input type="file" multiple onChange={handleFileAttach} className="hidden" />
             </label>
 
-            {/* Sandbox Toggle */}
-            <button
-              type="button"
-              onClick={() => setSandbox(!sandbox)}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                sandbox
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
-                  : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/20'
-              }`}
-              title={sandbox ? 'Sandbox mode active: execution is restricted. Click to request full access.' : 'Full access active: commands run unrestricted. Click to sandbox.'}
-            >
-              <ShieldCheck size={14} />
-              <span>{sandbox ? 'Sandboxed' : 'Full Access'}</span>
-            </button>
-
-            {/* Permissions Mode */}
-            <select
-              value={approvalMode}
-              onChange={(e) => setApprovalMode(e.target.value as 'ask' | 'always' | 'never')}
-              className="bg-brand-bg text-brand-textMain border border-brand-border text-xs rounded-xl px-2.5 py-1.5 focus:outline-none cursor-pointer"
-            >
-              <option value="ask">Ask Approval</option>
-              <option value="always">Auto Approve</option>
-              <option value="never">Strict Readonly</option>
-            </select>
+            {/* Voice Dictation */}
+            {workspaceVoiceEnabled && (
+              <button
+                type="button"
+                onClick={toggleListening}
+                className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                  listening
+                    ? 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse'
+                    : 'hover:bg-slate-900 text-slate-400 hover:text-slate-200'
+                }`}
+                title="Voice Input"
+              >
+                {listening ? <MicOff size={15} /> : <Mic size={15} />}
+              </button>
+            )}
           </div>
 
           <button
+            type="button"
             onClick={handleSend}
             disabled={disabled || (!prompt.trim() && attachments.length === 0)}
-            className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
             <span>Send</span>
             <Send size={13} />
           </button>
         </div>
       </div>
+
+      {/* Teach a Task Modal */}
+      <TaskRecorderModal
+        isOpen={isRecorderOpen}
+        onClose={() => setIsRecorderOpen(false)}
+      />
     </div>
   );
 };
+
+export default ComposerBar;

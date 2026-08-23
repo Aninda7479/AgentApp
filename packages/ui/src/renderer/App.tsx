@@ -1668,7 +1668,13 @@ export const App: React.FC = () => {
           )}
 
           {(activeTab === 'partner' || activeTab === 'companion') && (
-            <PartnerPage onBack={() => setActiveTab('trajectory')} />
+            <PartnerPage
+              onBack={() => setActiveTab('trajectory')}
+              onOpenChatWithPersona={(personaId) => {
+                handleNewChat();
+                setActiveTab('trajectory');
+              }}
+            />
           )}
 
           {activeTab === 'artifacts' && (

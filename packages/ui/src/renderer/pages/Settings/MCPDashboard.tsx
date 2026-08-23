@@ -77,7 +77,8 @@ const LOGO_ORG: Record<string, string> = {
   postgres: 'postgres',
   sqlite: 'sqlite',
   git: 'git',
-  notion: 'makenotion'
+  notion: 'makenotion',
+  composio: 'ComposioHQ',
 };
 
 /** Renders a server's real brand logo with an emoji fallback tile. */

@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { KanbanView, KanbanCard } from './KanbanView';
-import { Folder, Globe, Search, RefreshCw, KanbanSquare } from 'lucide-react';
+import { RoutinesView } from './RoutinesView';
+import { Folder, Globe, Search, RefreshCw, KanbanSquare, Clock } from 'lucide-react';
 
 interface TasksPageProps {
   activeProject?: string;
   ipc: any;
   triggerToast?: (message: string, type?: 'info' | 'error') => void;
   onStartWork?: (card: KanbanCard) => void;
+  initialView?: 'kanban' | 'routines';
 }
 
 export const TasksPage: React.FC<TasksPageProps> = ({
@@ -14,7 +16,9 @@ export const TasksPage: React.FC<TasksPageProps> = ({
   ipc,
   triggerToast,
   onStartWork,
+  initialView = 'kanban',
 }) => {
+  const [activeTab, setActiveTab] = useState<'kanban' | 'routines'>(initialView);
   const [scope, setScope] = useState<'global' | 'project'>('global');
   const [cards, setCards] = useState<KanbanCard[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,10 +46,8 @@ export const TasksPage: React.FC<TasksPageProps> = ({
   };
 
   useEffect(() => {
-    // If activeProject changed from one project to another (or was unset), adjust scope
     if (activeProject !== lastProjectRef.current) {
       lastProjectRef.current = activeProject;
-      // Default to project scope if a project is active, otherwise global
       const newScope = activeProject ? 'project' : 'global';
       setScope(newScope);
       loadCards(newScope, activeProject);
@@ -84,125 +86,103 @@ export const TasksPage: React.FC<TasksPageProps> = ({
 
   return (
     <div className="flex-1 flex flex-col h-full bg-brand-bg min-h-0 relative select-none">
-      {/* Header bar */}
+      {/* Top Header bar with Tab Switcher */}
       <div
         className="flex-shrink-0 flex flex-col sm:flex-row sm:items-center justify-between p-4 border-b border-brand-border/40 gap-4 bg-brand-bg/50 backdrop-blur-md z-10"
         style={{ backgroundImage: 'radial-gradient(135% 160% at 0% 0%, var(--brand-atmo-glow) 0%, transparent 52%)' }}
       >
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-[var(--brand-accent-tint)] border border-[var(--brand-accent-border)] text-[var(--brand-accent)]">
-            <KanbanSquare className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-base font-bold text-brand-textMain leading-tight">Tasks Board</h1>
-            <p className="text-[11px] text-brand-textMuted leading-relaxed">
-              Track short-term tasks for your workspace
-            </p>
+          <div className="flex items-center p-1 rounded-2xl bg-slate-900 border border-slate-800">
+            <button
+              onClick={() => setActiveTab('kanban')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'kanban'
+                  ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <KanbanSquare size={14} />
+              <span>Tasks Board</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('routines')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'routines'
+                  ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Clock size={14} />
+              <span>Scheduled Routines</span>
+            </button>
           </div>
         </div>
 
-        {/* Scope Pill Switcher (only shown if a project is active in sidebar) */}
-        {activeProject ? (
-          <div className="flex items-center p-0.5 rounded-lg bg-brand-sidebar border border-brand-border/50 self-start sm:self-auto">
-            <button
-              onClick={() => setScope('global')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                scope === 'global'
-                  ? 'bg-brand-card text-brand-textMain shadow-sm border border-brand-border/20'
-                  : 'text-brand-textMuted hover:text-brand-textMain'
-              }`}
-            >
-              <Globe className="w-3.5 h-3.5" />
-              <span>Global Tasks</span>
-            </button>
-            <button
-              onClick={() => setScope('project')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                scope === 'project'
-                  ? 'bg-brand-card text-brand-textMain shadow-sm border border-brand-border/20'
-                  : 'text-brand-textMuted hover:text-brand-textMain'
-              }`}
-            >
-              <Folder className="w-3.5 h-3.5" />
-              <span className="truncate max-w-[120px]">{activeProject}</span>
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-sidebar/40 border border-brand-border/40 text-xs font-semibold text-brand-textMuted self-start sm:self-auto select-none">
-            <Globe className="w-3.5 h-3.5" />
-            <span>Global Scope</span>
+        {activeTab === 'kanban' && (
+          <div className="flex items-center gap-3">
+            {/* Scope Pill Switcher */}
+            {activeProject ? (
+              <div className="flex items-center p-0.5 rounded-lg bg-brand-sidebar border border-brand-border/50 self-start sm:self-auto">
+                <button
+                  onClick={() => setScope('global')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                    scope === 'global'
+                      ? 'bg-brand-card text-brand-textMain shadow-sm border border-brand-border/20'
+                      : 'text-brand-textMuted hover:text-brand-textMain'
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>Global Tasks</span>
+                </button>
+                <button
+                  onClick={() => setScope('project')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                    scope === 'project'
+                      ? 'bg-brand-card text-brand-textMain shadow-sm border border-brand-border/20'
+                      : 'text-brand-textMuted hover:text-brand-textMain'
+                  }`}
+                >
+                  <Folder className="w-3.5 h-3.5" />
+                  <span className="truncate max-w-[120px]">{activeProject}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-sidebar/40 border border-brand-border/40 text-xs font-semibold text-brand-textMuted self-start sm:self-auto select-none">
+                <Globe className="w-3.5 h-3.5" />
+                <span>Global Scope</span>
+              </div>
+            )}
+
+            {/* Search bar */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-brand-textMuted" />
+              <input
+                type="text"
+                placeholder="Search tasks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 pr-3 py-1.5 rounded-lg text-xs bg-brand-card/60 border border-brand-border text-brand-textMain focus:outline-none focus:border-brand-accent transition-colors w-40 sm:w-48 placeholder:text-brand-textMuted/60"
+              />
+            </div>
           </div>
         )}
-
-        {/* Action Controls */}
-        <div className="flex items-center gap-2">
-          {/* Search bar */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-brand-textMuted" />
-            <input
-              type="text"
-              placeholder="Search tasks..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full sm:w-48 pl-8 pr-3 py-1.5 rounded-lg bg-brand-sidebar border border-brand-border text-xs text-brand-textMain placeholder-brand-textMuted/45 focus:outline-none focus:border-[var(--brand-accent-border)] focus:ring-1 focus:ring-[var(--brand-accent)]"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-2.5 text-brand-textMuted hover:text-brand-textMain cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Reload button */}
-          <button
-            onClick={() => loadCards(scope, activeProject)}
-            disabled={loading}
-            className={`p-2 rounded-lg bg-brand-sidebar border border-brand-border hover:bg-brand-hover text-brand-textMuted hover:text-brand-textMain transition-all cursor-pointer ${
-              loading ? 'animate-spin' : ''
-            }`}
-            title="Reload Board"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-        </div>
       </div>
 
-      {/* Main Kanban Content Area */}
-      {loading ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-2" style={{ backgroundImage: 'radial-gradient(circle at 50% 42%, var(--brand-atmo-glow) 0%, transparent 60%)' }}>
-          <RefreshCw className="w-6 h-6 text-[var(--brand-text-muted)] animate-spin" />
-          <span className="text-xs text-brand-textMuted">Loading task board...</span>
-        </div>
-      ) : (
+      {/* Body View */}
+      {activeTab === 'kanban' ? (
         <KanbanView
           cards={filteredCards}
           onCardsChange={handleCardsChange}
           scope={scope}
-          projectName={activeProject}
+          projectName={scope === 'project' ? activeProject : undefined}
+          triggerToast={triggerToast}
           onStartWork={onStartWork}
         />
+      ) : (
+        <RoutinesView />
       )}
     </div>
   );
 };
 
-// Auxiliary close icon for input clearing
-const X = ({ className, ...props }: any) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    {...props}
-  >
-    <path d="M18 6 6 18" />
-    <path d="m6 6 12 12" />
-  </svg>
-);
+export default TasksPage;

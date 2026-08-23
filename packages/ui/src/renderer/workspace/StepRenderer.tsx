@@ -279,6 +279,66 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
     );
   }
 
+  if (step.type === 'handover') {
+    return (
+      <div className="my-2 px-4">
+        <div className="flex items-center gap-3 p-3 rounded-2xl bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-transparent border border-cyan-500/20 text-xs text-slate-200">
+          <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-sm font-bold shrink-0">
+            🔀
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 font-bold text-slate-100 mb-0.5">
+              <span>Agent Handover</span>
+              {step.metadata?.fromPersona && step.metadata?.toPersona && (
+                <span className="text-cyan-400 font-mono text-[11px]">
+                  @{step.metadata.fromPersona} ➔ @{step.metadata.toPersona}
+                </span>
+              )}
+            </div>
+            <div className="text-slate-400 text-[11px]">{step.content}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step.type === 'subagent_start' || step.type === 'subagent_finish') {
+    const isFinish = step.type === 'subagent_finish';
+    return (
+      <div className="my-1.5 px-4 pl-8 border-l-2 border-cyan-500/30 ml-4">
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 text-xs font-mono space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 font-bold text-cyan-300">
+              <Cpu size={14} />
+              <span>Subagent Delegation</span>
+              {step.metadata?.personaId && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-950 text-slate-300">
+                  @{step.metadata.personaId}
+                </span>
+              )}
+            </div>
+            <span className="text-[10px] text-slate-500">
+              {isFinish ? 'Finished' : 'Running'}
+            </span>
+          </div>
+          <div className="text-slate-300 whitespace-pre-wrap">{step.content}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step.type === 'workflow_progress') {
+    return (
+      <div className="my-2 px-4">
+        <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300">
+          <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+          <span className="font-bold">Pipeline Progress:</span>
+          <span>{step.content}</span>
+        </div>
+      </div>
+    );
+  }
+
   if (step.type === 'thought') {
     return (
       <div className="my-1.5 px-4">
