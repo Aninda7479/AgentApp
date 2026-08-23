@@ -11,7 +11,7 @@ import { resolve } from 'path';
  * asserts those rules exist in the source CSS so a regression can't silently
  * re-introduce outline:none-with-no-ring.
  */
-const css = readFileSync(resolve(__dirname, '../../index.css'), 'utf-8');
+const css = readFileSync(resolve(__dirname, '../../styles/index.css'), 'utf-8');
 
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '');
 
