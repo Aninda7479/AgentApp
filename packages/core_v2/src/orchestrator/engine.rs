@@ -128,6 +128,12 @@ impl AgentEngine {
                         AgentEvent::Finished { .. } => {
                             // Suppress per-turn provider finish events until outer loop turn ends
                         }
+                        AgentEvent::AgentHandover { .. }
+                        | AgentEvent::SubagentStart { .. }
+                        | AgentEvent::SubagentFinish { .. }
+                        | AgentEvent::WorkflowProgress { .. } => {
+                            let _ = tx.send(event).await;
+                        }
                     }
                 }
 

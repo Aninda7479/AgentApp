@@ -6,12 +6,10 @@ pub mod media;
 pub mod memory;
 pub mod orchestrator;
 pub mod providers;
+pub mod roster;
 pub mod server;
 pub mod startup;
 pub mod storage;
 pub mod tools;
 pub mod types;
 pub mod vector;
-
-
-
