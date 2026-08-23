@@ -1,6 +1,6 @@
 {
   "name": "@superagent/ui",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "SuperAgent — Full production React UI shared across Desktop (Tauri), Web (Express), and future platforms.",
   "type": "module",
   "main": "dist/renderer/entry.bundle.js",
