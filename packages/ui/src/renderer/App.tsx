@@ -1439,7 +1439,7 @@ export const App: React.FC = () => {
       data-testid="app-container"
       data-theme={themeMode}
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
-      className="flex flex-col h-dvh w-full max-w-full bg-brand-bg text-brand-textMain overflow-hidden overflow-x-hidden font-sans select-none"
+      className="flex flex-col h-full w-full max-w-full bg-brand-bg text-brand-textMain overflow-hidden overflow-x-hidden font-sans select-none"
     >
       {/* Skip link: first focusable element so keyboard/SR users can bypass the
           title bar + sidebar and jump straight to the primary content. Hidden
@@ -1568,7 +1568,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col relative isolate overflow-hidden workspace-canvas m-1 rounded-xl pb-18 md:pb-0 focus:outline-none">
+        <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col min-h-0 relative isolate overflow-hidden workspace-canvas m-1 rounded-xl pb-18 md:pb-0 focus:outline-none">
           {/* Ambient "layered atmosphere" backdrop — a soft accent glow and three
               calm depth bands, painted behind all content (Atmosphere mode, low
               opacity). Decorative only; never sits behind text contrast. */}

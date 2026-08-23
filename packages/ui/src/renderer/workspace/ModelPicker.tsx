@@ -1,9 +1,5 @@
-/**
- * Model Picker Component (Pure TailwindCSS)
- * Sleek dropdown selector grouped by connected AI providers.
- */
-
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Cpu, Check, Sparkles } from 'lucide-react';
 import { useModelList } from '../hooks/useModelList';
 import { useLastUsedModel, providerStore } from '../stores/providerStore';
@@ -18,19 +14,50 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
   const [isOpen, setIsOpen] = useState(false);
   const { groupedModels, allModels } = useModelList();
   const lastUsedModel = useLastUsedModel();
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, height: 0, openUpward: true });
 
   const effectiveModel = selectedModel || lastUsedModel || allModels[0]?.name || '';
 
+  const updateCoords = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpward = spaceBelow < 320 && rect.top > spaceBelow;
+      setCoords({
+        top: rect.top,
+        left: rect.left,
+        width: Math.max(rect.width, 240),
+        height: rect.height,
+        openUpward,
+      });
+    }
+  };
+
   useEffect(() => {
     const handleClickOutside = (evt: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(evt.target as Node)) {
+      const target = evt.target as Node;
+      const insideTrigger = triggerRef.current?.contains(target) ?? false;
+      const insidePopup = popupRef.current?.contains(target) ?? false;
+      if (!insideTrigger && !insidePopup) {
         setIsOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updateCoords();
+    window.addEventListener('scroll', updateCoords, true);
+    window.addEventListener('resize', updateCoords);
+    return () => {
+      window.removeEventListener('scroll', updateCoords, true);
+      window.removeEventListener('resize', updateCoords);
+    };
+  }, [isOpen]);
 
   // Display label — never show "Orchestrator" as selected when orchestrator is disabled
   const displayLabel = (() => {
@@ -41,19 +68,37 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
   })();
 
   return (
-    <div className="relative inline-block" ref={dropdownRef}>
+    <div className="relative inline-block">
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-brand-bg hover:bg-brand-bg/85 text-brand-textMain border border-brand-border text-xs font-semibold shadow-sm transition-all select-none"
+        onClick={() => {
+          updateCoords();
+          setIsOpen(!isOpen);
+        }}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-brand-bg hover:bg-brand-bg/85 text-brand-textMain border border-brand-border text-xs font-semibold shadow-sm transition-all select-none cursor-pointer"
       >
         <Cpu size={14} className="text-cyan-400" />
         <span className="truncate max-w-[140px]">{displayLabel}</span>
-        <ChevronDown size={14} className="text-slate-400" />
+        <ChevronDown size={14} className={`text-slate-400 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {isOpen && (
-        <div className="absolute bottom-full mb-2 left-0 w-64 max-h-80 overflow-y-auto bg-brand-popover border border-brand-border rounded-2xl shadow-2xl z-50 p-1.5 scrollbar-thin scrollbar-thumb-brand-border">
+      {isOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={popupRef}
+          style={{
+            position: 'fixed',
+            left: `${coords.left}px`,
+            width: `${coords.width}px`,
+            ...(coords.openUpward
+              ? { bottom: `${window.innerHeight - coords.top + 6}px` }
+              : { top: `${coords.top + coords.height + 6}px` }),
+            maxHeight: coords.openUpward
+              ? `${Math.min(320, Math.max(160, coords.top - 20))}px`
+              : `${Math.min(320, Math.max(160, window.innerHeight - (coords.top + coords.height) - 20))}px`,
+          }}
+          className="z-[99999] overflow-y-auto bg-brand-popover/95 backdrop-blur-2xl border border-brand-border rounded-2xl shadow-2xl p-1.5 scrollbar-thin scrollbar-thumb-brand-border animate-in fade-in zoom-in-95 duration-100"
+        >
           {orchestratorEnabled && (
             <div
               onClick={() => {
@@ -100,7 +145,8 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
               ))}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

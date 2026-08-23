@@ -202,7 +202,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
   };
 
   return (
-    <div className="relative w-full max-w-4xl mx-auto p-3" onContextMenu={handleRightClickPaste}>
+    <div className="relative w-full max-w-4xl mx-auto" onContextMenu={handleRightClickPaste}>
       {/* Slash Suggestions Menu */}
       {isSlashOpen && (
         <div className="absolute bottom-full mb-2 left-4 right-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-1.5 z-50">

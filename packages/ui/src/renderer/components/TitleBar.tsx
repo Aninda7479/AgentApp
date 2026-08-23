@@ -387,42 +387,6 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             </div>
           )}
         </div>
-
-        {/* Custom Window Controls — Desktop only, hidden on small screens */}
-        {isDesktop && !isMac && (
-          <div className="hidden lg:flex items-center pl-1">
-            <button
-              data-testid="win-minimize"
-              onClick={() => onWindowControl('minimize')}
-               className="atmo-btn w-8 h-8 flex items-center justify-center text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 rounded transition-colors cursor-pointer"
-               title="Minimize"
-            >
-              <svg width="10" height="1" viewBox="0 0 10 1" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect width="10" height="1" rx="0.5" fill="currentColor" />
-              </svg>
-            </button>
-            <button
-              data-testid="win-maximize"
-              onClick={() => onWindowControl('maximize')}
-               className="atmo-btn w-8 h-8 flex items-center justify-center text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 rounded transition-colors cursor-pointer"
-               title="Maximize"
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="0.5" y="0.5" width="9" height="9" rx="0.5" stroke="currentColor" strokeWidth="1" />
-              </svg>
-            </button>
-            <button
-              data-testid="win-close"
-              onClick={() => onWindowControl('close')}
-               className="atmo-btn w-8 h-8 flex items-center justify-center text-brand-textMuted hover:text-white hover:bg-[color:var(--neon-destructive)] rounded transition-colors cursor-pointer"
-               title="Close"
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
-              </svg>
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -118,5 +118,4 @@
 .workspace-canvas {
   background: var(--brand-bg);
   color: var(--brand-text-main);
-  min-height: 100vh;
 }
