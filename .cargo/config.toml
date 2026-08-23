@@ -1,0 +1,15 @@
+# Use LLD linker on Windows for 3-6x faster linking
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"
+rustflags = [
+    "-C", "link-arg=-fuse-ld=lld",
+    "-C", "split-debuginfo=packed",
+]
+
+# Limit parallel codegen jobs to 4 to protect 16GB RAM and SSD during builds
+[build]
+jobs = 4
+
+# Network: use sparse protocol for faster crate index fetches
+[registries.crates-io]
+protocol = "sparse"

@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = [
+    "packages/core_v2",
+    "packages/desktop/src-tauri",
+]
+
+[workspace.dependencies]
+tokio = { version = "1.38", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sysinfo = "0.30"
+
+[profile.dev]
+debug = 1
+incremental = true
+opt-level = 0
+
+[profile.dev.package."*"]
+debug = 0
+opt-level = 1
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
