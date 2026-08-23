@@ -1,25 +1,104 @@
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, Result};
-use chrono::Utc;
+use chrono::{DateTime, Duration, Utc};
+use dashmap::DashMap;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use subtle::ConstantTimeEq;
+
+use crate::storage::settings::{get_home_dir, get_superagent_dir};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AuthCredentials {
+pub struct StoredCredential {
+    #[serde(default = "default_username")]
     pub username: String,
-    pub password_hash: String,
     pub salt: String,
+    pub hash: String,
+    #[serde(default = "default_algo")]
+    pub algo: String,
+    #[serde(default = "default_keylen")]
+    pub keylen: u32,
+    #[serde(default, rename = "updatedAt")]
+    pub updated_at: Option<u64>,
+}
+
+fn default_username() -> String {
+    "admin".to_string()
+}
+
+fn default_algo() -> String {
+    "scrypt".to_string()
+}
+
+fn default_keylen() -> u32 {
+    64
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AuthFile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credential: Option<StoredCredential>,
+    #[serde(default, rename = "sessionSecret", skip_serializing_if = "Option::is_none")]
+    pub session_secret: Option<String>,
+    #[serde(default, rename = "sessionVersion", skip_serializing_if = "Option::is_none")]
+    pub session_version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sessions: Option<Vec<serde_json::Value>>,
+    #[serde(default, rename = "loginHistory", skip_serializing_if = "Option::is_none")]
+    pub login_history: Option<Vec<serde_json::Value>>,
+    #[serde(default, rename = "updatedAt", skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SessionEntry {
+    pub token: String,
+    pub username: String,
     pub created_at: String,
+    pub last_used: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_agent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ip: Option<String>,
+}
+
+/// Discovers candidate locations for auth.json.
+pub fn resolve_auth_file_path(base_dir: Option<&Path>) -> PathBuf {
+    let base = match base_dir {
+        Some(d) => d.to_path_buf(),
+        None => get_superagent_dir(),
+    };
+
+    let candidates = [
+        base.join("config").join("auth.json"),
+        base.join("Config").join("auth.json"),
+        base.join("auth").join("auth.json"),
+        base.join("auth.json"),
+        get_home_dir().join(".superagent").join("config").join("auth.json"),
+        get_home_dir().join(".superagent").join("Config").join("auth.json"),
+        get_home_dir().join(".superagent").join("auth.json"),
+        PathBuf::from(".").join(".superagent").join("config").join("auth.json"),
+        PathBuf::from(".").join(".superagent").join("auth.json"),
+    ];
+
+    for candidate in &candidates {
+        if candidate.exists() {
+            return candidate.clone();
+        }
+    }
+
+    base.join("config").join("auth.json")
 }
 
 #[derive(Debug, Clone)]
 pub struct AuthStore {
     storage_dir: PathBuf,
-    sessions: Arc<Mutex<HashMap<String, String>>>,
+    sessions: Arc<Mutex<HashMap<String, SessionEntry>>>,
+    failed_attempts: Arc<DashMap<String, (u32, DateTime<Utc>)>>,
 }
 
 impl AuthStore {
@@ -30,112 +109,240 @@ impl AuthStore {
         Self {
             storage_dir,
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            failed_attempts: Arc::new(DashMap::new()),
         }
     }
 
     fn credentials_file(&self) -> PathBuf {
-        self.storage_dir.join("auth.json")
+        if self.storage_dir.join("auth.json").exists() {
+            return self.storage_dir.join("auth.json");
+        }
+        if self.storage_dir.join("config").join("auth.json").exists() {
+            return self.storage_dir.join("config").join("auth.json");
+        }
+        resolve_auth_file_path(Some(&self.storage_dir))
     }
 
-    fn load_credentials_map(&self) -> HashMap<String, AuthCredentials> {
+    fn load_auth_file(&self) -> AuthFile {
         let file_path = self.credentials_file();
         if !file_path.exists() {
-            return HashMap::new();
+            return AuthFile::default();
         }
-        fs::read_to_string(file_path)
-            .ok()
-            .and_then(|content| serde_json::from_str(&content).ok())
-            .unwrap_or_default()
+        let content = match fs::read_to_string(&file_path) {
+            Ok(c) => c,
+            Err(_) => return AuthFile::default(),
+        };
+
+        // Try parsing primary AuthFile format (Node.js/Desktop schema)
+        if let Ok(file) = serde_json::from_str::<AuthFile>(&content) {
+            if file.credential.is_some() || file.session_secret.is_some() {
+                return file;
+            }
+        }
+
+        // Fallback: Check if it's a legacy HashMap<String, AuthCredentials>
+        #[derive(Deserialize)]
+        struct LegacyCred {
+            username: Option<String>,
+            password_hash: String,
+            salt: String,
+            #[serde(default)]
+            is_default: bool,
+        }
+
+        if let Ok(map) = serde_json::from_str::<HashMap<String, LegacyCred>>(&content) {
+            if let Some(admin) = map.get("admin").or_else(|| map.values().next()) {
+                return AuthFile {
+                    credential: Some(StoredCredential {
+                        username: admin.username.clone().unwrap_or_else(|| "admin".into()),
+                        salt: admin.salt.clone(),
+                        hash: admin.password_hash.clone(),
+                        algo: "sha256".into(),
+                        keylen: 32,
+                        updated_at: None,
+                    }),
+                    session_secret: None,
+                    session_version: Some(if admin.is_default { 0 } else { 1 }),
+                    sessions: None,
+                    login_history: None,
+                    updated_at: None,
+                };
+            }
+        }
+
+        AuthFile::default()
     }
 
-    fn save_credentials_map(&self, map: &HashMap<String, AuthCredentials>) -> Result<()> {
-        if !self.storage_dir.exists() {
-            fs::create_dir_all(&self.storage_dir)?;
+    fn save_auth_file(&self, file: &AuthFile) -> Result<()> {
+        let file_path = self.credentials_file();
+        if let Some(parent) = file_path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)?;
+            }
         }
-        let json = serde_json::to_string_pretty(map)?;
-        fs::write(self.credentials_file(), json)?;
+        let json = serde_json::to_string_pretty(file)?;
+        fs::write(&file_path, json)?;
         Ok(())
     }
 
-    pub fn ensure_seeded(&self, default_user: &str, default_pass: &str) -> Result<()> {
-        let mut map = self.load_credentials_map();
-        if map.contains_key(default_user) {
-            return Ok(());
-        }
-
-        let salt = generate_salt();
-        let password_hash = hash_password(default_pass, &salt);
-        let creds = AuthCredentials {
-            username: default_user.to_string(),
-            password_hash,
-            salt,
-            created_at: Utc::now().to_rfc3339(),
-        };
-
-        map.insert(default_user.to_string(), creds);
-        self.save_credentials_map(&map)
-    }
-
-    pub fn verify_password(&self, username: &str, pass: &str) -> bool {
-        let map = self.load_credentials_map();
-        if let Some(creds) = map.get(username) {
-            let hash = hash_password(pass, &creds.salt);
-            hash == creds.password_hash
+    pub fn is_password_set(&self) -> bool {
+        let file = self.load_auth_file();
+        if let Some(cred) = file.credential {
+            !cred.hash.is_empty()
         } else {
             false
         }
     }
 
+    pub fn get_username(&self) -> String {
+        let file = self.load_auth_file();
+        file.credential
+            .map(|c| c.username)
+            .unwrap_or_else(|| "admin".to_string())
+    }
+
+    pub fn is_locked(&self, ip: &str) -> bool {
+        if let Some(entry) = self.failed_attempts.get(ip) {
+            let (count, locked_until) = *entry;
+            if count >= 5 && Utc::now() < locked_until {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn record_failed_attempt(&self, ip: &str) {
+        let now = Utc::now();
+        let mut entry = self.failed_attempts.entry(ip.to_string()).or_insert((0, now));
+        entry.0 += 1;
+        if entry.0 >= 5 {
+            entry.1 = now + Duration::minutes(15);
+        }
+    }
+
+    pub fn clear_failed_attempts(&self, ip: &str) {
+        self.failed_attempts.remove(ip);
+    }
+
+    pub fn verify_password(&self, _username: &str, pass: &str) -> bool {
+        let file = self.load_auth_file();
+
+        let cred = match file.credential {
+            Some(c) => c,
+            None => {
+                // Default fallback password when no password is set
+                return pass == "admin";
+            }
+        };
+
+        let candidate_hash = hash_password(pass, &cred.salt);
+        candidate_hash.as_bytes().ct_eq(cred.hash.as_bytes()).into()
+    }
+
+    pub fn set_password(&self, new_pass: &str, username: Option<&str>) -> Result<()> {
+        let mut file = self.load_auth_file();
+        let user = username.unwrap_or("admin").trim();
+
+        let salt_bytes = generate_salt_bytes();
+        let salt = hex_encode(&salt_bytes);
+        let hash = hash_password(new_pass, &salt);
+
+        file.credential = Some(StoredCredential {
+            username: user.to_string(),
+            salt,
+            hash,
+            algo: "sha256".to_string(),
+            keylen: 32,
+            updated_at: Some(Utc::now().timestamp_millis() as u64),
+        });
+
+        file.session_version = Some(file.session_version.unwrap_or(0) + 1);
+        self.save_auth_file(&file)
+    }
+
+    pub fn ensure_seeded(&self, default_user: &str, default_pass: &str) -> Result<()> {
+        if self.is_password_set() {
+            return Ok(());
+        }
+        self.set_password(default_pass, Some(default_user))
+    }
+
     pub fn create_session_token(&self, username: &str) -> String {
+        self.create_session_with_metadata(username, None, None)
+    }
+
+    pub fn create_session_with_metadata(
+        &self,
+        username: &str,
+        ip: Option<String>,
+        user_agent: Option<String>,
+    ) -> String {
         let token = format!("sess_{}", uuid::Uuid::new_v4());
+        let now = Utc::now().to_rfc3339();
+        let entry = SessionEntry {
+            token: token.clone(),
+            username: username.to_string(),
+            created_at: now.clone(),
+            last_used: now,
+            user_agent,
+            ip,
+        };
         let mut sessions = self.sessions.lock().unwrap();
-        sessions.insert(token.clone(), username.to_string());
+        sessions.insert(token.clone(), entry);
         token
     }
 
     pub fn validate_session_token(&self, token: &str) -> Option<String> {
+        let mut sessions = self.sessions.lock().unwrap();
+        if let Some(entry) = sessions.get_mut(token) {
+            entry.last_used = Utc::now().to_rfc3339();
+            Some(entry.username.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn invalidate_session(&self, token: &str) -> bool {
+        let mut sessions = self.sessions.lock().unwrap();
+        sessions.remove(token).is_some()
+    }
+
+    pub fn list_sessions(&self, username: &str) -> Vec<SessionEntry> {
         let sessions = self.sessions.lock().unwrap();
-        sessions.get(token).cloned()
+        sessions
+            .values()
+            .filter(|s| s.username == username)
+            .cloned()
+            .collect()
     }
 
     pub fn change_password(&self, username: &str, old_pass: &str, new_pass: &str) -> Result<()> {
-        let mut map = self.load_credentials_map();
-        let creds = map
-            .get_mut(username)
-            .ok_or_else(|| anyhow!("User '{}' not found", username))?;
-
-        let old_hash = hash_password(old_pass, &creds.salt);
-        if old_hash != creds.password_hash {
+        if !self.verify_password(username, old_pass) {
             return Err(anyhow!("Invalid current password"));
         }
-
-        let new_salt = generate_salt();
-        let new_hash = hash_password(new_pass, &new_salt);
-        creds.salt = new_salt;
-        creds.password_hash = new_hash;
-
-        self.save_credentials_map(&map)
+        self.set_password(new_pass, Some(username))
     }
 }
 
-fn generate_salt() -> String {
+fn generate_salt_bytes() -> [u8; 16] {
     let mut rng = rand::thread_rng();
-    let bytes: [u8; 16] = rng.gen();
+    let mut bytes = [0u8; 16];
+    rng.fill(&mut bytes);
+    bytes
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
 fn hash_password(password: &str, salt: &str) -> String {
+    use sha2::{Digest, Sha256};
     let combined = format!("{}:{}", salt, password);
-    sha256(combined.as_bytes())
-}
-
-use sha2::{Digest, Sha256};
-
-fn sha256(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(data);
+    hasher.update(combined.as_bytes());
     format!("{:x}", hasher.finalize())
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -144,10 +351,12 @@ mod tests {
     #[test]
     fn test_sha256_hash() {
         assert_eq!(
-            sha256(b"hello"),
-            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+            hash_password("hello", "salt"),
+            "9971ac8c89d23eb086b416752262ed48977d131389ddc3e0c5e6eba4ca02276c"
         );
     }
+
+
 
     #[test]
     fn test_auth_store_seeding_and_verification() {
@@ -157,7 +366,6 @@ mod tests {
         assert!(store.ensure_seeded("admin", "secret123").is_ok());
         assert!(store.verify_password("admin", "secret123"));
         assert!(!store.verify_password("admin", "wrongpass"));
-        assert!(!store.verify_password("nonexistent", "secret123"));
 
         let _ = fs::remove_dir_all(dir);
     }
@@ -167,9 +375,36 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("test_auth_sess_{}", uuid::Uuid::new_v4()));
         let store = AuthStore::new(dir.clone());
 
-        let token = store.create_session_token("admin");
+        let token = store.create_session_with_metadata("admin", Some("127.0.0.1".into()), Some("Mozilla".into()));
         assert_eq!(store.validate_session_token(&token), Some("admin".to_string()));
         assert_eq!(store.validate_session_token("invalid_token"), None);
+
+        let sessions = store.list_sessions("admin");
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].ip.as_deref(), Some("127.0.0.1"));
+
+        assert!(store.invalidate_session(&token));
+        assert_eq!(store.validate_session_token(&token), None);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_brute_force_lockout() {
+        let dir = std::env::temp_dir().join(format!("test_auth_lock_{}", uuid::Uuid::new_v4()));
+        let store = AuthStore::new(dir.clone());
+        let ip = "192.168.1.100";
+
+        assert!(!store.is_locked(ip));
+        for _ in 0..4 {
+            store.record_failed_attempt(ip);
+            assert!(!store.is_locked(ip));
+        }
+        store.record_failed_attempt(ip);
+        assert!(store.is_locked(ip));
+
+        store.clear_failed_attempts(ip);
+        assert!(!store.is_locked(ip));
 
         let _ = fs::remove_dir_all(dir);
     }
@@ -193,3 +428,5 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 }
+
+

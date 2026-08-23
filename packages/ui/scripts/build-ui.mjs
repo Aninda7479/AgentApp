@@ -63,7 +63,21 @@ for (const { src, dest } of htmlFiles) {
   }
 }
 
-// 4. Copy static assets if folder exists
+// 4. Copy web-specific assets (login.html, manifest.json, sw.js, icon.*)
+const webSrcDir = path.resolve(ROOT, '../web/src');
+if (fs.existsSync(webSrcDir)) {
+  const webFiles = ['login.html', 'manifest.json', 'sw.js', 'icon.png', 'icon.svg'];
+  for (const f of webFiles) {
+    const srcPath = path.join(webSrcDir, f);
+    const destPath = path.join(distDir, f);
+    if (fs.existsSync(srcPath)) {
+      fs.copyFileSync(srcPath, destPath);
+      console.log(`[build-ui] Copied web asset ${f} -> dist/${f}`);
+    }
+  }
+}
+
+// 5. Copy static assets if folder exists
 if (fs.existsSync(srcAssetsDir)) {
   const assets = fs.readdirSync(srcAssetsDir);
   for (const asset of assets) {
@@ -76,7 +90,7 @@ if (fs.existsSync(srcAssetsDir)) {
   console.log(`[build-ui] Copied ${assets.length} assets to dist/assets/`);
 }
 
-// 5. Bundle esbuild renderers
+// 6. Bundle esbuild renderers
 console.log('[build-ui] Running esbuild bundle-renderer...');
 const bundleScript = path.join(__dirname, 'bundle-renderer.mjs');
 if (isWatch) {
@@ -91,13 +105,20 @@ if (isWatch) {
     stdio: 'inherit',
   });
 
-  // 6. Sync built UI assets to desktop/dist if desktop package exists
-  const desktopDist = path.resolve(ROOT, '../desktop/dist');
-  try {
-    fs.mkdirSync(desktopDist, { recursive: true });
-    fs.cpSync(distDir, desktopDist, { recursive: true });
-    console.log('[build-ui] ✅ Synced UI assets -> packages/desktop/dist');
-  } catch {}
+  // 7. Sync built UI assets to desktop/dist and core_v2/ui-dist
+  const syncTargets = [
+    path.resolve(ROOT, '../desktop/dist'),
+    path.resolve(ROOT, '../core_v2/ui-dist'),
+    path.resolve(ROOT, '../web/dist'),
+  ];
+  for (const target of syncTargets) {
+    try {
+      fs.mkdirSync(target, { recursive: true });
+      fs.cpSync(distDir, target, { recursive: true });
+      console.log(`[build-ui] ✅ Synced UI assets -> ${path.relative(ROOT, target)}`);
+    } catch {}
+  }
 
   console.log('[build-ui] ✅ UI build finished.');
 }
+

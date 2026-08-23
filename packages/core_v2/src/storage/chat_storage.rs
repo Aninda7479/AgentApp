@@ -47,6 +47,29 @@ impl From<&ChatSession> for ChatSessionMetadata {
     }
 }
 
+pub fn resolve_conversation_dir(base_dir: Option<&PathBuf>) -> PathBuf {
+    let base = match base_dir {
+        Some(d) => d.clone(),
+        None => get_superagent_dir(),
+    };
+
+    let candidates = [
+        base.join("conversation"),
+        base.join("conversations"),
+        base.join("chats"),
+        PathBuf::from(".").join(".superagent").join("conversation"),
+        PathBuf::from(".").join(".superagent").join("chats"),
+    ];
+
+    for c in &candidates {
+        if c.exists() {
+            return c.clone();
+        }
+    }
+
+    base.join("conversation")
+}
+
 #[derive(Debug, Clone)]
 pub struct ChatStorage {
     storage_dir: PathBuf,
@@ -54,54 +77,158 @@ pub struct ChatStorage {
 
 impl ChatStorage {
     pub fn new() -> Self {
-        Self::with_dir(get_superagent_dir().join("chats"))
+        Self::with_dir(resolve_conversation_dir(None))
     }
 
     pub fn with_dir(storage_dir: PathBuf) -> Self {
         Self { storage_dir }
     }
 
-    fn session_file_path(&self, id: &str) -> PathBuf {
-        self.storage_dir.join(format!("session_{}.json", id))
+    fn find_chat_file(&self, id: &str) -> Option<PathBuf> {
+        let candidates = [
+            self.storage_dir.join("chats").join(id).join("chat.json"),
+            self.storage_dir.join(id).join("chat.json"),
+            self.storage_dir.join(format!("session_{}.json", id)),
+            self.storage_dir.join(format!("{}.json", id)),
+            get_superagent_dir().join("conversation").join("chats").join(id).join("chat.json"),
+            get_superagent_dir().join("chats").join(format!("session_{}.json", id)),
+        ];
+
+        for c in &candidates {
+            if c.exists() {
+                return Some(c.clone());
+            }
+        }
+
+        // Also search in projects subdirectories
+        let projects_dir = self.storage_dir.join("projects");
+        if let Ok(entries) = fs::read_dir(projects_dir) {
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    let chat_in_proj = entry.path().join(id).join("chat.json");
+                    if chat_in_proj.exists() {
+                        return Some(chat_in_proj);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    fn default_write_path(&self, id: &str) -> PathBuf {
+        self.storage_dir.join("chats").join(id).join("chat.json")
     }
 
     pub fn save_session(&self, session: &ChatSession) -> Result<()> {
-        if !self.storage_dir.exists() {
-            fs::create_dir_all(&self.storage_dir)?;
+        let file_path = self.find_chat_file(&session.id).unwrap_or_else(|| self.default_write_path(&session.id));
+        if let Some(parent) = file_path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)?;
+            }
         }
-        let file_path = self.session_file_path(&session.id);
         let json = serde_json::to_string_pretty(session)?;
         fs::write(file_path, json)?;
         Ok(())
     }
 
     pub fn load_session(&self, id: &str) -> Result<ChatSession> {
-        let file_path = self.session_file_path(id);
-        if !file_path.exists() {
-            return Err(anyhow!("Chat session with id '{}' not found", id));
-        }
+        let file_path = self.find_chat_file(id)
+            .ok_or_else(|| anyhow!("Chat session with id '{}' not found", id))?;
         let content = fs::read_to_string(file_path)?;
-        let session: ChatSession = serde_json::from_str(&content)?;
-        Ok(session)
+        
+        // Try parsing primary ChatSession format
+        if let Ok(session) = serde_json::from_str::<ChatSession>(&content) {
+            return Ok(session);
+        }
+
+        // Try parsing TypeScript chat.json schema { id, title, createdAt, updatedAt, messages: [...] }
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+            let chat_id = val.get("id").and_then(|v| v.as_str()).unwrap_or(id).to_string();
+            let title = val.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled Chat").to_string();
+            let created_at = val.get("createdAt").and_then(|v| v.as_i64()).unwrap_or(0);
+            let updated_at = val.get("updatedAt").and_then(|v| v.as_i64()).unwrap_or(created_at);
+            let project = val.get("projectName").or_else(|| val.get("project")).and_then(|v| v.as_str()).map(|s| s.to_string());
+            let model = val.get("model").and_then(|v| v.as_str()).map(|s| s.to_string());
+
+            let mut messages = Vec::new();
+            if let Some(msg_arr) = val.get("messages").and_then(|v| v.as_array()) {
+                for m in msg_arr {
+                    if let Ok(chat_msg) = serde_json::from_value::<ChatMessage>(m.clone()) {
+                        messages.push(chat_msg);
+                    }
+                }
+            }
+
+            return Ok(ChatSession {
+                id: chat_id,
+                title,
+                project,
+                model,
+                created_at,
+                updated_at,
+                messages,
+            });
+        }
+
+        Err(anyhow!("Failed to parse chat session JSON for id '{}'", id))
     }
 
     pub fn list_sessions(&self) -> Result<Vec<ChatSessionMetadata>> {
-        if !self.storage_dir.exists() {
-            return Ok(Vec::new());
-        }
-
         let mut metadata_list = Vec::new();
-        let entries = fs::read_dir(&self.storage_dir)?;
+        let mut seen_ids = std::collections::HashSet::new();
 
-        for entry in entries {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_file() {
-                if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
-                    if file_name.starts_with("session_") && file_name.ends_with(".json") {
-                        if let Ok(content) = fs::read_to_string(&path) {
+        let search_dirs = [
+            self.storage_dir.join("chats"),
+            self.storage_dir.clone(),
+            get_superagent_dir().join("conversation").join("chats"),
+            get_superagent_dir().join("chats"),
+        ];
+
+        for dir in &search_dirs {
+            if !dir.exists() {
+                continue;
+            }
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let file_to_read = if path.is_dir() && path.join("chat.json").exists() {
+                        Some(path.join("chat.json"))
+                    } else if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("json") {
+                        Some(path.clone())
+                    } else {
+                        None
+                    };
+
+                    if let Some(target_file) = file_to_read {
+                        if let Ok(content) = fs::read_to_string(&target_file) {
                             if let Ok(session) = serde_json::from_str::<ChatSession>(&content) {
-                                metadata_list.push(ChatSessionMetadata::from(&session));
+                                if !seen_ids.contains(&session.id) {
+                                    seen_ids.insert(session.id.clone());
+                                    metadata_list.push(ChatSessionMetadata::from(&session));
+                                }
+                            } else if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                                if let Some(id) = val.get("id").and_then(|v| v.as_str()) {
+                                    if !seen_ids.contains(id) {
+                                        seen_ids.insert(id.to_string());
+                                        let title = val.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled Chat").to_string();
+                                        let created_at = val.get("createdAt").and_then(|v| v.as_i64()).unwrap_or(0);
+                                        let updated_at = val.get("updatedAt").and_then(|v| v.as_i64()).unwrap_or(created_at);
+                                        let project = val.get("projectName").or_else(|| val.get("project")).and_then(|v| v.as_str()).map(|s| s.to_string());
+                                        let model = val.get("model").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                        let message_count = val.get("messages").and_then(|v| v.as_array()).map_or(0, |a| a.len());
+
+                                        metadata_list.push(ChatSessionMetadata {
+                                            id: id.to_string(),
+                                            title,
+                                            project,
+                                            model,
+                                            created_at,
+                                            updated_at,
+                                            message_count,
+                                        });
+                                    }
+                                }
                             }
                         }
                     }
@@ -111,18 +238,22 @@ impl ChatStorage {
 
         // Sort by updated_at descending (newest first)
         metadata_list.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-
         Ok(metadata_list)
     }
 
     pub fn delete_session(&self, id: &str) -> Result<()> {
-        let file_path = self.session_file_path(id);
-        if file_path.exists() {
-            fs::remove_file(file_path)?;
+        if let Some(file_path) = self.find_chat_file(id) {
+            let _ = fs::remove_file(&file_path);
+            if let Some(parent) = file_path.parent() {
+                if parent.file_name().and_then(|n| n.to_str()) == Some(id) {
+                    let _ = fs::remove_dir_all(parent);
+                }
+            }
         }
         Ok(())
     }
 }
+
 
 impl Default for ChatStorage {
     fn default() -> Self {

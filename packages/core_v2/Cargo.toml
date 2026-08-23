@@ -32,12 +32,16 @@ url = "2.5"
 rand = "0.8"
 sha2 = "0.10"
 axum = { version = "0.7", features = ["ws", "tokio"] }
-tower = { version = "0.4", features = ["util"] }
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+tower = { version = "0.4", features = ["util", "limit"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "fs", "set-header", "compression-br", "compression-gzip"] }
 sysinfo = "0.30"
 async-stream = "0.3"
 urlencoding = "2.1"
 cron = "0.15"
+lru = "0.12"
+subtle = "2.6"
+dashmap = "5.5"
+mime_guess = "2.0"
 
 
 

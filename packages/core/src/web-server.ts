@@ -54,36 +54,78 @@ export interface StartWebServerOptions {
  * Returns `null` when no candidate can be found (caller should surface a
  * helpful "build the web package first" message).
  */
-export function locateWebServerEntry(): string | null {
-  const envOverride = process.env.SUPERAGENT_WEB_SERVER_PATH;
+/**
+ * Resolves the absolute path or binary execution info for the web server daemon.
+ *
+ * Resolution order:
+ *   1. `SUPERAGENT_CORE_DAEMON_PATH` / `SUPERAGENT_WEB_SERVER_PATH` env override.
+ *   2. Native Rust daemon binary in core_v2 target (debug / release).
+ *   3. Packaged Desktop resources: `<resourcesPath>/bin/superagent-core-daemon` or `<resourcesPath>/web/server.js`.
+ *   4. Monorepo dev layout: walk up to find `packages/core_v2/target/release/superagent-core-daemon(.exe)`
+ *      or `packages/core_v2/target/debug/superagent-core-daemon(.exe)`
+ *      or `packages/web/dist/server.js`.
+ *   5. Published package resolution: `require.resolve('@superagent/web')`.
+ */
+export interface WebServerEntry {
+  type: 'binary' | 'node';
+  executable: string;
+  args?: string[];
+}
+
+export function locateWebServerEntry(): WebServerEntry | null {
+  const isWin = process.platform === 'win32';
+  const binName = isWin ? 'superagent-core-daemon.exe' : 'superagent-core-daemon';
+
+  const envOverride = process.env.SUPERAGENT_CORE_DAEMON_PATH || process.env.SUPERAGENT_WEB_SERVER_PATH;
   if (envOverride && fs.existsSync(envOverride)) {
-    return envOverride;
+    if (envOverride.endsWith('.js') || envOverride.endsWith('.mjs') || envOverride.endsWith('.cjs')) {
+      return { type: 'node', executable: envOverride };
+    }
+    return { type: 'binary', executable: envOverride };
   }
 
-  // Packaged Desktop build bundles the web server under resources/web.
+  // Packaged Desktop build
   const resourcesPath = (process as any).resourcesPath as string | undefined;
   if (resourcesPath) {
+    const nativeBin = path.join(resourcesPath, 'bin', binName);
+    if (fs.existsSync(nativeBin)) return { type: 'binary', executable: nativeBin };
+    const nativeRoot = path.join(resourcesPath, binName);
+    if (fs.existsSync(nativeRoot)) return { type: 'binary', executable: nativeRoot };
+
     const packed = path.join(resourcesPath, 'web', 'server.js');
-    if (fs.existsSync(packed)) return packed;
+    if (fs.existsSync(packed)) return { type: 'node', executable: packed };
     const packedDist = path.join(resourcesPath, 'web', 'dist', 'server.js');
-    if (fs.existsSync(packedDist)) return packedDist;
+    if (fs.existsSync(packedDist)) return { type: 'node', executable: packedDist };
   }
 
-  // Monorepo dev: this file lives at packages/core/dist/web-server.js, so walk
-  // up looking for <root>/packages/web/dist/server.js.
+  // Monorepo dev: walk up looking for Rust core_v2 target binaries or packages/web/dist/server.js
   let dir = __dirname;
   for (let i = 0; i < 12; i++) {
-    const candidate = path.join(dir, 'packages', 'web', 'dist', 'server.js');
-    if (fs.existsSync(candidate)) return candidate;
+    const releaseBin = path.join(dir, 'packages', 'core_v2', 'target', 'release', binName);
+    if (fs.existsSync(releaseBin)) return { type: 'binary', executable: releaseBin };
+
+    const debugBin = path.join(dir, 'packages', 'core_v2', 'target', 'debug', binName);
+    if (fs.existsSync(debugBin)) return { type: 'binary', executable: debugBin };
+
+    const rootTargetRelease = path.join(dir, 'target', 'release', binName);
+    if (fs.existsSync(rootTargetRelease)) return { type: 'binary', executable: rootTargetRelease };
+
+    const rootTargetDebug = path.join(dir, 'target', 'debug', binName);
+    if (fs.existsSync(rootTargetDebug)) return { type: 'binary', executable: rootTargetDebug };
+
+    const nodeCandidate = path.join(dir, 'packages', 'web', 'dist', 'server.js');
+    if (fs.existsSync(nodeCandidate)) return { type: 'node', executable: nodeCandidate };
+
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
 
-  // Published layout: @superagent/web's main field points at its server.js.
+  // Published layout
   try {
     const req = createRequire(__filename);
-    return req.resolve('@superagent/web');
+    const resolved = req.resolve('@superagent/web');
+    return { type: 'node', executable: resolved };
   } catch {
     /* not installed as a dependency — fall through */
   }
@@ -124,13 +166,14 @@ export function startWebServer(options: StartWebServerOptions = {}): ChildProces
   }
 
   const env: NodeJS.ProcessEnv = { ...process.env };
-  if (options.port != null) env.PORT = String(options.port);
-  if (options.host != null) env.HOST = options.host;
+  const port = options.port != null ? String(options.port) : '1469';
+  const host = options.host || '0.0.0.0';
+  env.PORT = port;
+  env.HOST = host;
   // Record who launched it so the server can write it into the shared lock.
   env.SUPERAGENT_WEB_LAUNCHER = options.startedBy ?? 'standalone';
 
   // When running inside a standalone @yao-pkg/pkg binary, process.execPath IS the binary.
-  // Spawn process.execPath with SUPERAGENT_INTERNAL_WEB_SERVER=1 to launch the web server child process!
   if ((process as any).pkg) {
     env.SUPERAGENT_INTERNAL_WEB_SERVER = '1';
     const child = spawn(process.execPath, [], {
@@ -152,15 +195,23 @@ export function startWebServer(options: StartWebServerOptions = {}): ChildProces
   const entry = locateWebServerEntry();
   if (!entry) {
     throw new Error(
-      'Could not locate the SuperAgent web server (packages/web/dist/server.js). ' +
-        'Build the web package first with `npm run build --workspace=@superagent/web`.'
+      'Could not locate the SuperAgent web daemon (superagent-core-daemon binary or packages/web/dist/server.js). ' +
+        'Build the core package first with `cargo build --manifest-path packages/core_v2/Cargo.toml`.'
     );
   }
 
-  const child = spawn(process.execPath, [entry], {
-    env,
-    stdio: options.quiet ? 'ignore' : 'inherit'
-  });
+  let child: ChildProcess;
+  if (entry.type === 'binary') {
+    child = spawn(entry.executable, ['--server', '--port', port, '--host', host], {
+      env,
+      stdio: options.quiet ? 'ignore' : 'inherit'
+    });
+  } else {
+    child = spawn(process.execPath, [entry.executable], {
+      env,
+      stdio: options.quiet ? 'ignore' : 'inherit'
+    });
+  }
 
   // Track the child so callers can later stop it and we can report status.
   // Clear the handle if this exact child exits so status stays accurate.
@@ -174,6 +225,7 @@ export function startWebServer(options: StartWebServerOptions = {}): ChildProces
 
   return child;
 }
+
 
 /**
  * Stops the running web server — even one started by a *different* surface.

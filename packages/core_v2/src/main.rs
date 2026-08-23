@@ -29,22 +29,39 @@ pub struct AgentRunRequest {
 }
 
 pub enum CliMode {
-    Server { port: u16, workspace_root: PathBuf },
+    Server {
+        port: u16,
+        host: String,
+        workspace_root: PathBuf,
+        ui_dir: Option<PathBuf>,
+    },
     Run(AgentRunRequest),
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing subscriber for logging
     tracing_subscriber::fmt::init();
 
     let args: Vec<String> = std::env::args().collect();
     let mode = parse_cli_mode(&args)?;
 
     match mode {
-        CliMode::Server { port, workspace_root } => {
-            println!("🚀 Starting SuperAgent Core v2 Daemon on port {}...", port);
-            start_server(port, workspace_root).await?;
+        CliMode::Server {
+            port,
+            host,
+            workspace_root,
+            ui_dir,
+        } => {
+            println!("================================================================");
+            println!("🚀 SuperAgent Core v2 Daemon ignited at: http://{}:{}", if host == "0.0.0.0" { "localhost" } else { &host }, port);
+            println!("⚡ Mode: Native Rust Axum Async Engine");
+            println!("📂 Workspace: {}", workspace_root.display());
+            if let Some(ref d) = ui_dir {
+                println!("🌐 Static UI Bundle: {}", d.display());
+            }
+            println!("================================================================");
+
+            start_server(port, &host, workspace_root, ui_dir).await?;
         }
         CliMode::Run(request) => {
             let provider = request.provider.unwrap_or(ProviderType::OpenAI);
@@ -121,6 +138,8 @@ async fn main() -> Result<()> {
 fn parse_cli_mode(args: &[String]) -> Result<CliMode> {
     let mut is_server = false;
     let mut server_port: u16 = 1469;
+    let mut server_host = String::from("0.0.0.0");
+    let mut ui_dir = None;
     let mut user_prompt = None;
     let mut system_prompt = None;
     let mut provider_str = None;
@@ -137,13 +156,16 @@ fn parse_cli_mode(args: &[String]) -> Result<CliMode> {
                 println!("SuperAgent Core v2 Daemon");
                 println!();
                 println!("USAGE:");
-                println!("    superagent-core-daemon --server [--port 1469]");
+                println!("    superagent-core-daemon --server [--port 1469] [--host 0.0.0.0] [--ui-dir <PATH>]");
                 println!("    superagent-core-daemon --prompt <PROMPT> [OPTIONS]");
                 println!("    superagent-core-daemon --json '<JSON_STRING>'");
                 println!();
                 println!("OPTIONS:");
                 println!("    -d, --server, --daemon      Run as background HTTP/WebSocket daemon");
                 println!("    --port <PORT>               Port for the server (default: 1469)");
+                println!("    --host <HOST>               Host IP to bind to (default: 0.0.0.0)");
+                println!("    --ui-dir <PATH>             Path to compiled static UI directory");
+                println!("    --no-auth                   Disable authentication gate");
                 println!("    -p, --prompt <PROMPT>       User prompt instruction for one-shot execution");
                 println!("    -s, --system <SYSTEM>       Optional system prompt");
                 println!("    --provider <PROVIDER>       openai | anthropic | gemini | ollama | openrouter | deepseek | groq");
@@ -165,6 +187,21 @@ fn parse_cli_mode(args: &[String]) -> Result<CliMode> {
                     }
                     i += 1;
                 }
+            }
+            "--host" => {
+                if i + 1 < args.len() {
+                    server_host = args[i + 1].clone();
+                    i += 1;
+                }
+            }
+            "--ui-dir" => {
+                if i + 1 < args.len() {
+                    ui_dir = Some(PathBuf::from(&args[i + 1]));
+                    i += 1;
+                }
+            }
+            "--no-auth" => {
+                std::env::set_var("SUPERAGENT_DISABLE_AUTH", "true");
             }
             "--json" => {
                 if i + 1 < args.len() {
@@ -226,7 +263,9 @@ fn parse_cli_mode(args: &[String]) -> Result<CliMode> {
     if is_server {
         return Ok(CliMode::Server {
             port: server_port,
+            host: server_host,
             workspace_root: workspace,
+            ui_dir,
         });
     }
 
@@ -256,6 +295,9 @@ fn parse_cli_mode(args: &[String]) -> Result<CliMode> {
     // Default to daemon server mode if no prompt provided
     Ok(CliMode::Server {
         port: server_port,
+        host: server_host,
         workspace_root: workspace,
+        ui_dir,
     })
 }
+
