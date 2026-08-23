@@ -22,4 +22,27 @@ pub enum AgentEvent {
     Finished {
         stop_reason: String,
     },
+    // Multi-Agent Collaboration Events
+    AgentHandover {
+        from_persona: String,
+        to_persona: String,
+        reason: String,
+    },
+    SubagentStart {
+        subagent_id: String,
+        persona_id: String,
+        prompt: String,
+    },
+    SubagentFinish {
+        subagent_id: String,
+        output: String,
+        is_error: bool,
+    },
+    WorkflowProgress {
+        workflow_id: String,
+        step_index: usize,
+        total_steps: usize,
+        step_name: String,
+        status: String,
+    },
 }

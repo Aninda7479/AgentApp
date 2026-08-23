@@ -11,6 +11,8 @@ pub struct UserSettings {
     pub default_model: String,
     pub server_port: u16,
     pub api_keys: HashMap<String, String>,
+    #[serde(default)]
+    pub enable_auth: Option<bool>,
 }
 
 impl Default for UserSettings {
@@ -20,9 +22,11 @@ impl Default for UserSettings {
             default_model: "gpt-4o".to_string(),
             server_port: 8080,
             api_keys: HashMap::new(),
+            enable_auth: Some(false),
         }
     }
 }
+
 
 pub fn get_home_dir() -> PathBuf {
     std::env::var("USERPROFILE")

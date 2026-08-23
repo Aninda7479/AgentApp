@@ -85,7 +85,17 @@ async fn main() -> Result<()> {
             registry.register(RunCommandTool::new(workspace_root.clone()));
             registry.register(GrepSearchTool::new(workspace_root.clone()));
 
+            // Multimodal Media Generation Tools
+            registry.register(superagent_core_v2::media::GeneratePdfTool::new(workspace_root.clone()));
+            registry.register(superagent_core_v2::media::GeneratePresentationTool::new(workspace_root.clone()));
+
+            // Browser Automation & Search Tools
+            registry.register(superagent_core_v2::automation::BrowserNavigateTool::new());
+            registry.register(superagent_core_v2::automation::BrowserScreenshotTool::new(workspace_root.clone()));
+            registry.register(superagent_core_v2::automation::WebSearchTool::new());
+
             let engine = AgentEngine::new(Arc::new(registry));
+
             let system_prompt = request.system_prompt.unwrap_or_default();
 
             let mut rx = engine
