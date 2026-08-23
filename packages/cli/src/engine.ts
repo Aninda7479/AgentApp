@@ -158,19 +158,58 @@ export class ChatSession {
     const start = Date.now();
     handlers.onThinking?.(true);
     try {
-      const config = {
-        provider: this.conn.provider,
-        model: this.conn.model,
-        apiKey: this.conn.apiKey || 'missing-api-key',
-        baseUrl: this.conn.baseUrl || undefined,
-        userDataDir: getUserDataDirectory()
-      };
+      let handledViaV2 = false;
+      try {
+        const client = new (await import('@superagent/core')).CoreV2Client();
+        await client.checkHealth();
 
-      const onToken = (token: string) => {
-        handlers.onToken(token);
-      };
+        await client.runChatStream(
+          {
+            prompt,
+            provider: this.conn.provider as any,
+            model_id: this.conn.model,
+            api_key: this.conn.apiKey || undefined,
+            base_url: this.conn.baseUrl || undefined,
+            workspace: process.cwd(),
+          },
+          (event) => {
+            if (event.type === 'token' && event.content) {
+              handlers.onToken(event.content);
+            } else if (event.type === 'tool_call') {
+              handlers.onToolCall?.(event.name, event.parameters || {});
+            } else if (event.type === 'tool_result') {
+              handlers.onToolResult?.(event.name, event.output || '');
+            } else if (event.type === 'usage' && event.usage) {
+              handlers.onUsage?.({
+                promptTokens: event.usage.prompt_tokens || 0,
+                completionTokens: event.usage.completion_tokens || 0,
+                totalTokens: event.usage.total_tokens || 0,
+              });
+            } else if (event.type === 'error') {
+              handlers.onError?.(event.message || 'Unknown error');
+            }
+          }
+        );
+        handledViaV2 = true;
+      } catch {
+        // Fallback to in-process direct execution
+      }
 
-      await sendChatMessageDirect(this.sessionId, prompt, config, onToken, attachments);
+      if (!handledViaV2) {
+        const config = {
+          provider: this.conn.provider,
+          model: this.conn.model,
+          apiKey: this.conn.apiKey || 'missing-api-key',
+          baseUrl: this.conn.baseUrl || undefined,
+          userDataDir: getUserDataDirectory(),
+        };
+
+        const onToken = (token: string) => {
+          handlers.onToken(token);
+        };
+
+        await sendChatMessageDirect(this.sessionId, prompt, config, onToken, attachments);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       handlers.onError?.(msg);
@@ -180,3 +219,4 @@ export class ChatSession {
     }
   }
 }
+

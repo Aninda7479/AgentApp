@@ -135,6 +135,62 @@ export class CoreV2Client {
   }
 
   /**
+   * Retrieves auth status from the Rust core.
+   */
+  async getAuthStatus(): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/api/auth/status`);
+    return res.json();
+  }
+
+  /**
+   * Logs in against the Rust core auth store.
+   */
+  async login(username: string, password: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    return res.json();
+  }
+
+  /**
+   * Retrieves provider configuration status from the Rust core.
+   */
+  async getProvidersStatus(): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/api/providers/status`);
+    return res.json();
+  }
+
+  /**
+   * Scans and returns live artifact runtime states.
+   */
+  async getArtifacts(): Promise<any[]> {
+    const res = await fetch(`${this.baseUrl}/api/artifacts`);
+    return res.json();
+  }
+
+  /**
+   * Starts a background artifact micro-app runner.
+   */
+  async startArtifact(id: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/api/artifacts/${encodeURIComponent(id)}/start`, {
+      method: 'POST',
+    });
+    return res.json();
+  }
+
+  /**
+   * Stops an active artifact micro-app runner.
+   */
+  async stopArtifact(id: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/api/artifacts/${encodeURIComponent(id)}/stop`, {
+      method: 'POST',
+    });
+    return res.json();
+  }
+
+  /**
    * Dispatches an agent execution request to the Rust daemon with SSE streaming.
    */
   async runChatStream(
@@ -180,3 +236,4 @@ export class CoreV2Client {
     }
   }
 }
+

@@ -95,6 +95,32 @@ pub struct SynthesizeTraceRequest {
     pub skill_name: String,
 }
 
+fn default_admin_username() -> String {
+    "admin".to_string()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthLoginRequest {
+    #[serde(default = "default_admin_username")]
+    pub username: String,
+    pub password: String,
+}
+
+
+#[derive(Debug, Deserialize)]
+pub struct AuthVerifyRequest {
+    pub token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthPasswordRequest {
+    pub username: String,
+    #[serde(rename = "currentPassword")]
+    pub current_password: String,
+    #[serde(rename = "newPassword")]
+    pub new_password: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct SystemInfoResponse {
     pub os_name: String,
@@ -122,6 +148,11 @@ pub fn create_router(state: AppState) -> Router {
         .route("/health", get(health_check))
         .route("/api/health", get(health_check))
         .route("/api/system-info", get(get_system_info))
+        .route("/api/auth/status", get(get_auth_status))
+        .route("/api/auth/login", post(login_auth))
+        .route("/api/auth/verify", post(verify_auth_token))
+        .route("/api/auth/password", post(change_auth_password))
+        .route("/api/providers/status", get(get_providers_status))
         .route("/api/settings", get(get_settings).post(save_settings))
         .route(
             "/api/conversations",
@@ -136,6 +167,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/artifacts/:id/stop", post(stop_artifact))
         .route("/api/tools", get(list_tools))
         .route("/api/integrations", get(list_integrations))
+
         // Persona / Digital Workforce Endpoints
         .route(
             "/api/personas",
@@ -199,7 +231,89 @@ async fn get_system_info() -> impl IntoResponse {
     })
 }
 
+async fn get_auth_status(State(state): State<AppState>) -> impl IntoResponse {
+    let settings = state.settings_store.load().unwrap_or_default();
+    let auth_required = settings.enable_auth.unwrap_or(false);
+
+    Json(serde_json::json!({
+        "authenticated": !auth_required,
+        "authRequired": auth_required,
+        "user": if !auth_required { Some("admin") } else { None }
+    }))
+}
+
+async fn login_auth(
+    State(state): State<AppState>,
+    Json(req): Json<AuthLoginRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let _ = state.auth_store.ensure_seeded("admin", "admin123");
+    if state.auth_store.verify_password(&req.username, &req.password) {
+        let token = state.auth_store.create_session_token(&req.username);
+        Ok(Json(serde_json::json!({
+            "ok": true,
+            "success": true,
+            "token": token,
+            "username": req.username
+        })))
+    } else {
+        Err(StatusCode::UNAUTHORIZED)
+    }
+}
+
+
+async fn verify_auth_token(
+    State(state): State<AppState>,
+    Json(req): Json<AuthVerifyRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if let Some(token) = req.token {
+        if let Some(user) = state.auth_store.validate_session_token(&token) {
+            return Ok(Json(serde_json::json!({
+                "valid": true,
+                "username": user
+            })));
+        }
+    }
+    Err(StatusCode::UNAUTHORIZED)
+}
+
+async fn change_auth_password(
+    State(state): State<AppState>,
+    Json(req): Json<AuthPasswordRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    state
+        .auth_store
+        .change_password(&req.username, &req.current_password, &req.new_password)
+        .map(|_| Json(serde_json::json!({ "success": true })))
+        .map_err(|_| StatusCode::BAD_REQUEST)
+}
+
+async fn get_providers_status(State(state): State<AppState>) -> impl IntoResponse {
+    let settings = state.settings_store.load().unwrap_or_default();
+
+    let check_provider = |key_name: &str, env_var: &str| -> bool {
+        if std::env::var(env_var).map(|v| !v.trim().is_empty()).unwrap_or(false) {
+            return true;
+        }
+        if let Some(val) = settings.api_keys.get(key_name) {
+            return !val.trim().is_empty();
+        }
+        false
+    };
+
+
+    Json(serde_json::json!({
+        "openai": { "configured": check_provider("openai", "OPENAI_API_KEY") },
+        "anthropic": { "configured": check_provider("anthropic", "ANTHROPIC_API_KEY") },
+        "gemini": { "configured": check_provider("gemini", "GEMINI_API_KEY") },
+        "openrouter": { "configured": check_provider("openrouter", "OPENROUTER_API_KEY") },
+        "deepseek": { "configured": check_provider("deepseek", "DEEPSEEK_API_KEY") },
+        "groq": { "configured": check_provider("groq", "GROQ_API_KEY") },
+        "ollama": { "configured": true }
+    }))
+}
+
 async fn get_settings(State(state): State<AppState>) -> Result<Json<UserSettings>, StatusCode> {
+
     state
         .settings_store
         .load()
