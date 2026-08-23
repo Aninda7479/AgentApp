@@ -89,6 +89,16 @@ export class SettingsService {
       if (settings.lastUsedModel?.model) {
         ctx.setLastUsedModel(settings.lastUsedModel.model);
       }
+      if (Array.isArray(settings.providers) && settings.providers.length > 0) {
+        if (ctx.getConnectedProviders().length === 0) {
+          ctx.setConnectedProviders(settings.providers);
+        }
+      }
+      if (Array.isArray(settings.models) && settings.models.length > 0) {
+        if (ctx.getModelsCatalog().length === 0) {
+          ctx.setModelsCatalog(settings.models);
+        }
+      }
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Failed to load general settings:', err);

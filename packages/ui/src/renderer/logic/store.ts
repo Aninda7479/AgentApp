@@ -93,16 +93,32 @@ export class StoreService {
   }> {
     const stored = await StoreService.read(ctx.ipc);
 
+    let providers = stored.connectedProviders;
+    let models = stored.modelsCatalog;
+
+    // Fallback: If store-read didn't contain providers or models, check settings
+    if (providers.length === 0 || models.length === 0) {
+      try {
+        const settings = await ctx.ipc?.invoke('settings-read');
+        if (providers.length === 0 && Array.isArray(settings?.providers) && settings.providers.length > 0) {
+          providers = settings.providers;
+        }
+        if (models.length === 0 && Array.isArray(settings?.models) && settings.models.length > 0) {
+          models = settings.models;
+        }
+      } catch {}
+    }
+
     ctx.setProjects(stored.projects);
-    ctx.setConnectedProviders(stored.connectedProviders);
-    ctx.setModelsCatalog(stored.modelsCatalog);
+    ctx.setConnectedProviders(providers);
+    ctx.setModelsCatalog(models);
     chatStore.setProjects(stored.projects);
 
-    if (stored.connectedProviders.length > 0) {
-      providerStore.setProviders(stored.connectedProviders);
+    if (providers.length > 0) {
+      providerStore.setProviders(providers);
     }
-    if (stored.modelsCatalog.length > 0) {
-      providerStore.setModels(stored.modelsCatalog);
+    if (models.length > 0) {
+      providerStore.setModels(models);
     }
 
     // Only the ACTIVE chat's steps stay resident; every other chat is held

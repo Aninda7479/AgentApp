@@ -123,9 +123,13 @@ pub fn resolve_models_file_path(base_dir: Option<&Path>) -> Option<PathBuf> {
         base.join("config").join("models.json"),
         base.join("Config").join("models.json"),
         base.join("models.json"),
+        base.join("config").join("models.json.bak"),
         get_home_dir().join(".superagent").join("config").join("models.json"),
         get_home_dir().join(".superagent").join("Config").join("models.json"),
         get_home_dir().join(".superagent").join("models.json"),
+        get_home_dir().join(".superagent").join("config").join("models.json.bak"),
+        PathBuf::from(".").join(".superagent").join("config").join("models.json"),
+        PathBuf::from(".").join(".superagent").join("models.json"),
     ];
 
     for candidate in &candidates {
@@ -152,16 +156,93 @@ impl SettingsStore {
     }
 
     /// Loads the raw JSON value representing full application settings.
-    /// Merges separate models.json if present, perfectly matching @superagent/core.
+    /// Recovers from settings.json.bak and models.json.bak if primary is empty or lacks providers.
     pub fn load_raw(&self) -> Result<serde_json::Value> {
         let active_path = &self.file_path;
 
         let mut settings_val = if active_path.exists() {
-
-            let content = fs::read_to_string(&active_path)?;
+            let content = fs::read_to_string(active_path).unwrap_or_default();
             serde_json::from_str::<serde_json::Value>(&content).unwrap_or_else(|_| serde_json::json!({}))
         } else {
-            serde_json::json!({
+            serde_json::json!({})
+        };
+
+        // Check if primary settings has configured providers
+        let has_providers = settings_val
+            .get("providers")
+            .and_then(|p| p.as_array())
+            .map(|a| !a.is_empty())
+            .unwrap_or(false);
+
+        let is_empty = settings_val.as_object().map(|m| m.is_empty()).unwrap_or(true);
+
+        // Fallback to backup settings.json.bak if primary is empty or missing providers
+        if is_empty || !has_providers {
+            let mut backup_candidates = vec![
+                active_path.with_extension("json.bak"),
+            ];
+            if let Some(parent) = active_path.parent() {
+                backup_candidates.push(parent.join("settings.json.bak"));
+            }
+
+            let sa_dir = get_superagent_dir();
+            if active_path.starts_with(&sa_dir) || active_path.to_string_lossy().contains(".superagent") {
+                backup_candidates.push(sa_dir.join("config").join("settings.json.bak"));
+                backup_candidates.push(sa_dir.join("Config").join("settings.json.bak"));
+                backup_candidates.push(sa_dir.join("settings.json.bak"));
+                backup_candidates.push(get_home_dir().join(".superagent").join("config").join("settings.json.bak"));
+                backup_candidates.push(get_home_dir().join(".superagent").join("Config").join("settings.json.bak"));
+                backup_candidates.push(get_home_dir().join(".superagent").join("settings.json.bak"));
+                backup_candidates.push(PathBuf::from(".").join(".superagent").join("config").join("settings.json.bak"));
+            }
+
+            for bak in &backup_candidates {
+                if bak.exists() {
+                    if let Ok(c) = fs::read_to_string(bak) {
+                        if let Ok(bak_val) = serde_json::from_str::<serde_json::Value>(&c) {
+                            if let Some(bak_map) = bak_val.as_object() {
+                                if !bak_map.is_empty() {
+                                    if is_empty {
+                                        settings_val = bak_val.clone();
+                                    } else if !has_providers {
+                                        if let Some(bak_providers) = bak_val.get("providers") {
+                                            if let Some(settings_map) = settings_val.as_object_mut() {
+                                                settings_map.insert("providers".to_string(), bak_providers.clone());
+                                            }
+                                        }
+                                        if settings_val.get("general").is_none() && bak_val.get("general").is_some() {
+                                            if let Some(settings_map) = settings_val.as_object_mut() {
+                                                settings_map.insert("general".to_string(), bak_val["general"].clone());
+                                            }
+                                        }
+                                        if settings_val.get("lastUsedModel").is_none() && bak_val.get("lastUsedModel").is_some() {
+                                            if let Some(settings_map) = settings_val.as_object_mut() {
+                                                settings_map.insert("lastUsedModel".to_string(), bak_val["lastUsedModel"].clone());
+                                            }
+                                        }
+                                        if settings_val.get("theme").is_none() && bak_val.get("theme").is_some() {
+                                            if let Some(settings_map) = settings_val.as_object_mut() {
+                                                settings_map.insert("theme".to_string(), bak_val["theme"].clone());
+                                            }
+                                        }
+                                        if settings_val.get("telegram").is_none() && bak_val.get("telegram").is_some() {
+                                            if let Some(settings_map) = settings_val.as_object_mut() {
+                                                settings_map.insert("telegram".to_string(), bak_val["telegram"].clone());
+                                            }
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // If settings is still completely empty, initialize safe default structure
+        if settings_val.as_object().map(|m| m.is_empty()).unwrap_or(true) {
+            settings_val = serde_json::json!({
                 "general": {
                     "workMode": "coding",
                     "confirmShellCommands": true,
@@ -174,20 +255,63 @@ impl SettingsStore {
                 },
                 "providers": [],
                 "models": []
-            })
-        };
+            });
+        }
 
-        // If settings has no models array or it is empty, check for external models.json
-        if let Some(models_path) = resolve_models_file_path(active_path.parent().and_then(|p| p.parent())) {
-            if let Ok(models_content) = fs::read_to_string(&models_path) {
-                if let Ok(models_json) = serde_json::from_str::<serde_json::Value>(&models_content) {
-                    if let Some(map) = settings_val.as_object_mut() {
-                        if !map.contains_key("models") || map.get("models").and_then(|m| m.as_array()).map_or(true, |a| a.is_empty()) {
-                            if models_json.is_array() {
-                                map.insert("models".to_string(), models_json);
-                            } else if let Some(m_arr) = models_json.get("models") {
-                                map.insert("models".to_string(), m_arr.clone());
+        // Discover and merge separate models.json / models.json.bak if present
+        let config_dir = active_path.parent();
+        let mut models_candidates = vec![
+            config_dir.map(|p| p.join("models.json")),
+            config_dir.map(|p| p.join("models.json.bak")),
+        ];
+
+        let sa_dir = get_superagent_dir();
+        if active_path.starts_with(&sa_dir) || active_path.to_string_lossy().contains(".superagent") {
+            models_candidates.push(Some(sa_dir.join("config").join("models.json")));
+            models_candidates.push(Some(sa_dir.join("config").join("models.json.bak")));
+            models_candidates.push(Some(get_home_dir().join(".superagent").join("config").join("models.json")));
+            models_candidates.push(Some(get_home_dir().join(".superagent").join("config").join("models.json.bak")));
+            models_candidates.push(Some(PathBuf::from(".").join(".superagent").join("config").join("models.json")));
+        }
+
+        let mut models_val: Option<serde_json::Value> = None;
+        for opt_p in &models_candidates {
+            if let Some(p) = opt_p {
+                if p.exists() {
+                    if let Ok(c) = fs::read_to_string(p) {
+                        if let Ok(m_json) = serde_json::from_str::<serde_json::Value>(&c) {
+                            if m_json.is_array() && !m_json.as_array().unwrap().is_empty() {
+                                models_val = Some(m_json);
+                                break;
+                            } else if let Some(m_arr) = m_json.get("models") {
+                                if m_arr.is_array() && !m_arr.as_array().unwrap().is_empty() {
+                                    models_val = Some(m_arr.clone());
+                                    break;
+                                }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(m_val) = models_val {
+            if let Some(map) = settings_val.as_object_mut() {
+                if !map.contains_key("models") || map.get("models").and_then(|m| m.as_array()).map_or(true, |a| a.is_empty()) {
+                    map.insert("models".to_string(), m_val);
+                }
+            }
+        }
+
+        // Ensure setupState.completed is true whenever providers array is configured
+        if let Some(providers_arr) = settings_val.get("providers").and_then(|p| p.as_array()) {
+            if !providers_arr.is_empty() {
+                if let Some(map) = settings_val.as_object_mut() {
+                    let general = map.entry("general".to_string()).or_insert_with(|| serde_json::json!({}));
+                    if let Some(gen_map) = general.as_object_mut() {
+                        let setup_state = gen_map.entry("setupState".to_string()).or_insert_with(|| serde_json::json!({}));
+                        if let Some(ss_map) = setup_state.as_object_mut() {
+                            ss_map.insert("completed".to_string(), serde_json::Value::Bool(true));
                         }
                     }
                 }
@@ -198,20 +322,46 @@ impl SettingsStore {
     }
 
     /// Persists raw JSON value preserving all fields and schema formatting.
+    /// Automatically handles backup files and separate models.json storage.
     pub fn save_raw(&self, val: &serde_json::Value) -> Result<()> {
         let target_path = &self.file_path;
 
         if let Some(parent) = target_path.parent() {
-
             if !parent.exists() {
                 fs::create_dir_all(parent)?;
             }
         }
 
-        let json = serde_json::to_string_pretty(val)?;
-        fs::write(&target_path, json)?;
+        let mut settings_to_write = val.clone();
+
+        // Extract models if present and save separately to models.json / models.json.bak
+        if let Some(map) = settings_to_write.as_object_mut() {
+            if let Some(models) = map.remove("models") {
+                if let Some(config_dir) = target_path.parent() {
+                    let models_path = config_dir.join("models.json");
+                    let models_bak_path = config_dir.join("models.json.bak");
+                    if let Ok(models_str) = serde_json::to_string_pretty(&models) {
+                        if models_path.exists() {
+                            let _ = fs::copy(&models_path, &models_bak_path);
+                        }
+                        let _ = fs::write(&models_path, &models_str);
+                    }
+                }
+            }
+        }
+
+        let json = serde_json::to_string_pretty(&settings_to_write)?;
+
+        // Create a backup copy before overwriting
+        let bak_path = target_path.with_extension("json.bak");
+        if target_path.exists() {
+            let _ = fs::copy(target_path, &bak_path);
+        }
+
+        fs::write(target_path, json)?;
         Ok(())
     }
+
 
     /// Loads typed UserSettings while extracting keys from providers array if present.
     pub fn load(&self) -> Result<UserSettings> {
@@ -371,6 +521,88 @@ mod tests {
 
         store.set_api_key("openai", "sk-openai-key").unwrap();
         assert_eq!(store.get_api_key("openai").unwrap(), Some("sk-openai-key".to_string()));
+
+        let _ = fs::remove_dir_all(test_dir);
+    }
+
+    #[test]
+    fn test_backup_recovery_and_setup_completed() {
+        let test_dir = std::env::temp_dir().join(format!("test_settings_bak_{}", uuid::Uuid::new_v4()));
+        let config_dir = test_dir.join("config");
+        fs::create_dir_all(&config_dir).unwrap();
+
+        let file_path = config_dir.join("settings.json");
+        let bak_path = config_dir.join("settings.json.bak");
+
+        // Create empty settings.json (the issue user had)
+        fs::write(&file_path, "{}").unwrap();
+
+        // Create full backup file with providers and ownerName
+        let bak_content = serde_json::json!({
+            "providers": [
+                {
+                    "id": "ollama",
+                    "name": "Ollama",
+                    "type": "local"
+                },
+                {
+                    "id": "groq",
+                    "name": "Groq",
+                    "apiKey": "gsk_test_key"
+                }
+            ],
+            "lastUsedModel": {
+                "provider": "groq",
+                "model": "llama-3.3-70b-versatile"
+            },
+            "ownerName": "Aninda"
+        });
+        fs::write(&bak_path, serde_json::to_string_pretty(&bak_content).unwrap()).unwrap();
+
+        let store = SettingsStore::with_path(file_path);
+        let raw = store.load_raw().unwrap();
+
+        // Check that providers were recovered from .bak
+        let providers = raw["providers"].as_array().unwrap();
+        assert_eq!(providers.len(), 2);
+        assert_eq!(providers[0]["id"], "ollama");
+        assert_eq!(providers[1]["id"], "groq");
+
+        // Check that setupState.completed was automatically set to true
+        assert_eq!(raw["general"]["setupState"]["completed"], true);
+
+        let _ = fs::remove_dir_all(test_dir);
+    }
+
+    #[test]
+    fn test_models_separation_and_merge() {
+        let test_dir = std::env::temp_dir().join(format!("test_settings_models_{}", uuid::Uuid::new_v4()));
+        let config_dir = test_dir.join("config");
+        fs::create_dir_all(&config_dir).unwrap();
+
+        let file_path = config_dir.join("settings.json");
+        let models_path = config_dir.join("models.json");
+
+        // Write models.json directly
+        let models_data = serde_json::json!([
+            { "id": "m1", "name": "Model 1", "provider": "openai" },
+            { "id": "m2", "name": "Model 2", "provider": "anthropic" }
+        ]);
+        fs::write(&models_path, serde_json::to_string_pretty(&models_data).unwrap()).unwrap();
+
+        // Write settings without models
+        fs::write(&file_path, serde_json::json!({ "providers": [{ "id": "openai" }] }).to_string()).unwrap();
+
+        let store = SettingsStore::with_path(file_path.clone());
+        let raw = store.load_raw().unwrap();
+
+        // Verify models were merged into raw
+        assert_eq!(raw["models"].as_array().unwrap().len(), 2);
+
+        // Save raw (with models included) and verify models.json is updated separately
+        store.save_raw(&raw).unwrap();
+        assert!(models_path.exists());
+        assert!(config_dir.join("models.json.bak").exists());
 
         let _ = fs::remove_dir_all(test_dir);
     }

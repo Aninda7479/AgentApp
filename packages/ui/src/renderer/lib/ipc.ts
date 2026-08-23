@@ -160,14 +160,52 @@ export function getIpc(): any {
     return cachedBridge;
   }
 
-  // 3. Safe web fallback surface — prevents crashes in browser/react renders
-  const fallbackSurface = {
-    invoke: async () => null,
-    send: () => {},
-    on: () => () => {},
-    off: () => {}
+  // 3. Web HTTP IPC path — communicates with SuperAgent Core v2 over HTTP / REST
+  const webHttpSurface = {
+    invoke: async (channel: string, ...args: any[]) => {
+      try {
+        const httpRes = await fetch(`/api/ipc/${encodeURIComponent(channel)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channel, args }),
+        });
+        if (httpRes.ok) {
+          const resJson = await httpRes.json();
+          if (resJson && typeof resJson === 'object' && 'data' in resJson) {
+            return resJson.data;
+          }
+          return resJson;
+        }
+      } catch {
+        /* ignore network error */
+      }
+
+      // Direct REST fallback for settings when offline or during bootstrap
+      if (channel === 'settings-read' || channel === 'settings_read') {
+        try {
+          const res = await fetch('/api/settings');
+          if (res.ok) {
+            return await res.json();
+          }
+        } catch {}
+      }
+
+      if (SAFE_EMPTY_CHANNELS.has(channel)) {
+        return [];
+      }
+      return null;
+    },
+    send: (channel: string, ...args: any[]) => {
+      fetch(`/api/ipc/${encodeURIComponent(channel)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel, args }),
+      }).catch(() => {});
+    },
+    on: (_channel: string, _fn: any) => () => {},
+    off: (_channel: string, _fn: any) => {}
   };
-  cachedBridge = makeIpcBridge(fallbackSurface);
+  cachedBridge = makeIpcBridge(webHttpSurface);
   return cachedBridge;
 }
 

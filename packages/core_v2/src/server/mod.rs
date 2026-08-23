@@ -1420,15 +1420,40 @@ async fn handle_ipc(
 
     match ch {
         "store-read" => {
+            let settings_val = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
+            let providers = settings_val.get("providers").cloned().unwrap_or_else(|| serde_json::json!([]));
+            let models = settings_val.get("models").cloned().unwrap_or_else(|| serde_json::json!([]));
             let sessions = state.chat_storage.list_sessions().unwrap_or_default();
             Ok(Json(serde_json::json!({
                 "data": {
-                    "chats": sessions,
-                    "projects": []
+                    "connectedProviders": providers,
+                    "modelsCatalog": models,
+                    "projects": [],
+                    "chats": sessions
                 }
             })))
         }
-        "store-write" => Ok(Json(serde_json::json!({ "data": null }))),
+        "store-write" => {
+            if let Some(arg) = args.first() {
+                if let Some(obj) = arg.as_object() {
+                    let mut current = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
+                    if let Some(c_obj) = current.as_object_mut() {
+                        if let Some(p) = obj.get("connectedProviders") {
+                            if p.as_array().map(|a| !a.is_empty()).unwrap_or(false) {
+                                c_obj.insert("providers".to_string(), p.clone());
+                            }
+                        }
+                        if let Some(m) = obj.get("modelsCatalog") {
+                            if m.as_array().map(|a| !a.is_empty()).unwrap_or(false) {
+                                c_obj.insert("models".to_string(), m.clone());
+                            }
+                        }
+                        let _ = state.settings_store.save_raw(&current);
+                    }
+                }
+            }
+            Ok(Json(serde_json::json!({ "data": null })))
+        }
         "chat-steps-read" => {
             let chat_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
             if let Ok(session) = state.chat_storage.load_session(chat_id) {
@@ -1549,7 +1574,124 @@ async fn handle_ipc(
         "partner-set-active" => Ok(Json(serde_json::json!({ "data": { "success": true } }))),
         "whisper-local-status" => Ok(Json(serde_json::json!({ "data": { "ok": true, "status": { "state": "ready" } } }))),
         "global-memory-read" => Ok(Json(serde_json::json!({ "data": { "userProfile": [], "learnedInsights": [] } }))),
-        "telegram-test" => Ok(Json(serde_json::json!({ "data": { "success": true } }))),
+        "telegram-config-get" => {
+            let settings_val = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
+            let tg = settings_val.get("telegram").cloned().unwrap_or_else(|| serde_json::json!({
+                "botToken": std::env::var("TELEGRAM_BOT_TOKEN").unwrap_or_default(),
+                "chatId": std::env::var("TELEGRAM_CHAT_ID").unwrap_or_default(),
+                "enabled": true,
+                "parseMode": "Markdown"
+            }));
+            Ok(Json(serde_json::json!({ "data": tg })))
+        }
+        "telegram-config-save" => {
+            if let Some(arg) = args.first() {
+                let mut current = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
+                if let Some(c_obj) = current.as_object_mut() {
+                    c_obj.insert("telegram".to_string(), arg.clone());
+                    let _ = state.settings_store.save_raw(&current);
+                }
+            }
+            Ok(Json(serde_json::json!({ "data": { "success": true } })))
+        }
+        "telegram-test" => {
+            let arg = args.first();
+            let bot_token = arg.and_then(|a| a.get("botToken")).and_then(|v| v.as_str()).unwrap_or("");
+            let chat_id = arg.and_then(|a| a.get("chatId")).and_then(|v| v.as_str()).unwrap_or("");
+            let send_test_msg = arg.and_then(|a| a.get("sendTestMessage")).and_then(|v| v.as_bool()).unwrap_or(false);
+
+            if bot_token.trim().is_empty() {
+                return Ok(Json(serde_json::json!({ "data": { "success": false, "error": "Bot token is required" } })));
+            }
+
+            let client = reqwest::Client::new();
+            let me_url = format!("https://api.telegram.org/bot{}/getMe", bot_token.trim());
+            match client.get(&me_url).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    let body: serde_json::Value = resp.json().await.unwrap_or_default();
+                    let result = body.get("result");
+                    let bot_name = result.and_then(|r| r.get("first_name")).and_then(|v| v.as_str()).unwrap_or("Telegram Bot");
+                    let username = result.and_then(|r| r.get("username")).and_then(|v| v.as_str()).unwrap_or("");
+                    let bot_id = result.and_then(|r| r.get("id")).and_then(|v| v.as_i64()).unwrap_or(0);
+
+                    if send_test_msg && !chat_id.trim().is_empty() {
+                        let send_opts = crate::integrations::telegram::TelegramSendOptions {
+                            bot_token: bot_token.trim().to_string(),
+                            chat_id: chat_id.trim().to_string(),
+                            text: "Hello from SuperAgent! Test notification confirmed.".to_string(),
+                            parse_mode: Some("Markdown".to_string()),
+                            disable_notification: Some(false),
+                        };
+                        let tg_client = crate::integrations::telegram::TelegramClient::new();
+                        let _ = tg_client.send_message(&send_opts).await;
+                    }
+
+                    Ok(Json(serde_json::json!({
+                        "data": {
+                            "success": true,
+                            "botName": bot_name,
+                            "username": username,
+                            "botId": bot_id
+                        }
+                    })))
+                }
+                Ok(resp) => {
+                    let err = resp.text().await.unwrap_or_else(|_| "Failed to connect to Telegram".into());
+                    Ok(Json(serde_json::json!({ "data": { "success": false, "error": err } })))
+                }
+                Err(e) => {
+                    Ok(Json(serde_json::json!({ "data": { "success": false, "error": e.to_string() } })))
+                }
+            }
+        }
+        "telegram-send" => {
+            let arg = args.first();
+            let mut bot_token = arg.and_then(|a| a.get("botToken")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let mut chat_id = arg.and_then(|a| a.get("chatId")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let text = arg.and_then(|a| a.get("text")).and_then(|v| v.as_str()).unwrap_or("");
+
+            if bot_token.is_empty() || chat_id.is_empty() {
+                if let Ok(s) = state.settings_store.load_raw() {
+                    if let Some(tg) = s.get("telegram") {
+                        if bot_token.is_empty() {
+                            if let Some(tok) = tg.get("botToken").and_then(|v| v.as_str()) {
+                                bot_token = tok.to_string();
+                            }
+                        }
+                        if chat_id.is_empty() {
+                            if let Some(cid) = tg.get("chatId").and_then(|v| v.as_str()) {
+                                chat_id = cid.to_string();
+                            }
+                        }
+                    }
+                }
+            }
+
+            if bot_token.trim().is_empty() || chat_id.trim().is_empty() || text.trim().is_empty() {
+                return Ok(Json(serde_json::json!({ "data": { "success": false, "error": "Missing botToken, chatId, or text" } })));
+            }
+
+            let send_opts = crate::integrations::telegram::TelegramSendOptions {
+                bot_token: bot_token.trim().to_string(),
+                chat_id: chat_id.trim().to_string(),
+                text: text.to_string(),
+                parse_mode: Some("Markdown".to_string()),
+                disable_notification: Some(false),
+            };
+            let tg_client = crate::integrations::telegram::TelegramClient::new();
+            match tg_client.send_message(&send_opts).await {
+                Ok(res) => Ok(Json(serde_json::json!({
+                    "data": {
+                        "success": res.success,
+                        "messageId": res.message_id,
+                        "error": res.error
+                    }
+                }))),
+                Err(e) => Ok(Json(serde_json::json!({
+                    "data": { "success": false, "error": e.to_string() }
+                }))),
+            }
+        }
         "artifact-list" | "artifact_list" | "artifact:list" => {
             let list = state.artifact_runner.scan_artifacts();
             Ok(Json(serde_json::json!({ "data": list })))

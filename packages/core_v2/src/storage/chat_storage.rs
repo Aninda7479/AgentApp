@@ -84,15 +84,35 @@ impl ChatStorage {
         Self { storage_dir }
     }
 
+    fn list_projects(&self) -> Result<Vec<String>> {
+        let projects_dir = self.storage_dir.join("projects");
+        let mut projects = Vec::new();
+        if projects_dir.exists() {
+            for entry in fs::read_dir(projects_dir)? {
+                let entry = entry?;
+                if entry.path().is_dir() {
+                    if let Some(name) = entry.file_name().to_str() {
+                        projects.push(name.to_string());
+                    }
+                }
+            }
+        }
+        Ok(projects)
+    }
+
     fn find_chat_file(&self, id: &str) -> Option<PathBuf> {
-        let candidates = [
+        let mut candidates = vec![
             self.storage_dir.join("chats").join(id).join("chat.json"),
             self.storage_dir.join(id).join("chat.json"),
             self.storage_dir.join(format!("session_{}.json", id)),
             self.storage_dir.join(format!("{}.json", id)),
-            get_superagent_dir().join("conversation").join("chats").join(id).join("chat.json"),
-            get_superagent_dir().join("chats").join(format!("session_{}.json", id)),
         ];
+
+        let sa_conv = get_superagent_dir().join("conversation");
+        if self.storage_dir.starts_with(&sa_conv) || self.storage_dir.to_string_lossy().contains(".superagent") {
+            candidates.push(get_superagent_dir().join("conversation").join("chats").join(id).join("chat.json"));
+            candidates.push(get_superagent_dir().join("chats").join(format!("session_{}.json", id)));
+        }
 
         for c in &candidates {
             if c.exists() {
@@ -100,12 +120,14 @@ impl ChatStorage {
             }
         }
 
-        // Also search in projects subdirectories
-        let projects_dir = self.storage_dir.join("projects");
-        if let Ok(entries) = fs::read_dir(projects_dir) {
-            for entry in entries.flatten() {
-                if entry.path().is_dir() {
-                    let chat_in_proj = entry.path().join(id).join("chat.json");
+        // Also check if any project folder contains this chat
+        if let Ok(projects) = self.list_projects() {
+            for proj in projects {
+                let proj_chat_candidates = [
+                    self.storage_dir.join("chats").join(&proj).join(id).join("chat.json"),
+                    self.storage_dir.join(&proj).join(id).join("chat.json"),
+                ];
+                for chat_in_proj in proj_chat_candidates {
                     if chat_in_proj.exists() {
                         return Some(chat_in_proj);
                     }
@@ -178,12 +200,16 @@ impl ChatStorage {
         let mut metadata_list = Vec::new();
         let mut seen_ids = std::collections::HashSet::new();
 
-        let search_dirs = [
+        let mut search_dirs = vec![
             self.storage_dir.join("chats"),
             self.storage_dir.clone(),
-            get_superagent_dir().join("conversation").join("chats"),
-            get_superagent_dir().join("chats"),
         ];
+
+        let sa_conv = get_superagent_dir().join("conversation");
+        if self.storage_dir.starts_with(&sa_conv) || self.storage_dir.to_string_lossy().contains(".superagent") {
+            search_dirs.push(get_superagent_dir().join("conversation").join("chats"));
+            search_dirs.push(get_superagent_dir().join("chats"));
+        }
 
         for dir in &search_dirs {
             if !dir.exists() {
