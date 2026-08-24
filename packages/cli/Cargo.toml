@@ -1,6 +1,6 @@
 [package]
 name = "superagent-cli"
-version = "0.17.0"
+version = "0.19.0"
 description = "SuperAgent Terminal CLI & TUI - Pure Rust Ratatui Native Application"
 authors = ["SuperAgent Contributors"]
 edition = "2021"
