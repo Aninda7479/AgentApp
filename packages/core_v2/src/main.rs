@@ -7,7 +7,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use superagent_core_v2::orchestrator::AgentEngine;
-use superagent_core_v2::server::start_server;
+use superagent_core_v2::server::{lan_addresses, start_server};
 use superagent_core_v2::tools::builtin::{
     EditFileTool, GrepSearchTool, ListDirTool, ReadFileTool, RunCommandTool, WriteFileTool,
 };
@@ -53,7 +53,18 @@ async fn main() -> Result<()> {
             ui_dir,
         } => {
             println!("================================================================");
-            println!("🚀 SuperAgent Core v2 Daemon ignited at: http://{}:{}", if host == "0.0.0.0" { "localhost" } else { &host }, port);
+            println!(
+                "🚀 SuperAgent Core v2 Daemon ignited at: http://{}:{}",
+                if host == "0.0.0.0" { "localhost" } else { &host },
+                port
+            );
+            if host == "0.0.0.0" || host == "::" {
+                for addr in lan_addresses() {
+                    println!("🌐 Network (LAN) URL:              http://{}:{}", addr, port);
+                }
+            } else if host != "127.0.0.1" && host != "localhost" {
+                println!("🌐 Network URL:                    http://{}:{}", host, port);
+            }
             println!("⚡ Mode: Native Rust Axum Async Engine");
             println!("📂 Workspace: {}", workspace_root.display());
             if let Some(ref d) = ui_dir {

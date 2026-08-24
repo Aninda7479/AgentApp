@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -1799,6 +1799,54 @@ async fn handle_ws_socket(socket: WebSocket, state: AppState) {
     }
 }
 
+/// Returns the machine's non-internal IPv4 addresses for LAN access.
+pub fn lan_addresses() -> Vec<String> {
+    let mut addrs: Vec<String> = Vec::new();
+
+    // 1. Probe routing table with UDP sockets (no network packets are transmitted for UDP connect)
+    let probe_targets = [
+        "8.8.8.8:80",
+        "1.1.1.1:80",
+        "192.168.1.1:80",
+        "10.0.0.1:80",
+        "172.16.0.1:80",
+    ];
+    for target in probe_targets {
+        if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
+            if socket.connect(target).is_ok() {
+                if let Ok(local_addr) = socket.local_addr() {
+                    if let std::net::IpAddr::V4(ipv4) = local_addr.ip() {
+                        if !ipv4.is_loopback() && !ipv4.is_unspecified() && !ipv4.is_link_local() {
+                            let s = ipv4.to_string();
+                            if !addrs.contains(&s) {
+                                addrs.push(s);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Resolve hostname addresses
+    if let Some(host) = System::host_name() {
+        if let Ok(lookup) = (host.as_str(), 0).to_socket_addrs() {
+            for addr in lookup {
+                if let std::net::IpAddr::V4(ipv4) = addr.ip() {
+                    if !ipv4.is_loopback() && !ipv4.is_unspecified() && !ipv4.is_link_local() {
+                        let s = ipv4.to_string();
+                        if !addrs.contains(&s) {
+                            addrs.push(s);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    addrs
+}
+
 /// Starts the SuperAgent Core v2 Daemon server on the given host and port.
 pub async fn start_server(port: u16, host: &str, workspace_root: PathBuf, custom_ui_dir: Option<PathBuf>) -> Result<()> {
     let superagent_dir = get_superagent_dir();
@@ -1868,11 +1916,13 @@ pub async fn start_server(port: u16, host: &str, workspace_root: PathBuf, custom
 
     let app = create_router(state);
 
-    let bind_ip = if host == "0.0.0.0" {
-        [0, 0, 0, 0]
-    } else {
-        [127, 0, 0, 1]
-    };
+    let bind_ip: std::net::IpAddr = host.parse().unwrap_or_else(|_| {
+        if host == "0.0.0.0" || host.is_empty() {
+            std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)
+        } else {
+            std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+        }
+    });
     let addr = SocketAddr::from((bind_ip, port));
     info!("🚀 SuperAgent Core v2 Daemon listening on http://{}", addr);
 
@@ -1981,6 +2031,17 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_lan_addresses_format() {
+        let addrs = lan_addresses();
+        for addr in addrs {
+            assert!(!addr.is_empty());
+            let parsed: std::net::Ipv4Addr = addr.parse().expect("valid IPv4 string");
+            assert!(!parsed.is_loopback());
+            assert!(!parsed.is_unspecified());
+        }
     }
 }
 

@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { AgentEngine, type AgentEvent } from '../src/ai-engine';
+import { handleIpc } from '../src/server.js';
 
 /**
  * CERTAIN-4 smoke test: Web send message end-to-end.
@@ -298,7 +299,6 @@ describe('CERTAIN-4D: Web send error handling', () => {
 
 describe('CERTAIN-4E: Web IPC agent-run validation', () => {
   it('agent-run returns 400 when args is missing', async () => {
-    const { handleIpc } = await import('../src/server.js');
     const res: any = {
       statusCode: 200,
       body: undefined,
@@ -314,7 +314,6 @@ describe('CERTAIN-4E: Web IPC agent-run validation', () => {
   });
 
   it('agent-run returns 400 when args is not an array', async () => {
-    const { handleIpc } = await import('../src/server.js');
     const res: any = {
       statusCode: 200,
       body: undefined,
