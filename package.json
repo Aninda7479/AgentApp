@@ -44,14 +44,12 @@
     "build:desktop-ui": "npm run build:ui --workspace=@superagent/desktop",
     "build:ext": "npm run build --workspace=@superagent/browser-extension",
     "build": "npm run build:core && npm run build:ts-core && npm run build:ui && npm run build:desktop-ui && npm run build:cli && npm run build:web && npm run build:ext",
-
     "test:core": "cargo test --manifest-path packages/core_v2/Cargo.toml",
     "test:ui": "npm test --workspace=@superagent/ui",
     "test:cli": "npm test --workspace=@superagent/cli",
     "test:web": "npm test --workspace=@superagent/web",
     "test:ext": "npm test --workspace=@superagent/browser-extension",
     "test": "npm run test:core && npm run test:ui && npm run test:cli && npm run test:web && npm run test:ext",
-
     "check:core_v2": "cargo check --manifest-path packages/core_v2/Cargo.toml",
     "check:desktop": "cargo check --manifest-path packages/desktop/src-tauri/Cargo.toml",
     "check:rust": "npm run check:core_v2 && npm run check:desktop",
@@ -70,5 +68,5 @@
     "@vitest/coverage-v8": "^4.1.9",
     "concurrently": "^10.0.3"
   },
-  "version": "0.16.0"
+  "version": "0.17.0"
 }
