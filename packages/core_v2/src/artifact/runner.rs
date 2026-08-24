@@ -101,6 +101,99 @@ impl ArtifactRunner {
         fs::write(&manifest_file, json)?;
         Ok(dir)
     }
+
+    /// Deletes an artifact folder and its contents.
+    pub fn delete_artifact(&self, id: &str) -> Result<()> {
+        let dir = self.storage_dir.join(id);
+        if dir.exists() {
+            fs::remove_dir_all(&dir)?;
+        }
+        Ok(())
+    }
+
+    /// Ensures seed artifacts are created if the artifacts directory is empty.
+    pub fn ensure_seed_artifacts(&self) -> Result<()> {
+        let list = self.scan_artifacts();
+        if list.is_empty() {
+            let demo_manifest = ArtifactManifest {
+                name: "Interactive Demo".to_string(),
+                description: "SuperAgent built-in demo artifact".to_string(),
+                version: "1.0.0".to_string(),
+                artifact_type: "web".to_string(),
+                icon: Some("Sparkles".to_string()),
+                logo: None,
+                entry: "index.html".to_string(),
+                port: Some(3081),
+            };
+            let dir = self.create_artifact("demo-app", &demo_manifest)?;
+            let index_html = r#"<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>SuperAgent Demo</title></head>
+<body style="font-family: sans-serif; padding: 2rem; background: #0f172a; color: #f8fafc;">
+<h1>SuperAgent Artifact Runner</h1>
+<p>This micro-app is running safely inside SuperAgent Core v2 Daemon.</p>
+</body>
+</html>"#;
+            let _ = fs::write(dir.join("index.html"), index_html);
+        }
+        Ok(())
+    }
+
+    /// Returns the JSON storage for an artifact.
+    pub fn get_storage(&self, id: &str) -> serde_json::Value {
+        let file = self.storage_dir.join(id).join("storage.json");
+        if file.exists() {
+            if let Ok(raw) = fs::read_to_string(&file) {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) {
+                    return val;
+                }
+            }
+        }
+        serde_json::json!({})
+    }
+
+    /// Replaces the JSON storage for an artifact.
+    pub fn set_storage(&self, id: &str, data: serde_json::Value) -> Result<()> {
+        let dir = self.storage_dir.join(id);
+        fs::create_dir_all(&dir)?;
+        let file = dir.join("storage.json");
+        let json = serde_json::to_string_pretty(&data)?;
+        fs::write(file, json)?;
+        Ok(())
+    }
+
+    /// Sets a specific key in an artifact's storage.
+    pub fn set_storage_key(&self, id: &str, key: &str, val: serde_json::Value) -> Result<()> {
+        let mut cur = self.get_storage(id);
+        if let Some(obj) = cur.as_object_mut() {
+            obj.insert(key.to_string(), val);
+        } else {
+            let mut map = serde_json::Map::new();
+            map.insert(key.to_string(), val);
+            cur = serde_json::Value::Object(map);
+        }
+        self.set_storage(id, cur)
+    }
+
+    /// Deletes a specific key in an artifact's storage.
+    pub fn delete_storage_key(&self, id: &str, key: &str) -> Result<()> {
+        let mut cur = self.get_storage(id);
+        if let Some(obj) = cur.as_object_mut() {
+            obj.remove(key);
+            self.set_storage(id, cur)?;
+        }
+        Ok(())
+    }
+
+    /// Clears an artifact's storage.
+    pub fn clear_storage(&self, id: &str) -> Result<()> {
+        self.set_storage(id, serde_json::json!({}))
+    }
+
+    /// Returns recent logs for an artifact.
+    pub fn get_artifact_logs(&self, _id: &str, _limit: usize) -> Vec<String> {
+        vec!["[artifact] Ready".to_string()]
+    }
 }
 
 impl Default for ArtifactRunner {

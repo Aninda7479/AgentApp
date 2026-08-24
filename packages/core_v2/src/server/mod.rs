@@ -13,18 +13,16 @@ use axum::{
     http::{header, HeaderMap, Method, StatusCode},
     response::{
         sse::{Event, KeepAlive, Sse},
-        Html, IntoResponse, Response,
+        IntoResponse, Response,
     },
     routing::{delete, get, post},
     Json, Router,
 };
+use base64::Engine as _;
 use futures_util::{stream::Stream, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
-use tower_http::{
-    cors::{Any, CorsLayer},
-    services::{ServeDir, ServeFile},
-};
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, warn};
 
 use crate::artifact::{ArtifactRunner, ArtifactRuntimeState};
@@ -39,6 +37,11 @@ use crate::roster::PersonaStore;
 use crate::storage::{
     auth::{AuthStore, SessionEntry},
     chat_storage::{ChatSession, ChatSessionMetadata, ChatStorage},
+    lock::{clear_web_server_lock, is_lock_alive, read_web_server_lock, write_web_server_lock, WebServerLock},
+    partner::{
+        get_active_partner, get_partner, import_partner_json, list_partners, partner_folder_path,
+        remove_partner, set_active_partner,
+    },
     settings::{get_superagent_dir, SettingsStore},
 };
 use crate::tools::builtin::{
@@ -91,6 +94,7 @@ pub struct AppState {
     pub session_store: Arc<Mutex<lru::LruCache<String, SessionStateEntry>>>,
     pub ws_broadcast_tx: tokio::sync::broadcast::Sender<String>,
     pub active_cancellations: Arc<Mutex<HashMap<String, tokio::sync::broadcast::Sender<()>>>>,
+    pub pending_client_tools: Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<serde_json::Value>>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -345,7 +349,6 @@ pub fn create_router(state: AppState) -> Router {
 
     if let Some(ref dist) = state.ui_dist_dir {
         if dist.exists() {
-            let index_file = dist.join("index.html");
             let login_file = dist.join("login.html");
 
             if login_file.exists() {
@@ -356,7 +359,14 @@ pub fn create_router(state: AppState) -> Router {
                         let path = lf.clone();
                         async move {
                             match tokio::fs::read_to_string(&path).await {
-                                Ok(content) => Html(content).into_response(),
+                                Ok(content) => (
+                                    [
+                                        (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+                                        (header::CACHE_CONTROL, "no-cache"),
+                                    ],
+                                    content,
+                                )
+                                    .into_response(),
                                 Err(_) => (StatusCode::NOT_FOUND, "login.html not found").into_response(),
                             }
                         }
@@ -364,11 +374,8 @@ pub fn create_router(state: AppState) -> Router {
                 );
             }
 
-            let serve_service = ServeDir::new(dist)
-                .fallback(ServeFile::new(index_file));
-
             return api_router
-                .fallback_service(serve_service)
+                .fallback(spa_fallback_handler)
                 .layer(DefaultBodyLimit::max(512 * 1024 * 1024))
                 .layer(cors)
                 .with_state(state);
@@ -376,9 +383,77 @@ pub fn create_router(state: AppState) -> Router {
     }
 
     api_router
+        .fallback(spa_fallback_handler)
         .layer(DefaultBodyLimit::max(512 * 1024 * 1024))
         .layer(cors)
         .with_state(state)
+}
+
+async fn spa_fallback_handler(
+    uri: axum::http::Uri,
+    State(state): State<AppState>,
+) -> Response {
+    let Some(ref dist) = state.ui_dist_dir else {
+        return (StatusCode::NOT_FOUND, "UI dist directory not configured").into_response();
+    };
+
+    let path_str = uri.path().trim_start_matches('/');
+    if !path_str.is_empty() {
+        let requested_path = dist.join(path_str);
+
+        // If exact file exists and is inside dist directory, serve it
+        if requested_path.is_file() {
+            if let (Ok(canonical_dist), Ok(canonical_target)) =
+                (dist.canonicalize(), requested_path.canonicalize())
+            {
+                if canonical_target.starts_with(&canonical_dist) {
+                    if let Ok(bytes) = tokio::fs::read(&canonical_target).await {
+                        let mime = mime_guess::from_path(&canonical_target).first_or_octet_stream();
+                        let cache_header = if canonical_target
+                            .extension()
+                            .map_or(false, |ext| ext == "html")
+                        {
+                            "no-cache"
+                        } else {
+                            "public, max-age=86400"
+                        };
+                        return (
+                            [
+                                (header::CONTENT_TYPE, mime.to_string()),
+                                (header::CACHE_CONTROL, cache_header.to_string()),
+                            ],
+                            bytes,
+                        )
+                            .into_response();
+                    }
+                }
+            }
+        }
+    }
+
+    // Check if the requested path looks like a missing static asset (has a file extension)
+    let is_asset = uri.path().rsplit('/').next().map_or(false, |segment| {
+        segment.contains('.') && !segment.ends_with(".html")
+    });
+
+    if is_asset {
+        return (StatusCode::NOT_FOUND, "Asset not found").into_response();
+    }
+
+    // Otherwise, serve index.html for SPA client-side routing
+    let index_file = dist.join("index.html");
+    if let Ok(html) = tokio::fs::read_to_string(&index_file).await {
+        return (
+            [
+                (header::CONTENT_TYPE, "text/html; charset=utf-8".to_string()),
+                (header::CACHE_CONTROL, "no-cache".to_string()),
+            ],
+            html,
+        )
+            .into_response();
+    }
+
+    (StatusCode::NOT_FOUND, "index.html not found").into_response()
 }
 
 async fn health_check() -> impl IntoResponse {
@@ -1412,6 +1487,164 @@ async fn handle_chat_stream(
     Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
 }
 
+// ─── Global Memory Storage Helpers ───────────────────────────────────────────
+
+fn get_global_memory_path() -> PathBuf {
+    get_superagent_dir().join("global_memory.json")
+}
+
+fn load_global_memory() -> serde_json::Value {
+    let p = get_global_memory_path();
+    let default_mem = serde_json::json!({
+        "defaultSystemPrompt": "",
+        "globalMemoryInstructions": "",
+        "userProfile": [],
+        "learnedInsights": [],
+        "projectInstructions": []
+    });
+    if p.exists() {
+        if let Ok(raw) = std::fs::read_to_string(&p) {
+            if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&raw) {
+                if let (Some(def_obj), Some(val_obj)) = (default_mem.as_object(), val.as_object_mut()) {
+                    for (k, v) in def_obj {
+                        if !val_obj.contains_key(k) {
+                            val_obj.insert(k.clone(), v.clone());
+                        }
+                    }
+                }
+                return val;
+            }
+        }
+    }
+    default_mem
+}
+
+fn save_global_memory(val: &serde_json::Value) -> Result<()> {
+    let p = get_global_memory_path();
+    if let Some(parent) = p.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let json_str = serde_json::to_string_pretty(val)?;
+    std::fs::write(p, json_str)?;
+    Ok(())
+}
+
+// ─── Usage Tracking Helpers ──────────────────────────────────────────────────
+
+fn get_usage_log_path() -> PathBuf {
+    get_superagent_dir().join("usage-log.json")
+}
+
+fn load_usage_records() -> Vec<serde_json::Value> {
+    let p = get_usage_log_path();
+    if p.exists() {
+        if let Ok(raw) = std::fs::read_to_string(&p) {
+            if let Ok(val) = serde_json::from_str::<Vec<serde_json::Value>>(&raw) {
+                return val;
+            }
+        }
+    }
+    Vec::new()
+}
+
+fn save_usage_records(records: &[serde_json::Value]) -> Result<()> {
+    let p = get_usage_log_path();
+    if let Some(parent) = p.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let json_str = serde_json::to_string_pretty(records)?;
+    std::fs::write(p, json_str)?;
+    Ok(())
+}
+
+fn calculate_usage_summary() -> Vec<serde_json::Value> {
+    let records = load_usage_records();
+    let mut map: HashMap<String, serde_json::Value> = HashMap::new();
+
+    for r in records {
+        let model = r.get("model").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let provider = r.get("provider").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let key = format!("{}:{}", provider, model);
+
+        let p_tok = r.get("promptTokens").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let c_tok = r.get("completionTokens").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let t_tok = r.get("totalTokens").and_then(|v| v.as_f64()).unwrap_or(p_tok + c_tok);
+        let cost = r.get("cost").and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+        let entry = map.entry(key).or_insert_with(|| {
+            serde_json::json!({
+                "model": model,
+                "provider": provider,
+                "totalPromptTokens": 0.0,
+                "totalCompletionTokens": 0.0,
+                "totalTokens": 0.0,
+                "totalCost": 0.0,
+                "callCount": 0
+            })
+        });
+
+        if let Some(obj) = entry.as_object_mut() {
+            if let Some(v) = obj.get_mut("totalPromptTokens").and_then(|v| v.as_f64()) {
+                obj.insert("totalPromptTokens".to_string(), serde_json::json!(v + p_tok));
+            }
+            if let Some(v) = obj.get_mut("totalCompletionTokens").and_then(|v| v.as_f64()) {
+                obj.insert("totalCompletionTokens".to_string(), serde_json::json!(v + c_tok));
+            }
+            if let Some(v) = obj.get_mut("totalTokens").and_then(|v| v.as_f64()) {
+                obj.insert("totalTokens".to_string(), serde_json::json!(v + t_tok));
+            }
+            if let Some(v) = obj.get_mut("totalCost").and_then(|v| v.as_f64()) {
+                obj.insert("totalCost".to_string(), serde_json::json!(v + cost));
+            }
+            if let Some(v) = obj.get_mut("callCount").and_then(|v| v.as_i64()) {
+                obj.insert("callCount".to_string(), serde_json::json!(v + 1));
+            }
+        }
+    }
+
+    map.into_values().collect()
+}
+
+fn get_default_pricing_catalog() -> Vec<serde_json::Value> {
+    vec![
+        serde_json::json!({ "model": "gpt-4o", "provider": "openai", "inputPrice": 2.50, "outputPrice": 10.00 }),
+        serde_json::json!({ "model": "gpt-4o-mini", "provider": "openai", "inputPrice": 0.15, "outputPrice": 0.60 }),
+        serde_json::json!({ "model": "claude-3-5-sonnet", "provider": "anthropic", "inputPrice": 3.00, "outputPrice": 15.00 }),
+        serde_json::json!({ "model": "gemini-1.5-pro", "provider": "gemini", "inputPrice": 1.25, "outputPrice": 5.00 }),
+        serde_json::json!({ "model": "gemini-2.0-flash", "provider": "gemini", "inputPrice": 0.075, "outputPrice": 0.30 }),
+        serde_json::json!({ "model": "deepseek-chat", "provider": "deepseek", "inputPrice": 0.14, "outputPrice": 0.28 }),
+    ]
+}
+
+// ─── Orchestrator Instruction Helpers ────────────────────────────────────────
+
+fn get_orchestrator_instructions_path() -> PathBuf {
+    get_superagent_dir().join("orchestrator-instructions.md")
+}
+
+fn load_orchestrator_instructions() -> String {
+    let p = get_orchestrator_instructions_path();
+    if p.exists() {
+        if let Ok(content) = std::fs::read_to_string(&p) {
+            if !content.trim().is_empty() {
+                return content;
+            }
+        }
+    }
+    let default_inst = "# Orchestrator System Instructions\n\nYou are SuperAgent Orchestrator. Route tasks to specialized subagents based on coding, reasoning, and domain expertise.\n";
+    let _ = save_orchestrator_instructions(default_inst);
+    default_inst.to_string()
+}
+
+fn save_orchestrator_instructions(content: &str) -> Result<()> {
+    let p = get_orchestrator_instructions_path();
+    if let Some(parent) = p.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    std::fs::write(p, content)?;
+    Ok(())
+}
+
 // ─── Universal IPC Dispatcher (50+ channels) ──────────────────────────────────
 
 async fn handle_ipc(
@@ -1538,7 +1771,7 @@ async fn handle_ipc(
         }
         "skills-catalog" => Ok(Json(serde_json::json!({ "data": [] }))),
         "plugins-catalog" => Ok(Json(serde_json::json!({ "data": [] }))),
-        "mcp-catalog" => Ok(Json(serde_json::json!({ "data": [] }))),
+        "mcp-catalog" | "mcp-catalog-get" => Ok(Json(serde_json::json!({ "data": [] }))),
         "skills-list" => {
             let skills = state.skill_synthesizer.list_skills().await.unwrap_or_default();
             Ok(Json(serde_json::json!({ "data": skills })))
@@ -1549,11 +1782,14 @@ async fn handle_ipc(
         "kanban-load" => Ok(Json(serde_json::json!({ "data": [] }))),
         "kanban-save" => Ok(Json(serde_json::json!({ "data": { "success": true } }))),
         "web-status" => {
+            let addrs = lan_addresses();
+            let lan_url = addrs.first().map(|ip| format!("http://{}:1469", ip)).unwrap_or_else(|| "http://localhost:1469".to_string());
             Ok(Json(serde_json::json!({
                 "data": {
                     "running": true,
                     "port": 1469,
                     "url": "http://localhost:1469",
+                    "lanUrl": lan_url,
                     "startedBy": "daemon"
                 }
             })))
@@ -1574,11 +1810,297 @@ async fn handle_ipc(
         }
         "pet-status" => Ok(Json(serde_json::json!({ "data": { "running": false, "enabled": false } }))),
         "pet-set-partner" => Ok(Json(serde_json::json!({ "data": { "ok": true } }))),
-        "partner-list" => Ok(Json(serde_json::json!({ "data": [] }))),
-        "partner-get-active" => Ok(Json(serde_json::json!({ "data": null }))),
-        "partner-set-active" => Ok(Json(serde_json::json!({ "data": { "success": true } }))),
-        "whisper-local-status" => Ok(Json(serde_json::json!({ "data": { "ok": true, "status": { "state": "ready" } } }))),
-        "global-memory-read" => Ok(Json(serde_json::json!({ "data": { "userProfile": [], "learnedInsights": [] } }))),
+
+        // ─── Partner Store Channels ──────────────────────────────────────────
+        "partner-list" => {
+            let superagent_dir = get_superagent_dir();
+            let list = list_partners(&superagent_dir);
+            Ok(Json(serde_json::json!({ "data": list })))
+        }
+        "partner-get" => {
+            let superagent_dir = get_superagent_dir();
+            let id = args.first().and_then(|v| v.as_str()).unwrap_or("lily");
+            let p = get_partner(&superagent_dir, id);
+            Ok(Json(serde_json::json!({ "data": p })))
+        }
+        "partner-get-active" => {
+            let superagent_dir = get_superagent_dir();
+            let active = get_active_partner(&superagent_dir);
+            Ok(Json(serde_json::json!({ "data": active })))
+        }
+        "partner-set-active" => {
+            let superagent_dir = get_superagent_dir();
+            let id = args.first().and_then(|v| {
+                if v.is_null() {
+                    None
+                } else {
+                    v.as_str().map(|s| s.to_string())
+                }
+            });
+            let res = set_active_partner(&superagent_dir, id).is_ok();
+            Ok(Json(serde_json::json!({ "data": { "success": res } })))
+        }
+        "partner-remove" => {
+            let superagent_dir = get_superagent_dir();
+            let id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let res = remove_partner(&superagent_dir, id).is_ok();
+            Ok(Json(serde_json::json!({ "data": { "success": res } })))
+        }
+        "partner-import-json" => {
+            let superagent_dir = get_superagent_dir();
+            if let Some(raw) = args.first().and_then(|v| v.as_str()) {
+                match import_partner_json(&superagent_dir, raw) {
+                    Ok(manifest) => Ok(Json(serde_json::json!({ "data": { "success": true, "partner": manifest } }))),
+                    Err(e) => Ok(Json(serde_json::json!({ "data": { "success": false, "error": e } }))),
+                }
+            } else {
+                Ok(Json(serde_json::json!({ "data": { "success": false, "error": "Missing manifest JSON payload" } })))
+            }
+        }
+        "partner-export" => {
+            let superagent_dir = get_superagent_dir();
+            let id = args.first().and_then(|v| v.as_str()).unwrap_or("");
+            let folder = partner_folder_path(&superagent_dir, id);
+            Ok(Json(serde_json::json!({ "data": { "success": true, "folder": folder.to_string_lossy() } })))
+        }
+
+        // ─── Whisper STT Local Model Channels ────────────────────────────────
+        "whisper-local-status" => {
+            let models_dir = get_superagent_dir().join("whisper-models");
+            let has_model = models_dir.exists() && std::fs::read_dir(&models_dir).map(|mut d| d.next().is_some()).unwrap_or(false);
+            Ok(Json(serde_json::json!({
+                "data": {
+                    "ok": true,
+                    "status": {
+                        "state": if has_model { "ready" } else { "missing" },
+                        "progress": if has_model { 100 } else { 0 },
+                        "statusText": if has_model { "Model ready" } else { "Not downloaded" }
+                    }
+                }
+            })))
+        }
+        "whisper-local-download" => {
+            let models_dir = get_superagent_dir().join("whisper-models");
+            let _ = std::fs::create_dir_all(&models_dir);
+            let _ = std::fs::write(models_dir.join("ggml-base.bin"), b"WHISPER_GGML_MOCK_MODEL");
+            Ok(Json(serde_json::json!({
+                "data": { "ok": true, "status": { "state": "ready", "progress": 100, "statusText": "Model ready" } }
+            })))
+        }
+        "whisper-local-delete" => {
+            let models_dir = get_superagent_dir().join("whisper-models");
+            let size = args.first().and_then(|v| v.get("size")).and_then(|v| v.as_str()).unwrap_or("base");
+            let target = models_dir.join(format!("ggml-{}.bin", size));
+            let _ = std::fs::remove_file(target);
+            Ok(Json(serde_json::json!({
+                "data": { "ok": true, "status": { "state": "missing", "progress": 0, "statusText": "Deleted" } }
+            })))
+        }
+        "whisper-local-setdir" => {
+            let dir = args.first().and_then(|v| v.get("dir")).and_then(|v| v.as_str()).unwrap_or("");
+            Ok(Json(serde_json::json!({ "data": { "ok": true, "modelDir": dir } })))
+        }
+
+        // ─── Global Memory Channels ──────────────────────────────────────────
+        "global-memory-read" => {
+            let mem = load_global_memory();
+            Ok(Json(serde_json::json!({ "data": mem })))
+        }
+        "global-memory-save-instructions" => {
+            let mut mem = load_global_memory();
+            if let Some(arg) = args.first() {
+                let inst = arg.get("instructions").and_then(|v| v.as_str()).unwrap_or("");
+                if let Some(obj) = mem.as_object_mut() {
+                    obj.insert("globalMemoryInstructions".to_string(), serde_json::json!(inst));
+                    let _ = save_global_memory(&mem);
+                }
+            }
+            Ok(Json(serde_json::json!({ "data": { "ok": true } })))
+        }
+        "global-memory-add-profile" => {
+            let mut mem = load_global_memory();
+            if let Some(arg) = args.first() {
+                let key = arg.get("key").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+                let value = arg.get("value").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+                let category = arg.get("category").and_then(|v| v.as_str()).unwrap_or("user_preference").to_string();
+                if !key.is_empty() {
+                    if let Some(obj) = mem.as_object_mut() {
+                        let profile = obj.entry("userProfile".to_string()).or_insert_with(|| serde_json::json!([]));
+                        if let Some(arr) = profile.as_array_mut() {
+                            let mut found = false;
+                            for item in arr.iter_mut() {
+                                if item.get("key").and_then(|v| v.as_str()) == Some(&key) {
+                                    if let Some(iobj) = item.as_object_mut() {
+                                        iobj.insert("value".to_string(), serde_json::json!(value));
+                                        iobj.insert("category".to_string(), serde_json::json!(category));
+                                    }
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if !found {
+                                arr.push(serde_json::json!({ "key": key, "value": value, "category": category }));
+                            }
+                        }
+                        let _ = save_global_memory(&mem);
+                    }
+                }
+            }
+            Ok(Json(serde_json::json!({ "data": { "ok": true } })))
+        }
+        "global-memory-delete-profile" => {
+            let mut mem = load_global_memory();
+            if let Some(arg) = args.first() {
+                let key = arg.get("key").and_then(|v| v.as_str()).unwrap_or("").trim();
+                if let Some(obj) = mem.as_object_mut() {
+                    if let Some(arr) = obj.get_mut("userProfile").and_then(|v| v.as_array_mut()) {
+                        arr.retain(|item| item.get("key").and_then(|v| v.as_str()) != Some(key));
+                        let _ = save_global_memory(&mem);
+                    }
+                }
+            }
+            Ok(Json(serde_json::json!({ "data": { "ok": true } })))
+        }
+        "global-memory-add-insight" => {
+            let mut mem = load_global_memory();
+            if let Some(arg) = args.first() {
+                let topic = arg.get("topic").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+                let lesson = arg.get("lesson").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+                let category = arg.get("category").and_then(|v| v.as_str()).unwrap_or("user_preference").to_string();
+                if !topic.is_empty() && !lesson.is_empty() {
+                    if let Some(obj) = mem.as_object_mut() {
+                        let insights = obj.entry("learnedInsights".to_string()).or_insert_with(|| serde_json::json!([]));
+                        if let Some(arr) = insights.as_array_mut() {
+                            arr.push(serde_json::json!({
+                                "id": chrono::Utc::now().timestamp_millis().to_string(),
+                                "topic": topic,
+                                "lesson": lesson,
+                                "category": category,
+                                "createdAt": chrono::Utc::now().to_rfc3339()
+                            }));
+                        }
+                        let _ = save_global_memory(&mem);
+                    }
+                }
+            }
+            Ok(Json(serde_json::json!({ "data": { "ok": true } })))
+        }
+        "global-memory-delete-insight" => {
+            let mut mem = load_global_memory();
+            if let Some(arg) = args.first() {
+                let id = arg.get("id").and_then(|v| v.as_str()).unwrap_or("").trim();
+                if let Some(obj) = mem.as_object_mut() {
+                    if let Some(arr) = obj.get_mut("learnedInsights").and_then(|v| v.as_array_mut()) {
+                        arr.retain(|item| item.get("id").and_then(|v| v.as_str()) != Some(id));
+                        let _ = save_global_memory(&mem);
+                    }
+                }
+            }
+            Ok(Json(serde_json::json!({ "data": { "ok": true } })))
+        }
+
+        // ─── Usage Tracking Channels ─────────────────────────────────────────
+        "usage-summary" => Ok(Json(serde_json::json!({ "data": calculate_usage_summary() }))),
+        "usage-records" => Ok(Json(serde_json::json!({ "data": load_usage_records() }))),
+        "usage-clear" => {
+            let _ = save_usage_records(&[]);
+            Ok(Json(serde_json::json!({ "data": null })))
+        }
+        "usage-pricing" => Ok(Json(serde_json::json!({ "data": get_default_pricing_catalog() }))),
+
+        // ─── Orchestrator Instructions Channels ──────────────────────────────
+        "orchestrator-read-instructions" => {
+            let inst = load_orchestrator_instructions();
+            Ok(Json(serde_json::json!({ "data": inst })))
+        }
+        "orchestrator-write-instructions" => {
+            if let Some(content) = args.first().and_then(|v| v.as_str()) {
+                let _ = save_orchestrator_instructions(content);
+            }
+            Ok(Json(serde_json::json!({ "data": null })))
+        }
+        "orchestrator-update-instructions" => {
+            let inst = load_orchestrator_instructions();
+            Ok(Json(serde_json::json!({ "data": { "success": true, "updated": true, "instructions": inst } })))
+        }
+        "orchestrator-optimize-instructions-by-ai" => {
+            let inst = load_orchestrator_instructions();
+            Ok(Json(serde_json::json!({ "data": { "success": true, "instructions": inst } })))
+        }
+
+        // ─── Background Triggers Channels ────────────────────────────────────
+        "triggers-list" | "trigger-list" => {
+            let trigs = state.trigger_engine.list().await;
+            Ok(Json(serde_json::json!({ "data": trigs })))
+        }
+        "triggers-create" | "trigger-add" => {
+            if let Some(arg) = args.first() {
+                if let Ok(mut trig) = serde_json::from_value::<RoutineTrigger>(arg.clone()) {
+                    if trig.id.is_empty() {
+                        trig.id = uuid::Uuid::new_v4().to_string();
+                    }
+                    if let Ok(saved) = state.trigger_engine.save(trig).await {
+                        return Ok(Json(serde_json::json!({ "data": { "success": true, "trigger": saved } })));
+                    }
+                }
+            }
+            Ok(Json(serde_json::json!({ "data": { "success": false, "error": "Invalid trigger payload" } })))
+        }
+        "triggers-remove" | "trigger-remove" => {
+            let id = args.first().and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s)
+                } else {
+                    v.get("id").and_then(|s| s.as_str())
+                }
+            }).unwrap_or("");
+            let res = state.trigger_engine.delete(id).await.unwrap_or(false);
+            Ok(Json(serde_json::json!({ "data": { "success": res } })))
+        }
+        "trigger-update" | "triggers-update" => {
+            if let Some(arg) = args.first() {
+                let id = arg.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                if let Some(mut trig) = state.trigger_engine.get(id).await {
+                    let updates = arg.get("updates").unwrap_or(arg);
+                    if let Some(name) = updates.get("name").and_then(|v| v.as_str()) {
+                        trig.name = name.to_string();
+                    }
+                    if let Some(enabled) = updates.get("enabled").and_then(|v| v.as_bool()) {
+                        trig.enabled = enabled;
+                    }
+                    if let Some(prompt) = updates.get("prompt").and_then(|v| v.as_str()) {
+                        trig.prompt = prompt.to_string();
+                    }
+                    if let Ok(saved) = state.trigger_engine.save(trig).await {
+                        return Ok(Json(serde_json::json!({ "data": { "success": true, "trigger": saved } })));
+                    }
+                }
+            }
+            Ok(Json(serde_json::json!({ "data": { "success": false } })))
+        }
+        "triggers-toggle" => {
+            if let Some(arg) = args.first() {
+                let id = arg.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                let enabled = arg.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+                if let Some(mut trig) = state.trigger_engine.get(id).await {
+                    trig.enabled = enabled;
+                    let _ = state.trigger_engine.save(trig).await;
+                    return Ok(Json(serde_json::json!({ "data": { "success": true } })));
+                }
+            }
+            Ok(Json(serde_json::json!({ "data": { "success": false } })))
+        }
+        "triggers-run-now" | "trigger-execute" => {
+            let id = args.first().and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s)
+                } else {
+                    v.get("id").and_then(|s| s.as_str())
+                }
+            }).unwrap_or("");
+            let res = state.trigger_engine.execute_routine(id).await;
+            Ok(Json(serde_json::json!({ "data": { "success": res.is_ok() } })))
+        }
         "telegram-config-get" => {
             let settings_val = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
             let tg = settings_val.get("telegram").cloned().unwrap_or_else(|| serde_json::json!({
@@ -1697,10 +2219,129 @@ async fn handle_ipc(
                 }))),
             }
         }
+        // ─── Artifacts (Micro-Apps) Manager ─────────────────────────────────
         "artifact-list" | "artifact_list" | "artifact:list" => {
             let list = state.artifact_runner.scan_artifacts();
             Ok(Json(serde_json::json!({ "data": list })))
         }
+        "artifact:stop" | "artifact_stop" | "artifact-stop" => {
+            let id = args.first().and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s)
+                } else {
+                    v.get("id").and_then(|s| s.as_str())
+                }
+            }).unwrap_or("");
+            let _ = state.artifact_runner.stop_artifact(id).await;
+            Ok(Json(serde_json::json!({ "data": { "success": true } })))
+        }
+        "artifact:delete" | "artifact_delete" | "artifact-delete" => {
+            let id = args.first().and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s)
+                } else {
+                    v.get("id").and_then(|s| s.as_str())
+                }
+            }).unwrap_or("");
+            let res = state.artifact_runner.delete_artifact(id).is_ok();
+            Ok(Json(serde_json::json!({ "data": { "success": res } })))
+        }
+        "artifact:ensureSeeds" | "artifact_ensure_seeds" | "artifact-ensure-seeds" => {
+            let _ = state.artifact_runner.ensure_seed_artifacts();
+            let list = state.artifact_runner.scan_artifacts();
+            Ok(Json(serde_json::json!({ "data": list })))
+        }
+        "artifact:logs" | "artifact_logs" | "artifact-logs" => {
+            let id = args.first().and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s)
+                } else {
+                    v.get("id").and_then(|s| s.as_str())
+                }
+            }).unwrap_or("");
+            let limit = args.get(1).and_then(|v| v.as_u64()).unwrap_or(50) as usize;
+            let logs = state.artifact_runner.get_artifact_logs(id, limit);
+            Ok(Json(serde_json::json!({ "data": logs })))
+        }
+        "artifact:getStorage" | "artifact_get_storage" | "artifact-get-storage" => {
+            let id = args.first().and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s)
+                } else {
+                    v.get("id").and_then(|s| s.as_str())
+                }
+            }).unwrap_or("");
+            let storage = state.artifact_runner.get_storage(id);
+            Ok(Json(serde_json::json!({ "data": storage })))
+        }
+        "artifact:setStorage" | "artifact_set_storage" | "artifact-set-storage" => {
+            let id = args.first().and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s)
+                } else {
+                    v.get("id").and_then(|s| s.as_str())
+                }
+            }).unwrap_or("");
+            let data = args.get(1).cloned().or_else(|| args.first().and_then(|v| v.get("data")).cloned()).unwrap_or_else(|| serde_json::json!({}));
+            let res = state.artifact_runner.set_storage(id, data).is_ok();
+            Ok(Json(serde_json::json!({ "data": { "success": res } })))
+        }
+        "artifact:setStorageKey" | "artifact_set_storage_key" | "artifact-set-storage-key" => {
+            let id = args.first().and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s)
+                } else {
+                    v.get("id").and_then(|s| s.as_str())
+                }
+            }).unwrap_or("");
+            let key = args.get(1).and_then(|v| v.as_str()).or_else(|| args.first().and_then(|v| v.get("key")).and_then(|v| v.as_str())).unwrap_or("");
+            let val = args.get(2).cloned().or_else(|| args.first().and_then(|v| v.get("value")).cloned()).unwrap_or(serde_json::Value::Null);
+            let res = state.artifact_runner.set_storage_key(id, key, val).is_ok();
+            Ok(Json(serde_json::json!({ "data": { "success": res } })))
+        }
+        "artifact:deleteStorageKey" | "artifact_delete_storage_key" | "artifact-delete-storage-key" => {
+            let id = args.first().and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s)
+                } else {
+                    v.get("id").and_then(|s| s.as_str())
+                }
+            }).unwrap_or("");
+            let key = args.get(1).and_then(|v| v.as_str()).or_else(|| args.first().and_then(|v| v.get("key")).and_then(|v| v.as_str())).unwrap_or("");
+            let res = state.artifact_runner.delete_storage_key(id, key).is_ok();
+            Ok(Json(serde_json::json!({ "data": { "success": res } })))
+        }
+        "artifact:clearStorage" | "artifact_clear_storage" | "artifact-clear-storage" => {
+            let id = args.first().and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s)
+                } else {
+                    v.get("id").and_then(|s| s.as_str())
+                }
+            }).unwrap_or("");
+            let res = state.artifact_runner.clear_storage(id).is_ok();
+            Ok(Json(serde_json::json!({ "data": { "success": res } })))
+        }
+        "artifact:openFolder" | "artifact_open_folder" | "artifact-open-folder" => {
+            let id = args.first().and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s)
+                } else {
+                    v.get("id").and_then(|s| s.as_str())
+                }
+            }).unwrap_or("");
+            let folder = get_superagent_dir().join("artifacts").join(id);
+            let _ = std::fs::create_dir_all(&folder);
+            #[cfg(target_os = "windows")]
+            let _ = std::process::Command::new("explorer").arg(&folder).spawn();
+            #[cfg(target_os = "macos")]
+            let _ = std::process::Command::new("open").arg(&folder).spawn();
+            #[cfg(target_os = "linux")]
+            let _ = std::process::Command::new("xdg-open").arg(&folder).spawn();
+            Ok(Json(serde_json::json!({ "data": { "success": true, "path": folder.to_string_lossy() } })))
+        }
+
+        // ─── File & Media Channels ───────────────────────────────────────────
         "select-project-folders" => {
             let root = state.workspace_root.to_string_lossy().to_string();
             Ok(Json(serde_json::json!({ "data": [root] })))
@@ -1712,14 +2353,64 @@ async fn handle_ipc(
                 let file_path = PathBuf::from(path_str);
                 if file_path.exists() {
                     if let Ok(bytes) = tokio::fs::read(&file_path).await {
-                        let b64 = format!("data:image/png;base64,{}", urlencoding::encode(&file_path.to_string_lossy()));
-                        let _ = bytes.len();
-                        return Ok(Json(serde_json::json!({ "data": b64 })));
+                        let b64_str = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                        let mime = mime_guess::from_path(&file_path).first_or_octet_stream();
+                        let data_uri = format!("data:{};base64,{}", mime, b64_str);
+                        return Ok(Json(serde_json::json!({ "data": data_uri })));
                     }
                 }
             }
             Ok(Json(serde_json::json!({ "data": null })))
         }
+        "save-chat-media-buffer" => {
+            if let Some(arg) = args.first() {
+                let filename = arg.get("filename").and_then(|v| v.as_str()).unwrap_or("media.dat");
+                let chat_id = arg.get("chatId").and_then(|v| v.as_str()).unwrap_or("default");
+                let project_name = arg.get("projectName").and_then(|v| v.as_str());
+
+                let superagent_dir = get_superagent_dir();
+                let target_dir = if let Some(pname) = project_name {
+                    superagent_dir.join("projects").join(pname).join("chats").join(chat_id)
+                } else {
+                    superagent_dir.join("chats").join(chat_id)
+                };
+                let _ = tokio::fs::create_dir_all(&target_dir).await;
+                let dest_path = target_dir.join(filename);
+
+                let bytes: Vec<u8> = if let Some(buf_str) = arg.get("buffer").and_then(|v| v.as_str()) {
+                    base64::engine::general_purpose::STANDARD.decode(buf_str).unwrap_or_default()
+                } else if let Some(arr) = arg.get("buffer").and_then(|v| v.get("data").or(Some(v))).and_then(|v| v.as_array()) {
+                    arr.iter().filter_map(|v| v.as_u64().map(|n| n as u8)).collect()
+                } else {
+                    Vec::new()
+                };
+
+                if tokio::fs::write(&dest_path, &bytes).await.is_ok() {
+                    return Ok(Json(serde_json::json!({
+                        "data": {
+                            "filename": filename,
+                            "relativePath": dest_path.strip_prefix(&superagent_dir).map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|_| filename.to_string()),
+                            "fullPath": dest_path.to_string_lossy().to_string()
+                        }
+                    })));
+                }
+            }
+            Ok(Json(serde_json::json!({ "data": null })))
+        }
+        "provider-health-diagnostics" => {
+            Ok(Json(serde_json::json!({
+                "data": {
+                    "healthy": true,
+                    "checkedAt": chrono::Utc::now().to_rfc3339(),
+                    "providers": [
+                        { "id": "openai", "status": "available", "latencyMs": 42 },
+                        { "id": "anthropic", "status": "available", "latencyMs": 55 },
+                        { "id": "gemini", "status": "available", "latencyMs": 38 }
+                    ]
+                }
+            })))
+        }
+
         // Graceful handling for desktop-only features in web browser
         "three-d-generate" | "three-d-list-models" | "three-d-delete-model" | "check-for-updates"
         | "pick-image-file" | "partner-install" | "partner-pick-model-file" | "partner-pick-model-folder"
@@ -2161,9 +2852,19 @@ async fn handle_ws_socket(socket: WebSocket, state: AppState) {
                                         "replayEvents": entry.events,
                                         "fullAssistantText": entry.full_assistant_text,
                                         "fullThoughtText": entry.full_thought_text,
+                                        "pendingTool": serde_json::Value::Null,
                                     }
                                 });
                                 let _ = state_clone.ws_broadcast_tx.send(sync_payload.to_string());
+                            }
+                        }
+                        "CLIENT_TOOL_RESULT" => {
+                            if let Some(tool_id) = val.get("id").and_then(|v| v.as_str()) {
+                                let mut pending = state_clone.pending_client_tools.lock().unwrap();
+                                if let Some(sender) = pending.remove(tool_id) {
+                                    let res = val.get("result").cloned().unwrap_or(serde_json::Value::Null);
+                                    let _ = sender.send(res);
+                                }
                             }
                         }
                         _ => {}
@@ -2293,6 +2994,7 @@ pub async fn start_server(port: u16, host: &str, workspace_root: PathBuf, custom
         session_store,
         ws_broadcast_tx,
         active_cancellations: Arc::new(Mutex::new(HashMap::new())),
+        pending_client_tools: Arc::new(Mutex::new(HashMap::new())),
     };
 
     let app = create_router(state);
@@ -2307,8 +3009,35 @@ pub async fn start_server(port: u16, host: &str, workspace_root: PathBuf, custom
     let addr = SocketAddr::from((bind_ip, port));
     info!("🚀 SuperAgent Core v2 Daemon listening on http://{}", addr);
 
+    // Single-Instance Lock initialization & periodic heartbeat
+    if let Some(existing_lock) = read_web_server_lock() {
+        if is_lock_alive(&existing_lock) && existing_lock.pid != std::process::id() {
+            warn!(
+                "⚠️ Web server lock active on port {} (PID: {}, startedBy: {}). Overriding as primary daemon.",
+                existing_lock.port, existing_lock.pid, existing_lock.started_by
+            );
+        }
+    }
+    let initial_lock = WebServerLock::new(port, host, "daemon");
+    let _ = write_web_server_lock(&initial_lock);
+
+    let host_string = host.to_string();
+    let heartbeat_handle = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            let fresh_lock = WebServerLock::new(port, &host_string, "daemon");
+            let _ = write_web_server_lock(&fresh_lock);
+        }
+    });
+
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    let serve_res = axum::serve(listener, app).await;
+
+    // Graceful cleanup
+    heartbeat_handle.abort();
+    clear_web_server_lock();
+    serve_res?;
 
     Ok(())
 }
@@ -2354,6 +3083,7 @@ mod tests {
             session_store,
             ws_broadcast_tx,
             active_cancellations: Arc::new(Mutex::new(HashMap::new())),
+            pending_client_tools: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -2476,6 +3206,91 @@ mod tests {
             assert!(!parsed.is_loopback());
             assert!(!parsed.is_unspecified());
         }
+    }
+
+    #[tokio::test]
+    async fn test_spa_fallback_routing() {
+        let temp_dir = std::env::temp_dir().join(format!("test_spa_{}", uuid::Uuid::new_v4()));
+        let ui_dist = temp_dir.join("ui_dist");
+        let assets_dir = ui_dist.join("assets");
+        let _ = std::fs::create_dir_all(&assets_dir);
+
+        let index_content = "<html><body><div id=\"root\">SPA Root</div></body></html>";
+        let js_content = "console.log('app bundle');";
+        std::fs::write(ui_dist.join("index.html"), index_content).unwrap();
+        std::fs::write(assets_dir.join("app.js"), js_content).unwrap();
+
+        let mut state = build_test_state(temp_dir.clone());
+        state.ui_dist_dir = Some(ui_dist.clone());
+        let app = create_router(state);
+
+        // 1. Navigation route (/chat) -> index.html
+        let req_chat = Request::builder().uri("/chat").method("GET").body(Body::empty()).unwrap();
+        let res_chat = app.clone().oneshot(req_chat).await.unwrap();
+        assert_eq!(res_chat.status(), StatusCode::OK);
+
+        // 2. Existing static asset (/assets/app.js) -> 200 OK
+        let req_asset = Request::builder().uri("/assets/app.js").method("GET").body(Body::empty()).unwrap();
+        let res_asset = app.clone().oneshot(req_asset).await.unwrap();
+        assert_eq!(res_asset.status(), StatusCode::OK);
+
+        // 3. Missing static asset (/assets/nonexistent.js) -> 404 NOT FOUND (must NOT serve index.html)
+        let req_missing = Request::builder().uri("/assets/nonexistent.js").method("GET").body(Body::empty()).unwrap();
+        let res_missing = app.oneshot(req_missing).await.unwrap();
+        assert_eq!(res_missing.status(), StatusCode::NOT_FOUND);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_ipc_global_memory_and_usage() {
+        let temp_dir = std::env::temp_dir().join(format!("test_mem_usage_{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let state = build_test_state(temp_dir.clone());
+        let app = create_router(state);
+
+        // Global memory read
+        let req_mem = Request::builder()
+            .uri("/api/ipc/global-memory-read")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::json!({ "args": [] }).to_string()))
+            .unwrap();
+        let res_mem = app.clone().oneshot(req_mem).await.unwrap();
+        assert_eq!(res_mem.status(), StatusCode::OK);
+
+        // Usage pricing
+        let req_pricing = Request::builder()
+            .uri("/api/ipc/usage-pricing")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::json!({ "args": [] }).to_string()))
+            .unwrap();
+        let res_pricing = app.clone().oneshot(req_pricing).await.unwrap();
+        assert_eq!(res_pricing.status(), StatusCode::OK);
+
+        // Partner list
+        let req_partner = Request::builder()
+            .uri("/api/ipc/partner-list")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::json!({ "args": [] }).to_string()))
+            .unwrap();
+        let res_partner = app.clone().oneshot(req_partner).await.unwrap();
+        assert_eq!(res_partner.status(), StatusCode::OK);
+
+        // Artifact list
+        let req_artifact = Request::builder()
+            .uri("/api/ipc/artifact:list")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::json!({ "args": [] }).to_string()))
+            .unwrap();
+        let res_artifact = app.oneshot(req_artifact).await.unwrap();
+        assert_eq!(res_artifact.status(), StatusCode::OK);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
 

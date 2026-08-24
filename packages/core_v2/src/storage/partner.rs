@@ -223,3 +223,24 @@ pub fn remove_partner(user_data: &Path, id: &str) -> Result<(), String> {
     }
     Ok(())
 }
+
+pub fn partner_folder_path(user_data: &Path, id: &str) -> PathBuf {
+    get_partners_dir(user_data).join(id)
+}
+
+pub fn import_partner_json(user_data: &Path, raw_json: &str) -> Result<PartnerManifest, String> {
+    let mut manifest: PartnerManifest = serde_json::from_str(raw_json).map_err(|e| format!("Invalid JSON: {}", e))?;
+    if !is_valid_manifest(&manifest) {
+        return Err("Invalid partner manifest format or schema".to_string());
+    }
+    if manifest.id == "lily" {
+        return Err("Cannot overwrite default partner 'lily'".to_string());
+    }
+    let target_dir = partner_folder_path(user_data, &manifest.id);
+    fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+    let manifest_path = target_dir.join("partner.json");
+    let json_str = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
+    fs::write(&manifest_path, json_str).map_err(|e| e.to_string())?;
+    manifest.folder = Some(target_dir.to_string_lossy().to_string());
+    Ok(manifest)
+}
