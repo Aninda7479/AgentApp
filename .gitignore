@@ -13,6 +13,8 @@ jspm_packages/
 target/
 # Build and distribution outputs
 dist/
+ui-dist/
+packages/core_v2/ui-dist/
 dist-release/
 dist-release-app/
 packages/cli/dist-release-cli/

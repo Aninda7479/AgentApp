@@ -11,7 +11,7 @@ import { useAgentMentions } from '../hooks/useAgentMentions';
 import { TaskRecorderModal } from './TaskRecorderModal';
 import type { ComposerOptions, ComposerAttachment } from '../core/types';
 import { getIpc } from '../lib/ipc';
-import { useLastUsedModel } from '../stores/providerStore';
+import { useLastUsedModel, providerStore } from '../stores/providerStore';
 
 interface ComposerBarProps {
   onSend: (prompt: string, options: ComposerOptions, attachments: ComposerAttachment[]) => void;
@@ -337,7 +337,16 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
           <div className="flex items-center gap-2">
             <ModelPicker
               selectedModel={lastUsedModel}
-              onSelectModel={() => {}}
+              onSelectModel={(model) => {
+                providerStore.setLastUsedModel(model);
+                const ipc = getIpc();
+                if (ipc) {
+                  ipc.invoke('settings-read').then((s: any) => {
+                    const next = { ...(s || {}), lastUsedModel: { model } };
+                    return ipc.invoke('settings-save', next);
+                  }).catch(() => {});
+                }
+              }}
               orchestratorEnabled={orchestratorEnabled}
             />
 

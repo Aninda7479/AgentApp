@@ -90,6 +90,7 @@ pub struct AppState {
     pub skill_synthesizer: Arc<SkillSynthesizer>,
     pub session_store: Arc<Mutex<lru::LruCache<String, SessionStateEntry>>>,
     pub ws_broadcast_tx: tokio::sync::broadcast::Sender<String>,
+    pub active_cancellations: Arc<Mutex<HashMap<String, tokio::sync::broadcast::Sender<()>>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -182,11 +183,15 @@ pub fn find_ui_dist_dir(workspace_root: &Path) -> Option<PathBuf> {
         }
     }
     let candidates = [
+        workspace_root.join("packages").join("core_v2").join("ui-dist"),
+        workspace_root.join("core_v2").join("ui-dist"),
         workspace_root.join("packages").join("ui").join("dist"),
         workspace_root.join("ui").join("dist"),
         workspace_root.join("web-dist"),
         workspace_root.join("packages").join("web").join("dist"),
         workspace_root.join("dist"),
+        PathBuf::from("packages/core_v2/ui-dist"),
+        PathBuf::from("core_v2/ui-dist"),
         PathBuf::from("packages/ui/dist"),
         PathBuf::from("ui/dist"),
         PathBuf::from("web-dist"),
@@ -1728,6 +1733,372 @@ async fn handle_ipc(
                 }
             })))
         }
+        "agent-run" => {
+            let arg = match args.first() {
+                Some(a) => a,
+                None => {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        Json(serde_json::json!({
+                            "error": "Channel \"agent-run\" requires a payload argument."
+                        })),
+                    ));
+                }
+            };
+
+            let session_id = arg
+                .get("sessionId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("default-session")
+                .to_string();
+            let prompt = arg.get("prompt").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let config_val = arg.get("config").cloned().unwrap_or_else(|| serde_json::json!({}));
+
+            let mut provider_str = config_val
+                .get("provider")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let mut model_str = config_val
+                .get("model")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let mut api_key = config_val
+                .get("apiKey")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            let base_url = config_val
+                .get("baseUrl")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            let instructions = config_val
+                .get("instructions")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            let raw_settings = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
+
+            // If model is Orchestrator, auto, or empty, resolve first enabled from settings
+            if model_str.is_empty() || model_str == "Orchestrator" || model_str == "auto" || model_str == "Model Governance" {
+                if let Some(models) = raw_settings.get("models").and_then(|m| m.as_array()) {
+                    if let Some(first_enabled) = models.iter().find(|m| m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false)) {
+                        if let Some(id) = first_enabled.get("id").and_then(|v| v.as_str()) {
+                            model_str = id.to_string();
+                        }
+                        if let Some(pid) = first_enabled.get("providerId").and_then(|v| v.as_str()) {
+                            provider_str = pid.to_string();
+                        }
+                    }
+                }
+            }
+
+            // Check settings models list to resolve display names or provider prefix
+            if let Some(models) = raw_settings.get("models").and_then(|m| m.as_array()) {
+                if let Some(match_model) = models.iter().find(|m| {
+                    m.get("name").and_then(|v| v.as_str()) == Some(&model_str)
+                        || m.get("id").and_then(|v| v.as_str()) == Some(&model_str)
+                }) {
+                    if let Some(pid) = match_model.get("providerId").and_then(|v| v.as_str()) {
+                        provider_str = pid.to_string();
+                    }
+                    if let Some(id) = match_model.get("id").and_then(|v| v.as_str()) {
+                        model_str = id.to_string();
+                    }
+                }
+            }
+
+            // Strip provider prefix from model if present (e.g. "gemini-gemini-1.5-pro" -> "gemini-1.5-pro")
+            if !provider_str.is_empty() {
+                let prefix = format!("{}-", provider_str);
+                if model_str.starts_with(&prefix) {
+                    model_str = model_str[prefix.len()..].to_string();
+                }
+            }
+
+            // Fallback API key from settings providers
+            if api_key.is_none() && !provider_str.is_empty() {
+                if let Some(providers) = raw_settings.get("providers").and_then(|p| p.as_array()) {
+                    if let Some(prov) = providers.iter().find(|p| {
+                        let id = p.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                        id == provider_str || (provider_str == "gemini" && id == "google") || (provider_str == "google" && id == "gemini")
+                    }) {
+                        if let Some(key) = prov.get("apiKey").and_then(|v| v.as_str()) {
+                            if !key.is_empty() {
+                                api_key = Some(key.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Fallback to get_api_key
+            if api_key.is_none() && !provider_str.is_empty() {
+                if let Ok(Some(k)) = state.settings_store.get_api_key(&provider_str) {
+                    if !k.is_empty() {
+                        api_key = Some(k);
+                    }
+                }
+            }
+
+            let provider_type = match provider_str.to_lowercase().as_str() {
+                "anthropic" | "claude" => ProviderType::Anthropic,
+                "gemini" | "google" => ProviderType::Gemini,
+                "ollama" => ProviderType::Ollama,
+                "openrouter" => ProviderType::OpenRouter,
+                "deepseek" => ProviderType::DeepSeek,
+                "groq" => ProviderType::Groq,
+                _ => ProviderType::OpenAI,
+            };
+
+            if model_str.is_empty() {
+                model_str = match provider_type {
+                    ProviderType::Anthropic => "claude-3-5-sonnet-20241022".to_string(),
+                    ProviderType::Gemini => "gemini-1.5-pro".to_string(),
+                    ProviderType::Ollama => "llama3".to_string(),
+                    ProviderType::DeepSeek => "deepseek-chat".to_string(),
+                    ProviderType::Groq => "llama-3.3-70b-versatile".to_string(),
+                    _ => "gpt-4o".to_string(),
+                };
+            }
+
+            // Fallback to environment variables if still no API key
+            if api_key.is_none() {
+                api_key = match provider_type {
+                    ProviderType::OpenAI => std::env::var("OPENAI_API_KEY").ok(),
+                    ProviderType::Anthropic => std::env::var("ANTHROPIC_API_KEY").ok(),
+                    ProviderType::Gemini => std::env::var("GEMINI_API_KEY").ok(),
+                    ProviderType::OpenRouter => std::env::var("OPENROUTER_API_KEY").ok(),
+                    ProviderType::DeepSeek => std::env::var("DEEPSEEK_API_KEY").ok(),
+                    ProviderType::Groq => std::env::var("GROQ_API_KEY").ok(),
+                    _ => None,
+                };
+            }
+
+            let mut model_config = ModelConfig::new(provider_type, model_str);
+            model_config.api_key = api_key;
+            model_config.base_url = base_url;
+
+            let (cancel_tx, mut cancel_rx) = tokio::sync::broadcast::channel::<()>(2);
+            {
+                let mut cancellations = state.active_cancellations.lock().unwrap();
+                cancellations.insert(session_id.clone(), cancel_tx);
+            }
+
+            let state_clone = state.clone();
+            let sid = session_id.clone();
+            let prompt_clone = prompt.clone();
+
+            tokio::spawn(async move {
+                // 1. Mark session running in session_store
+                {
+                    let mut store = state_clone.session_store.lock().unwrap();
+                    if let Some(entry) = store.get_mut(&sid) {
+                        entry.is_running = true;
+                        entry.events.clear();
+                        entry.full_assistant_text.clear();
+                        entry.full_thought_text.clear();
+                        entry.last_updated = chrono::Utc::now().timestamp_millis();
+                    } else {
+                        store.put(
+                            sid.clone(),
+                            SessionStateEntry {
+                                events: Vec::new(),
+                                is_running: true,
+                                full_assistant_text: String::new(),
+                                full_thought_text: String::new(),
+                                last_updated: chrono::Utc::now().timestamp_millis(),
+                            },
+                        );
+                    }
+                }
+
+                // 2. Broadcast context event
+                let ctx_evt = serde_json::json!({
+                    "channel": "agent-event",
+                    "data": {
+                        "type": "context",
+                        "sessionId": sid,
+                        "context": { "used": 0, "limit": 128000, "pct": 0 }
+                    }
+                });
+                let _ = state_clone.ws_broadcast_tx.send(ctx_evt.to_string());
+
+                let engine = AgentEngine::new(state_clone.tool_registry.clone());
+                let sys_prompt = if instructions.is_empty() {
+                    "You are SuperAgent, an expert autonomous AI software engineer and problem solver.".to_string()
+                } else {
+                    instructions
+                };
+
+                let run_result = engine.run_loop(&model_config, &sys_prompt, &prompt_clone).await;
+                let mut did_emit_done = false;
+
+                match run_result {
+                    Ok(mut rx) => {
+                        loop {
+                            tokio::select! {
+                                _ = cancel_rx.recv() => {
+                                    let abort_evt = serde_json::json!({
+                                        "channel": "agent-event",
+                                        "data": {
+                                            "type": "abort",
+                                            "sessionId": sid
+                                        }
+                                    });
+                                    let _ = state_clone.ws_broadcast_tx.send(abort_evt.to_string());
+                                    did_emit_done = true;
+                                    break;
+                                }
+                                event_opt = rx.recv() => {
+                                    match event_opt {
+                                        Some(event) => {
+                                            let mut data_obj = serde_json::json!({
+                                                "sessionId": sid,
+                                            });
+
+                                            match &event {
+                                                crate::types::AgentEvent::Token { text } => {
+                                                    data_obj["type"] = serde_json::json!("token");
+                                                    data_obj["content"] = serde_json::json!(text);
+                                                }
+                                                crate::types::AgentEvent::ToolCall { name, input, .. } => {
+                                                    data_obj["type"] = serde_json::json!("tool_call");
+                                                    data_obj["toolName"] = serde_json::json!(name);
+                                                    data_obj["toolArgs"] = input.clone();
+                                                }
+                                                crate::types::AgentEvent::ToolOutput { output, .. } => {
+                                                    data_obj["type"] = serde_json::json!("tool_result");
+                                                    data_obj["toolResult"] = serde_json::json!(output);
+                                                }
+                                                crate::types::AgentEvent::Error { message } => {
+                                                    data_obj["type"] = serde_json::json!("error");
+                                                    data_obj["error"] = serde_json::json!(message);
+                                                    did_emit_done = true;
+                                                }
+                                                crate::types::AgentEvent::Finished { .. } => {
+                                                    data_obj["type"] = serde_json::json!("done");
+                                                    did_emit_done = true;
+                                                }
+                                                _ => {
+                                                    data_obj["type"] = serde_json::json!("token");
+                                                    data_obj["content"] = serde_json::json!("");
+                                                }
+                                            }
+
+                                            // Record text in session store
+                                            {
+                                                let mut store = state_clone.session_store.lock().unwrap();
+                                                if let Some(entry) = store.get_mut(&sid) {
+                                                    if let Some(c) = data_obj.get("content").and_then(|v| v.as_str()) {
+                                                        entry.full_assistant_text.push_str(c);
+                                                    }
+                                                    entry.last_updated = chrono::Utc::now().timestamp_millis();
+                                                }
+                                            }
+
+                                            let broadcast_msg = serde_json::json!({
+                                                "channel": "agent-event",
+                                                "data": data_obj
+                                            });
+                                            let _ = state_clone.ws_broadcast_tx.send(broadcast_msg.to_string());
+                                        }
+                                        None => {
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        let err_msg = serde_json::json!({
+                            "channel": "agent-event",
+                            "data": {
+                                "type": "error",
+                                "sessionId": sid,
+                                "error": err.to_string()
+                            }
+                        });
+                        let _ = state_clone.ws_broadcast_tx.send(err_msg.to_string());
+                        did_emit_done = true;
+                    }
+                }
+
+                if !did_emit_done {
+                    let done_msg = serde_json::json!({
+                        "channel": "agent-event",
+                        "data": {
+                            "type": "done",
+                            "sessionId": sid
+                        }
+                    });
+                    let _ = state_clone.ws_broadcast_tx.send(done_msg.to_string());
+                }
+
+                // Mark session idle & clean cancellation token
+                {
+                    let mut store = state_clone.session_store.lock().unwrap();
+                    if let Some(entry) = store.get_mut(&sid) {
+                        entry.is_running = false;
+                        entry.last_updated = chrono::Utc::now().timestamp_millis();
+                    }
+                    let mut cancellations = state_clone.active_cancellations.lock().unwrap();
+                    cancellations.remove(&sid);
+                }
+            });
+
+            Ok(Json(serde_json::json!({
+                "data": {
+                    "status": "started",
+                    "sessionId": session_id
+                }
+            })))
+        }
+        "agent-stop" => {
+            let session_id = args.first().and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s.to_string())
+                } else {
+                    v.get("sessionId").and_then(|s| s.as_str()).map(|s| s.to_string())
+                }
+            }).unwrap_or_default();
+
+            {
+                let cancellations = state.active_cancellations.lock().unwrap();
+                if let Some(tx) = cancellations.get(&session_id) {
+                    let _ = tx.send(());
+                }
+            }
+
+            {
+                let mut store = state.session_store.lock().unwrap();
+                if let Some(entry) = store.get_mut(&session_id) {
+                    entry.is_running = false;
+                }
+            }
+
+            let stop_msg = serde_json::json!({
+                "channel": "agent-event",
+                "data": {
+                    "type": "abort",
+                    "sessionId": session_id
+                }
+            });
+            let _ = state.ws_broadcast_tx.send(stop_msg.to_string());
+
+            Ok(Json(serde_json::json!({ "data": { "stopped": true } })))
+        }
+        "agent-list" => {
+            let store = state.session_store.lock().unwrap();
+            let sessions: Vec<String> = store.iter().filter(|(_, v)| v.is_running).map(|(k, _)| k.clone()).collect();
+            Ok(Json(serde_json::json!({ "data": { "sessions": sessions } })))
+        }
+        "agent-permission-response" => Ok(Json(serde_json::json!({ "data": { "success": true } }))),
+        "agent-compact" => Ok(Json(serde_json::json!({ "data": { "compacted": false, "tokensBefore": 0, "tokensAfter": 0 } }))),
         _ => {
             warn!("IPC channel not found: {}", ch);
             Ok(Json(serde_json::json!({ "data": null })))
@@ -1912,6 +2283,7 @@ pub async fn start_server(port: u16, host: &str, workspace_root: PathBuf, custom
         skill_synthesizer,
         session_store,
         ws_broadcast_tx,
+        active_cancellations: Arc::new(Mutex::new(HashMap::new())),
     };
 
     let app = create_router(state);
@@ -1972,6 +2344,7 @@ mod tests {
             skill_synthesizer,
             session_store,
             ws_broadcast_tx,
+            active_cancellations: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -2029,6 +2402,58 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_ipc_agent_run_and_stop() {
+        let temp_dir = std::env::temp_dir().join(format!("test_ipc_agent_{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let state = build_test_state(temp_dir.clone());
+        let app = create_router(state.clone());
+
+        // Test 400 when payload is missing
+        let req_bad = Request::builder()
+            .uri("/api/ipc/agent-run")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::json!({ "args": [] }).to_string()))
+            .unwrap();
+        let res_bad = app.clone().oneshot(req_bad).await.unwrap();
+        assert_eq!(res_bad.status(), StatusCode::BAD_REQUEST);
+
+        // Test starting an agent run
+        let req_start = Request::builder()
+            .uri("/api/ipc/agent-run")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::json!({
+                "args": [{
+                    "sessionId": "test-session-123",
+                    "prompt": "Hello test agent",
+                    "config": {
+                        "model": "gpt-4o",
+                        "provider": "openai"
+                    }
+                }]
+            }).to_string()))
+            .unwrap();
+        let res_start = app.clone().oneshot(req_start).await.unwrap();
+        assert_eq!(res_start.status(), StatusCode::OK);
+
+        // Test stopping an agent run
+        let req_stop = Request::builder()
+            .uri("/api/ipc/agent-stop")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::json!({
+                "args": ["test-session-123"]
+            }).to_string()))
+            .unwrap();
+        let res_stop = app.oneshot(req_stop).await.unwrap();
+        assert_eq!(res_stop.status(), StatusCode::OK);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

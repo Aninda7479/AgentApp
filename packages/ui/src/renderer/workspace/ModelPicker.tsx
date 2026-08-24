@@ -20,6 +20,12 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
 
   const effectiveModel = selectedModel || lastUsedModel || allModels[0]?.name || '';
 
+  const handleSelect = (modelName: string) => {
+    providerStore.setLastUsedModel(modelName);
+    onSelectModel(modelName);
+    setIsOpen(false);
+  };
+
   const updateCoords = () => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
@@ -101,17 +107,14 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
         >
           {orchestratorEnabled && (
             <div
-              onClick={() => {
-                onSelectModel('Orchestrator');
-                setIsOpen(false);
-              }}
+              onClick={() => handleSelect('Orchestrator')}
               className="flex items-center justify-between p-2 rounded-xl hover:bg-brand-hover cursor-pointer text-xs transition-colors text-brand-textMain"
             >
               <div className="flex items-center gap-2">
                 <Sparkles size={14} className="text-cyan-400" />
                 <span className="font-semibold text-cyan-300">AI Orchestrator</span>
               </div>
-              {displayLabel === 'Orchestrator' && <Check size={14} className="text-cyan-400" />}
+              {(displayLabel === 'Orchestrator' || effectiveModel === 'Orchestrator') && <Check size={14} className="text-cyan-400" />}
             </div>
           )}
 
@@ -128,21 +131,21 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
               <div className="px-2 py-1 text-[10px] font-mono text-brand-textMuted uppercase tracking-wider">
                 {provider.name}
               </div>
-              {models.map((m) => (
-                <div
-                  key={m.id}
-                  onClick={() => {
-                    onSelectModel(m.name);
-                    setIsOpen(false);
-                  }}
-                  className={`flex items-center justify-between p-2 rounded-xl hover:bg-brand-hover cursor-pointer text-xs transition-colors ${
-                    displayLabel === m.name ? 'text-brand-textMain font-semibold bg-brand-hover-strong' : 'text-brand-textMuted'
-                  }`}
-                >
-                  <span className="truncate">{m.name}</span>
-                  {displayLabel === m.name && <Check size={14} className="text-cyan-400" />}
-                </div>
-              ))}
+              {models.map((m) => {
+                const isSelected = displayLabel === m.name || effectiveModel === m.name || effectiveModel === m.id;
+                return (
+                  <div
+                    key={m.id}
+                    onClick={() => handleSelect(m.name)}
+                    className={`flex items-center justify-between p-2 rounded-xl hover:bg-brand-hover cursor-pointer text-xs transition-colors ${
+                      isSelected ? 'text-brand-textMain font-semibold bg-brand-hover-strong' : 'text-brand-textMuted'
+                    }`}
+                  >
+                    <span className="truncate">{m.name}</span>
+                    {isSelected && <Check size={14} className="text-cyan-400" />}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>,
