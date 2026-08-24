@@ -38,21 +38,18 @@ async function run() {
   fs.mkdirSync(packDir, { recursive: true });
   fs.mkdirSync(outDir, { recursive: true });
 
-  // 2. Create staging package.json with all production dependencies of CLI, Web, and Core combined
+  // 2. Create staging package.json with all production dependencies of CLI and Core combined
   console.log('[pack] Creating staging package.json...');
   const cliPkg = JSON.parse(fs.readFileSync(path.join(cliDir, 'package.json'), 'utf8'));
   const corePkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages', 'core', 'package.json'), 'utf8'));
-  const webPkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages', 'web', 'package.json'), 'utf8'));
 
   const combinedDeps = {
     ...corePkg.dependencies,
-    ...webPkg.dependencies,
     ...cliPkg.dependencies
   };
   // Remove monorepo workspace dependencies as they are bundled/handled manually
   delete combinedDeps['@superagent/core'];
   delete combinedDeps['@superagent/ui'];
-  delete combinedDeps['@superagent/web'];
 
   const stagingPkg = {
     name: 'superagent-cli-pack',
@@ -63,10 +60,7 @@ async function run() {
       scripts: [
         'bundle.cjs'
       ],
-      assets: [
-        'web-dist/**/*',
-        'node_modules/@superagent/web/dist/**/*'
-      ]
+      assets: []
     },
     dependencies: {
       ...combinedDeps,
@@ -99,21 +93,12 @@ async function run() {
     '--prefer-offline'
   ], { cwd: packDir });
 
-  // 4. Copy compiled core and web files into staged node_modules
-  console.log('[pack] Linking staged core and web packages...');
+  // 4. Copy compiled core files into staged node_modules
+  console.log('[pack] Linking staged core package...');
   const stagedCoreDir = path.join(packDir, 'node_modules', '@superagent', 'core');
   fs.mkdirSync(stagedCoreDir, { recursive: true });
   fs.cpSync(path.join(repoRoot, 'packages', 'core', 'dist'), path.join(stagedCoreDir, 'dist'), { recursive: true });
   fs.copyFileSync(path.join(repoRoot, 'packages', 'core', 'package.json'), path.join(stagedCoreDir, 'package.json'));
-
-  const stagedWebDir = path.join(packDir, 'node_modules', '@superagent', 'web');
-  fs.mkdirSync(stagedWebDir, { recursive: true });
-  fs.cpSync(path.join(repoRoot, 'packages', 'web', 'dist'), path.join(stagedWebDir, 'dist'), { recursive: true });
-  fs.copyFileSync(path.join(repoRoot, 'packages', 'web', 'package.json'), path.join(stagedWebDir, 'package.json'));
-
-  const stagedWebDistDir = path.join(packDir, 'web-dist');
-  fs.mkdirSync(stagedWebDistDir, { recursive: true });
-  fs.cpSync(path.join(repoRoot, 'packages', 'web', 'dist'), stagedWebDistDir, { recursive: true });
 
   // Patch ink reconciler top-level await to prevent esbuild syntax errors when compiling to CJS
   console.log('[pack] Patching ink reconciler devtools import in root and staging folders...');

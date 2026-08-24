@@ -199,10 +199,9 @@ if (isWatch) {
     stdio: 'inherit',
   });
 
-  // Sync to secondary non-Tauri destinations if necessary (e.g. core_v2 / web)
+  // Sync to secondary non-Tauri destinations (e.g. core_v2)
   const syncTargets = [
     path.resolve(ROOT, '../core_v2/ui-dist'),
-    path.resolve(ROOT, '../web/dist'),
   ];
   for (const target of syncTargets) {
     try {

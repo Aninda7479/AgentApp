@@ -24,7 +24,7 @@ if (process.argv.includes('--models')) {
 }
 
 if (process.env.SUPERAGENT_INTERNAL_WEB_SERVER === '1' || process.argv.includes('--internal-web-server')) {
-  import('@superagent/web').catch((err) => {
+  startWebServer({ startedBy: 'cli' }).catch((err) => {
     console.error('[web-server] Failed to start web server:', err?.stack || err);
     process.exit(1);
   });

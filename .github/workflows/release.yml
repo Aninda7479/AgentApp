@@ -101,9 +101,6 @@ jobs:
       - name: Build @superagent/desktop UI
         run: npm run build:ui --workspace=@superagent/desktop
 
-      - name: Build @superagent/web (needed for --serve inside the desktop)
-        run: npm run build --workspace=@superagent/web
-
       - name: Build & bundle Tauri app
         uses: tauri-apps/tauri-action@v1
         env:
@@ -117,7 +114,7 @@ jobs:
           prerelease: false
           args: --target ${{ matrix.target }}
 
-  # ── Step 2: Build self-contained standalone binaries for CLI + Web server ────
+  # ── Step 2: Build self-contained standalone binaries for CLI ────
   build-cli-binary:
     needs: version
     runs-on: windows-latest
@@ -134,11 +131,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build core, desktop UI, web & cli packages
+      - name: Build core, desktop UI, & cli packages
         run: |
           npm run build --workspace=@superagent/core
           npm run build:desktop-ui
-          npm run build --workspace=@superagent/web
           npm run build --workspace=@superagent/cli
 
       - name: Build standalone binaries via pack.mjs

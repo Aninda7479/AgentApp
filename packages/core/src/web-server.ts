@@ -43,28 +43,14 @@ export interface StartWebServerOptions {
 }
 
 /**
- * Resolves the absolute path to the web server's compiled entry point.
- * Resolution order (first hit wins):
- *   1. `SUPERAGENT_WEB_SERVER_PATH` env override (explicit path to server.js).
- *   2. Packaged Desktop build: `<resourcesPath>/web/server.js`.
- *   3. Monorepo dev layout: walk up from this file to find
- *      `packages/web/dist/server.js`.
- *   4. Published package resolution: `require.resolve('@superagent/web')`.
- *
- * Returns `null` when no candidate can be found (caller should surface a
- * helpful "build the web package first" message).
- */
-/**
  * Resolves the absolute path or binary execution info for the web server daemon.
  *
  * Resolution order:
  *   1. `SUPERAGENT_CORE_DAEMON_PATH` / `SUPERAGENT_WEB_SERVER_PATH` env override.
  *   2. Native Rust daemon binary in core_v2 target (debug / release).
- *   3. Packaged Desktop resources: `<resourcesPath>/bin/superagent-core-daemon` or `<resourcesPath>/web/server.js`.
+ *   3. Packaged Desktop resources: `<resourcesPath>/bin/superagent-core-daemon`.
  *   4. Monorepo dev layout: walk up to find `packages/core_v2/target/release/superagent-core-daemon(.exe)`
- *      or `packages/core_v2/target/debug/superagent-core-daemon(.exe)`
- *      or `packages/web/dist/server.js`.
- *   5. Published package resolution: `require.resolve('@superagent/web')`.
+ *      or `packages/core_v2/target/debug/superagent-core-daemon(.exe)`.
  */
 export interface WebServerEntry {
   type: 'binary' | 'node';
@@ -91,14 +77,9 @@ export function locateWebServerEntry(): WebServerEntry | null {
     if (fs.existsSync(nativeBin)) return { type: 'binary', executable: nativeBin };
     const nativeRoot = path.join(resourcesPath, binName);
     if (fs.existsSync(nativeRoot)) return { type: 'binary', executable: nativeRoot };
-
-    const packed = path.join(resourcesPath, 'web', 'server.js');
-    if (fs.existsSync(packed)) return { type: 'node', executable: packed };
-    const packedDist = path.join(resourcesPath, 'web', 'dist', 'server.js');
-    if (fs.existsSync(packedDist)) return { type: 'node', executable: packedDist };
   }
 
-  // Monorepo dev: walk up looking for Rust core_v2 target binaries or packages/web/dist/server.js
+  // Monorepo dev: walk up looking for Rust core_v2 target binaries
   let dir = __dirname;
   for (let i = 0; i < 12; i++) {
     const releaseBin = path.join(dir, 'packages', 'core_v2', 'target', 'release', binName);
@@ -113,21 +94,9 @@ export function locateWebServerEntry(): WebServerEntry | null {
     const rootTargetDebug = path.join(dir, 'target', 'debug', binName);
     if (fs.existsSync(rootTargetDebug)) return { type: 'binary', executable: rootTargetDebug };
 
-    const nodeCandidate = path.join(dir, 'packages', 'web', 'dist', 'server.js');
-    if (fs.existsSync(nodeCandidate)) return { type: 'node', executable: nodeCandidate };
-
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
-  }
-
-  // Published layout
-  try {
-    const req = createRequire(__filename);
-    const resolved = req.resolve('@superagent/web');
-    return { type: 'node', executable: resolved };
-  } catch {
-    /* not installed as a dependency — fall through */
   }
 
   return null;
