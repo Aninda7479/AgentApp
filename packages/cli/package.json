@@ -28,10 +28,10 @@
     ]
   },
   "scripts": {
-    "build": "tsc",
-    "prepublishOnly": "npm run build",
-    "start": "node dist/bin/main.js",
-    "test": "vitest run",
+    "build": "cargo build -p superagent-cli --release",
+    "prepublishOnly": "cargo build -p superagent-cli --release",
+    "start": "cargo run -p superagent-cli --",
+    "test": "cargo test -p superagent-cli",
     "pack": "node scripts/pack.mjs"
   },
   "dependencies": {

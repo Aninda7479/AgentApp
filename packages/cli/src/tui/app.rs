@@ -98,6 +98,8 @@ pub struct AppState {
     pub start_time: Option<std::time::Instant>,
 }
 
+use superagent_core_v2::storage::SettingsStore;
+
 impl AppState {
     pub fn new(
         provider: Option<String>,
@@ -108,8 +110,44 @@ impl AppState {
         workspace_root: PathBuf,
         resume_id: Option<String>,
     ) -> Self {
-        let prov = provider.unwrap_or_else(|| "openai".to_string());
-        let mod_id = model.unwrap_or_else(|| "gpt-4o".to_string());
+        let (prov, mod_id, key, url) = {
+            let settings = SettingsStore::new().load_raw().unwrap_or_default();
+            let mut p = provider;
+            let mut m = model;
+            let mut k = api_key;
+            let mut u = base_url;
+
+            if p.is_none() || m.is_none() {
+                if let Some(last_used) = settings.get("lastUsedModel") {
+                    if p.is_none() {
+                        p = last_used.get("provider").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    }
+                    if m.is_none() {
+                        m = last_used.get("model").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    }
+                }
+            }
+
+            if p.is_none() {
+                if let Some(prov_arr) = settings.get("providers").and_then(|v| v.as_array()) {
+                    if let Some(first_prov) = prov_arr.first() {
+                        p = first_prov.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        if m.is_none() {
+                            m = first_prov.get("defaultModel").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        }
+                        if k.is_none() {
+                            k = first_prov.get("apiKey").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        }
+                        if u.is_none() {
+                            u = first_prov.get("baseUrl").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        }
+                    }
+                }
+            }
+
+            (p.unwrap_or_default(), m.unwrap_or_default(), k, u)
+        };
+
         let session_id = resume_id.clone().unwrap_or_else(generate_session_id);
 
         let skills = get_runnable_skills(&workspace_root);
@@ -138,6 +176,13 @@ impl AppState {
         let engine = Arc::new(AgentEngine::new(Arc::new(registry)));
 
         let mut messages = Vec::new();
+
+        let has_model = !prov.is_empty() && !mod_id.is_empty();
+        let welcome_text = if has_model {
+            format!("Welcome to SuperAgent Terminal — {}/{}. Type a prompt or / for skills.", prov, mod_id)
+        } else {
+            "Welcome to SuperAgent Terminal — no model selected. Type a prompt, or / for skills & commands.\n⚠ No AI provider or model is connected. Run `/model` to pick a model or `/model set <provider/model>` (e.g. `/model set ollama/qwen2.5-coder`).".to_string()
+        };
 
         // Check if resuming existing session
         if let Some(ref res_id) = resume_id {
@@ -170,7 +215,7 @@ impl AppState {
                 messages.push(UiMessage {
                     id: "sys-welcome".to_string(),
                     role: MessageRole::System,
-                    content: format!("Welcome to SuperAgent Terminal — {}/{}. Type a prompt or / for skills.", prov, mod_id),
+                    content: welcome_text,
                     tool_calls: Vec::new(),
                     is_streaming: false,
                     timestamp: Utc::now(),
@@ -180,7 +225,7 @@ impl AppState {
             messages.push(UiMessage {
                 id: "sys-welcome".to_string(),
                 role: MessageRole::System,
-                content: format!("Welcome to SuperAgent Terminal — {}/{}. Type a prompt or / for skills.", prov, mod_id),
+                content: welcome_text,
                 tool_calls: Vec::new(),
                 is_streaming: false,
                 timestamp: Utc::now(),
@@ -194,8 +239,8 @@ impl AppState {
             permission,
             provider: prov,
             model: mod_id,
-            api_key,
-            base_url,
+            api_key: key,
+            base_url: url,
             workspace_root,
             session_id,
             is_busy: false,

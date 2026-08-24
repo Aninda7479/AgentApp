@@ -214,18 +214,18 @@ export interface AppProps {
 }
 
 /** Claude-Code-style startup banner: name/version, active model + effort, cwd. */
-const Banner: React.FC<{ provider: string; model: string; cwd: string }> = ({ provider, model, cwd }) => (
-  // Uses only universally-supported box-drawing characters (single border)
-  // instead of quadrant-block glyphs (▟ ▙) that render as garbage in many
-  // terminals.
-  <Box flexDirection="column" marginBottom={1}>
-    <Box borderStyle="single" borderColor="cyan" paddingX={1} flexDirection="column">
-      <Text bold color="cyan">{'SuperAgent Terminal'}</Text>
-      <Text dimColor color="gray">{`${provider}/${model} · effort xhigh`}</Text>
-      <Text dimColor color="gray">{cwd}</Text>
+const Banner: React.FC<{ provider: string; model: string; cwd: string }> = ({ provider, model, cwd }) => {
+  const modelText = (provider || model) ? `${provider || 'unknown'}/${model || 'none'}` : 'no model configured';
+  return (
+    <Box flexDirection="column" marginBottom={1}>
+      <Box borderStyle="single" borderColor="cyan" paddingX={1} flexDirection="column">
+        <Text bold color="cyan">{'SuperAgent Terminal'}</Text>
+        <Text dimColor color="gray">{`${modelText} · effort xhigh`}</Text>
+        <Text dimColor color="gray">{cwd}</Text>
+      </Box>
     </Box>
-  </Box>
-);
+  );
+};
 
 /**
  * Main SuperAgent Terminal TUI (Claude-Code style): a pinned, bottom-anchored
@@ -267,10 +267,11 @@ export const App: React.FC<AppProps> = ({
     const conn = initialConn;
     const restored = initialMessages && initialMessages.length > 0 ? initialMessages : [];
     const msgs: UiMessage[] = [...restored];
+    const modelDisplay = (conn.provider || conn.model) ? `${conn.provider || 'unknown'}/${conn.model || 'none'}` : 'no model selected';
     msgs.push({
       id: 'sys-welcome',
       role: 'system',
-      content: `Welcome to SuperAgent Terminal — ${conn.provider || 'no model'}/${conn.model || 'selected'}. Type a prompt, or / for skills & commands.`,
+      content: `Welcome to SuperAgent Terminal — ${modelDisplay}. Type a prompt, or / for skills & commands.`,
     });
     if (restored.length > 0) {
       msgs.push({
@@ -555,9 +556,9 @@ export const App: React.FC<AppProps> = ({
         c.supportsTools ? 'Tools' : null,
         c.supportsReasoning ? 'Reasoning' : null,
       ].filter(Boolean) as string[],
-      isCurrent: c.id === chatRef.current.model && c.provider === chatRef.current.provider,
+      isCurrent: Boolean(chatRef.current.model) && c.id === chatRef.current.model && c.provider === chatRef.current.provider,
     }));
-    if (!items.find((i) => i.id === chatRef.current.model)) {
+    if (chatRef.current.model && !items.find((i) => i.id === chatRef.current.model)) {
       items.unshift({
         id: chatRef.current.model,
         name: chatRef.current.model,

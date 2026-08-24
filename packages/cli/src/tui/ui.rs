@@ -41,9 +41,14 @@ fn draw_banner(f: &mut Frame, app: &AppState, area: Rect) {
     let title_line = Line::from(vec![
         Span::styled("SuperAgent Terminal", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
     ]);
+    let model_text = if !app.provider.is_empty() && !app.model.is_empty() {
+        format!("{}/{} · effort xhigh", app.provider, app.model)
+    } else {
+        "no model configured · effort xhigh".to_string()
+    };
     let info_line = Line::from(vec![
         Span::styled(
-            format!("{}/{} · effort xhigh", app.provider, app.model),
+            model_text,
             Style::default().fg(Color::DarkGray),
         ),
     ]);
@@ -196,10 +201,16 @@ fn draw_status_bar(f: &mut Frame, app: &AppState, area: Rect) {
         crate::shortcuts::permissions::PermissionLevel::Deny => Color::Red,
     };
 
+    let model_label = if !app.provider.is_empty() && !app.model.is_empty() {
+        format!("{}/{} ", app.provider, app.model)
+    } else {
+        "no model selected ".to_string()
+    };
+
     let mut spans = vec![
         Span::styled(format!(" [{}] ", app.permission.label()), Style::default().fg(perm_color).add_modifier(Modifier::BOLD)),
         Span::styled("│ ", Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{}/{} ", app.provider, app.model), Style::default().fg(Color::White)),
+        Span::styled(model_label, Style::default().fg(Color::White)),
         Span::styled("│ ", Style::default().fg(Color::DarkGray)),
     ];
 

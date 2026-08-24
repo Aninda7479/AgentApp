@@ -39,6 +39,8 @@ pub enum CommandAction {
     SetPermission(PermissionLevel),
     Exit,
     RunPrompt(String),
+    OpenModelPicker,
+    OpenDiffReview,
 }
 
 #[derive(Debug, Clone)]
@@ -231,19 +233,46 @@ pub struct ModelCommand;
 impl SlashCommand for ModelCommand {
     fn name(&self) -> &'static str { "model" }
     fn aliases(&self) -> &'static [&'static str] { &["m"] }
-    fn description(&self) -> &'static str { "List or switch active AI model" }
+    fn description(&self) -> &'static str { "List or switch active AI model (or opens picker)" }
     fn usage(&self) -> &'static str { "/model [list | set <provider/model>]" }
     async fn execute(&self, args: &str, ctx: &mut CommandContext) -> CommandResult {
         let args = args.trim();
-        if args.is_empty() || args == "list" {
-            let mut list = String::from("**Available Models & Providers:**\n");
-            list.push_str("• **openai**: gpt-4o, gpt-4o-mini, o1, o3-mini\n");
-            list.push_str("• **anthropic**: claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022\n");
-            list.push_str("• **gemini**: gemini-1.5-pro, gemini-2.0-flash\n");
-            list.push_str("• **deepseek**: deepseek-chat, deepseek-reasoner\n");
-            list.push_str("• **groq**: llama-3.3-70b-versatile\n");
-            list.push_str("• **ollama**: llama3, mistral, qwen2.5-coder\n");
-            list.push_str(&format!("\n*Current model:* **{}/{}**", ctx.active_provider, ctx.active_model));
+        if args.is_empty() {
+            // Typing /model opens the interactive TUI model picker modal
+            return CommandResult::with_action("", CommandAction::OpenModelPicker);
+        }
+
+        if args == "list" {
+            let settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+            let mut list = String::new();
+            
+            let providers_opt = settings.get("providers").and_then(|v| v.as_array());
+            let has_providers = providers_opt.map(|arr| !arr.is_empty()).unwrap_or(false);
+
+            if has_providers {
+                list.push_str("**Connected Providers & Models:**\n");
+                if let Some(arr) = providers_opt {
+                    for p in arr {
+                        let name = p.get("name").or_else(|| p.get("id")).and_then(|v| v.as_str()).unwrap_or("unknown");
+                        let id = p.get("id").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        let def_model = p.get("defaultModel").and_then(|v| v.as_str()).unwrap_or("default");
+                        list.push_str(&format!("• **{}** (`{}`): default model `{}`\n", name, id, def_model));
+                    }
+                }
+            } else {
+                list.push_str("**No connected AI providers found in settings.**\n");
+                list.push_str("To connect a provider, you can:\n");
+                list.push_str("• Configure via Web UI / Settings at http://localhost:1469\n");
+                list.push_str("• Use a local runner (keyless): `/model set ollama/qwen2.5-coder` or `/model set omniroute/default`\n");
+                list.push_str("• Or select a model using the interactive picker: `/model`\n");
+            }
+
+            let curr = if !ctx.active_provider.is_empty() && !ctx.active_model.is_empty() {
+                format!("{}/{}", ctx.active_provider, ctx.active_model)
+            } else {
+                "none configured (run `/model set <provider/model>`)".to_string()
+            };
+            list.push_str(&format!("\n*Current model:* **{}**", curr));
             return CommandResult::ok(list);
         }
 

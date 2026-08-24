@@ -182,30 +182,71 @@ pub struct SystemInfoResponse {
 pub fn find_ui_dist_dir(workspace_root: &Path) -> Option<PathBuf> {
     if let Ok(val) = std::env::var("SUPERAGENT_UI_DIST") {
         let p = PathBuf::from(val);
-        if p.exists() {
+        if p.exists() && (p.join("index.html").exists() || p.join("login.html").exists()) {
             return Some(p);
         }
     }
-    let candidates = [
-        workspace_root.join("packages").join("core_v2").join("ui-dist"),
-        workspace_root.join("core_v2").join("ui-dist"),
-        workspace_root.join("packages").join("ui").join("dist"),
-        workspace_root.join("ui").join("dist"),
-        workspace_root.join("web-dist"),
-        workspace_root.join("packages").join("web").join("dist"),
-        workspace_root.join("dist"),
-        PathBuf::from("packages/core_v2/ui-dist"),
-        PathBuf::from("core_v2/ui-dist"),
-        PathBuf::from("packages/ui/dist"),
-        PathBuf::from("ui/dist"),
-        PathBuf::from("web-dist"),
-        PathBuf::from("dist"),
-    ];
-    for cand in &candidates {
-        if cand.join("index.html").exists() || cand.join("login.html").exists() {
-            return Some(cand.clone());
+
+    let mut search_roots: Vec<PathBuf> = Vec::new();
+
+    // 1. Workspace root and its ancestors
+    let mut curr = Some(workspace_root.to_path_buf());
+    while let Some(dir) = curr {
+        search_roots.push(dir.clone());
+        curr = dir.parent().map(|p| p.to_path_buf());
+    }
+
+    // 2. Current working directory and its ancestors
+    if let Ok(cwd) = std::env::current_dir() {
+        let mut curr_cwd = Some(cwd);
+        while let Some(dir) = curr_cwd {
+            if !search_roots.contains(&dir) {
+                search_roots.push(dir.clone());
+            }
+            curr_cwd = dir.parent().map(|p| p.to_path_buf());
         }
     }
+
+    // 3. Executable directory and its ancestors
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let mut curr_exe = Some(exe_dir.to_path_buf());
+            while let Some(dir) = curr_exe {
+                if !search_roots.contains(&dir) {
+                    search_roots.push(dir.clone());
+                }
+                curr_exe = dir.parent().map(|p| p.to_path_buf());
+            }
+        }
+    }
+
+    // 4. SuperAgent user config directory
+    let sa_dir = get_superagent_dir();
+    if !search_roots.contains(&sa_dir) {
+        search_roots.push(sa_dir);
+    }
+
+    let relative_suffixes = [
+        "packages/core_v2/ui-dist",
+        "core_v2/ui-dist",
+        "packages/ui/dist",
+        "ui/dist",
+        "ui-dist",
+        "web-dist",
+        "packages/web/dist",
+        "web/dist",
+        "dist",
+    ];
+
+    for root in &search_roots {
+        for suffix in &relative_suffixes {
+            let cand = root.join(suffix);
+            if cand.join("index.html").exists() || cand.join("login.html").exists() {
+                return Some(cand);
+            }
+        }
+    }
+
     None
 }
 
@@ -393,8 +434,47 @@ async fn spa_fallback_handler(
     uri: axum::http::Uri,
     State(state): State<AppState>,
 ) -> Response {
-    let Some(ref dist) = state.ui_dist_dir else {
-        return (StatusCode::NOT_FOUND, "UI dist directory not configured").into_response();
+    let dist_opt = state
+        .ui_dist_dir
+        .as_ref()
+        .cloned()
+        .or_else(|| find_ui_dist_dir(&state.workspace_root));
+
+    let Some(ref dist) = dist_opt else {
+        let help_html = r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SuperAgent Daemon Active</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+    .card { background: #1e293b; padding: 2.5rem; border-radius: 16px; border: 1px solid #334155; max-width: 580px; text-align: center; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+    h1 { margin-top: 0; color: #38bdf8; font-size: 1.6rem; }
+    p { line-height: 1.6; color: #cbd5e1; font-size: 0.95rem; }
+    .code-box { background: #090d16; padding: 0.8rem 1rem; border-radius: 8px; border: 1px solid #1e293b; color: #34d399; font-family: monospace; font-size: 0.9rem; margin: 1rem 0; text-align: left; }
+    .status { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #10b981; font-weight: bold; margin-bottom: 1rem; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; animation: pulse 2s infinite; }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="status"><span class="dot"></span> SUPERAGENT CORE DAEMON ONLINE</div>
+    <h1>🚀 SuperAgent Web Server Active</h1>
+    <p>The backend Axum engine is successfully listening. To load the web interface, ensure the UI static assets are built:</p>
+    <div class="code-box">npm run build --workspace=@superagent/ui</div>
+    <p style="font-size: 0.8rem; color: #64748b;">Or configure <code>SUPERAGENT_UI_DIST</code> to point to your compiled UI folder.</p>
+  </div>
+</body>
+</html>"#;
+        return (
+            [
+                (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+                (header::CACHE_CONTROL, "no-cache"),
+            ],
+            help_html,
+        )
+            .into_response();
     };
 
     let path_str = uri.path().trim_start_matches('/');

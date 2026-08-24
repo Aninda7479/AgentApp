@@ -347,6 +347,12 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
 
                                             if let Some(action) = res.action {
                                                 match action {
+                                                    CommandAction::OpenModelPicker => {
+                                                        app.mode = Mode::ModelPicker;
+                                                    }
+                                                    CommandAction::OpenDiffReview => {
+                                                        app.mode = Mode::DiffReview;
+                                                    }
                                                     CommandAction::ClearChat => {
                                                         app.messages.clear();
                                                     }
@@ -392,6 +398,12 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
 
                                     // Normal User prompt
                                     let (clean_text, _attachments) = prepare_attachments(&raw_input);
+
+                                    if app.provider.is_empty() || app.model.is_empty() {
+                                        app.add_user_message(clean_text);
+                                        app.add_system_message("⚠ No AI model is configured. Run `/model` to pick a model or connect a provider first (e.g. `/model set ollama/qwen2.5-coder` or `/model set groq/llama-3.3-70b-versatile`).".to_string());
+                                        continue;
+                                    }
 
                                     if app.is_busy {
                                         app.turn_queue.enqueue(clean_text);

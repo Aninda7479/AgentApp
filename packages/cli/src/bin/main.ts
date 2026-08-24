@@ -24,10 +24,12 @@ if (process.argv.includes('--models')) {
 }
 
 if (process.env.SUPERAGENT_INTERNAL_WEB_SERVER === '1' || process.argv.includes('--internal-web-server')) {
-  startWebServer({ startedBy: 'cli' }).catch((err) => {
+  try {
+    startWebServer({ startedBy: 'cli' });
+  } catch (err: any) {
     console.error('[web-server] Failed to start web server:', err?.stack || err);
     process.exit(1);
-  });
+  }
 } else {
 
 // `superagent --stop-web` / `--web-status` coordinate the single shared web
