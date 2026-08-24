@@ -34,11 +34,13 @@ export const DL = {
   deb:       `${REPO}/releases/latest/download/SuperAgent_${VERSION}_amd64.deb`,
 }
 
-// Server / HomeLab tarball download URLs (for CLI --serve mode)
+// Server / HomeLab / CLI standalone archive download URLs (for terminal & CLI --serve mode)
 export const SERVER_DL = {
-  linux:   `${REPO}/releases/latest/download/superagent-server-v${VERSION}-linux-x64.tar.gz`,
-  windows: `${REPO}/releases/latest/download/superagent-server-v${VERSION}-windows-x64.zip`,
-  mac:     `${REPO}/releases/latest/download/superagent-server-v${VERSION}-macos-arm64.zip`,
+  linux:    `${REPO}/releases/latest/download/superagent-cli-v${VERSION}-linux-x64.tar.gz`,
+  linuxArm: `${REPO}/releases/latest/download/superagent-cli-v${VERSION}-linux-arm64.tar.gz`,
+  windows:  `${REPO}/releases/latest/download/superagent-cli-v${VERSION}-windows-x64.zip`,
+  mac:      `${REPO}/releases/latest/download/superagent-cli-v${VERSION}-macos-arm64.zip`,
+  macIntel: `${REPO}/releases/latest/download/superagent-cli-v${VERSION}-macos-x64.zip`,
 }
 
 // Browser extension release package (.zip)

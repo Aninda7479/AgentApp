@@ -28,8 +28,9 @@
     ]
   },
   "scripts": {
-    "build": "cargo build -p superagent-cli --release",
-    "prepublishOnly": "cargo build -p superagent-cli --release",
+    "build:ts": "tsc",
+    "build": "tsc && cargo build -p superagent-cli --release",
+    "prepublishOnly": "tsc && cargo build -p superagent-cli --release",
     "start": "cargo run -p superagent-cli --",
     "test": "cargo test -p superagent-cli",
     "pack": "node scripts/pack.mjs"

@@ -18,6 +18,7 @@ packages/core_v2/ui-dist/
 dist-release/
 dist-release-app/
 packages/cli/dist-release-cli/
+packages/browser-extension/release
 
 build/
 out/

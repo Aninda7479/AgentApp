@@ -108,6 +108,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          projectPath: packages/desktop
           tagName: v${{ needs.version.outputs.version }}
           releaseName: SuperAgent v${{ needs.version.outputs.version }}
           releaseDraft: true
@@ -210,6 +211,7 @@ jobs:
       - name: Generate updater.json
         env:
           RELEASE_VERSION: ${{ needs.version.outputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/generate-updater-json.cjs
 
       - name: Generate release notes with download table

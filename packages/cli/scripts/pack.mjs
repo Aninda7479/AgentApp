@@ -197,7 +197,14 @@ if (process.pkg) {
 }
 `;
 
-  // 6. Bundle CLI entry point with esbuild
+  // 6. Ensure CLI TypeScript code is compiled into dist/
+  const mainJsPath = path.join(cliDir, 'dist', 'bin', 'main.js');
+  if (!fs.existsSync(mainJsPath)) {
+    console.log('[pack] Compiling CLI TypeScript sources...');
+    sh('npx', ['tsc'], { cwd: cliDir });
+  }
+
+  // 7. Bundle CLI entry point with esbuild
   console.log('[pack] Bundling Javascript code via esbuild...');
   const bundleFile = path.join(packDir, 'bundle.cjs');
   

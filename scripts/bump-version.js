@@ -190,6 +190,7 @@ updateJsonFile('packages/desktop/src-tauri/tauri.conf.json', (data) => {
 
 updateTomlVersion('packages/desktop/src-tauri/Cargo.toml', newVersion);
 updateTomlVersion('packages/core_v2/Cargo.toml', newVersion);
+updateTomlVersion('packages/cli/Cargo.toml', newVersion);
 
 updatePackageJson('website/package.json', (data) => {
   data.version = newVersion;
