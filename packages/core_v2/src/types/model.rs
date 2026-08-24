@@ -37,7 +37,11 @@ impl ModelConfig {
     pub fn get_base_url(&self) -> String {
         if let Some(ref url) = self.base_url {
             if !url.is_empty() {
-                return url.clone();
+                let trimmed = url.trim_end_matches('/');
+                if self.provider == ProviderType::Gemini && !trimmed.contains("/v1") {
+                    return format!("{}/v1beta", trimmed);
+                }
+                return trimmed.to_string();
             }
         }
         match self.provider {

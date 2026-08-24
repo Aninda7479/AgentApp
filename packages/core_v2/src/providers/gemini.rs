@@ -34,11 +34,19 @@ impl LlmProvider for GeminiProvider {
         tools: &[serde_json::Value],
     ) -> anyhow::Result<Receiver<AgentEvent>> {
         let base_url = config.get_base_url();
+        let base_trimmed = base_url.trim_end_matches('/');
+        let effective_base = if !base_trimmed.contains("/v1") {
+            format!("{}/v1beta", base_trimmed)
+        } else {
+            base_trimmed.to_string()
+        };
         let api_key = config.api_key.clone().unwrap_or_default();
+        let clean_model_id = config.model_id.strip_prefix("models/").unwrap_or(&config.model_id);
+        let clean_model_id = clean_model_id.strip_prefix("google-").unwrap_or(clean_model_id);
         let url = format!(
             "{}/models/{}:streamGenerateContent?alt=sse&key={}",
-            base_url.trim_end_matches('/'),
-            config.model_id,
+            effective_base,
+            clean_model_id,
             api_key
         );
 

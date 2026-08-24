@@ -1769,7 +1769,7 @@ async fn handle_ipc(
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string());
-            let base_url = config_val
+            let mut base_url = config_val
                 .get("baseUrl")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
@@ -1819,16 +1819,25 @@ async fn handle_ipc(
                 }
             }
 
-            // Fallback API key from settings providers
-            if api_key.is_none() && !provider_str.is_empty() {
+            // Fallback API key and baseUrl from settings providers
+            if !provider_str.is_empty() {
                 if let Some(providers) = raw_settings.get("providers").and_then(|p| p.as_array()) {
                     if let Some(prov) = providers.iter().find(|p| {
                         let id = p.get("id").and_then(|v| v.as_str()).unwrap_or("");
                         id == provider_str || (provider_str == "gemini" && id == "google") || (provider_str == "google" && id == "gemini")
                     }) {
-                        if let Some(key) = prov.get("apiKey").and_then(|v| v.as_str()) {
-                            if !key.is_empty() {
-                                api_key = Some(key.to_string());
+                        if api_key.is_none() {
+                            if let Some(key) = prov.get("apiKey").and_then(|v| v.as_str()) {
+                                if !key.is_empty() {
+                                    api_key = Some(key.to_string());
+                                }
+                            }
+                        }
+                        if base_url.is_none() {
+                            if let Some(u) = prov.get("baseUrl").and_then(|v| v.as_str()) {
+                                if !u.is_empty() {
+                                    base_url = Some(u.to_string());
+                                }
                             }
                         }
                     }

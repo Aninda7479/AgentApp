@@ -160,7 +160,67 @@ export function getIpc(): any {
     return cachedBridge;
   }
 
-  // 3. Web HTTP IPC path — communicates with SuperAgent Core v2 over HTTP / REST
+  // Web client WebSocket connection and listener registry for live streaming (e.g. agent-event)
+  const webListeners = new Map<string, Set<Function>>();
+  let webSocket: WebSocket | null = null;
+  let webSocketConnecting = false;
+
+  function ensureWebSocketConnected() {
+    if (typeof window === 'undefined') return;
+    if (webSocket && (webSocket.readyState === WebSocket.OPEN || webSocket.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+    if (webSocketConnecting) return;
+    webSocketConnecting = true;
+
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/api/ws`;
+      const ws = new WebSocket(wsUrl);
+      webSocket = ws;
+
+      ws.onopen = () => {
+        webSocketConnecting = false;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          const channel = payload.channel || payload.action;
+          const data = payload.data !== undefined ? payload.data : payload;
+          if (channel) {
+            const channelListeners = webListeners.get(channel);
+            if (channelListeners) {
+              channelListeners.forEach((callback) => {
+                try {
+                  callback({}, data);
+                } catch (err) {
+                  console.error(`[IPC-Bridge] Error in listener for channel "${channel}":`, err);
+                }
+              });
+            }
+          }
+        } catch (err) {
+          console.error('[IPC-Bridge] Error parsing WebSocket message:', err);
+        }
+      };
+
+      ws.onclose = () => {
+        webSocketConnecting = false;
+        webSocket = null;
+        setTimeout(ensureWebSocketConnected, 2000);
+      };
+
+      ws.onerror = () => {
+        webSocketConnecting = false;
+      };
+    } catch (err) {
+      webSocketConnecting = false;
+      console.warn('[IPC-Bridge] Failed to create WebSocket:', err);
+    }
+  }
+
+  // 3. Web HTTP IPC path — communicates with SuperAgent Core v2 over HTTP / REST and WebSocket
   const webHttpSurface = {
     invoke: async (channel: string, ...args: any[]) => {
       try {
@@ -196,14 +256,36 @@ export function getIpc(): any {
       return null;
     },
     send: (channel: string, ...args: any[]) => {
-      fetch(`/api/ipc/${encodeURIComponent(channel)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel, args }),
-      }).catch(() => {});
+      ensureWebSocketConnected();
+      const payload = JSON.stringify({ channel, args });
+      if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+        webSocket.send(payload);
+      } else {
+        fetch(`/api/ipc/${encodeURIComponent(channel)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+        }).catch(() => {});
+      }
     },
-    on: (_channel: string, _fn: any) => () => {},
-    off: (_channel: string, _fn: any) => {}
+    on: (channel: string, fn: any) => {
+      ensureWebSocketConnected();
+      let set = webListeners.get(channel);
+      if (!set) {
+        set = new Set();
+        webListeners.set(channel, set);
+      }
+      set.add(fn);
+      return () => {
+        set?.delete(fn);
+      };
+    },
+    off: (channel: string, fn: any) => {
+      const set = webListeners.get(channel);
+      if (set) {
+        set.delete(fn);
+      }
+    }
   };
   cachedBridge = makeIpcBridge(webHttpSurface);
   return cachedBridge;
