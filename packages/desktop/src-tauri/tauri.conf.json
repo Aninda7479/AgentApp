@@ -4,10 +4,10 @@
   "version": "0.16.0",
   "identifier": "com.opensource.agentapp",
   "build": {
-    "frontendDist": "../dist",
-    "devUrl": "http://localhost:1469",
-    "beforeDevCommand": "npm run build:ui",
-    "beforeBuildCommand": "npm run build:ui"
+    "frontendDist": "../../ui/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run --workspace=@superagent/ui dev",
+    "beforeBuildCommand": "npm run --workspace=@superagent/ui build"
   },
   "app": {
     "windows": [

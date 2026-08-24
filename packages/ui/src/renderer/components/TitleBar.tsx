@@ -25,6 +25,9 @@ import {
   WifiOff,
   ArrowUpCircle,
   Package,
+  Minus,
+  Square,
+  X,
 } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { ThemeMode } from '../types';
@@ -239,18 +242,59 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     </div>
   );
 
+  const isDesktop = !isWebMode && (WindowService.isDesktop() || (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)));
+
   return (
     <div
       data-testid="title-bar"
+      data-tauri-drag-region
       className="title-bar h-10 flex items-center justify-between px-3 select-none drag-window z-100"
       style={isDesktop ? ({ WebkitAppRegion: 'drag' } as React.CSSProperties) : undefined}
+      onDoubleClick={(e) => {
+        if (e.target === e.currentTarget && isDesktop) {
+          onWindowControl('maximize');
+        }
+      }}
     >
-      {/* Left side: Logo, Nav History, and Application Menu */}
+      {/* Left side: macOS Traffic Lights (if macOS desktop), Logo, Nav History, and Application Menu */}
       <div
-        className={`flex items-center gap-2 sm:gap-3 no-drag-window min-w-0 ${isMac && isDesktop ? 'pl-[72px]' : ''}`}
+        className="flex items-center gap-2 sm:gap-3 no-drag-window min-w-0"
         style={isDesktop ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
         ref={menuRef}
       >
+        {/* macOS native-styled Traffic Lights */}
+        {isMac && isDesktop && (
+          <div className="flex items-center gap-2 mr-1.5 group/traffic shrink-0">
+            <button
+              data-testid="window-close-button"
+              onClick={() => onWindowControl('close')}
+              className="w-3 h-3 rounded-full bg-[#ff5f56] border border-[#e0443e] hover:brightness-90 transition-all flex items-center justify-center cursor-pointer group-hover/traffic:text-black/70 text-transparent"
+              title="Close"
+              aria-label="Close window"
+            >
+              <span className="text-[8px] font-bold leading-none select-none">✕</span>
+            </button>
+            <button
+              data-testid="window-minimize-button"
+              onClick={() => onWindowControl('minimize')}
+              className="w-3 h-3 rounded-full bg-[#ffbd2e] border border-[#dea123] hover:brightness-90 transition-all flex items-center justify-center cursor-pointer group-hover/traffic:text-black/70 text-transparent"
+              title="Minimize"
+              aria-label="Minimize window"
+            >
+              <span className="text-[8px] font-bold leading-none select-none">−</span>
+            </button>
+            <button
+              data-testid="window-maximize-button"
+              onClick={() => onWindowControl('maximize')}
+              className="w-3 h-3 rounded-full bg-[#27c93f] border border-[#1aab29] hover:brightness-90 transition-all flex items-center justify-center cursor-pointer group-hover/traffic:text-black/70 text-transparent"
+              title="Zoom / Maximize"
+              aria-label="Maximize window"
+            >
+              <span className="text-[8px] font-bold leading-none select-none">+</span>
+            </button>
+          </div>
+        )}
+
         {/* Mobile nav toggle (hamburger) */}
         {onToggleMobileNav && (
           <button
@@ -322,7 +366,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         superagent
       </div>
 
-      {/* Right side: theme, BYOK status, menu (mobile), and custom Window controls */}
+      {/* Right side: theme, BYOK status, menu (mobile), and Windows/Linux window controls */}
       <div
         className="flex items-center gap-2 sm:gap-3 no-drag-window shrink-0"
         style={isDesktop ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
@@ -387,6 +431,39 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             </div>
           )}
         </div>
+
+        {/* Windows & Linux Window Controls (Minimize, Maximize/Restore, Close) */}
+        {!isMac && isDesktop && (
+          <div className="flex items-center h-full ml-1 border-l border-brand-border/30 pl-1">
+            <button
+              data-testid="window-minimize-button"
+              onClick={() => onWindowControl('minimize')}
+              className="w-8 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/10 transition-colors cursor-pointer"
+              title="Minimize"
+              aria-label="Minimize window"
+            >
+              <Minus className="w-3.5 h-3.5" />
+            </button>
+            <button
+              data-testid="window-maximize-button"
+              onClick={() => onWindowControl('maximize')}
+              className="w-8 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/10 transition-colors cursor-pointer"
+              title="Maximize / Restore"
+              aria-label="Maximize window"
+            >
+              <Square className="w-3 h-3" />
+            </button>
+            <button
+              data-testid="window-close-button"
+              onClick={() => onWindowControl('close')}
+              className="w-8 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-white hover:bg-rose-600 transition-colors cursor-pointer"
+              title="Close"
+              aria-label="Close window"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -21,7 +21,26 @@ describe('TitleBar File Menu - Artifacts Page Link', () => {
     expect(html).toContain('File');
     expect(html).toContain('Edit');
   });
+
+  it('renders TitleBar with window controls in desktop mode', () => {
+    const html = renderToStaticMarkup(
+      <TitleBar
+        hasOpenAiKey={true}
+        onOpenProviders={vi.fn()}
+        onWindowControl={vi.fn()}
+        onNavigateBack={vi.fn()}
+        onNavigateForward={vi.fn()}
+        canNavigateBack={false}
+        canNavigateForward={false}
+        isWebMode={false}
+      />
+    );
+    expect(html).toContain('window-minimize-button');
+    expect(html).toContain('window-maximize-button');
+    expect(html).toContain('window-close-button');
+  });
 });
+
 
 describe('ArtifactsPage Component', () => {
   it('renders ArtifactsPage header and empty state or controls', () => {
