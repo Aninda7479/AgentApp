@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "packages/core_v2",
     "packages/desktop/src-tauri",
+    "packages/cli",
 ]
 
 [workspace.dependencies]
