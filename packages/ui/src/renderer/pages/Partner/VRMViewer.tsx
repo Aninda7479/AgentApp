@@ -49,9 +49,12 @@ const MOOD_EXPRESSIONS: Record<CompanionMood, Partial<Record<VRMExpressionPreset
   surprised: { surprised: 0.95 },
 };
 
-// ── Complete Pose Definition ──────────────────────────────────────────────────
+// ── Finger Pose Preset Types ──────────────────────────────────────────────────
+export type FingerPreset = 'relaxed' | 'open' | 'fist' | 'peace' | 'heart' | 'salute' | 'cat';
+
+// ── Complete Pose Definition with Full Human Skeleton ─────────────────────────
 export interface VRMPose {
-  // Torso
+  // Torso & Core
   hipsPos?: [number, number, number];
   hipsRot?: [number, number, number];
   spineRot?: [number, number, number];
@@ -65,15 +68,95 @@ export interface VRMPose {
   leftUpperArmRot?: [number, number, number];
   leftLowerArmRot?: [number, number, number];
   leftHandRot?: [number, number, number];
+  leftFingers?: FingerPreset;
 
   // Right Arm Chain
   rightShoulderRot?: [number, number, number];
   rightUpperArmRot?: [number, number, number];
   rightLowerArmRot?: [number, number, number];
   rightHandRot?: [number, number, number];
+  rightFingers?: FingerPreset;
+
+  // Lower Limbs (Legs, Knees, Feet)
+  leftUpperLegRot?: [number, number, number];
+  rightUpperLegRot?: [number, number, number];
+  leftLowerLegRot?: [number, number, number];
+  rightLowerLegRot?: [number, number, number];
+  leftFootRot?: [number, number, number];
+  rightFootRot?: [number, number, number];
 
   // Expression Overrides
   expressions?: Partial<Record<VRMExpressionPresetName, number>>;
+}
+
+// ── Helper to Apply All 15 Finger Bones per Hand ──────────────────────────────
+function applyFingerPreset(vrm: VRM, side: 'left' | 'right', preset: FingerPreset = 'relaxed') {
+  const isL = side === 'left';
+  const sign = isL ? 1 : -1;
+
+  const setBoneRot = (name: VRMHumanBoneName, rot: [number, number, number]) => {
+    const node = vrm.humanoid?.getNormalizedBoneNode(name);
+    if (node) node.rotation.set(rot[0], rot[1], rot[2]);
+  };
+
+  // Base finger configurations
+  let curl = 0.35; // Proximal curl
+  let midCurl = 0.45; // Intermediate curl
+  let distCurl = 0.25; // Distal curl
+  let thumbCurl = 0.25;
+  let spread = 0.05;
+
+  if (preset === 'open') {
+    curl = 0.05; midCurl = 0.05; distCurl = 0.02; thumbCurl = 0.05; spread = 0.12;
+  } else if (preset === 'fist') {
+    curl = 1.35; midCurl = 1.45; distCurl = 1.10; thumbCurl = 1.20; spread = -0.02;
+  } else if (preset === 'salute') {
+    curl = 0.02; midCurl = 0.02; distCurl = 0.01; thumbCurl = 0.45; spread = -0.04;
+  } else if (preset === 'cat') {
+    curl = 1.20; midCurl = 1.35; distCurl = 0.85; thumbCurl = 0.75; spread = 0.08;
+  } else if (preset === 'heart') {
+    curl = 0.75; midCurl = 0.95; distCurl = 0.55; thumbCurl = 0.45; spread = 0.02;
+  }
+
+  // Handle peace sign specifically
+  if (preset === 'peace') {
+    // Index and Middle straight
+    setBoneRot(isL ? 'leftIndexProximal' : 'rightIndexProximal',       [0, 0, sign * 0.05]);
+    setBoneRot(isL ? 'leftIndexIntermediate' : 'rightIndexIntermediate', [0, 0, sign * 0.05]);
+    setBoneRot(isL ? 'leftIndexDistal' : 'rightIndexDistal',             [0, 0, sign * 0.02]);
+
+    setBoneRot(isL ? 'leftMiddleProximal' : 'rightMiddleProximal',       [0, 0, sign * 0.05]);
+    setBoneRot(isL ? 'leftMiddleIntermediate' : 'rightMiddleIntermediate', [0, 0, sign * 0.05]);
+    setBoneRot(isL ? 'leftMiddleDistal' : 'rightMiddleDistal',             [0, 0, sign * 0.02]);
+
+    // Ring, Pinky, and Thumb curled
+    setBoneRot(isL ? 'leftRingProximal' : 'rightRingProximal',           [0, 0, sign * 1.35]);
+    setBoneRot(isL ? 'leftRingIntermediate' : 'rightRingIntermediate',   [0, 0, sign * 1.45]);
+    setBoneRot(isL ? 'leftRingDistal' : 'rightRingDistal',               [0, 0, sign * 1.10]);
+
+    setBoneRot(isL ? 'leftLittleProximal' : 'rightLittleProximal',       [0, 0, sign * 1.35]);
+    setBoneRot(isL ? 'leftLittleIntermediate' : 'rightLittleIntermediate', [0, 0, sign * 1.45]);
+    setBoneRot(isL ? 'leftLittleDistal' : 'rightLittleDistal',             [0, 0, sign * 1.10]);
+
+    setBoneRot(isL ? 'leftThumbMetacarpal' : 'rightThumbMetacarpal',     [0, 0.4 * sign, sign * 0.45]);
+    setBoneRot(isL ? 'leftThumbProximal' : 'rightThumbProximal',         [0, 0.2 * sign, sign * 0.65]);
+    setBoneRot(isL ? 'leftThumbDistal' : 'rightThumbDistal',             [0, 0, sign * 0.55]);
+    return;
+  }
+
+  // Apply general preset across all 5 fingers (15 joints)
+  const fingers: ('Index' | 'Middle' | 'Ring' | 'Little')[] = ['Index', 'Middle', 'Ring', 'Little'];
+  fingers.forEach((f, idx) => {
+    const spreadAngle = (idx - 1.5) * spread * sign;
+    setBoneRot((isL ? `left${f}Proximal` : `right${f}Proximal`) as VRMHumanBoneName, [0, spreadAngle, sign * curl]);
+    setBoneRot((isL ? `left${f}Intermediate` : `right${f}Intermediate`) as VRMHumanBoneName, [0, 0, sign * midCurl]);
+    setBoneRot((isL ? `left${f}Distal` : `right${f}Distal`) as VRMHumanBoneName, [0, 0, sign * distCurl]);
+  });
+
+  // Thumb
+  setBoneRot(isL ? 'leftThumbMetacarpal' : 'rightThumbMetacarpal', [0, 0.25 * sign, sign * thumbCurl * 0.5]);
+  setBoneRot(isL ? 'leftThumbProximal' : 'rightThumbProximal',     [0, 0.15 * sign, sign * thumbCurl]);
+  setBoneRot(isL ? 'leftThumbDistal' : 'rightThumbDistal',         [0, 0, sign * thumbCurl * 0.8]);
 }
 
 // ── Default Standing Idle Pose Function ───────────────────────────────────────
@@ -98,15 +181,25 @@ function getIdlePose(t: number, gazeX: number, gazeY: number): VRMPose {
     leftShoulderRot: [0, 0, 0.02 + breath * 0.015],
     rightShoulderRot: [0, 0, -0.02 - breath * 0.015],
 
-    // Left Arm rests alongside body with soft elbow bend
+    // Left Arm
     leftUpperArmRot: [0.08 + breath * 0.015, -0.05, -1.24 + swaySide * 0.03],
     leftLowerArmRot: [0.15, -0.15, -0.10],
     leftHandRot:     [0.05, -0.05, -0.05],
+    leftFingers:     'relaxed',
 
-    // Right Arm rests alongside body with soft elbow bend
+    // Right Arm
     rightUpperArmRot: [0.08 + breath * 0.015, 0.05, 1.24 - swaySide * 0.03],
     rightLowerArmRot: [0.15, 0.15, 0.10],
     rightHandRot:     [0.05, 0.05, 0.05],
+    rightFingers:     'relaxed',
+
+    // Legs & Feet (Contrapposto balance)
+    leftUpperLegRot:  [-0.02, 0.02, -swaySide * 0.02],
+    rightUpperLegRot: [-0.02, -0.02, -swaySide * 0.02],
+    leftLowerLegRot:  [ 0.04, 0, 0],
+    rightLowerLegRot: [ 0.04, 0, 0],
+    leftFootRot:      [ 0.0, 0, swaySide * 0.015],
+    rightFootRot:     [ 0.0, 0, swaySide * 0.015],
   };
 }
 
@@ -122,6 +215,8 @@ function getWavePose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
     rightLowerArmRot: [-0.20, 0.20, -1.65 + waveCycle * 0.25],
     // Hand rotated on wrist (Y = 1.45) so palm faces forward towards user, waving side-to-side
     rightHandRot:     [0.0, 1.45, waveCycle * 0.25],
+    rightFingers:     'open',
+    leftFingers:      'relaxed',
 
     headRot: [
       (baseIdle.headRot?.[0] || 0),
@@ -142,6 +237,8 @@ function getSalutePose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
     rightLowerArmRot: [0.45, 0.60, -1.75],
     // Flat hand, palm facing diagonally inward/down
     rightHandRot:     [0.10, 0.30, -0.15],
+    rightFingers:     'salute',
+    leftFingers:      'relaxed',
 
     headRot: [0.02, 0.04, 0.02],
     expressions: { neutral: 0.8, happy: 0.3 },
@@ -166,8 +263,16 @@ function getDancePose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
     ],
     leftUpperArmRot:  [0.25 + danceSway * 0.2, -0.15, -0.55 + danceStep * 0.35],
     leftLowerArmRot:  [0.65, 0, -0.55],
+    leftFingers:      'relaxed',
+
     rightUpperArmRot: [0.25 - danceSway * 0.2,  0.15,  0.55 - danceStep * 0.35],
     rightLowerArmRot: [0.65, 0,  0.55],
+    rightFingers:     'relaxed',
+
+    leftUpperLegRot:  [-0.04 + danceStep * 0.04, 0, -danceSway * 0.04],
+    rightUpperLegRot: [-0.04 - danceStep * 0.04, 0, -danceSway * 0.04],
+    leftLowerLegRot:  [ 0.08 + Math.max(0, danceSway) * 0.08, 0, 0],
+    rightLowerLegRot: [ 0.08 + Math.max(0, -danceSway) * 0.08, 0, 0],
     expressions: { happy: 0.9 },
   };
 }
@@ -185,8 +290,10 @@ function getStretchPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose 
       headRot: [-0.30 * raise, 0, 0],
       leftUpperArmRot:  [0.30 * raise, 0, THREE.MathUtils.lerp(-1.24,  2.65, raise)],
       leftLowerArmRot:  [0.10, 0, 0],
+      leftFingers:      'open',
       rightUpperArmRot: [0.30 * raise, 0, THREE.MathUtils.lerp( 1.24, -2.65, raise)],
       rightLowerArmRot: [0.10, 0, 0],
+      rightFingers:     'open',
       expressions: { relaxed: 0.6 },
     };
   } else {
@@ -198,8 +305,10 @@ function getStretchPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose 
       headRot: [THREE.MathUtils.lerp(-0.30, 0, release), 0, 0],
       leftUpperArmRot:  [0.10, 0, THREE.MathUtils.lerp( 2.65, -1.24, release)],
       leftLowerArmRot:  [0.15, -0.15, -0.10],
+      leftFingers:      'relaxed',
       rightUpperArmRot: [0.10, 0, THREE.MathUtils.lerp(-2.65,  1.24, release)],
       rightLowerArmRot: [0.15,  0.15,  0.10],
+      rightFingers:     'relaxed',
       expressions: { relaxed: 0.4 },
     };
   }
@@ -212,10 +321,12 @@ function getHeartPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
     leftUpperArmRot:  [0.45, -0.35, -0.55],
     leftLowerArmRot:  [0.85,  0,    -1.25],
     leftHandRot:      [0, 0, -0.25],
+    leftFingers:      'heart',
 
     rightUpperArmRot: [0.45,  0.35,  0.55],
     rightLowerArmRot: [0.85,  0,     1.25],
     rightHandRot:     [0, 0,  0.25],
+    rightFingers:     'heart',
 
     headRot: [0, 0, -0.16 + Math.sin(t * 2.0) * 0.03],
     expressions: { happy: 1.0 },
@@ -229,6 +340,8 @@ function getPeacePose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
     rightUpperArmRot: [0.20, 0.35, -0.55],
     rightLowerArmRot: [0.30, 0.0,  -1.50],
     rightHandRot:     [0.35, 0,     0.25],
+    rightFingers:     'peace',
+    leftFingers:      'relaxed',
     headRot: [0, 0, 0.14],
     expressions: { happy: 0.95 },
   };
@@ -244,10 +357,12 @@ function getNekoPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
     leftUpperArmRot:  [0.35, -0.25, -0.45],
     leftLowerArmRot:  [0.65, -0.25, -1.25 + pawL],
     leftHandRot:      [0.75, 0, 0],
+    leftFingers:      'cat',
 
     rightUpperArmRot: [0.35,  0.25,  0.45],
     rightLowerArmRot: [0.65,  0.25,  1.25 + pawR],
     rightHandRot:     [0.75, 0, 0],
+    rightFingers:     'cat',
 
     headRot: [0, Math.cos(t * 2.5) * 0.10, Math.sin(t * 3.0) * 0.12],
     expressions: { happy: 0.9 },
@@ -264,6 +379,8 @@ function getBowPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
     headRot:  [THREE.MathUtils.clamp(bowProg * 0.20, 0, 0.20), 0, 0],
     leftUpperArmRot:  [0.05, 0, -1.28],
     rightUpperArmRot: [0.05, 0,  1.28],
+    leftFingers:      'salute',
+    rightFingers:     'salute',
     expressions: { neutral: 1.0 },
   };
 }
@@ -277,8 +394,10 @@ function getCheerPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
     hipsPos: [0, cheerHop * 0.035, 0],
     leftUpperArmRot:  [0.45, 0,  2.15],
     leftLowerArmRot:  [0.65 + cheerHop * 0.2, 0, 0],
+    leftFingers:      'fist',
     rightUpperArmRot: [0.45, 0, -2.15],
     rightLowerArmRot: [0.65 + cheerHop * 0.2, 0, 0],
+    rightFingers:     'fist',
     headRot: [-0.20, 0, 0],
     expressions: { happy: 1.0 },
   };
@@ -294,6 +413,8 @@ function getTalkingPose(t: number, baseIdle: VRMPose): VRMPose {
     rightUpperArmRot: [0.35 + talk2 * 0.12, 0.20, 0.85 + talk1 * 0.15],
     rightLowerArmRot: [0.55 + talk2 * 0.20, 0.35, 0.20],
     rightHandRot:     [0.20, 0, 0],
+    rightFingers:     'relaxed',
+    leftFingers:      'relaxed',
     headRot: [
       (baseIdle.headRot?.[0] || 0) + Math.sin(t * 5.5) * 0.03,
       (baseIdle.headRot?.[1] || 0) + Math.cos(t * 2.8) * 0.02,
@@ -309,6 +430,8 @@ function getThinkingPose(t: number, baseIdle: VRMPose): VRMPose {
     rightUpperArmRot: [0.35, 0.35, -0.35],
     rightLowerArmRot: [0.65, 0.30, -1.45],
     rightHandRot:     [0.30, 0, 0],
+    rightFingers:     'relaxed',
+    leftFingers:      'relaxed',
     headRot: [-0.10, -0.18, -0.15],
     expressions: { neutral: 0.6, lookUp: 0.4 },
   };
@@ -646,6 +769,18 @@ export const VRMViewer = forwardRef<VRMViewerHandle, Props>(
           applyRot('rightUpperArm', activePose.rightUpperArmRot);
           applyRot('rightLowerArm', activePose.rightLowerArmRot);
           applyRot('rightHand', activePose.rightHandRot);
+
+          // Apply Lower Limbs (Legs, Knees, Feet)
+          applyRot('leftUpperLeg', activePose.leftUpperLegRot);
+          applyRot('rightUpperLeg', activePose.rightUpperLegRot);
+          applyRot('leftLowerLeg', activePose.leftLowerLegRot);
+          applyRot('rightLowerLeg', activePose.rightLowerLegRot);
+          applyRot('leftFoot', activePose.leftFootRot);
+          applyRot('rightFoot', activePose.rightFootRot);
+
+          // Apply all 15 finger bones for Left and Right hands
+          applyFingerPreset(vrm, 'left', activePose.leftFingers || 'relaxed');
+          applyFingerPreset(vrm, 'right', activePose.rightFingers || 'relaxed');
 
           // Apply action expressions if present
           if (activePose.expressions && vrm.expressionManager) {
