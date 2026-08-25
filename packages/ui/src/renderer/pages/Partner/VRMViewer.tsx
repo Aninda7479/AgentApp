@@ -2,12 +2,13 @@
  * VRMViewer.tsx — Modular VRM 3D Canvas & Kinematics Renderer
  * 
  * Features:
- * 1. Modular Animation Clips: Imports pure pose functions from `./animations`
+ * 1. 125 Modular Animation Clips: Imports pure pose functions from `./animations`
  * 2. Preserved Rest Kinematics: Maintains natural humanoid hip height so model never sinks into ground
- * 3. Smooth Continuous Pose Interpolator: Seamlessly blends transitions between all actions & idle
- * 4. Dynamic Live-Joint Skeleton Auto-Framing: Accurately centers Full / Half / Face camera views
+ * 3. Smooth Continuous Pose Interpolator: Seamlessly blends transitions between all actions & idle ($8.5\times$ damping)
+ * 4. Dynamic Live-Joint Skeleton Auto-Framing: Accurately centers Full / Half / Face camera views for standing & sitting
  * 5. High-DPI 16x Anisotropic Textures & 4-Point Studio Lighting with ground contact shadow
  * 6. Micro-expressions: Saccadic eye gaze, natural stochastic blinking, real-time lip-sync
+ * 7. Interactive Touch/Click Reactions: Raycasts touch zones on avatar (Head, Cheeks, Ears, Arms, Ribs)
  */
 import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import * as THREE from 'three';
@@ -23,20 +24,8 @@ import {
   applyMoodExpressions,
   ACTION_DURATIONS,
   getIdlePose,
-  getWavePose,
-  getSalutePose,
-  getDancePose,
-  getStretchPose,
-  getHeartPose,
-  getPeacePose,
-  getNekoPose,
-  getBowPose,
-  getCheerPose,
-  getBlushPose,
-  getLaughPose,
-  getListenPose,
   getTalkingPose,
-  getThinkingPose,
+  resolveActionPose,
 } from './animations';
 
 export type { CompanionMood, CompanionAction, VRMViewerHandle, VRMPose };
@@ -48,10 +37,11 @@ interface Props {
   angle?: 'portrait' | 'half' | 'full';
   className?: string;
   onActionEnd?: () => void;
+  onAvatarInteract?: (action: CompanionAction) => void;
 }
 
 export const VRMViewer = forwardRef<VRMViewerHandle, Props>(
-  ({ vrmUrl, mood = 'idle', action = 'idle', angle = 'full', className = '', onActionEnd }, ref) => {
+  ({ vrmUrl, mood = 'idle', action = 'idle', angle = 'full', className = '', onActionEnd, onAvatarInteract }, ref) => {
     const containerRef    = useRef<HTMLDivElement>(null);
     const vrmRef          = useRef<VRM | null>(null);
     const rendererRef     = useRef<THREE.WebGLRenderer | null>(null);
@@ -66,8 +56,8 @@ export const VRMViewer = forwardRef<VRMViewerHandle, Props>(
     const mousePosRef      = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
     const currentGazeRef   = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-    const propsRef = useRef({ angle, onActionEnd });
-    useEffect(() => { propsRef.current = { angle, onActionEnd }; }, [angle, onActionEnd]);
+    const propsRef = useRef({ angle, onActionEnd, onAvatarInteract });
+    useEffect(() => { propsRef.current = { angle, onActionEnd, onAvatarInteract }; }, [angle, onActionEnd, onAvatarInteract]);
 
     useEffect(() => {
       currentActionRef.current = action;
@@ -187,6 +177,53 @@ export const VRMViewer = forwardRef<VRMViewerHandle, Props>(
       };
       window.addEventListener('mousemove', handleMouseMove);
 
+      // ── Interactive Click/Touch Raycasting on Avatar ─────────────────────────
+      const raycaster = new THREE.Raycaster();
+      const mouseVec = new THREE.Vector2();
+
+      const handleClick = (e: MouseEvent) => {
+        if (!vrmRef.current) return;
+        const rect = el.getBoundingClientRect();
+        mouseVec.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        mouseVec.y = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+
+        raycaster.setFromCamera(mouseVec, camera);
+        const hits = raycaster.intersectObjects(vrmRef.current.scene.children, true);
+
+        if (hits.length > 0) {
+          const hitPt = hits[0].point;
+          let interactAction: CompanionAction = 'react_tap_surprise';
+
+          if (hitPt.y > 1.45) {
+            // Top of head
+            interactAction = 'react_headpat';
+          } else if (hitPt.y > 1.25) {
+            // Face level
+            if (Math.abs(hitPt.x) > 0.12) {
+              interactAction = 'react_ear_pull';
+            } else if (Math.abs(hitPt.x) > 0.04) {
+              interactAction = 'react_poke';
+            } else {
+              interactAction = 'react_boop';
+            }
+          } else if (hitPt.y > 0.85) {
+            // Torso & Arms
+            if (Math.abs(hitPt.x) > 0.2) {
+              interactAction = 'react_arm_touch';
+            } else {
+              interactAction = 'react_tickle';
+            }
+          } else {
+            interactAction = 'react_tap_surprise';
+          }
+
+          currentActionRef.current = interactAction;
+          actionTimeRef.current = 0;
+          propsRef.current.onAvatarInteract?.(interactAction);
+        }
+      };
+      el.addEventListener('click', handleClick);
+
       const getBone = (vrm: VRM, name: VRMHumanBoneName) => {
         return vrm.humanoid?.getNormalizedBoneNode(name) || null;
       };
@@ -275,7 +312,7 @@ export const VRMViewer = forwardRef<VRMViewerHandle, Props>(
           // 1. Calculate Base Standing Idle Pose
           const idlePose = getIdlePose(t, currentGazeRef.current.x, currentGazeRef.current.y);
 
-          // 2. Select Active Isolated Action Pose
+          // 2. Select Active Isolated Action Pose among 125 library actions
           let activePose: VRMPose = idlePose;
           const maxDur = ACTION_DURATIONS[act];
           if (maxDur && actTime > maxDur) {
@@ -283,37 +320,13 @@ export const VRMViewer = forwardRef<VRMViewerHandle, Props>(
             propsRef.current.onActionEnd?.();
           }
 
-          if (act === 'wave') {
-            activePose = getWavePose(t, actTime, idlePose);
-          } else if (act === 'salute') {
-            activePose = getSalutePose(t, actTime, idlePose);
-          } else if (act === 'dance') {
-            activePose = getDancePose(t, actTime, idlePose);
-          } else if (act === 'stretch') {
-            activePose = getStretchPose(t, actTime, idlePose);
-          } else if (act === 'heart') {
-            activePose = getHeartPose(t, actTime, idlePose);
-          } else if (act === 'peace') {
-            activePose = getPeacePose(t, actTime, idlePose);
-          } else if (act === 'neko') {
-            activePose = getNekoPose(t, actTime, idlePose);
-          } else if (act === 'bow') {
-            activePose = getBowPose(t, actTime, idlePose);
-          } else if (act === 'cheer') {
-            activePose = getCheerPose(t, actTime, idlePose);
-          } else if (act === 'blush') {
-            activePose = getBlushPose(t, actTime, idlePose);
-          } else if (act === 'laugh') {
-            activePose = getLaughPose(t, actTime, idlePose);
-          } else if (act === 'listen') {
-            activePose = getListenPose(t, actTime, idlePose);
-          } else if (isLipSyncRef.current) {
+          if (isLipSyncRef.current && act === 'idle') {
             activePose = getTalkingPose(t, idlePose);
-          } else if (mood === 'thinking' || act === 'thinking') {
-            activePose = getThinkingPose(t, idlePose);
+          } else {
+            activePose = resolveActionPose(act, t, actTime, idlePose);
           }
 
-          // 3. Smooth Continuous Bone Interpolator (Damping Slerp/Lerp)
+          // 3. Smooth Continuous Bone Interpolator (Damping Slerp/Lerp at 8.5x)
           const blendRate = THREE.MathUtils.clamp(dt * 8.5, 0, 1);
 
           const applySmoothRot = (boneName: VRMHumanBoneName, rot?: [number, number, number]) => {
@@ -363,7 +376,7 @@ export const VRMViewer = forwardRef<VRMViewerHandle, Props>(
           applySmoothRot('leftFoot', activePose.leftFootRot);
           applySmoothRot('rightFoot', activePose.rightFootRot);
 
-          // Apply finger presets
+          // Apply finger presets with correct anatomical kinematics
           applyFingerPreset(vrm, 'left', activePose.leftFingers || 'relaxed');
           applyFingerPreset(vrm, 'right', activePose.rightFingers || 'relaxed');
 
@@ -405,7 +418,7 @@ export const VRMViewer = forwardRef<VRMViewerHandle, Props>(
           vrm.update(dt);
         }
 
-        // Live Joint Auto-Framing
+        // Live Joint Auto-Framing with Seated / Floor Compensation
         const headNode = vrm ? getBone(vrm, 'head') : null;
         const hipsNode = vrm ? getBone(vrm, 'hips') : null;
         const headPos = new THREE.Vector3();
@@ -417,8 +430,8 @@ export const VRMViewer = forwardRef<VRMViewerHandle, Props>(
         const headY = headPos.y || 1.48;
         const hipsY = hipsPos.y || 0.82;
         const torsoY = (headY + hipsY) / 2;
-        const fullHeight = headY + 0.22; // include top of hair
-        const bodyCenterY = fullHeight * 0.5;
+        const fullHeight = headY + 0.22;
+        const bodyCenterY = Math.max(0.4, fullHeight * 0.5);
 
         const currentAngle = propsRef.current.angle || 'full';
 
@@ -428,19 +441,16 @@ export const VRMViewer = forwardRef<VRMViewerHandle, Props>(
         let targetFov   = 32;
 
         if (currentAngle === 'portrait') {
-          // Face close-up view: centers face & eyes with headroom
           targetLookY = headY;
           targetCamY  = headY;
           targetDist  = 1.15;
           targetFov   = 26;
         } else if (currentAngle === 'half') {
-          // Half body view: from waist to top of hair
           targetLookY = torsoY + 0.05;
           targetCamY  = torsoY + 0.05;
           targetDist  = 2.15;
           targetFov   = 28;
         } else {
-          // Full body view: centers entire standing avatar from shoes to top of hair with headroom
           targetLookY = bodyCenterY;
           targetCamY  = bodyCenterY + 0.05;
           targetDist  = 3.45;
@@ -476,6 +486,7 @@ export const VRMViewer = forwardRef<VRMViewerHandle, Props>(
       return () => {
         ro.disconnect();
         window.removeEventListener('mousemove', handleMouseMove);
+        el.removeEventListener('click', handleClick);
         if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
         if (vrmRef.current) {
           VRMUtils.deepDispose(vrmRef.current.scene);
@@ -493,7 +504,7 @@ export const VRMViewer = forwardRef<VRMViewerHandle, Props>(
     return (
       <div
         ref={containerRef}
-        className={`w-full h-full relative overflow-hidden ${className}`}
+        className={`w-full h-full relative overflow-hidden cursor-pointer ${className}`}
         style={{ background: 'transparent' }}
         aria-label="3D AI Companion Avatar"
       />

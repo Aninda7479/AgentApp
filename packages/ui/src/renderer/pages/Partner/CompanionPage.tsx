@@ -140,22 +140,70 @@ export const CompanionPage: React.FC<CompanionPageProps> = () => {
   // ── Trigger action on prompt keywords ──────────────────────────────────────
   const triggerActionByPrompt = (text: string) => {
     const lower = text.toLowerCase();
-    if (lower.includes('dance') || lower.includes('groove')) {
+    if (lower.includes('finger heart') || lower.includes('korean heart')) {
+      handleTriggerAction('finger_heart');
+    } else if (lower.includes('arm heart') || lower.includes('big heart')) {
+      handleTriggerAction('arm_heart_big');
+    } else if (lower.includes('heart') || lower.includes('love')) {
+      handleTriggerAction('heart');
+    } else if (lower.includes('dance') || lower.includes('groove')) {
       handleTriggerAction('dance');
-    } else if (lower.includes('stretch') || lower.includes('gymnastic') || lower.includes('exercise')) {
-      handleTriggerAction('stretch');
+    } else if (lower.includes('stretch') || lower.includes('gymnastic') || lower.includes('yoga')) {
+      handleTriggerAction('routine_exercise');
+    } else if (lower.includes('energetic wave') || lower.includes('excited wave')) {
+      handleTriggerAction('wave_energetic');
+    } else if (lower.includes('shy wave')) {
+      handleTriggerAction('wave_shy');
+    } else if (lower.includes('good morning')) {
+      handleTriggerAction('good_morning');
+    } else if (lower.includes('goodbye') || lower.includes('bye')) {
+      handleTriggerAction('goodbye_wave');
     } else if (lower.includes('hello') || lower.includes('hi ') || lower.includes('hey') || lower.includes('wave')) {
       handleTriggerAction('wave');
-    } else if (lower.includes('salute') || lower.includes('respect') || lower.includes('captain')) {
+    } else if (lower.includes('salute') || lower.includes('captain')) {
       handleTriggerAction('salute');
-    } else if (lower.includes('love') || lower.includes('heart') || lower.includes('cute')) {
-      handleTriggerAction('heart');
-    } else if (lower.includes('peace') || lower.includes('victory')) {
+    } else if (lower.includes('kiss') || lower.includes('mwah')) {
+      handleTriggerAction('kiss_single');
+    } else if (lower.includes('peace') || lower.includes('victory') || lower.includes('v-sign')) {
       handleTriggerAction('peace');
-    } else if (lower.includes('cat') || lower.includes('neko') || lower.includes('meow')) {
+    } else if (lower.includes('cat') || lower.includes('neko') || lower.includes('meow') || lower.includes('nya')) {
       handleTriggerAction('neko');
     } else if (lower.includes('bow') || lower.includes('thank')) {
       handleTriggerAction('bow');
+    } else if (lower.includes('clap') || lower.includes('applause')) {
+      handleTriggerAction('clap');
+    } else if (lower.includes('cheer') || lower.includes('celebrate') || lower.includes('production')) {
+      handleTriggerAction('cheer');
+    } else if (lower.includes('laugh') || lower.includes('joke') || lower.includes('haha') || lower.includes('lol')) {
+      handleTriggerAction('laugh');
+    } else if (lower.includes('thumbs up') || lower.includes('great job')) {
+      handleTriggerAction('thumbs_up_double');
+    } else if (lower.includes('high five')) {
+      handleTriggerAction('high_five');
+    } else if (lower.includes('blush') || lower.includes('cute')) {
+      handleTriggerAction('blush');
+    } else if (lower.includes('wink')) {
+      handleTriggerAction('wink_smile');
+    } else if (lower.includes('selfie')) {
+      handleTriggerAction('routine_selfie');
+    } else if (lower.includes('phone')) {
+      handleTriggerAction('routine_phone');
+    } else if (lower.includes('coffee') || lower.includes('tea') || lower.includes('drink')) {
+      handleTriggerAction('routine_coffee');
+    } else if (lower.includes('book') || lower.includes('read')) {
+      handleTriggerAction('routine_book');
+    } else if (lower.includes('glasses')) {
+      handleTriggerAction('routine_adjust_glasses');
+    } else if (lower.includes('time') || lower.includes('watch')) {
+      handleTriggerAction('routine_check_watch');
+    } else if (lower.includes('sleep') || lower.includes('tired') || lower.includes('goodnight')) {
+      handleTriggerAction('routine_sleeping');
+    } else if (lower.includes('sit') || lower.includes('chair')) {
+      handleTriggerAction('idle_sitting_chair');
+    } else if (lower.includes('hug')) {
+      handleTriggerAction('air_hug');
+    } else if (lower.includes('spin')) {
+      handleTriggerAction('spin');
     }
   };
 
@@ -263,6 +311,7 @@ export const CompanionPage: React.FC<CompanionPageProps> = () => {
             angle={cameraAngle}
             className="w-full h-full"
             onActionEnd={() => setCurrentAction('idle')}
+            onAvatarInteract={handleTriggerAction}
           />
         </div>
 

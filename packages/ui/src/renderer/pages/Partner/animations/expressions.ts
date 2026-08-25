@@ -10,6 +10,8 @@ export const MOOD_EXPRESSIONS: Record<CompanionMood, Partial<Record<VRMExpressio
   sad:       { sad: 0.85 },
   angry:     { angry: 0.7 },
   surprised: { surprised: 0.95 },
+  flirty:    { happy: 0.8, relaxed: 0.5 },
+  sleepy:    { relaxed: 0.9, lookDown: 0.35 },
 };
 
 const ALL_PRESETS: VRMExpressionPresetName[] = [

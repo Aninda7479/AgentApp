@@ -1,239 +1,169 @@
-import { MathUtils } from 'three';
-import type { VRMPose } from './types';
+import type { VRMPose, CompanionAction } from './types';
 
-// ── Organic Lifelike Standing Idle ────────────────────────────────────────────
-export function getIdlePose(t: number, gazeX: number, gazeY: number): VRMPose {
-  // Breathing: 4.2s natural resting cycle
-  const breath = Math.sin(t * 1.5);
-  // Weight-shifting hip sway: 5.6s slow cycle
-  const swaySide = Math.sin(t * 0.4);
-  const swayRot = Math.cos(t * 0.4);
+export * from './clipsCore';
+export * from './clipsGreetings';
+export * from './clipsAffection';
+export * from './clipsJoy';
+export * from './clipsConversation';
+export * from './clipsPlayful';
+export * from './clipsNegative';
+export * from './clipsInteractive';
+export * from './clipsRoutines';
 
-  return {
-    // Subtle weight shift on hips
-    hipsPos: [swaySide * 0.015, breath * 0.005, 0],
-    hipsRot: [0, swayRot * 0.02, swaySide * 0.02],
+import {
+  getIdlePose,
+  getIdleRelaxedPose,
+  getIdleBehindBackPose,
+  getIdleHipsPose,
+  getIdleArmsCrossedPose,
+  getThinkingPose,
+  getIdleWaitingPose,
+  getIdleSittingChairPose,
+  getIdleSittingFloorPose,
+  getIdleStretchingPose,
+  getIdleSleepyPose,
+  getIdleCuriousPose,
+} from './clipsCore';
 
-    // Spine & chest counter-balance the hip sway
-    spineRot: [0.02 + breath * 0.02, -swayRot * 0.015, -swaySide * 0.015],
-    chestRot: [breath * 0.025, swaySide * 0.01, 0],
-    upperChestRot: [breath * 0.015, 0, 0],
+import {
+  getWavePose,
+  getWaveEnergeticPose,
+  getWaveShyPose,
+  getBowPose,
+  getNodCasualPose,
+  getAirHugPose,
+  getKissGreetingPose,
+  getGoodMorningPose,
+  getGoodbyeWavePose,
+  getGoodbyeReluctantPose,
+  getKissGoodbyePose,
+} from './clipsGreetings';
 
-    // Neck & Head with organic micro-motion & eye tracking
-    neckRot: [-0.01 + breath * 0.01, gazeX * 0.25, gazeY * 0.15],
-    headRot: [
-      -gazeY * 0.35 + Math.sin(t * 0.6) * 0.02,
-      gazeX * 0.45 + swayRot * 0.02,
-      -gazeX * 0.1 + Math.sin(t * 0.45) * 0.015,
-    ],
+import {
+  getKissSinglePose,
+  getKissTwoHandedPose,
+  getFingerHeartPose,
+  getHeartPose,
+  getArmHeartBigPose,
+  getAirCuddlesPose,
+  getBlushPose,
+  getWinkSmilePose,
+  getHairFlipPose,
+  getLeanInPose,
+  getLovingGazePose,
+  getLipBitePose,
+  getBeckonPose,
+  getTraceHeartPose,
+  getPeekFingersPose,
+  getTwirlHairPose,
+  getLovingSighPose,
+} from './clipsAffection';
 
-    // Shoulders slightly rise on inhale
-    leftShoulderRot: [0, 0, 0.02 + breath * 0.02],
-    rightShoulderRot: [0, 0, -0.02 - breath * 0.02],
+import {
+  getClapPose,
+  getJumpJoyPose,
+  getSpinPose,
+  getFistPumpPose,
+  getLaughPose,
+  getLaughFullPose,
+  getDancePose,
+  getThumbsUpDoublePose,
+  getThumbsUpSinglePose,
+  getSparklyEyesPose,
+  getHighFivePose,
+  getPeacePose,
+  getCheerPose,
+} from './clipsJoy';
 
-    // Left Arm (relaxed natural drop with subtle elbow curve)
-    leftUpperArmRot: [0.1 + breath * 0.015, -0.05, -1.22 + swaySide * 0.025],
-    leftLowerArmRot: [0.22, -0.12, -0.1],
-    leftHandRot:     [0.08, -0.05, -0.05],
-    leftFingers:     'relaxed',
+import {
+  getTalkNodPose,
+  getTalkShakeHeadPose,
+  getTalkShrugPose,
+  getTalkCountFingersPose,
+  getTalkPointScreenPose,
+  getTalkPointSelfPose,
+  getTalkHandsPose,
+  getTalkTiltHeadPose,
+  getTalkCupEarPose,
+  getTalkHandChestPose,
+  getTalkWagFingerPose,
+  getTalkEyebrowPose,
+  getTalkDeepBreathPose,
+  getTalkLookAroundPose,
+  getTalkWhisperPose,
+  getTalkInterruptionPose,
+  getTalkingPose,
+} from './clipsConversation';
 
-    // Right Arm (relaxed natural drop with subtle elbow curve)
-    rightUpperArmRot: [0.1 + breath * 0.015, 0.05, 1.22 - swaySide * 0.025],
-    rightLowerArmRot: [0.22, 0.12, 0.1],
-    rightHandRot:     [0.08, 0.05, 0.05],
-    rightFingers:     'relaxed',
+import {
+  getPoutPose,
+  getTongueOutPose,
+  getEyerollPose,
+  getFakeYawnPose,
+  getPeekabooPose,
+  getWatchingYouPose,
+  getPlayfulPunchPose,
+  getMicDropPose,
+  getDustShouldersPose,
+  getLookNailsPose,
+  getNekoPose,
+} from './clipsPlayful';
 
-    // Legs with contrapposto balance
-    leftUpperLegRot:  [-0.02, 0.02, -swaySide * 0.025],
-    rightUpperLegRot: [-0.02, -0.02, -swaySide * 0.025],
-    leftLowerLegRot:  [0.05, 0, 0],
-    rightLowerLegRot: [0.05, 0, 0],
-    leftFootRot:      [0, 0, swaySide * 0.02],
-    rightFootRot:     [0, 0, swaySide * 0.02],
-  };
-}
+import {
+  getSadSighPose,
+  getCryingPose,
+  getSulkingPose,
+  getStartledPose,
+  getShiveringPose,
+  getAngryStompPose,
+  getFacepalmPose,
+  getAnxiousFidgetPose,
+  getPacingPose,
+  getPleadingPose,
+  getCurlingUpPose,
+  getTremblingLipPose,
+  getEmbarrassedHidePose,
+} from './clipsNegative';
 
-// ── Wave (Hello 👋) ───────────────────────────────────────────────────────────
-export function getWavePose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  const waveCycle = Math.sin(actTime * 8.0);
-  const bodyTurn = Math.sin(actTime * 2.0) * 0.06;
+import {
+  getReactHeadpatPose,
+  getReactPokePose,
+  getReactTicklePose,
+  getReactTapSurprisePose,
+  getReactStrokeHairPose,
+  getReactArmTouchPose,
+  getReactBoopPose,
+  getReactEarPullPose,
+  getReactHugPose,
+  getReactDizzyPose,
+  getReactSwipePose,
+} from './clipsInteractive';
 
-  return {
-    ...baseIdle,
-    hipsRot: [0, 0.08 + bodyTurn, 0.02],
-    spineRot: [0.02, -0.05, -0.02],
-    headRot: [
-      (baseIdle.headRot?.[0] || 0) - 0.05,
-      (baseIdle.headRot?.[1] || 0) + 0.08,
-      0.12,
-    ],
+import {
+  getRoutineYawnPose,
+  getRoutineFallAsleepPose,
+  getRoutineSleepingPose,
+  getRoutinePhonePose,
+  getRoutineSelfiePose,
+  getRoutineListenMusicPose,
+  getRoutineCoffeePose,
+  getRoutineBookPose,
+  getRoutineAdjustGlassesPose,
+  getRoutineCheckWatchPose,
+  getRoutineMakeupPose,
+  getRoutinePetAnimalPose,
+  getRoutineExercisePose,
+  getRoutineSnackPose,
+  getRoutineCookingPose,
+  getRoutineTypingPose,
+  getRoutineJacketPose,
+  getRoutineSmellFlowersPose,
+  getRoutineCatchBugPose,
+  getRoutineTieShoesPose,
+  getRoutineLookSkyPose,
+} from './clipsRoutines';
 
-    // Left hand rests comfortably on hip
-    leftUpperArmRot: [0.15, -0.2, -0.75],
-    leftLowerArmRot: [0.85, -0.2, -0.65],
-    leftHandRot:     [0.2, 0, -0.2],
-    leftFingers:     'relaxed',
-
-    // Right arm raised and waving gracefully
-    rightUpperArmRot: [0.25, -0.15, 0.45],
-    rightLowerArmRot: [-0.15, 0.25, -1.6 + waveCycle * 0.28],
-    rightHandRot:     [0.0, -1.4, waveCycle * 0.3],
-    rightFingers:     'open',
-
-    expressions: { happy: 0.95 },
-  };
-}
-
-// ── Heart (💖 Cute Love) ──────────────────────────────────────────────────────
-export function getHeartPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  const rock = Math.sin(actTime * 3.0) * 0.04;
-
-  return {
-    ...baseIdle,
-    hipsRot: [0, 0, rock],
-    spineRot: [0.04, 0, -rock * 0.8],
-    headRot: [-0.04, rock * 0.5, -0.16 + Math.sin(t * 2.0) * 0.04],
-
-    // Both hands form a heart at chest level
-    leftUpperArmRot:  [0.52, -0.3, -0.55],
-    leftLowerArmRot:  [0.92, -0.1, -1.2],
-    leftHandRot:      [0.1, 0, -0.25],
-    leftFingers:      'heart',
-
-    rightUpperArmRot: [0.52, 0.3, 0.55],
-    rightLowerArmRot: [0.92, 0.1, 1.2],
-    rightHandRot:     [0.1, 0, 0.25],
-    rightFingers:     'heart',
-
-    expressions: { happy: 1.0, relaxed: 0.4 },
-  };
-}
-
-// ── Peace (✌️ Playful Victory) ─────────────────────────────────────────────────
-export function getPeacePose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  const bounce = Math.sin(actTime * 4.0) * 0.02;
-
-  return {
-    ...baseIdle,
-    hipsRot: [0, 0, 0.05 + bounce],
-    headRot: [-0.05, 0.05, 0.16],
-
-    // Left arm on waist
-    leftUpperArmRot: [0.15, -0.15, -0.8],
-    leftLowerArmRot: [0.85, -0.2, -0.6],
-    leftFingers:     'relaxed',
-
-    // Right arm holds peace sign near eye
-    rightUpperArmRot: [0.28, 0.3, -0.5],
-    rightLowerArmRot: [0.35, 0.05, -1.55],
-    rightHandRot:     [0.35, -0.1, 0.25],
-    rightFingers:     'peace',
-
-    expressions: { happy: 0.95 },
-  };
-}
-
-// ── Dance (Groovy Rhythm 💃) ─────────────────────────────────────────────────
-export function getDancePose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  const beat = t * 4.4;
-  const danceSway = Math.sin(beat);
-  const danceStep = Math.cos(beat);
-  const bounce = Math.abs(Math.sin(beat * 2.0));
-
-  return {
-    ...baseIdle,
-    hipsPos: [danceSway * 0.07, bounce * 0.03, 0],
-    hipsRot: [0, danceStep * 0.1, danceSway * 0.09],
-    spineRot: [0.03, -danceStep * 0.06, -danceSway * 0.07],
-    chestRot: [bounce * 0.03, danceStep * 0.04, 0],
-    headRot: [
-      bounce * 0.08,
-      -danceSway * 0.22,
-      danceSway * 0.12,
-    ],
-
-    // Flowing dance arms
-    leftUpperArmRot:  [0.3 + danceSway * 0.25, -0.2, -0.6 + danceStep * 0.4],
-    leftLowerArmRot:  [0.7 + bounce * 0.2, 0, -0.6],
-    leftHandRot:      [danceSway * 0.2, 0, 0],
-    leftFingers:      'open',
-
-    rightUpperArmRot: [0.3 - danceSway * 0.25, 0.2, 0.6 - danceStep * 0.4],
-    rightLowerArmRot: [0.7 + bounce * 0.2, 0, 0.6],
-    rightHandRot:     [-danceSway * 0.2, 0, 0],
-    rightFingers:     'open',
-
-    leftUpperLegRot:  [-0.05 + danceStep * 0.05, 0, -danceSway * 0.05],
-    rightUpperLegRot: [-0.05 - danceStep * 0.05, 0, -danceSway * 0.05],
-    leftLowerLegRot:  [0.08 + Math.max(0, danceSway) * 0.1, 0, 0],
-    rightLowerLegRot: [0.08 + Math.max(0, -danceSway) * 0.1, 0, 0],
-
-    expressions: { happy: 0.95 },
-  };
-}
-
-// ── Stretch (Morning Refresh 🤸) ──────────────────────────────────────────────
-export function getStretchPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  const stretchPhase = (actTime % 6.0) / 6.0;
-
-  if (stretchPhase < 0.55) {
-    const p = stretchPhase / 0.55;
-    const raise = MathUtils.smoothstep(p, 0, 1);
-    return {
-      ...baseIdle,
-      spineRot: [-0.18 * raise, 0, 0],
-      chestRot: [0.1 * raise, 0, 0],
-      headRot: [-0.32 * raise, 0, 0],
-      leftUpperArmRot:  [0.35 * raise, 0, MathUtils.lerp(-1.22, 2.7, raise)],
-      leftLowerArmRot:  [0.12, 0, 0],
-      leftFingers:      'open',
-      rightUpperArmRot: [0.35 * raise, 0, MathUtils.lerp(1.22, -2.7, raise)],
-      rightLowerArmRot: [0.12, 0, 0],
-      rightFingers:     'open',
-      expressions: { relaxed: 0.8 },
-    };
-  } else {
-    const p = (stretchPhase - 0.55) / 0.45;
-    const release = MathUtils.smoothstep(p, 0, 1);
-    return {
-      ...baseIdle,
-      spineRot: [MathUtils.lerp(-0.18, 0.02, release), 0, 0],
-      headRot: [MathUtils.lerp(-0.32, 0, release), 0, 0],
-      leftUpperArmRot:  [0.1, 0, MathUtils.lerp(2.7, -1.22, release)],
-      leftLowerArmRot:  [0.2, -0.1, -0.1],
-      leftFingers:      'relaxed',
-      rightUpperArmRot: [0.1, 0, MathUtils.lerp(-2.7, 1.22, release)],
-      rightLowerArmRot: [0.2, 0.1, 0.1],
-      rightFingers:     'relaxed',
-      expressions: { relaxed: 0.5 },
-    };
-  }
-}
-
-// ── Neko (Cat Girl Paws 🐱) ──────────────────────────────────────────────────
-export function getNekoPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  const pawL = Math.sin(t * 6.5) * 0.2;
-  const pawR = Math.cos(t * 6.5) * 0.2;
-  const headSway = Math.sin(t * 3.0) * 0.14;
-
-  return {
-    ...baseIdle,
-    headRot: [0, Math.cos(t * 2.5) * 0.1, headSway],
-    leftUpperArmRot:  [0.4, -0.25, -0.45],
-    leftLowerArmRot:  [0.75, -0.2, -1.3 + pawL],
-    leftHandRot:      [0.85, 0, 0],
-    leftFingers:      'cat',
-
-    rightUpperArmRot: [0.4, 0.25, 0.45],
-    rightLowerArmRot: [0.75, 0.2, 1.3 + pawR],
-    rightHandRot:     [0.85, 0, 0],
-    rightFingers:     'cat',
-
-    expressions: { happy: 0.95 },
-  };
-}
-
-// ── Salute (🫡 Sharp & Respectful) ─────────────────────────────────────────────
+// Legacy helpers
 export function getSalutePose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
   return {
     ...baseIdle,
@@ -248,157 +178,173 @@ export function getSalutePose(t: number, actTime: number, baseIdle: VRMPose): VR
   };
 }
 
-// ── Bow (🙇 Polite Japanese Greeting) ─────────────────────────────────────────
-export function getBowPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  const bowProg = Math.sin((actTime / 3.2) * Math.PI);
-  const bend = MathUtils.clamp(bowProg * 0.48, 0, 0.48);
-
-  return {
-    ...baseIdle,
-    hipsRot: [bend * 0.3, 0, 0],
-    spineRot: [bend, 0, 0],
-    headRot:  [bend * 0.4, 0, 0],
-    leftUpperArmRot:  [0.05, 0, -1.28],
-    rightUpperArmRot: [0.05, 0, 1.28],
-    leftFingers:      'salute',
-    rightFingers:     'salute',
-    expressions: { neutral: 1.0 },
-  };
+export function getStretchPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
+  return getIdleStretchingPose(t, actTime, baseIdle);
 }
 
-// ── Cheer (🎉 Excited Fist Pump) ──────────────────────────────────────────────
-export function getCheerPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  const hop = Math.abs(Math.sin(t * 7.5));
-
-  return {
-    ...baseIdle,
-    hipsPos: [0, hop * 0.04, 0],
-    spineRot: [-0.06, 0, 0],
-    headRot: [-0.22, 0, 0],
-    leftUpperArmRot:  [0.5, 0, 2.2],
-    leftLowerArmRot:  [0.7 + hop * 0.25, 0, 0],
-    leftFingers:      'fist',
-    rightUpperArmRot: [0.5, 0, -2.2],
-    rightLowerArmRot: [0.7 + hop * 0.25, 0, 0],
-    rightFingers:     'fist',
-    expressions: { happy: 1.0 },
-  };
-}
-
-// ── Blush (😳 Shy & Embarrassed) ──────────────────────────────────────────────
-export function getBlushPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  const shySway = Math.sin(t * 1.8) * 0.03;
-
-  return {
-    ...baseIdle,
-    hipsRot: [0, 0.15, shySway],
-    spineRot: [0.06, -0.1, -shySway],
-    headRot: [0.22, -0.12, -0.14],
-
-    // Hands clasped together shyly in front
-    leftUpperArmRot:  [0.35, -0.2, -0.35],
-    leftLowerArmRot:  [0.85, -0.1, -0.8],
-    leftHandRot:      [0.2, 0, -0.3],
-    leftFingers:      'relaxed',
-
-    rightUpperArmRot: [0.35, 0.2, 0.35],
-    rightLowerArmRot: [0.85, 0.1, 0.8],
-    rightHandRot:     [0.2, 0, 0.3],
-    rightFingers:     'relaxed',
-
-    expressions: { relaxed: 0.6, happy: 0.4 },
-  };
-}
-
-// ── Laugh (😄 Giggle & Laughter) ──────────────────────────────────────────────
-export function getLaughPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  const chuckle = Math.sin(t * 12.0) * 0.03;
-
-  return {
-    ...baseIdle,
-    spineRot: [0.08 + chuckle, 0, 0],
-    chestRot: [0.05 + chuckle * 1.5, 0, 0],
-    headRot: [-0.15 + chuckle * 0.8, Math.sin(t * 3.0) * 0.05, 0.08],
-
-    // Right hand covering mouth gently while laughing
-    rightUpperArmRot: [0.38, 0.35, -0.4],
-    rightLowerArmRot: [0.65, 0.2, -1.6],
-    rightHandRot:     [0.4, -0.1, 0],
-    rightFingers:     'relaxed',
-
-    leftUpperArmRot:  [0.2, -0.2, -0.75],
-    leftLowerArmRot:  [0.7, -0.15, -0.4],
-    leftFingers:      'relaxed',
-
-    expressions: { happy: 1.0 },
-  };
-}
-
-// ── Listen (👂 Attentive Lean-In) ─────────────────────────────────────────────
 export function getListenPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  return {
-    ...baseIdle,
-    // Leans forward slightly toward user
-    spineRot: [0.12, 0, 0],
-    chestRot: [0.08, 0, 0],
-    headRot: [-0.08, 0.05, 0.15],
-
-    // Attentive posture with arms loosely folded
-    leftUpperArmRot:  [0.25, -0.2, -0.45],
-    leftLowerArmRot:  [0.75, -0.15, -0.65],
-    leftFingers:      'relaxed',
-
-    rightUpperArmRot: [0.25, 0.2, 0.45],
-    rightLowerArmRot: [0.75, 0.15, 0.65],
-    rightFingers:     'relaxed',
-
-    expressions: { neutral: 0.6, happy: 0.3 },
-  };
+  return getLeanInPose(t, actTime, baseIdle);
 }
 
-// ── Talking (Communicative Gestures with Speech) ───────────────────────────────
-export function getTalkingPose(t: number, baseIdle: VRMPose): VRMPose {
-  const g1 = Math.sin(t * 3.6);
-  const g2 = Math.cos(t * 2.8);
+/**
+ * Master Action Resolver: Returns the target VRMPose for any action among the 125 library actions.
+ */
+export function resolveActionPose(
+  action: CompanionAction,
+  t: number,
+  actTime: number,
+  baseIdle: VRMPose
+): VRMPose {
+  switch (action) {
+    // 1. Core Idles
+    case 'idle':                return baseIdle;
+    case 'idle_relaxed':        return getIdleRelaxedPose(t, baseIdle);
+    case 'idle_behind_back':    return getIdleBehindBackPose(t, baseIdle);
+    case 'idle_hips':           return getIdleHipsPose(t, baseIdle);
+    case 'idle_arms_crossed':   return getIdleArmsCrossedPose(t, baseIdle);
+    case 'thinking':            return getThinkingPose(t, baseIdle);
+    case 'idle_waiting':        return getIdleWaitingPose(t, baseIdle);
+    case 'idle_sitting_chair':  return getIdleSittingChairPose(t, baseIdle);
+    case 'idle_sitting_floor':  return getIdleSittingFloorPose(t, baseIdle);
+    case 'idle_stretching':     return getIdleStretchingPose(t, actTime, baseIdle);
+    case 'idle_sleepy':         return getIdleSleepyPose(t, baseIdle);
+    case 'idle_curious':        return getIdleCuriousPose(t, baseIdle);
 
-  return {
-    ...baseIdle,
-    spineRot: [0.03 + g1 * 0.015, g2 * 0.02, 0],
-    headRot: [
-      (baseIdle.headRot?.[0] || 0) + Math.sin(t * 4.8) * 0.04,
-      (baseIdle.headRot?.[1] || 0) + Math.cos(t * 2.2) * 0.03,
-      (baseIdle.headRot?.[2] || 0) + g1 * 0.02,
-    ],
+    // 2. Greetings & Farewells
+    case 'wave':                return getWavePose(t, actTime, baseIdle);
+    case 'wave_energetic':      return getWaveEnergeticPose(t, actTime, baseIdle);
+    case 'wave_shy':            return getWaveShyPose(t, actTime, baseIdle);
+    case 'bow':                 return getBowPose(t, actTime, baseIdle);
+    case 'nod_casual':          return getNodCasualPose(t, actTime, baseIdle);
+    case 'air_hug':             return getAirHugPose(t, actTime, baseIdle);
+    case 'kiss_greeting':       return getKissGreetingPose(t, actTime, baseIdle);
+    case 'good_morning':        return getGoodMorningPose(t, actTime, baseIdle);
+    case 'goodbye_wave':        return getGoodbyeWavePose(t, actTime, baseIdle);
+    case 'goodbye_reluctant':   return getGoodbyeReluctantPose(t, actTime, baseIdle);
+    case 'kiss_goodbye':        return getKissGoodbyePose(t, actTime, baseIdle);
 
-    // Natural expressive arm movements
-    rightUpperArmRot: [0.32 + g2 * 0.12, 0.18, 0.82 + g1 * 0.16],
-    rightLowerArmRot: [0.52 + g2 * 0.18, 0.3, 0.22],
-    rightHandRot:     [0.18 + g1 * 0.1, 0, 0],
-    rightFingers:     'open',
+    // 3. Affection & Flirting
+    case 'kiss_single':         return getKissSinglePose(t, actTime, baseIdle);
+    case 'kiss_two_handed':     return getKissTwoHandedPose(t, actTime, baseIdle);
+    case 'finger_heart':        return getFingerHeartPose(t, actTime, baseIdle);
+    case 'heart':               return getHeartPose(t, actTime, baseIdle);
+    case 'arm_heart_big':       return getArmHeartBigPose(t, actTime, baseIdle);
+    case 'air_cuddles':         return getAirCuddlesPose(t, actTime, baseIdle);
+    case 'blush':               return getBlushPose(t, actTime, baseIdle);
+    case 'wink_smile':          return getWinkSmilePose(t, actTime, baseIdle);
+    case 'hair_flip':           return getHairFlipPose(t, actTime, baseIdle);
+    case 'lean_in':             return getLeanInPose(t, actTime, baseIdle);
+    case 'loving_gaze':         return getLovingGazePose(t, actTime, baseIdle);
+    case 'lip_bite':            return getLipBitePose(t, actTime, baseIdle);
+    case 'beckon':              return getBeckonPose(t, actTime, baseIdle);
+    case 'trace_heart':         return getTraceHeartPose(t, actTime, baseIdle);
+    case 'peek_fingers':        return getPeekFingersPose(t, actTime, baseIdle);
+    case 'twirl_hair':          return getTwirlHairPose(t, actTime, baseIdle);
+    case 'loving_sigh':         return getLovingSighPose(t, actTime, baseIdle);
 
-    leftUpperArmRot:  [0.15, -0.15, -0.9 + g2 * 0.08],
-    leftLowerArmRot:  [0.35, -0.1, -0.15],
-    leftFingers:      'relaxed',
-  };
-}
+    // 4. Joy & Excitement
+    case 'clap':                return getClapPose(t, actTime, baseIdle);
+    case 'jump_joy':            return getJumpJoyPose(t, actTime, baseIdle);
+    case 'spin':                return getSpinPose(t, actTime, baseIdle);
+    case 'fist_pump':           return getFistPumpPose(t, actTime, baseIdle);
+    case 'laugh':               return getLaughPose(t, actTime, baseIdle);
+    case 'laugh_full':          return getLaughFullPose(t, actTime, baseIdle);
+    case 'dance':               return getDancePose(t, actTime, baseIdle);
+    case 'thumbs_up_double':    return getThumbsUpDoublePose(t, actTime, baseIdle);
+    case 'thumbs_up_single':    return getThumbsUpSinglePose(t, actTime, baseIdle);
+    case 'sparkly_eyes':        return getSparklyEyesPose(t, actTime, baseIdle);
+    case 'high_five':           return getHighFivePose(t, actTime, baseIdle);
+    case 'peace':               return getPeacePose(t, actTime, baseIdle);
+    case 'cheer':               return getCheerPose(t, actTime, baseIdle);
 
-// ── Thinking (Curious Pondering 🤔) ────────────────────────────────────────────
-export function getThinkingPose(t: number, baseIdle: VRMPose): VRMPose {
-  return {
-    ...baseIdle,
-    spineRot: [0.04, -0.05, -0.02],
-    headRot: [-0.14, -0.18, -0.16],
+    // 5. Conversational Gestures
+    case 'talk_nod':            return getTalkNodPose(t, actTime, baseIdle);
+    case 'talk_shake_head':     return getTalkShakeHeadPose(t, actTime, baseIdle);
+    case 'talk_shrug':          return getTalkShrugPose(t, actTime, baseIdle);
+    case 'talk_count_fingers':  return getTalkCountFingersPose(t, actTime, baseIdle);
+    case 'talk_point_screen':   return getTalkPointScreenPose(t, actTime, baseIdle);
+    case 'talk_point_self':     return getTalkPointSelfPose(t, actTime, baseIdle);
+    case 'talk_hands':          return getTalkHandsPose(t, baseIdle);
+    case 'talk_tilt_head':      return getTalkTiltHeadPose(t, actTime, baseIdle);
+    case 'talk_cup_ear':        return getTalkCupEarPose(t, actTime, baseIdle);
+    case 'talk_hand_chest':     return getTalkHandChestPose(t, actTime, baseIdle);
+    case 'talk_wag_finger':     return getTalkWagFingerPose(t, actTime, baseIdle);
+    case 'talk_eyebrow':        return getTalkEyebrowPose(t, actTime, baseIdle);
+    case 'talk_deep_breath':    return getTalkDeepBreathPose(t, actTime, baseIdle);
+    case 'talk_look_around':    return getTalkLookAroundPose(t, actTime, baseIdle);
+    case 'talk_whisper':        return getTalkWhisperPose(t, actTime, baseIdle);
+    case 'talk_interruption':   return getTalkInterruptionPose(t, actTime, baseIdle);
 
-    // Right hand resting on chin
-    rightUpperArmRot: [0.38, 0.38, -0.38],
-    rightLowerArmRot: [0.68, 0.32, -1.48],
-    rightHandRot:     [0.32, 0, 0],
-    rightFingers:     'relaxed',
+    // 6. Playful & Sassy
+    case 'pout':                return getPoutPose(t, actTime, baseIdle);
+    case 'tongue_out':          return getTongueOutPose(t, actTime, baseIdle);
+    case 'eyeroll':             return getEyerollPose(t, actTime, baseIdle);
+    case 'fake_yawn':           return getFakeYawnPose(t, actTime, baseIdle);
+    case 'peekaboo':            return getPeekabooPose(t, actTime, baseIdle);
+    case 'watching_you':        return getWatchingYouPose(t, actTime, baseIdle);
+    case 'playful_punch':       return getPlayfulPunchPose(t, actTime, baseIdle);
+    case 'mic_drop':            return getMicDropPose(t, actTime, baseIdle);
+    case 'dust_shoulders':      return getDustShouldersPose(t, actTime, baseIdle);
+    case 'look_nails':          return getLookNailsPose(t, actTime, baseIdle);
+    case 'neko':                return getNekoPose(t, actTime, baseIdle);
 
-    leftUpperArmRot:  [0.2, -0.2, -0.7],
-    leftLowerArmRot:  [0.75, -0.2, -0.5],
-    leftFingers:      'relaxed',
+    // 7. Negative Emotions
+    case 'sad_sigh':            return getSadSighPose(t, actTime, baseIdle);
+    case 'crying':              return getCryingPose(t, actTime, baseIdle);
+    case 'sulking':             return getSulkingPose(t, actTime, baseIdle);
+    case 'startled':            return getStartledPose(t, actTime, baseIdle);
+    case 'shivering':           return getShiveringPose(t, actTime, baseIdle);
+    case 'angry_stomp':         return getAngryStompPose(t, actTime, baseIdle);
+    case 'facepalm':            return getFacepalmPose(t, actTime, baseIdle);
+    case 'anxious_fidget':      return getAnxiousFidgetPose(t, actTime, baseIdle);
+    case 'pacing':              return getPacingPose(t, actTime, baseIdle);
+    case 'pleading':            return getPleadingPose(t, actTime, baseIdle);
+    case 'curling_up':          return getCurlingUpPose(t, actTime, baseIdle);
+    case 'trembling_lip':       return getTremblingLipPose(t, actTime, baseIdle);
+    case 'embarrassed_hide':    return getEmbarrassedHidePose(t, actTime, baseIdle);
 
-    expressions: { neutral: 0.6, lookUp: 0.45 },
-  };
+    // 8. Interactive Reactions
+    case 'react_headpat':       return getReactHeadpatPose(t, actTime, baseIdle);
+    case 'react_poke':          return getReactPokePose(t, actTime, baseIdle);
+    case 'react_tickle':        return getReactTicklePose(t, actTime, baseIdle);
+    case 'react_tap_surprise':  return getReactTapSurprisePose(t, actTime, baseIdle);
+    case 'react_stroke_hair':   return getReactStrokeHairPose(t, actTime, baseIdle);
+    case 'react_arm_touch':     return getReactArmTouchPose(t, actTime, baseIdle);
+    case 'react_boop':          return getReactBoopPose(t, actTime, baseIdle);
+    case 'react_ear_pull':      return getReactEarPullPose(t, actTime, baseIdle);
+    case 'react_hug':           return getReactHugPose(t, actTime, baseIdle);
+    case 'react_dizzy':         return getReactDizzyPose(t, actTime, baseIdle);
+    case 'react_swipe':         return getReactSwipePose(t, actTime, baseIdle);
+
+    // 9. Daily Routines
+    case 'routine_yawn':            return getRoutineYawnPose(t, actTime, baseIdle);
+    case 'routine_fall_asleep':     return getRoutineFallAsleepPose(t, actTime, baseIdle);
+    case 'routine_sleeping':        return getRoutineSleepingPose(t, baseIdle);
+    case 'routine_phone':           return getRoutinePhonePose(t, actTime, baseIdle);
+    case 'routine_selfie':          return getRoutineSelfiePose(t, actTime, baseIdle);
+    case 'routine_listen_music':    return getRoutineListenMusicPose(t, actTime, baseIdle);
+    case 'routine_coffee':          return getRoutineCoffeePose(t, actTime, baseIdle);
+    case 'routine_book':            return getRoutineBookPose(t, actTime, baseIdle);
+    case 'routine_adjust_glasses':  return getRoutineAdjustGlassesPose(t, actTime, baseIdle);
+    case 'routine_check_watch':     return getRoutineCheckWatchPose(t, actTime, baseIdle);
+    case 'routine_makeup':          return getRoutineMakeupPose(t, actTime, baseIdle);
+    case 'routine_pet_animal':      return getRoutinePetAnimalPose(t, actTime, baseIdle);
+    case 'routine_exercise':        return getRoutineExercisePose(t, actTime, baseIdle);
+    case 'routine_snack':           return getRoutineSnackPose(t, actTime, baseIdle);
+    case 'routine_cooking':         return getRoutineCookingPose(t, actTime, baseIdle);
+    case 'routine_typing':          return getRoutineTypingPose(t, actTime, baseIdle);
+    case 'routine_jacket':          return getRoutineJacketPose(t, actTime, baseIdle);
+    case 'routine_smell_flowers':   return getRoutineSmellFlowersPose(t, actTime, baseIdle);
+    case 'routine_catch_bug':       return getRoutineCatchBugPose(t, actTime, baseIdle);
+    case 'routine_tie_shoes':       return getRoutineTieShoesPose(t, actTime, baseIdle);
+    case 'routine_look_sky':        return getRoutineLookSkyPose(t, actTime, baseIdle);
+
+    // Backward-compat aliases
+    case 'salute':  return getSalutePose(t, actTime, baseIdle);
+    case 'stretch': return getStretchPose(t, actTime, baseIdle);
+    case 'listen':  return getListenPose(t, actTime, baseIdle);
+
+    default:
+      return baseIdle;
+  }
 }
