@@ -1,8 +1,11 @@
 /**
  * CompanionPage.tsx
- * Full-screen AI companion page with ultra-lifelike 3D VRM movements,
- * compact side chatpanel, interactive action triggers (Dance, Stretch, Wave, Heart, Neko, Peace, Bow),
- * real-time voice lip-sync, and full tool capabilities (read files, web search, sandboxed execution).
+ * Ultra-lifelike 3D AI Companion experience with avatar_companion.vrm.
+ * Features:
+ * - 3D Stage with isolated animation triggers (Dance, Stretch, Wave, Heart, Neko, Peace, Bow, Cheer, Salute)
+ * - Seamless tab navigation: 💬 Chat | 💕 Bond | 📊 Mood | 📸 Photo | ⚙️ Persona
+ * - Real-time browser SpeechSynthesis voice lip-sync
+ * - Persistent relationship affinity, streak tracking, and memory recall
  */
 import React, {
   useState, useRef, useEffect, useCallback,
@@ -11,21 +14,23 @@ import {
   Send, Mic, MicOff, Trash2, Settings2, ChevronDown,
   Globe, FolderOpen, Terminal, Shield, RefreshCw,
   Heart, Users, BookOpen, Sparkles, Activity,
-  Play, StopCircle, Smile,
+  Camera, Smile, UserCog, StopCircle, Flame,
 } from 'lucide-react';
 import { VRMViewer, type VRMViewerHandle, type CompanionMood, type CompanionAction } from './VRMViewer';
 import { useCompanionChat, type CompanionMode } from './useCompanionChat';
+import { usePartnerMemory } from '../../stores/partnerMemory';
 import { providerStore } from '../../stores/providerStore';
+import { RelationshipPanel } from './RelationshipPanel';
+import { DailyGreeting } from './DailyGreeting';
+import { MoodJournal } from './MoodJournal';
+import { PhotoMode } from './PhotoMode';
+import { CompanionPersona } from './CompanionPersona';
+import { AnimationsPanel } from './AnimationsPanel';
 
 const VRM_URL = 'assets/models/avatar_companion.vrm';
 
-// ── Relationship Modes ────────────────────────────────────────────────────────
-const MODES: { id: CompanionMode; label: string; icon: React.ReactNode; desc: string }[] = [
-  { id: 'friend',     label: 'Friend',     icon: <Users size={14} />,    desc: 'Casual, friendly & curious' },
-  { id: 'girlfriend', label: 'Girlfriend', icon: <Heart size={14} />,    desc: 'Warm, affectionate & playful' },
-  { id: 'boyfriend',  label: 'Boyfriend',  icon: <Shield size={14} />,   desc: 'Chill, protective & supportive' },
-  { id: 'mentor',     label: 'Mentor',     icon: <BookOpen size={14} />, desc: 'Wise & goal-oriented' },
-];
+// ── Sidebar Tabs ──────────────────────────────────────────────────────────────
+type CompanionTab = 'chat' | 'motion' | 'bond' | 'mood' | 'photo' | 'persona';
 
 // ── Camera Angle Presets ──────────────────────────────────────────────────────
 type CameraAngle = 'portrait' | 'half' | 'full';
@@ -48,7 +53,6 @@ const ACTIONS: { id: CompanionAction; label: string; emoji: string; desc: string
   { id: 'cheer',   label: 'Cheer',   emoji: '🎉', desc: 'Double fist pump cheer' },
 ];
 
-// ── Typing indicator ──────────────────────────────────────────────────────────
 function TypingDots() {
   return (
     <div className="flex items-center gap-1.5 px-4 py-3">
@@ -63,7 +67,6 @@ function TypingDots() {
   );
 }
 
-// ── Message bubble ────────────────────────────────────────────────────────────
 function MessageBubble({ role, text, streaming }: { role: 'user' | 'assistant' | 'tool'; text: string; streaming?: boolean }) {
   if (role === 'tool') {
     return (
@@ -82,7 +85,7 @@ function MessageBubble({ role, text, streaming }: { role: 'user' | 'assistant' |
       <div
         className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed whitespace-pre-wrap break-words shadow-sm
           ${isUser
-            ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white rounded-br-sm'
+            ? 'bg-gradient-to-r from-indigo-600 to-pink-600 text-white rounded-br-sm'
             : 'bg-slate-900/90 border border-slate-800/90 text-slate-100 rounded-bl-sm backdrop-blur-md'
           }`}
       >
@@ -95,16 +98,15 @@ function MessageBubble({ role, text, streaming }: { role: 'user' | 'assistant' |
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
 export interface CompanionPageProps {
   onBack?: () => void;
 }
 
-export const CompanionPage: React.FC<CompanionPageProps> = ({ onBack }) => {
+export const CompanionPage: React.FC<CompanionPageProps> = () => {
+  const memory = usePartnerMemory();
+
   // ── State ──────────────────────────────────────────────────────────────────
-  const [mode, setMode] = useState<CompanionMode>(() => {
-    return (localStorage.getItem('companion-mode') as CompanionMode) || 'friend';
-  });
+  const [activeTab, setActiveTab] = useState<CompanionTab>('chat');
   const [cameraAngle, setCameraAngle] = useState<CameraAngle>('full');
   const [currentAction, setCurrentAction] = useState<CompanionAction>('idle');
   const [selectedModel, setSelectedModel] = useState<string>(() => {
@@ -123,7 +125,7 @@ export const CompanionPage: React.FC<CompanionPageProps> = ({ onBack }) => {
 
   // ── Chat hook ──────────────────────────────────────────────────────────────
   const { messages, sendMessage, isGenerating, currentMood, clearHistory } =
-    useCompanionChat(mode, selectedModel);
+    useCompanionChat(memory.relationshipType as CompanionMode, selectedModel);
 
   const models = providerStore.getState().models.filter(m => m.enabled);
 
@@ -157,7 +159,7 @@ export const CompanionPage: React.FC<CompanionPageProps> = ({ onBack }) => {
     }
   };
 
-  // ── TTS + lip-sync ─────────────────────────────────────────────────────────
+  // ── TTS + lip-sync using browser SpeechSynthesis ───────────────────────────
   const lastSpokenId = useRef<string | null>(null);
   useEffect(() => {
     const last = messages[messages.length - 1];
@@ -181,7 +183,6 @@ export const CompanionPage: React.FC<CompanionPageProps> = ({ onBack }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  useEffect(() => { localStorage.setItem('companion-mode', mode); }, [mode]);
   useEffect(() => { localStorage.setItem('companion-model', selectedModel); }, [selectedModel]);
 
   // ── Send message ───────────────────────────────────────────────────────────
@@ -236,64 +237,21 @@ export const CompanionPage: React.FC<CompanionPageProps> = ({ onBack }) => {
           background: 'radial-gradient(ellipse at 50% 45%, #151428 0%, #06060f 100%)',
         }}
       >
-        {/* Top Controls: Camera Angle Selector */}
-        <div className="absolute top-3 left-4 z-20 flex gap-1 bg-slate-900/80 border border-slate-700/60 rounded-2xl p-1 backdrop-blur-md shadow-lg">
+        {/* Top Controls: Sleek Camera Angle Selector */}
+        <div className="absolute top-4 left-4 z-20 flex gap-1 bg-slate-900/80 border border-slate-700/60 rounded-2xl p-1 backdrop-blur-md shadow-lg">
           {ANGLES.map(a => (
             <button
               key={a.id}
               onClick={() => setCameraAngle(a.id)}
               className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer
                 ${cameraAngle === a.id
-                  ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md'
+                  ? 'bg-gradient-to-r from-indigo-600 to-pink-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-slate-200'}`}
             >
               {a.label}
             </button>
           ))}
         </div>
-
-        {/* Action Bar Toggle */}
-        <div className="absolute top-3 right-4 z-20">
-          <button
-            onClick={() => setShowActionsBar(v => !v)}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-2xl text-xs font-semibold border backdrop-blur-md transition-all cursor-pointer
-              ${showActionsBar
-                ? 'bg-indigo-600/30 border-indigo-500/50 text-indigo-200'
-                : 'bg-slate-900/80 border-slate-700/60 text-slate-300 hover:text-white'}`}
-          >
-            <Sparkles size={13} className="text-amber-400" />
-            <span>Animations</span>
-          </button>
-        </div>
-
-        {/* Quick Action Bar Overlay */}
-        {showActionsBar && (
-          <div className="absolute top-13 left-4 right-4 z-20 flex flex-wrap gap-1.5 justify-center bg-slate-900/85 border border-slate-800/90 rounded-2xl p-2 backdrop-blur-md shadow-xl animate-fade-in">
-            {ACTIONS.map(act => (
-              <button
-                key={act.id}
-                onClick={() => handleTriggerAction(act.id)}
-                title={act.desc}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-medium transition-all cursor-pointer
-                  ${currentAction === act.id
-                    ? 'bg-indigo-600 text-white shadow-md ring-1 ring-indigo-400'
-                    : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white'}`}
-              >
-                <span>{act.emoji}</span>
-                <span>{act.label}</span>
-              </button>
-            ))}
-            {currentAction !== 'idle' && (
-              <button
-                onClick={() => handleTriggerAction('idle')}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-medium bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 transition-all cursor-pointer"
-              >
-                <StopCircle size={12} />
-                <span>Reset</span>
-              </button>
-            )}
-          </div>
-        )}
 
         {/* 3D VRM Canvas fills 100% of the stage */}
         <div className="absolute inset-0 w-full h-full">
@@ -314,35 +272,51 @@ export const CompanionPage: React.FC<CompanionPageProps> = ({ onBack }) => {
           style={{ height: 60, background: 'linear-gradient(to top, #06060f 0%, transparent 100%)' }}
         />
 
-        {/* Live Status Pill */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 bg-slate-900/90 border border-slate-800 rounded-full px-3.5 py-1 backdrop-blur-md shadow-lg">
-          <span
-            className="w-2 h-2 rounded-full flex-shrink-0 animate-pulse"
-            style={{
-              background: {
-                idle: '#10b981', thinking: '#38bdf8', working: '#a855f7',
-                celebrate: '#f59e0b', happy: '#f59e0b', sad: '#f43f5e',
-                angry: '#f43f5e', surprised: '#ec4899',
-              }[currentMood] || '#10b981',
-              boxShadow: '0 0 8px currentColor',
-            }}
-          />
-          <span className="text-[11px] text-slate-200 font-medium capitalize">
-            {currentAction !== 'idle' ? `${currentAction}…` : currentMood}
-          </span>
+        {/* Live Status & Bond Pill */}
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-3 bg-slate-900/90 border border-slate-800 rounded-full px-4 py-1.5 backdrop-blur-md shadow-lg">
+          <div className="flex items-center gap-1.5">
+            <span
+              className="w-2 h-2 rounded-full flex-shrink-0 animate-pulse"
+              style={{
+                background: {
+                  idle: '#10b981', thinking: '#38bdf8', working: '#a855f7',
+                  celebrate: '#f59e0b', happy: '#f59e0b', sad: '#f43f5e',
+                  angry: '#f43f5e', surprised: '#ec4899',
+                }[currentMood] || '#10b981',
+                boxShadow: '0 0 8px currentColor',
+              }}
+            />
+            <span className="text-[11px] text-slate-200 font-medium capitalize">
+              {currentAction !== 'idle' ? `${currentAction}…` : currentMood}
+            </span>
+          </div>
+
+          <span className="w-1 h-1 rounded-full bg-slate-700" />
+
+          <div className="flex items-center gap-1 text-[11px] text-pink-400 font-semibold">
+            <Heart size={11} className="fill-pink-400" />
+            <span>{memory.affinityScore}%</span>
+          </div>
+
+          <span className="w-1 h-1 rounded-full bg-slate-700" />
+
+          <div className="flex items-center gap-1 text-[11px] text-amber-400 font-semibold">
+            <Flame size={11} className="fill-amber-400" />
+            <span>{memory.streak}d</span>
+          </div>
         </div>
       </div>
 
-      {/* ── RIGHT: Compact Side Chatpanel (Width 360px - 400px) ───────────── */}
-      <div className="w-[360px] lg:w-[390px] xl:w-[420px] flex-shrink-0 flex flex-col h-full border-l border-slate-800/80 bg-slate-950/95 backdrop-blur-xl">
+      {/* ── RIGHT: Multi-Feature Companion Panel (Width 380px - 420px) ───── */}
+      <div className="w-[380px] lg:w-[410px] xl:w-[430px] flex-shrink-0 flex flex-col h-full border-l border-slate-800/80 bg-slate-950/95 backdrop-blur-xl">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur-md flex-shrink-0">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800/80 bg-slate-900/40 backdrop-blur-md flex-shrink-0">
           <div>
             <div className="flex items-center gap-1.5">
-              <h1 className="text-xs font-bold text-slate-100">AI Companion</h1>
-              <span className="px-1.5 py-0.2 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-[9px] font-semibold uppercase tracking-wider">
-                {mode}
+              <h1 className="text-xs font-bold text-slate-100">{memory.companionName}</h1>
+              <span className="px-1.5 py-0.2 rounded-full bg-pink-500/10 border border-pink-500/30 text-pink-300 text-[9px] font-semibold uppercase tracking-wider">
+                {memory.relationshipType}
               </span>
             </div>
             <p className="text-[10px] text-slate-400 truncate max-w-[190px]">
@@ -354,7 +328,7 @@ export const CompanionPage: React.FC<CompanionPageProps> = ({ onBack }) => {
             <button
               onClick={() => setShowSettings(s => !s)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer"
-              title="Settings"
+              title="Quick model settings"
             >
               <Settings2 size={15} />
             </button>
@@ -368,32 +342,39 @@ export const CompanionPage: React.FC<CompanionPageProps> = ({ onBack }) => {
           </div>
         </div>
 
-        {/* Collapsible Settings */}
-        {showSettings && (
-          <div className="flex-shrink-0 border-b border-slate-800/80 bg-slate-900/60 p-3 flex flex-col gap-3 animate-fade-in text-xs">
-            {/* Relationship Mode */}
-            <div>
-              <p className="text-[9px] text-slate-400 uppercase tracking-wider font-bold mb-1.5">Relationship</p>
-              <div className="grid grid-cols-2 gap-1">
-                {MODES.map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => setMode(m.id)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer
-                      ${mode === m.id
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'bg-slate-800/80 text-slate-400 hover:text-slate-200'}`}
-                  >
-                    {m.icon} <span>{m.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+        {/* Navigation Tabs */}
+        <div className="flex items-center justify-between px-2 pt-1 border-b border-slate-800/60 bg-slate-900/30 flex-shrink-0 text-xs">
+          {[
+            { id: 'chat' as CompanionTab, label: 'Chat', icon: <Send size={12} /> },
+            { id: 'motion' as CompanionTab, label: 'Motion', icon: <Sparkles size={12} /> },
+            { id: 'bond' as CompanionTab, label: 'Bond', icon: <Heart size={12} /> },
+            { id: 'mood' as CompanionTab, label: 'Mood', icon: <Smile size={12} /> },
+            { id: 'photo' as CompanionTab, label: 'Photo', icon: <Camera size={12} /> },
+            { id: 'persona' as CompanionTab, label: 'Persona', icon: <UserCog size={12} /> },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 flex items-center justify-center gap-1 py-2 border-b-2 font-semibold transition-all cursor-pointer
+                ${activeTab === tab.id
+                  ? 'border-pink-500 text-pink-300 bg-slate-800/40'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+            >
+              {tab.icon}
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
 
-            {/* Model Selector */}
+        {/* Daily Contextual Greeting */}
+        <DailyGreeting onGreet={() => handleTriggerAction('wave')} />
+
+        {/* Collapsible Model & Sandbox Settings */}
+        {showSettings && (
+          <div className="flex-shrink-0 border-b border-slate-800/80 bg-slate-900/60 p-3 flex flex-col gap-2.5 animate-fade-in text-xs">
             {models.length > 0 && (
               <div>
-                <p className="text-[9px] text-slate-400 uppercase tracking-wider font-bold mb-1.5">AI Model</p>
+                <p className="text-[9px] text-slate-400 uppercase tracking-wider font-bold mb-1">Active AI Model</p>
                 <div className="relative">
                   <select
                     value={selectedModel}
@@ -409,7 +390,6 @@ export const CompanionPage: React.FC<CompanionPageProps> = ({ onBack }) => {
               </div>
             )}
 
-            {/* Tool badges */}
             <div className="flex items-center gap-1 pt-1 border-t border-slate-800/60">
               <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px]">
                 <Globe size={10} /> Web
@@ -424,90 +404,127 @@ export const CompanionPage: React.FC<CompanionPageProps> = ({ onBack }) => {
           </div>
         )}
 
-        {/* Messages Feed */}
-        <div className="flex-1 overflow-y-auto py-3 flex flex-col gap-1" style={{ scrollbarWidth: 'thin' }}>
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-2xl shadow-md">
-                🌸
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-slate-100 mb-0.5">Your AI Companion</h3>
-                <p className="text-[11px] text-slate-400 leading-normal">
-                  Ask questions, request dances or movements, read files, or search the web!
-                </p>
-              </div>
-              <div className="flex flex-col gap-1.5 w-full mt-1">
-                {[
-                  "Hi! Wave at me! 👋",
-                  "Show me a dance! 💃",
-                  "Can you do a stretch? 🤸",
-                  "What's on my Desktop? 📂",
-                ].map(s => (
+        {/* ── Sub-Panels Based on Active Tab ──────────────────────────────── */}
+
+        {/* TAB 1: Chat Panel */}
+        {activeTab === 'chat' && (
+          <>
+            <div className="flex-1 overflow-y-auto py-3 flex flex-col gap-1" style={{ scrollbarWidth: 'thin' }}>
+              {messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-4">
+                  <div className="w-12 h-12 rounded-2xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-2xl shadow-md">
+                    🌸
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-100 mb-0.5">{memory.companionName} is listening</h3>
+                    <p className="text-[11px] text-slate-400 leading-normal">
+                      Ask questions, request 3D dances, read files, or have a heart-to-heart!
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-1.5 w-full mt-1">
+                    {[
+                      "Hi Kai! Wave at me! 👋",
+                      "Can you do a stretch? 🤸",
+                      "Show me a dance! 💃",
+                      "What's on my Desktop? 📂",
+                    ].map(s => (
+                      <button
+                        key={s}
+                        onClick={() => {
+                          triggerActionByPrompt(s);
+                          sendMessage(s);
+                        }}
+                        className="w-full text-left px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-slate-300 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {messages.map(msg => (
+                <MessageBubble key={msg.id} role={msg.role} text={msg.text} streaming={msg.streaming} />
+              ))}
+
+              {isGenerating && messages[messages.length - 1]?.role === 'user' && (
+                <div className="flex justify-start px-4">
+                  <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl rounded-bl-sm">
+                    <TypingDots />
+                  </div>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input Bar */}
+            <div className="flex-shrink-0 border-t border-slate-800/80 bg-slate-900/40 p-3">
+              <div className="flex items-end gap-1.5 bg-slate-900/90 border border-slate-800 rounded-2xl px-3 py-2 focus-within:border-pink-500/70 shadow-md transition-all">
+                <textarea
+                  ref={inputRef}
+                  value={inputText}
+                  onChange={e => setInputText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={`Message ${memory.companionName}...`}
+                  rows={1}
+                  disabled={isGenerating}
+                  className="flex-1 bg-transparent text-slate-100 text-xs placeholder-slate-500 resize-none focus:outline-none min-h-[22px] max-h-[100px] py-0.5"
+                  style={{ lineHeight: '1.4' }}
+                />
+                <div className="flex items-center gap-1 flex-shrink-0">
                   <button
-                    key={s}
-                    onClick={() => {
-                      triggerActionByPrompt(s);
-                      sendMessage(s);
-                    }}
-                    className="w-full text-left px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-slate-300 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
+                    onClick={toggleMic}
+                    className={`p-1.5 rounded-lg transition-all cursor-pointer
+                      ${isListening ? 'text-red-400 bg-red-500/15 ring-1 ring-red-500/40' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}
+                    title={isListening ? 'Stop listening' : 'Voice input (SpeechRecognition)'}
                   >
-                    {s}
+                    {isListening ? <MicOff size={14} /> : <Mic size={14} />}
                   </button>
-                ))}
+                  <button
+                    onClick={handleSend}
+                    disabled={!inputText.trim() || isGenerating}
+                    className="p-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 disabled:opacity-40 disabled:cursor-not-allowed text-white shadow-sm transition-all cursor-pointer"
+                    title="Send"
+                  >
+                    {isGenerating ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+                  </button>
+                </div>
               </div>
             </div>
-          )}
+          </>
+        )}
 
-          {messages.map(msg => (
-            <MessageBubble key={msg.id} role={msg.role} text={msg.text} streaming={msg.streaming} />
-          ))}
+        {/* TAB 2: Motion / Animations Catalog Panel */}
+        {activeTab === 'motion' && (
+          <AnimationsPanel
+            currentAction={currentAction}
+            onTriggerAction={handleTriggerAction}
+          />
+        )}
 
-          {isGenerating && messages[messages.length - 1]?.role === 'user' && (
-            <div className="flex justify-start px-4">
-              <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl rounded-bl-sm">
-                <TypingDots />
-              </div>
-            </div>
-          )}
+        {/* TAB 3: Bond / Relationship Panel */}
+        {activeTab === 'bond' && <RelationshipPanel />}
 
-          <div ref={messagesEndRef} />
-        </div>
+        {/* TAB 3: Mood Journal */}
+        {activeTab === 'mood' && (
+          <MoodJournal
+            onTriggerAction={handleTriggerAction}
+            onSendChatMessage={sendMessage}
+          />
+        )}
 
-        {/* Input Bar */}
-        <div className="flex-shrink-0 border-t border-slate-800/80 bg-slate-900/40 p-3">
-          <div className="flex items-end gap-1.5 bg-slate-900/90 border border-slate-800 rounded-2xl px-3 py-2 focus-within:border-indigo-500/70 shadow-md transition-all">
-            <textarea
-              ref={inputRef}
-              value={inputText}
-              onChange={e => setInputText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Message your companion..."
-              rows={1}
-              disabled={isGenerating}
-              className="flex-1 bg-transparent text-slate-100 text-xs placeholder-slate-500 resize-none focus:outline-none min-h-[22px] max-h-[100px] py-0.5"
-              style={{ lineHeight: '1.4' }}
-            />
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <button
-                onClick={toggleMic}
-                className={`p-1.5 rounded-lg transition-all cursor-pointer
-                  ${isListening ? 'text-red-400 bg-red-500/15 ring-1 ring-red-500/40' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}
-                title={isListening ? 'Stop listening' : 'Voice input'}
-              >
-                {isListening ? <MicOff size={14} /> : <Mic size={14} />}
-              </button>
-              <button
-                onClick={handleSend}
-                disabled={!inputText.trim() || isGenerating}
-                className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white shadow-sm transition-all cursor-pointer"
-                title="Send"
-              >
-                {isGenerating ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
-              </button>
-            </div>
-          </div>
-        </div>
+        {/* TAB 4: Photo Mode */}
+        {activeTab === 'photo' && (
+          <PhotoMode
+            onTriggerAction={handleTriggerAction}
+            onSetCameraAngle={setCameraAngle}
+          />
+        )}
+
+        {/* TAB 5: Persona Editor */}
+        {activeTab === 'persona' && <CompanionPersona />}
+
       </div>
 
       <style>{`

@@ -222,6 +222,21 @@ try {
 
 // ============================================================== VRMCharacter
 // Loads a VRoid `.vrm`. Falls back to Lily if anything fails.
+import {
+  type VRMPose,
+  type CompanionMood,
+  applyFingerPreset,
+  applyMoodExpressions,
+  getIdlePose,
+  getWavePose,
+  getCheerPose,
+  getTalkingPose,
+  getThinkingPose,
+  getDancePose,
+} from '../renderer/pages/Partner/animations';
+
+// ============================================================== VRMCharacter
+// Loads a VRoid / VRM model (such as avatar_companion.vrm).
 class VRMCharacter implements Character {
   object = new THREE.Group();
   private vrm: any = null;
@@ -231,13 +246,13 @@ class VRMCharacter implements Character {
   private darkCircles = false;
   private laptop: THREE.Group;
   private pillow: THREE.Group;
-  private target: Record<string, Vec3> = {};
   private loaded = false;
   private fallback: Character | null = null;
   private usingFallback = false;
+  private actionTime = 0;
 
   constructor(accent: string) {
-    // laptop + pillow as primitive props parented to VRM bones later
+    // laptop + pillow as primitive props parented to VRM bones
     this.laptop = new THREE.Group();
     const baseMat = new THREE.MeshStandardMaterial({ color: 0xcfd6e6, roughness: 0.5, metalness: 0.3 });
     const base = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.04, 0.46), baseMat);
@@ -257,12 +272,8 @@ class VRMCharacter implements Character {
 
   async load(url: string, accent: string): Promise<void> {
     try {
-      // Variable specifiers keep `three-vrm` optional: it is not a hard
-      // dependency, so the app still builds/loads (procedural fallback) in
-      // environments where the package isn't installed. Install `three-vrm@^3`
-      // (a normal npm registry) to enable real VRM characters.
       const gltfSpec: string = 'three/examples/jsm/loaders/GLTFLoader.js';
-      const vrmSpec: string = 'three-vrm';
+      const vrmSpec: string = '@pixiv/three-vrm';
       const gltfMod: any = await import(gltfSpec);
       const vrmMod: any = await import(vrmSpec);
       const GLTFLoader = gltfMod.GLTFLoader;
@@ -273,21 +284,18 @@ class VRMCharacter implements Character {
       const gltf: any = await loader.loadAsync(url);
       const vrm = gltf.userData.vrm;
       if (!vrm) throw new Error('no vrm in gltf');
-      VRMUtils.removeUnnecessaryJoints(vrm.scene);
-      vrm.scene.rotation.y = Math.PI;
+      VRMUtils.rotateVRM0(vrm);
       this.object.add(vrm.scene);
       this.vrm = vrm;
       this.loaded = true;
+
       // parent props to bones
-      const handR = vrm.humanoid?.getNormalizedBoneNode('rightWrist') || vrm.humanoid?.getNormalizedBoneNode('rightHand');
+      const handR = vrm.humanoid?.getNormalizedBoneNode('rightHand');
       if (handR) { this.laptop.position.set(0.1, -0.1, 0.1); handR.add(this.laptop); }
       this.laptop.visible = true;
       const head = vrm.humanoid?.getNormalizedBoneNode('head');
       if (head) { this.pillow.position.set(0, 0.1, -0.25); head.add(this.pillow); }
       this.pillow.visible = true;
-      if (accent) {
-        // optional: tint nothing by default; VRM carries its own materials
-      }
     } catch (err) {
       console.error('[pet] VRM load failed, using procedural fallback', err);
       this.usingFallback = true;
@@ -301,28 +309,11 @@ class VRMCharacter implements Character {
     return this.vrm?.humanoid?.getNormalizedBoneNode(name) || null;
   }
 
-  private poseFor(b: Behavior): Record<string, Vec3> {
-    const r = d2r;
-    const map: Record<string, Vec3> = { pelvis: [0, 0, 0], spine: [0, 0, 0], chest: [0, 0, 0], head: [0, 0, 0], leftUpperArm: [0, 0, r(15)], rightUpperArm: [0, 0, r(-15)], leftLowerArm: [r(80), 0, 0], rightLowerArm: [r(80), 0, 0], leftUpperLeg: [r(70), 0, 0], rightUpperLeg: [r(70), 0, 0], leftLowerLeg: [r(-70), 0, 0], rightLowerLeg: [r(-70), 0, 0] };
-    switch (b) {
-      case 'working': map.spine = [r(-12), 0, 0]; map.head = [r(10), 0, 0]; map.leftLowerArm = [r(100), 0, 0]; map.rightLowerArm = [r(100), 0, 0]; break;
-      case 'idle': map.spine = [r(-4), 0, 0]; break;
-      case 'sleeping': map.spine = [r(6), 0, r(10)]; map.head = [r(36), 0, r(12)]; map.leftUpperArm = [0, 0, r(35)]; map.rightUpperArm = [0, 0, r(-35)]; map.leftLowerArm = [r(50), 0, 0]; map.rightLowerArm = [r(50), 0, 0]; break;
-      case 'laying': map.spine = [r(20), 0, r(14)]; map.head = [r(28), 0, r(16)]; map.leftUpperLeg = [r(95), 0, 0]; map.rightUpperLeg = [r(95), 0, 0]; map.leftLowerLeg = [r(-95), 0, 0]; map.rightLowerLeg = [r(-95), 0, 0]; map.leftUpperArm = [0, 0, r(45)]; map.rightUpperArm = [0, 0, r(-45)]; break;
-      case 'walk': map.spine = [r(2), 0, 0]; map.head = [r(-4), 0, 0]; map.leftUpperArm = [0, 0, r(40)]; map.rightUpperArm = [0, 0, r(-40)]; map.leftLowerArm = [r(55), 0, 0]; map.rightLowerArm = [r(55), 0, 0]; break;
-      case 'celebrate': map.spine = [r(-2), 0, 0]; map.head = [r(-6), 0, 0]; map.leftUpperArm = [0, 0, r(150)]; map.rightUpperArm = [0, 0, r(-150)]; map.leftLowerArm = [r(20), 0, 0]; map.rightLowerArm = [r(20), 0, 0]; break;
-      case 'sad': map.spine = [r(8), 0, 0]; map.head = [r(14), 0, 0]; map.leftUpperArm = [0, 0, r(35)]; map.rightUpperArm = [0, 0, r(-35)]; break;
-      case 'hello': map.spine = [r(-4), 0, 0]; map.head = [r(-8), 0, 0]; map.rightUpperArm = [0, 0, r(-150)]; map.rightLowerArm = [r(20), 0, 0]; break;
-      case 'talking': map.head = [r(-2), 0, 0]; break;
-    }
-    return map;
-  }
-
   setBehavior(b: Behavior, _opts?: { part?: string }): void {
     this.behavior = b;
+    this.actionTime = 0;
     if (this.usingFallback && this.fallback) { this.fallback.setBehavior(b, _opts); return; }
-    this.target = this.poseFor(b);
-    this.applyExpression(this.expressionFor(b));
+    this.setExpression(this.expressionFor(b));
   }
 
   private expressionFor(b: Behavior): ExpressionName {
@@ -333,32 +324,24 @@ class VRMCharacter implements Character {
     return this.darkCircles ? 'angry' : 'neutral';
   }
 
-  private applyExpression(e: ExpressionName): void {
-    const em = this.vrm?.expressionManager;
-    if (!em) return;
-    const presets: Record<ExpressionName, string> = { neutral: 'neutral', happy: 'happy', sad: 'sad', surprised: 'surprised', angry: 'angry' };
-    for (const key of ['happy', 'sad', 'surprised', 'angry']) em.setValue(key, 0);
-    em.setValue(presets[e], 1);
-  }
-
   setExpression(e: ExpressionName): void {
     this.expression = e;
     if (this.usingFallback && this.fallback) { this.fallback.setExpression(e); return; }
-    this.applyExpression(e);
+    applyMoodExpressions(this.vrm, (e === 'neutral' ? 'idle' : e) as CompanionMood);
   }
 
   setLipSync(on: boolean): void {
     this.lipSync = on;
     if (this.usingFallback && this.fallback) { this.fallback.setLipSync(on); return; }
     const em = this.vrm?.expressionManager;
-    if (em) em.setValue('aa', on ? 1 : 0);
+    if (em) em.setValue('aa', on ? 0.7 : 0);
   }
 
   setDarkCircles(on: boolean): void {
     this.darkCircles = on;
     if (this.usingFallback && this.fallback) { this.fallback.setDarkCircles(on); return; }
     const em = this.vrm?.expressionManager;
-    if (em) em.setValue('sad', on ? 1 : 0);
+    if (em) em.setValue('sad', on ? 0.8 : 0);
   }
 
   setScale(s: number): void { this.object.scale.setScalar(s); }
@@ -374,30 +357,57 @@ class VRMCharacter implements Character {
   update(dt: number, t: number): void {
     if (this.usingFallback && this.fallback) { this.fallback.update(dt, t); return; }
     if (!this.vrm) return;
-    const k = clamp(dt * 8, 0, 1);
-    for (const boneName in this.target) {
-      const bone = this.bone(boneName);
-      if (!bone) continue;
-      const [tx, ty, tz] = this.target[boneName];
-      bone.rotation.x = lerp(bone.rotation.x, tx, k);
-      bone.rotation.y = lerp(bone.rotation.y, ty, k);
-      bone.rotation.z = lerp(bone.rotation.z, tz, k);
+
+    this.actionTime += dt;
+    const baseIdle = getIdlePose(t, 0, 0);
+    let activePose: VRMPose = baseIdle;
+
+    if (this.behavior === 'hello') {
+      activePose = getWavePose(t, this.actionTime, baseIdle);
+    } else if (this.behavior === 'celebrate') {
+      activePose = getCheerPose(t, this.actionTime, baseIdle);
+    } else if (this.behavior === 'talking' || this.lipSync) {
+      activePose = getTalkingPose(t, baseIdle);
+    } else if (this.behavior === 'working') {
+      activePose = getThinkingPose(t, baseIdle);
     }
+
+    // Apply pose to humanoid bones
+    const applyRot = (boneName: any, rot?: [number, number, number]) => {
+      if (!rot) return;
+      const b = this.bone(boneName);
+      if (b) {
+        b.rotation.x = lerp(b.rotation.x, rot[0], clamp(dt * 8, 0, 1));
+        b.rotation.y = lerp(b.rotation.y, rot[1], clamp(dt * 8, 0, 1));
+        b.rotation.z = lerp(b.rotation.z, rot[2], clamp(dt * 8, 0, 1));
+      }
+    };
+
+    applyRot('spine', activePose.spineRot);
+    applyRot('chest', activePose.chestRot);
+    applyRot('head', activePose.headRot);
+    applyRot('leftUpperArm', activePose.leftUpperArmRot);
+    applyRot('leftLowerArm', activePose.leftLowerArmRot);
+    applyRot('leftHand', activePose.leftHandRot);
+    applyRot('rightUpperArm', activePose.rightUpperArmRot);
+    applyRot('rightLowerArm', activePose.rightLowerArmRot);
+    applyRot('rightHand', activePose.rightHandRot);
+
+    applyFingerPreset(this.vrm, 'left', activePose.leftFingers || 'relaxed');
+    applyFingerPreset(this.vrm, 'right', activePose.rightFingers || 'relaxed');
+
     if (this.lipSync) {
       const em = this.vrm.expressionManager;
-      if (em) em.setValue('aa', Math.abs(Math.sin(t * 18)) > 0.5 ? 1 : 0);
+      if (em) em.setValue('aa', Math.abs(Math.sin(t * 16)) * 0.7);
     }
-    // gentle breathing via spine
-    const breathe = Math.sin(t * 1.6) * 0.02;
-    const spine = this.bone('spine');
-    if (spine) spine.rotation.x = lerp(spine.rotation.x, (this.target.spine?.[0] || 0) + breathe, k);
+
     this.vrm.update(dt);
   }
 
   dispose(): void {
     this.object.traverse((o: any) => {
       if (o.geometry) o.geometry.dispose?.();
-      if (o.material) { const m = o.material; Array.isArray(m) ? m.forEach((x) => x.dispose?.()) : m.dispose?.(); }
+      if (o.material) { const m = o.material; Array.isArray(m) ? m.forEach((x: any) => x.dispose?.()) : m.dispose?.(); }
     });
   }
 }
