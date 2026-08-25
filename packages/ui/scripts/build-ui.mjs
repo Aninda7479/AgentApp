@@ -39,6 +39,7 @@ const MIME_TYPES = {
   '.wasm': 'application/wasm',
   '.glb': 'model/gltf-binary',
   '.gltf': 'model/gltf+json',
+  '.vrm': 'model/gltf-binary',
 };
 
 // 1. Ensure dist directories exist
@@ -121,15 +122,12 @@ function copyWebAssets() {
 // 5. Copy static assets if folder exists
 function copyStaticAssets() {
   if (fs.existsSync(srcAssetsDir)) {
-    const assets = fs.readdirSync(srcAssetsDir);
-    for (const asset of assets) {
-      const fromPath = path.join(srcAssetsDir, asset);
-      const toPath = path.join(distAssetsDir, asset);
-      if (fs.statSync(fromPath).isFile()) {
-        fs.copyFileSync(fromPath, toPath);
-      }
+    try {
+      fs.cpSync(srcAssetsDir, distAssetsDir, { recursive: true });
+      console.log(`[build-ui] Copied static assets (including models) to dist/assets/`);
+    } catch (err) {
+      console.warn(`[build-ui] Static asset copy error:`, err.message);
     }
-    console.log(`[build-ui] Copied ${assets.length} assets to dist/assets/`);
   }
 }
 

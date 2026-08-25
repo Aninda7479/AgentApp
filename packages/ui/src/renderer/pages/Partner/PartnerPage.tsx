@@ -14,10 +14,14 @@ import {
   Layers,
   Wrench,
   ChevronRight,
+  Heart,
 } from 'lucide-react';
 import { usePersonas } from '../../hooks/usePersonas';
 import { PersonaModal } from './PersonaModal';
+import { CompanionPage } from './CompanionPage';
 import type { AgentPersona, CapabilityTier } from '../../core/types';
+
+type PartnerTab = 'companion' | 'workforce';
 
 interface PartnerPageProps {
   onBack?: () => void;
@@ -59,6 +63,7 @@ const TIER_BADGES: Record<CapabilityTier, { label: string; bg: string; text: str
 
 export const PartnerPage: React.FC<PartnerPageProps> = ({ onBack, onOpenChatWithPersona }) => {
   const { personas, loading, savePersona, deletePersona } = usePersonas();
+  const [activeTab, setActiveTab] = useState<PartnerTab>('companion');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTier, setSelectedTier] = useState<string>('all');
   const [modalOpen, setModalOpen] = useState(false);
@@ -94,8 +99,39 @@ export const PartnerPage: React.FC<PartnerPageProps> = ({ onBack, onOpenChatWith
     }
   };
 
+  // ── Tab switcher shell ───────────────────────────────────────────────────────
   return (
-    <div className="flex-1 flex flex-col h-full min-w-0 bg-slate-950/20 overflow-y-auto p-6 md:p-8 select-none">
+    <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-slate-950">
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 px-4 pt-3 pb-0 border-b border-slate-800/60 bg-slate-900/60 flex-shrink-0">
+        <button
+          onClick={() => setActiveTab('companion')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-t-xl text-xs font-semibold border-b-2 transition-colors cursor-pointer
+            ${activeTab === 'companion'
+              ? 'border-indigo-500 text-indigo-300 bg-slate-800/60'
+              : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+        >
+          <Heart size={13} /> Companion
+        </button>
+        <button
+          onClick={() => setActiveTab('workforce')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-t-xl text-xs font-semibold border-b-2 transition-colors cursor-pointer
+            ${activeTab === 'workforce'
+              ? 'border-cyan-500 text-cyan-300 bg-slate-800/60'
+              : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+        >
+          <Users size={13} /> Agent Workforce
+        </button>
+      </div>
+
+      {/* Companion tab — full height */}
+      {activeTab === 'companion' && (
+        <CompanionPage onBack={onBack} />
+      )}
+
+      {/* Workforce tab — existing persona grid */}
+      {activeTab === 'workforce' && (
+      <div className="flex-1 flex flex-col h-full min-w-0 bg-slate-950/20 overflow-y-auto p-6 md:p-8 select-none">
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div className="flex items-center gap-4">
@@ -322,6 +358,8 @@ export const PartnerPage: React.FC<PartnerPageProps> = ({ onBack, onOpenChatWith
         onSave={savePersona}
         initialPersona={editingPersona}
       />
+    </div>
+      )}
     </div>
   );
 };
