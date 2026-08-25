@@ -24,6 +24,11 @@ use serde::{Deserialize, Serialize};
 use sysinfo::System;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, warn};
+use rust_embed::RustEmbed;
+
+#[derive(RustEmbed)]
+#[folder = "ui-dist/"]
+pub struct EmbeddedUi;
 
 use crate::artifact::{ArtifactRunner, ArtifactRuntimeState};
 use crate::automation::{
@@ -440,8 +445,133 @@ async fn spa_fallback_handler(
         .cloned()
         .or_else(|| find_ui_dist_dir(&state.workspace_root));
 
-    let Some(ref dist) = dist_opt else {
-        let help_html = r#"<!DOCTYPE html>
+    let path_str = uri.path().trim_start_matches('/');
+
+    // 1. If local disk distribution folder exists on filesystem, serve from disk (for local dev)
+    if let Some(ref dist) = dist_opt {
+        if !path_str.is_empty() {
+            let requested_path = dist.join(path_str);
+            if requested_path.is_file() {
+                if let (Ok(canonical_dist), Ok(canonical_target)) =
+                    (dist.canonicalize(), requested_path.canonicalize())
+                {
+                    if canonical_target.starts_with(&canonical_dist) {
+                        if let Ok(bytes) = tokio::fs::read(&canonical_target).await {
+                            let mime = mime_guess::from_path(&canonical_target).first_or_octet_stream();
+                            let cache_header = if canonical_target
+                                .extension()
+                                .map_or(false, |ext| ext == "html")
+                            {
+                                "no-cache"
+                            } else {
+                                "public, max-age=86400"
+                            };
+                            return (
+                                [
+                                    (header::CONTENT_TYPE, mime.to_string()),
+                                    (header::CACHE_CONTROL, cache_header.to_string()),
+                                ],
+                                bytes,
+                            )
+                                .into_response();
+                        }
+                    }
+                }
+            }
+
+            if path_str == "login" {
+                let login_file = dist.join("login.html");
+                if let Ok(html) = tokio::fs::read_to_string(&login_file).await {
+                    return (
+                        [
+                            (header::CONTENT_TYPE, "text/html; charset=utf-8".to_string()),
+                            (header::CACHE_CONTROL, "no-cache".to_string()),
+                        ],
+                        html,
+                    )
+                        .into_response();
+                }
+            }
+        }
+
+        // Check if requested path is a specific missing static asset (has extension other than .html)
+        let is_asset = uri.path().rsplit('/').next().map_or(false, |segment| {
+            segment.contains('.') && !segment.ends_with(".html")
+        });
+
+        if !is_asset {
+            let index_file = dist.join("index.html");
+            if let Ok(html) = tokio::fs::read_to_string(&index_file).await {
+                return (
+                    [
+                        (header::CONTENT_TYPE, "text/html; charset=utf-8".to_string()),
+                        (header::CACHE_CONTROL, "no-cache".to_string()),
+                    ],
+                    html,
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    // 2. Serve from embedded UI assets (self-contained pure Rust binary)
+    if !path_str.is_empty() {
+        if let Some(file) = EmbeddedUi::get(path_str) {
+            let mime = mime_guess::from_path(path_str).first_or_octet_stream();
+            let cache_header = if path_str.ends_with(".html") {
+                "no-cache"
+            } else {
+                "public, max-age=86400"
+            };
+            return (
+                [
+                    (header::CONTENT_TYPE, mime.to_string()),
+                    (header::CACHE_CONTROL, cache_header.to_string()),
+                ],
+                file.data.into_owned(),
+            )
+                .into_response();
+        }
+
+        if path_str == "login" {
+            if let Some(file) = EmbeddedUi::get("login.html") {
+                return (
+                    [
+                        (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+                        (header::CACHE_CONTROL, "no-cache"),
+                    ],
+                    file.data.into_owned(),
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    // Check if the requested path looks like a missing static asset
+    let is_asset = uri.path().rsplit('/').next().map_or(false, |segment| {
+        segment.contains('.') && !segment.ends_with(".html")
+    });
+
+    if is_asset {
+        return (StatusCode::NOT_FOUND, "Asset not found").into_response();
+    }
+
+    // SPA routing fallback: serve embedded index.html
+    if let Some(index_file) = EmbeddedUi::get("index.html") {
+        if index_file.data.len() > 150 {
+            return (
+                [
+                    (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+                    (header::CACHE_CONTROL, "no-cache"),
+                ],
+                index_file.data.into_owned(),
+            )
+                .into_response();
+        }
+    }
+
+    // 3. Fallback help card if neither disk nor valid embedded UI assets exist
+    let help_html = r#"<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -467,73 +597,14 @@ async fn spa_fallback_handler(
   </div>
 </body>
 </html>"#;
-        return (
-            [
-                (header::CONTENT_TYPE, "text/html; charset=utf-8"),
-                (header::CACHE_CONTROL, "no-cache"),
-            ],
-            help_html,
-        )
-            .into_response();
-    };
-
-    let path_str = uri.path().trim_start_matches('/');
-    if !path_str.is_empty() {
-        let requested_path = dist.join(path_str);
-
-        // If exact file exists and is inside dist directory, serve it
-        if requested_path.is_file() {
-            if let (Ok(canonical_dist), Ok(canonical_target)) =
-                (dist.canonicalize(), requested_path.canonicalize())
-            {
-                if canonical_target.starts_with(&canonical_dist) {
-                    if let Ok(bytes) = tokio::fs::read(&canonical_target).await {
-                        let mime = mime_guess::from_path(&canonical_target).first_or_octet_stream();
-                        let cache_header = if canonical_target
-                            .extension()
-                            .map_or(false, |ext| ext == "html")
-                        {
-                            "no-cache"
-                        } else {
-                            "public, max-age=86400"
-                        };
-                        return (
-                            [
-                                (header::CONTENT_TYPE, mime.to_string()),
-                                (header::CACHE_CONTROL, cache_header.to_string()),
-                            ],
-                            bytes,
-                        )
-                            .into_response();
-                    }
-                }
-            }
-        }
-    }
-
-    // Check if the requested path looks like a missing static asset (has a file extension)
-    let is_asset = uri.path().rsplit('/').next().map_or(false, |segment| {
-        segment.contains('.') && !segment.ends_with(".html")
-    });
-
-    if is_asset {
-        return (StatusCode::NOT_FOUND, "Asset not found").into_response();
-    }
-
-    // Otherwise, serve index.html for SPA client-side routing
-    let index_file = dist.join("index.html");
-    if let Ok(html) = tokio::fs::read_to_string(&index_file).await {
-        return (
-            [
-                (header::CONTENT_TYPE, "text/html; charset=utf-8".to_string()),
-                (header::CACHE_CONTROL, "no-cache".to_string()),
-            ],
-            html,
-        )
-            .into_response();
-    }
-
-    (StatusCode::NOT_FOUND, "index.html not found").into_response()
+    (
+        [
+            (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-cache"),
+        ],
+        help_html,
+    )
+        .into_response()
 }
 
 async fn health_check() -> impl IntoResponse {

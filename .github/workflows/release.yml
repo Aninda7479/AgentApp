@@ -149,6 +149,18 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build @superagent/ui (Embedded Web UI)
+        run: npm run build --workspace=@superagent/ui
+
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
         with:
