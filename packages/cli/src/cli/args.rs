@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[command(
     name = "superagent",
     about = "SuperAgent Terminal CLI & TUI — Pure Rust Native Application",
-    version = "0.17.0",
+    version = env!("CARGO_PKG_VERSION"),
     arg_required_else_help = false
 )]
 pub struct Cli {
@@ -14,7 +14,7 @@ pub struct Cli {
     #[arg(long)]
     pub models: bool,
 
-    /// Start the SuperAgent web server (same as `npm start:web`)
+    /// Start the SuperAgent web server (same as `superagent serve`)
     #[arg(long, visible_alias = "serve")]
     pub start_web: bool,
 
@@ -31,7 +31,7 @@ pub struct Cli {
     pub status: bool,
 
     /// Port for the web server when using --start-web / --serve
-    #[arg(long, visible_alias = "serve-port", default_value = "1469")]
+    #[arg(long, visible_alias = "serve-port", alias = "port", default_value = "1469")]
     pub web_port: u16,
 
     /// Run as background HTTP/WebSocket daemon
@@ -122,8 +122,45 @@ pub enum Commands {
     /// Start interactive terminal chat session or execute single prompt
     Chat(ChatArgs),
 
-    /// Display SuperAgent CLI version, web server status & port, and connected devices
+    /// Display SuperAgent CLI version, web server status & port, connected devices, and global directory size
     Status,
+
+    /// Start the SuperAgent web server daemon (UI & WebSocket bridge)
+    #[command(visible_alias = "start-web", visible_alias = "daemon")]
+    Serve {
+        /// TCP port to bind
+        #[arg(short = 'p', long, alias = "serve-port", default_value = "1469")]
+        port: u16,
+
+        /// Host IP interface to bind
+        #[arg(long, default_value = "0.0.0.0")]
+        host: String,
+
+        /// Path to compiled UI directory
+        #[arg(long)]
+        ui_dir: Option<PathBuf>,
+
+        /// Disable auth requirement
+        #[arg(long, default_value_t = false)]
+        no_auth: bool,
+    },
+
+    /// Stop the running SuperAgent web server daemon
+    #[command(visible_alias = "stop")]
+    StopWeb,
+
+    /// Check if the SuperAgent web server daemon is currently running
+    WebStatus,
+
+    /// List all available model IDs across providers
+    Models,
+
+    /// Run system and API connectivity diagnostics
+    #[command(visible_alias = "diag")]
+    Doctor,
+
+    /// Create AGENTS.md in current workspace
+    Init,
 
     /// Manage OS auto-start on boot (enable, disable, status)
     Startup {

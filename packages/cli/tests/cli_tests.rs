@@ -1,10 +1,10 @@
-use superagent_cli::attachments::{format_bytes, prepare_attachments, sniff_image_type, strip_wrapping_quotes};
+use superagent_cli::attachments::{format_bytes, sniff_image_type, strip_wrapping_quotes};
 use superagent_cli::commands::{CommandAction, CommandContext, SlashCommandRouter};
 use superagent_cli::session::{generate_session_id, load_session, save_session, SavedMessage};
 use superagent_cli::shortcuts::history_search::HistorySearch;
 use superagent_cli::shortcuts::permissions::PermissionLevel;
 use superagent_cli::shortcuts::queue::TurnQueueManager;
-use superagent_cli::skills::{get_builtin_skills, parse_skill_file};
+use superagent_cli::skills::get_builtin_skills;
 use superagent_cli::tui::composer::Composer;
 use superagent_cli::tui::diff_viewer::DiffViewerState;
 use superagent_cli::tui::markdown::{parse_markdown, MarkdownToken};

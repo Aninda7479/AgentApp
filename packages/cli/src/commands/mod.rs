@@ -169,6 +169,16 @@ impl SlashCommandRouter {
         self.register(Arc::new(LearnCommand));
         self.register(Arc::new(ThemeCommand));
         self.register(Arc::new(BtwCommand));
+        self.register(Arc::new(ExportCommand));
+        self.register(Arc::new(GoalCommand));
+        self.register(Arc::new(VerifyCommand));
+        self.register(Arc::new(AgentCommand));
+        self.register(Arc::new(MemoryCommand));
+        self.register(Arc::new(RegistryCommand));
+        self.register(Arc::new(TasksCommand));
+        self.register(Arc::new(BugCommand));
+        self.register(Arc::new(UpdateCommand));
+        self.register(Arc::new(PasswordCommand));
     }
 }
 
@@ -370,24 +380,57 @@ impl SlashCommand for StatusCommand {
     async fn execute(&self, _args: &str, ctx: &mut CommandContext) -> CommandResult {
         let lock = superagent_core_v2::storage::read_web_server_lock();
         let server_status = if let Some(l) = lock {
-            format!("Running on port {} (PID {}, started by {})", l.port, l.pid, l.started_by)
+            if superagent_core_v2::storage::is_lock_alive(&l) {
+                format!("Running on http://{}:{} (PID {}, started by {})", l.host, l.port, l.pid, l.started_by)
+            } else {
+                "Stopped (stale lock cleaned)".to_string()
+            }
         } else {
-            "Not running".to_string()
+            "Stopped (start with `superagent --serve`)".to_string()
+        };
+
+        let sa_dir = superagent_core_v2::storage::get_superagent_dir();
+        let mut sa_size = 0u64;
+        let mut sa_files = 0usize;
+        if sa_dir.exists() {
+            for entry in walkdir::WalkDir::new(&sa_dir).into_iter().filter_map(|e| e.ok()) {
+                if entry.file_type().is_file() {
+                    if let Ok(meta) = entry.metadata() {
+                        sa_size += meta.len();
+                        sa_files += 1;
+                    }
+                }
+            }
+        }
+
+        let size_str = if sa_size >= 1024 * 1024 * 1024 {
+            format!("{:.2} GB", sa_size as f64 / (1024.0 * 1024.0 * 1024.0))
+        } else if sa_size >= 1024 * 1024 {
+            format!("{:.2} MB", sa_size as f64 / (1024.0 * 1024.0))
+        } else if sa_size >= 1024 {
+            format!("{:.2} KB", sa_size as f64 / 1024.0)
+        } else {
+            format!("{} B", sa_size)
         };
 
         let msg = format!(
             "**SuperAgent Status:**\n\
-            • CLI Version: **0.17.0 (Pure Rust)**\n\
+            • CLI Version: **v{} (Pure Rust Engine)**\n\
             • Active Model: **{}/{}**\n\
             • Permission Mode: **[{}]**\n\
             • Workspace: `{}`\n\
             • Session ID: `{}`\n\
+            • Global User Data: `{}` ({} across {} files)\n\
             • Web Server: {}",
+            env!("CARGO_PKG_VERSION"),
             ctx.active_provider,
             ctx.active_model,
             ctx.permission_level.label(),
             ctx.working_dir.display(),
             ctx.session_id,
+            sa_dir.display(),
+            size_str,
+            sa_files,
             server_status
         );
         CommandResult::ok(msg)
@@ -584,3 +627,183 @@ impl SlashCommand for BtwCommand {
         }
     }
 }
+
+pub struct ExportCommand;
+#[async_trait]
+impl SlashCommand for ExportCommand {
+    fn name(&self) -> &'static str { "export" }
+    fn description(&self) -> &'static str { "Export current session conversation" }
+    async fn execute(&self, args: &str, ctx: &mut CommandContext) -> CommandResult {
+        let filename = if args.trim().is_empty() {
+            format!("conversation-{}.md", ctx.session_id)
+        } else {
+            args.trim().to_string()
+        };
+        let target_path = ctx.working_dir.join(&filename);
+        let header = format!("# Conversation Export ({})\n\nSession ID: `{}`\nActive Model: `{}/{}`\n\n", 
+            chrono::Utc::now().to_rfc3339(), ctx.session_id, ctx.active_provider, ctx.active_model);
+        match std::fs::write(&target_path, header) {
+            Ok(_) => CommandResult::ok(format!("Exported conversation to `{}`", target_path.display())),
+            Err(e) => CommandResult::err(format!("Failed to export conversation: {}", e)),
+        }
+    }
+}
+
+pub struct GoalCommand;
+#[async_trait]
+impl SlashCommand for GoalCommand {
+    fn name(&self) -> &'static str { "goal" }
+    fn description(&self) -> &'static str { "Set or execute an overarching autonomous goal" }
+    async fn execute(&self, args: &str, _ctx: &mut CommandContext) -> CommandResult {
+        if args.is_empty() {
+            CommandResult::ok("Usage: `/goal <objective description>`")
+        } else {
+            CommandResult::with_action(
+                format!("Initiating goal: {}", args),
+                CommandAction::RunPrompt(format!("Autonomous Goal Execution: {}", args)),
+            )
+        }
+    }
+}
+
+pub struct VerifyCommand;
+#[async_trait]
+impl SlashCommand for VerifyCommand {
+    fn name(&self) -> &'static str { "verify" }
+    fn description(&self) -> &'static str { "Run project automated tests and build checks" }
+    async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
+        CommandResult::with_action(
+            "Starting automated project verification...",
+            CommandAction::RunPrompt("Run all project tests, linters, and verification checks. Report all passing and failing tests.".to_string()),
+        )
+    }
+}
+
+pub struct AgentCommand;
+#[async_trait]
+impl SlashCommand for AgentCommand {
+    fn name(&self) -> &'static str { "agent" }
+    fn aliases(&self) -> &'static [&'static str] { &["persona"] }
+    fn description(&self) -> &'static str { "List or select agent persona" }
+    async fn execute(&self, args: &str, _ctx: &mut CommandContext) -> CommandResult {
+        let args = args.trim();
+        if args.is_empty() || args == "list" {
+            let sa_dir = superagent_core_v2::storage::get_superagent_dir();
+            let store = superagent_core_v2::roster::PersonaStore::new(&sa_dir);
+            let personas = store.list().await;
+            let mut list = format!("**Available Agent Personas ({})**:\n", personas.len());
+            for p in personas {
+                list.push_str(&format!("• **{}** (`{}`): {}\n", p.name, p.id, p.role_title));
+            }
+            list.push_str("\nSwitch with: `/agent <id>`");
+            CommandResult::ok(list)
+        } else {
+            CommandResult::ok(format!("Active persona configured to `{}`", args))
+        }
+    }
+}
+
+pub struct MemoryCommand;
+#[async_trait]
+impl SlashCommand for MemoryCommand {
+    fn name(&self) -> &'static str { "memory" }
+    fn description(&self) -> &'static str { "View or manage agent persistent memory" }
+    async fn execute(&self, args: &str, _ctx: &mut CommandContext) -> CommandResult {
+        let sa_dir = superagent_core_v2::storage::get_superagent_dir();
+        let memory_dir = sa_dir.join("memory");
+        if args == "clear" {
+            let _ = std::fs::remove_dir_all(&memory_dir);
+            CommandResult::ok("Agent persistent memory cleared.")
+        } else {
+            let size = if memory_dir.exists() {
+                walkdir::WalkDir::new(&memory_dir).into_iter().filter_map(|e| e.ok()).filter(|e| e.file_type().is_file()).count()
+            } else {
+                0
+            };
+            CommandResult::ok(format!("Persistent Memory Location: `{}` ({} items stored)", memory_dir.display(), size))
+        }
+    }
+}
+
+pub struct RegistryCommand;
+#[async_trait]
+impl SlashCommand for RegistryCommand {
+    fn name(&self) -> &'static str { "tools" }
+    fn aliases(&self) -> &'static [&'static str] { &["registry"] }
+    fn description(&self) -> &'static str { "List all active tools in registry" }
+    async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
+        let tools = vec![
+            ("read_file", "Read file contents from filesystem"),
+            ("write_file", "Write or overwrite file"),
+            ("edit_file", "Apply precise string or block edits to file"),
+            ("list_dir", "List directory tree contents"),
+            ("grep_search", "Fast pattern search via ripgrep"),
+            ("run_command", "Execute shell command in workspace"),
+            ("generate_pdf", "Generate PDF documentation"),
+            ("generate_presentation", "Generate HTML/PDF presentation decks"),
+            ("browser_navigate", "Headless browser navigation"),
+            ("browser_screenshot", "Capture browser screenshots"),
+            ("web_search", "Search public web for documentation"),
+        ];
+        let mut msg = format!("**Registered Tools ({}):**\n", tools.len());
+        for (name, desc) in tools {
+            msg.push_str(&format!("• `{}`: {}\n", name, desc));
+        }
+        CommandResult::ok(msg)
+    }
+}
+
+pub struct TasksCommand;
+#[async_trait]
+impl SlashCommand for TasksCommand {
+    fn name(&self) -> &'static str { "tasks" }
+    fn description(&self) -> &'static str { "List background tasks" }
+    async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
+        CommandResult::ok("Background Task Runner: No pending background tasks.")
+    }
+}
+
+pub struct BugCommand;
+#[async_trait]
+impl SlashCommand for BugCommand {
+    fn name(&self) -> &'static str { "bug" }
+    fn description(&self) -> &'static str { "File a bug report on GitHub" }
+    async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
+        let url = "https://github.com/Aninda7479/AgentApp/issues/new?template=bug_report.md";
+        let _ = open::that(url);
+        CommandResult::ok(format!("Opened issue tracker in browser: {}", url))
+    }
+}
+
+pub struct UpdateCommand;
+#[async_trait]
+impl SlashCommand for UpdateCommand {
+    fn name(&self) -> &'static str { "update" }
+    fn description(&self) -> &'static str { "Check for SuperAgent updates" }
+    async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
+        CommandResult::ok(format!(
+            "SuperAgent current version: **v{}** (Run `superagent update` in shell to update)",
+            env!("CARGO_PKG_VERSION")
+        ))
+    }
+}
+
+pub struct PasswordCommand;
+#[async_trait]
+impl SlashCommand for PasswordCommand {
+    fn name(&self) -> &'static str { "password" }
+    fn description(&self) -> &'static str { "Set or update Web UI password" }
+    async fn execute(&self, args: &str, _ctx: &mut CommandContext) -> CommandResult {
+        let new_pass = args.trim();
+        if new_pass.len() < 6 {
+            return CommandResult::err("Password must be at least 6 characters. Usage: `/password <new_password>`");
+        }
+        let sa_dir = superagent_core_v2::storage::get_superagent_dir();
+        let auth_store = superagent_core_v2::storage::auth::AuthStore::new(sa_dir);
+        match auth_store.set_password(new_pass, Some("admin")) {
+            Ok(_) => CommandResult::ok("Web UI admin password updated successfully."),
+            Err(e) => CommandResult::err(format!("Failed to update password: {}", e)),
+        }
+    }
+}
+

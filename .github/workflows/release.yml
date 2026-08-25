@@ -115,38 +115,71 @@ jobs:
           prerelease: false
           args: --target ${{ matrix.target }}
 
-  # ── Step 2: Build self-contained standalone binaries for CLI ────
+  # ── Step 2: Build native standalone binaries for CLI (Pure Rust) ────
   build-cli-binary:
     needs: version
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            label: windows-x64
+            ext: zip
+            binary: superagent.exe
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            label: linux-x64
+            ext: tar.gz
+            binary: superagent
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            label: macos-x64
+            ext: zip
+            binary: superagent
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            label: macos-arm64
+            ext: zip
+            binary: superagent
+
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
         with:
-          node-version: 22
+          targets: ${{ matrix.target }}
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Build pure native Rust CLI binary
+        run: cargo build -p superagent-cli --release --target ${{ matrix.target }}
 
-      - name: Build core, desktop UI, & cli packages
+      - name: Package standalone binary archive
+        shell: bash
         run: |
-          npm run build --workspace=@superagent/core
-          npm run build:desktop-ui
-          npm run build --workspace=@superagent/cli
-
-      - name: Build standalone binaries via pack.mjs
-        run: node packages/cli/scripts/pack.mjs
+          mkdir -p dist-release-cli
+          ARCHIVE="superagent-cli-v${{ needs.version.outputs.version }}-${{ matrix.label }}"
+          BIN_PATH="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          mkdir -p staging
+          cp "$BIN_PATH" staging/superagent-cli${{ matrix.platform == 'windows-latest' && '.exe' || '' }}
+          cp "$BIN_PATH" staging/superagent${{ matrix.platform == 'windows-latest' && '.exe' || '' }}
+          chmod +x staging/* 2>/dev/null || true
+          if [ "${{ matrix.ext }}" = "zip" ]; then
+            cd staging && zip -r "../dist-release-cli/${ARCHIVE}.zip" . && cd ..
+          else
+            cd staging && tar -czf "../dist-release-cli/${ARCHIVE}.tar.gz" . && cd ..
+          fi
 
       - name: Upload binary artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: cli-binary-artifacts
-          path: packages/cli/dist-release-cli/superagent-cli-v*.*
+          name: cli-binary-artifacts-${{ matrix.label }}
+          path: dist-release-cli/superagent-cli-v*.*
           if-no-files-found: error
+
 
   # ── Step 2b: Build Browser Extension (.zip release bundle) ───────────────────
   build-extension:
@@ -199,8 +232,9 @@ jobs:
       - name: Download CLI binary archives
         uses: actions/download-artifact@v4
         with:
-          name: cli-binary-artifacts
+          pattern: cli-binary-artifacts-*
           path: cli-artifacts
+          merge-multiple: true
 
       - name: Download Browser Extension release archive
         uses: actions/download-artifact@v4
