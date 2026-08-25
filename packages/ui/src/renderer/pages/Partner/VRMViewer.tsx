@@ -213,8 +213,8 @@ function getWavePose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
     rightUpperArmRot: [0.15, -0.10, 0.45],
     // Forearm bent upward ~95° so hand is to the right of the ear in open space
     rightLowerArmRot: [-0.20, 0.20, -1.65 + waveCycle * 0.25],
-    // Hand rotated on wrist (Y = 1.45) so palm faces forward towards user, waving side-to-side
-    rightHandRot:     [0.0, 1.45, waveCycle * 0.25],
+    // Wrist rotated so open palm faces directly toward the screen/viewer
+    rightHandRot:     [0.0, -1.45, waveCycle * 0.25],
     rightFingers:     'open',
     leftFingers:      'relaxed',
 
