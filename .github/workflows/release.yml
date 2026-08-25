@@ -167,8 +167,10 @@ jobs:
           cp "$BIN_PATH" staging/superagent-cli${{ matrix.platform == 'windows-latest' && '.exe' || '' }}
           cp "$BIN_PATH" staging/superagent${{ matrix.platform == 'windows-latest' && '.exe' || '' }}
           chmod +x staging/* 2>/dev/null || true
-          if [ "${{ matrix.ext }}" = "zip" ]; then
-            cd staging && zip -r "../dist-release-cli/${ARCHIVE}.zip" . && cd ..
+          if [ "${{ matrix.platform }}" = "windows-latest" ]; then
+            cd staging && tar -a -cf "../dist-release-cli/${ARCHIVE}.zip" * && cd ..
+          elif [ "${{ matrix.ext }}" = "zip" ]; then
+            cd staging && (zip -r "../dist-release-cli/${ARCHIVE}.zip" . 2>/dev/null || tar -a -cf "../dist-release-cli/${ARCHIVE}.zip" *) && cd ..
           else
             cd staging && tar -czf "../dist-release-cli/${ARCHIVE}.tar.gz" . && cd ..
           fi

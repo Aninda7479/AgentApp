@@ -284,10 +284,31 @@ async fn print_system_status(workspace: &std::path::Path) {
         println!("  Conversations:     {} chats ({})", chats_files, format_bytes(chats_bytes));
     }
 
-    let artifacts_dir = sa_dir.join("artifacts");
+    let artifacts_dir = if sa_dir.join("artifacts").exists() {
+        sa_dir.join("artifacts")
+    } else {
+        sa_dir.join("artifact")
+    };
     let (artifacts_bytes, artifacts_files, _) = calculate_dir_size(&artifacts_dir);
-    if artifacts_files > 0 {
-        println!("  Artifacts:         {} artifacts ({})", artifacts_files, format_bytes(artifacts_bytes));
+    if artifacts_bytes > 0 || artifacts_files > 0 {
+        let mut app_count = 0;
+        if let Ok(entries) = std::fs::read_dir(&artifacts_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    app_count += 1;
+                }
+            }
+        }
+        if app_count == 0 && artifacts_files > 0 {
+            app_count = 1;
+        }
+        let app_label = if app_count == 1 { "artifact" } else { "artifacts" };
+        if artifacts_files > app_count {
+            println!("  Artifacts:         {} {} ({} across {} files)", app_count, app_label, format_bytes(artifacts_bytes), artifacts_files);
+        } else {
+            println!("  Artifacts:         {} {} ({})", app_count, app_label, format_bytes(artifacts_bytes));
+        }
     }
 
     let settings_file = sa_dir.join("settings.json");
