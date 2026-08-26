@@ -86,6 +86,7 @@ function compileCss(watch = false) {
 const htmlFiles = [
   { src: 'src/index.html', dest: 'dist/index.html' },
   { src: 'src/ui.html', dest: 'dist/ui.html' },
+  { src: 'src/login.html', dest: 'dist/login.html' },
   { src: 'src/pet.html', dest: 'dist/pet.html' },
   { src: 'src/circle-search.html', dest: 'dist/circle-search.html' },
   { src: 'src/tray.html', dest: 'dist/tray.html' },
@@ -202,8 +203,9 @@ if (isWatch) {
     stdio: 'inherit',
   });
 
-  // Sync to secondary non-Tauri destinations (e.g. core_v2)
+  // Sync to secondary non-Tauri and daemon destinations (desktop and core_v2)
   const syncTargets = [
+    path.resolve(ROOT, '../desktop/dist'),
     path.resolve(ROOT, '../core_v2/ui-dist'),
   ];
   for (const target of syncTargets) {

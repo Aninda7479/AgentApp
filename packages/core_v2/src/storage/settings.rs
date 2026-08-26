@@ -38,7 +38,7 @@ impl Default for UserSettings {
             default_model: default_model(),
             server_port: default_server_port(),
             api_keys: HashMap::new(),
-            enable_auth: Some(false),
+            enable_auth: Some(true),
         }
     }
 }

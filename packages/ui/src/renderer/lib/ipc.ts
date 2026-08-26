@@ -218,8 +218,12 @@ export function getIpc(): any {
           const httpRes = await fetch(`${getCoreApiBaseUrl()}/api/ipc/${encodeURIComponent(channel)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify({ channel, args }),
           });
+          if (httpRes.status === 401 && typeof window !== 'undefined' && window.location && window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
           if (httpRes.ok) {
             const resJson = await httpRes.json();
             if (resJson && typeof resJson === 'object' && 'data' in resJson) {

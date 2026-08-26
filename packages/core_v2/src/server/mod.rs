@@ -8,9 +8,10 @@ use anyhow::Result;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        DefaultBodyLimit, Path as AxumPath, State,
+        DefaultBodyLimit, Path as AxumPath, Request, State,
     },
     http::{header, HeaderMap, Method, StatusCode},
+    middleware::{self, Next},
     response::{
         sse::{Event, KeepAlive, Sse},
         IntoResponse, Response,
@@ -303,6 +304,138 @@ fn is_request_authenticated(state: &AppState, headers: &HeaderMap) -> bool {
 }
 
 
+fn is_public_path(path: &str) -> bool {
+    let clean = path.trim_end_matches('/');
+    matches!(
+        clean,
+        "/login"
+            | "/health"
+            | "/api/health"
+            | "/api/auth/status"
+            | "/api/auth/login"
+            | "/api/auth/setup"
+            | "/manifest.json"
+            | "/icon.svg"
+            | "/icon.png"
+            | "/favicon.ico"
+    ) || path.ends_with("/sdk.js")
+        || path.ends_with(".css")
+        || path.ends_with(".js")
+        || path.ends_with(".png")
+        || path.ends_with(".svg")
+        || path.ends_with(".ico")
+        || path.ends_with(".woff")
+        || path.ends_with(".woff2")
+        || path.ends_with(".ttf")
+        || path.ends_with(".map")
+        || path.ends_with(".jpg")
+        || path.ends_with(".jpeg")
+        || path.ends_with(".webp")
+        || path.ends_with(".gif")
+}
+
+/// Axum middleware guarding all protected API routes, WebSockets, and SPA pages.
+async fn auth_middleware(
+    State(state): State<AppState>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let path = req.uri().path().to_string();
+
+    // Check if auth is disabled via environment variable override
+    let disable_auth = std::env::var("SUPERAGENT_DISABLE_AUTH").map(|v| v == "true").unwrap_or(false);
+    if disable_auth {
+        return next.run(req).await;
+    }
+
+    // Check if auth is explicitly disabled in settings
+    let settings = state.settings_store.load().unwrap_or_default();
+    let auth_required = settings.enable_auth.unwrap_or(true);
+    if !auth_required {
+        return next.run(req).await;
+    }
+
+    // Allow public endpoints (login, status, health, static brand & assets)
+    if is_public_path(&path) {
+        return next.run(req).await;
+    }
+
+    // Check headers (Authorization: Bearer <token> or Cookie sa_session=...)
+    if is_request_authenticated(&state, req.headers()) {
+        return next.run(req).await;
+    }
+
+    // Check query params (?token=... or ?sa_session=...) for WebSocket upgrades or direct links
+    if let Some(query) = req.uri().query() {
+        for part in query.split('&') {
+            if let Some(token) = part.strip_prefix("token=").or_else(|| part.strip_prefix("sa_session=")) {
+                if state.auth_store.validate_session_token(token).is_some() {
+                    return next.run(req).await;
+                }
+            }
+        }
+    }
+
+    // If unauthenticated: API and WebSocket calls get 401 JSON
+    if path.starts_with("/api/") || path.starts_with("/ws/") {
+        return (
+            StatusCode::UNAUTHORIZED,
+            [
+                (header::CONTENT_TYPE, "application/json"),
+            ],
+            serde_json::json!({
+                "error": "Authentication required",
+                "authRequired": true
+            }).to_string(),
+        ).into_response();
+    }
+
+    // Browser navigation / page requests get redirected to /login
+    (
+        StatusCode::FOUND,
+        [
+            (header::LOCATION, "/login"),
+            (header::CACHE_CONTROL, "no-cache"),
+        ],
+        "",
+    ).into_response()
+}
+
+async fn serve_login(State(state): State<AppState>) -> Response {
+    let dist_opt = state
+        .ui_dist_dir
+        .as_ref()
+        .cloned()
+        .or_else(|| find_ui_dist_dir(&state.workspace_root));
+
+    if let Some(ref dist) = dist_opt {
+        let login_file = dist.join("login.html");
+        if let Ok(html) = tokio::fs::read_to_string(&login_file).await {
+            return (
+                [
+                    (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+                    (header::CACHE_CONTROL, "no-cache"),
+                ],
+                html,
+            )
+                .into_response();
+        }
+    }
+
+    if let Some(file) = EmbeddedUi::get("login.html") {
+        return (
+            [
+                (header::CONTENT_TYPE, "text/html; charset=utf-8"),
+                (header::CACHE_CONTROL, "no-cache"),
+            ],
+            file.data.into_owned(),
+        )
+            .into_response();
+    }
+
+    (StatusCode::NOT_FOUND, "login.html not found").into_response()
+}
+
 /// Creates the complete router for the Core v2 API and static UI daemon.
 pub fn create_router(state: AppState) -> Router {
     let cors = CorsLayer::new()
@@ -321,7 +454,8 @@ pub fn create_router(state: AppState) -> Router {
             header::ACCEPT,
         ]);
 
-    let mut api_router = Router::new()
+    let api_router = Router::new()
+        .route("/login", get(serve_login))
         .route("/health", get(health_check))
         .route("/api/health", get(health_check))
         .route("/api/system-info", get(get_system_info))
@@ -393,43 +527,9 @@ pub fn create_router(state: AppState) -> Router {
         .route("/ws/agent", get(handle_agent_ws))
         .route("/api/ws", get(handle_agent_ws));
 
-    if let Some(ref dist) = state.ui_dist_dir {
-        if dist.exists() {
-            let login_file = dist.join("login.html");
-
-            if login_file.exists() {
-                let lf = login_file.clone();
-                api_router = api_router.route(
-                    "/login",
-                    get(move || {
-                        let path = lf.clone();
-                        async move {
-                            match tokio::fs::read_to_string(&path).await {
-                                Ok(content) => (
-                                    [
-                                        (header::CONTENT_TYPE, "text/html; charset=utf-8"),
-                                        (header::CACHE_CONTROL, "no-cache"),
-                                    ],
-                                    content,
-                                )
-                                    .into_response(),
-                                Err(_) => (StatusCode::NOT_FOUND, "login.html not found").into_response(),
-                            }
-                        }
-                    }),
-                );
-            }
-
-            return api_router
-                .fallback(spa_fallback_handler)
-                .layer(DefaultBodyLimit::max(512 * 1024 * 1024))
-                .layer(cors)
-                .with_state(state);
-        }
-    }
-
     api_router
         .fallback(spa_fallback_handler)
+        .layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
         .layer(DefaultBodyLimit::max(512 * 1024 * 1024))
         .layer(cors)
         .with_state(state)
@@ -3239,20 +3339,70 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_health_check_endpoint() {
-        let temp_dir = std::env::temp_dir().join(format!("test_server_{}", uuid::Uuid::new_v4()));
+    async fn test_unauthenticated_requests_gate() {
+        let temp_dir = std::env::temp_dir().join(format!("test_unauth_{}", uuid::Uuid::new_v4()));
         let _ = std::fs::create_dir_all(&temp_dir);
 
         let state = build_test_state(temp_dir.clone());
         let app = create_router(state);
-        let req = Request::builder()
-            .uri("/api/health")
-            .method("GET")
-            .body(Body::empty())
-            .unwrap();
 
-        let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        // 1. Root page without auth -> 302 to /login
+        let req_root = Request::builder().uri("/").method("GET").body(Body::empty()).unwrap();
+        let res_root = app.clone().oneshot(req_root).await.unwrap();
+        assert_eq!(res_root.status(), StatusCode::FOUND);
+        assert_eq!(res_root.headers().get("location").unwrap(), "/login");
+
+        // 2. SPA page (/chat) without auth -> 302 to /login
+        let req_chat = Request::builder().uri("/chat").method("GET").body(Body::empty()).unwrap();
+        let res_chat = app.clone().oneshot(req_chat).await.unwrap();
+        assert_eq!(res_chat.status(), StatusCode::FOUND);
+        assert_eq!(res_chat.headers().get("location").unwrap(), "/login");
+
+        // 3. Protected API without auth -> 401 Unauthorized
+        let req_api = Request::builder().uri("/api/conversations").method("GET").body(Body::empty()).unwrap();
+        let res_api = app.clone().oneshot(req_api).await.unwrap();
+        assert_eq!(res_api.status(), StatusCode::UNAUTHORIZED);
+
+        // 4. Protected IPC endpoint without auth -> 401 Unauthorized
+        let req_ipc = Request::builder()
+            .uri("/api/ipc/settings-read")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::json!({ "args": [] }).to_string()))
+            .unwrap();
+        let res_ipc = app.oneshot(req_ipc).await.unwrap();
+        assert_eq!(res_ipc.status(), StatusCode::UNAUTHORIZED);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_public_endpoints_accessible_without_auth() {
+        let temp_dir = std::env::temp_dir().join(format!("test_public_{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let state = build_test_state(temp_dir.clone());
+        let app = create_router(state);
+
+        // Health check
+        let req_health = Request::builder().uri("/api/health").method("GET").body(Body::empty()).unwrap();
+        let res_health = app.clone().oneshot(req_health).await.unwrap();
+        assert_eq!(res_health.status(), StatusCode::OK);
+
+        // Auth status
+        let req_status = Request::builder().uri("/api/auth/status").method("GET").body(Body::empty()).unwrap();
+        let res_status = app.clone().oneshot(req_status).await.unwrap();
+        assert_eq!(res_status.status(), StatusCode::OK);
+
+        // Artifact SDK
+        let req_sdk = Request::builder().uri("/api/artifacts/sdk.js").method("GET").body(Body::empty()).unwrap();
+        let res_sdk = app.clone().oneshot(req_sdk).await.unwrap();
+        assert_eq!(res_sdk.status(), StatusCode::OK);
+
+        // Login endpoint (served via EmbeddedUi or filesystem)
+        let req_login = Request::builder().uri("/login").method("GET").body(Body::empty()).unwrap();
+        let res_login = app.oneshot(req_login).await.unwrap();
+        assert_eq!(res_login.status(), StatusCode::OK);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
@@ -3263,31 +3413,14 @@ mod tests {
         let _ = std::fs::create_dir_all(&temp_dir);
 
         let state = build_test_state(temp_dir.clone());
+        let token = state.auth_store.create_session_token("admin");
         let app = create_router(state);
         let req = Request::builder()
             .uri("/api/ipc/settings-read")
             .method("POST")
             .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
             .body(Body::from(serde_json::json!({ "args": [] }).to_string()))
-            .unwrap();
-
-        let response = app.oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let _ = std::fs::remove_dir_all(&temp_dir);
-    }
-
-    #[tokio::test]
-    async fn test_artifact_sdk_endpoint() {
-        let temp_dir = std::env::temp_dir().join(format!("test_sdk_{}", uuid::Uuid::new_v4()));
-        let _ = std::fs::create_dir_all(&temp_dir);
-
-        let state = build_test_state(temp_dir.clone());
-        let app = create_router(state);
-        let req = Request::builder()
-            .uri("/api/artifacts/sdk.js")
-            .method("GET")
-            .body(Body::empty())
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
@@ -3302,6 +3435,7 @@ mod tests {
         let _ = std::fs::create_dir_all(&temp_dir);
 
         let state = build_test_state(temp_dir.clone());
+        let token = state.auth_store.create_session_token("admin");
         let app = create_router(state.clone());
 
         // Test 400 when payload is missing
@@ -3309,6 +3443,7 @@ mod tests {
             .uri("/api/ipc/agent-run")
             .method("POST")
             .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
             .body(Body::from(serde_json::json!({ "args": [] }).to_string()))
             .unwrap();
         let res_bad = app.clone().oneshot(req_bad).await.unwrap();
@@ -3319,6 +3454,7 @@ mod tests {
             .uri("/api/ipc/agent-run")
             .method("POST")
             .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
             .body(Body::from(serde_json::json!({
                 "args": [{
                     "sessionId": "test-session-123",
@@ -3338,6 +3474,7 @@ mod tests {
             .uri("/api/ipc/agent-stop")
             .method("POST")
             .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
             .body(Body::from(serde_json::json!({
                 "args": ["test-session-123"]
             }).to_string()))
@@ -3373,14 +3510,20 @@ mod tests {
 
         let mut state = build_test_state(temp_dir.clone());
         state.ui_dist_dir = Some(ui_dist.clone());
+        let token = state.auth_store.create_session_token("admin");
         let app = create_router(state);
 
-        // 1. Navigation route (/chat) -> index.html
-        let req_chat = Request::builder().uri("/chat").method("GET").body(Body::empty()).unwrap();
+        // 1. Navigation route (/chat) with valid session cookie -> index.html (200 OK)
+        let req_chat = Request::builder()
+            .uri("/chat")
+            .method("GET")
+            .header("Cookie", format!("sa_session={}", token))
+            .body(Body::empty())
+            .unwrap();
         let res_chat = app.clone().oneshot(req_chat).await.unwrap();
         assert_eq!(res_chat.status(), StatusCode::OK);
 
-        // 2. Existing static asset (/assets/app.js) -> 200 OK
+        // 2. Existing static asset (/assets/app.js) is public -> 200 OK
         let req_asset = Request::builder().uri("/assets/app.js").method("GET").body(Body::empty()).unwrap();
         let res_asset = app.clone().oneshot(req_asset).await.unwrap();
         assert_eq!(res_asset.status(), StatusCode::OK);
@@ -3399,6 +3542,7 @@ mod tests {
         let _ = std::fs::create_dir_all(&temp_dir);
 
         let state = build_test_state(temp_dir.clone());
+        let token = state.auth_store.create_session_token("admin");
         let app = create_router(state);
 
         // Global memory read
@@ -3406,6 +3550,7 @@ mod tests {
             .uri("/api/ipc/global-memory-read")
             .method("POST")
             .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
             .body(Body::from(serde_json::json!({ "args": [] }).to_string()))
             .unwrap();
         let res_mem = app.clone().oneshot(req_mem).await.unwrap();
@@ -3416,6 +3561,7 @@ mod tests {
             .uri("/api/ipc/usage-pricing")
             .method("POST")
             .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
             .body(Body::from(serde_json::json!({ "args": [] }).to_string()))
             .unwrap();
         let res_pricing = app.clone().oneshot(req_pricing).await.unwrap();
@@ -3426,6 +3572,7 @@ mod tests {
             .uri("/api/ipc/partner-list")
             .method("POST")
             .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
             .body(Body::from(serde_json::json!({ "args": [] }).to_string()))
             .unwrap();
         let res_partner = app.clone().oneshot(req_partner).await.unwrap();
@@ -3436,6 +3583,7 @@ mod tests {
             .uri("/api/ipc/artifact:list")
             .method("POST")
             .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
             .body(Body::from(serde_json::json!({ "args": [] }).to_string()))
             .unwrap();
         let res_artifact = app.oneshot(req_artifact).await.unwrap();

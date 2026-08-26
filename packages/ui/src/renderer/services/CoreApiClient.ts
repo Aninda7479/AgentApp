@@ -28,7 +28,10 @@ export class CoreApiClient {
     };
 
     try {
-      const res = await fetch(url, { ...options, headers });
+      const res = await fetch(url, { credentials: 'same-origin', ...options, headers });
+      if (res.status === 401 && typeof window !== 'undefined' && window.location && window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
       if (!res.ok) {
         const errorText = await res.text().catch(() => '');
         throw new Error(`API ${options.method || 'GET'} ${endpoint} failed (${res.status}): ${errorText || res.statusText}`);
