@@ -383,15 +383,29 @@ class VRMCharacter implements Character {
       }
     };
 
+    applyRot('hips', activePose.hipsRot);
     applyRot('spine', activePose.spineRot);
     applyRot('chest', activePose.chestRot);
+    applyRot('upperChest', activePose.upperChestRot);
+    applyRot('neck', activePose.neckRot);
     applyRot('head', activePose.headRot);
+
+    applyRot('leftShoulder', activePose.leftShoulderRot);
     applyRot('leftUpperArm', activePose.leftUpperArmRot);
     applyRot('leftLowerArm', activePose.leftLowerArmRot);
     applyRot('leftHand', activePose.leftHandRot);
+
+    applyRot('rightShoulder', activePose.rightShoulderRot);
     applyRot('rightUpperArm', activePose.rightUpperArmRot);
     applyRot('rightLowerArm', activePose.rightLowerArmRot);
     applyRot('rightHand', activePose.rightHandRot);
+
+    applyRot('leftUpperLeg', activePose.leftUpperLegRot);
+    applyRot('rightUpperLeg', activePose.rightUpperLegRot);
+    applyRot('leftLowerLeg', activePose.leftLowerLegRot);
+    applyRot('rightLowerLeg', activePose.rightLowerLegRot);
+    applyRot('leftFoot', activePose.leftFootRot);
+    applyRot('rightFoot', activePose.rightFootRot);
 
     applyFingerPreset(this.vrm, 'left', activePose.leftFingers || 'relaxed');
     applyFingerPreset(this.vrm, 'right', activePose.rightFingers || 'relaxed');

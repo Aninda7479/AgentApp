@@ -3,16 +3,16 @@ import type { VRMPose } from './types';
 
 // ── 54. Nodding Slowly ────────────────────────────────────────────────────────
 export function getTalkNodPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  const nod = Math.sin(actTime * 3.5) * 0.14;
+  const nod = Math.sin(actTime * 3.5) * 0.12;
   return {
     ...baseIdle,
-    headRot: [nod + 0.05, 0, 0],
-    spineRot: [0.03, 0, 0],
-    leftUpperArmRot:  [0.08, 0, -1.28],
-    leftLowerArmRot:  [0, 0.22, 0],
+    headRot: [nod + 0.04, 0, 0],
+    spineRot: [0.02, 0, 0],
+    leftUpperArmRot:  [0.08, -0.04, -1.28],
+    leftLowerArmRot:  [0, -0.22, 0],
     leftFingers:      'relaxed',
-    rightUpperArmRot: [0.08, 0, 1.28],
-    rightLowerArmRot: [0, -0.22, 0],
+    rightUpperArmRot: [0.08, 0.04, 1.28],
+    rightLowerArmRot: [0, 0.22, 0],
     rightFingers:     'relaxed',
     expressions: { happy: 0.6, neutral: 0.4 },
   };
@@ -20,15 +20,15 @@ export function getTalkNodPose(t: number, actTime: number, baseIdle: VRMPose): V
 
 // ── 55. Shaking Head ──────────────────────────────────────────────────────────
 export function getTalkShakeHeadPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  const shake = Math.sin(actTime * 5.0) * 0.2;
+  const shake = Math.sin(actTime * 5.0) * 0.18;
   return {
     ...baseIdle,
-    headRot: [0.02, shake, -shake * 0.15],
-    leftUpperArmRot:  [0.08, 0, -1.28],
-    leftLowerArmRot:  [0, 0.22, 0],
+    headRot: [0.02, shake, -shake * 0.12],
+    leftUpperArmRot:  [0.08, -0.04, -1.28],
+    leftLowerArmRot:  [0, -0.22, 0],
     leftFingers:      'relaxed',
-    rightUpperArmRot: [0.08, 0, 1.28],
-    rightLowerArmRot: [0, -0.22, 0],
+    rightUpperArmRot: [0.08, 0.04, 1.28],
+    rightLowerArmRot: [0, 0.22, 0],
     rightFingers:     'relaxed',
     expressions: { neutral: 0.8 },
   };
@@ -39,16 +39,16 @@ export function getTalkShrugPose(t: number, actTime: number, baseIdle: VRMPose):
   const p = Math.sin(Math.min(actTime / 3.2, 1) * Math.PI);
   return {
     ...baseIdle,
-    headRot: [-0.04 * p, 0, 0.12 * p],
+    headRot: [-0.03 * p, 0, 0.10 * p],
     leftShoulderRot:  [0, 0, 0.15 * p],
     rightShoulderRot: [0, 0, -0.15 * p],
-    leftUpperArmRot:  [0.35 * p, 0, MathUtils.lerp(-1.28, -0.95, p)],
-    leftLowerArmRot:  [0, 1.15 * p, 0],
-    leftHandRot:      [0.15 * p, 0, -0.15 * p],
+    leftUpperArmRot:  [0.30 * p, 0, MathUtils.lerp(-1.28, -0.95, p)],
+    leftLowerArmRot:  [0, -1.15 * p, 0],
+    leftHandRot:      [0.12 * p, 0, -0.12 * p],
     leftFingers:      'open',
-    rightUpperArmRot: [0.35 * p, 0, MathUtils.lerp(1.28, 0.95, p)],
-    rightLowerArmRot: [0, -1.15 * p, 0],
-    rightHandRot:     [0.15 * p, 0, 0.15 * p],
+    rightUpperArmRot: [0.30 * p, 0, MathUtils.lerp(1.28, 0.95, p)],
+    rightLowerArmRot: [0, 1.15 * p, 0],
+    rightHandRot:     [0.12 * p, 0, 0.12 * p],
     rightFingers:     'open',
     expressions: { neutral: 0.7, surprised: 0.3 },
   };
@@ -59,13 +59,13 @@ export function getTalkCountFingersPose(t: number, actTime: number, baseIdle: VR
   const step = Math.floor((actTime * 1.5) % 3);
   return {
     ...baseIdle,
-    headRot: [0.1, -0.08, 0],
-    leftUpperArmRot:  [0.45, 0, -0.85],
-    leftLowerArmRot:  [0, 1.65, 0.15],
+    headRot: [0.08, -0.06, 0],
+    leftUpperArmRot:  [0.38, 0, -0.75],
+    leftLowerArmRot:  [0, -1.65, -0.12],
     leftFingers:      step === 0 ? 'pointing' : step === 1 ? 'peace' : 'open',
-    rightUpperArmRot: [0.45, 0, 0.85],
-    rightLowerArmRot: [0, -1.65, -0.15],
-    rightHandRot:     [0.15, 0, 0.15],
+    rightUpperArmRot: [0.38, 0, 0.75],
+    rightLowerArmRot: [0, 1.65, 0.12],
+    rightHandRot:     [0.12, 0, 0.12],
     rightFingers:     'pointing',
     expressions: { neutral: 0.8 },
   };
@@ -75,13 +75,13 @@ export function getTalkCountFingersPose(t: number, actTime: number, baseIdle: VR
 export function getTalkPointScreenPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
   return {
     ...baseIdle,
-    headRot: [-0.04, 0.04, 0.06],
-    leftUpperArmRot:  [0.08, 0, -1.28],
-    leftLowerArmRot:  [0, 0.22, 0],
+    headRot: [-0.03, 0.03, 0.05],
+    leftUpperArmRot:  [0.08, -0.04, -1.28],
+    leftLowerArmRot:  [0, -0.22, 0],
     leftFingers:      'relaxed',
-    rightUpperArmRot: [0.55, 0, 0.85],
-    rightLowerArmRot: [0, -0.95, 0],
-    rightHandRot:     [0.15, 0, 0],
+    rightUpperArmRot: [0.48, 0, 0.85],
+    rightLowerArmRot: [0, 0.95, 0],
+    rightHandRot:     [0.12, 0, 0],
     rightFingers:     'pointing',
     expressions: { happy: 0.7 },
   };
@@ -91,13 +91,13 @@ export function getTalkPointScreenPose(t: number, actTime: number, baseIdle: VRM
 export function getTalkPointSelfPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
   return {
     ...baseIdle,
-    headRot: [0.06, -0.04, 0.06],
-    leftUpperArmRot:  [0.08, 0, -1.28],
-    leftLowerArmRot:  [0, 0.22, 0],
+    headRot: [0.05, -0.03, 0.05],
+    leftUpperArmRot:  [0.08, -0.04, -1.28],
+    leftLowerArmRot:  [0, -0.22, 0],
     leftFingers:      'relaxed',
-    rightUpperArmRot: [0.55, -0.15, 0.55],
-    rightLowerArmRot: [0, -1.85, -0.2],
-    rightHandRot:     [0.25, 0, 0],
+    rightUpperArmRot: [0.48, -0.12, 0.55],
+    rightLowerArmRot: [0, 1.85, 0.18],
+    rightHandRot:     [0.20, 0, 0],
     rightFingers:     'pointing',
     expressions: { surprised: 0.5, happy: 0.4 },
   };
@@ -114,18 +114,18 @@ export function getTalkingPose(t: number, baseIdle: VRMPose): VRMPose {
 
   return {
     ...baseIdle,
-    spineRot: [0.03 + g1 * 0.015, g2 * 0.015, 0],
+    spineRot: [0.03 + g1 * 0.012, g2 * 0.012, 0],
     headRot: [
-      (baseIdle.headRot?.[0] || 0) + Math.sin(t * 4.8) * 0.03,
-      (baseIdle.headRot?.[1] || 0) + Math.cos(t * 2.2) * 0.025,
-      (baseIdle.headRot?.[2] || 0) + g1 * 0.015,
+      (baseIdle.headRot?.[0] || 0) + Math.sin(t * 4.8) * 0.025,
+      (baseIdle.headRot?.[1] || 0) + Math.cos(t * 2.2) * 0.02,
+      (baseIdle.headRot?.[2] || 0) + g1 * 0.012,
     ],
-    leftUpperArmRot:  [0.15, 0, -1.22 + g2 * 0.05],
-    leftLowerArmRot:  [0, 0.45 + g1 * 0.1, 0],
+    leftUpperArmRot:  [0.15, 0, -1.22 + g2 * 0.04],
+    leftLowerArmRot:  [0, -0.45 - g1 * 0.08, 0],
     leftFingers:      'relaxed',
-    rightUpperArmRot: [0.28 + g2 * 0.08, 0, 1.05 - g1 * 0.08],
-    rightLowerArmRot: [0, -0.75 - g2 * 0.15, 0],
-    rightHandRot:     [0.15 + g1 * 0.08, 0, 0],
+    rightUpperArmRot: [0.25 + g2 * 0.06, 0, 1.05 - g1 * 0.06],
+    rightLowerArmRot: [0, 0.75 + g2 * 0.12, 0],
+    rightHandRot:     [0.12 + g1 * 0.06, 0, 0],
     rightFingers:     'open',
   };
 }
@@ -134,11 +134,11 @@ export function getTalkingPose(t: number, baseIdle: VRMPose): VRMPose {
 export function getTalkTiltHeadPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
   return {
     ...baseIdle,
-    headRot: [-0.04, 0.06, 0.22],
-    leftUpperArmRot:  [0.08, 0, -1.28],
-    leftLowerArmRot:  [0, 0.22, 0],
-    rightUpperArmRot: [0.08, 0, 1.28],
-    rightLowerArmRot: [0, -0.22, 0],
+    headRot: [-0.03, 0.05, 0.20],
+    leftUpperArmRot:  [0.08, -0.04, -1.28],
+    leftLowerArmRot:  [0, -0.22, 0],
+    rightUpperArmRot: [0.08, 0.04, 1.28],
+    rightLowerArmRot: [0, 0.22, 0],
     expressions: { surprised: 0.4, happy: 0.35 },
   };
 }
@@ -147,14 +147,14 @@ export function getTalkTiltHeadPose(t: number, actTime: number, baseIdle: VRMPos
 export function getTalkCupEarPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
   return {
     ...baseIdle,
-    spineRot: [0.06, -0.04, 0],
-    headRot: [-0.05, -0.12, 0.16],
-    leftUpperArmRot:  [0.08, 0, -1.28],
-    leftLowerArmRot:  [0, 0.22, 0],
+    spineRot: [0.05, -0.03, 0],
+    headRot: [-0.04, -0.10, 0.14],
+    leftUpperArmRot:  [0.08, -0.04, -1.28],
+    leftLowerArmRot:  [0, -0.22, 0],
     leftFingers:      'relaxed',
-    rightUpperArmRot: [0.65, -0.15, 0.45],
-    rightLowerArmRot: [0, -2.15, -0.25],
-    rightHandRot:     [0.25, 0, 0.1],
+    rightUpperArmRot: [0.62, -0.15, 0.42],
+    rightLowerArmRot: [0, 2.10, 0.20],
+    rightHandRot:     [0.20, 0, 0.08],
     rightFingers:     'cup',
     expressions: { surprised: 0.4, neutral: 0.6 },
   };
@@ -164,14 +164,14 @@ export function getTalkCupEarPose(t: number, actTime: number, baseIdle: VRMPose)
 export function getTalkHandChestPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
   return {
     ...baseIdle,
-    spineRot: [0.04, 0, 0],
-    headRot: [-0.04, 0.04, 0.06],
-    leftUpperArmRot:  [0.08, 0, -1.28],
-    leftLowerArmRot:  [0, 0.22, 0],
+    spineRot: [0.03, 0, 0],
+    headRot: [-0.03, 0.03, 0.05],
+    leftUpperArmRot:  [0.08, -0.04, -1.28],
+    leftLowerArmRot:  [0, -0.22, 0],
     leftFingers:      'relaxed',
-    rightUpperArmRot: [0.55, -0.12, 0.55],
-    rightLowerArmRot: [0, -1.75, -0.18],
-    rightHandRot:     [0.15, 0, 0],
+    rightUpperArmRot: [0.48, -0.10, 0.55],
+    rightLowerArmRot: [0, 1.75, 0.15],
+    rightHandRot:     [0.12, 0, 0],
     rightFingers:     'open',
     expressions: { happy: 0.7, relaxed: 0.4 },
   };
@@ -179,16 +179,16 @@ export function getTalkHandChestPose(t: number, actTime: number, baseIdle: VRMPo
 
 // ── 64. Wagging Finger ────────────────────────────────────────────────────────
 export function getTalkWagFingerPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  const wag = Math.sin(actTime * 9.0) * 0.22;
+  const wag = Math.sin(actTime * 9.0) * 0.20;
   return {
     ...baseIdle,
-    headRot: [-0.02, 0.05, 0.06],
-    leftUpperArmRot:  [-0.12, -0.25, -1.12],
-    leftLowerArmRot:  [0, 1.35, 0.2],
+    headRot: [-0.02, 0.04, 0.05],
+    leftUpperArmRot:  [-0.10, -0.22, -0.95],
+    leftLowerArmRot:  [0, -1.55, -0.20],
     leftFingers:      'fist',
-    rightUpperArmRot: [0.45, 0, 0.85],
-    rightLowerArmRot: [0, -1.45, -0.15],
-    rightHandRot:     [0.15, 0, wag],
+    rightUpperArmRot: [0.38, 0, 0.85],
+    rightLowerArmRot: [0, 1.45, 0.12],
+    rightHandRot:     [0.12, 0, wag],
     rightFingers:     'pointing',
     expressions: { neutral: 0.8, happy: 0.2 },
   };
@@ -198,11 +198,11 @@ export function getTalkWagFingerPose(t: number, actTime: number, baseIdle: VRMPo
 export function getTalkEyebrowPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
   return {
     ...baseIdle,
-    headRot: [-0.04, 0.05, 0.1],
-    leftUpperArmRot:  [0.08, 0, -1.28],
-    leftLowerArmRot:  [0, 0.22, 0],
-    rightUpperArmRot: [0.08, 0, 1.28],
-    rightLowerArmRot: [0, -0.22, 0],
+    headRot: [-0.03, 0.04, 0.08],
+    leftUpperArmRot:  [0.08, -0.04, -1.28],
+    leftLowerArmRot:  [0, -0.22, 0],
+    rightUpperArmRot: [0.08, 0.04, 1.28],
+    rightLowerArmRot: [0, 0.22, 0],
     expressions: { neutral: 0.6, surprised: 0.5 },
   };
 }
@@ -213,30 +213,30 @@ export function getTalkDeepBreathPose(t: number, actTime: number, baseIdle: VRMP
   const breath = Math.sin(p * Math.PI);
   return {
     ...baseIdle,
-    spineRot: [-0.05 * breath, 0, 0],
-    chestRot: [0.08 * breath, 0, 0],
-    headRot: [-0.08 * breath, 0, 0],
-    leftShoulderRot:  [0, 0, 0.04 * breath],
-    rightShoulderRot: [0, 0, -0.04 * breath],
-    leftUpperArmRot:  [0.08, 0, -1.28],
-    leftLowerArmRot:  [0, 0.22, 0],
-    rightUpperArmRot: [0.08, 0, 1.28],
-    rightLowerArmRot: [0, -0.22, 0],
+    spineRot: [-0.04 * breath, 0, 0],
+    chestRot: [0.06 * breath, 0, 0],
+    headRot: [-0.06 * breath, 0, 0],
+    leftShoulderRot:  [0, 0, 0.03 * breath],
+    rightShoulderRot: [0, 0, -0.03 * breath],
+    leftUpperArmRot:  [0.08, -0.04, -1.28],
+    leftLowerArmRot:  [0, -0.22, 0],
+    rightUpperArmRot: [0.08, 0.04, 1.28],
+    rightLowerArmRot: [0, 0.22, 0],
     expressions: { relaxed: 0.85 },
   };
 }
 
 // ── 67. Looking Around ────────────────────────────────────────────────────────
 export function getTalkLookAroundPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
-  const look = Math.sin(actTime * 1.5) * 0.3;
+  const look = Math.sin(actTime * 1.5) * 0.25;
   return {
     ...baseIdle,
-    spineRot: [0, look * 0.15, 0],
-    headRot: [-0.02, look, 0.04],
-    leftUpperArmRot:  [0.08, 0, -1.28],
-    leftLowerArmRot:  [0, 0.22, 0],
-    rightUpperArmRot: [0.08, 0, 1.28],
-    rightLowerArmRot: [0, -0.22, 0],
+    spineRot: [0, look * 0.12, 0],
+    headRot: [-0.02, look, 0.03],
+    leftUpperArmRot:  [0.08, -0.04, -1.28],
+    leftLowerArmRot:  [0, -0.22, 0],
+    rightUpperArmRot: [0.08, 0.04, 1.28],
+    rightLowerArmRot: [0, 0.22, 0],
     expressions: { neutral: 0.8 },
   };
 }
@@ -245,14 +245,14 @@ export function getTalkLookAroundPose(t: number, actTime: number, baseIdle: VRMP
 export function getTalkWhisperPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
   return {
     ...baseIdle,
-    spineRot: [0.08, -0.08, 0],
-    headRot: [-0.05, -0.15, 0.1],
-    leftUpperArmRot:  [0.08, 0, -1.28],
-    leftLowerArmRot:  [0, 0.22, 0],
+    spineRot: [0.06, -0.06, 0],
+    headRot: [-0.04, -0.12, 0.08],
+    leftUpperArmRot:  [0.08, -0.04, -1.28],
+    leftLowerArmRot:  [0, -0.22, 0],
     leftFingers:      'relaxed',
-    rightUpperArmRot: [0.65, -0.12, 0.45],
-    rightLowerArmRot: [0, -2.1, -0.2],
-    rightHandRot:     [0.25, 0, 0.1],
+    rightUpperArmRot: [0.62, -0.10, 0.42],
+    rightLowerArmRot: [0, 2.05, 0.18],
+    rightHandRot:     [0.20, 0, 0.08],
     rightFingers:     'cup',
     expressions: { happy: 0.6, surprised: 0.3 },
   };
@@ -262,13 +262,13 @@ export function getTalkWhisperPose(t: number, actTime: number, baseIdle: VRMPose
 export function getTalkInterruptionPose(t: number, actTime: number, baseIdle: VRMPose): VRMPose {
   return {
     ...baseIdle,
-    headRot: [-0.04, 0.04, 0.05],
-    leftUpperArmRot:  [0.08, 0, -1.28],
-    leftLowerArmRot:  [0, 0.22, 0],
+    headRot: [-0.03, 0.03, 0.04],
+    leftUpperArmRot:  [0.08, -0.04, -1.28],
+    leftLowerArmRot:  [0, -0.22, 0],
     leftFingers:      'relaxed',
-    rightUpperArmRot: [0.45, 0, 0.85],
-    rightLowerArmRot: [0, -1.45, -0.15],
-    rightHandRot:     [0.15, 0, 0],
+    rightUpperArmRot: [0.38, 0, 0.85],
+    rightLowerArmRot: [0, 1.45, 0.12],
+    rightHandRot:     [0.12, 0, 0],
     rightFingers:     'pointing',
     expressions: { neutral: 0.7, surprised: 0.3 },
   };

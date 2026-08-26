@@ -169,11 +169,13 @@ export function getSalutePose(t: number, actTime: number, baseIdle: VRMPose): VR
     ...baseIdle,
     spineRot: [0.01, 0, 0],
     headRot: [0.02, 0.03, 0.02],
-    rightUpperArmRot: [0.22, 0.35, -0.45],
-    rightLowerArmRot: [0.48, 0.6, -1.75],
-    rightHandRot:     [0.1, 0.3, -0.15],
-    rightFingers:     'salute',
+    leftUpperArmRot:  [0.08, -0.04, -1.28],
+    leftLowerArmRot:  [0, -0.22, 0],
     leftFingers:      'relaxed',
+    rightUpperArmRot: [0.35, -0.15, 0.55],
+    rightLowerArmRot: [0, 2.05, 0.15],
+    rightHandRot:     [0.15, 0, 0],
+    rightFingers:     'salute',
     expressions: { neutral: 0.7, happy: 0.35 },
   };
 }

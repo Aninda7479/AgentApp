@@ -182,6 +182,25 @@ describe('VRM Animations & Kinematics Module', () => {
     expect(rightIndexDistal.rotation.z).toBeGreaterThan(0);
   });
 
+  it('should enforce anatomical elbow flexion direction across all library actions (Left <= 0, Right >= 0)', () => {
+    const baseIdle = getIdlePose(0, 0, 0);
+    ALL_ANIMATION_OPTIONS.forEach(anim => {
+      const pose = resolveActionPose(anim.id, 1.0, 0.5, baseIdle);
+      if (pose.leftLowerArmRot) {
+        expect(
+          pose.leftLowerArmRot[1],
+          `Action ${anim.id} has inverted leftLowerArm Y rotation: ${pose.leftLowerArmRot[1]}`
+        ).toBeLessThanOrEqual(0.001);
+      }
+      if (pose.rightLowerArmRot) {
+        expect(
+          pose.rightLowerArmRot[1],
+          `Action ${anim.id} has inverted rightLowerArm Y rotation: ${pose.rightLowerArmRot[1]}`
+        ).toBeGreaterThanOrEqual(-0.001);
+      }
+    });
+  });
+
   it('should have standard action durations defined for finite clips', () => {
     expect(ACTION_DURATIONS.wave).toBe(4.5);
     expect(ACTION_DURATIONS.bow).toBe(3.2);
