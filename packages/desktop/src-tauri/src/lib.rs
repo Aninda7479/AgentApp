@@ -49,6 +49,11 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            let superagent_dir = superagent_core_v2::storage::settings::get_superagent_dir();
+            tauri::async_runtime::spawn(async move {
+                let _ = superagent_core_v2::server::start_server(1469, "127.0.0.1", superagent_dir, None).await;
+            });
+
             let args: Vec<String> = std::env::args().collect();
             let is_dormant = args.iter().any(|arg| {
                 arg == "--autostart" || arg == "--hidden" || arg == "--minimized" || arg == "--background" || arg == "--dormant"

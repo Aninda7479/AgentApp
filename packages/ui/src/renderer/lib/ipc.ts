@@ -87,6 +87,84 @@ const SAFE_EMPTY_CHANNELS = new Set<string>([
 
 let cachedBridge: any = null;
 
+function getCoreApiBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    if (window.location && window.location.port && window.location.port !== '5173') {
+      return window.location.origin;
+    }
+  }
+  return 'http://localhost:1469';
+}
+
+function getCoreWsUrl(): string {
+  if (typeof window !== 'undefined') {
+    if (window.location && window.location.port && window.location.port !== '5173') {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${protocol}//${window.location.host}/api/ws`;
+    }
+  }
+  return 'ws://localhost:1469/api/ws';
+}
+
+// Live WebSocket connection and listener registry for streaming (e.g. agent-event)
+const webListeners = new Map<string, Set<Function>>();
+let webSocket: WebSocket | null = null;
+let webSocketConnecting = false;
+
+function ensureWebSocketConnected() {
+  if (typeof window === 'undefined') return;
+  if (webSocket && (webSocket.readyState === WebSocket.OPEN || webSocket.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
+  if (webSocketConnecting) return;
+  webSocketConnecting = true;
+
+  try {
+    const wsUrl = getCoreWsUrl();
+    const ws = new WebSocket(wsUrl);
+    webSocket = ws;
+
+    ws.onopen = () => {
+      webSocketConnecting = false;
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        const channel = payload.channel || payload.action;
+        const data = payload.data !== undefined ? payload.data : payload;
+        if (channel) {
+          const channelListeners = webListeners.get(channel);
+          if (channelListeners) {
+            channelListeners.forEach((callback) => {
+              try {
+                callback({}, data);
+              } catch (err) {
+                console.error(`[IPC-Bridge] Error in listener for channel "${channel}":`, err);
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.error('[IPC-Bridge] Error parsing WebSocket message:', err);
+      }
+    };
+
+    ws.onclose = () => {
+      webSocketConnecting = false;
+      webSocket = null;
+      setTimeout(ensureWebSocketConnected, 2000);
+    };
+
+    ws.onerror = () => {
+      webSocketConnecting = false;
+    };
+  } catch (err) {
+    webSocketConnecting = false;
+    console.warn('[IPC-Bridge] Failed to create WebSocket:', err);
+  }
+}
+
 /**
  * Resolves the active IPC surface as a DUAL value (so BOTH call-site styles keep working):
  *   - callable: `ipc(channel, listenerFn)` registers a listener (on) and returns
@@ -101,53 +179,102 @@ export function getIpc(): any {
   if (tauri) {
     const tauriSurface = {
       invoke: async (channel: string, ...args: any[]) => {
-        const rustCmd = TAURI_COMMAND_MAP[channel] || channel.replace(/[:\-]/g, '_');
-        const payload = args[0] && typeof args[0] === 'object'
-          ? args[0]
-          : (args[0] !== undefined ? { id: args[0], arg: args[0], chatId: args[0], chat_id: args[0], content: args[0] } : undefined);
-        try {
-          const res = await tauri(rustCmd, payload);
-          if (res !== undefined) {
-            if (typeof res === 'string' && (channel === 'settings-read' || channel === 'settings_read')) {
-              try { return JSON.parse(res); } catch { return res; }
-            }
-            return res;
-          }
-          return null;
-        } catch (err: any) {
-          const errMsg = String(err?.message || err || '');
-          // If Tauri says command not found, try fallback to HTTP proxy when web server is reachable
-          if (errMsg.includes('not found') || errMsg.includes('Command')) {
-            try {
-              const httpRes = await fetch(`/api/ipc/${channel}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ channel, args }),
-              });
-              if (httpRes.ok) {
-                const data = await httpRes.json();
-                return data.data;
+        const isCoreApiChannel =
+          channel === 'agent-run' ||
+          channel === 'agent-stop' ||
+          channel === 'agent_run' ||
+          channel === 'agent_stop';
+
+        if (!isCoreApiChannel) {
+          const rustCmd = TAURI_COMMAND_MAP[channel] || channel.replace(/[:\-]/g, '_');
+          const payload =
+            args[0] && typeof args[0] === 'object'
+              ? args[0]
+              : args[0] !== undefined
+              ? { id: args[0], arg: args[0], chatId: args[0], chat_id: args[0], content: args[0] }
+              : undefined;
+          try {
+            const res = await tauri(rustCmd, payload);
+            if (res !== undefined) {
+              if (typeof res === 'string' && (channel === 'settings-read' || channel === 'settings_read')) {
+                try {
+                  return JSON.parse(res);
+                } catch {
+                  return res;
+                }
               }
-            } catch {
-              /* ignore fallback failure */
+              return res;
             }
-            if (SAFE_EMPTY_CHANNELS.has(channel) || SAFE_EMPTY_CHANNELS.has(rustCmd)) {
-              return [];
+          } catch (err: any) {
+            const errMsg = String(err?.message || err || '');
+            if (!errMsg.includes('not found') && !errMsg.includes('Command')) {
+              throw err;
             }
-            return null;
           }
-          throw err;
         }
+
+        // Fallback to Core v2 HTTP API on port 1469
+        try {
+          const httpRes = await fetch(`${getCoreApiBaseUrl()}/api/ipc/${encodeURIComponent(channel)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel, args }),
+          });
+          if (httpRes.ok) {
+            const resJson = await httpRes.json();
+            if (resJson && typeof resJson === 'object' && 'data' in resJson) {
+              return resJson.data;
+            }
+            return resJson;
+          }
+        } catch {
+          /* ignore network error */
+        }
+        if (SAFE_EMPTY_CHANNELS.has(channel)) {
+          return [];
+        }
+        return null;
       },
       send: (channel: string, ...args: any[]) => {
+        ensureWebSocketConnected();
         const rustCmd = TAURI_COMMAND_MAP[channel] || channel.replace(/[:\-]/g, '_');
-        const payload = args[0] && typeof args[0] === 'object'
-          ? args[0]
-          : (args[0] !== undefined ? { id: args[0], arg: args[0], chatId: args[0], chat_id: args[0], content: args[0] } : undefined);
-        tauri(rustCmd, payload).catch(() => {});
+        const payload =
+          args[0] && typeof args[0] === 'object'
+            ? args[0]
+            : args[0] !== undefined
+            ? { id: args[0], arg: args[0], chatId: args[0], chat_id: args[0], content: args[0] }
+            : undefined;
+        tauri(rustCmd, payload).catch(() => {
+          const jsonPayload = JSON.stringify({ channel, args });
+          if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+            webSocket.send(jsonPayload);
+          } else {
+            fetch(`${getCoreApiBaseUrl()}/api/ipc/${encodeURIComponent(channel)}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: jsonPayload,
+            }).catch(() => {});
+          }
+        });
       },
-      on: (_channel: string, _fn: any) => () => {},
-      off: (_channel: string, _fn: any) => {}
+      on: (channel: string, fn: any) => {
+        ensureWebSocketConnected();
+        let set = webListeners.get(channel);
+        if (!set) {
+          set = new Set();
+          webListeners.set(channel, set);
+        }
+        set.add(fn);
+        return () => {
+          set?.delete(fn);
+        };
+      },
+      off: (channel: string, fn: any) => {
+        const set = webListeners.get(channel);
+        if (set) {
+          set.delete(fn);
+        }
+      },
     };
     cachedBridge = makeIpcBridge(tauriSurface);
     return cachedBridge;
@@ -160,71 +287,11 @@ export function getIpc(): any {
     return cachedBridge;
   }
 
-  // Web client WebSocket connection and listener registry for live streaming (e.g. agent-event)
-  const webListeners = new Map<string, Set<Function>>();
-  let webSocket: WebSocket | null = null;
-  let webSocketConnecting = false;
-
-  function ensureWebSocketConnected() {
-    if (typeof window === 'undefined') return;
-    if (webSocket && (webSocket.readyState === WebSocket.OPEN || webSocket.readyState === WebSocket.CONNECTING)) {
-      return;
-    }
-    if (webSocketConnecting) return;
-    webSocketConnecting = true;
-
-    try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/api/ws`;
-      const ws = new WebSocket(wsUrl);
-      webSocket = ws;
-
-      ws.onopen = () => {
-        webSocketConnecting = false;
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          const channel = payload.channel || payload.action;
-          const data = payload.data !== undefined ? payload.data : payload;
-          if (channel) {
-            const channelListeners = webListeners.get(channel);
-            if (channelListeners) {
-              channelListeners.forEach((callback) => {
-                try {
-                  callback({}, data);
-                } catch (err) {
-                  console.error(`[IPC-Bridge] Error in listener for channel "${channel}":`, err);
-                }
-              });
-            }
-          }
-        } catch (err) {
-          console.error('[IPC-Bridge] Error parsing WebSocket message:', err);
-        }
-      };
-
-      ws.onclose = () => {
-        webSocketConnecting = false;
-        webSocket = null;
-        setTimeout(ensureWebSocketConnected, 2000);
-      };
-
-      ws.onerror = () => {
-        webSocketConnecting = false;
-      };
-    } catch (err) {
-      webSocketConnecting = false;
-      console.warn('[IPC-Bridge] Failed to create WebSocket:', err);
-    }
-  }
-
   // 3. Web HTTP IPC path — communicates with SuperAgent Core v2 over HTTP / REST and WebSocket
   const webHttpSurface = {
     invoke: async (channel: string, ...args: any[]) => {
       try {
-        const httpRes = await fetch(`/api/ipc/${encodeURIComponent(channel)}`, {
+        const httpRes = await fetch(`${getCoreApiBaseUrl()}/api/ipc/${encodeURIComponent(channel)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ channel, args }),
@@ -243,7 +310,7 @@ export function getIpc(): any {
       // Direct REST fallback for settings when offline or during bootstrap
       if (channel === 'settings-read' || channel === 'settings_read') {
         try {
-          const res = await fetch('/api/settings');
+          const res = await fetch(`${getCoreApiBaseUrl()}/api/settings`);
           if (res.ok) {
             return await res.json();
           }
@@ -261,7 +328,7 @@ export function getIpc(): any {
       if (webSocket && webSocket.readyState === WebSocket.OPEN) {
         webSocket.send(payload);
       } else {
-        fetch(`/api/ipc/${encodeURIComponent(channel)}`, {
+        fetch(`${getCoreApiBaseUrl()}/api/ipc/${encodeURIComponent(channel)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: payload,
@@ -285,7 +352,7 @@ export function getIpc(): any {
       if (set) {
         set.delete(fn);
       }
-    }
+    },
   };
   cachedBridge = makeIpcBridge(webHttpSurface);
   return cachedBridge;
