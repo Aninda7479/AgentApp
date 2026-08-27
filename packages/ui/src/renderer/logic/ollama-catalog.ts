@@ -20,7 +20,7 @@
  * "couldn't load" state instead of fabricated data).
  */
 import { browserSafeFetch } from '../web-fetch';
-import type { SystemInfo } from '../../main/system-info';
+import type { SystemInfo } from './systemInfo';
 
 export type ModelFit = 'best' | 'runnable' | 'too-large';
 
@@ -299,8 +299,9 @@ export function rankModels(
   }
 
   const need = (m: OllamaCatalogModel) => estimateRequirement(m);
-  const maxFreeDisk = sys.storage.length
-    ? Math.max(...sys.storage.map((s) => s.freeGB))
+  const storageList = sys.storage || [];
+  const maxFreeDisk = storageList.length
+    ? Math.max(...storageList.map((s) => s.freeGB || 0))
     : Infinity;
 
   const fitsVram = (m: OllamaCatalogModel) => need(m) <= sys.vramBudgetGB;

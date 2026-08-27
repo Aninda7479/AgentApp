@@ -32,13 +32,22 @@ export const TasksPage: React.FC<TasksPageProps> = ({
     if (!ipc) return;
     setLoading(true);
     try {
-      const loaded: KanbanCard[] = await ipc.invoke('kanban-load', {
+      const loaded = await ipc.invoke('kanban-load', {
         scope: currentScope,
         projectName: currentScope === 'project' ? projName : undefined,
       });
-      setCards(loaded || []);
+      let parsedCards: KanbanCard[] = [];
+      if (Array.isArray(loaded)) {
+        parsedCards = loaded;
+      } else if (loaded && Array.isArray(loaded.cards)) {
+        parsedCards = loaded.cards;
+      } else if (loaded && Array.isArray(loaded.columns)) {
+        parsedCards = loaded.columns.flatMap((col: any) => (Array.isArray(col?.cards) ? col.cards : []));
+      }
+      setCards(parsedCards);
     } catch (err: any) {
       console.error('Failed to load kanban cards:', err);
+      setCards([]);
       triggerToast?.('Failed to load tasks from local storage', 'error');
     } finally {
       setLoading(false);
@@ -58,13 +67,14 @@ export const TasksPage: React.FC<TasksPageProps> = ({
 
   // Save cards to file
   const handleCardsChange = async (newCards: KanbanCard[]) => {
-    setCards(newCards);
+    const safeCards = Array.isArray(newCards) ? newCards : [];
+    setCards(safeCards);
     if (!ipc) return;
     try {
       await ipc.invoke('kanban-save', {
         scope,
         projectName: scope === 'project' ? activeProject : undefined,
-        cards: newCards,
+        cards: safeCards,
       });
     } catch (err: any) {
       console.error('Failed to save kanban cards:', err);
@@ -73,14 +83,15 @@ export const TasksPage: React.FC<TasksPageProps> = ({
   };
 
   // Filter cards based on search query
-  const filteredCards = cards.filter((card) => {
+  const safeCards = Array.isArray(cards) ? cards : [];
+  const filteredCards = safeCards.filter((card) => {
     const q = searchQuery.toLowerCase().trim();
     if (!q) return true;
     return (
-      card.title.toLowerCase().includes(q) ||
+      (card.title && card.title.toLowerCase().includes(q)) ||
       (card.description && card.description.toLowerCase().includes(q)) ||
-      (card.labels && card.labels.some((lbl) => lbl.text.toLowerCase().includes(q))) ||
-      card.priority.toLowerCase().includes(q)
+      (card.labels && card.labels.some((lbl) => lbl.text && lbl.text.toLowerCase().includes(q))) ||
+      (card.priority && card.priority.toLowerCase().includes(q))
     );
   });
 

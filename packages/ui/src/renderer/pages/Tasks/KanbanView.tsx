@@ -75,12 +75,14 @@ const LABEL_COLORS = [
 ];
 
 export const KanbanView: React.FC<KanbanViewProps> = ({
-  cards,
+  cards = [],
   onCardsChange,
   scope,
   projectName,
   onStartWork,
 }) => {
+  const safeCards = Array.isArray(cards) ? cards : [];
+
   // Drag and drop state
   const [draggedCardId, setDraggedCardId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
@@ -121,7 +123,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
     e.preventDefault();
     const cardId = e.dataTransfer.getData('text/plain') || draggedCardId;
     if (cardId) {
-      const updated = cards.map((c) => {
+      const updated = safeCards.map((c) => {
         if (c.id === cardId) {
           return { ...c, column: columnId };
         }
@@ -147,14 +149,14 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
       projectScope: scope === 'project' ? projectName : undefined,
     };
 
-    onCardsChange([...cards, newCard]);
+    onCardsChange([...safeCards, newCard]);
     setNewCardTitle('');
     setActiveAddCol(null);
   };
 
   // Delete Card
   const handleDeleteCard = (cardId: string) => {
-    onCardsChange(cards.filter((c) => c.id !== cardId));
+    onCardsChange(safeCards.filter((c) => c.id !== cardId));
     if (selectedCard?.id === cardId) {
       setSelectedCard(null);
     }
@@ -162,7 +164,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
 
   // Update card details
   const handleUpdateCardField = (cardId: string, field: keyof KanbanCard, value: any) => {
-    const updated = cards.map((c) => {
+    const updated = safeCards.map((c) => {
       if (c.id === cardId) {
         const newCard = { ...c, [field]: value };
         if (selectedCard?.id === cardId) {
@@ -188,7 +190,8 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
 
   const handleRemoveLabel = (labelIndex: number) => {
     if (!selectedCard) return;
-    const updatedLabels = selectedCard.labels.filter((_, idx) => idx !== labelIndex);
+    const labels = selectedCard.labels || [];
+    const updatedLabels = labels.filter((_, idx) => idx !== labelIndex);
     handleUpdateCardField(selectedCard.id, 'labels', updatedLabels);
   };
 
@@ -197,7 +200,7 @@ export const KanbanView: React.FC<KanbanViewProps> = ({
       {/* Board columns */}
       <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4 p-4 overflow-y-auto min-h-0 select-none custom-scrollbar">
         {COLUMNS.map((col) => {
-          const colCards = cards.filter((c) => c.column === col.id);
+          const colCards = safeCards.filter((c) => c.column === col.id);
           const isOver = dragOverCol === col.id;
 
           return (

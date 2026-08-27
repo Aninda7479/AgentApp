@@ -86,6 +86,7 @@ export class ProvidersService {
     ctx.setConnectedProviders(nextProviders);
     ctx.setModelsCatalog(nextModels);
     try {
+      providerStore.disconnect(providerId);
       providerStore.setProviders(nextProviders);
       providerStore.setModels(nextModels);
     } catch {}
@@ -164,7 +165,7 @@ export class ProvidersService {
     for (const d of detected) {
       if (storedIds.has(d.id)) continue;
       newProviders.push({ id: d.id, name: d.name, type: d.type, apiKey: d.apiKey, baseUrl: d.baseUrl });
-      for (const m of d.models) {
+      for (const m of (Array.isArray(d.models) ? d.models : [])) {
         newModels.push({
           id: `${d.id}-${m.id}`,
           name: m.name,

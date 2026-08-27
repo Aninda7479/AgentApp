@@ -2014,15 +2014,7 @@ async fn handle_ipc(
         }
         "settings-write" => {
             if let Some(arg) = args.first() {
-                let mut current = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
-                if let (Some(cur_map), Some(new_map)) = (current.as_object_mut(), arg.as_object()) {
-                    for (k, v) in new_map {
-                        cur_map.insert(k.clone(), v.clone());
-                    }
-                    let _ = state.settings_store.save_raw(&current);
-                } else {
-                    let _ = state.settings_store.save_raw(arg);
-                }
+                let _ = state.settings_store.save_patch(arg);
             }
             Ok(Json(serde_json::json!({ "data": null })))
         }

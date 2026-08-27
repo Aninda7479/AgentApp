@@ -25,6 +25,7 @@ import {
   WifiOff,
   ArrowUpCircle,
   Package,
+  Cpu,
   Minus,
   Square,
   X,
@@ -51,6 +52,7 @@ interface TitleBarProps {
   onNewChat?: () => void;
   onOpenFolder?: () => void;
   onOpenArtifacts?: () => void;
+  onOpenPCBWorkspace?: () => void;
   onOpen3DStudio?: () => void;
   onOpenPartner?: () => void;
   onScheduleTask?: () => void;
@@ -109,6 +111,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onNewChat,
   onOpenFolder,
   onOpenArtifacts,
+  onOpenPCBWorkspace,
   onOpen3DStudio,
   onOpenPartner,
   onScheduleTask,
@@ -168,6 +171,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         { label: 'Open folder…', icon: FolderOpen, onClick: () => onOpenFolder?.() },
         'sep',
         { label: 'Artifacts', icon: Package, onClick: () => onOpenArtifacts?.() },
+        { label: 'PCB Workspace', icon: Cpu, onClick: () => onOpenPCBWorkspace?.() },
         { label: 'Open 3D Studio', icon: Box, onClick: () => onOpen3DStudio?.() },
         { label: 'Partner', icon: PersonStanding, onClick: () => onOpenPartner?.() },
         { label: 'Schedule Task', icon: Clock, onClick: () => onScheduleTask?.() },
@@ -358,6 +362,32 @@ export const TitleBar: React.FC<TitleBarProps> = ({
               )}
             </div>
           ))}
+        </div>
+
+        {/* Top bar direct links beside Artifacts */}
+        <div className="hidden xl:flex items-center gap-1 border-l border-brand-border/30 pl-3">
+          {onOpenArtifacts && (
+            <button
+              data-testid="titlebar-artifacts-link"
+              onClick={onOpenArtifacts}
+              className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
+              title="Open Artifacts"
+            >
+              <Package size={12} className="text-brand-textMuted" />
+              <span>Artifacts</span>
+            </button>
+          )}
+          {onOpenPCBWorkspace && (
+            <button
+              data-testid="titlebar-pcb-workspace-link"
+              onClick={onOpenPCBWorkspace}
+              className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors cursor-pointer border border-emerald-500/25 shadow-xs"
+              title="Open PCB Workspace"
+            >
+              <Cpu size={12} className="text-emerald-400" />
+              <span>PCB Workspace</span>
+            </button>
+          )}
         </div>
       </div>
 

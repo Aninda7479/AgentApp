@@ -5,6 +5,9 @@
   "windows": ["*"],
   "permissions": [
     "core:default",
+    "core:window:default",
+    "core:window:allow-start-dragging",
+    "core:webview:default",
     "updater:default",
     "process:allow-restart",
     "shell:default",

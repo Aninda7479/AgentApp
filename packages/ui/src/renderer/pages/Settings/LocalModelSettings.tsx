@@ -15,7 +15,7 @@ import {
   CircleAlert
 } from 'lucide-react';
 import { ProviderConnection, ModelConfig } from './types';
-import type { SystemInfo } from '../../../main/system-info';
+import { SystemInfo, normalizeSystemInfo } from '../../logic/systemInfo';
 import {
   rankModels,
   fetchLiveCatalog,
@@ -99,10 +99,10 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
     setSystemLoading(true);
     try {
       const ipc = getIpc();
-      const info = (await ipc?.invoke('system-info')) as SystemInfo | null;
-      setSystemInfo(info ?? null);
+      const info = await ipc?.invoke('system-info');
+      setSystemInfo(normalizeSystemInfo(info));
     } catch {
-      setSystemInfo(null);
+      setSystemInfo(normalizeSystemInfo(null));
     } finally {
       setSystemLoading(false);
     }
@@ -309,15 +309,15 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Stat icon={<Cpu size={14} />} label="CPU" value={systemInfo.cpuBrand} sub={`${systemInfo.cpuCores} cores · ${systemInfo.cpuSpeedGHz} GHz`} />
-            <Stat icon={<MemoryStick size={14} />} label="RAM" value={`${fmtGB(systemInfo.ramGB)} GB`} sub={`${fmtGB(systemInfo.ramFreeGB)} GB free`} />
+            <Stat icon={<Cpu size={14} />} label="CPU" value={systemInfo.cpuBrand || 'System CPU'} sub={`${systemInfo.cpuCores || 4} cores · ${systemInfo.cpuSpeedGHz || 2.4} GHz`} />
+            <Stat icon={<MemoryStick size={14} />} label="RAM" value={`${fmtGB(systemInfo.ramGB || 16)} GB`} sub={`${fmtGB(systemInfo.ramFreeGB || 8)} GB free`} />
             <div className="sm:col-span-2">
-              <div className="ui-label mb-1.5">GPU{systemInfo.gpus.length !== 1 ? 's' : ''}</div>
-              {systemInfo.gpus.length === 0 ? (
+              <div className="ui-label mb-1.5">GPU{(systemInfo.gpus || []).length !== 1 ? 's' : ''}</div>
+              {(systemInfo.gpus || []).length === 0 ? (
                 <div className="text-xs text-brand-textMuted">No discrete GPU detected (CPU-only inference)</div>
               ) : (
                 <div className="flex flex-col gap-1.5">
-                  {systemInfo.gpus.map((g, i) => (
+                  {(systemInfo.gpus || []).map((g, i) => (
                     <div key={i} className="flex items-center justify-between gap-2 text-xs">
                       <span className="text-brand-textMain">{g.model}</span>
                       <span className="text-brand-textMuted">
@@ -326,7 +326,7 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
                     </div>
                   ))}
                   <div className="mt-1 text-[11px] text-brand-textMuted">
-                    Usable for inference: <span className="text-brand-textMain">{fmtGB(systemInfo.vramBudgetGB)} GB</span>
+                    Usable for inference: <span className="text-brand-textMain">{fmtGB(systemInfo.vramBudgetGB || 0)} GB</span>
                     {systemInfo.isUnifiedMemory ? ' (unified)' : ' (largest GPU)'}
                   </div>
                 </div>
@@ -337,7 +337,7 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
                 <HardDrive size={12} /> Storage
               </div>
               <div className="flex flex-col gap-1.5">
-                {systemInfo.storage.map((s, i) => (
+                {(systemInfo.storage || []).map((s, i) => (
                   <div key={i} className="flex items-center justify-between gap-2 text-xs">
                     <span className="text-brand-textMain">
                       {s.mount} {s.type !== 'unknown' && <span className="text-brand-textMuted">· {s.type}</span>}
@@ -350,8 +350,8 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
             <Stat
               icon={<MonitorSmartphone size={14} />}
               label="NPU / TPU"
-              value={systemInfo.npuTpu.detected ? systemInfo.npuTpu.label : 'Not detected'}
-              sub={systemInfo.npuTpu.detected ? 'informational' : 'CPU/GPU used for inference'}
+              value={systemInfo.npuTpu?.detected ? systemInfo.npuTpu.label : 'Not detected'}
+              sub={systemInfo.npuTpu?.detected ? 'informational' : 'CPU/GPU used for inference'}
             />
           </div>
         )}

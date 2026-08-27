@@ -398,6 +398,58 @@ impl SettingsStore {
         Ok(settings_val)
     }
 
+    /// Deep merges a patch into existing settings and persists the result.
+    /// Guarantees existing providers, models, and nested configurations are preserved
+    /// unless explicitly updated in the patch.
+    pub fn save_patch(&self, patch: &serde_json::Value) -> Result<()> {
+        let mut current = self.load_raw().unwrap_or_else(|_| serde_json::json!({}));
+        if let (Some(cur_map), Some(patch_map)) = (current.as_object_mut(), patch.as_object()) {
+            for (k, v) in patch_map {
+                match k.as_str() {
+                    "general" | "theme" | "lastUsedModel" | "telegram" | "modelGov" | "orchestrator" | "internetAccess" | "skills" | "plugins" | "mcp" => {
+                        if let Some(v_obj) = v.as_object() {
+                            let cur_entry = cur_map.entry(k.clone()).or_insert_with(|| serde_json::json!({}));
+                            if let Some(cur_nested) = cur_entry.as_object_mut() {
+                                for (sub_k, sub_v) in v_obj {
+                                    cur_nested.insert(sub_k.clone(), sub_v.clone());
+                                }
+                            } else {
+                                cur_map.insert(k.clone(), v.clone());
+                            }
+                        } else {
+                            cur_map.insert(k.clone(), v.clone());
+                        }
+                    }
+                    "providers" => {
+                        if v.is_array() {
+                            cur_map.insert(k.clone(), v.clone());
+                            if v.as_array().map(|a| !a.is_empty()).unwrap_or(false) {
+                                let general = cur_map.entry("general".to_string()).or_insert_with(|| serde_json::json!({}));
+                                if let Some(gen_map) = general.as_object_mut() {
+                                    let setup_state = gen_map.entry("setupState".to_string()).or_insert_with(|| serde_json::json!({}));
+                                    if let Some(ss_map) = setup_state.as_object_mut() {
+                                        ss_map.insert("completed".to_string(), serde_json::Value::Bool(true));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "models" => {
+                        if v.is_array() {
+                            cur_map.insert(k.clone(), v.clone());
+                        }
+                    }
+                    _ => {
+                        cur_map.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+            self.save_raw(&current)
+        } else {
+            self.save_raw(patch)
+        }
+    }
+
     /// Persists raw JSON value preserving all fields and schema formatting.
     /// Automatically handles backup files and separate models.json storage.
     pub fn save_raw(&self, val: &serde_json::Value) -> Result<()> {
@@ -409,11 +461,11 @@ impl SettingsStore {
             }
         }
 
-        let mut settings_to_write = val.clone();
+        let settings_to_write = val.clone();
 
-        // Extract models if present and save separately to models.json / models.json.bak
-        if let Some(map) = settings_to_write.as_object_mut() {
-            if let Some(models) = map.remove("models") {
+        // Also save models separately to models.json / models.json.bak as a secondary mirror
+        if let Some(models) = settings_to_write.get("models") {
+            if models.is_array() && !models.as_array().unwrap().is_empty() {
                 if let Some(config_dir) = target_path.parent() {
                     let models_path = config_dir.join("models.json");
                     let models_bak_path = config_dir.join("models.json.bak");
@@ -429,10 +481,14 @@ impl SettingsStore {
 
         let json = serde_json::to_string_pretty(&settings_to_write)?;
 
-        // Create a backup copy before overwriting
+        // Create a backup copy before overwriting if existing file is non-empty
         let bak_path = target_path.with_extension("json.bak");
         if target_path.exists() {
-            let _ = fs::copy(target_path, &bak_path);
+            if let Ok(meta) = fs::metadata(target_path) {
+                if meta.len() > 10 {
+                    let _ = fs::copy(target_path, &bak_path);
+                }
+            }
         }
 
         fs::write(target_path, json)?;
@@ -680,6 +736,56 @@ mod tests {
         store.save_raw(&raw).unwrap();
         assert!(models_path.exists());
         assert!(config_dir.join("models.json.bak").exists());
+
+        let _ = fs::remove_dir_all(test_dir);
+    }
+
+    #[test]
+    fn test_save_patch_preserves_providers_and_models() {
+        let test_dir = std::env::temp_dir().join(format!("test_settings_patch_{}", uuid::Uuid::new_v4()));
+        let file_path = test_dir.join("settings.json");
+        let store = SettingsStore::with_path(file_path);
+
+        // Initial save with providers and models
+        let initial = serde_json::json!({
+            "providers": [
+                { "id": "openai", "name": "OpenAI", "apiKey": "sk-1234" }
+            ],
+            "models": [
+                { "id": "gpt-4o", "name": "GPT-4o", "providerId": "openai" }
+            ],
+            "general": {
+                "workMode": "coding",
+                "setupState": { "completed": true }
+            }
+        });
+        store.save_raw(&initial).unwrap();
+
+        // Partial patch update (e.g. user toggles theme or lastUsedModel)
+        let patch = serde_json::json!({
+            "lastUsedModel": {
+                "provider": "openai",
+                "model": "gpt-4o"
+            },
+            "theme": {
+                "desktop": "dark"
+            }
+        });
+        store.save_patch(&patch).unwrap();
+
+        // Verify providers and models were NOT wiped
+        let loaded = store.load_raw().unwrap();
+        let providers = loaded["providers"].as_array().unwrap();
+        assert_eq!(providers.len(), 1);
+        assert_eq!(providers[0]["id"], "openai");
+
+        let models = loaded["models"].as_array().unwrap();
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0]["id"], "gpt-4o");
+
+        assert_eq!(loaded["theme"]["desktop"], "dark");
+        assert_eq!(loaded["general"]["workMode"], "coding");
+        assert_eq!(loaded["general"]["setupState"]["completed"], true);
 
         let _ = fs::remove_dir_all(test_dir);
     }

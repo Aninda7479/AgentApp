@@ -34,6 +34,7 @@ import { usePartners } from './pages/Settings/companion/library';
 import { ThreeDStudio } from './pages/Studio/ThreeDStudio';
 import { PartnerPage } from './pages/Partner/PartnerPage';
 import { ArtifactsPage } from './pages/Artifacts/ArtifactsPage';
+import { PCBWorkspacePage } from './pages/PCB/PCBWorkspacePage';
 import { StoredChat, StoredProject } from './types';
 import { resolveScopeSettings } from './logic/scopeSettings';
 import { SessionLoopManager, LoopTask } from './logic/loop';
@@ -89,6 +90,7 @@ const PAGE_LABELS: Record<string, string> = {
   scheduled: 'Scheduled',
   tasks: 'Tasks',
   artifacts: 'Artifacts',
+  pcb: 'PCB Workspace',
   'project-settings': 'Project Settings',
   'standalone-chat': 'Standalone Chat',
   studio: '3D Studio',
@@ -416,7 +418,10 @@ export const App: React.FC = () => {
   const persistDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistStore = useCallback(
     (providers: ProviderConnection[], models: ModelConfig[], currentProjects?: StoredProject[], currentChats?: StoredChat[]) => {
-      if (providers.length > 0) {
+      const resolvedProviders = providers.length > 0 ? providers : (stateRef.current.connectedProviders.length > 0 ? stateRef.current.connectedProviders : providers);
+      const resolvedModels = models.length > 0 ? models : (stateRef.current.modelsCatalog.length > 0 ? stateRef.current.modelsCatalog : models);
+
+      if (resolvedProviders.length > 0) {
         setSetupCompleted(true);
         try {
           if (typeof localStorage !== 'undefined') {
@@ -428,8 +433,8 @@ export const App: React.FC = () => {
       persistDebounceRef.current = setTimeout(() => {
         persistDebounceRef.current = null;
         ipc?.invoke('store-write', {
-          connectedProviders: providers,
-          modelsCatalog: models,
+          connectedProviders: resolvedProviders,
+          modelsCatalog: resolvedModels,
           projects: currentProjects ?? stateRef.current.projects,
           chats: currentChats ?? stateRef.current.chats
         });
@@ -1511,6 +1516,7 @@ export const App: React.FC = () => {
         onNewChat={() => handleNewChat()}
         onOpenFolder={handleOpenFolder}
         onOpenArtifacts={() => setActiveTab('artifacts')}
+        onOpenPCBWorkspace={() => setActiveTab('pcb')}
         onOpen3DStudio={() => setActiveTab('studio')}
         onOpenPartner={() => setActiveTab('partner')}
         onScheduleTask={() => setActiveTab('scheduled')}
@@ -1728,6 +1734,17 @@ export const App: React.FC = () => {
             />
           )}
 
+          {activeTab === 'pcb' && (
+            <PCBWorkspacePage
+              ipc={ipc}
+              triggerToast={triggerToast}
+              onBack={() => setActiveTab('trajectory')}
+              onNewChat={(promptText) => {
+                handleNewChat();
+              }}
+            />
+          )}
+
           {activeTab === 'settings' && (
             <SettingsView
               activeCategory={settingsCategory}
@@ -1793,7 +1810,7 @@ export const App: React.FC = () => {
           )}
 
           {/* Fallback to Workspace stage if no other tab matches, ensuring the body is never empty */}
-          {!['trajectory', 'scheduled', 'tasks', 'artifacts', 'project-settings', 'standalone-chat', 'studio', 'settings', 'diff', 'partner', 'companion'].includes(activeTab) && (
+          {!['trajectory', 'scheduled', 'tasks', 'artifacts', 'pcb', 'project-settings', 'standalone-chat', 'studio', 'settings', 'diff', 'partner', 'companion'].includes(activeTab) && (
             <WorkspaceStage
               activeProject={activeProject}
               onViewDiff={handleViewDiff}

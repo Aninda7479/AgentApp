@@ -18,6 +18,7 @@ import {
   Box,
   KanbanSquare,
   Package,
+  Cpu,
 } from 'lucide-react';
 
 
@@ -285,6 +286,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {renderNavItem('scheduled', 'Scheduled', Clock)}
           {renderNavItem('tasks', 'Tasks', KanbanSquare)}
           {renderNavItem('artifacts', 'Artifacts', Package)}
+          {renderNavItem('pcb', 'PCB Workspace', Cpu)}
           {renderNavItem('partner', 'Partner', PawPrint)}
 
         </div>

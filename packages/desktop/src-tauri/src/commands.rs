@@ -299,9 +299,50 @@ pub fn settings_read() -> serde_json::Value {
 }
 
 #[tauri::command]
-pub fn settings_write(content: Option<serde_json::Value>, data: Option<serde_json::Value>, settings: Option<serde_json::Value>) -> Result<(), String> {
-    let val = content.or(data).or(settings).unwrap_or_else(|| serde_json::json!({}));
-    superagent_core_v2::storage::SettingsStore::new().save_raw(&val).map_err(|e| e.to_string())
+pub fn settings_write(
+    content: Option<serde_json::Value>,
+    data: Option<serde_json::Value>,
+    settings: Option<serde_json::Value>,
+    payload: Option<serde_json::Value>,
+    theme: Option<serde_json::Value>,
+    general: Option<serde_json::Value>,
+    providers: Option<serde_json::Value>,
+    models: Option<serde_json::Value>,
+    last_used_model: Option<serde_json::Value>,
+    skills: Option<serde_json::Value>,
+    plugins: Option<serde_json::Value>,
+    mcp: Option<serde_json::Value>,
+    telegram: Option<serde_json::Value>,
+    internet_access: Option<serde_json::Value>,
+    web_app: Option<serde_json::Value>,
+) -> Result<(), String> {
+    let mut patch_map = serde_json::Map::new();
+
+    let full_obj = content.or(data).or(settings).or(payload);
+    if let Some(obj) = full_obj.as_ref().and_then(|v| v.as_object()) {
+        for (k, v) in obj {
+            patch_map.insert(k.clone(), v.clone());
+        }
+    }
+
+    if let Some(v) = theme { patch_map.insert("theme".to_string(), v); }
+    if let Some(v) = general { patch_map.insert("general".to_string(), v); }
+    if let Some(v) = providers { patch_map.insert("providers".to_string(), v); }
+    if let Some(v) = models { patch_map.insert("models".to_string(), v); }
+    if let Some(v) = last_used_model { patch_map.insert("lastUsedModel".to_string(), v); }
+    if let Some(v) = skills { patch_map.insert("skills".to_string(), v); }
+    if let Some(v) = plugins { patch_map.insert("plugins".to_string(), v); }
+    if let Some(v) = mcp { patch_map.insert("mcp".to_string(), v); }
+    if let Some(v) = telegram { patch_map.insert("telegram".to_string(), v); }
+    if let Some(v) = internet_access { patch_map.insert("internetAccess".to_string(), v); }
+    if let Some(v) = web_app { patch_map.insert("webApp".to_string(), v); }
+
+    if !patch_map.is_empty() {
+        superagent_core_v2::storage::SettingsStore::new()
+            .save_patch(&serde_json::Value::Object(patch_map))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -356,32 +397,46 @@ pub fn store_read() -> serde_json::Value {
 }
 
 #[tauri::command]
-pub fn store_write(data: Option<serde_json::Value>, content: Option<serde_json::Value>) -> Result<(), String> {
-    let val = data.or(content).unwrap_or_else(|| serde_json::json!({}));
-    if let Some(obj) = val.as_object() {
-        if obj.contains_key("connectedProviders") || obj.contains_key("modelsCatalog") {
-            let mut current = settings_read();
-            if let Some(c_obj) = current.as_object_mut() {
-                if let Some(p) = obj.get("connectedProviders") {
-                    if p.as_array().map(|a| !a.is_empty()).unwrap_or(false) {
-                        c_obj.insert("providers".to_string(), p.clone());
-                        let gen = c_obj.entry("general".to_string()).or_insert_with(|| serde_json::json!({}));
-                        if let Some(g) = gen.as_object_mut() {
-                            let ss = g.entry("setupState".to_string()).or_insert_with(|| serde_json::json!({}));
-                            if let Some(s) = ss.as_object_mut() {
-                                s.insert("completed".to_string(), serde_json::Value::Bool(true));
-                            }
-                        }
-                    }
-                }
-                if let Some(m) = obj.get("modelsCatalog") {
-                    if m.as_array().map(|a| !a.is_empty()).unwrap_or(false) {
-                        c_obj.insert("models".to_string(), m.clone());
-                    }
-                }
+pub fn store_write(
+    data: Option<serde_json::Value>,
+    content: Option<serde_json::Value>,
+    payload: Option<serde_json::Value>,
+    connected_providers: Option<serde_json::Value>,
+    models_catalog: Option<serde_json::Value>,
+    _projects: Option<serde_json::Value>,
+    _chats: Option<serde_json::Value>,
+) -> Result<(), String> {
+    let mut patch = serde_json::Map::new();
+
+    let full_obj = data.or(content).or(payload);
+    if let Some(obj) = full_obj.as_ref().and_then(|v| v.as_object()) {
+        if let Some(p) = obj.get("connectedProviders").or_else(|| obj.get("connected_providers")).or_else(|| obj.get("providers")) {
+            if p.is_array() {
+                patch.insert("providers".to_string(), p.clone());
             }
-            let _ = settings_write(Some(current), None, None);
         }
+        if let Some(m) = obj.get("modelsCatalog").or_else(|| obj.get("models_catalog")).or_else(|| obj.get("models")) {
+            if m.is_array() {
+                patch.insert("models".to_string(), m.clone());
+            }
+        }
+    }
+
+    if let Some(p) = connected_providers {
+        if p.is_array() {
+            patch.insert("providers".to_string(), p);
+        }
+    }
+    if let Some(m) = models_catalog {
+        if m.is_array() {
+            patch.insert("models".to_string(), m);
+        }
+    }
+
+    if !patch.is_empty() {
+        superagent_core_v2::storage::SettingsStore::new()
+            .save_patch(&serde_json::Value::Object(patch))
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -425,6 +480,14 @@ pub fn window_close(app: AppHandle) -> Result<(), String> {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DetectedModel {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "contextLimit", default)]
+    pub context_limit: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DetectedProvider {
     pub id: String,
     pub name: String,
@@ -434,6 +497,8 @@ pub struct DetectedProvider {
     pub api_key: String,
     #[serde(rename = "baseUrl", default)]
     pub base_url: String,
+    #[serde(default)]
+    pub models: Vec<DetectedModel>,
 }
 
 #[tauri::command]
@@ -447,6 +512,13 @@ pub fn auto_detect_providers() -> Vec<DetectedProvider> {
             provider_type: "custom".to_string(),
             api_key: "".to_string(),
             base_url: "http://localhost:11434".to_string(),
+            models: vec![
+                DetectedModel {
+                    id: "llama3.2".to_string(),
+                    name: "Llama 3.2 (Local)".to_string(),
+                    context_limit: Some("128k".to_string()),
+                }
+            ],
         });
     }
 
@@ -458,6 +530,18 @@ pub fn auto_detect_providers() -> Vec<DetectedProvider> {
                 provider_type: "env".to_string(),
                 api_key: key,
                 base_url: "https://api.openai.com/v1".to_string(),
+                models: vec![
+                    DetectedModel {
+                        id: "gpt-4o".to_string(),
+                        name: "GPT-4o".to_string(),
+                        context_limit: Some("128k".to_string()),
+                    },
+                    DetectedModel {
+                        id: "gpt-4o-mini".to_string(),
+                        name: "GPT-4o Mini".to_string(),
+                        context_limit: Some("128k".to_string()),
+                    },
+                ],
             });
         }
     }
@@ -470,6 +554,18 @@ pub fn auto_detect_providers() -> Vec<DetectedProvider> {
                 provider_type: "env".to_string(),
                 api_key: key,
                 base_url: "https://api.anthropic.com".to_string(),
+                models: vec![
+                    DetectedModel {
+                        id: "claude-3-7-sonnet-20250219".to_string(),
+                        name: "Claude 3.7 Sonnet".to_string(),
+                        context_limit: Some("200k".to_string()),
+                    },
+                    DetectedModel {
+                        id: "claude-3-5-haiku-20241022".to_string(),
+                        name: "Claude 3.5 Haiku".to_string(),
+                        context_limit: Some("200k".to_string()),
+                    },
+                ],
             });
         }
     }
@@ -482,6 +578,18 @@ pub fn auto_detect_providers() -> Vec<DetectedProvider> {
                 provider_type: "env".to_string(),
                 api_key: key,
                 base_url: "https://generativelanguage.googleapis.com".to_string(),
+                models: vec![
+                    DetectedModel {
+                        id: "gemini-2.5-pro".to_string(),
+                        name: "Gemini 2.5 Pro".to_string(),
+                        context_limit: Some("1M".to_string()),
+                    },
+                    DetectedModel {
+                        id: "gemini-2.5-flash".to_string(),
+                        name: "Gemini 2.5 Flash".to_string(),
+                        context_limit: Some("1M".to_string()),
+                    },
+                ],
             });
         }
     }
@@ -555,7 +663,7 @@ pub fn skills_import_perform(_payload: Option<serde_json::Value>) -> serde_json:
 
 #[tauri::command]
 pub fn kanban_load(_payload: Option<serde_json::Value>) -> serde_json::Value {
-    serde_json::json!({ "columns": [] })
+    serde_json::json!([])
 }
 
 #[tauri::command]

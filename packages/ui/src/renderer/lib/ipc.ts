@@ -568,9 +568,29 @@ export function invoke(channel: string, ...args: unknown[]): Promise<any> {
   const tauri = getTauriInvoke();
   if (tauri) {
     const rustCmd = TAURI_COMMAND_MAP[channel] || channel.replace(/[:\-]/g, '_');
-    const payload = args[0] && typeof args[0] === 'object'
-      ? args[0]
-      : (args[0] !== undefined ? { id: args[0], arg: args[0], chatId: args[0], chat_id: args[0], content: args[0] } : undefined);
+    const firstArg = args[0];
+    let payload: any;
+    if (firstArg && typeof firstArg === 'object') {
+      payload = {
+        ...firstArg,
+        data: firstArg,
+        content: firstArg,
+        settings: firstArg,
+        payload: firstArg,
+      };
+    } else if (firstArg !== undefined) {
+      payload = {
+        id: firstArg,
+        arg: firstArg,
+        chatId: firstArg,
+        chat_id: firstArg,
+        content: firstArg,
+        data: firstArg,
+        payload: firstArg,
+      };
+    } else {
+      payload = undefined;
+    }
     return wrapInvoke((_ch, a) => tauri(rustCmd, a))(channel, payload);
   }
   const api = superagent();
@@ -582,9 +602,10 @@ export function send(channel: string, ...args: unknown[]): void {
   const tauri = getTauriInvoke();
   if (tauri) {
     const rustCmd = TAURI_COMMAND_MAP[channel] || channel.replace(/[:\-]/g, '_');
-    const payload = args[0] && typeof args[0] === 'object'
-      ? args[0]
-      : (args[0] !== undefined ? { id: args[0], arg: args[0], chatId: args[0], chat_id: args[0], content: args[0] } : undefined);
+    const firstArg = args[0];
+    const payload = firstArg && typeof firstArg === 'object'
+      ? { ...firstArg, data: firstArg, content: firstArg, settings: firstArg, payload: firstArg }
+      : (firstArg !== undefined ? { id: firstArg, arg: firstArg, chatId: firstArg, chat_id: firstArg, content: firstArg, data: firstArg, payload: firstArg } : undefined);
     tauri(rustCmd, payload).catch(() => {});
     return;
   }
