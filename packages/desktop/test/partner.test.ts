@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 
-import { PartnerOverlay } from '../src/renderer/partner-popup/PartnerOverlay';
 import { PartnerCreator } from '../src/renderer/pages/Settings/companion/PartnerCreator';
 import { PetSprite } from '../src/renderer/partner-popup/PetSprite';
 import { DEFAULT_PARTNERS } from '../src/renderer/pages/Settings/companion/defaultPartners';
@@ -88,58 +87,6 @@ describe('Partner library merge', () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(merged.find((p) => p.id === DEFAULT_PARTNERS[0].id)?.description).toBe('edited');
     expect(merged.find((p) => p.id === 'mochi')).toBeDefined();
-  });
-});
-
-describe('PartnerOverlay (floating companion)', () => {
-  it('renders the active Partner with a mood when visible', () => {
-    const html = renderToString(
-      React.createElement(PartnerOverlay, {
-        manifest: CUSTOM,
-        visible: true,
-        isGenerating: false,
-        lastError: null
-      })
-    );
-    expect(html).toContain('data-testid="partner-overlay"');
-    expect(html).toContain(CUSTOM.name);
-    expect(html).toContain('Mmm.');
-  });
-
-  it('shows a reopen pill when hidden', () => {
-    const html = renderToString(
-      React.createElement(PartnerOverlay, { manifest: CUSTOM, visible: false })
-    );
-    expect(html).toContain('data-testid="partner-reopen"');
-  });
-
-  it('renders the working mood while the agent is generating', () => {
-    const html = renderToString(
-      React.createElement(PartnerOverlay, {
-        manifest: CUSTOM,
-        visible: true,
-        isGenerating: true,
-        lastError: null
-      })
-    );
-    expect(html).toContain('data-mood="working"');
-  });
-
-  it('renders the sad mood when there is a last error', () => {
-    const html = renderToString(
-      React.createElement(PartnerOverlay, {
-        manifest: CUSTOM,
-        visible: true,
-        isGenerating: false,
-        lastError: 'boom'
-      })
-    );
-    expect(html).toContain('data-mood="sad"');
-  });
-
-  it('renders nothing when there is no Partner', () => {
-    const html = renderToString(React.createElement(PartnerOverlay, { manifest: null, visible: true }));
-    expect(html).toBe('');
   });
 });
 

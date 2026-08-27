@@ -84,14 +84,46 @@ pub fn get_superagent_dir() -> PathBuf {
     home_superagent
 }
 
+pub fn get_legacy_appdata_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        dirs.push(PathBuf::from(&appdata).join("OpenSource").join("AgentApp"));
+        dirs.push(PathBuf::from(&appdata).join("AgentApp"));
+        dirs.push(PathBuf::from(&appdata).join("SuperAgent"));
+    }
+    if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+        dirs.push(PathBuf::from(&localappdata).join("OpenSource").join("AgentApp"));
+        dirs.push(PathBuf::from(&localappdata).join("AgentApp"));
+        dirs.push(PathBuf::from(&localappdata).join("SuperAgent"));
+    }
+    let home = get_home_dir();
+    dirs.push(home.join("Library").join("Application Support").join("OpenSource").join("AgentApp"));
+    dirs.push(home.join("Library").join("Application Support").join("AgentApp"));
+    dirs.push(home.join("Library").join("Application Support").join("SuperAgent"));
+    dirs.push(home.join(".config").join("OpenSource").join("AgentApp"));
+    dirs.push(home.join(".config").join("AgentApp"));
+    dirs.push(home.join(".config").join("superagent"));
+    dirs
+}
+
 /// Discovers the active settings.json file path across standard candidate locations.
 pub fn resolve_settings_file_path(base_dir: Option<&Path>) -> PathBuf {
-    let base = match base_dir {
-        Some(d) => d.to_path_buf(),
-        None => get_superagent_dir(),
-    };
+    if let Some(base) = base_dir {
+        let candidates = [
+            base.join("config").join("settings.json"),
+            base.join("Config").join("settings.json"),
+            base.join("settings.json"),
+        ];
+        for candidate in &candidates {
+            if candidate.exists() {
+                return candidate.clone();
+            }
+        }
+        return base.join("config").join("settings.json");
+    }
 
-    let candidates = [
+    let base = get_superagent_dir();
+    let mut candidates = vec![
         base.join("config").join("settings.json"),
         base.join("Config").join("settings.json"),
         base.join("settings.json"),
@@ -101,6 +133,12 @@ pub fn resolve_settings_file_path(base_dir: Option<&Path>) -> PathBuf {
         PathBuf::from(".").join(".superagent").join("config").join("settings.json"),
         PathBuf::from(".").join(".superagent").join("settings.json"),
     ];
+
+    for legacy in get_legacy_appdata_dirs() {
+        candidates.push(legacy.join("Config").join("settings.json"));
+        candidates.push(legacy.join("config").join("settings.json"));
+        candidates.push(legacy.join("settings.json"));
+    }
 
     for candidate in &candidates {
         if candidate.exists() {
@@ -114,12 +152,22 @@ pub fn resolve_settings_file_path(base_dir: Option<&Path>) -> PathBuf {
 
 /// Discovers the models.json file path across candidate locations.
 pub fn resolve_models_file_path(base_dir: Option<&Path>) -> Option<PathBuf> {
-    let base = match base_dir {
-        Some(d) => d.to_path_buf(),
-        None => get_superagent_dir(),
-    };
+    if let Some(base) = base_dir {
+        let candidates = [
+            base.join("config").join("models.json"),
+            base.join("Config").join("models.json"),
+            base.join("models.json"),
+        ];
+        for candidate in &candidates {
+            if candidate.exists() {
+                return Some(candidate.clone());
+            }
+        }
+        return None;
+    }
 
-    let candidates = [
+    let base = get_superagent_dir();
+    let mut candidates = vec![
         base.join("config").join("models.json"),
         base.join("Config").join("models.json"),
         base.join("models.json"),
@@ -131,6 +179,12 @@ pub fn resolve_models_file_path(base_dir: Option<&Path>) -> Option<PathBuf> {
         PathBuf::from(".").join(".superagent").join("config").join("models.json"),
         PathBuf::from(".").join(".superagent").join("models.json"),
     ];
+
+    for legacy in get_legacy_appdata_dirs() {
+        candidates.push(legacy.join("Config").join("models.json"));
+        candidates.push(legacy.join("config").join("models.json"));
+        candidates.push(legacy.join("models.json"));
+    }
 
     for candidate in &candidates {
         if candidate.exists() {
@@ -194,6 +248,15 @@ impl SettingsStore {
                 backup_candidates.push(get_home_dir().join(".superagent").join("Config").join("settings.json.bak"));
                 backup_candidates.push(get_home_dir().join(".superagent").join("settings.json.bak"));
                 backup_candidates.push(PathBuf::from(".").join(".superagent").join("config").join("settings.json.bak"));
+
+                for legacy in get_legacy_appdata_dirs() {
+                    backup_candidates.push(legacy.join("Config").join("settings.json"));
+                    backup_candidates.push(legacy.join("Config").join("settings.json.bak"));
+                    backup_candidates.push(legacy.join("config").join("settings.json"));
+                    backup_candidates.push(legacy.join("config").join("settings.json.bak"));
+                    backup_candidates.push(legacy.join("settings.json"));
+                    backup_candidates.push(legacy.join("settings.json.bak"));
+                }
             }
 
             for bak in &backup_candidates {
@@ -208,6 +271,11 @@ impl SettingsStore {
                                         if let Some(bak_providers) = bak_val.get("providers") {
                                             if let Some(settings_map) = settings_val.as_object_mut() {
                                                 settings_map.insert("providers".to_string(), bak_providers.clone());
+                                            }
+                                        }
+                                        if settings_val.get("models").is_none() && bak_val.get("models").is_some() {
+                                            if let Some(settings_map) = settings_val.as_object_mut() {
+                                                settings_map.insert("models".to_string(), bak_val["models"].clone());
                                             }
                                         }
                                         if settings_val.get("general").is_none() && bak_val.get("general").is_some() {
@@ -272,6 +340,15 @@ impl SettingsStore {
             models_candidates.push(Some(get_home_dir().join(".superagent").join("config").join("models.json")));
             models_candidates.push(Some(get_home_dir().join(".superagent").join("config").join("models.json.bak")));
             models_candidates.push(Some(PathBuf::from(".").join(".superagent").join("config").join("models.json")));
+
+            for legacy in get_legacy_appdata_dirs() {
+                models_candidates.push(Some(legacy.join("Config").join("models.json")));
+                models_candidates.push(Some(legacy.join("Config").join("models.json.bak")));
+                models_candidates.push(Some(legacy.join("config").join("models.json")));
+                models_candidates.push(Some(legacy.join("config").join("models.json.bak")));
+                models_candidates.push(Some(legacy.join("models.json")));
+                models_candidates.push(Some(legacy.join("models.json.bak")));
+            }
         }
 
         let mut models_val: Option<serde_json::Value> = None;

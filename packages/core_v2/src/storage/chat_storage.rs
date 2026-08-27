@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::storage::settings::get_superagent_dir;
+use crate::storage::settings::{get_legacy_appdata_dirs, get_superagent_dir};
 use crate::types::ChatMessage;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -111,7 +111,16 @@ impl ChatStorage {
         let sa_conv = get_superagent_dir().join("conversation");
         if self.storage_dir.starts_with(&sa_conv) || self.storage_dir.to_string_lossy().contains(".superagent") {
             candidates.push(get_superagent_dir().join("conversation").join("chats").join(id).join("chat.json"));
+            candidates.push(get_superagent_dir().join("conversation").join("Chats").join(id).join("chat.json"));
             candidates.push(get_superagent_dir().join("chats").join(format!("session_{}.json", id)));
+
+            for legacy in get_legacy_appdata_dirs() {
+                candidates.push(legacy.join("Conversation").join("Chats").join(id).join("chat.json"));
+                candidates.push(legacy.join("Conversation").join("chats").join(id).join("chat.json"));
+                candidates.push(legacy.join("conversation").join("chats").join(id).join("chat.json"));
+                candidates.push(legacy.join("Conversation").join(id).join("chat.json"));
+                candidates.push(legacy.join("conversation").join(id).join("chat.json"));
+            }
         }
 
         for c in &candidates {
@@ -202,13 +211,25 @@ impl ChatStorage {
 
         let mut search_dirs = vec![
             self.storage_dir.join("chats"),
+            self.storage_dir.join("Chats"),
             self.storage_dir.clone(),
         ];
 
         let sa_conv = get_superagent_dir().join("conversation");
         if self.storage_dir.starts_with(&sa_conv) || self.storage_dir.to_string_lossy().contains(".superagent") {
             search_dirs.push(get_superagent_dir().join("conversation").join("chats"));
+            search_dirs.push(get_superagent_dir().join("conversation").join("Chats"));
             search_dirs.push(get_superagent_dir().join("chats"));
+            search_dirs.push(get_superagent_dir().join("Chats"));
+
+            for legacy in get_legacy_appdata_dirs() {
+                search_dirs.push(legacy.join("Conversation").join("Chats"));
+                search_dirs.push(legacy.join("Conversation").join("chats"));
+                search_dirs.push(legacy.join("conversation").join("chats"));
+                search_dirs.push(legacy.join("conversation").join("Chats"));
+                search_dirs.push(legacy.join("Chats"));
+                search_dirs.push(legacy.join("chats"));
+            }
         }
 
         for dir in &search_dirs {

@@ -13,7 +13,6 @@ FROM node:20-alpine AS node-builder
 WORKDIR /app
 COPY package*.json ./
 COPY packages/ui ./packages/ui
-COPY packages/core ./packages/core
 RUN npm ci
 RUN npm run build --workspace=@superagent/ui
 
@@ -26,7 +25,7 @@ ENV PORT=1469
 ENV HOST=0.0.0.0
 
 COPY --from=rust-builder /app/packages/core_v2/target/release/superagent-core-daemon /usr/local/bin/superagent-core-daemon
-COPY --from=node-builder /app/packages/core_v2/ui-dist /app/ui-dist
+COPY --from=node-builder /app/packages/ui/dist /app/ui-dist
 
 EXPOSE 1469
 

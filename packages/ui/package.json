@@ -14,18 +14,14 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.5.2",
     "@pixiv/three-vrm": "^3.5.5",
-    "@superagent/core": "file:../core",
     "@tauri-apps/api": "^2.2.0",
     "@tauri-apps/plugin-process": "^2.2.0",
     "@tauri-apps/plugin-updater": "^2.2.1",
     "lucide-react": "^1.22.0",
-    "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "three": "^0.160.1",
-    "three-vrm": "npm:@pixiv/three-vrm@^3"
+    "three": "^0.160.1"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.2",

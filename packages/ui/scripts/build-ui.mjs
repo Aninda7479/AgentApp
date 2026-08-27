@@ -104,23 +104,7 @@ function copyHtmlTemplates() {
   }
 }
 
-// 4. Copy web-specific assets (login.html, manifest.json, sw.js, icon.*)
-function copyWebAssets() {
-  const webSrcDir = path.resolve(ROOT, '../web/src');
-  if (fs.existsSync(webSrcDir)) {
-    const webFiles = ['login.html', 'manifest.json', 'sw.js', 'icon.png', 'icon.svg'];
-    for (const f of webFiles) {
-      const srcPath = path.join(webSrcDir, f);
-      const destPath = path.join(distDir, f);
-      if (fs.existsSync(srcPath)) {
-        fs.copyFileSync(srcPath, destPath);
-        console.log(`[build-ui] Copied web asset ${f} -> dist/${f}`);
-      }
-    }
-  }
-}
-
-// 5. Copy static assets if folder exists
+// 4. Copy static assets if folder exists
 function copyStaticAssets() {
   if (fs.existsSync(srcAssetsDir)) {
     try {
@@ -134,7 +118,6 @@ function copyStaticAssets() {
 
 // Run initial copies
 copyHtmlTemplates();
-copyWebAssets();
 copyStaticAssets();
 
 // Dev server
@@ -156,7 +139,12 @@ function startDevServer(port = DEV_PORT) {
 
     let filePath = path.join(distDir, reqPath);
     if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-      filePath = path.join(distDir, 'index.html');
+      const htmlCandidate = filePath + '.html';
+      if (fs.existsSync(htmlCandidate)) {
+        filePath = htmlCandidate;
+      } else {
+        filePath = path.join(distDir, 'index.html');
+      }
     }
 
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
@@ -181,6 +169,20 @@ function startDevServer(port = DEV_PORT) {
   return server;
 }
 
+function syncDist() {
+  const syncTargets = [
+    path.resolve(ROOT, '../desktop/dist'),
+    path.resolve(ROOT, '../core_v2/ui-dist'),
+  ];
+  for (const target of syncTargets) {
+    try {
+      fs.mkdirSync(target, { recursive: true });
+      fs.cpSync(distDir, target, { recursive: true });
+      console.log(`[build-ui] ✅ Synced UI assets -> ${path.relative(ROOT, target)}`);
+    } catch {}
+  }
+}
+
 // 6. Bundle esbuild renderers
 console.log('[build-ui] Running esbuild bundle-renderer...');
 const bundleScript = path.join(__dirname, 'bundle-renderer.mjs');
@@ -194,6 +196,7 @@ if (isWatch) {
   });
   child.on('error', (err) => console.error('[build-ui] esbuild watch error:', err));
 
+  syncDist();
   startDevServer(DEV_PORT);
 } else {
   compileCss(false);
@@ -203,19 +206,7 @@ if (isWatch) {
     stdio: 'inherit',
   });
 
-  // Sync to secondary non-Tauri and daemon destinations (desktop and core_v2)
-  const syncTargets = [
-    path.resolve(ROOT, '../desktop/dist'),
-    path.resolve(ROOT, '../core_v2/ui-dist'),
-  ];
-  for (const target of syncTargets) {
-    try {
-      fs.mkdirSync(target, { recursive: true });
-      fs.cpSync(distDir, target, { recursive: true });
-      console.log(`[build-ui] ✅ Synced UI assets -> ${path.relative(ROOT, target)}`);
-    } catch {}
-  }
-
+  syncDist();
   console.log('[build-ui] ✅ UI build finished.');
 }
 

@@ -560,11 +560,11 @@ async fn spa_fallback_handler(
                             let mime = mime_guess::from_path(&canonical_target).first_or_octet_stream();
                             let cache_header = if canonical_target
                                 .extension()
-                                .map_or(false, |ext| ext == "html")
+                                .map_or(false, |ext| ext == "html" || ext == "js" || ext == "css" || ext == "map")
                             {
-                                "no-cache"
+                                "no-cache, no-store, must-revalidate"
                             } else {
-                                "public, max-age=86400"
+                                "public, max-age=3600"
                             };
                             return (
                                 [
@@ -585,7 +585,7 @@ async fn spa_fallback_handler(
                     return (
                         [
                             (header::CONTENT_TYPE, "text/html; charset=utf-8".to_string()),
-                            (header::CACHE_CONTROL, "no-cache".to_string()),
+                            (header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".to_string()),
                         ],
                         html,
                     )
@@ -605,7 +605,7 @@ async fn spa_fallback_handler(
                 return (
                     [
                         (header::CONTENT_TYPE, "text/html; charset=utf-8".to_string()),
-                        (header::CACHE_CONTROL, "no-cache".to_string()),
+                        (header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".to_string()),
                     ],
                     html,
                 )
@@ -618,10 +618,10 @@ async fn spa_fallback_handler(
     if !path_str.is_empty() {
         if let Some(file) = EmbeddedUi::get(path_str) {
             let mime = mime_guess::from_path(path_str).first_or_octet_stream();
-            let cache_header = if path_str.ends_with(".html") {
-                "no-cache"
+            let cache_header = if path_str.ends_with(".html") || path_str.ends_with(".js") || path_str.ends_with(".css") || path_str.ends_with(".map") {
+                "no-cache, no-store, must-revalidate"
             } else {
-                "public, max-age=86400"
+                "public, max-age=3600"
             };
             return (
                 [

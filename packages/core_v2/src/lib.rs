@@ -12,4 +12,3 @@ pub mod startup;
 pub mod storage;
 pub mod tools;
 pub mod types;
-pub mod vector;

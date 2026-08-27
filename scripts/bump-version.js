@@ -150,7 +150,7 @@ updatePackageJson('package.json', (data) => {
   data.version = newVersion;
 });
 
-updatePackageJson('packages/core/package.json', (data) => {
+updatePackageJson('legacy/core/package.json', (data) => {
   data.version = newVersion;
 });
 
@@ -160,16 +160,6 @@ updatePackageJson('packages/ui/package.json', (data) => {
 
 updatePackageJson('packages/cli/package.json', (data) => {
   data.version = newVersion;
-  if (data.dependencies && data.dependencies['@superagent/core']) {
-    data.dependencies['@superagent/core'] = `^${newVersion}`;
-  }
-});
-
-updatePackageJson('packages/web/package.json', (data) => {
-  data.version = newVersion;
-  if (data.dependencies && data.dependencies['@superagent/core']) {
-    data.dependencies['@superagent/core'] = `^${newVersion}`;
-  }
 });
 
 updatePackageJson('packages/desktop/package.json', (data) => {

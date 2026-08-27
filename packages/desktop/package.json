@@ -22,7 +22,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@superagent/core": "file:../core",
     "@superagent/ui": "file:../ui"
   },
   "devDependencies": {

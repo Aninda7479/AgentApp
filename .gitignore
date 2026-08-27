@@ -79,14 +79,23 @@ logs/skill-loop/
 # procedural model, so these are never required to build or run.
 
 
-# Playwright MCP single-use artifacts (screenshots, page snapshots, console logs) — kept out of git
+# Playwright MCP single-use artifacts
 .playwright
 .playwright-mcp
 
-# Local MCP server config (contains a machine-specific Chromium executable path)
+# Local MCP server config
 .mcp.json
 
-.claude\art-direction.md
-.claude\art-director-env.md
-.claude\art-director-state.md
+.claude/art-direction.md
+.claude/art-director-env.md
+.claude/art-director-state.md
 new_doc
+
+# Monorepo cleanups & ignores
+~/**
+*.bak
+**/coverage/
+**/logs/
+**/.superagent/
+packages/*/tmp/
+legacy/

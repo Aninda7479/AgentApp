@@ -268,17 +268,6 @@ fn get_user_data_dir() -> PathBuf {
     PathBuf::from(home).join(".superagent")
 }
 
-fn get_config_dir() -> PathBuf {
-    let home = std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .unwrap_or_else(|_| ".".to_string());
-    let cfg = PathBuf::from(&home).join(".superagent").join("config");
-    if cfg.exists() {
-        return cfg;
-    }
-    PathBuf::from(home).join(".superagent")
-}
-
 #[tauri::command]
 pub fn read_global_memory() -> String {
     let p = get_user_data_dir().join("global_memory.json");
@@ -294,78 +283,25 @@ pub fn write_global_memory(content: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn read_settings_file() -> String {
-    let p_cfg = get_config_dir().join("settings.json");
-    if let Ok(c) = fs::read_to_string(&p_cfg) {
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&c) {
-            let has_providers = val.get("providers").and_then(|p| p.as_array()).map(|a| !a.is_empty()).unwrap_or(false);
-            if val.is_object() && !val.as_object().unwrap().is_empty() && has_providers {
-                return c;
-            }
-        }
-    }
-    // Check backup settings.json.bak
-    let p_bak = get_config_dir().join("settings.json.bak");
-    if let Ok(c) = fs::read_to_string(&p_bak) {
-        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&c) {
-            if val.is_object() && !val.as_object().unwrap().is_empty() {
-                return c;
-            }
-        }
-    }
-    let p_root = get_user_data_dir().join("settings.json");
-    fs::read_to_string(p_root).unwrap_or_else(|_| "{}".to_string())
+    let settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_else(|_| serde_json::json!({}));
+    serde_json::to_string_pretty(&settings).unwrap_or_else(|_| "{}".to_string())
 }
 
 #[tauri::command]
 pub fn write_settings_file(content: String) -> Result<(), String> {
-    let config_dir = get_config_dir();
-    let _ = fs::create_dir_all(&config_dir);
-    let p_cfg = config_dir.join("settings.json");
-    fs::write(&p_cfg, &content).map_err(|e| e.to_string())?;
-    let _ = fs::write(get_user_data_dir().join("settings.json"), &content);
-    Ok(())
+    let val: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+    superagent_core_v2::storage::SettingsStore::new().save_raw(&val).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn settings_read() -> serde_json::Value {
-    let raw = read_settings_file();
-    let mut val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({}));
-    
-    // Merge models from models.json or models.json.bak if present
-    let models_file = get_config_dir().join("models.json");
-    let mut models_opt: Option<serde_json::Value> = None;
-    if let Ok(m_str) = fs::read_to_string(&models_file) {
-        if let Ok(m_val) = serde_json::from_str::<serde_json::Value>(&m_str) {
-            if m_val.as_array().map(|a| !a.is_empty()).unwrap_or(false) {
-                models_opt = Some(m_val);
-            }
-        }
-    }
-    if models_opt.is_none() {
-        let models_bak = get_config_dir().join("models.json.bak");
-        if let Ok(m_str) = fs::read_to_string(&models_bak) {
-            if let Ok(m_val) = serde_json::from_str::<serde_json::Value>(&m_str) {
-                if m_val.as_array().map(|a| !a.is_empty()).unwrap_or(false) {
-                    models_opt = Some(m_val);
-                }
-            }
-        }
-    }
-    if let Some(m_val) = models_opt {
-        if let Some(obj) = val.as_object_mut() {
-            if !obj.contains_key("models") || obj.get("models").map(|v| v.as_array().map(|a| a.is_empty()).unwrap_or(true)).unwrap_or(true) {
-                obj.insert("models".to_string(), m_val);
-            }
-        }
-    }
-    val
+    superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_else(|_| serde_json::json!({}))
 }
 
 #[tauri::command]
 pub fn settings_write(content: Option<serde_json::Value>, data: Option<serde_json::Value>, settings: Option<serde_json::Value>) -> Result<(), String> {
     let val = content.or(data).or(settings).unwrap_or_else(|| serde_json::json!({}));
-    let json_str = serde_json::to_string_pretty(&val).map_err(|e| e.to_string())?;
-    write_settings_file(json_str)
+    superagent_core_v2::storage::SettingsStore::new().save_raw(&val).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -374,36 +310,37 @@ pub fn store_read() -> serde_json::Value {
     let providers = settings_val.get("providers").cloned().unwrap_or_else(|| serde_json::json!([]));
     let models = settings_val.get("models").cloned().unwrap_or_else(|| serde_json::json!([]));
 
-    let conv_dir = get_user_data_dir().join("conversation");
-    let mut projects = Vec::new();
+    let storage = superagent_core_v2::storage::ChatStorage::new();
+    let chats_meta = storage.list_sessions().unwrap_or_default();
+    
     let mut chats = Vec::new();
-
-    let chats_dir = conv_dir.join("Chats");
-    if let Ok(entries) = fs::read_dir(&chats_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                let meta_file = path.join("meta.json");
-                let chat_file = path.join("chat.json");
-                if let Ok(c) = fs::read_to_string(&meta_file).or_else(|_| fs::read_to_string(&chat_file)) {
-                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&c) {
-                        chats.push(v);
-                    }
-                }
-            }
-        }
+    for meta in chats_meta {
+        chats.push(serde_json::json!({
+            "id": meta.id,
+            "title": meta.title,
+            "project": meta.project,
+            "model": meta.model,
+            "timestamp": meta.created_at,
+            "updatedAt": meta.updated_at,
+            "stepCount": meta.message_count,
+            "isRunning": false
+        }));
     }
 
-    let projects_dir = conv_dir.join("Projects");
-    if let Ok(entries) = fs::read_dir(&projects_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                let meta_file = path.join("meta.json");
-                let proj_file = path.join("project.json");
-                if let Ok(c) = fs::read_to_string(&meta_file).or_else(|_| fs::read_to_string(&proj_file)) {
-                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(&c) {
-                        projects.push(v);
+    let conv_dir = get_user_data_dir().join("conversation");
+    let mut projects = Vec::new();
+    for dir_name in &["projects", "Projects"] {
+        let projects_dir = conv_dir.join(dir_name);
+        if let Ok(entries) = fs::read_dir(&projects_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    let meta_file = path.join("meta.json");
+                    let proj_file = path.join("project.json");
+                    if let Ok(c) = fs::read_to_string(&meta_file).or_else(|_| fs::read_to_string(&proj_file)) {
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&c) {
+                            projects.push(v);
+                        }
                     }
                 }
             }

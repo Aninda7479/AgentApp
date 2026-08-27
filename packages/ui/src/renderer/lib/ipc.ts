@@ -221,7 +221,8 @@ export function getIpc(): any {
             credentials: 'same-origin',
             body: JSON.stringify({ channel, args }),
           });
-          if (httpRes.status === 401 && typeof window !== 'undefined' && window.location && window.location.pathname !== '/login') {
+          const isTauri = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
+          if (!isTauri && httpRes.status === 401 && typeof window !== 'undefined' && window.location && window.location.pathname !== '/login') {
             window.location.href = '/login';
           }
           if (httpRes.ok) {

@@ -16,3 +16,12 @@ awesome-mcp.md
 list.md
 *.log
 .DS_Store
+target
+**/target
+legacy
+website
+packages/desktop
+packages/browser-extension
+packages/cli
+tmp
+~

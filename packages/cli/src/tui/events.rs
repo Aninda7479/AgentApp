@@ -1,6 +1,6 @@
 use std::time::Duration;
 use crossterm::event::{Event as CrosstermEvent, KeyEvent, MouseEvent};
-use futures::StreamExt;
+use futures_util::StreamExt;
 use superagent_core_v2::types::AgentEvent;
 use tokio::sync::mpsc;
 

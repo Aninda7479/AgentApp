@@ -16,15 +16,7 @@ export default defineConfig({
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'test/**/*.test.ts', 'test/**/*.test.tsx'],
     exclude: [
       'dist/**',
-      'node_modules/**',
-      'test/ai-engine.test.ts',
-      'test/artifact_manager.test.ts',
-      'test/desktop-send-message-e2e.test.ts',
-      'test/desktop_gateway.test.ts',
-      'test/gateway-whatsapp.test.ts',
-      'test/partner-window.test.ts',
-      'test/pet-geometry.test.ts',
-      'test/storage.test.ts'
+      'node_modules/**'
     ],
     environment: 'jsdom'
   }

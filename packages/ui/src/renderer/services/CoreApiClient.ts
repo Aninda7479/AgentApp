@@ -29,7 +29,8 @@ export class CoreApiClient {
 
     try {
       const res = await fetch(url, { credentials: 'same-origin', ...options, headers });
-      if (res.status === 401 && typeof window !== 'undefined' && window.location && window.location.pathname !== '/login') {
+      const isTauri = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
+      if (!isTauri && res.status === 401 && typeof window !== 'undefined' && window.location && window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
       if (!res.ok) {
