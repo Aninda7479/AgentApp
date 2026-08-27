@@ -74,7 +74,7 @@ const POPULAR_PROVIDERS_CONFIG: ProviderItem[] = [
   { id: 'vertex', name: 'Google Vertex AI', category: 'cloud', defaultUrl: '', url: '', apiKey: '', desc: 'Google Cloud Vertex platform integration endpoint', status: 'idle', models: [] }
 ];
 
-/** Dynamic model enrichment logic identical to Settings page. */
+/** Dynamic model enrichment logic with ZERO hardcoded model names. */
 const enrichDynamicModel = (raw: {
   id: string;
   name: string;
@@ -83,10 +83,11 @@ const enrichDynamicModel = (raw: {
   description?: string;
   apiType?: string;
   free?: boolean;
+  enabled?: boolean;
   pricing?: ModelPricing;
   inputModalities?: string[];
   outputModalities?: string[];
-}, providerId: string): ModelConfig => {
+}, providerId: string, index: number = 0): ModelConfig => {
   let isFree = raw.free;
   let ctxLimit = raw.contextLimit;
 
@@ -94,31 +95,21 @@ const enrichDynamicModel = (raw: {
     isFree = true;
   }
 
-  const idLower = raw.id.toLowerCase();
-  if (!ctxLimit || ctxLimit === 'n/a') {
-    if (idLower.includes('llama-3.1') || idLower.includes('llama-3.3') || idLower.includes('nemotron') || idLower.includes('qwen2.5') || idLower.includes('phi-3')) {
-      ctxLimit = '128k';
-    } else if (idLower.includes('deepseek') || idLower.includes('mixtral')) {
-      ctxLimit = '64k';
-    } else if (idLower.includes('mistral') || idLower.includes('qwen')) {
-      ctxLimit = '32k';
-    }
-  }
-
   const inferModalities = (mId: string): { inputModalities: string[]; outputModalities: string[] } => {
     const id = mId.toLowerCase();
-    if (/^gemini/.test(id)) return { inputModalities: ['text', 'image', 'audio', 'video'], outputModalities: ['text'] };
-    if (/^claude|vision|4o|gpt-4v|llava|pixtral|qwen.*vl/.test(id)) return { inputModalities: ['text', 'image'], outputModalities: ['text'] };
+    if (/vision|image|vl/i.test(id)) return { inputModalities: ['text', 'image'], outputModalities: ['text'] };
     return { inputModalities: ['text'], outputModalities: ['text'] };
   };
 
   const mods = inferModalities(raw.id);
+  // Default to enabling only the primary/first model (index === 0) with zero hardcoded model names
+  const isEnabled = raw.enabled !== undefined ? raw.enabled : (index === 0);
 
   return {
     id: `${providerId}-${raw.id}`,
     name: raw.name || raw.id,
     providerId,
-    enabled: true,
+    enabled: isEnabled,
     free: isFree,
     contextLimit: ctxLimit,
     outputLimit: raw.outputLimit,
@@ -269,12 +260,12 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
             const data = await res.json();
             const list = data.models ?? [];
             if (list.length > 0) {
-              foundOllamaModels = list.map((m: any) => enrichDynamicModel({
+              foundOllamaModels = list.map((m: any, idx: number) => enrichDynamicModel({
                 id: m.name || m.model || String(m),
                 name: m.name || m.model || String(m),
                 contextLimit: m.details?.parameter_size ? `${m.details.parameter_size}` : undefined,
                 free: true
-              }, 'ollama'));
+              }, 'ollama', idx));
               successOllamaUrl = base;
               break;
             }
@@ -296,11 +287,11 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
             const data = await res.json();
             const list = data.data ?? [];
             if (list.length > 0) {
-              foundOmniModels = list.map((m: any) => enrichDynamicModel({
+              foundOmniModels = list.map((m: any, idx: number) => enrichDynamicModel({
                 id: m.id || m.name || String(m),
                 name: m.id || m.name || String(m),
                 free: true
-              }, 'omniroute'));
+              }, 'omniroute', idx));
               successOmniUrl = base;
               break;
             }
@@ -565,12 +556,12 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         throw new Error('Endpoint reached successfully, but zero models were returned.');
       }
 
-      const enrichedList = rawModels.map(m => enrichDynamicModel(m, pId));
+      const enrichedList = rawModels.map((m, idx) => enrichDynamicModel(m, pId, idx));
 
       setProviderList(prev => prev.map(p => p.id === pId ? {
         ...p,
         status: 'connected',
-        statusMessage: `Connected: fetched ${enrichedList.length} model${enrichedList.length === 1 ? '' : 's'} from API`,
+        statusMessage: `Connected: ${enrichedList.filter(m => m.enabled).length} enabled (${enrichedList.length} discovered)`,
         models: enrichedList
       } : p));
     } catch (err: any) {
@@ -580,6 +571,17 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         statusMessage: err?.message || 'Connection failed. Verify your key and endpoint URL.'
       } : p));
     }
+  };
+
+  // ── Toggle Individual Model in Onboarding ──────────────────────────────────
+  const toggleProviderModel = (providerId: string, modelId: string) => {
+    setProviderList(prev => prev.map(p => {
+      if (p.id !== providerId) return p;
+      return {
+        ...p,
+        models: p.models.map(m => m.id === modelId ? { ...m, enabled: !m.enabled } : m)
+      };
+    }));
   };
 
   // ── Add Custom Provider ─────────────────────────────────────────────────────
@@ -671,9 +673,12 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
           apiKey: p.apiKey.trim(),
           baseUrl: p.url.trim() || p.defaultUrl
         };
+        const modelsWithDefault = p.models.length > 0
+          ? (p.models.some(m => m.enabled) ? p.models : p.models.map((m, idx) => idx === 0 ? { ...m, enabled: true } : m))
+          : [];
         batchToConnect.push({
           provider: conn,
-          models: p.models.filter(m => m.enabled)
+          models: modelsWithDefault
         });
       }
     }
@@ -890,12 +895,29 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
 
                           {p.models.length > 0 && (
                             <div className="pt-1.5 border-t border-brand-border/30">
-                              <span className="text-[10px] font-semibold text-brand-textMuted uppercase block mb-1">Live Discovered Models ({p.models.length})</span>
-                              <div className="flex flex-wrap gap-1">
-                                {p.models.slice(0, 6).map(m => (
-                                  <span key={m.id} className="text-[10px] px-1.5 py-0.5 rounded bg-brand-bg border border-brand-border text-brand-textMain font-mono">{m.name}</span>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-[10px] font-semibold text-brand-textMuted uppercase">
+                                  Models ({p.models.filter(m => m.enabled).length}/{p.models.length} active)
+                                </span>
+                                <span className="text-[9px] text-brand-textMuted">Click to toggle</span>
+                              </div>
+                              <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto pr-1">
+                                {p.models.map(m => (
+                                  <button
+                                    key={m.id}
+                                    type="button"
+                                    onClick={() => toggleProviderModel(p.id, m.id)}
+                                    className={`text-[10px] px-2 py-0.5 rounded border transition-colors cursor-pointer font-mono flex items-center gap-1 ${
+                                      m.enabled
+                                        ? 'bg-[color:var(--brand-accent)]/15 border-[color:var(--brand-accent)]/40 text-[color:var(--brand-accent)] font-medium'
+                                        : 'bg-brand-bg/50 border-brand-border/40 text-brand-textMuted hover:text-brand-textMain opacity-60'
+                                    }`}
+                                    title={m.enabled ? 'Enabled (click to disable)' : 'Disabled (click to enable)'}
+                                  >
+                                    {m.enabled && <Check size={10} className="shrink-0" />}
+                                    <span>{m.name}</span>
+                                  </button>
                                 ))}
-                                {p.models.length > 6 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-bg text-brand-textMuted">+{p.models.length - 6} more</span>}
                               </div>
                             </div>
                           )}
