@@ -1094,7 +1094,8 @@ async fn handle_provider_proxy(
     }
 
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
+        .user_agent("SuperAgent/0.21.0 (Windows; x64)")
+        .timeout(Duration::from_secs(45))
         .build()
         .map_err(|e| {
             (
@@ -1123,7 +1124,11 @@ async fn handle_provider_proxy(
     }
 
     if let Some(body_val) = req.body {
-        request_builder = request_builder.json(&body_val);
+        if let Some(s) = body_val.as_str() {
+            request_builder = request_builder.header(reqwest::header::CONTENT_TYPE, "application/json").body(s.to_string());
+        } else {
+            request_builder = request_builder.json(&body_val);
+        }
     }
 
     match request_builder.send().await {

@@ -34,6 +34,7 @@ import { runElectricalRulesCheck } from './ercEngine';
 import { exportToKiCad, exportToAltiumNetlist, exportToSKiDL, exportToEasyEDA, exportToBOM } from './exporters';
 import { processHardwarePrompt, PCBSettingsConfig, DEFAULT_PCB_SETTINGS } from './hardwareAiEngine';
 import { PCBSettingsModal } from './PCBSettingsModal';
+import { PCBLayoutCanvas } from './PCBLayoutCanvas';
 import { useModelList } from '../../hooks/useModelList';
 import { useProviderStore } from '../../stores/providerStore';
 
@@ -80,8 +81,17 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
   // UI Selection State
   const [selectedCompId, setSelectedCompId] = useState<string | null>(null);
   const [selectedNetId, setSelectedNetId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'canvas' | 'bom' | 'erc' | 'power'>('canvas');
+  const [activeTab, setActiveTab] = useState<'canvas' | 'layout' | 'bom' | 'erc' | 'power'>('canvas');
   const [zoomLevel, setZoomLevel] = useState<number>(1);
+  
+  // Copy chat message state
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+
+  const handleCopyMessage = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedMsgId(id);
+    setTimeout(() => setCopiedMsgId(null), 2000);
+  };
 
   // PCB Workspace Settings & AI Model State
   const [pcbSettings, setPcbSettings] = useState<PCBSettingsConfig>(DEFAULT_PCB_SETTINGS);
@@ -293,6 +303,17 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
             Schematic & Chips
           </button>
           <button
+            onClick={() => setActiveTab('layout')}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition-all cursor-pointer ${
+              activeTab === 'layout'
+                ? 'bg-emerald-500 text-black shadow-sm font-semibold'
+                : 'text-brand-textMuted hover:text-brand-textMain'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>PCB Layout & Traces</span>
+          </button>
+          <button
             onClick={() => setActiveTab('power')}
             className={`px-3 py-1 rounded-md font-medium transition-all cursor-pointer ${
               activeTab === 'power'
@@ -476,7 +497,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
                     }`}
                   >
                     <span className="truncate">{net.name}</span>
-                    <span className="text-[9px] text-brand-textMuted/60 uppercase">{net.netClass}</span>
+          <span className="text-[9px] text-brand-textMuted/60 uppercase">{net.netClass}</span>
                   </div>
                 ))
               )}
@@ -484,183 +505,322 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
           </div>
         </div>
 
-        {/* Center: Interactive Visual Schematic / Block Canvas */}
+        {/* Center: Interactive Visual Schematic / PCB Layout Canvas / Analysis Tabs */}
         <div className="flex-1 flex flex-col bg-black/40 overflow-hidden relative">
-          {/* Canvas Controls overlay */}
-          <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 p-1 rounded-lg bg-[color:var(--brand-surface)]/90 border border-brand-border/40 shadow-lg backdrop-blur-sm">
-            <button
-              onClick={() => setZoomLevel((z) => Math.min(z + 0.15, 2.0))}
-              className="p-1.5 rounded hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
-              title="Zoom in"
-            >
-              <ZoomIn className="w-3.5 h-3.5" />
-            </button>
-            <span className="text-[10px] font-mono px-1 text-brand-textMuted">
-              {Math.round(zoomLevel * 100)}%
-            </span>
-            <button
-              onClick={() => setZoomLevel((z) => Math.max(z - 0.15, 0.5))}
-              className="p-1.5 rounded hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
-              title="Zoom out"
-            >
-              <ZoomOut className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setZoomLevel(1)}
-              className="p-1.5 rounded hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
-              title="Reset Zoom"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Interactive Visual Canvas Area */}
-          <div className="flex-1 overflow-auto p-8 relative flex items-center justify-center">
-            {graph.components.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center select-none max-w-md">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-4 shadow-inner">
-                  <Cpu className="w-7 h-7" />
-                </div>
-                <h3 className="text-base font-semibold text-brand-textMain mb-1.5">
-                  Clean Blank Canvas
-                </h3>
-                <p className="text-xs text-brand-textMuted mb-6 leading-relaxed">
-                  Start fresh. Prompt the <strong>AI Hardware Co-Pilot</strong> on the right to synthesize your schematic topology, or click below to manually add ICs and passives.
-                </p>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setShowAddCompModal(true)}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-all shadow-md active:scale-95 cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add Component</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      const tmpl = STARTER_TEMPLATES.find((t) => t.id === 'esp32s3-sensor-node');
-                      if (tmpl) {
-                        updateGraph(JSON.parse(JSON.stringify(tmpl.graph)));
-                        triggerToast?.(`Loaded ${tmpl.name}`);
-                      }
-                    }}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain border border-brand-border/40 text-xs font-medium transition-all cursor-pointer"
-                  >
-                    <span>Load Example Template</span>
-                  </button>
+          {activeTab === 'layout' ? (
+            <PCBLayoutCanvas
+              graph={graph}
+              selectedCompId={selectedCompId}
+              selectedNetId={selectedNetId}
+              onSelectComponent={(id) => {
+                setSelectedCompId(id);
+                setSelectedNetId(null);
+              }}
+              onSelectNet={(id) => {
+                setSelectedNetId(id);
+                setSelectedCompId(null);
+              }}
+            />
+          ) : activeTab === 'power' ? (
+            <div className="flex-1 overflow-auto p-6 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-brand-border/30">
+                <div>
+                  <h3 className="text-sm font-bold text-brand-textMain flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    Power Tree & Rails Budget
+                  </h3>
+                  <p className="text-xs text-brand-textMuted">
+                    Calculates voltage regulation drop, current capacities, and ground isolation.
+                  </p>
                 </div>
               </div>
-            ) : (
-              <div
-                style={{
-                  transform: `scale(${zoomLevel})`,
-                  transformOrigin: 'center center',
-                  transition: 'transform 0.15s ease-out',
-                  minWidth: '850px',
-                  minHeight: '480px',
-                }}
-                className="relative rounded-xl border border-brand-border/30 bg-[#0b0f17] shadow-2xl p-6 select-none"
-              >
-                {/* Grid Background Pattern */}
-                <div
-                  className="absolute inset-0 opacity-15 pointer-events-none rounded-xl"
-                  style={{
-                    backgroundImage: `radial-gradient(circle, #3b82f6 1px, transparent 1px)`,
-                    backgroundSize: '20px 20px',
-                  }}
-                />
-
-                {/* Functional Section Boxes */}
-                <div className="text-[10px] font-mono uppercase tracking-wider text-brand-textMuted/40 mb-3 flex items-center justify-between">
-                  <span>Schematic Topology & Pin Allocation</span>
-                  <span>Ground: Star Point GND • System Rails: +3V3 / 5V</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {graph.powerRails.map((rail) => (
+                  <div key={rail.id} className="p-4 rounded-xl border border-brand-border/40 bg-black/30 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-bold text-sm text-emerald-400">{rail.id}</span>
+                      <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 font-mono">
+                        {rail.voltage}V
+                      </span>
+                    </div>
+                    <div className="text-xs text-brand-textMuted flex items-center justify-between">
+                      <span>Max Budget:</span>
+                      <span className="font-mono text-brand-textMain font-semibold">{rail.maxCurrent_mA} mA</span>
+                    </div>
+                    <div className="text-xs text-brand-textMuted flex items-center justify-between">
+                      <span>Source Component:</span>
+                      <span className="font-mono text-amber-300">{rail.sourceComponentId}.{rail.sourcePinNumber}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : activeTab === 'bom' ? (
+            <div className="flex-1 overflow-auto p-6 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-brand-border/30">
+                <div>
+                  <h3 className="text-sm font-bold text-brand-textMain flex items-center gap-2">
+                    <Box className="w-4 h-4 text-emerald-400" />
+                    Bill of Materials (BOM) & Sourcing
+                  </h3>
+                  <p className="text-xs text-brand-textMuted">
+                    LCSC, JLCPCB, and DigiKey distributor part numbers for automated SMT assembly.
+                  </p>
                 </div>
-
-                {/* Render Component Blocks */}
-                <div className="flex flex-wrap gap-4 items-start relative z-10">
-                  {graph.components.map((comp) => {
-                    const isSelected = selectedCompId === comp.id;
-                    const isConnectedToSelectedNet =
-                      selectedNetId &&
-                      comp.pins.some((p) => p.connectedNet === selectedNetId);
-
-                    return (
-                      <div
-                        key={comp.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedCompId(comp.id);
-                          setSelectedNetId(null);
-                        }}
-                        className={`min-w-[190px] rounded-lg border transition-all duration-150 p-3 relative cursor-pointer shadow-md ${
-                          isSelected
-                            ? 'border-emerald-500 bg-emerald-950/40 ring-2 ring-emerald-500/20'
-                            : isConnectedToSelectedNet
-                            ? 'border-amber-500/80 bg-amber-950/30'
-                            : 'border-brand-border/40 bg-brand-surface/90 hover:border-brand-border-strong hover:bg-white/[0.03]'
-                        }`}
-                      >
-                        {/* Header */}
-                        <div className="flex items-center justify-between pb-2 border-b border-brand-border/20 mb-2">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-bold text-xs text-emerald-400">
-                              {comp.id}
-                            </span>
-                            <span className="text-[10px] text-brand-textMuted truncate max-w-[110px]">
-                              {comp.name}
-                            </span>
-                          </div>
-                          <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/40 text-brand-textMuted">
-                            {comp.package}
-                          </span>
+              </div>
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-brand-border/40 text-brand-textMuted font-mono text-[11px]">
+                    <th className="pb-2">Designator</th>
+                    <th className="pb-2">Component Name</th>
+                    <th className="pb-2">MPN</th>
+                    <th className="pb-2">Package</th>
+                    <th className="pb-2">Manufacturer</th>
+                    <th className="pb-2">LCSC Part #</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-brand-border/20 font-mono">
+                  {graph.components.map((comp) => (
+                    <tr key={comp.id} className="hover:bg-white/[0.02]">
+                      <td className="py-2.5 font-bold text-emerald-400">{comp.id}</td>
+                      <td className="py-2.5 font-sans text-brand-textMain">{comp.name}</td>
+                      <td className="py-2.5 text-brand-textMuted">{comp.mpn}</td>
+                      <td className="py-2.5 text-amber-300">{comp.package}</td>
+                      <td className="py-2.5 text-brand-textMuted">{comp.manufacturer}</td>
+                      <td className="py-2.5 text-blue-400">{comp.lcscPart || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : activeTab === 'erc' ? (
+            <div className="flex-1 overflow-auto p-6 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-brand-border/30">
+                <div>
+                  <h3 className="text-sm font-bold text-brand-textMain flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    Electrical Rules Check (ERC) Audit
+                  </h3>
+                  <p className="text-xs text-brand-textMuted">
+                    Comprehensive net connectivity, pin type validation, and high-voltage clearance.
+                  </p>
+                </div>
+              </div>
+              {graph.ercReport.length === 0 ? (
+                <div className="p-6 rounded-xl border border-emerald-500/30 bg-emerald-500/5 text-center text-xs text-emerald-300">
+                  ✅ 0 ERC Errors & 0 Warnings. Circuit passes all electrical rules checks.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {graph.ercReport.map((erc) => (
+                    <div
+                      key={erc.id}
+                      className={`p-4 rounded-xl border ${
+                        erc.severity === 'error'
+                          ? 'border-rose-500/40 bg-rose-500/10'
+                          : 'border-amber-500/40 bg-amber-500/10'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 text-xs font-bold mb-1">
+                        {erc.severity === 'error' ? (
+                          <AlertTriangle className="w-4 h-4 text-rose-400" />
+                        ) : (
+                          <Info className="w-4 h-4 text-amber-400" />
+                        )}
+                        <span className={erc.severity === 'error' ? 'text-rose-300' : 'text-amber-300'}>
+                          {erc.title}
+                        </span>
+                      </div>
+                      <p className="text-xs text-brand-textMuted mb-2">{erc.message}</p>
+                      {erc.suggestedFix && (
+                        <div className="text-[11px] font-mono text-emerald-400 bg-black/40 p-2 rounded">
+                          💡 Suggestion: {erc.suggestedFix}
                         </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Canvas Controls overlay */}
+              <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 p-1 rounded-lg bg-[color:var(--brand-surface)]/90 border border-brand-border/40 shadow-lg backdrop-blur-sm">
+                <button
+                  onClick={() => setZoomLevel((z) => Math.min(z + 0.15, 2.0))}
+                  className="p-1.5 rounded hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
+                  title="Zoom in"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[10px] font-mono px-1 text-brand-textMuted">
+                  {Math.round(zoomLevel * 100)}%
+                </span>
+                <button
+                  onClick={() => setZoomLevel((z) => Math.max(z - 0.15, 0.5))}
+                  className="p-1.5 rounded hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
+                  title="Zoom out"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setZoomLevel(1)}
+                  className="p-1.5 rounded hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
+                  title="Reset Zoom"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
 
-                        {/* Pins Matrix */}
-                        <div className="space-y-1">
-                          {comp.pins.map((pin) => {
-                            const isPinNetSelected = selectedNetId && pin.connectedNet === selectedNetId;
-                            const isPower = pin.type === 'power_in' || pin.type === 'power_out';
-                            return (
-                              <div
-                                key={pin.number}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (pin.connectedNet) {
-                                    setSelectedNetId(pin.connectedNet);
-                                    setSelectedCompId(null);
-                                  }
-                                }}
-                                className={`flex items-center justify-between text-[10px] font-mono px-1.5 py-0.5 rounded transition-colors ${
-                                  isPinNetSelected
-                                    ? 'bg-amber-400 text-black font-bold'
-                                    : 'hover:bg-white/10 text-brand-textMuted'
-                                }`}
-                              >
-                                <div className="flex items-center gap-1">
-                                  <span className="text-brand-textMuted/60 w-4">{pin.number}</span>
-                                  <span className={isPower ? 'text-rose-400 font-semibold' : 'text-brand-textMain'}>
-                                    {pin.name}
-                                  </span>
-                                </div>
-                                <span className="text-[9px] text-brand-textMuted/80 truncate max-w-[70px]">
-                                  {pin.connectedNet || 'NC'}
+              {/* Interactive Visual Canvas Area */}
+              <div className="flex-1 overflow-auto p-8 relative flex items-center justify-center">
+                {graph.components.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center select-none max-w-md">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-4 shadow-inner">
+                      <Cpu className="w-7 h-7" />
+                    </div>
+                    <h3 className="text-base font-semibold text-brand-textMain mb-1.5">
+                      Clean Blank Canvas
+                    </h3>
+                    <p className="text-xs text-brand-textMuted mb-6 leading-relaxed">
+                      Start fresh. Prompt the <strong>AI Hardware Co-Pilot</strong> on the right to synthesize your schematic topology, or click below to manually add ICs and passives.
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setShowAddCompModal(true)}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-all shadow-md active:scale-95 cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Add Component</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          const tmpl = STARTER_TEMPLATES.find((t) => t.id === 'usbpd-45w-charger') || STARTER_TEMPLATES[1];
+                          if (tmpl) {
+                            updateGraph(JSON.parse(JSON.stringify(tmpl.graph)));
+                            triggerToast?.(`Loaded ${tmpl.name}`);
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain border border-brand-border/40 text-xs font-medium transition-all cursor-pointer"
+                      >
+                        <span>Load 45W USB-PD Template</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      transform: `scale(${zoomLevel})`,
+                      transformOrigin: 'center center',
+                      transition: 'transform 0.15s ease-out',
+                      minWidth: '850px',
+                      minHeight: '480px',
+                    }}
+                    className="relative rounded-xl border border-brand-border/30 bg-[#0b0f17] shadow-2xl p-6 select-none"
+                  >
+                    {/* Grid Background Pattern */}
+                    <div
+                      className="absolute inset-0 opacity-15 pointer-events-none rounded-xl"
+                      style={{
+                        backgroundImage: `radial-gradient(circle, #3b82f6 1px, transparent 1px)`,
+                        backgroundSize: '20px 20px',
+                      }}
+                    />
+
+                    {/* Functional Section Boxes */}
+                    <div className="text-[10px] font-mono uppercase tracking-wider text-brand-textMuted/40 mb-3 flex items-center justify-between">
+                      <span>Schematic Topology & Pin Allocation</span>
+                      <span>Ground: Star Point GND • System Rails: +3V3 / 5V</span>
+                    </div>
+
+                    {/* Render Component Blocks */}
+                    <div className="flex flex-wrap gap-4 items-start relative z-10">
+                      {graph.components.map((comp) => {
+                        const isSelected = selectedCompId === comp.id;
+                        const isConnectedToSelectedNet =
+                          selectedNetId &&
+                          comp.pins.some((p) => p.connectedNet === selectedNetId);
+
+                        return (
+                          <div
+                            key={comp.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedCompId(comp.id);
+                              setSelectedNetId(null);
+                            }}
+                            className={`min-w-[190px] rounded-lg border transition-all duration-150 p-3 relative cursor-pointer shadow-md ${
+                              isSelected
+                                ? 'border-emerald-500 bg-emerald-950/40 ring-2 ring-emerald-500/20'
+                                : isConnectedToSelectedNet
+                                ? 'border-amber-500/80 bg-amber-950/30'
+                                : 'border-brand-border/40 bg-brand-surface/90 hover:border-brand-border-strong hover:bg-white/[0.03]'
+                            }`}
+                          >
+                            {/* Header */}
+                            <div className="flex items-center justify-between pb-2 border-b border-brand-border/20 mb-2">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono font-bold text-xs text-emerald-400">
+                                  {comp.id}
+                                </span>
+                                <span className="text-[10px] text-brand-textMuted truncate max-w-[110px]">
+                                  {comp.name}
                                 </span>
                               </div>
-                            );
-                          })}
-                        </div>
+                              <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/40 text-brand-textMuted">
+                                {comp.package}
+                              </span>
+                            </div>
 
-                        {/* MPN / Sourcing Footer */}
-                        <div className="mt-2 pt-1.5 border-t border-brand-border/20 flex items-center justify-between text-[9px] font-mono text-brand-textMuted/60">
-                          <span>{comp.mpn}</span>
-                          {comp.lcscPart && <span className="text-blue-400">{comp.lcscPart}</span>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                            {/* Pins Matrix */}
+                            <div className="space-y-1">
+                              {comp.pins.map((pin) => {
+                                const isPinNetSelected = selectedNetId && pin.connectedNet === selectedNetId;
+                                const isPower = pin.type === 'power_in' || pin.type === 'power_out';
+                                return (
+                                  <div
+                                    key={pin.number}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (pin.connectedNet) {
+                                        setSelectedNetId(pin.connectedNet);
+                                        setSelectedCompId(null);
+                                      }
+                                    }}
+                                    className={`flex items-center justify-between text-[10px] font-mono px-1.5 py-0.5 rounded transition-colors ${
+                                      isPinNetSelected
+                                        ? 'bg-amber-400 text-black font-bold'
+                                        : 'hover:bg-white/10 text-brand-textMuted'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-brand-textMuted/60 w-4">{pin.number}</span>
+                                      <span className={isPower ? 'text-rose-400 font-semibold' : 'text-brand-textMain'}>
+                                        {pin.name}
+                                      </span>
+                                    </div>
+                                    <span className="text-[9px] text-brand-textMuted/80 truncate max-w-[70px]">
+                                      {pin.connectedNet || 'NC'}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* MPN / Sourcing Footer */}
+                            <div className="mt-2 pt-1.5 border-t border-brand-border/20 flex items-center justify-between text-[9px] font-mono text-brand-textMuted/60">
+                              <span>{comp.mpn}</span>
+                              {comp.lcscPart && <span className="text-blue-400">{comp.lcscPart}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
 
           {/* Bottom Inspector Bar */}
           <div className="h-28 border-t border-brand-border/40 bg-[color:var(--brand-surface)]/90 p-3 flex items-center gap-4 shrink-0 overflow-x-auto">
@@ -728,71 +888,66 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
         </div>
 
         {/* Right Pane: AI Hardware Co-Pilot & Chat Feedback Loop */}
-        <div className="w-84 lg:w-96 border-l border-brand-border/40 flex flex-col bg-[color:var(--brand-surface)]/60 shrink-0">
+        <div className="w-96 border-l border-brand-border/40 bg-[color:var(--brand-surface)] flex flex-col shrink-0">
           {/* Header */}
-          <div className="p-3 border-b border-brand-border/30 flex items-center justify-between">
+          <div className="p-3 border-b border-brand-border/40 flex items-center justify-between bg-black/20">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-emerald-400" />
-              <span className="font-semibold text-xs text-brand-textMain">AI Hardware Co-Pilot</span>
+              <span className="font-semibold text-xs">AI Hardware Co-Pilot</span>
             </div>
+            {/* Dynamic Model Chip */}
             <button
               onClick={() => setShowSettingsModal(true)}
-              className="flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-colors cursor-pointer"
-              title="Click to select model or edit settings"
+              className="flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all cursor-pointer"
+              title="Click to edit connected model & settings"
             >
               <span className="max-w-[130px] truncate">{resolvedModelName}</span>
-              <ChevronDown className="w-2.5 h-2.5 shrink-0" />
+              <ChevronDown className="w-3 h-3 text-emerald-400" />
             </button>
           </div>
 
-          {/* Quick Action Suggestion Pills */}
-          <div className="p-2 border-b border-brand-border/20 flex flex-wrap gap-1.5 bg-black/10">
+          {/* Quick Action Chips */}
+          <div className="p-2 border-b border-brand-border/20 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             {graph.components.length === 0 ? (
               <>
                 <button
-                  onClick={() => runAiCommand('Generate ESP32-S3 IoT node with USB-C and 3.3V power regulator')}
-                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
+                  onClick={() => runAiCommand('Generate full 45W USB-PD AC-DC Charger system')}
+                  className="text-[10px] px-2 py-1 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-semibold transition-colors cursor-pointer border border-emerald-500/30"
                 >
-                  + Generate ESP32-S3 System
+                  ⚡ Synthesize 45W USB-PD
                 </button>
                 <button
-                  onClick={() => runAiCommand('Design 5V to 3.3V LDO Power Supply subsystem with filter capacitors')}
+                  onClick={() => runAiCommand('Generate ESP32-S3 System with Type-C and Power Supply')}
                   className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
                 >
-                  ⚡ Add 3.3V Power Supply
-                </button>
-                <button
-                  onClick={() => runAiCommand('Add Type-C USB Connector with ESD protection and CC resistors')}
-                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
-                >
-                  🔌 Add USB-C Subsystem
+                  + ESP32-S3 System
                 </button>
               </>
             ) : (
               <>
                 <button
-                  onClick={() => runAiCommand('Add 0.96" I2C OLED display (SSD1306) on address 0x3C')}
+                  onClick={() => runAiCommand('Add secondary USB-PD Controller with CC1/CC2 pins')}
                   className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
                 >
-                  + Add I2C OLED Display
+                  + Add USB-PD IC
                 </button>
                 <button
                   onClick={() => runAiCommand('Upgrade LDO regulator to ultra-low quiescent current TI TPS7A05')}
                   className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
                 >
-                  ⚡ Upgrade to Low-Iq LDO
+                  ⚡ Upgrade LDO
                 </button>
                 <button
                   onClick={() => runAiCommand('Synthesize missing I2C pullup resistors and run ERC verification')}
                   className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
                 >
-                  🛡️ Auto-Fix ERC Warnings
+                  🛡️ Auto-Fix ERC
                 </button>
               </>
             )}
           </div>
 
-          {/* Messages Stream */}
+          {/* Messages Stream with Copy Button */}
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
             {messages.map((msg) => (
               <div
@@ -808,7 +963,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
                       : 'bg-black/30 border border-brand-border/30 text-brand-textMain/90 rounded-bl-xs'
                   }`}
                 >
-                  {msg.text}
+                  <div className="whitespace-pre-wrap">{msg.text}</div>
 
                   {msg.actionDiff && (
                     <div className="mt-2 pt-2 border-t border-white/10 text-[10px] font-mono space-y-1">
@@ -824,8 +979,33 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
                       )}
                     </div>
                   )}
+
+                  {msg.sender === 'agent' && (
+                    <div className="mt-2 pt-1.5 border-t border-white/10 flex items-center justify-between">
+                      <span className="text-[9px] text-brand-textMuted/50">{msg.timestamp}</span>
+                      <button
+                        onClick={() => handleCopyMessage(msg.id, msg.text)}
+                        className="flex items-center gap-1 text-[10px] text-brand-textMuted hover:text-brand-textMain transition-colors px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 cursor-pointer"
+                        title="Copy message text"
+                      >
+                        {copiedMsgId === msg.id ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-emerald-400">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <span className="text-[9px] text-brand-textMuted/50 mt-1 px-1">{msg.timestamp}</span>
+                {msg.sender === 'user' && (
+                  <span className="text-[9px] text-brand-textMuted/50 mt-1 px-1">{msg.timestamp}</span>
+                )}
               </div>
             ))}
 

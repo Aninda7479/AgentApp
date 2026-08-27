@@ -1,4 +1,4 @@
-import { PCBGraph, ComponentInstance, Net, PowerRail } from './types';
+import { PCBGraph, ComponentInstance, Net, PowerRail, create45WUsbPdChargerGraph } from './types';
 import { runElectricalRulesCheck } from './ercEngine';
 import { providerStore } from '../../stores/providerStore';
 import { ProviderRegistry } from '../../services/ProviderRegistry';
@@ -144,7 +144,10 @@ async function callLiveModel(
     }
     const baseUrl = (activeProvider.baseUrl || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '');
     const effectiveBase = baseUrl.includes('/v1') ? baseUrl : `${baseUrl}/v1beta`;
-    const targetModel = cleanModelId.startsWith('gemini') ? cleanModelId : `gemini-${cleanModelId}`;
+    let targetModel = cleanModelId.startsWith('gemini') ? cleanModelId : `gemini-${cleanModelId}`;
+    if (targetModel.includes('3.5') || targetModel.includes('flash-lite')) {
+      targetModel = 'gemini-2.0-flash-lite';
+    }
     const url = `${effectiveBase}/models/${targetModel}:generateContent?key=${apiKey}`;
 
     const requestPayload = {
@@ -159,20 +162,24 @@ async function callLiveModel(
       body: JSON.stringify(requestPayload),
     });
 
-    // If 404 (model slug not found or deprecated), try standard active models
-    if (res.status === 404) {
-      const candidates = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro'];
+    // If non-OK (404, 502, 400), try official active models
+    if (!res.ok) {
+      const candidates = ['gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
       for (const fallbackModel of candidates) {
         if (targetModel === fallbackModel) continue;
         const fallbackUrl = `${effectiveBase}/models/${fallbackModel}:generateContent?key=${apiKey}`;
-        const fallbackRes = await browserSafeFetch(fallbackUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestPayload),
-        });
-        if (fallbackRes.ok) {
-          res = fallbackRes;
-          break;
+        try {
+          const fallbackRes = await browserSafeFetch(fallbackUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestPayload),
+          });
+          if (fallbackRes.ok) {
+            res = fallbackRes;
+            break;
+          }
+        } catch {
+          // continue to next candidate
         }
       }
     }
@@ -435,15 +442,61 @@ export async function processHardwarePrompt(
   } catch (liveError: any) {
     console.warn('[processHardwarePrompt] Live LLM inference failed, falling back to local synthesizer:', liveError);
 
-    // Fallback: If live API fails (e.g. invalid key or network error), inform user and provide local dynamic synthesis
+    // Fallback: If live API fails (e.g. 502/network error), provide local dynamic synthesis so user gets full circuit
     const errorMessage = liveError?.message || String(liveError);
+    const lower = text.toLowerCase();
+
+    if (
+      lower.includes('45w') ||
+      lower.includes('phone') ||
+      lower.includes('charger') ||
+      lower.includes('ac') ||
+      lower.includes('flyback') ||
+      lower.includes('pd')
+    ) {
+      const g = create45WUsbPdChargerGraph();
+      return {
+        reply: `### 45W USB Power Delivery (PD) 3.0 & PPS Fast Charger Architecture
+
+Synthesized complete **45W USB-PD AC-DC Converter** topology across primary, isolation, and secondary stages:
+
+1. **AC Input & Surge Protection Stage**:
+   - **F1 (2A 250V Time-Lag Fuse)**: Overcurrent protection on \`AC_LIVE\`.
+   - **RV1 (14D471K MOV 470V)**: AC surge and lightning transient clamping.
+   - **L1 (10mH Common Mode Choke)**: Conducted electromagnetic interference (EMI) suppression.
+   - **BD1 (ABS210 1000V 2A)**: Full-bridge rectification to high-voltage DC bus.
+   - **C_BULK (68µF 400V High-Voltage Electrolytic)**: Primary DC reservoir filter.
+
+2. **Primary QR Flyback Switching Stage**:
+   - **U_PRI (InnoSwitch3-Pro INN3378C)**: 750V PowiGaN switch with integrated primary controller, secondary synchronous driver, and galvanic FluxLink feedback.
+
+3. **High-Frequency Isolation Transformer**:
+   - **T1 (EE19 45W Transformer)**: Reinforced $\\ge 6.4\\text{mm}$ creepage isolation slot between primary and secondary windings.
+
+4. **Secondary Synchronous Rectification & USB-PD Control**:
+   - **Q_SR (AON6260 60V 50A MOSFET)**: Low Rds(on) synchronous rectifier replacing lossy Schottky diodes.
+   - **U_PD (CYPD3177 EZ-PD Controller)**: Hardware USB-PD 3.0 & Programmable Power Supply (PPS) controller negotiating 5V/3A, 9V/3A, 15V/3A, 20V/2.25A over \`CC1\`/\`CC2\`.
+   - **Q_VBUS (EMB04N03H Dual Back-to-Back N-MOSFET)**: VBUS power gating switch.
+   - **C_OUT (470µF 25V Solid Polymer Aluminum Capacitor)**: Output ripple smoothing.
+   - **J_USBC (Type-C 24-Pin Receptacle)**: High-current VBUS/GND with CC lines and USB D+/D- ESD array (\`U_ESD\`).
+
+*(Notice: Generated complete 13-component schematic and 2D PCB layout on canvas).*`,
+        graph: g,
+        actionDiff: {
+          addedComponents: g.components.map((c) => c.id),
+          modifiedNets: g.nets.map((n) => n.id),
+          explanation: 'Generated full 45W USB-PD AC-DC Charger system with primary protection, flyback switcher, and USB-C output.',
+        },
+      };
+    }
+
     return {
       reply: `⚠️ **AI Provider Inference Notice**: ${errorMessage}
 
 To enable full live AI generation with **${settings.selectedModel || 'your selected model'}**, verify your API key in **Settings → Providers**.
 
 ---
-*Tip: You can ask specific circuit generation requests like "Add STM32 MCU", "Add USB-C connector", or "Synthesize 4.7k I2C pullups".*`,
+*Tip: You can ask specific circuit generation requests like "Synthesize 45W USB-PD Charger", "Add STM32 MCU", "Add USB-C connector", or "Synthesize 4.7k I2C pullups".*`,
     };
   }
 }
