@@ -29,9 +29,13 @@ import {
   Radio,
   FileText
 } from 'lucide-react';
-import { PCBGraph, ComponentInstance, Net, ERCResult, STARTER_TEMPLATES, ExportFormat } from './types';
+import { PCBGraph, ComponentInstance, Net, ERCResult, STARTER_TEMPLATES, ExportFormat, createEmptyProjectGraph } from './types';
 import { runElectricalRulesCheck } from './ercEngine';
 import { exportToKiCad, exportToAltiumNetlist, exportToSKiDL, exportToEasyEDA, exportToBOM } from './exporters';
+import { processHardwarePrompt, PCBSettingsConfig, DEFAULT_PCB_SETTINGS } from './hardwareAiEngine';
+import { PCBSettingsModal } from './PCBSettingsModal';
+import { useModelList } from '../../hooks/useModelList';
+import { useProviderStore } from '../../stores/providerStore';
 
 interface PCBWorkspacePageProps {
   ipc?: any;
@@ -58,12 +62,15 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
   onBack,
   onNewChat,
 }) => {
-  // Active Project Graph State
+  // Hook into real connected models from providerStore
+  const { enabledModels } = useModelList();
+  const storeLastUsedModel = useProviderStore((s) => s.lastUsedModel);
+  const allStoreModels = useProviderStore((s) => s.models) || [];
+  const availableModels = enabledModels.length > 0 ? enabledModels : allStoreModels;
+
+  // Active Project Graph State (Starts as a clean blank project by default)
   const [graph, setGraph] = useState<PCBGraph>(() => {
-    const template = STARTER_TEMPLATES[0];
-    const initialGraph = JSON.parse(JSON.stringify(template.graph));
-    initialGraph.ercReport = runElectricalRulesCheck(initialGraph);
-    return initialGraph;
+    return createEmptyProjectGraph();
   });
 
   // History Stack for Undo/Redo
@@ -76,15 +83,31 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
   const [activeTab, setActiveTab] = useState<'canvas' | 'bom' | 'erc' | 'power'>('canvas');
   const [zoomLevel, setZoomLevel] = useState<number>(1);
 
-  // Model & AI Chat State
-  const [selectedModel, setSelectedModel] = useState<string>('Claude 3.7 Sonnet / Gemini 2.5');
+  // PCB Workspace Settings & AI Model State
+  const [pcbSettings, setPcbSettings] = useState<PCBSettingsConfig>(DEFAULT_PCB_SETTINGS);
+  const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
+
+  // Resolve active connected model dynamically
+  const resolvedModelName = useMemo(() => {
+    if (pcbSettings.selectedModel && availableModels.some((m) => m.name === pcbSettings.selectedModel || m.id === pcbSettings.selectedModel)) {
+      return pcbSettings.selectedModel;
+    }
+    if (storeLastUsedModel && availableModels.some((m) => m.name === storeLastUsedModel || m.id === storeLastUsedModel)) {
+      return storeLastUsedModel;
+    }
+    if (availableModels.length > 0) {
+      return availableModels[0].name;
+    }
+    return 'Default Model';
+  }, [pcbSettings.selectedModel, storeLastUsedModel, availableModels]);
+
   const [chatInput, setChatInput] = useState<string>('');
   const [isAiThinking, setIsAiThinking] = useState<boolean>(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'm1',
       sender: 'agent',
-      text: 'PCB Co-Pilot active. I have loaded the ESP32-S3 IoT Sensor Node architecture. All power rails (+3V3, VBUS_5V) and I2C buses are synchronized. How would you like to edit or expand the design?',
+      text: 'PCB Co-Pilot active. Design canvas is empty and ready. What circuit or hardware system would you like to build? (e.g. "Create an STM32 with USB-C and 3.3V LDO", "Design a dual H-bridge motor driver with CAN bus", or click "+" to place components manually).',
       timestamp: 'Just now',
     },
   ]);
@@ -120,9 +143,9 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
     }
   };
 
-  // Quick Action Prompts
+  // Hardware AI Command Execution (Intelligent Reasoning & Synthesis)
   const runAiCommand = async (promptText: string) => {
-    if (!promptText.trim()) return;
+    if (!promptText.trim() || isAiThinking) return;
 
     const userMsg: ChatMessage = {
       id: `u-${Date.now()}`,
@@ -134,101 +157,38 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
     setChatInput('');
     setIsAiThinking(true);
 
-    // Simulate Agent Hardware Reasoning & Mutating PCB Graph
-    setTimeout(() => {
-      const g = JSON.parse(JSON.stringify(graph)) as PCBGraph;
-      let agentReply = '';
-      let actionDiff: ChatMessage['actionDiff'] = undefined;
+    try {
+      const effectiveSettings = { ...pcbSettings, selectedModel: resolvedModelName };
+      const result = await processHardwarePrompt(promptText, graph, effectiveSettings, ipc);
 
-      const lower = promptText.toLowerCase();
-
-      if (lower.includes('pullup') || lower.includes('pull-up') || lower.includes('fix i2c') || lower.includes('fix erc')) {
-        // Auto-fix I2C pullups
-        if (!g.components.some((c) => c.id === 'R1')) {
-          g.components.push({
-            id: 'R1',
-            name: 'I2C Pull-Up SDA',
-            mpn: 'RC0402JR-074K7L',
-            manufacturer: 'Yageo',
-            package: '0402',
-            category: 'Passive',
-            value: '4.7k',
-            lcscPart: 'C25900',
-            description: '4.7k 1% 0402 Pull-up Resistor for I2C SDA',
-            pins: [
-              { number: '1', name: '1', type: 'passive', connectedNet: '+3V3' },
-              { number: '2', name: '2', type: 'passive', connectedNet: 'NET_I2C_SDA' },
-            ],
-            x: 550,
-            y: 80,
-          });
-          const sdaNet = g.nets.find((n) => n.id === 'NET_I2C_SDA');
-          if (sdaNet) sdaNet.connections.push({ componentId: 'R1', pinNumber: '2' });
-        }
-        agentReply = 'Synthesized 4.7kΩ I2C pull-up resistors tied to the +3.3V rail. Signal rise-time calculations validated for standard-mode and fast-mode 400kHz I2C bus compliance.';
-        actionDiff = { addedComponents: ['R1 (4.7k)'], modifiedNets: ['NET_I2C_SDA', '+3V3'] };
-      } else if (lower.includes('oled') || lower.includes('display') || lower.includes('ssd1306')) {
-        // Add SSD1306 OLED display
-        const displayId = `U${g.components.length + 1}`;
-        g.components.push({
-          id: displayId,
-          name: 'SSD1306 0.96" OLED Display',
-          mpn: 'SSD1306-0.96-I2C',
-          manufacturer: 'Solomon Systech',
-          package: 'Module-4P',
-          category: 'Interface',
-          lcscPart: 'C2096',
-          description: '128x64 Monochrome OLED Display via I2C (Address 0x3C)',
-          pins: [
-            { number: '1', name: 'GND', type: 'power_in', connectedNet: 'GND' },
-            { number: '2', name: 'VCC', type: 'power_in', voltageLevel: 3.3, connectedNet: '+3V3' },
-            { number: '3', name: 'SCL', type: 'input', voltageLevel: 3.3, connectedNet: 'NET_I2C_SCL' },
-            { number: '4', name: 'SDA', type: 'bidirectional', voltageLevel: 3.3, connectedNet: 'NET_I2C_SDA' },
-          ],
-          x: 720,
-          y: 280,
-        });
-        // Hook up nets
-        const vccNet = g.nets.find((n) => n.id === '+3V3');
-        if (vccNet) vccNet.connections.push({ componentId: displayId, pinNumber: '2' });
-        const gndNet = g.nets.find((n) => n.id === 'GND');
-        if (gndNet) gndNet.connections.push({ componentId: displayId, pinNumber: '1' });
-        const sdaNet = g.nets.find((n) => n.id === 'NET_I2C_SDA');
-        if (sdaNet) sdaNet.connections.push({ componentId: displayId, pinNumber: '4' });
-        const sclNet = g.nets.find((n) => n.id === 'NET_I2C_SCL');
-        if (sclNet) sclNet.connections.push({ componentId: displayId, pinNumber: '3' });
-
-        agentReply = `Added SSD1306 0.96" OLED display (${displayId}) on the shared I2C bus at default I2C address 0x3C. Tied VCC to the 3.3V LDO power rail.`;
-        actionDiff = { addedComponents: [`${displayId} (SSD1306)`], modifiedNets: ['NET_I2C_SDA', 'NET_I2C_SCL', '+3V3', 'GND'] };
-      } else if (lower.includes('ldo') || lower.includes('power') || lower.includes('regulator')) {
-        // Upgrade / adjust LDO
-        const ldo = g.components.find((c) => c.category === 'Power' || c.name.includes('LDO'));
-        if (ldo) {
-          ldo.name = 'TPS7A05-33 200mA Ultra-low Iq LDO';
-          ldo.mpn = 'TPS7A0533PDBVR';
-          ldo.manufacturer = 'Texas Instruments';
-          ldo.description = 'Ultra-low 1µA quiescent current LDO for battery optimization';
-          agentReply = `Replaced LDO with Texas Instruments TPS7A05-33. Quiescent current reduced to 1µA, extending battery sleep life. Decoupling capacitors (10µF input / output) retained.`;
-          actionDiff = { modifiedNets: ['+3V3', 'VBUS_5V'], explanation: 'Upgraded LDO to TI TPS7A0533' };
-        }
-      } else {
-        agentReply = `I analyzed your request: "${promptText}". Circuit graph verified. All ${g.components.length} components, ${g.nets.length} nets, and ${g.powerRails.length} power rails are in electrical compliance. Ready to synthesize next modification or export.`;
+      if (result.graph) {
+        updateGraph(result.graph);
+        triggerToast?.('PCB Graph updated & ERC validated');
       }
 
-      updateGraph(g);
-      setIsAiThinking(false);
       setMessages((prev) => [
         ...prev,
         {
           id: `a-${Date.now()}`,
           sender: 'agent',
-          text: agentReply,
+          text: result.reply,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          actionDiff,
+          actionDiff: result.actionDiff,
         },
       ]);
-      triggerToast?.('PCB Graph updated & ERC validated');
-    }, 600);
+    } catch (err: any) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `a-${Date.now()}`,
+          sender: 'agent',
+          text: `Error processing hardware instruction: ${err?.message || 'Unknown error'}. Please retry.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
+    } finally {
+      setIsAiThinking(false);
+    }
   };
 
   // Selected Component Details
@@ -410,6 +370,16 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
             <RefreshCw className="w-3.5 h-3.5 rotate-180" />
           </button>
 
+          {/* Settings Button */}
+          <button
+            onClick={() => setShowSettingsModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain border border-brand-border/40 text-xs font-medium transition-all cursor-pointer"
+            title="PCB Workspace & Model Settings"
+          >
+            <Settings className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Settings</span>
+          </button>
+
           {/* Export to ECAD Button */}
           <button
             onClick={() => setShowExportModal(true)}
@@ -440,36 +410,44 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
           </div>
 
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {graph.components.map((comp) => {
-              const isSelected = selectedCompId === comp.id;
-              const hasErc = graph.ercReport.some((r) => r.affectedComponents?.includes(comp.id));
-              return (
-                <div
-                  key={comp.id}
-                  onClick={() => {
-                    setSelectedCompId(comp.id);
-                    setSelectedNetId(null);
-                  }}
-                  className={`p-2 rounded-lg border text-xs transition-all cursor-pointer ${
-                    isSelected
-                      ? 'border-emerald-500/60 bg-emerald-500/10 text-brand-textMain shadow-sm'
-                      : 'border-brand-border/20 bg-black/10 hover:bg-white/5 text-brand-textMuted hover:text-brand-textMain'
-                  }`}
-                >
-                  <div className="flex items-center justify-between font-mono font-semibold">
-                    <span className="text-emerald-400">{comp.id}</span>
-                    <span className="text-[10px] px-1 py-0.5 rounded bg-white/5 text-brand-textMuted">
-                      {comp.package}
-                    </span>
+            {graph.components.length === 0 ? (
+              <div className="p-4 text-center text-xs text-brand-textMuted/60 flex flex-col items-center justify-center h-40">
+                <Box className="w-6 h-6 mb-2 text-brand-textMuted/40" />
+                <p>No components added.</p>
+                <p className="text-[10px] mt-1 text-brand-textMuted/40">Click + or prompt AI Co-Pilot.</p>
+              </div>
+            ) : (
+              graph.components.map((comp) => {
+                const isSelected = selectedCompId === comp.id;
+                const hasErc = graph.ercReport.some((r) => r.affectedComponents?.includes(comp.id));
+                return (
+                  <div
+                    key={comp.id}
+                    onClick={() => {
+                      setSelectedCompId(comp.id);
+                      setSelectedNetId(null);
+                    }}
+                    className={`p-2 rounded-lg border text-xs transition-all cursor-pointer ${
+                      isSelected
+                        ? 'border-emerald-500/60 bg-emerald-500/10 text-brand-textMain shadow-sm'
+                        : 'border-brand-border/20 bg-black/10 hover:bg-white/5 text-brand-textMuted hover:text-brand-textMain'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-mono font-semibold">
+                      <span className="text-emerald-400">{comp.id}</span>
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-white/5 text-brand-textMuted">
+                        {comp.package}
+                      </span>
+                    </div>
+                    <div className="truncate font-medium text-[11px] mt-0.5">{comp.name}</div>
+                    <div className="flex items-center justify-between text-[10px] text-brand-textMuted/70 mt-1 font-mono">
+                      <span>{comp.mpn}</span>
+                      {hasErc && <span className="text-amber-400">⚠️ ERC</span>}
+                    </div>
                   </div>
-                  <div className="truncate font-medium text-[11px] mt-0.5">{comp.name}</div>
-                  <div className="flex items-center justify-between text-[10px] text-brand-textMuted/70 mt-1 font-mono">
-                    <span>{comp.mpn}</span>
-                    {hasErc && <span className="text-amber-400">⚠️ ERC</span>}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
 
           {/* Nets Quick Tree */}
@@ -479,23 +457,29 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
               Nets & Buses ({graph.nets.length})
             </div>
             <div className="max-h-36 overflow-y-auto space-y-0.5 pr-1">
-              {graph.nets.map((net) => (
-                <div
-                  key={net.id}
-                  onClick={() => {
-                    setSelectedNetId(net.id);
-                    setSelectedCompId(null);
-                  }}
-                  className={`flex items-center justify-between px-2 py-1 rounded text-[11px] font-mono cursor-pointer transition-colors ${
-                    selectedNetId === net.id
-                      ? 'bg-amber-500/15 text-amber-300 font-semibold'
-                      : 'text-brand-textMuted hover:bg-white/5 hover:text-brand-textMain'
-                  }`}
-                >
-                  <span className="truncate">{net.name}</span>
-                  <span className="text-[9px] text-brand-textMuted/60 uppercase">{net.netClass}</span>
+              {graph.nets.length === 0 ? (
+                <div className="p-2 text-center text-[10px] text-brand-textMuted/50 font-mono">
+                  No electrical nets defined.
                 </div>
-              ))}
+              ) : (
+                graph.nets.map((net) => (
+                  <div
+                    key={net.id}
+                    onClick={() => {
+                      setSelectedNetId(net.id);
+                      setSelectedCompId(null);
+                    }}
+                    className={`flex items-center justify-between px-2 py-1 rounded text-[11px] font-mono cursor-pointer transition-colors ${
+                      selectedNetId === net.id
+                        ? 'bg-amber-500/15 text-amber-300 font-semibold'
+                        : 'text-brand-textMuted hover:bg-white/5 hover:text-brand-textMain'
+                    }`}
+                  >
+                    <span className="truncate">{net.name}</span>
+                    <span className="text-[9px] text-brand-textMuted/60 uppercase">{net.netClass}</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -532,115 +516,150 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
 
           {/* Interactive Visual Canvas Area */}
           <div className="flex-1 overflow-auto p-8 relative flex items-center justify-center">
-            <div
-              style={{
-                transform: `scale(${zoomLevel})`,
-                transformOrigin: 'center center',
-                transition: 'transform 0.15s ease-out',
-                minWidth: '850px',
-                minHeight: '480px',
-              }}
-              className="relative rounded-xl border border-brand-border/30 bg-[#0b0f17] shadow-2xl p-6 select-none"
-            >
-              {/* Grid Background Pattern */}
-              <div
-                className="absolute inset-0 opacity-15 pointer-events-none rounded-xl"
-                style={{
-                  backgroundImage: `radial-gradient(circle, #3b82f6 1px, transparent 1px)`,
-                  backgroundSize: '20px 20px',
-                }}
-              />
-
-              {/* Functional Section Boxes */}
-              <div className="text-[10px] font-mono uppercase tracking-wider text-brand-textMuted/40 mb-3 flex items-center justify-between">
-                <span>Schematic Topology & Pin Allocation</span>
-                <span>Ground: Star Point GND • System Rails: +3V3 / 5V</span>
+            {graph.components.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center select-none max-w-md">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-4 shadow-inner">
+                  <Cpu className="w-7 h-7" />
+                </div>
+                <h3 className="text-base font-semibold text-brand-textMain mb-1.5">
+                  Clean Blank Canvas
+                </h3>
+                <p className="text-xs text-brand-textMuted mb-6 leading-relaxed">
+                  Start fresh. Prompt the <strong>AI Hardware Co-Pilot</strong> on the right to synthesize your schematic topology, or click below to manually add ICs and passives.
+                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setShowAddCompModal(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-all shadow-md active:scale-95 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add Component</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const tmpl = STARTER_TEMPLATES.find((t) => t.id === 'esp32s3-sensor-node');
+                      if (tmpl) {
+                        updateGraph(JSON.parse(JSON.stringify(tmpl.graph)));
+                        triggerToast?.(`Loaded ${tmpl.name}`);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain border border-brand-border/40 text-xs font-medium transition-all cursor-pointer"
+                  >
+                    <span>Load Example Template</span>
+                  </button>
+                </div>
               </div>
+            ) : (
+              <div
+                style={{
+                  transform: `scale(${zoomLevel})`,
+                  transformOrigin: 'center center',
+                  transition: 'transform 0.15s ease-out',
+                  minWidth: '850px',
+                  minHeight: '480px',
+                }}
+                className="relative rounded-xl border border-brand-border/30 bg-[#0b0f17] shadow-2xl p-6 select-none"
+              >
+                {/* Grid Background Pattern */}
+                <div
+                  className="absolute inset-0 opacity-15 pointer-events-none rounded-xl"
+                  style={{
+                    backgroundImage: `radial-gradient(circle, #3b82f6 1px, transparent 1px)`,
+                    backgroundSize: '20px 20px',
+                  }}
+                />
 
-              {/* Render Component Blocks */}
-              <div className="flex flex-wrap gap-4 items-start relative z-10">
-                {graph.components.map((comp) => {
-                  const isSelected = selectedCompId === comp.id;
-                  const isConnectedToSelectedNet =
-                    selectedNetId &&
-                    comp.pins.some((p) => p.connectedNet === selectedNetId);
+                {/* Functional Section Boxes */}
+                <div className="text-[10px] font-mono uppercase tracking-wider text-brand-textMuted/40 mb-3 flex items-center justify-between">
+                  <span>Schematic Topology & Pin Allocation</span>
+                  <span>Ground: Star Point GND • System Rails: +3V3 / 5V</span>
+                </div>
 
-                  return (
-                    <div
-                      key={comp.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedCompId(comp.id);
-                        setSelectedNetId(null);
-                      }}
-                      className={`min-w-[190px] rounded-lg border transition-all duration-150 p-3 relative cursor-pointer shadow-md ${
-                        isSelected
-                          ? 'border-emerald-500 bg-emerald-950/40 ring-2 ring-emerald-500/20'
-                          : isConnectedToSelectedNet
-                          ? 'border-amber-500/80 bg-amber-950/30'
-                          : 'border-brand-border/40 bg-brand-surface/90 hover:border-brand-border-strong hover:bg-white/[0.03]'
-                      }`}
-                    >
-                      {/* Header */}
-                      <div className="flex items-center justify-between pb-2 border-b border-brand-border/20 mb-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono font-bold text-xs text-emerald-400">
-                            {comp.id}
-                          </span>
-                          <span className="text-[10px] text-brand-textMuted truncate max-w-[110px]">
-                            {comp.name}
+                {/* Render Component Blocks */}
+                <div className="flex flex-wrap gap-4 items-start relative z-10">
+                  {graph.components.map((comp) => {
+                    const isSelected = selectedCompId === comp.id;
+                    const isConnectedToSelectedNet =
+                      selectedNetId &&
+                      comp.pins.some((p) => p.connectedNet === selectedNetId);
+
+                    return (
+                      <div
+                        key={comp.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedCompId(comp.id);
+                          setSelectedNetId(null);
+                        }}
+                        className={`min-w-[190px] rounded-lg border transition-all duration-150 p-3 relative cursor-pointer shadow-md ${
+                          isSelected
+                            ? 'border-emerald-500 bg-emerald-950/40 ring-2 ring-emerald-500/20'
+                            : isConnectedToSelectedNet
+                            ? 'border-amber-500/80 bg-amber-950/30'
+                            : 'border-brand-border/40 bg-brand-surface/90 hover:border-brand-border-strong hover:bg-white/[0.03]'
+                        }`}
+                      >
+                        {/* Header */}
+                        <div className="flex items-center justify-between pb-2 border-b border-brand-border/20 mb-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-xs text-emerald-400">
+                              {comp.id}
+                            </span>
+                            <span className="text-[10px] text-brand-textMuted truncate max-w-[110px]">
+                              {comp.name}
+                            </span>
+                          </div>
+                          <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/40 text-brand-textMuted">
+                            {comp.package}
                           </span>
                         </div>
-                        <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/40 text-brand-textMuted">
-                          {comp.package}
-                        </span>
-                      </div>
 
-                      {/* Pins Matrix */}
-                      <div className="space-y-1">
-                        {comp.pins.map((pin) => {
-                          const isPinNetSelected = selectedNetId && pin.connectedNet === selectedNetId;
-                          const isPower = pin.type === 'power_in' || pin.type === 'power_out';
-                          return (
-                            <div
-                              key={pin.number}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (pin.connectedNet) {
-                                  setSelectedNetId(pin.connectedNet);
-                                  setSelectedCompId(null);
-                                }
-                              }}
-                              className={`flex items-center justify-between text-[10px] font-mono px-1.5 py-0.5 rounded transition-colors ${
-                                isPinNetSelected
-                                  ? 'bg-amber-400 text-black font-bold'
-                                  : 'hover:bg-white/10 text-brand-textMuted'
-                              }`}
-                            >
-                              <div className="flex items-center gap-1">
-                                <span className="text-brand-textMuted/60 w-4">{pin.number}</span>
-                                <span className={isPower ? 'text-rose-400 font-semibold' : 'text-brand-textMain'}>
-                                  {pin.name}
+                        {/* Pins Matrix */}
+                        <div className="space-y-1">
+                          {comp.pins.map((pin) => {
+                            const isPinNetSelected = selectedNetId && pin.connectedNet === selectedNetId;
+                            const isPower = pin.type === 'power_in' || pin.type === 'power_out';
+                            return (
+                              <div
+                                key={pin.number}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (pin.connectedNet) {
+                                    setSelectedNetId(pin.connectedNet);
+                                    setSelectedCompId(null);
+                                  }
+                                }}
+                                className={`flex items-center justify-between text-[10px] font-mono px-1.5 py-0.5 rounded transition-colors ${
+                                  isPinNetSelected
+                                    ? 'bg-amber-400 text-black font-bold'
+                                    : 'hover:bg-white/10 text-brand-textMuted'
+                                }`}
+                              >
+                                <div className="flex items-center gap-1">
+                                  <span className="text-brand-textMuted/60 w-4">{pin.number}</span>
+                                  <span className={isPower ? 'text-rose-400 font-semibold' : 'text-brand-textMain'}>
+                                    {pin.name}
+                                  </span>
+                                </div>
+                                <span className="text-[9px] text-brand-textMuted/80 truncate max-w-[70px]">
+                                  {pin.connectedNet || 'NC'}
                                 </span>
                               </div>
-                              <span className="text-[9px] text-brand-textMuted/80 truncate max-w-[70px]">
-                                {pin.connectedNet || 'NC'}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
+                            );
+                          })}
+                        </div>
 
-                      {/* MPN / Sourcing Footer */}
-                      <div className="mt-2 pt-1.5 border-t border-brand-border/20 flex items-center justify-between text-[9px] font-mono text-brand-textMuted/60">
-                        <span>{comp.mpn}</span>
-                        {comp.lcscPart && <span className="text-blue-400">{comp.lcscPart}</span>}
+                        {/* MPN / Sourcing Footer */}
+                        <div className="mt-2 pt-1.5 border-t border-brand-border/20 flex items-center justify-between text-[9px] font-mono text-brand-textMuted/60">
+                          <span>{comp.mpn}</span>
+                          {comp.lcscPart && <span className="text-blue-400">{comp.lcscPart}</span>}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Bottom Inspector Bar */}
@@ -698,7 +717,11 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
             ) : (
               <div className="text-xs text-brand-textMuted flex items-center gap-2">
                 <Info className="w-4 h-4 text-emerald-400" />
-                <span>Select any component or net in the schematic above to inspect electrical parameters, pinmuxing, and footprint mapping.</span>
+                <span>
+                  {graph.components.length === 0
+                    ? 'Empty Canvas — Prompt the AI Co-Pilot on the right to synthesize your design or click "+" to place components.'
+                    : 'Select any component or net in the schematic above to inspect electrical parameters, pinmuxing, and footprint mapping.'}
+                </span>
               </div>
             )}
           </div>
@@ -712,31 +735,61 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
               <Sparkles className="w-4 h-4 text-emerald-400" />
               <span className="font-semibold text-xs text-brand-textMain">AI Hardware Co-Pilot</span>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-              Active Feedback Loop
-            </span>
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="flex items-center gap-1.5 text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-colors cursor-pointer"
+              title="Click to select model or edit settings"
+            >
+              <span className="max-w-[130px] truncate">{resolvedModelName}</span>
+              <ChevronDown className="w-2.5 h-2.5 shrink-0" />
+            </button>
           </div>
 
           {/* Quick Action Suggestion Pills */}
           <div className="p-2 border-b border-brand-border/20 flex flex-wrap gap-1.5 bg-black/10">
-            <button
-              onClick={() => runAiCommand('Add 0.96" I2C OLED display (SSD1306) on address 0x3C')}
-              className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
-            >
-              + Add I2C OLED Display
-            </button>
-            <button
-              onClick={() => runAiCommand('Upgrade LDO regulator to ultra-low quiescent current TI TPS7A05')}
-              className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
-            >
-              ⚡ Upgrade to Low-Iq LDO
-            </button>
-            <button
-              onClick={() => runAiCommand('Synthesize missing I2C pullup resistors and run ERC verification')}
-              className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
-            >
-              🛡️ Auto-Fix ERC Warnings
-            </button>
+            {graph.components.length === 0 ? (
+              <>
+                <button
+                  onClick={() => runAiCommand('Generate ESP32-S3 IoT node with USB-C and 3.3V power regulator')}
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
+                >
+                  + Generate ESP32-S3 System
+                </button>
+                <button
+                  onClick={() => runAiCommand('Design 5V to 3.3V LDO Power Supply subsystem with filter capacitors')}
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
+                >
+                  ⚡ Add 3.3V Power Supply
+                </button>
+                <button
+                  onClick={() => runAiCommand('Add Type-C USB Connector with ESD protection and CC resistors')}
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
+                >
+                  🔌 Add USB-C Subsystem
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => runAiCommand('Add 0.96" I2C OLED display (SSD1306) on address 0x3C')}
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
+                >
+                  + Add I2C OLED Display
+                </button>
+                <button
+                  onClick={() => runAiCommand('Upgrade LDO regulator to ultra-low quiescent current TI TPS7A05')}
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
+                >
+                  ⚡ Upgrade to Low-Iq LDO
+                </button>
+                <button
+                  onClick={() => runAiCommand('Synthesize missing I2C pullup resistors and run ERC verification')}
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
+                >
+                  🛡️ Auto-Fix ERC Warnings
+                </button>
+              </>
+            )}
           </div>
 
           {/* Messages Stream */}
@@ -991,6 +1044,17 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
           </div>
         </div>
       )}
+
+      {/* ── Modal: PCB Workspace Settings ── */}
+      <PCBSettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        settings={{ ...pcbSettings, selectedModel: resolvedModelName }}
+        onSaveSettings={(newSettings) => {
+          setPcbSettings(newSettings);
+          triggerToast?.(`Model updated to ${newSettings.selectedModel}`);
+        }}
+      />
     </div>
   );
 };

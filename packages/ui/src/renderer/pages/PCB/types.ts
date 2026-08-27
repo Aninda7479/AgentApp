@@ -110,11 +110,33 @@ export interface PCBGraph {
 
 export type ExportFormat = 'kicad' | 'altium' | 'skidl' | 'easyeda' | 'bom' | 'json';
 
+export const createEmptyProjectGraph = (): PCBGraph => ({
+  metadata: {
+    projectId: `prj-${Date.now().toString(36)}`,
+    name: 'Untitled PCB Design',
+    revision: 'v0.1',
+    author: 'SuperAgent ECAD User',
+    targetEcad: 'kicad8',
+    created: new Date().toISOString().split('T')[0],
+    updated: new Date().toISOString().split('T')[0],
+  },
+  powerRails: [],
+  components: [],
+  nets: [],
+  ercReport: [],
+});
+
 /** Starter Design Templates */
 export const STARTER_TEMPLATES: { id: string; name: string; description: string; graph: PCBGraph }[] = [
   {
+    id: 'empty',
+    name: 'New Empty Design',
+    description: 'Start with a clean blank canvas with zero components or nets.',
+    graph: createEmptyProjectGraph(),
+  },
+  {
     id: 'esp32s3-sensor-node',
-    name: 'ESP32-S3 IoT Environmental Sensor Node',
+    name: 'Template: ESP32-S3 Sensor Node',
     description: 'ESP32-S3 with BME680 Sensor, Type-C Power with ESD, and 3.3V LDO Regulator.',
     graph: {
       metadata: {
