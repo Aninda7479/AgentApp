@@ -35,6 +35,7 @@ import { exportToKiCad, exportToAltiumNetlist, exportToSKiDL, exportToEasyEDA, e
 import { processHardwarePrompt, PCBSettingsConfig, DEFAULT_PCB_SETTINGS } from './hardwareAiEngine';
 import { PCBSettingsModal } from './PCBSettingsModal';
 import { PCBLayoutCanvas } from './PCBLayoutCanvas';
+import { ECADSchematicCanvas } from './ECADSchematicCanvas';
 import { useModelList } from '../../hooks/useModelList';
 import { useProviderStore } from '../../stores/providerStore';
 
@@ -643,183 +644,20 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
               )}
             </div>
           ) : (
-            <>
-              {/* Canvas Controls overlay */}
-              <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 p-1 rounded-lg bg-[color:var(--brand-surface)]/90 border border-brand-border/40 shadow-lg backdrop-blur-sm">
-                <button
-                  onClick={() => setZoomLevel((z) => Math.min(z + 0.15, 2.0))}
-                  className="p-1.5 rounded hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
-                  title="Zoom in"
-                >
-                  <ZoomIn className="w-3.5 h-3.5" />
-                </button>
-                <span className="text-[10px] font-mono px-1 text-brand-textMuted">
-                  {Math.round(zoomLevel * 100)}%
-                </span>
-                <button
-                  onClick={() => setZoomLevel((z) => Math.max(z - 0.15, 0.5))}
-                  className="p-1.5 rounded hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
-                  title="Zoom out"
-                >
-                  <ZoomOut className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => setZoomLevel(1)}
-                  className="p-1.5 rounded hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
-                  title="Reset Zoom"
-                >
-                  <Maximize2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* Interactive Visual Canvas Area */}
-              <div className="flex-1 overflow-auto p-8 relative flex items-center justify-center">
-                {graph.components.length === 0 ? (
-                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center select-none max-w-md">
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-4 shadow-inner">
-                      <Cpu className="w-7 h-7" />
-                    </div>
-                    <h3 className="text-base font-semibold text-brand-textMain mb-1.5">
-                      Clean Blank Canvas
-                    </h3>
-                    <p className="text-xs text-brand-textMuted mb-6 leading-relaxed">
-                      Start fresh. Prompt the <strong>AI Hardware Co-Pilot</strong> on the right to synthesize your schematic topology, or click below to manually add ICs and passives.
-                    </p>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => setShowAddCompModal(true)}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-all shadow-md active:scale-95 cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Add Component</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          const tmpl = STARTER_TEMPLATES.find((t) => t.id === 'usbpd-45w-charger') || STARTER_TEMPLATES[1];
-                          if (tmpl) {
-                            updateGraph(JSON.parse(JSON.stringify(tmpl.graph)));
-                            triggerToast?.(`Loaded ${tmpl.name}`);
-                          }
-                        }}
-                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain border border-brand-border/40 text-xs font-medium transition-all cursor-pointer"
-                      >
-                        <span>Load 45W USB-PD Template</span>
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      transform: `scale(${zoomLevel})`,
-                      transformOrigin: 'center center',
-                      transition: 'transform 0.15s ease-out',
-                      minWidth: '850px',
-                      minHeight: '480px',
-                    }}
-                    className="relative rounded-xl border border-brand-border/30 bg-[#0b0f17] shadow-2xl p-6 select-none"
-                  >
-                    {/* Grid Background Pattern */}
-                    <div
-                      className="absolute inset-0 opacity-15 pointer-events-none rounded-xl"
-                      style={{
-                        backgroundImage: `radial-gradient(circle, #3b82f6 1px, transparent 1px)`,
-                        backgroundSize: '20px 20px',
-                      }}
-                    />
-
-                    {/* Functional Section Boxes */}
-                    <div className="text-[10px] font-mono uppercase tracking-wider text-brand-textMuted/40 mb-3 flex items-center justify-between">
-                      <span>Schematic Topology & Pin Allocation</span>
-                      <span>Ground: Star Point GND • System Rails: +3V3 / 5V</span>
-                    </div>
-
-                    {/* Render Component Blocks */}
-                    <div className="flex flex-wrap gap-4 items-start relative z-10">
-                      {graph.components.map((comp) => {
-                        const isSelected = selectedCompId === comp.id;
-                        const isConnectedToSelectedNet =
-                          selectedNetId &&
-                          comp.pins.some((p) => p.connectedNet === selectedNetId);
-
-                        return (
-                          <div
-                            key={comp.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedCompId(comp.id);
-                              setSelectedNetId(null);
-                            }}
-                            className={`min-w-[190px] rounded-lg border transition-all duration-150 p-3 relative cursor-pointer shadow-md ${
-                              isSelected
-                                ? 'border-emerald-500 bg-emerald-950/40 ring-2 ring-emerald-500/20'
-                                : isConnectedToSelectedNet
-                                ? 'border-amber-500/80 bg-amber-950/30'
-                                : 'border-brand-border/40 bg-brand-surface/90 hover:border-brand-border-strong hover:bg-white/[0.03]'
-                            }`}
-                          >
-                            {/* Header */}
-                            <div className="flex items-center justify-between pb-2 border-b border-brand-border/20 mb-2">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-mono font-bold text-xs text-emerald-400">
-                                  {comp.id}
-                                </span>
-                                <span className="text-[10px] text-brand-textMuted truncate max-w-[110px]">
-                                  {comp.name}
-                                </span>
-                              </div>
-                              <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-black/40 text-brand-textMuted">
-                                {comp.package}
-                              </span>
-                            </div>
-
-                            {/* Pins Matrix */}
-                            <div className="space-y-1">
-                              {comp.pins.map((pin) => {
-                                const isPinNetSelected = selectedNetId && pin.connectedNet === selectedNetId;
-                                const isPower = pin.type === 'power_in' || pin.type === 'power_out';
-                                return (
-                                  <div
-                                    key={pin.number}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (pin.connectedNet) {
-                                        setSelectedNetId(pin.connectedNet);
-                                        setSelectedCompId(null);
-                                      }
-                                    }}
-                                    className={`flex items-center justify-between text-[10px] font-mono px-1.5 py-0.5 rounded transition-colors ${
-                                      isPinNetSelected
-                                        ? 'bg-amber-400 text-black font-bold'
-                                        : 'hover:bg-white/10 text-brand-textMuted'
-                                    }`}
-                                  >
-                                    <div className="flex items-center gap-1">
-                                      <span className="text-brand-textMuted/60 w-4">{pin.number}</span>
-                                      <span className={isPower ? 'text-rose-400 font-semibold' : 'text-brand-textMain'}>
-                                        {pin.name}
-                                      </span>
-                                    </div>
-                                    <span className="text-[9px] text-brand-textMuted/80 truncate max-w-[70px]">
-                                      {pin.connectedNet || 'NC'}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-
-                            {/* MPN / Sourcing Footer */}
-                            <div className="mt-2 pt-1.5 border-t border-brand-border/20 flex items-center justify-between text-[9px] font-mono text-brand-textMuted/60">
-                              <span>{comp.mpn}</span>
-                              {comp.lcscPart && <span className="text-blue-400">{comp.lcscPart}</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </>
+            <ECADSchematicCanvas
+              graph={graph}
+              selectedCompId={selectedCompId}
+              selectedNetId={selectedNetId}
+              onSelectComponent={(id) => {
+                setSelectedCompId(id);
+                setSelectedNetId(null);
+              }}
+              onSelectNet={(id) => {
+                setSelectedNetId(id);
+                setSelectedCompId(null);
+              }}
+              onUpdateGraph={updateGraph}
+            />
           )}
 
           {/* Bottom Inspector Bar */}
@@ -911,14 +749,20 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
             {graph.components.length === 0 ? (
               <>
                 <button
-                  onClick={() => runAiCommand('Generate full 45W USB-PD AC-DC Charger system')}
-                  className="text-[10px] px-2 py-1 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-semibold transition-colors cursor-pointer border border-emerald-500/30"
+                  onClick={() => runAiCommand('Make an AC to 5W Speaker charger PCB with PAM8403 and isolated power supply')}
+                  className="text-[10px] px-2 py-1 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-semibold transition-colors cursor-pointer border border-emerald-500/30 shrink-0"
                 >
-                  ⚡ Synthesize 45W USB-PD
+                  ⚡ AC to 5W Speaker PCB
+                </button>
+                <button
+                  onClick={() => runAiCommand('Synthesize USB-PD 3.0 Fast Charger Power Supply with Type-C')}
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20 shrink-0"
+                >
+                  ⚡ USB-PD Charger
                 </button>
                 <button
                   onClick={() => runAiCommand('Generate ESP32-S3 System with Type-C and Power Supply')}
-                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20 shrink-0"
                 >
                   + ESP32-S3 System
                 </button>
@@ -926,20 +770,26 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
             ) : (
               <>
                 <button
+                  onClick={() => runAiCommand('Add PAM8403 5W Class-D Audio Amplifier subsystem with 3.5mm jack and speaker terminal')}
+                  className="text-[10px] px-2 py-1 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-semibold transition-colors cursor-pointer border border-emerald-500/30 shrink-0"
+                >
+                  🔊 + 5W Audio Amp
+                </button>
+                <button
                   onClick={() => runAiCommand('Add secondary USB-PD Controller with CC1/CC2 pins')}
-                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20 shrink-0"
                 >
                   + Add USB-PD IC
                 </button>
                 <button
                   onClick={() => runAiCommand('Upgrade LDO regulator to ultra-low quiescent current TI TPS7A05')}
-                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20 shrink-0"
                 >
                   ⚡ Upgrade LDO
                 </button>
                 <button
                   onClick={() => runAiCommand('Synthesize missing I2C pullup resistors and run ERC verification')}
-                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20"
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20 shrink-0"
                 >
                   🛡️ Auto-Fix ERC
                 </button>
