@@ -1548,15 +1548,15 @@ export const App: React.FC = () => {
       {/* Main Body container */}
       <div className="flex-1 flex overflow-hidden overflow-x-hidden relative min-w-0">
         {/* Mobile drawer backdrop */}
-        {mobileNavOpen && activeTab !== 'settings' && activeTab !== 'studio' && activeTab !== 'project-settings' && activeTab !== 'standalone-chat' && (
+        {mobileNavOpen && activeTab !== 'settings' && activeTab !== 'studio' && activeTab !== 'project-settings' && activeTab !== 'standalone-chat' && activeTab !== 'pcb' && (
           <div
             className="lg:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
             onClick={() => setMobileNavOpen(false)}
             aria-hidden="true"
           />
         )}
-        {/* Hide main sidebar when viewing Settings page, matching Image 4 */}
-        {activeTab !== 'settings' && activeTab !== 'studio' && activeTab !== 'project-settings' && activeTab !== 'standalone-chat' && (
+        {/* Hide main sidebar when viewing full-page views (Settings, Studio, PCB Workspace, etc.) */}
+        {activeTab !== 'settings' && activeTab !== 'studio' && activeTab !== 'project-settings' && activeTab !== 'standalone-chat' && activeTab !== 'pcb' && (
           <Sidebar
             activeTab={activeTab}
             showStudio={showStudio}
@@ -1610,7 +1610,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col min-h-0 relative isolate overflow-hidden workspace-canvas m-1 rounded-xl pb-18 md:pb-0 focus:outline-none">
+        <main id="main-content" tabIndex={-1} className={`flex-1 flex flex-col min-h-0 relative isolate overflow-hidden workspace-canvas ${activeTab === 'pcb' ? 'm-0 rounded-none p-0' : 'm-1 rounded-xl pb-18 md:pb-0'} focus:outline-none`}>
           {/* Ambient "layered atmosphere" backdrop — a soft accent glow and three
               calm depth bands, painted behind all content (Atmosphere mode, low
               opacity). Decorative only; never sits behind text contrast. */}

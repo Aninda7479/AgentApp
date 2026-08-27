@@ -296,10 +296,11 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
           {onBack && (
             <button
               onClick={onBack}
-              className="p-1.5 rounded-lg hover:bg-white/5 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
-              title="Back"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain border border-brand-border/40 text-xs font-medium transition-all cursor-pointer mr-1"
+              title="Return to Main Workspace"
             >
-              <ArrowRight className="w-4 h-4 rotate-180" />
+              <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+              <span>Workspace</span>
             </button>
           )}
           <div className="flex items-center gap-2">
