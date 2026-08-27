@@ -624,25 +624,28 @@ export const ECADSchematicCanvas: React.FC<ECADSchematicCanvasProps> = ({
     };
   }, [graph.ercReport]);
 
-  // Mouse Wheel Navigation (Vertical scroll = Y axis, Shift+Scroll = X axis, Ctrl+Scroll = Zoom)
-  const handleWheel = useCallback(
-    (e: React.WheelEvent<HTMLDivElement>) => {
+  const canvasContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Non-Passive Native Wheel Listener to smoothly prevent default and support X/Y scrolling and zooming
+  useEffect(() => {
+    const el = canvasContainerRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
       e.preventDefault();
 
       if (e.ctrlKey || e.metaKey) {
         const zoomFactor = e.deltaY < 0 ? 1.12 : 0.88;
         setZoom((prevZoom) => {
           const nextZoom = Math.max(0.2, Math.min(3.5, prevZoom * zoomFactor));
-          if (containerRef.current) {
-            const rect = containerRef.current.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+          const rect = el.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
 
-            setPan((prevPan) => ({
-              x: mouseX - (mouseX - prevPan.x) * (nextZoom / prevZoom),
-              y: mouseY - (mouseY - prevPan.y) * (nextZoom / prevZoom),
-            }));
-          }
+          setPan((prevPan) => ({
+            x: mouseX - (mouseX - prevPan.x) * (nextZoom / prevZoom),
+            y: mouseY - (mouseY - prevPan.y) * (nextZoom / prevZoom),
+          }));
           return nextZoom;
         });
       } else if (e.shiftKey) {
@@ -658,9 +661,13 @@ export const ECADSchematicCanvas: React.FC<ECADSchematicCanvasProps> = ({
           y: prev.y - e.deltaY,
         }));
       }
-    },
-    []
-  );
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, []);
 
   // Handle Canvas Drag & Pan
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -1402,11 +1409,11 @@ export const ECADSchematicCanvas: React.FC<ECADSchematicCanvasProps> = ({
 
       {/* ── Main Interactive Schematic SVG Canvas ── */}
       <div
+        ref={canvasContainerRef}
         className={`flex-1 overflow-hidden relative ${activeTool === 'wire' ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'}`}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onWheel={handleWheel}
       >
         <svg
           ref={svgRef}
