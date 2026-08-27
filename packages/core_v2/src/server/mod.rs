@@ -23,7 +23,7 @@ use base64::Engine as _;
 use futures_util::{stream::Stream, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use sysinfo::System;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing::{info, warn};
 use rust_embed::RustEmbed;
 
@@ -340,6 +340,11 @@ async fn auth_middleware(
     req: Request,
     next: Next,
 ) -> Response {
+    // Allow CORS preflight requests
+    if req.method() == Method::OPTIONS {
+        return next.run(req).await;
+    }
+
     let path = req.uri().path().to_string();
 
     // Check if auth is disabled via environment variable override
@@ -439,7 +444,8 @@ async fn serve_login(State(state): State<AppState>) -> Response {
 /// Creates the complete router for the Core v2 API and static UI daemon.
 pub fn create_router(state: AppState) -> Router {
     let cors = CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin(AllowOrigin::mirror_request())
+        .allow_credentials(true)
         .allow_methods([
             Method::GET,
             Method::POST,
@@ -749,7 +755,8 @@ async fn get_auth_status(
     let owner_name = raw_settings.get("general").and_then(|g| g.get("ownerName")).and_then(|v| v.as_str());
 
     let disable_auth = std::env::var("SUPERAGENT_DISABLE_AUTH").map(|v| v == "true").unwrap_or(false);
-    let auth_required = !disable_auth;
+    let settings = state.settings_store.load().unwrap_or_default();
+    let auth_required = !disable_auth && settings.enable_auth.unwrap_or(true);
     let password_set = state.auth_store.is_password_set();
 
     let authenticated = if !auth_required {

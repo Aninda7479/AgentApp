@@ -1,9 +1,9 @@
 /**
- * `AccountService` — the web-deployment account actions (open the account page,
- * log out). On the desktop shell these have no native surface, so they surface
- * an informational toast instead. The design layer calls `open` / `logout`.
+ * `AccountService` — account and session locking actions.
+ * Manages locking the app / logging out across both Desktop and Web deployments.
  */
 import type { AppContext } from './types';
+import { AuthService } from '../services/AuthService';
 
 export class AccountService {
   /**
@@ -15,19 +15,20 @@ export class AccountService {
   }
 
   /**
-   * Logs the user out. Web only: POSTs to `/api/auth/logout` (best-effort) then
-   * redirects to `/login`. On the desktop app it shows an info toast and returns.
+   * Locks the active session / logs the user out.
+   * On Web: calls logout and redirects to `/login`.
+   * On Desktop: clears stored session token and renders the DesktopLockScreen.
    */
   static async logout(ctx: AppContext, isWebMode: boolean): Promise<void> {
-    if (!isWebMode) {
-      ctx.triggerToast('Logout is available in the web deployment.');
-      return;
-    }
     try {
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+      await AuthService.logout();
     } catch {
-      /* best-effort — proceed to redirect anyway */
+      /* ignore */
     }
-    window.location.href = '/login';
+    if (isWebMode && typeof window !== 'undefined' && window.location && window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    } else {
+      ctx.triggerToast('SuperAgent session locked.');
+    }
   }
 }

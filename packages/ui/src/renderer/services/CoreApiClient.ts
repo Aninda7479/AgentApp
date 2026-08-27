@@ -7,6 +7,7 @@ import type {
   SynthesizedSkill,
   IntegrationEntry,
 } from '../core/types';
+import { getAuthHeaders } from '../lib/ipc';
 
 function getApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
@@ -22,13 +23,10 @@ export class CoreApiClient {
 
   private static async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    };
+    const headers = getAuthHeaders((options.headers as Record<string, string>) || {});
 
     try {
-      const res = await fetch(url, { credentials: 'same-origin', ...options, headers });
+      const res = await fetch(url, { credentials: 'include', ...options, headers });
       const isTauri = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
       if (!isTauri && res.status === 401 && typeof window !== 'undefined' && window.location && window.location.pathname !== '/login') {
         window.location.href = '/login';

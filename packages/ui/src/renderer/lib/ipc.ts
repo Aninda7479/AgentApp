@@ -87,6 +87,39 @@ const SAFE_EMPTY_CHANNELS = new Set<string>([
 
 let cachedBridge: any = null;
 
+export function getStoredAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem('sa_session_token') || sessionStorage.getItem('sa_session_token');
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredAuthToken(token: string | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (token) {
+      localStorage.setItem('sa_session_token', token);
+    } else {
+      localStorage.removeItem('sa_session_token');
+      sessionStorage.removeItem('sa_session_token');
+    }
+  } catch {}
+}
+
+export function getAuthHeaders(extra?: Record<string, string>): Record<string, string> {
+  const token = getStoredAuthToken();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(extra || {}),
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 function getCoreApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
     if (window.location && window.location.port && window.location.port !== '5173') {
@@ -97,19 +130,38 @@ function getCoreApiBaseUrl(): string {
 }
 
 function getCoreWsUrl(): string {
+  const token = getStoredAuthToken();
+  const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
   if (typeof window !== 'undefined') {
     if (window.location && window.location.port && window.location.port !== '5173') {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${protocol}//${window.location.host}/api/ws`;
+      return `${protocol}//${window.location.host}/api/ws${tokenQuery}`;
     }
   }
-  return 'ws://localhost:1469/api/ws';
+  return `ws://localhost:1469/api/ws${tokenQuery}`;
 }
 
 // Live WebSocket connection and listener registry for streaming (e.g. agent-event)
 const webListeners = new Map<string, Set<Function>>();
 let webSocket: WebSocket | null = null;
 let webSocketConnecting = false;
+
+export function disconnectWebSocket(): void {
+  if (webSocket) {
+    try {
+      webSocket.onclose = null;
+      webSocket.onerror = null;
+      webSocket.close();
+    } catch {}
+    webSocket = null;
+  }
+  webSocketConnecting = false;
+}
+
+export function reconnectWebSocket(): void {
+  disconnectWebSocket();
+  ensureWebSocketConnected();
+}
 
 function ensureWebSocketConnected() {
   if (typeof window === 'undefined') return;
@@ -217,8 +269,8 @@ export function getIpc(): any {
         try {
           const httpRes = await fetch(`${getCoreApiBaseUrl()}/api/ipc/${encodeURIComponent(channel)}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
+            headers: getAuthHeaders(),
+            credentials: 'include',
             body: JSON.stringify({ channel, args }),
           });
           const isTauri = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
@@ -256,7 +308,8 @@ export function getIpc(): any {
           } else {
             fetch(`${getCoreApiBaseUrl()}/api/ipc/${encodeURIComponent(channel)}`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: getAuthHeaders(),
+              credentials: 'include',
               body: jsonPayload,
             }).catch(() => {});
           }
@@ -298,7 +351,8 @@ export function getIpc(): any {
       try {
         const httpRes = await fetch(`${getCoreApiBaseUrl()}/api/ipc/${encodeURIComponent(channel)}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
+          credentials: 'include',
           body: JSON.stringify({ channel, args }),
         });
         if (httpRes.ok) {
@@ -315,7 +369,10 @@ export function getIpc(): any {
       // Direct REST fallback for settings when offline or during bootstrap
       if (channel === 'settings-read' || channel === 'settings_read') {
         try {
-          const res = await fetch(`${getCoreApiBaseUrl()}/api/settings`);
+          const res = await fetch(`${getCoreApiBaseUrl()}/api/settings`, {
+            headers: getAuthHeaders(),
+            credentials: 'include',
+          });
           if (res.ok) {
             return await res.json();
           }
@@ -335,7 +392,8 @@ export function getIpc(): any {
       } else {
         fetch(`${getCoreApiBaseUrl()}/api/ipc/${encodeURIComponent(channel)}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
+          credentials: 'include',
           body: payload,
         }).catch(() => {});
       }

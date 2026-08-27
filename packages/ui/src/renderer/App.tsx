@@ -47,6 +47,8 @@ import { chatStore } from './stores/chatStore';
 import { providerStore } from './stores/providerStore';
 import { sessionStore } from './stores/sessionStore';
 import { AgentOrchestrator } from './services/AgentOrchestrator';
+import { AuthService, AuthStatus } from './services/AuthService';
+import { DesktopLockScreen } from './components/DesktopLockScreen';
 
 // ── Logic layer (separated from design; see renderer/logic/*) ────────────────
 import { FormatService } from './logic/format';
@@ -98,6 +100,16 @@ export const App: React.FC = () => {
   // ── All React state is declared first (hooks order is stable) ──────────────
   const [loading, setLoading] = useState(true);
   const { themeMode, setThemeMode } = useThemeMode();
+
+  const [authStatus, setAuthStatus] = useState<AuthStatus>(() => AuthService.getStatus());
+
+  useEffect(() => {
+    AuthService.checkStatus();
+    const unsubscribe = AuthService.subscribe((s) => {
+      setAuthStatus(s);
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1501,6 +1513,7 @@ export const App: React.FC = () => {
         isWebMode={isWebMode}
         onOpenAccount={handleOpenAccount}
         onLogout={handleLogout}
+        onLockApp={handleLogout}
       />
 
       {/* Main Body container */}
@@ -1861,6 +1874,16 @@ export const App: React.FC = () => {
             setSetupCompleted(true);
           }}
           onConnectProvider={handleConnectProvider}
+        />
+      )}
+
+      {/* In-App Password Protection & Lock Screen */}
+      {authStatus.authRequired && !authStatus.authenticated && (
+        <DesktopLockScreen
+          authStatus={authStatus}
+          onUnlocked={() => {
+            void AuthService.checkStatus();
+          }}
         />
       )}
     </div>

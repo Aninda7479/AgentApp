@@ -28,6 +28,7 @@ import {
   Minus,
   Square,
   X,
+  Lock,
 } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { ThemeMode } from '../types';
@@ -66,10 +67,11 @@ interface TitleBarProps {
   onOpenDoctor?: () => void;
   /** True when running in the browser/web build. */
   isWebMode?: boolean;
-  /** Opens the account/settings page (web build only). */
+  /** Opens the account/settings page. */
   onOpenAccount?: () => void;
-  /** Logs the user out and returns to the login page (web build only). */
+  /** Locks the session or logs the user out. */
   onLogout?: () => void;
+  onLockApp?: () => void;
   /** Warning state: backend core disconnected. */
   isBackendDisconnected?: boolean;
   /** Available update version string. Null/undefined if none. */
@@ -124,6 +126,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   isWebMode = false,
   onOpenAccount,
   onLogout,
+  onLockApp,
   isBackendDisconnected = false,
   updateAvailableVersion = null,
   onOpenUpdates,
@@ -170,6 +173,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         { label: 'Schedule Task', icon: Clock, onClick: () => onScheduleTask?.() },
         'sep',
         { label: 'Settings', icon: Settings, onClick: () => onOpenSettings?.() },
+        { label: 'Lock Session', icon: Lock, onClick: () => onLockApp?.() || onLogout?.() },
         ...(!isWebMode
           ? [
               'sep' as const,
@@ -205,13 +209,9 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         { label: 'Keyboard Shortcuts', icon: Keyboard, onClick: () => onOpenShortcuts?.() },
         { label: 'Doctor Diagnostics', icon: Stethoscope, onClick: () => onOpenDoctor?.() },
         { label: 'Documentation', icon: BookOpen, onClick: () => onOpenDocs?.() },
-        ...(isWebMode
-          ? [
-              'sep' as const,
-              { label: 'Account', icon: User, onClick: () => onOpenAccount?.() },
-              { label: 'Log out', icon: LogOut, danger: true, onClick: () => onLogout?.() }
-            ]
-          : []),
+        'sep',
+        { label: 'Account / Host Settings', icon: User, onClick: () => onOpenAccount?.() },
+        { label: 'Lock & Log out', icon: LogOut, danger: true, onClick: () => onLockApp?.() || onLogout?.() },
         'sep',
         { label: 'About SuperAgent', icon: HelpCircle, onClick: () => onAbout?.() },
       ],
@@ -404,6 +404,16 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           aria-label="Toggle theme"
         >
           {themeMode === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+        </button>
+
+        {/* Lock App / Session toggle */}
+        <button
+          onClick={onLockApp || onLogout}
+          className="atmo-btn w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
+          title="Lock session"
+          aria-label="Lock session"
+        >
+          <Lock className="w-3.5 h-3.5" />
         </button>
 
         {/* Mobile "More" menu (File/Edit/View/Help consolidated) */}
