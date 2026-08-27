@@ -38,6 +38,22 @@ fn default_keylen() -> u32 {
     64
 }
 
+fn default_time_str() -> String {
+    Utc::now().to_rfc3339()
+}
+
+fn deserialize_timestamp<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let val = serde_json::Value::deserialize(deserializer)?;
+    match val {
+        serde_json::Value::String(s) => Ok(s),
+        serde_json::Value::Number(n) => Ok(n.to_string()),
+        _ => Ok(Utc::now().to_rfc3339()),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuthFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -47,7 +63,7 @@ pub struct AuthFile {
     #[serde(default, rename = "sessionVersion", skip_serializing_if = "Option::is_none")]
     pub session_version: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sessions: Option<Vec<serde_json::Value>>,
+    pub sessions: Option<Vec<SessionEntry>>,
     #[serde(default, rename = "loginHistory", skip_serializing_if = "Option::is_none")]
     pub login_history: Option<Vec<serde_json::Value>>,
     #[serde(default, rename = "updatedAt", skip_serializing_if = "Option::is_none")]
@@ -56,13 +72,27 @@ pub struct AuthFile {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SessionEntry {
+    #[serde(alias = "id")]
     pub token: String,
+    #[serde(default = "default_username")]
     pub username: String,
+    #[serde(
+        alias = "issuedAt",
+        alias = "createdAt",
+        default = "default_time_str",
+        deserialize_with = "deserialize_timestamp"
+    )]
     pub created_at: String,
+    #[serde(
+        alias = "lastSeenAt",
+        alias = "lastUsed",
+        default = "default_time_str",
+        deserialize_with = "deserialize_timestamp"
+    )]
     pub last_used: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(alias = "userAgent", default, skip_serializing_if = "Option::is_none")]
     pub user_agent: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ip: Option<String>,
 }
 
@@ -106,11 +136,31 @@ impl AuthStore {
         if !storage_dir.exists() {
             let _ = fs::create_dir_all(&storage_dir);
         }
-        Self {
+        let store = Self {
             storage_dir,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             failed_attempts: Arc::new(DashMap::new()),
+        };
+        store.load_sessions_from_disk();
+        store
+    }
+
+    pub fn load_sessions_from_disk(&self) {
+        let file = self.load_auth_file();
+        if let Some(loaded_sessions) = file.sessions {
+            let mut map = self.sessions.lock().unwrap();
+            for s in loaded_sessions {
+                map.insert(s.token.clone(), s);
+            }
         }
+    }
+
+    pub fn sync_sessions_to_disk(&self) {
+        let mut file = self.load_auth_file();
+        let sessions = self.sessions.lock().unwrap();
+        file.sessions = Some(sessions.values().cloned().collect());
+        file.updated_at = Some(Utc::now().timestamp_millis() as u64);
+        let _ = self.save_auth_file(&file);
     }
 
     fn credentials_file(&self) -> PathBuf {
@@ -352,27 +402,79 @@ impl AuthStore {
             username: username.to_string(),
             created_at: now.clone(),
             last_used: now,
-            user_agent,
-            ip,
+            user_agent: user_agent.clone(),
+            ip: ip.clone(),
         };
-        let mut sessions = self.sessions.lock().unwrap();
-        sessions.insert(token.clone(), entry);
+
+        {
+            let mut sessions = self.sessions.lock().unwrap();
+            sessions.insert(token.clone(), entry);
+        }
+
+        // Record in login history and persist sessions to disk (auth.json)
+        let mut file = self.load_auth_file();
+        let mut history = file.login_history.unwrap_or_default();
+        let history_entry = serde_json::json!({
+            "id": uuid::Uuid::new_v4().to_string().replace("-", "")[..16].to_string(),
+            "timestamp": Utc::now().timestamp_millis(),
+            "ip": ip.unwrap_or_else(|| "127.0.0.1".to_string()),
+            "userAgent": user_agent.unwrap_or_else(|| "Unknown".to_string()),
+            "status": "success"
+        });
+        history.insert(0, history_entry);
+        if history.len() > 50 {
+            history.truncate(50);
+        }
+        file.login_history = Some(history);
+
+        let sessions = self.sessions.lock().unwrap();
+        file.sessions = Some(sessions.values().cloned().collect());
+        file.updated_at = Some(Utc::now().timestamp_millis() as u64);
+        let _ = self.save_auth_file(&file);
+
         token
     }
 
     pub fn validate_session_token(&self, token: &str) -> Option<String> {
-        let mut sessions = self.sessions.lock().unwrap();
-        if let Some(entry) = sessions.get_mut(token) {
-            entry.last_used = Utc::now().to_rfc3339();
-            Some(entry.username.clone())
-        } else {
-            None
+        {
+            let mut sessions = self.sessions.lock().unwrap();
+            if let Some(entry) = sessions.get_mut(token) {
+                entry.last_used = Utc::now().to_rfc3339();
+                return Some(entry.username.clone());
+            }
         }
+
+        // Fallback: reload from disk in case session was persisted by another process or instance
+        let file = self.load_auth_file();
+        if let Some(loaded_sessions) = file.sessions {
+            let mut map = self.sessions.lock().unwrap();
+            for s in &loaded_sessions {
+                map.insert(s.token.clone(), s.clone());
+            }
+            if let Some(entry) = map.get_mut(token) {
+                entry.last_used = Utc::now().to_rfc3339();
+                return Some(entry.username.clone());
+            }
+        }
+
+        None
     }
 
     pub fn invalidate_session(&self, token: &str) -> bool {
-        let mut sessions = self.sessions.lock().unwrap();
-        sessions.remove(token).is_some()
+        let removed = {
+            let mut sessions = self.sessions.lock().unwrap();
+            sessions.remove(token).is_some()
+        };
+
+        if removed {
+            let mut file = self.load_auth_file();
+            let sessions = self.sessions.lock().unwrap();
+            file.sessions = Some(sessions.values().cloned().collect());
+            file.updated_at = Some(Utc::now().timestamp_millis() as u64);
+            let _ = self.save_auth_file(&file);
+        }
+
+        removed
     }
 
     pub fn list_sessions(&self, username: &str) -> Vec<SessionEntry> {
@@ -490,8 +592,20 @@ mod tests {
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].ip.as_deref(), Some("127.0.0.1"));
 
-        assert!(store.invalidate_session(&token));
-        assert_eq!(store.validate_session_token(&token), None);
+        // Simulate server restart by creating a new AuthStore instance for the same directory
+        drop(store);
+        let restarted_store = AuthStore::new(dir.clone());
+        assert_eq!(restarted_store.validate_session_token(&token), Some("admin".to_string()));
+        let reloaded_sessions = restarted_store.list_sessions("admin");
+        assert_eq!(reloaded_sessions.len(), 1);
+        assert_eq!(reloaded_sessions[0].token, token);
+
+        assert!(restarted_store.invalidate_session(&token));
+        assert_eq!(restarted_store.validate_session_token(&token), None);
+
+        // Verify invalidation also persists to disk
+        let third_store = AuthStore::new(dir.clone());
+        assert_eq!(third_store.validate_session_token(&token), None);
 
         let _ = fs::remove_dir_all(dir);
     }

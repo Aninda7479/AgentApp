@@ -797,7 +797,7 @@ async fn setup_auth(
     }
 
     let token = state.auth_store.create_session_token("admin");
-    let cookie_header = format!("sa_session={}; Path=/; HttpOnly; SameSite=Lax", token);
+    let cookie_header = format!("sa_session={}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax", token);
     let body = Json(serde_json::json!({
         "ok": true,
         "success": true,
@@ -847,7 +847,7 @@ async fn login_auth(
             user_agent,
         );
 
-        let cookie_header = format!("sa_session={}; Path=/; HttpOnly; SameSite=Lax", token);
+        let cookie_header = format!("sa_session={}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax", token);
         let body = Json(serde_json::json!({
             "ok": true,
             "success": true,
@@ -882,7 +882,7 @@ async fn logout_auth(
         state.auth_store.invalidate_session(&token);
     }
     let mut res = Json(serde_json::json!({ "ok": true, "success": true })).into_response();
-    if let Ok(val) = header::HeaderValue::from_str("session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT") {
+    if let Ok(val) = header::HeaderValue::from_str("sa_session=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax") {
         res.headers_mut().insert(header::SET_COOKIE, val);
     }
     res
