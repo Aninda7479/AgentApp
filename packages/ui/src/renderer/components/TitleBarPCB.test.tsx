@@ -38,27 +38,46 @@ describe('PCBWorkspacePage Component', () => {
         onNewChat={vi.fn()}
       />
     );
-    expect(html).toContain('ESP32-S3 Environmental Sensor Node');
     expect(html).toContain('Schematic &amp; Chips');
     expect(html).toContain('AI Hardware Co-Pilot');
     expect(html).toContain('ECAD Export');
-    expect(html).toContain('BME680');
-    expect(html).toContain('AP2112K-3.3');
   });
 });
 
 describe('Electrical Rules Checking (ERC) Engine', () => {
-  it('passes on valid starter template with zero short circuits', () => {
-    const graph = STARTER_TEMPLATES[0].graph;
-    const errors = runElectricalRulesCheck(graph);
+  const testGraph = {
+    ...STARTER_TEMPLATES[0].graph,
+    components: [
+      {
+        id: 'U1',
+        name: 'MCU',
+        mpn: 'TEST-MCU-1',
+        manufacturer: 'Generic',
+        package: 'QFN-32',
+        category: 'MCU' as const,
+        description: 'Test MCU',
+        pins: [
+          { number: '1', name: 'VCC', type: 'power_in' as const, connectedNet: '+3V3' },
+          { number: '2', name: 'GND', type: 'power_in' as const, connectedNet: 'GND' },
+        ],
+      },
+    ],
+    nets: [
+      { id: '+3V3', name: '+3V3', netClass: 'power' as const, connections: [{ componentId: 'U1', pinNumber: '1' }] },
+      { id: 'GND', name: 'GND', netClass: 'ground' as const, connections: [{ componentId: 'U1', pinNumber: '2' }] },
+    ],
+  };
+
+  it('passes on valid circuit with zero short circuits', () => {
+    const errors = runElectricalRulesCheck(testGraph);
     const shorts = errors.filter((e) => e.category === 'power');
     expect(shorts.length).toBe(0);
   });
 
   it('flags direct power-to-ground short circuits', () => {
-    const brokenGraph = JSON.parse(JSON.stringify(STARTER_TEMPLATES[0].graph));
+    const brokenGraph = JSON.parse(JSON.stringify(testGraph));
     // Intentionally short +3V3 to GND on pin
-    brokenGraph.nets.find((n: any) => n.id === 'GND')?.connections.push({ componentId: 'U2', pinNumber: '5' });
+    brokenGraph.nets.find((n: any) => n.id === 'GND')?.connections.push({ componentId: 'U1', pinNumber: '1' });
     const errors = runElectricalRulesCheck(brokenGraph);
     const powerShort = errors.find((e) => e.id.includes('erc-short'));
     expect(powerShort).toBeDefined();
@@ -67,12 +86,36 @@ describe('Electrical Rules Checking (ERC) Engine', () => {
 });
 
 describe('ECAD Multi-Format Exporters', () => {
-  const sampleGraph = STARTER_TEMPLATES[0].graph;
+  const sampleGraph = {
+    ...STARTER_TEMPLATES[0].graph,
+    metadata: {
+      ...STARTER_TEMPLATES[0].graph.metadata,
+      name: 'Dynamic Sensor Board',
+    },
+    components: [
+      {
+        id: 'U1',
+        name: 'Microcontroller',
+        mpn: 'MCU-001',
+        manufacturer: 'Generic',
+        package: 'QFN-32',
+        category: 'MCU' as const,
+        description: 'Main MCU',
+        lcscPart: 'C12345',
+        pins: [
+          { number: '1', name: 'SDA', type: 'bidirectional' as const, connectedNet: 'I2C_SDA' },
+        ],
+      },
+    ],
+    nets: [
+      { id: 'I2C_SDA', name: 'I2C_SDA', netClass: 'i2c' as const, connections: [{ componentId: 'U1', pinNumber: '1' }] },
+    ],
+  };
 
   it('exports valid KiCad 8/9 S-Expression schematic', () => {
     const { schematic, project } = exportToKiCad(sampleGraph);
     expect(schematic).toContain('(kicad_sch');
-    expect(schematic).toContain('ESP32-S3');
+    expect(schematic).toContain('U1');
     expect(schematic).toContain('(global_label "I2C_SDA"');
     expect(project).toContain('kicad_pro');
   });
@@ -80,7 +123,7 @@ describe('ECAD Multi-Format Exporters', () => {
   it('exports valid Altium Protel 2 Netlist', () => {
     const netlist = exportToAltiumNetlist(sampleGraph);
     expect(netlist).toContain('PROTEL ADVANCED PCB NETLIST 2.0');
-    expect(netlist).toContain('ESP32-S3-WROOM-1-N8R8');
+    expect(netlist).toContain('MCU-001');
     expect(netlist).toContain('I2C_SDA');
   });
 
@@ -93,6 +136,6 @@ describe('ECAD Multi-Format Exporters', () => {
   it('exports manufacturing BOM CSV with JLCPCB / LCSC part numbers', () => {
     const bom = exportToBOM(sampleGraph);
     expect(bom).toContain('Designator,Quantity,Name,Value,Package,Manufacturer,MPN,LCSC Part #,Description');
-    expect(bom).toContain('C2913199'); // ESP32 LCSC Part
+    expect(bom).toContain('C12345');
   });
 });

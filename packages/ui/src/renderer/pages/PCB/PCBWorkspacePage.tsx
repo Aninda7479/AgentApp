@@ -749,49 +749,55 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
             {graph.components.length === 0 ? (
               <>
                 <button
-                  onClick={() => runAiCommand('Make an AC to 5W Speaker charger PCB with PAM8403 and isolated power supply')}
+                  onClick={() => runAiCommand('Synthesize a regulated power supply circuit with input protection, filtering, and power rail outputs')}
                   className="text-[10px] px-2 py-1 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-semibold transition-colors cursor-pointer border border-emerald-500/30 shrink-0"
                 >
-                  ⚡ AC to 5W Speaker PCB
+                  ⚡ Synthesize Power Supply
                 </button>
                 <button
-                  onClick={() => runAiCommand('Synthesize USB-PD 3.0 Fast Charger Power Supply with Type-C')}
+                  onClick={() => runAiCommand('Synthesize a microcontroller system with crystal oscillator, decoupling capacitors, reset button, and programming header')}
                   className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20 shrink-0"
                 >
-                  ⚡ USB-PD Charger
+                  🧠 Synthesize MCU Subsystem
                 </button>
                 <button
-                  onClick={() => runAiCommand('Generate ESP32-S3 System with Type-C and Power Supply')}
+                  onClick={() => runAiCommand('Synthesize an IoT sensor node circuit with environmental sensing, I2C bus, and status LEDs')}
                   className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20 shrink-0"
                 >
-                  + ESP32-S3 System
+                  📡 Synthesize IoT Node
+                </button>
+                <button
+                  onClick={() => runAiCommand('Synthesize a USB-C interface circuit with ESD protection, CC pull-downs, and power delivery')}
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20 shrink-0"
+                >
+                  🔌 Synthesize USB Interface
                 </button>
               </>
             ) : (
               <>
                 <button
-                  onClick={() => runAiCommand('Add PAM8403 5W Class-D Audio Amplifier subsystem with 3.5mm jack and speaker terminal')}
+                  onClick={() => runAiCommand('Analyze all Electrical Rules Check violations in this circuit and synthesize missing pullups, decoupling caps, and pin connections to fix them')}
                   className="text-[10px] px-2 py-1 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-semibold transition-colors cursor-pointer border border-emerald-500/30 shrink-0"
                 >
-                  🔊 + 5W Audio Amp
-                </button>
-                <button
-                  onClick={() => runAiCommand('Add secondary USB-PD Controller with CC1/CC2 pins')}
-                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20 shrink-0"
-                >
-                  + Add USB-PD IC
-                </button>
-                <button
-                  onClick={() => runAiCommand('Upgrade LDO regulator to ultra-low quiescent current TI TPS7A05')}
-                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20 shrink-0"
-                >
-                  ⚡ Upgrade LDO
-                </button>
-                <button
-                  onClick={() => runAiCommand('Synthesize missing I2C pullup resistors and run ERC verification')}
-                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20 shrink-0"
-                >
                   🛡️ Auto-Fix ERC
+                </button>
+                <button
+                  onClick={() => runAiCommand('Add a low-noise voltage regulation stage to power the existing ICs on this board')}
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20 shrink-0"
+                >
+                  ⚡ Add Voltage Regulator
+                </button>
+                <button
+                  onClick={() => runAiCommand('Add TVS protection diodes, fuses, and filtering on external interface lines')}
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20 shrink-0"
+                >
+                  🛡️ Add ESD Protection
+                </button>
+                <button
+                  onClick={() => runAiCommand('Audit component voltage ratings, decoupling coverage, pin allocations, and power distribution across this schematic')}
+                  className="text-[10px] px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer border border-brand-border/20 shrink-0"
+                >
+                  🔍 Design Audit
                 </button>
               </>
             )}
