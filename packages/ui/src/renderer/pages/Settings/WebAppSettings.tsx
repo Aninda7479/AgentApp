@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Globe, Play, Square, KeyRound, CheckCircle2, AlertTriangle, ExternalLink, RotateCw, Copy, Check, ShieldCheck, User } from 'lucide-react';
+import { Globe, Play, Square, KeyRound, CheckCircle2, AlertTriangle, ExternalLink, RotateCw, Copy, Check, ShieldCheck, User, Smartphone, Laptop, Clock } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
 import { getIpc } from '../../lib/ipc';
 
@@ -497,6 +497,103 @@ export const WebAppSettings: React.FC = () => {
 };
 
 /** Sub-component for managing active sessions and inspecting login history. */
+interface ParsedUA {
+  browser: string;
+  os: string;
+  deviceType: 'desktop' | 'mobile' | 'tablet';
+}
+
+function parseUserAgent(ua?: string): ParsedUA {
+  if (!ua || ua === 'Unknown' || ua === 'Web Browser') {
+    return { browser: 'Web Browser', os: 'Desktop', deviceType: 'desktop' };
+  }
+
+  // OS detection
+  let os = 'Unknown OS';
+  let deviceType: 'desktop' | 'mobile' | 'tablet' = 'desktop';
+
+  if (/Windows NT 10\.0|Windows NT 11\.0|Windows 10|Windows 11/i.test(ua)) os = 'Windows';
+  else if (/Windows NT/i.test(ua)) os = 'Windows';
+  else if (/iPhone/i.test(ua)) {
+    os = 'iOS';
+    deviceType = 'mobile';
+  } else if (/iPad/i.test(ua)) {
+    os = 'iPadOS';
+    deviceType = 'tablet';
+  } else if (/Android/i.test(ua)) {
+    os = 'Android';
+    deviceType = /Mobile/i.test(ua) ? 'mobile' : 'tablet';
+  } else if (/Macintosh|Mac OS X/i.test(ua)) {
+    os = 'macOS';
+  } else if (/CrOS/i.test(ua)) {
+    os = 'ChromeOS';
+  } else if (/Linux/i.test(ua)) {
+    os = 'Linux';
+  }
+
+  // Browser detection
+  let browser = 'Web Browser';
+  if (/SuperAgent/i.test(ua)) browser = 'SuperAgent App';
+  else if (/Edg\//i.test(ua) || /Edge\//i.test(ua)) browser = 'Microsoft Edge';
+  else if (/Brave/i.test(ua)) browser = 'Brave';
+  else if (/Arc\//i.test(ua)) browser = 'Arc';
+  else if (/OPR\//i.test(ua) || /Opera/i.test(ua)) browser = 'Opera';
+  else if (/Chrome\//i.test(ua) || /CriOS\//i.test(ua)) browser = 'Google Chrome';
+  else if (/Firefox\//i.test(ua) || /FxiOS\//i.test(ua)) browser = 'Mozilla Firefox';
+  else if (/Safari\//i.test(ua) && !/Chrome/i.test(ua)) browser = 'Apple Safari';
+  else if (/Electron|Code\//i.test(ua)) browser = 'Desktop Client';
+
+  return { browser, os, deviceType };
+}
+
+function getTimeMs(timeVal: any): number {
+  if (!timeVal) return 0;
+  const num = Number(timeVal);
+  if (!isNaN(num) && num > 1000000000) return num;
+  const d = new Date(timeVal).getTime();
+  return isNaN(d) ? 0 : d;
+}
+
+function formatRelativeTime(timeVal: any): string {
+  const ms = getTimeMs(timeVal);
+  if (!ms) return 'Unknown';
+
+  const diffMs = Date.now() - ms;
+  if (diffMs < 60_000) {
+    return 'Active just now';
+  }
+  const diffMinutes = Math.floor(diffMs / 60_000);
+  if (diffMinutes < 60) {
+    return `${diffMinutes}m ago`;
+  }
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) {
+    return 'Yesterday';
+  }
+  if (diffDays < 7) {
+    return `${diffDays}d ago`;
+  }
+  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function formatFullDateTime(timeVal: any): string {
+  const ms = getTimeMs(timeVal);
+  if (!ms) return '';
+  return new Date(ms).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+/** Sub-component for managing active sessions and inspecting login history. */
 function DeviceAndHistoryManager(): React.ReactElement {
   const [sessions, setSessions] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
@@ -508,12 +605,14 @@ function DeviceAndHistoryManager(): React.ReactElement {
       const resDev = await fetch('/api/auth/devices', { credentials: 'same-origin' });
       if (resDev.ok) {
         const data = await resDev.json();
-        setSessions(data.sessions || []);
+        const list = Array.isArray(data) ? data : (data?.sessions || []);
+        setSessions(list);
       }
       const resHist = await fetch('/api/auth/history', { credentials: 'same-origin' });
       if (resHist.ok) {
         const data = await resHist.json();
-        setHistory(data.history || []);
+        const list = Array.isArray(data) ? data : (data?.history || []);
+        setHistory(list);
       }
     } catch {
       /* ignore fetch failures if offline or outside web surface */
@@ -540,6 +639,22 @@ function DeviceAndHistoryManager(): React.ReactElement {
     }
   };
 
+  // Sort sessions chronologically (most recent first, current device pinned to top)
+  const sortedSessions = [...sessions].sort((a, b) => {
+    if (a.isCurrent && !b.isCurrent) return -1;
+    if (!a.isCurrent && b.isCurrent) return 1;
+    const timeA = getTimeMs(a.lastSeenAt || a.last_used || a.issuedAt || a.created_at);
+    const timeB = getTimeMs(b.lastSeenAt || b.last_used || b.issuedAt || b.created_at);
+    return timeB - timeA;
+  });
+
+  // Sort history chronologically (newest login attempt first)
+  const sortedHistory = [...history].sort((a, b) => {
+    const timeA = getTimeMs(a.timestamp || a.issuedAt);
+    const timeB = getTimeMs(b.timestamp || b.issuedAt);
+    return timeB - timeA;
+  });
+
   return (
     <div className="flex flex-col gap-6">
       {/* Active Sessions */}
@@ -549,67 +664,123 @@ function DeviceAndHistoryManager(): React.ReactElement {
           <button
             type="button"
             onClick={loadAuthData}
-            className="text-[11px] text-[var(--brand-accent)] hover:underline flex items-center gap-1 cursor-pointer"
+            disabled={loading}
+            className="text-[11px] text-[var(--brand-accent)] hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
           >
-            <RotateCw size={11} /> Refresh
+            <RotateCw size={11} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
         </div>
 
-        {sessions.length === 0 ? (
+        {sortedSessions.length === 0 ? (
           <p className="text-xs text-brand-textMuted italic">No active session records found or running standalone.</p>
         ) : (
-          <div className="flex flex-col gap-2">
-            {sessions.map((s) => (
-              <div key={s.id} className="flex items-center justify-between bg-brand-bg/40 border border-brand-border/60 rounded-lg px-3 py-2 text-xs">
-                <div className="flex flex-col min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-brand-textMain truncate">{s.userAgent || 'Web Browser'}</span>
-                    {s.isCurrent && (
-                      <span className="rounded-full bg-[var(--brand-accent)]/15 border border-[var(--brand-accent)]/30 text-[var(--brand-accent)] px-1.5 py-0.2 text-[9px] font-bold">
-                        THIS DEVICE
-                      </span>
-                    )}
+          <div className="flex flex-col gap-2.5">
+            {sortedSessions.map((s) => {
+              const sid = s.id || s.token;
+              const uaInfo = parseUserAgent(s.userAgent || s.user_agent);
+              const lastActiveMs = getTimeMs(s.lastSeenAt || s.last_used || s.issuedAt || s.created_at);
+              const isRecent = Date.now() - lastActiveMs < 120_000; // < 2 mins
+              const DeviceIcon = uaInfo.deviceType === 'mobile' ? Smartphone : Laptop;
+
+              return (
+                <div
+                  key={sid}
+                  className={`flex items-center justify-between border rounded-xl p-3.5 text-xs transition-all ${
+                    s.isCurrent
+                      ? 'bg-brand-bg/60 border-[var(--brand-accent)]/30 shadow-sm'
+                      : 'bg-brand-bg/40 border-brand-border/60 hover:border-brand-border'
+                  }`}
+                >
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-brand-popover border border-brand-border text-brand-textMuted shadow-inner">
+                      <DeviceIcon size={19} />
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-brand-textMain text-sm truncate">{uaInfo.browser}</span>
+                        <span className="rounded-md bg-brand-popover px-2 py-0.5 text-[10px] font-medium text-brand-textMuted border border-brand-border/60">
+                          {uaInfo.os}
+                        </span>
+                        {s.isCurrent && (
+                          <span className="rounded-full bg-[var(--brand-accent)]/15 border border-[var(--brand-accent)]/30 text-[var(--brand-accent)] px-2 py-0.5 text-[9px] font-bold tracking-wide">
+                            THIS DEVICE
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-brand-textMuted font-mono mt-1 flex-wrap">
+                        <span className="inline-flex items-center gap-1.5 font-sans">
+                          <span className={`w-2 h-2 rounded-full ${s.isCurrent || isRecent ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'}`} />
+                          <span className={s.isCurrent || isRecent ? 'text-emerald-400 font-medium' : 'text-brand-textMuted'}>
+                            {s.isCurrent ? 'Online now' : `Last online: ${formatRelativeTime(s.lastSeenAt || s.last_used || s.issuedAt || s.created_at)}`}
+                          </span>
+                        </span>
+                        <span>•</span>
+                        <span>IP: {s.ip || '127.0.0.1'}</span>
+                        <span>•</span>
+                        <span title={formatFullDateTime(s.issuedAt || s.created_at)}>
+                          Signed in: {formatFullDateTime(s.issuedAt || s.created_at)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <span className="text-[10px] text-brand-textMuted font-mono mt-0.5">
-                    IP: {s.ip} • Issued: {new Date(s.issuedAt).toLocaleTimeString()}
-                  </span>
+                  {!s.isCurrent && (
+                    <button
+                      type="button"
+                      onClick={() => removeDevice(sid)}
+                      className="ml-3 shrink-0 px-3 py-1.5 text-[11px] font-medium bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
-                {!s.isCurrent && (
-                  <button
-                    type="button"
-                    onClick={() => removeDevice(s.id)}
-                    className="px-2.5 py-1 text-[11px] font-medium bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-md transition-colors cursor-pointer"
-                  >
-                    Remove Device
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
       {/* Login History */}
       <div className="flex flex-col gap-2.5 pt-4 border-t border-brand-border/40">
-        <span className="text-xs font-semibold text-brand-textMain">Login History Audit Log</span>
-        {history.length === 0 ? (
+        <span className="text-xs font-semibold text-brand-textMain">Login History Audit Log ({sortedHistory.length})</span>
+        {sortedHistory.length === 0 ? (
           <p className="text-xs text-brand-textMuted italic">No recent login attempts logged.</p>
         ) : (
-          <div className="max-h-[180px] overflow-y-auto custom-scrollbar flex flex-col gap-1.5 pr-1">
-            {history.map((h) => (
-              <div key={h.id} className="flex items-center justify-between bg-brand-bg/30 border border-brand-border/40 rounded-lg px-3 py-1.5 text-xs">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${h.status === 'success' ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[11px] font-mono text-brand-textMain truncate">{h.ip} — {h.userAgent}</span>
-                    {h.reason && <span className="text-[9px] text-red-400 font-mono">{h.reason}</span>}
+          <div className="max-h-[220px] overflow-y-auto custom-scrollbar flex flex-col gap-2 pr-1">
+            {sortedHistory.map((h, i) => {
+              const uaInfo = parseUserAgent(h.userAgent);
+              const isSuccess = h.status === 'success';
+
+              return (
+                <div
+                  key={h.id || i}
+                  className="flex items-center justify-between bg-brand-bg/30 border border-brand-border/40 rounded-xl px-3.5 py-2.5 text-xs transition-colors hover:bg-brand-bg/50"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isSuccess ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-brand-textMain text-xs truncate">
+                          {uaInfo.browser}
+                        </span>
+                        <span className="rounded bg-brand-popover px-1.5 py-0.2 text-[10px] text-brand-textMuted border border-brand-border/60">
+                          {uaInfo.os}
+                        </span>
+                        <span className="text-[10px] font-mono text-brand-textMuted">({h.ip || '127.0.0.1'})</span>
+                      </div>
+                      {h.reason && <span className="text-[10px] text-red-400 font-mono mt-0.5">{h.reason}</span>}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end shrink-0 ml-3 text-right font-mono">
+                    <span className="text-[11px] font-medium text-brand-textMain">
+                      {formatRelativeTime(h.timestamp)}
+                    </span>
+                    <span className="text-[10px] text-brand-textMuted mt-0.5">
+                      {formatFullDateTime(h.timestamp)}
+                    </span>
                   </div>
                 </div>
-                <span className="text-[10px] text-brand-textMuted font-mono shrink-0 ml-2">
-                  {new Date(h.timestamp).toLocaleString()}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

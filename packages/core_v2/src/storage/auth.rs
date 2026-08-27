@@ -478,12 +478,22 @@ impl AuthStore {
     }
 
     pub fn list_sessions(&self, username: &str) -> Vec<SessionEntry> {
+        self.load_sessions_from_disk();
         let sessions = self.sessions.lock().unwrap();
-        sessions
-            .values()
-            .filter(|s| s.username == username)
-            .cloned()
-            .collect()
+        if username.trim().is_empty() || username == "*" {
+            sessions.values().cloned().collect()
+        } else {
+            sessions
+                .values()
+                .filter(|s| s.username == username || s.username.is_empty())
+                .cloned()
+                .collect()
+        }
+    }
+
+    pub fn get_login_history(&self) -> Vec<serde_json::Value> {
+        let file = self.load_auth_file();
+        file.login_history.unwrap_or_default()
     }
 
     pub fn change_password(&self, username: &str, old_pass: &str, new_pass: &str) -> Result<()> {

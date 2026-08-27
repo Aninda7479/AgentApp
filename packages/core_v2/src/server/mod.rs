@@ -41,7 +41,7 @@ use crate::media::{GeneratePdfTool, GeneratePresentationTool};
 use crate::orchestrator::{AgentEngine, Coordinator, PipelineExecutor, SubagentRunner};
 use crate::roster::PersonaStore;
 use crate::storage::{
-    auth::{AuthStore, SessionEntry},
+    auth::AuthStore,
     chat_storage::{ChatSession, ChatSessionMetadata, ChatStorage},
     lock::{clear_web_server_lock, is_lock_alive, read_web_server_lock, write_web_server_lock, WebServerLock},
     partner::{
@@ -918,12 +918,47 @@ async fn change_auth_password(
 async fn get_auth_devices(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<Vec<SessionEntry>>, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     if !is_request_authenticated(&state, &headers) {
         return Err(StatusCode::UNAUTHORIZED);
     }
-    let list = state.auth_store.list_sessions("admin");
-    Ok(Json(list))
+    let current_token = extract_session_token(&headers);
+    let mut list = state.auth_store.list_sessions("admin");
+
+    // Sort by last_used descending, but keep current session at the top
+    list.sort_by(|a, b| {
+        let is_a_cur = current_token.as_ref().map(|ct| ct == &a.token).unwrap_or(false);
+        let is_b_cur = current_token.as_ref().map(|ct| ct == &b.token).unwrap_or(false);
+        if is_a_cur && !is_b_cur {
+            std::cmp::Ordering::Less
+        } else if !is_a_cur && is_b_cur {
+            std::cmp::Ordering::Greater
+        } else {
+            b.last_used.cmp(&a.last_used)
+        }
+    });
+
+    let sessions: Vec<serde_json::Value> = list
+        .into_iter()
+        .map(|s| {
+            let is_current = current_token.as_ref().map(|ct| ct == &s.token).unwrap_or(false);
+            serde_json::json!({
+                "id": s.token,
+                "token": s.token,
+                "username": s.username,
+                "userAgent": s.user_agent.as_deref().unwrap_or("Web Browser"),
+                "ip": s.ip.as_deref().unwrap_or("127.0.0.1"),
+                "issuedAt": s.created_at,
+                "lastSeenAt": s.last_used,
+                "isCurrent": is_current,
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({
+        "sessions": sessions,
+        "currentSessionId": current_token,
+    })))
 }
 
 async fn delete_auth_device(
@@ -941,16 +976,19 @@ async fn delete_auth_device(
 async fn get_auth_history(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> Result<Json<Vec<serde_json::Value>>, StatusCode> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
     if !is_request_authenticated(&state, &headers) {
         return Err(StatusCode::UNAUTHORIZED);
     }
-    Ok(Json(vec![serde_json::json!({
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-        "action": "login",
-        "ip": "127.0.0.1",
-        "status": "success"
-    })]))
+    let mut history = state.auth_store.get_login_history();
+    history.sort_by(|a, b| {
+        let ts_a = a.get("timestamp").and_then(|v| v.as_i64()).unwrap_or(0);
+        let ts_b = b.get("timestamp").and_then(|v| v.as_i64()).unwrap_or(0);
+        ts_b.cmp(&ts_a)
+    });
+    Ok(Json(serde_json::json!({
+        "history": history
+    })))
 }
 
 async fn get_providers_status(State(state): State<AppState>) -> impl IntoResponse {
