@@ -212,7 +212,13 @@ export const App: React.FC = () => {
   // panels must show a loading state rather than a false "nothing connected".
   const [bootstrapping, setBootstrapping] = useState<boolean>(true);
   const [onboardingDismissed, setOnboardingDismissed] = useState<boolean>(false);
-  const [setupCompleted, setSetupCompleted] = useState<boolean>(false);
+  const [setupCompleted, setSetupCompleted] = useState<boolean>(() => {
+    try {
+      return typeof localStorage !== 'undefined' && localStorage.getItem('superagent_setup_completed') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   // Trajectory steps (the canvas)
   const [trajectorySteps, setTrajectorySteps] = useState<TrajectoryStep[]>([
@@ -257,6 +263,11 @@ export const App: React.FC = () => {
         setEnabledSkills(current?.skills || {});
         if (current?.general?.setupState?.completed || (Array.isArray(current?.providers) && current.providers.length > 0)) {
           setSetupCompleted(true);
+          try {
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem('superagent_setup_completed', 'true');
+            }
+          } catch {}
         }
       })
       .catch(() => {});
@@ -405,6 +416,14 @@ export const App: React.FC = () => {
   const persistDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistStore = useCallback(
     (providers: ProviderConnection[], models: ModelConfig[], currentProjects?: StoredProject[], currentChats?: StoredChat[]) => {
+      if (providers.length > 0) {
+        setSetupCompleted(true);
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('superagent_setup_completed', 'true');
+          }
+        } catch {}
+      }
       if (persistDebounceRef.current) clearTimeout(persistDebounceRef.current);
       persistDebounceRef.current = setTimeout(() => {
         persistDebounceRef.current = null;
@@ -445,17 +464,19 @@ export const App: React.FC = () => {
       getComposerAttachments: () => stateRef.current.composerAttachments,
       getTrajectorySteps: () => stateRef.current.trajectorySteps,
       getLastUsedModel: () => stateRef.current.lastUsedModel,
+      getSetupCompleted: () => setupCompleted,
       setProjects, setChats, setConnectedProviders, setModelsCatalog, setTrajectorySteps,
       setActiveChatId, setActiveProject, setDraftProject, setActiveTab, setSettingsCategory, setActiveDiff,
       setToastMessage, setToastType, setToastOpen, setNavigationHistory, setNavigationIndex, setMcpServers,
       setPluginEnabled, setIsGenerating, setThemeMode, setWorkMode, setDefaultPermissions, setAutoReview,
       setFullAccess, setInternetAccessLevel, setLastUsedModel, setUpdateStatus, setComposerPrompt, setComposerAttachments,
+      setSetupCompleted,
       persistStore,
       triggerToast
     }),
     // Setters are stable; getters read stateRef. Only ipc / composites matter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ipc, persistStore, triggerToast]
+    [ipc, persistStore, triggerToast, setupCompleted]
   );
 
   const activeChat = chats.find((chat) => chat.id === activeChatId) || null;
@@ -662,6 +683,8 @@ export const App: React.FC = () => {
   // ── Provider / model management ────────────────────────────────────────────
   const handleConnectProvider = (provider: ProviderConnection, newModels: ModelConfig[]) =>
     ProvidersService.connect(ctx, provider, newModels);
+  const handleConnectProviders = (batch: Array<{ provider: ProviderConnection; models: ModelConfig[] }>) =>
+    ProvidersService.connectBatch(ctx, batch);
   const handleDisconnectProvider = (providerId: string) => ProvidersService.disconnect(ctx, providerId);
   const handleToggleModel = (modelId: string) => ProvidersService.toggleModel(ctx, modelId);
 
@@ -1872,8 +1895,14 @@ export const App: React.FC = () => {
           onComplete={() => {
             setOnboardingDismissed(true);
             setSetupCompleted(true);
+            try {
+              if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('superagent_setup_completed', 'true');
+              }
+            } catch {}
           }}
           onConnectProvider={handleConnectProvider}
+          onConnectProviders={handleConnectProviders}
         />
       )}
 

@@ -35,7 +35,8 @@ import { ProvidersService } from '../logic/providers';
 
 export interface OnboardingWizardProps {
   onComplete: () => void;
-  onConnectProvider: (provider: ProviderConnection, models: ModelConfig[]) => void;
+  onConnectProvider?: (provider: ProviderConnection, models: ModelConfig[]) => void;
+  onConnectProviders?: (batch: Array<{ provider: ProviderConnection; models: ModelConfig[] }>) => void;
   /** Optional mode for targeted modular feature setup */
   mode?: 'full' | 'providers_only' | 'telegram_only' | 'preferences_only';
   /** Optional step number to start on */
@@ -131,6 +132,7 @@ const enrichDynamicModel = (raw: {
 export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ 
   onComplete, 
   onConnectProvider,
+  onConnectProviders,
   mode = 'full',
   initialStep
 }) => {
@@ -656,6 +658,29 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
 
   // ── Save & Complete ─────────────────────────────────────────────────────────
   const handleFinish = async () => {
+    // Collect all tested or saved providers
+    const batchToConnect: Array<{ provider: ProviderConnection; models: ModelConfig[] }> = [];
+    for (const p of providerList) {
+      const hasKey = Boolean(p.apiKey.trim());
+      const isLocalConnected = (p.id === 'ollama' || p.id === 'omniroute') && (p.status === 'connected' || p.models.length > 0);
+      if (hasKey || isLocalConnected) {
+        const conn: ProviderConnection = {
+          id: p.id,
+          name: p.name,
+          type: (p.id === 'ollama' || p.id === 'omniroute' || p.category === 'custom') ? 'custom' : 'key',
+          apiKey: p.apiKey.trim(),
+          baseUrl: p.url.trim() || p.defaultUrl
+        };
+        batchToConnect.push({
+          provider: conn,
+          models: p.models.filter(m => m.enabled)
+        });
+      }
+    }
+
+    const allProviders = batchToConnect.map(b => b.provider);
+    const allModels = batchToConnect.flatMap(b => b.models);
+
     const settingsPatch = {
       theme: { desktop: theme, cli: theme },
       general: {
@@ -667,13 +692,19 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         closeToTray: keepBackgroundAlive,
         setupState: { completed: true, version: 1, completedSteps: ['welcome', 'providers', 'telegram', 'preferences'] }
       },
+      providers: allProviders,
+      models: allModels,
       internetAccess: { level: internetAccessLevel }
     };
 
     if (ipc) {
       try {
-        const currentSettings = await ipc.invoke('settings-read');
+        const currentSettings = (await ipc.invoke('settings-read')) || {};
         await ipc.invoke('settings-write', { ...currentSettings, ...settingsPatch });
+        await ipc.invoke('store-write', {
+          connectedProviders: allProviders,
+          modelsCatalog: allModels
+        }).catch(() => {});
         if (!telegramSkipped && telegramToken.trim()) {
           await ipc.invoke('telegram-config-save', { botToken: telegramToken.trim(), chatId: telegramChatId.trim(), enabled: true }).catch(() => {});
         }
@@ -687,19 +718,17 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
       }
     }
 
-    // Connect all tested or saved providers
-    for (const p of providerList) {
-      const hasKey = Boolean(p.apiKey.trim());
-      const isLocalConnected = (p.id === 'ollama' || p.id === 'omniroute') && (p.status === 'connected' || p.models.length > 0);
-      if (hasKey || isLocalConnected) {
-        const conn: ProviderConnection = {
-          id: p.id,
-          name: p.name,
-          type: (p.id === 'ollama' || p.id === 'omniroute' || p.category === 'custom') ? 'custom' : 'key',
-          apiKey: p.apiKey.trim(),
-          baseUrl: p.url.trim() || p.defaultUrl
-        };
-        onConnectProvider(conn, p.models.filter(m => m.enabled));
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('superagent_setup_completed', 'true');
+      }
+    } catch {}
+
+    if (onConnectProviders) {
+      onConnectProviders(batchToConnect);
+    } else if (onConnectProvider) {
+      for (const item of batchToConnect) {
+        onConnectProvider(item.provider, item.models);
       }
     }
     onComplete();

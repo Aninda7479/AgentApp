@@ -99,6 +99,14 @@ export class SettingsService {
           ctx.setModelsCatalog(settings.models);
         }
       }
+      if (settings.general?.setupState?.completed || (Array.isArray(settings.providers) && settings.providers.length > 0)) {
+        ctx.setSetupCompleted(true);
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('superagent_setup_completed', 'true');
+          }
+        } catch {}
+      }
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error('Failed to load general settings:', err);

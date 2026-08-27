@@ -365,6 +365,13 @@ pub fn store_write(data: Option<serde_json::Value>, content: Option<serde_json::
                 if let Some(p) = obj.get("connectedProviders") {
                     if p.as_array().map(|a| !a.is_empty()).unwrap_or(false) {
                         c_obj.insert("providers".to_string(), p.clone());
+                        let gen = c_obj.entry("general".to_string()).or_insert_with(|| serde_json::json!({}));
+                        if let Some(g) = gen.as_object_mut() {
+                            let ss = g.entry("setupState".to_string()).or_insert_with(|| serde_json::json!({}));
+                            if let Some(s) = ss.as_object_mut() {
+                                s.insert("completed".to_string(), serde_json::Value::Bool(true));
+                            }
+                        }
                     }
                 }
                 if let Some(m) = obj.get("modelsCatalog") {

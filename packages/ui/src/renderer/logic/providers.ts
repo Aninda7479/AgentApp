@@ -4,18 +4,50 @@
  * keys in the environment. All mutations persist through `ctx.persistStore`.
  */
 import type { AppContext, ModelConfig, ProviderConnection, StoredChat, StoredProject } from './types';
+import { providerStore } from '../stores/providerStore';
 
 export class ProvidersService {
   /**
+   * Connects multiple providers at once atomically: merges their models and persists.
+   */
+  static connectBatch(
+    ctx: AppContext,
+    batch: Array<{ provider: ProviderConnection; models: ModelConfig[] }>
+  ): void {
+    if (!batch || batch.length === 0) return;
+    const batchProviderIds = new Set(batch.map((b) => b.provider.id));
+    const nextProviders = [
+      ...ctx.getConnectedProviders().filter((p) => !batchProviderIds.has(p.id)),
+      ...batch.map((b) => b.provider)
+    ];
+    const newModels = batch.flatMap((b) => b.models);
+    const nextModels = [
+      ...ctx.getModelsCatalog().filter((m) => !batchProviderIds.has(m.providerId)),
+      ...newModels
+    ];
+
+    ctx.setConnectedProviders(nextProviders);
+    ctx.setModelsCatalog(nextModels);
+    try {
+      providerStore.setProviders(nextProviders);
+      providerStore.setModels(nextModels);
+    } catch {}
+
+    if (nextProviders.length > 0) {
+      ctx.setSetupCompleted?.(true);
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('superagent_setup_completed', 'true');
+        }
+      } catch {}
+    }
+
+    ctx.persistStore(nextProviders, nextModels);
+  }
+
+  /**
    * Connects a new provider: replaces any existing entry with the same id, merges
    * its models (replacing that provider's previous models), and persists.
-   *
-   * Computation is done from the current context state (via the ctx getters)
-   * and the resulting arrays are applied with flat, top-level state setters.
-   * The previous implementation nested `setModelsCatalog` *inside* the
-   * `setConnectedProviders` updater — a side effect inside a reducer, which can
-   * be dropped or double-run (React StrictMode) and is the likely cause of the
-   * catalog sometimes not populating after a connect (composer stays disabled).
    */
   static connect(ctx: AppContext, provider: ProviderConnection, newModels: ModelConfig[]): void {
     const nextProviders = [
@@ -28,6 +60,20 @@ export class ProvidersService {
     ];
     ctx.setConnectedProviders(nextProviders);
     ctx.setModelsCatalog(nextModels);
+    try {
+      providerStore.setProviders(nextProviders);
+      providerStore.setModels(nextModels);
+    } catch {}
+
+    if (nextProviders.length > 0) {
+      ctx.setSetupCompleted?.(true);
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('superagent_setup_completed', 'true');
+        }
+      } catch {}
+    }
+
     ctx.persistStore(nextProviders, nextModels);
   }
 
@@ -39,6 +85,10 @@ export class ProvidersService {
     const nextModels = ctx.getModelsCatalog().filter((m) => m.providerId !== providerId);
     ctx.setConnectedProviders(nextProviders);
     ctx.setModelsCatalog(nextModels);
+    try {
+      providerStore.setProviders(nextProviders);
+      providerStore.setModels(nextModels);
+    } catch {}
     ctx.persistStore(nextProviders, nextModels);
   }
 

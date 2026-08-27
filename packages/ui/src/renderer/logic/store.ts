@@ -116,6 +116,12 @@ export class StoreService {
 
     if (providers.length > 0) {
       providerStore.setProviders(providers);
+      ctx.setSetupCompleted(true);
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('superagent_setup_completed', 'true');
+        }
+      } catch {}
     }
     if (models.length > 0) {
       providerStore.setModels(models);
@@ -155,12 +161,14 @@ export class StoreService {
       chatStore.setActiveChatId('draft-chat');
     }
 
-    // Persist the full store as-is so the on-disk transcript stays complete.
-    ctx.persistStore(stored.connectedProviders, stored.modelsCatalog, stored.projects, stored.chats);
+    // Persist the full store with loaded providers/models so on-disk configs are preserved.
+    if (providers.length > 0 || models.length > 0 || stored.projects.length > 0 || stored.chats.length > 0) {
+      ctx.persistStore(providers, models, stored.projects, stored.chats);
+    }
 
     return {
-      loadedProviders: stored.connectedProviders,
-      loadedModels: stored.modelsCatalog,
+      loadedProviders: providers,
+      loadedModels: models,
       finalProjects: stored.projects,
       finalChats: stored.chats
     };

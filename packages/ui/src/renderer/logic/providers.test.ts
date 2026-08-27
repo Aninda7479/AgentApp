@@ -34,6 +34,8 @@ function makeCtx() {
     ipc: { invoke: vi.fn() },
     getConnectedProviders: () => providers,
     getModelsCatalog: () => models,
+    getSetupCompleted: () => false,
+    setSetupCompleted: vi.fn(),
     setConnectedProviders: ((v: ProviderConnection[] | ((p: ProviderConnection[]) => ProviderConnection[])) =>
       (providers = typeof v === 'function' ? v(providers) : v)) as AppContext['setConnectedProviders'],
     setModelsCatalog: ((v: ModelConfig[] | ((m: ModelConfig[]) => ModelConfig[])) =>
@@ -124,5 +126,31 @@ describe('ProvidersService', () => {
       // with provider-prefixed ids ("openrouter-or-1"). Original "a" remains.
       expect(getModels().map((m) => m.id).sort()).toEqual(['a', 'openrouter-or-1']);
     });
+  });
+
+  it('connectBatch() connects multiple providers and models atomically without losing any', () => {
+    const { ctx, getProviders, getModels, getPersisted } = makeCtx();
+    (ctx as any).setSetupCompleted = vi.fn();
+
+    ProvidersService.connectBatch(ctx, [
+      {
+        provider: mkProvider('ollama'),
+        models: [mkModel('ollama-llama3', 'ollama', true)]
+      },
+      {
+        provider: mkProvider('chatgpt'),
+        models: [mkModel('chatgpt-gpt4o', 'chatgpt', true), mkModel('chatgpt-o1', 'chatgpt', true)]
+      },
+      {
+        provider: mkProvider('claude'),
+        models: [mkModel('claude-sonnet', 'claude', true)]
+      }
+    ]);
+
+    expect(getProviders()).toHaveLength(3);
+    expect(getProviders().map((p) => p.id)).toEqual(['ollama', 'chatgpt', 'claude']);
+    expect(getModels()).toHaveLength(4);
+    expect(getPersisted()?.providers).toHaveLength(3);
+    expect(getPersisted()?.models).toHaveLength(4);
   });
 });

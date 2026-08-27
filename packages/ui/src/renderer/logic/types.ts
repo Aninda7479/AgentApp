@@ -97,6 +97,7 @@ export interface AppContext {
   getComposerAttachments(): ComposerAttachment[];
   getTrajectorySteps(): TrajectoryStep[];
   getLastUsedModel(): string;
+  getSetupCompleted(): boolean;
 
   // ── setters ──
   setProjects: Dispatch<SetStateAction<StoredProject[]>>;
@@ -128,6 +129,7 @@ export interface AppContext {
   setUpdateStatus: Dispatch<SetStateAction<UpdateStatus | null>>;
   setComposerPrompt: Dispatch<SetStateAction<string>>;
   setComposerAttachments: Dispatch<SetStateAction<ComposerAttachment[]>>;
+  setSetupCompleted: Dispatch<SetStateAction<boolean>>;
 
   // ── composite helpers owned by App.tsx ──
   /** Writes providers/models/projects/chats back to the on-disk JSON store. */
