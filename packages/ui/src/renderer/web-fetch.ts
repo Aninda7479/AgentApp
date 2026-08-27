@@ -23,13 +23,44 @@ export async function browserSafeFetch(url: string, init: RequestInit = {}): Pro
     }
   }
 
+  // Parse body if present
+  let parsedBody: any = undefined;
+  if (init.body !== undefined && init.body !== null) {
+    if (typeof init.body === 'string') {
+      try {
+        parsedBody = JSON.parse(init.body);
+      } catch {
+        parsedBody = init.body;
+      }
+    } else {
+      parsedBody = init.body;
+    }
+  }
+
+  // Normalize headers object
+  const normalizedHeaders: Record<string, string> = {};
+  if (init.headers) {
+    if (init.headers instanceof Headers) {
+      init.headers.forEach((v, k) => {
+        normalizedHeaders[k] = v;
+      });
+    } else if (Array.isArray(init.headers)) {
+      init.headers.forEach(([k, v]) => {
+        normalizedHeaders[k] = v;
+      });
+    } else if (typeof init.headers === 'object') {
+      Object.assign(normalizedHeaders, init.headers);
+    }
+  }
+
   // If running with preload provider-proxy bridge
   if (typeof window !== 'undefined' && (window as any).superagent?.ipc) {
     try {
       const payload = await (window as any).superagent.ipc.invoke('provider-proxy', {
         method: init.method ?? 'GET',
         url,
-        headers: init.headers ?? {}
+        headers: normalizedHeaders,
+        body: parsedBody,
       });
       if (payload && typeof payload === 'object') {
         if (payload.error && payload.ok === undefined) {
@@ -60,7 +91,12 @@ export async function browserSafeFetch(url: string, init: RequestInit = {}): Pro
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify({ method: init.method ?? 'GET', url, headers: init.headers ?? {} }),
+        body: JSON.stringify({
+          method: init.method ?? 'GET',
+          url,
+          headers: normalizedHeaders,
+          body: parsedBody,
+        }),
       });
     } catch (err: any) {
       if (isLocalUrl) {
