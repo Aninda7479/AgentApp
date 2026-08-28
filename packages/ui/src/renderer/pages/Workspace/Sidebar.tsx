@@ -105,18 +105,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Sort helper to order chats chronologically (newest first)
   const parseChatTime = (chat: StoredChat): number => {
-    if (chat.startedAt) {
+    if (chat.startedAt && typeof chat.startedAt === 'number') {
       return chat.startedAt;
     }
-    if (chat.timestamp) {
-      if (chat.timestamp.toLowerCase() === 'just now') {
+    if (chat.createdAt && typeof chat.createdAt === 'number') {
+      return chat.createdAt;
+    }
+    if (chat.updatedAt && typeof chat.updatedAt === 'number') {
+      return chat.updatedAt;
+    }
+    if (chat.timestamp != null) {
+      if (typeof chat.timestamp === 'number') {
+        return chat.timestamp;
+      }
+      const tsStr = String(chat.timestamp).trim();
+      if (!tsStr) return 0;
+      if (tsStr.toLowerCase() === 'just now') {
         return Date.now();
       }
-      const dateParsed = Date.parse(chat.timestamp);
+      const dateParsed = Date.parse(tsStr);
       if (!isNaN(dateParsed)) {
         return dateParsed;
       }
-      const match = chat.timestamp.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+      const match = tsStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
       if (match) {
         const day = parseInt(match[1], 10);
         const month = parseInt(match[2], 10) - 1;
@@ -131,7 +142,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const formatRelativeTime = (chat: StoredChat): string => {
     const timeMs = parseChatTime(chat);
     if (!timeMs) {
-      return chat.timestamp || '1m';
+      return typeof chat.timestamp === 'string' && chat.timestamp ? chat.timestamp : '1m';
     }
 
     const diffMs = Date.now() - timeMs;
