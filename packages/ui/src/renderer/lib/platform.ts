@@ -122,3 +122,45 @@ export function formatShortcut(shortcut: string, options: { compact?: boolean } 
 
   return mapped.join(sep);
 }
+
+
+/**
+ * Normalizes any human-entered shortcut (e.g. 'Ctrl + Shift + S', '⌘ + ⇧ + S', 'cmd+shift+s')
+ * into the standard cross-platform accelerator string (e.g. 'CommandOrControl+Shift+S').
+ */
+export function toAccelerator(input: string): string {
+  if (!input || !input.trim()) return 'CommandOrControl+Shift+S';
+  const parts = input.replace(/[\+_\-\s]+/g, '+').split('+').map((p) => p.trim()).filter(Boolean);
+  const normalized = parts.map((p) => {
+    const l = p.toLowerCase();
+    if (l === 'ctrl' || l === 'control' || l === 'cmd' || l === 'command' || l === 'commandorcontrol' || l === 'cmdorctrl' || l === '⌘' || l === '⌃' || l === 'win') {
+      return 'CommandOrControl';
+    }
+    if (l === 'alt' || l === 'option' || l === 'opt' || l === '⌥') {
+      return 'Alt';
+    }
+    if (l === 'shift' || l === '⇧') {
+      return 'Shift';
+    }
+    if (l === 'space') {
+      return 'Space';
+    }
+    if (l === 'enter' || l === 'return' || l === '↵') {
+      return 'Enter';
+    }
+    if (l === 'esc' || l === 'escape') {
+      return 'Escape';
+    }
+    return p.toUpperCase();
+  });
+  return normalized.join('+');
+}
+
+/**
+ * Returns the OS-appropriate display format for an accelerator.
+ * E.g., 'CommandOrControl+Shift+S' -> 'Ctrl + Shift + S' on Windows/Linux, '⌘ + Shift + S' on macOS.
+ */
+export function toDisplayShortcut(shortcut: string): string {
+  return formatShortcut(shortcut);
+}
+

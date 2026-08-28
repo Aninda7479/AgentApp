@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Sparkles, Key, CheckCircle2, AlertTriangle, Camera, Play, ExternalLink } from 'lucide-react';
+import { Sparkles, Key, CheckCircle2, AlertTriangle, Camera, Play, RotateCcw } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
 import { getIpc } from '../../lib/ipc';
-import { getPlatform, getKeySymbols, formatShortcut } from '../../lib/platform';
+import { getPlatform, getKeySymbols, formatShortcut, toAccelerator, toDisplayShortcut } from '../../lib/platform';
 
 export const CircleSearchSettings: React.FC = () => {
   const ipc = getIpc();
@@ -11,33 +11,42 @@ export const CircleSearchSettings: React.FC = () => {
 
   const [enabled, setEnabled] = useState<boolean>(true);
   const [shortcut, setShortcut] = useState<string>('CommandOrControl+Shift+S');
+  const [displayShortcut, setDisplayShortcut] = useState<string>('');
   const [spotlightEnabled, setSpotlightEnabled] = useState<boolean>(true);
   const [saveStatus, setSaveStatus] = useState<{ ok: boolean; message: string } | null>(null);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
 
   useEffect(() => {
     if (!ipc) return;
     ipc
       .invoke('settings-read')
       .then((settings: any) => {
+        let initialShortcut = 'CommandOrControl+Shift+S';
         if (settings?.circleSearch) {
           if (settings.circleSearch.enabled !== undefined) {
             setEnabled(Boolean(settings.circleSearch.enabled));
           }
           if (settings.circleSearch.shortcut) {
-            setShortcut(settings.circleSearch.shortcut);
+            initialShortcut = settings.circleSearch.shortcut;
           }
         }
+        setShortcut(initialShortcut);
+        setDisplayShortcut(toDisplayShortcut(initialShortcut));
+
         if (settings?.general && settings.general.hotkeyOverlayEnabled !== undefined) {
           setSpotlightEnabled(Boolean(settings.general.hotkeyOverlayEnabled));
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setDisplayShortcut(toDisplayShortcut('CommandOrControl+Shift+S'));
+      });
   }, []);
 
-  const saveSettings = async (newEnabled: boolean, newShortcut: string, newSpotlightEnabled: boolean) => {
+  const saveSettings = async (newEnabled: boolean, rawShortcutInput: string, newSpotlightEnabled: boolean) => {
     if (!ipc) return;
     setSaveStatus(null);
     try {
+      const canonicalAccelerator = toAccelerator(rawShortcutInput);
       const currentSettings = await ipc.invoke('settings-read');
       await ipc.invoke('settings-write', {
         ...currentSettings,
@@ -47,10 +56,16 @@ export const CircleSearchSettings: React.FC = () => {
         },
         circleSearch: {
           enabled: newEnabled,
-          shortcut: newShortcut.trim(),
+          shortcut: canonicalAccelerator,
         },
       });
-      setSaveStatus({ ok: true, message: 'Unified Spotlight & Circle Search settings saved.' });
+
+      setShortcut(canonicalAccelerator);
+      setDisplayShortcut(toDisplayShortcut(canonicalAccelerator));
+      setSaveStatus({
+        ok: true,
+        message: `Saved shortcut: ${toDisplayShortcut(canonicalAccelerator)} (${platform === 'macos' ? 'macOS' : 'Windows'})`,
+      });
     } catch (err: any) {
       console.error(err);
       setSaveStatus({ ok: false, message: err.message || 'Failed to save settings.' });
@@ -67,13 +82,51 @@ export const CircleSearchSettings: React.FC = () => {
     saveSettings(enabled, shortcut, val);
   };
 
+  const handleShortcutKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Ignore lone modifier presses
+    if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
+      return;
+    }
+    e.preventDefault();
+
+    const parts: string[] = [];
+    if (e.ctrlKey || e.metaKey) {
+      parts.push(platform === 'macos' ? '⌘' : 'Ctrl');
+    }
+    if (e.altKey) {
+      parts.push(platform === 'macos' ? '⌥' : 'Alt');
+    }
+    if (e.shiftKey) {
+      parts.push(platform === 'macos' ? '⇧' : 'Shift');
+    }
+
+    let keyName = e.key.toUpperCase();
+    if (e.code === 'Space' || e.key === ' ') {
+      keyName = 'Space';
+    } else if (e.key === 'Escape') {
+      keyName = 'Esc';
+    }
+
+    parts.push(keyName);
+    const newFormatted = parts.join(' + ');
+    setDisplayShortcut(newFormatted);
+    setIsRecording(false);
+  };
+
   const handleShortcutChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setShortcut(e.target.value);
+    setDisplayShortcut(e.target.value);
   };
 
   const handleShortcutSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    saveSettings(enabled, shortcut, spotlightEnabled);
+    saveSettings(enabled, displayShortcut || shortcut, spotlightEnabled);
+  };
+
+  const handleResetDefaultShortcut = () => {
+    const defaultAcc = 'CommandOrControl+Shift+S';
+    setShortcut(defaultAcc);
+    setDisplayShortcut(toDisplayShortcut(defaultAcc));
+    saveSettings(enabled, defaultAcc, spotlightEnabled);
   };
 
   const handleTestOverlay = async () => {
@@ -87,7 +140,7 @@ export const CircleSearchSettings: React.FC = () => {
   };
 
   const spotlightShortcutFormatted = formatShortcut('CommandOrControl+Alt+Space');
-  const directCaptureFormatted = formatShortcut(shortcut || 'CommandOrControl+Shift+S');
+  const directCaptureFormatted = toDisplayShortcut(shortcut || 'CommandOrControl+Shift+S');
 
   return (
     <div
@@ -115,7 +168,7 @@ export const CircleSearchSettings: React.FC = () => {
                   Circle to Search & Spotlight
                 </h1>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-indigo-500/20 to-pink-500/20 text-indigo-300 border border-indigo-500/30">
-                  {platform === 'macos' ? 'macOS Native' : platform === 'windows' ? 'Windows Mica' : 'Linux'}
+                  {platform === 'macos' ? 'macOS Native' : platform === 'windows' ? 'Windows' : 'Linux'}
                 </span>
               </div>
               <p className="mt-1 text-sm leading-6 text-brand-textMuted">
@@ -222,22 +275,44 @@ export const CircleSearchSettings: React.FC = () => {
       {/* Shortcut Accelerator Config */}
       <section className="mb-6">
         <h3 className="mb-3 flex items-center gap-2 text-base font-semibold text-brand-textMain">
-          <Key size={16} /> Global Keypress Accelerators
+          <Key size={16} /> Global Keypress Accelerator
         </h3>
         <div className="rounded-lg border border-brand-border bg-brand-card p-4">
           <form onSubmit={handleShortcutSubmit} className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-brand-textMuted uppercase tracking-wider">
-                Direct Circle to Search Key Accelerator
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-brand-textMuted uppercase tracking-wider">
+                  Direct Circle to Search Keypress ({platform === 'macos' ? 'macOS' : 'Windows'})
+                </label>
+                <button
+                  type="button"
+                  onClick={handleResetDefaultShortcut}
+                  className="text-[11px] text-brand-textMuted hover:text-brand-textMain flex items-center gap-1 transition-colors cursor-pointer"
+                  title="Reset to default shortcut"
+                >
+                  <RotateCcw size={12} />
+                  <span>Reset Default</span>
+                </button>
+              </div>
+
               <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={shortcut}
-                  onChange={handleShortcutChange}
-                  className="ui-input flex-1"
-                  placeholder="CommandOrControl+Shift+S"
-                />
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={displayShortcut}
+                    onFocus={() => setIsRecording(true)}
+                    onBlur={() => setIsRecording(false)}
+                    onKeyDown={handleShortcutKeyDown}
+                    onChange={handleShortcutChange}
+                    className="ui-input w-full font-mono text-sm tracking-wide"
+                    placeholder={platform === 'macos' ? '⌘ + Shift + S' : 'Ctrl + Shift + S'}
+                  />
+                  {isRecording && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-indigo-400 animate-pulse">
+                      Press keys now...
+                    </span>
+                  )}
+                </div>
                 <button
                   type="submit"
                   className="px-4 py-2 rounded-lg bg-brand-highlight hover:bg-brand-highlight-hover text-brand-highlight-text text-xs font-semibold transition-colors cursor-pointer"
@@ -245,6 +320,13 @@ export const CircleSearchSettings: React.FC = () => {
                   Save Shortcut
                 </button>
               </div>
+              <p className="mt-1.5 text-[11px] text-brand-textMuted">
+                Click the input box and press your desired key combination (e.g.{' '}
+                <span className="font-mono text-zinc-300">
+                  {platform === 'macos' ? '⌘ + Shift + S' : 'Ctrl + Shift + S'}
+                </span>
+                ).
+              </p>
             </div>
 
             <div className="rounded-lg bg-brand-bg border border-brand-border/40 p-3.5 text-xs text-brand-textMuted space-y-2 leading-relaxed">
