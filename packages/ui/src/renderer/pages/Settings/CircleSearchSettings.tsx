@@ -234,6 +234,7 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
     const newFormatted = parts.join(' + ');
     setDisplayShortcut(newFormatted);
     setIsRecording(false);
+    saveSettings(enabled, newFormatted, spotlightEnabled);
   };
 
   const handleShortcutChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -253,6 +254,7 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
   };
 
   const handleTestOverlay = async () => {
+
     if (ipc?.invoke) {
       try {
         await ipc.invoke('circle-search-show');
@@ -352,14 +354,23 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
               </div>
             </div>
 
-            {activeSelectedOption?.metadata && (
-              <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] font-semibold">
-                {activeSelectedOption.metadata}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {saveStatus?.ok && (
+                <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-medium flex items-center gap-1 animate-fade-in">
+                  <CheckCircle2 size={11} />
+                  <span>Auto-saved</span>
+                </span>
+              )}
+              {activeSelectedOption?.metadata && (
+                <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[10px] font-semibold">
+                  {activeSelectedOption.metadata}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </section>
+
 
       {/* Spotlight Quick Launcher Toggle */}
       <section>

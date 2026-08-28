@@ -301,7 +301,9 @@ pub fn settings_read() -> serde_json::Value {
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub fn settings_write(
+
     content: Option<serde_json::Value>,
     data: Option<serde_json::Value>,
     settings: Option<serde_json::Value>,
@@ -317,6 +319,10 @@ pub fn settings_write(
     telegram: Option<serde_json::Value>,
     internet_access: Option<serde_json::Value>,
     web_app: Option<serde_json::Value>,
+    circle_search: Option<serde_json::Value>,
+    circleSearch: Option<serde_json::Value>,
+    chat_title: Option<serde_json::Value>,
+    chatTitle: Option<serde_json::Value>,
 ) -> Result<(), String> {
     let mut patch_map = serde_json::Map::new();
 
@@ -338,6 +344,8 @@ pub fn settings_write(
     if let Some(v) = telegram { patch_map.insert("telegram".to_string(), v); }
     if let Some(v) = internet_access { patch_map.insert("internetAccess".to_string(), v); }
     if let Some(v) = web_app { patch_map.insert("webApp".to_string(), v); }
+    if let Some(v) = circle_search.or(circleSearch) { patch_map.insert("circleSearch".to_string(), v); }
+    if let Some(v) = chat_title.or(chatTitle) { patch_map.insert("chatTitle".to_string(), v); }
 
     if !patch_map.is_empty() {
         superagent_core_v2::storage::SettingsStore::new()
@@ -346,6 +354,7 @@ pub fn settings_write(
     }
     Ok(())
 }
+
 
 #[tauri::command]
 pub fn store_read() -> serde_json::Value {

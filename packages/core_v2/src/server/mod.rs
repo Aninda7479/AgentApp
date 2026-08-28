@@ -3488,34 +3488,105 @@ async fn handle_ipc(
             let persona = routed.persona;
             let mut model_config = persona.model_config.clone();
 
-            let parse_provider = |p: &str| -> Option<crate::types::ProviderType> {
-                match p.to_lowercase().trim() {
-                    "gemini" | "google" => Some(crate::types::ProviderType::Gemini),
-                    "openai" => Some(crate::types::ProviderType::OpenAI),
-                    "anthropic" | "claude" => Some(crate::types::ProviderType::Anthropic),
-                    "ollama" => Some(crate::types::ProviderType::Ollama),
-                    "openrouter" => Some(crate::types::ProviderType::OpenRouter),
-                    "deepseek" => Some(crate::types::ProviderType::DeepSeek),
-                    "groq" => Some(crate::types::ProviderType::Groq),
-                    _ => None,
+            let mut resolved_provider_str = cfg_provider.to_string();
+            if resolved_provider_str.is_empty() {
+                let lower_m = cfg_model.to_lowercase();
+                if lower_m.contains("gemini") || lower_m.contains("google") {
+                    resolved_provider_str = "gemini".to_string();
+                } else if lower_m.contains("gpt") || lower_m.contains("o1") || lower_m.contains("o3") {
+                    resolved_provider_str = "openai".to_string();
+                } else if lower_m.contains("claude") || lower_m.contains("sonnet") || lower_m.contains("haiku") || lower_m.contains("opus") {
+                    resolved_provider_str = "anthropic".to_string();
+                } else if lower_m.contains("deepseek") {
+                    resolved_provider_str = "deepseek".to_string();
+                } else if lower_m.contains("llava") || lower_m.contains("llama") {
+                    resolved_provider_str = "ollama".to_string();
                 }
+            }
+
+            let mut api_key: Option<String> = None;
+            let mut base_url: Option<String> = None;
+
+            if let Some(providers_list) = raw_settings.get("providers").and_then(|p| p.as_array()) {
+                if let Some(found_prov) = providers_list.iter().find(|p| {
+                    let id = p.get("id").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+                    let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+                    let target = resolved_provider_str.to_lowercase();
+                    id == target
+                        || name == target
+                        || (target == "gemini" && (id == "google" || name == "google" || id == "google-ai"))
+                        || (target == "google" && (id == "gemini" || name == "gemini"))
+                        || (target == "anthropic" && (id == "claude" || name == "claude"))
+                }) {
+                    if let Some(k) = found_prov.get("apiKey").and_then(|v| v.as_str()) {
+                        if !k.trim().is_empty() {
+                            api_key = Some(k.trim().to_string());
+                        }
+                    }
+                    if let Some(u) = found_prov.get("baseUrl").and_then(|v| v.as_str()) {
+                        if !u.trim().is_empty() {
+                            base_url = Some(u.trim().to_string());
+                        }
+                    }
+                }
+            }
+
+            if api_key.is_none() {
+                if let Ok(Some(k)) = state.settings_store.get_api_key(&resolved_provider_str) {
+                    if !k.trim().is_empty() {
+                        api_key = Some(k.trim().to_string());
+                    }
+                }
+                if api_key.is_none() && (resolved_provider_str == "gemini" || resolved_provider_str == "google") {
+                    if let Ok(Some(k)) = state.settings_store.get_api_key("gemini") {
+                        if !k.trim().is_empty() { api_key = Some(k.trim().to_string()); }
+                    }
+                    if api_key.is_none() {
+                        if let Ok(Some(k)) = state.settings_store.get_api_key("google") {
+                            if !k.trim().is_empty() { api_key = Some(k.trim().to_string()); }
+                        }
+                    }
+                }
+            }
+
+            let provider_type = match resolved_provider_str.to_lowercase().as_str() {
+                "gemini" | "google" | "google-ai" => crate::types::ProviderType::Gemini,
+                "openai" => crate::types::ProviderType::OpenAI,
+                "anthropic" | "claude" => crate::types::ProviderType::Anthropic,
+                "ollama" => crate::types::ProviderType::Ollama,
+                "openrouter" => crate::types::ProviderType::OpenRouter,
+                "deepseek" => crate::types::ProviderType::DeepSeek,
+                "groq" => crate::types::ProviderType::Groq,
+                _ => model_config.provider,
             };
 
-            if let Some(parsed_prov) = parse_provider(cfg_provider) {
-                model_config.provider = parsed_prov;
+
+            if api_key.is_none() {
+                api_key = match provider_type {
+                    crate::types::ProviderType::Gemini => std::env::var("GEMINI_API_KEY").or_else(|_| std::env::var("GOOGLE_API_KEY")).ok(),
+                    crate::types::ProviderType::OpenAI => std::env::var("OPENAI_API_KEY").ok(),
+                    crate::types::ProviderType::Anthropic => std::env::var("ANTHROPIC_API_KEY").ok(),
+                    crate::types::ProviderType::OpenRouter => std::env::var("OPENROUTER_API_KEY").ok(),
+                    crate::types::ProviderType::DeepSeek => std::env::var("DEEPSEEK_API_KEY").ok(),
+                    crate::types::ProviderType::Groq => std::env::var("GROQ_API_KEY").ok(),
+                    _ => None,
+                };
             }
+
+            model_config.provider = provider_type;
             if !cfg_model.is_empty() && cfg_model != "auto" {
                 model_config.model_id = cfg_model.to_string();
             }
-
-            model_config.api_key = state
-                .settings_store
-                .get_api_key(&format!("{:?}", model_config.provider).to_lowercase())
-                .ok()
-                .flatten();
+            if let Some(k) = api_key {
+                model_config.api_key = Some(k);
+            }
+            if let Some(u) = base_url {
+                model_config.base_url = Some(u);
+            }
 
             let provider_instance = crate::providers::ProviderFactory::create(&model_config.provider);
             let mut answer = String::new();
+
 
 
             match provider_instance.chat_stream(&model_config, &messages, &[]).await {

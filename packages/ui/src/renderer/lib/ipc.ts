@@ -255,10 +255,17 @@ export function getIpc(): any {
           const rustCmd = TAURI_COMMAND_MAP[channel] || channel.replace(/[:\-]/g, '_');
           const payload =
             args[0] && typeof args[0] === 'object'
-              ? args[0]
+              ? {
+                  ...args[0],
+                  data: args[0],
+                  content: args[0],
+                  settings: args[0],
+                  payload: args[0],
+                }
               : args[0] !== undefined
-              ? { id: args[0], arg: args[0], chatId: args[0], chat_id: args[0], content: args[0] }
+              ? { id: args[0], arg: args[0], chatId: args[0], chat_id: args[0], content: args[0], data: args[0], settings: args[0], payload: args[0] }
               : undefined;
+
           try {
             const res = await tauri(rustCmd, payload);
             if (res !== undefined) {
