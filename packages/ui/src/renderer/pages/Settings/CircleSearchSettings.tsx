@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Sparkles, Key, CheckCircle2, Play, RotateCcw, Bot, Camera, HelpCircle, Check } from 'lucide-react';
+import { Sparkles, Key, CheckCircle2, Play, RotateCcw, Bot, HelpCircle, Power } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
 import { getIpc } from '../../lib/ipc';
-import { getPlatform, formatShortcut, toAccelerator, toDisplayShortcut } from '../../lib/platform';
+import { getPlatform, toAccelerator, toDisplayShortcut } from '../../lib/platform';
 import { SearchableSelect, SearchableSelectOption } from '../../components/ui/SearchableSelect';
 import { ModelConfig, ProviderConnection } from './types';
 
@@ -21,7 +21,6 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
   const [enabled, setEnabled] = useState<boolean>(true);
   const [shortcut, setShortcut] = useState<string>('CommandOrControl+Shift+S');
   const [displayShortcut, setDisplayShortcut] = useState<string>('');
-  const [spotlightEnabled, setSpotlightEnabled] = useState<boolean>(true);
 
   const [selectedKey, setSelectedKey] = useState<string>('auto');
   const [selectedProvider, setSelectedProvider] = useState<string>('');
@@ -61,9 +60,6 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
         setShortcut(initialShortcut);
         setDisplayShortcut(toDisplayShortcut(initialShortcut));
 
-        if (settings?.general && settings.general.hotkeyOverlayEnabled !== undefined) {
-          setSpotlightEnabled(Boolean(settings.general.hotkeyOverlayEnabled));
-        }
         if (Array.isArray(settings?.providers)) {
           setFallbackProviders(settings.providers);
         }
@@ -79,7 +75,7 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
   const effectiveProviders = propProviders && propProviders.length > 0 ? propProviders : fallbackProviders;
   const effectiveModels = propModels && propModels.length > 0 ? propModels : fallbackModels;
 
-  // Filter only enabled models
+  // Filter only enabled models from settings
   const enabledModels = useMemo(() => {
     return effectiveModels.filter((m) => m.enabled !== false);
   }, [effectiveModels]);
@@ -134,7 +130,6 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
   const saveSettings = async (
     newEnabled: boolean,
     rawShortcutInput: string,
-    newSpotlightEnabled: boolean,
     newProvider?: string,
     newModel?: string
   ) => {
@@ -149,7 +144,7 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
         ...currentSettings,
         general: {
           ...(currentSettings?.general || {}),
-          hotkeyOverlayEnabled: newSpotlightEnabled,
+          hotkeyOverlayEnabled: newEnabled,
         },
         circleSearch: {
           enabled: newEnabled,
@@ -176,7 +171,7 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
     if (val === 'auto') {
       setSelectedProvider('');
       setSelectedModel('auto');
-      saveSettings(enabled, shortcut, spotlightEnabled, '', 'auto');
+      saveSettings(enabled, shortcut, '', 'auto');
       return;
     }
 
@@ -186,26 +181,21 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
       const mod = matched.raw.model || '';
       setSelectedProvider(prov);
       setSelectedModel(mod);
-      saveSettings(enabled, shortcut, spotlightEnabled, prov, mod);
+      saveSettings(enabled, shortcut, prov, mod);
     } else if (val.includes('::')) {
       const [prov, mod] = val.split('::');
       setSelectedProvider(prov);
       setSelectedModel(mod);
-      saveSettings(enabled, shortcut, spotlightEnabled, prov, mod);
+      saveSettings(enabled, shortcut, prov, mod);
     } else {
       setSelectedModel(val);
-      saveSettings(enabled, shortcut, spotlightEnabled, selectedProvider, val);
+      saveSettings(enabled, shortcut, selectedProvider, val);
     }
   };
 
   const handleToggle = (val: boolean) => {
     setEnabled(val);
-    saveSettings(val, shortcut, spotlightEnabled);
-  };
-
-  const handleSpotlightToggle = (val: boolean) => {
-    setSpotlightEnabled(val);
-    saveSettings(enabled, shortcut, val);
+    saveSettings(val, shortcut);
   };
 
   const handleShortcutKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -236,14 +226,14 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
     const newFormatted = parts.join(' + ');
     setDisplayShortcut(newFormatted);
     setIsRecording(false);
-    saveSettings(enabled, newFormatted, spotlightEnabled);
+    saveSettings(enabled, newFormatted);
   };
 
   const handleResetDefaultShortcut = () => {
     const defaultAcc = 'CommandOrControl+Shift+S';
     setShortcut(defaultAcc);
     setDisplayShortcut(toDisplayShortcut(defaultAcc));
-    saveSettings(enabled, defaultAcc, spotlightEnabled);
+    saveSettings(enabled, defaultAcc);
   };
 
   const handleTestOverlay = async () => {
@@ -257,7 +247,6 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
   };
 
   const directShortcutDisplay = toDisplayShortcut(shortcut || 'CommandOrControl+Shift+S');
-  const spotlightShortcutDisplay = formatShortcut('CommandOrControl+Alt+Space');
   const activeSelectedOption = modelOptions.find((o) => o.value === selectedKey);
 
   return (
@@ -277,7 +266,7 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
             <div>
               <h1 className="text-xl font-semibold text-brand-textMain">Circle to Search</h1>
               <p className="mt-1 text-xs text-brand-textMuted leading-relaxed">
-                Circle or drag over anything on your screen to ask questions, solve code, summarize articles, or extract text.
+                One unified assistant to search your screen, ask questions, explain code, or extract text anywhere.
               </p>
             </div>
           </div>
@@ -293,7 +282,42 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
         </div>
       </div>
 
-      {/* 1. AI Model Selection */}
+      {/* 1. Master Enable Toggle */}
+      <section className="rounded-xl border border-brand-border bg-brand-card p-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span
+            className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+              enabled ? 'bg-indigo-500/15 text-indigo-400' : 'bg-brand-bg text-brand-textMuted'
+            }`}
+          >
+            <Power size={18} />
+          </span>
+          <div>
+            <div className="text-sm font-medium text-brand-textMain">Enable Circle to Search</div>
+            <div className="text-xs text-brand-textMuted">
+              Turn on the global shortcut to search your screen or ask quick questions anywhere.
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          onClick={() => handleToggle(!enabled)}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+            enabled ? 'bg-[color:var(--brand-accent)]' : 'bg-brand-bg border border-brand-border'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              enabled ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </section>
+
+      {/* 2. AI Model Selection */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-brand-textMain flex items-center gap-2">
@@ -310,7 +334,7 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
 
         <div className="rounded-xl border border-brand-border bg-brand-card p-4 space-y-3">
           <p className="text-xs text-brand-textMuted">
-            Choose which AI analyzes your screen content. It saves automatically when you make a selection.
+            Choose which AI answers questions and analyzes your screen. Saves automatically.
           </p>
 
           <SearchableSelect
@@ -341,7 +365,7 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
         </div>
       </section>
 
-      {/* 2. Keyboard Shortcut */}
+      {/* 3. Keyboard Shortcut */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-brand-textMain flex items-center gap-2">
@@ -360,7 +384,7 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
 
         <div className="rounded-xl border border-brand-border bg-brand-card p-4 space-y-3">
           <p className="text-xs text-brand-textMuted">
-            Press these keys anywhere on your computer to open the Circle to Search overlay.
+            Press these keys anywhere on your computer to open Circle to Search.
           </p>
 
           <div className="relative">
@@ -386,92 +410,24 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
         </div>
       </section>
 
-      {/* 3. Features & Toggles */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-brand-textMain">Features</h2>
-        <div className="rounded-xl border border-brand-border bg-brand-card divide-y divide-brand-border/60">
-          {/* Circle to search toggle */}
-          <div className="p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
-                <Camera size={16} />
-              </span>
-              <div>
-                <div className="text-sm font-medium text-brand-textMain">Circle to Search</div>
-                <div className="text-xs text-brand-textMuted">
-                  Highlight or circle areas on your screen for instant answers.
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              role="switch"
-              aria-checked={enabled}
-              onClick={() => handleToggle(!enabled)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
-                enabled ? 'bg-[color:var(--brand-accent)]' : 'bg-brand-bg border border-brand-border'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  enabled ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </div>
-
-          {/* Quick search bar toggle */}
-          <div className="p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400">
-                <Sparkles size={16} />
-              </span>
-              <div>
-                <div className="text-sm font-medium text-brand-textMain">Quick Search Bar</div>
-                <div className="text-xs text-brand-textMuted">
-                  Open a floating search box anywhere with <kbd className="px-1.5 py-0.5 rounded bg-brand-bg border border-brand-border font-mono text-[10px] text-brand-textMain">{spotlightShortcutDisplay}</kbd>.
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              role="switch"
-              aria-checked={spotlightEnabled}
-              onClick={() => handleSpotlightToggle(!spotlightEnabled)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
-                spotlightEnabled ? 'bg-[color:var(--brand-accent)]' : 'bg-brand-bg border border-brand-border'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  spotlightEnabled ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </div>
-        </div>
-      </section>
-
       {/* 4. Quick How-To Tips */}
       <section className="rounded-xl border border-brand-border/60 bg-brand-card/50 p-4 space-y-2.5">
         <h3 className="text-xs font-semibold text-brand-textMain flex items-center gap-1.5">
           <HelpCircle size={14} className="text-zinc-400" />
-          <span>Quick Tips</span>
+          <span>How It Works</span>
         </h3>
         <ul className="text-xs text-brand-textMuted space-y-1.5 pl-4 list-disc leading-relaxed">
           <li>
-            Press <kbd className="px-1 py-0.5 rounded bg-brand-bg border border-brand-border font-mono text-[10px] text-zinc-300">{directShortcutDisplay}</kbd> anytime to open the transparent screen overlay.
+            Press <kbd className="px-1 py-0.5 rounded bg-brand-bg border border-brand-border font-mono text-[10px] text-zinc-300">{directShortcutDisplay}</kbd> anywhere to open the search bar.
           </li>
           <li>
-            Click and drag to circle any image, error message, table, or code snippet.
+            <strong>To search your screen:</strong> Drag or circle any area with your mouse.
           </li>
           <li>
-            Use quick action buttons to instantly <strong>Explain</strong>, <strong>Summarize</strong>, or <strong>Copy Text</strong> from your selection.
+            <strong>To ask a question:</strong> Just start typing in the search bar and press Enter.
           </li>
           <li>
-            Press <kbd className="px-1 py-0.5 rounded bg-brand-bg border border-brand-border font-mono text-[10px] text-zinc-300">Esc</kbd> whenever you want to close the overlay.
+            <strong>To close:</strong> Press <kbd className="px-1 py-0.5 rounded bg-brand-bg border border-brand-border font-mono text-[10px] text-zinc-300">Esc</kbd> anytime.
           </li>
         </ul>
       </section>

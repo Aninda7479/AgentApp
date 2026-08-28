@@ -37,19 +37,15 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, shortcut, event| {
+                .with_handler(|app, _shortcut, event| {
                     use tauri_plugin_global_shortcut::ShortcutState;
                     if event.state() == ShortcutState::Pressed {
-                        let shortcut_str = shortcut.to_string().to_lowercase();
-                        if shortcut_str.contains("shift") && (shortcut_str.contains('s') || shortcut_str.contains("space")) {
-                            let _ = circle_search_toggle(app.clone());
-                        } else if shortcut_str.contains("space") {
-                            let _ = circle_search_toggle(app.clone());
-                        }
+                        let _ = circle_search_toggle(app.clone());
                     }
                 })
                 .build(),
         )
+
         .on_window_event(|window, event| {
             if window.label() == "artifacts" {
                 if let WindowEvent::Focused(false) = event {
@@ -145,10 +141,25 @@ pub fn run() {
                 .build(app)?;
 
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
-            let _ = app.global_shortcut().register("CommandOrControl+Shift+S");
-            let _ = app.global_shortcut().register("CommandOrControl+Alt+Space");
+            let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+            let shortcut_str = saved_settings
+                .get("circleSearch")
+                .and_then(|cs| cs.get("shortcut"))
+                .and_then(|s| s.as_str())
+                .unwrap_or("CommandOrControl+Shift+S");
+
+            let is_enabled = saved_settings
+                .get("circleSearch")
+                .and_then(|cs| cs.get("enabled"))
+                .and_then(|e| e.as_bool())
+                .unwrap_or(true);
+
+            if is_enabled {
+                let _ = app.global_shortcut().register(shortcut_str);
+            }
 
             Ok(())
+
         })
         .invoke_handler(tauri::generate_handler![
             get_system_info,

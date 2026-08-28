@@ -14,9 +14,9 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
   const platform = getPlatform();
 
   const shortcutItems = [
-    { label: 'Google Gemini Circle to Search', value: formatShortcut('CommandOrControl+Shift+S'), icon: <Camera size={14} className="text-pink-400" /> },
-    { label: 'Spotlight Quick Launcher', value: formatShortcut('CommandOrControl+Alt+Space'), icon: <Sparkles size={14} className="text-indigo-400" /> },
+    { label: 'Circle to Search & Quick Assistant', value: formatShortcut('CommandOrControl+Shift+S'), icon: <Sparkles size={14} className="text-indigo-400" /> },
     { label: 'Search Command Palette', value: formatShortcut('CommandOrControl+P') },
+
     { label: 'Create New Agent Chat', value: formatShortcut('CommandOrControl+N') },
     { label: 'Open Settings Panel', value: formatShortcut('CommandOrControl+,') },
     { label: 'Toggle Left Sidebar', value: formatShortcut('CommandOrControl+\\') },
