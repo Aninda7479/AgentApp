@@ -34,14 +34,15 @@ assets.
 # Install all workspace dependencies once
 npm install
 
-# Build every package in dependency order (core → cli → web → desktop)
+# Build every package (core, UI, desktop UI, CLI, browser extension)
 npm run build
 
-# Build just one package
-npm run build --workspace=@superagent/core
-npm run build --workspace=@superagent/cli
-npm run build --workspace=@superagent/web
-npm run build --workspace=@superagent/desktop
+# Build individual targets:
+npm run build:core        # Rust core engine (packages/core_v2)
+npm run build:ui          # Shared React UI (packages/ui)
+npm run build:desktop-ui  # Desktop UI bundle
+npm run build:cli         # Standalone native CLI (packages/cli)
+npm run build:ext         # Browser Extension (packages/browser-extension)
 
 # Build the promotion site (served at /AgentApp/ on GitHub Pages)
 cd website && npm ci && npm run build
