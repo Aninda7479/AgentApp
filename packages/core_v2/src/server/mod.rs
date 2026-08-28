@@ -2169,13 +2169,14 @@ async fn handle_ipc(
             let settings_val = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
             let providers = settings_val.get("providers").cloned().unwrap_or_else(|| serde_json::json!([]));
             let models = settings_val.get("models").cloned().unwrap_or_else(|| serde_json::json!([]));
-            let sessions = state.chat_storage.list_sessions().unwrap_or_default();
+            let chats = crate::storage::load_all_stored_chats();
+            let projects = crate::storage::load_all_stored_projects();
             Ok(Json(serde_json::json!({
                 "data": {
                     "connectedProviders": providers,
                     "modelsCatalog": models,
-                    "projects": [],
-                    "chats": sessions
+                    "projects": projects,
+                    "chats": chats
                 }
             })))
         }
@@ -2203,22 +2204,42 @@ async fn handle_ipc(
                         }
                         let _ = state.settings_store.save_raw(&current);
                     }
+
+                    // Save chats to disk
+                    if let Some(chats_arr) = obj.get("chats").and_then(|v| v.as_array()) {
+                        for chat_val in chats_arr {
+                            let _ = crate::storage::save_stored_chat_from_json(chat_val);
+                        }
+                    }
+
+                    // Save projects to disk
+                    if let Some(proj_arr) = obj.get("projects").and_then(|v| v.as_array()) {
+                        for proj_val in proj_arr {
+                            let _ = crate::storage::save_stored_project_from_json(proj_val);
+                        }
+                    }
                 }
             }
             Ok(Json(serde_json::json!({ "data": null })))
         }
         "chat-steps-read" => {
-            let chat_id = args.first().and_then(|v| v.as_str()).unwrap_or("");
-            if let Ok(session) = state.chat_storage.load_session(chat_id) {
-                Ok(Json(serde_json::json!({ "data": session.messages })))
-            } else {
-                Ok(Json(serde_json::json!({ "data": [] })))
-            }
+            let chat_id = args.first().and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s)
+                } else {
+                    v.get("chatId").and_then(|c| c.as_str())
+                }
+            }).unwrap_or("");
+            let steps = crate::storage::load_chat_steps(chat_id);
+            Ok(Json(serde_json::json!({ "data": steps })))
         }
-        "projects-read" => Ok(Json(serde_json::json!({ "data": [] }))),
+        "projects-read" => {
+            let projects = crate::storage::load_all_stored_projects();
+            Ok(Json(serde_json::json!({ "data": projects })))
+        }
         "chats-read" => {
-            let sessions = state.chat_storage.list_sessions().unwrap_or_default();
-            Ok(Json(serde_json::json!({ "data": sessions })))
+            let chats = crate::storage::load_all_stored_chats();
+            Ok(Json(serde_json::json!({ "data": chats })))
         }
         "settings-read" => {
             let settings = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
@@ -3101,6 +3122,28 @@ async fn handle_ipc(
             model_config.api_key = api_key;
             model_config.base_url = base_url;
 
+            let clean_chat_id = session_id.trim_start_matches("session-").trim().to_string();
+            let effective_workspace: PathBuf = if let Some(proj_root) = config_val.get("projectRoot")
+                .or_else(|| config_val.get("project_root"))
+                .or_else(|| config_val.get("workingDirectory"))
+                .or_else(|| config_val.get("workspace"))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.trim().is_empty())
+            {
+                let p = PathBuf::from(proj_root);
+                if p.exists() && p.is_dir() {
+                    p
+                } else {
+                    let conv_dir = get_superagent_dir().join("conversation").join("chats").join(&clean_chat_id);
+                    let _ = std::fs::create_dir_all(&conv_dir);
+                    conv_dir
+                }
+            } else {
+                let conv_dir = get_superagent_dir().join("conversation").join("chats").join(&clean_chat_id);
+                let _ = std::fs::create_dir_all(&conv_dir);
+                conv_dir
+            };
+
             let (cancel_tx, mut cancel_rx) = tokio::sync::broadcast::channel::<()>(2);
             {
                 let mut cancellations = state.active_cancellations.lock().unwrap();
@@ -3146,7 +3189,29 @@ async fn handle_ipc(
                 });
                 let _ = state_clone.ws_broadcast_tx.send(ctx_evt.to_string());
 
-                let engine = AgentEngine::new(state_clone.tool_registry.clone());
+                let mut session_tool_registry = ToolRegistry::new();
+                session_tool_registry.register(ReadFileTool::new(effective_workspace.clone()));
+                session_tool_registry.register(WriteFileTool::new(effective_workspace.clone()));
+                session_tool_registry.register(EditFileTool::new(effective_workspace.clone()));
+                session_tool_registry.register(ListDirTool::new(effective_workspace.clone()));
+                session_tool_registry.register(RunCommandTool::new(effective_workspace.clone()));
+                session_tool_registry.register(GrepSearchTool::new(effective_workspace.clone()));
+                session_tool_registry.register(GeneratePdfTool::new(effective_workspace.clone()));
+                session_tool_registry.register(GeneratePresentationTool::new(effective_workspace.clone()));
+                session_tool_registry.register(BrowserNavigateTool::new());
+                session_tool_registry.register(BrowserScreenshotTool::new(effective_workspace.clone()));
+                session_tool_registry.register(WebSearchTool::new());
+
+                let session_tool_registry_arc = Arc::new(session_tool_registry);
+                let subagent_runner = Arc::new(SubagentRunner::new(
+                    state_clone.persona_store.clone(),
+                    session_tool_registry_arc.clone(),
+                ));
+
+                let mut complete_registry = (*session_tool_registry_arc).clone();
+                complete_registry.register(RunSubagentTool::new(subagent_runner));
+
+                let engine = AgentEngine::new(Arc::new(complete_registry));
                 let sys_prompt = if instructions.is_empty() {
                     "You are SuperAgent, an expert autonomous AI software engineer and problem solver.".to_string()
                 } else {

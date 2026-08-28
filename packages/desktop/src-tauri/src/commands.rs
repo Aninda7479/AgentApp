@@ -403,8 +403,8 @@ pub fn store_write(
     payload: Option<serde_json::Value>,
     connected_providers: Option<serde_json::Value>,
     models_catalog: Option<serde_json::Value>,
-    _projects: Option<serde_json::Value>,
-    _chats: Option<serde_json::Value>,
+    projects: Option<serde_json::Value>,
+    chats: Option<serde_json::Value>,
 ) -> Result<(), String> {
     let mut patch = serde_json::Map::new();
 
@@ -420,6 +420,16 @@ pub fn store_write(
                 patch.insert("models".to_string(), m.clone());
             }
         }
+        if let Some(c_arr) = obj.get("chats").and_then(|v| v.as_array()) {
+            for c in c_arr {
+                let _ = superagent_core_v2::storage::save_stored_chat_from_json(c);
+            }
+        }
+        if let Some(p_arr) = obj.get("projects").and_then(|v| v.as_array()) {
+            for p in p_arr {
+                let _ = superagent_core_v2::storage::save_stored_project_from_json(p);
+            }
+        }
     }
 
     if let Some(p) = connected_providers {
@@ -430,6 +440,16 @@ pub fn store_write(
     if let Some(m) = models_catalog {
         if m.is_array() {
             patch.insert("models".to_string(), m);
+        }
+    }
+    if let Some(c_arr) = chats.as_ref().and_then(|v| v.as_array()) {
+        for c in c_arr {
+            let _ = superagent_core_v2::storage::save_stored_chat_from_json(c);
+        }
+    }
+    if let Some(p_arr) = projects.as_ref().and_then(|v| v.as_array()) {
+        for p in p_arr {
+            let _ = superagent_core_v2::storage::save_stored_project_from_json(p);
         }
     }
 

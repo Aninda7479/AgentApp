@@ -301,6 +301,202 @@ impl ChatStorage {
     }
 }
 
+pub fn save_stored_chat_from_json(chat_val: &serde_json::Value) -> Result<()> {
+    let id = match chat_val.get("id").and_then(|v| v.as_str()) {
+        Some(s) if !s.trim().is_empty() => s.trim().to_string(),
+        _ => return Ok(()),
+    };
+
+    let title = chat_val.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled Chat").to_string();
+    let project = chat_val.get("project").or_else(|| chat_val.get("projectName")).and_then(|v| v.as_str()).map(|s| s.to_string());
+    let model = chat_val.get("model").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let timestamp_str = chat_val.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
+    let created_at = chat_val.get("createdAt").and_then(|v| v.as_i64()).unwrap_or_else(|| {
+        chrono::DateTime::parse_from_rfc3339(timestamp_str)
+            .map(|dt| dt.timestamp_millis())
+            .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis())
+    });
+    let updated_at = chat_val.get("updatedAt").and_then(|v| v.as_i64()).unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
+
+    let conv_dir = get_superagent_dir().join("conversation");
+    let chat_dir = conv_dir.join("chats").join(&id);
+    let _ = fs::create_dir_all(&chat_dir);
+
+    // Save chat.json metadata
+    let meta_json = serde_json::json!({
+        "id": id,
+        "title": title,
+        "project": project,
+        "model": model,
+        "createdAt": created_at,
+        "updatedAt": updated_at,
+    });
+    let _ = fs::write(chat_dir.join("chat.json"), serde_json::to_string_pretty(&meta_json)?);
+
+    // Save steps.json
+    if let Some(steps) = chat_val.get("steps").and_then(|v| v.as_array()) {
+        if !steps.is_empty() {
+            let _ = fs::write(chat_dir.join("steps.json"), serde_json::to_string_pretty(steps)?);
+        }
+    }
+
+    Ok(())
+}
+
+pub fn save_stored_project_from_json(proj_val: &serde_json::Value) -> Result<()> {
+    let name = match proj_val.get("name").or_else(|| proj_val.get("id")).and_then(|v| v.as_str()) {
+        Some(s) if !s.trim().is_empty() => s.trim().to_string(),
+        _ => return Ok(()),
+    };
+
+    let conv_dir = get_superagent_dir().join("conversation");
+    let proj_dir = conv_dir.join("projects").join(&name);
+    let _ = fs::create_dir_all(&proj_dir);
+
+    let _ = fs::write(proj_dir.join("meta.json"), serde_json::to_string_pretty(proj_val)?);
+    Ok(())
+}
+
+pub fn load_all_stored_projects() -> Vec<serde_json::Value> {
+    let conv_dir = get_superagent_dir().join("conversation");
+    let mut projects = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    for dir_name in &["projects", "Projects"] {
+        let p_dir = conv_dir.join(dir_name);
+        if let Ok(entries) = fs::read_dir(&p_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    let meta_file = path.join("meta.json");
+                    let proj_file = path.join("project.json");
+                    if let Ok(c) = fs::read_to_string(&meta_file).or_else(|_| fs::read_to_string(&proj_file)) {
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&c) {
+                            let name = val.get("name").or_else(|| val.get("id")).and_then(|v| v.as_str()).unwrap_or("");
+                            if !name.is_empty() && !seen.contains(name) {
+                                seen.insert(name.to_string());
+                                projects.push(val);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    projects
+}
+
+pub fn load_all_stored_chats() -> Vec<serde_json::Value> {
+    let conv_dir = get_superagent_dir().join("conversation");
+    let mut chats = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    let search_dirs = [
+        conv_dir.join("chats"),
+        conv_dir.join("Chats"),
+        get_superagent_dir().join("chats"),
+        get_superagent_dir().join("Chats"),
+    ];
+
+    for dir in &search_dirs {
+        if !dir.exists() {
+            continue;
+        }
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    let chat_json = path.join("chat.json");
+                    let id_from_dir = entry.file_name().to_string_lossy().to_string();
+
+                    if chat_json.exists() {
+                        if let Ok(content) = fs::read_to_string(&chat_json) {
+                            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                                let id = val.get("id").and_then(|v| v.as_str()).unwrap_or(&id_from_dir).to_string();
+                                if !seen.contains(&id) {
+                                    seen.insert(id.clone());
+                                    let title = val.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled Chat").to_string();
+                                    let project = val.get("project").or_else(|| val.get("projectName")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                    let model = val.get("model").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                    let created_at = val.get("createdAt").and_then(|v| v.as_i64()).unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
+                                    let updated_at = val.get("updatedAt").and_then(|v| v.as_i64()).unwrap_or(created_at);
+
+                                    let iso_ts = chrono::DateTime::from_timestamp_millis(created_at)
+                                        .map(|dt| dt.to_rfc3339())
+                                        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+
+                                    chats.push(serde_json::json!({
+                                        "id": id,
+                                        "title": title,
+                                        "project": project,
+                                        "model": model,
+                                        "timestamp": iso_ts,
+                                        "createdAt": created_at,
+                                        "updatedAt": updated_at,
+                                        "steps": [],
+                                        "isRunning": false
+                                    }));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort newest updated first
+    chats.sort_by(|a, b| {
+        let b_up = b.get("updatedAt").and_then(|v| v.as_i64()).unwrap_or(0);
+        let a_up = a.get("updatedAt").and_then(|v| v.as_i64()).unwrap_or(0);
+        b_up.cmp(&a_up)
+    });
+
+    chats
+}
+
+pub fn load_chat_steps(chat_id: &str) -> Vec<serde_json::Value> {
+    let clean_id = chat_id.trim().trim_start_matches("session-");
+    let conv_dir = get_superagent_dir().join("conversation");
+
+    let candidates = [
+        conv_dir.join("chats").join(clean_id).join("steps.json"),
+        conv_dir.join("Chats").join(clean_id).join("steps.json"),
+        get_superagent_dir().join("chats").join(clean_id).join("steps.json"),
+    ];
+
+    for c in &candidates {
+        if c.exists() {
+            if let Ok(content) = fs::read_to_string(c) {
+                if let Ok(steps) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
+                    return steps;
+                }
+            }
+        }
+    }
+
+    // Check chat.json messages fallback
+    let meta_candidates = [
+        conv_dir.join("chats").join(clean_id).join("chat.json"),
+        conv_dir.join("Chats").join(clean_id).join("chat.json"),
+        get_superagent_dir().join("chats").join(clean_id).join("chat.json"),
+    ];
+
+    for c in &meta_candidates {
+        if c.exists() {
+            if let Ok(content) = fs::read_to_string(c) {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(msgs) = val.get("messages").and_then(|v| v.as_array()) {
+                        return msgs.clone();
+                    }
+                }
+            }
+        }
+    }
+
+    Vec::new()
+}
 
 impl Default for ChatStorage {
     fn default() -> Self {
