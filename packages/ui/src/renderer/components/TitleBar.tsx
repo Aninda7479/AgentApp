@@ -246,7 +246,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     </div>
   );
 
-  const isDesktop = !isWebMode && (WindowService.isDesktop() || (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)));
+  const isDesktop = isWebMode === false || (!isWebMode && (WindowService.isDesktop() || (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window))));
 
   return (
     <div
