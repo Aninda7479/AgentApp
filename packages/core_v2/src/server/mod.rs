@@ -3468,9 +3468,46 @@ async fn handle_ipc(
             ];
 
 
+            let raw_settings = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
+            let circle_settings = raw_settings.get("circleSearch").cloned().unwrap_or_else(|| serde_json::json!({}));
+
+            let query_provider = arg.get("provider").and_then(|v| v.as_str());
+            let query_model = arg.get("model").and_then(|v| v.as_str());
+
+            let cfg_provider = query_provider
+                .or_else(|| circle_settings.get("provider").and_then(|v| v.as_str()))
+                .or_else(|| circle_settings.get("providerType").and_then(|v| v.as_str()))
+                .unwrap_or("");
+            let cfg_model = query_model
+                .or_else(|| circle_settings.get("model").and_then(|v| v.as_str()))
+                .or_else(|| circle_settings.get("modelId").and_then(|v| v.as_str()))
+                .unwrap_or("")
+                .trim();
+
             let routed = state.coordinator.route_prompt(&effective_prompt).await;
             let persona = routed.persona;
             let mut model_config = persona.model_config.clone();
+
+            let parse_provider = |p: &str| -> Option<crate::types::ProviderType> {
+                match p.to_lowercase().trim() {
+                    "gemini" | "google" => Some(crate::types::ProviderType::Gemini),
+                    "openai" => Some(crate::types::ProviderType::OpenAI),
+                    "anthropic" | "claude" => Some(crate::types::ProviderType::Anthropic),
+                    "ollama" => Some(crate::types::ProviderType::Ollama),
+                    "openrouter" => Some(crate::types::ProviderType::OpenRouter),
+                    "deepseek" => Some(crate::types::ProviderType::DeepSeek),
+                    "groq" => Some(crate::types::ProviderType::Groq),
+                    _ => None,
+                }
+            };
+
+            if let Some(parsed_prov) = parse_provider(cfg_provider) {
+                model_config.provider = parsed_prov;
+            }
+            if !cfg_model.is_empty() && cfg_model != "auto" {
+                model_config.model_id = cfg_model.to_string();
+            }
+
             model_config.api_key = state
                 .settings_store
                 .get_api_key(&format!("{:?}", model_config.provider).to_lowercase())
@@ -3479,6 +3516,7 @@ async fn handle_ipc(
 
             let provider_instance = crate::providers::ProviderFactory::create(&model_config.provider);
             let mut answer = String::new();
+
 
             match provider_instance.chat_stream(&model_config, &messages, &[]).await {
                 Ok(mut rx) => {
@@ -4217,12 +4255,31 @@ mod tests {
             .header("Authorization", format!("Bearer {}", token))
             .body(Body::from(serde_json::json!({ "args": [text_only_payload] }).to_string()))
             .unwrap();
-        let res_text = app.oneshot(req_text).await.unwrap();
+        let res_text = app.clone().oneshot(req_text).await.unwrap();
         assert_eq!(res_text.status(), StatusCode::OK);
+
+        // 4. Custom Model & Provider Override (Zero Hardcoding Test)
+        let custom_model_payload = serde_json::json!({
+            "prompt": "Solve this equation",
+            "image": "data:image/jpeg;base64,/9j/4AAQSkZJRg==",
+            "provider": "gemini",
+            "model": "gemini-2.5-pro",
+            "mode": "code"
+        });
+        let req_custom = Request::builder()
+            .uri("/api/ipc/circle-search-analyze")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::from(serde_json::json!({ "args": [custom_model_payload] }).to_string()))
+            .unwrap();
+        let res_custom = app.oneshot(req_custom).await.unwrap();
+        assert_eq!(res_custom.status(), StatusCode::OK);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
+
 
 
 

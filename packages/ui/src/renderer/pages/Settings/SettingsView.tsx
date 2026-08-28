@@ -505,8 +505,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <WebAppSettings />
         )}
         {activeCategory === 'circle-search' && (
-          <CircleSearchSettings />
+          <CircleSearchSettings
+            connectedProviders={connectedProviders}
+            modelsCatalog={modelsCatalog}
+          />
         )}
+
         {activeCategory === 'artifacts' && (
           <ArtifactSettings />
         )}
