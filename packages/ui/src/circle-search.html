@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="transparent-overlay" style="background: transparent !important; background-color: transparent !important;">
 <head>
   <meta charset="UTF-8">
   <base href="/">
@@ -7,27 +7,28 @@
   <title>SuperAgent - Circle to Search</title>
   <link rel="stylesheet" href="/index.css">
   <style>
-    body {
-      font-family: 'Inter', -apple-system, sans-serif;
+    html,
+    body,
+    #root,
+    #circle-search-root {
+      background: transparent !important;
+      background-color: transparent !important;
       height: 100vh;
       width: 100%;
       overflow: hidden;
-      background: transparent;
       margin: 0;
       padding: 0;
       user-select: none;
     }
-    #root {
-      height: 100%;
-      width: 100%;
+    #root,
+    #circle-search-root {
       display: flex;
       flex-direction: column;
-      background: transparent;
     }
   </style>
 </head>
-<body>
-  <div id="root"></div>
+<body class="transparent-overlay" style="background: transparent !important; background-color: transparent !important;">
+  <div id="circle-search-root" style="background: transparent !important; background-color: transparent !important;"></div>
   <script src="/circle-search/entry.bundle.js"></script>
 </body>
 </html>

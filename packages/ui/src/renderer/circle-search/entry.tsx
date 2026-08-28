@@ -9,8 +9,9 @@ if (process.env.NODE_ENV === 'production') {
   }, { capture: true });
 }
 
-const container = document.getElementById('root');
+const container = document.getElementById('circle-search-root') || document.getElementById('root');
 if (container) {
+
   const root = createRoot(container);
   root.render(
     <ErrorBoundary>

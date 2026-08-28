@@ -159,11 +159,20 @@
   --brand-accent-glow: rgba(79, 70, 229, 0.18);
 }
 
-html,
-body {
+html:not(.transparent-overlay),
+body:not(.transparent-overlay) {
   background: var(--brand-bg);
   color: var(--brand-text-main);
 }
+
+html.transparent-overlay,
+body.transparent-overlay,
+.transparent-overlay,
+#circle-search-root {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
 
 /* Workspace main page: pure black/white background, independent of theme vars */
 :root[data-theme='dark'] .workspace-canvas {
