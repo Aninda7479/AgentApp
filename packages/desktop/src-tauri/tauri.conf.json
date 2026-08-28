@@ -74,6 +74,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZGN0JDMEUwNjI5NzNGNEUKUldST1A1ZGk0TUI3L3pBQnZWN1U0VjFzcXp6Y2YwTno1dHlqZVF3QkM0TnFGWC94Y0FiMnV0UjYK",
       "endpoints": [
+        "https://github.com/Aninda7479/AgentApp/releases/latest/download/latest.json",
         "https://github.com/Aninda7479/AgentApp/releases/latest/download/updater.json"
       ]
     }

@@ -43,6 +43,18 @@ async function main() {
     fileMap[path.basename(filePath)] = filePath;
   }
 
+  // Check if latest.json is present locally
+  if (fileMap['latest.json']) {
+    try {
+      const latestJson = JSON.parse(fs.readFileSync(fileMap['latest.json'], 'utf8'));
+      if (latestJson.platforms) {
+        Object.assign(updater.platforms, latestJson.platforms);
+      }
+    } catch (err) {
+      console.warn('[generate-updater-json] Could not parse local latest.json:', err);
+    }
+  }
+
   let localSigFound = false;
   for (const file of Object.keys(fileMap)) {
     if (file.endsWith('.sig')) {
@@ -56,8 +68,8 @@ async function main() {
     }
   }
 
-  // 2. If local signatures were not found (e.g. uploaded directly to GitHub release draft), fetch from GitHub API
-  if (!localSigFound || Object.keys(updater.platforms).length === 0) {
+  // 2. If local signatures were not found or platforms incomplete, fetch from GitHub API
+  if (Object.keys(updater.platforms).length === 0) {
     console.log('[generate-updater-json] Fetching release assets from GitHub API for v' + version + '...');
     const headers = { 'User-Agent': 'superagent-release' };
     const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
@@ -79,6 +91,22 @@ async function main() {
         const release = await releaseRes.json();
         const assets = release.assets || [];
         console.log(`[generate-updater-json] Found ${assets.length} release assets on GitHub.`);
+
+        // Check if latest.json is attached to the release
+        const latestAsset = assets.find(a => a.name === 'latest.json');
+        if (latestAsset) {
+          try {
+            const latestRes = await fetch(latestAsset.browser_download_url, { headers });
+            if (latestRes.ok) {
+              const latestJson = await latestRes.json();
+              if (latestJson.platforms) {
+                Object.assign(updater.platforms, latestJson.platforms);
+              }
+            }
+          } catch (err) {
+            console.warn('[generate-updater-json] Error reading remote latest.json:', err);
+          }
+        }
 
         for (const asset of assets) {
           if (asset.name.endsWith('.sig')) {

@@ -915,10 +915,18 @@ export const App: React.FC = () => {
 
   // Load the running app version for the Updates panel.
   useEffect(() => {
-    if (!ipc) return;
-    ipc.invoke('app-version').then((v: string) => setAppVersion(v)).catch(() => { });
+    if (ipc) {
+      ipc.invoke('app-version').then((v: string) => setAppVersion(v)).catch(() => { });
+    } else if (typeof fetch !== 'undefined') {
+      fetch('/api/update/check')
+        .then(r => r.json())
+        .then(data => {
+          if (data?.current) setAppVersion(data.current);
+        })
+        .catch(() => {});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ipc]);
 
   // Listen to settings-changed to update states, and apply Orchestrator fallback if disabled
   useEffect(() => {

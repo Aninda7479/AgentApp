@@ -7,11 +7,84 @@ import { isTauriEnv } from '../tauriBridge';
 
 let cachedPendingUpdate: any = null;
 
+/**
+ * Compares two semantic version strings (e.g. "0.27.1" vs "0.28.0" or "v0.1.0").
+ * Returns:
+ *   -1 if v1 < v2 (update available)
+ *    1 if v1 > v2
+ *    0 if v1 === v2
+ */
+export function compareSemver(v1: string, v2: string): number {
+  const parse = (s: string): number[] => {
+    return (s || '')
+      .replace(/^v/i, '')
+      .split('.')
+      .map(part => parseInt(part.replace(/\D.*$/, ''), 10))
+      .map(n => (Number.isNaN(n) ? 0 : n));
+  };
+  const p1 = parse(v1);
+  const p2 = parse(v2);
+  const maxLen = Math.max(p1.length, p2.length, 3);
+  for (let i = 0; i < maxLen; i++) {
+    const a = p1[i] ?? 0;
+    const b = p2[i] ?? 0;
+    if (a < b) return -1;
+    if (a > b) return 1;
+  }
+  return 0;
+}
+
+/**
+ * Queries GitHub Releases directly for the latest published release.
+ */
+export async function fetchLatestRelease(): Promise<{ version: string; releaseUrl: string; notes?: string } | null> {
+  // 1. Try latest.json manifest
+  try {
+    const manifestRes = await fetch('https://github.com/Aninda7479/AgentApp/releases/latest/download/latest.json', { cache: 'no-store' });
+    if (manifestRes.ok) {
+      const manifest = await manifestRes.json();
+      if (manifest.version) {
+        const cleanVer = String(manifest.version).replace(/^v/, '').trim();
+        return {
+          version: cleanVer,
+          releaseUrl: `https://github.com/Aninda7479/AgentApp/releases/tag/v${cleanVer}`,
+          notes: manifest.notes || ''
+        };
+      }
+    }
+  } catch {
+    // Continue to next fallback
+  }
+
+  // 2. Try GitHub API
+  try {
+    const apiRes = await fetch('https://api.github.com/repos/Aninda7479/AgentApp/releases/latest', {
+      headers: { Accept: 'application/vnd.github+json' },
+      cache: 'no-store'
+    });
+    if (apiRes.ok) {
+      const release = await apiRes.json();
+      if (release.tag_name) {
+        const cleanVer = String(release.tag_name).replace(/^v/, '').trim();
+        return {
+          version: cleanVer,
+          releaseUrl: release.html_url || `https://github.com/Aninda7479/AgentApp/releases/tag/${release.tag_name}`,
+          notes: release.body || ''
+        };
+      }
+    }
+  } catch {
+    // Network or offline
+  }
+
+  return null;
+}
+
 export class UpdateService {
   /**
    * Triggers a manual update check.
-   * - In Tauri (desktop app): uses @tauri-apps/plugin-updater.
-   * - In Web / Fallback: queries IPC or API endpoint.
+   * - In Tauri (desktop app): uses @tauri-apps/plugin-updater with GitHub release fallback.
+   * - In Web / Desktop IPC: queries IPC or API endpoint with fallback.
    */
   static async check(ctx: AppContext): Promise<void> {
     ctx.setActiveTab('settings');
@@ -31,36 +104,45 @@ export class UpdateService {
             version: update.version,
             message: `Version v${update.version} is available!`
           });
-        } else {
-          cachedPendingUpdate = null;
-          ctx.setUpdateStatus({
-            status: 'not-available',
-            message: 'SuperAgent is up to date.'
-          });
+          return;
         }
       } catch (err: any) {
-        const errMsg = err?.message || String(err);
-        const lowerMsg = errMsg.toLowerCase();
+        console.warn('[UpdateService] Tauri plugin-updater check failed, trying fallback check:', err);
+      }
 
-        if (
-          lowerMsg.includes('404') ||
-          lowerMsg.includes('not found') ||
-          lowerMsg.includes('could not fetch') ||
-          lowerMsg.includes('error sending request') ||
-          lowerMsg.includes('fallback platforms') ||
-          lowerMsg.includes('platforms') ||
-          lowerMsg.includes('no release')
-        ) {
-          ctx.setUpdateStatus({
-            status: 'not-available',
-            message: 'SuperAgent is up to date.'
-          });
-        } else {
-          ctx.setUpdateStatus({
-            status: 'error',
-            message: `Update check failed: ${errMsg}`
-          });
+      // If Tauri check returned null or threw (e.g. running in dev mode or platform manifest issue),
+      // verify directly against GitHub releases
+      try {
+        const remoteRelease = await fetchLatestRelease();
+        if (remoteRelease) {
+          let currentVersion = '0.27.1';
+          if (ctx.ipc) {
+            try {
+              const v = await ctx.ipc.invoke('app-version');
+              if (v) currentVersion = String(v).replace(/^v/, '').trim();
+            } catch {}
+          }
+
+          if (compareSemver(currentVersion, remoteRelease.version) < 0) {
+            ctx.setUpdateStatus({
+              status: 'available',
+              version: remoteRelease.version,
+              message: `Version v${remoteRelease.version} is available!`
+            });
+            return;
+          }
         }
+
+        cachedPendingUpdate = null;
+        ctx.setUpdateStatus({
+          status: 'not-available',
+          message: 'SuperAgent is up to date.'
+        });
+      } catch (err: any) {
+        ctx.setUpdateStatus({
+          status: 'error',
+          message: `Update check failed: ${err?.message || String(err)}`
+        });
       }
       return;
     }
@@ -69,24 +151,38 @@ export class UpdateService {
     if (ctx.ipc) {
       try {
         const res = await ctx.ipc.invoke('check-for-updates');
-        if (res) ctx.setUpdateStatus(res);
+        if (res) {
+          ctx.setUpdateStatus(res);
+          return;
+        }
       } catch (err: any) {
-        ctx.setUpdateStatus({ status: 'error', message: err?.message || String(err) });
+        console.warn('[UpdateService] IPC check-for-updates error, falling back to HTTP:', err);
       }
-      return;
     }
 
     // 3. Web fallback
-    if (typeof fetch !== 'undefined') {
-      try {
-        const res = await fetch('/api/update/check');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (data.hasUpdate && data.latest) {
+    try {
+      let data: any = null;
+      if (typeof fetch !== 'undefined') {
+        try {
+          const res = await fetch('/api/update/check');
+          if (res.ok) {
+            data = await res.json();
+          }
+        } catch {
+          // Local backend endpoint failed, fallback to direct GitHub check
+        }
+
+        if (!data || data.error) {
+          data = await fetchLatestRelease();
+        }
+
+        if (data && (data.hasUpdate || (data.version && compareSemver(data.current || '0.27.1', data.version || data.latest) < 0))) {
+          const latestVer = data.latest || data.version;
           ctx.setUpdateStatus({
             status: 'available',
-            version: data.latest,
-            message: `Version ${data.latest} is available.`
+            version: latestVer,
+            message: `Version v${latestVer} is available!`
           });
         } else {
           ctx.setUpdateStatus({
@@ -94,14 +190,14 @@ export class UpdateService {
             message: 'SuperAgent is up to date.'
           });
         }
-      } catch {
-        ctx.setUpdateStatus({
-          status: 'unsupported',
-          message: 'Updates are only managed automatically in the desktop app.'
-        });
+      } else {
+        ctx.setUpdateStatus({ status: 'unsupported', message: 'Updates are only available in the desktop app.' });
       }
-    } else {
-      ctx.setUpdateStatus({ status: 'unsupported', message: 'Updates are only available in the desktop app.' });
+    } catch (err: any) {
+      ctx.setUpdateStatus({
+        status: 'error',
+        message: `Update check failed: ${err?.message || String(err)}`
+      });
     }
   }
 

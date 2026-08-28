@@ -1222,14 +1222,120 @@ async fn handle_provider_proxy(
     }
 }
 
+pub fn compare_semver(a: &str, b: &str) -> i32 {
+    let parse = |s: &str| -> Vec<u64> {
+        s.trim_start_matches('v')
+            .split('.')
+            .map(|part| part.chars().take_while(|c| c.is_ascii_digit()).collect::<String>())
+            .filter_map(|p| p.parse().ok())
+            .collect()
+    };
+    let va = parse(a);
+    let vb = parse(b);
+    for i in 0..std::cmp::max(va.len(), vb.len()) {
+        let ai = va.get(i).copied().unwrap_or(0);
+        let bi = vb.get(i).copied().unwrap_or(0);
+        if ai < bi {
+            return -1;
+        } else if ai > bi {
+            return 1;
+        }
+    }
+    0
+}
+
+pub async fn fetch_latest_release_info() -> Result<(String, String, Option<String>), anyhow::Error> {
+    let client = reqwest::Client::builder()
+        .user_agent("SuperAgent-App")
+        .timeout(std::time::Duration::from_secs(6))
+        .build()?;
+
+    // 1. Try redirect on releases/latest
+    let head_res = client
+        .head("https://github.com/Aninda7479/AgentApp/releases/latest")
+        .send()
+        .await;
+
+    if let Ok(res) = head_res {
+        let final_url = res.url().as_str();
+        if let Some(tag_pos) = final_url.rfind("/tag/") {
+            let tag = &final_url[tag_pos + 5..];
+            let clean_ver = tag.trim_start_matches('v').trim();
+            if !clean_ver.is_empty() {
+                let release_url = format!("https://github.com/Aninda7479/AgentApp/releases/tag/v{}", clean_ver);
+                return Ok((clean_ver.to_string(), release_url, None));
+            }
+        }
+    }
+
+    // 2. Try GitHub API
+    let api_res = client
+        .get("https://api.github.com/repos/Aninda7479/AgentApp/releases/latest")
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await;
+
+    if let Ok(api_res) = api_res {
+        if api_res.status().is_success() {
+            if let Ok(json) = api_res.json::<serde_json::Value>().await {
+                if let Some(tag) = json.get("tag_name").and_then(|v| v.as_str()) {
+                    let clean_ver = tag.trim_start_matches('v').trim().to_string();
+                    let html_url = json.get("html_url")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("https://github.com/Aninda7479/AgentApp/releases")
+                        .to_string();
+                    let body = json.get("body").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    return Ok((clean_ver, html_url, body));
+                }
+            }
+        }
+    }
+
+    // 3. Fallback to latest.json manifest
+    let manifest_res = client
+        .get("https://github.com/Aninda7479/AgentApp/releases/latest/download/latest.json")
+        .send()
+        .await;
+
+    if let Ok(manifest_res) = manifest_res {
+        if manifest_res.status().is_success() {
+            if let Ok(json) = manifest_res.json::<serde_json::Value>().await {
+                if let Some(ver) = json.get("version").and_then(|v| v.as_str()) {
+                    let clean_ver = ver.trim_start_matches('v').trim().to_string();
+                    let release_url = format!("https://github.com/Aninda7479/AgentApp/releases/tag/v{}", clean_ver);
+                    let notes = json.get("notes").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    return Ok((clean_ver, release_url, notes));
+                }
+            }
+        }
+    }
+
+    anyhow::bail!("Could not fetch latest release version from GitHub")
+}
+
 async fn check_for_updates() -> impl IntoResponse {
     let current_version = env!("CARGO_PKG_VERSION");
-    Json(serde_json::json!({
-        "current": current_version,
-        "latest": current_version,
-        "hasUpdate": false,
-        "releaseUrl": "https://github.com/Aninda7479/AgentApp/releases"
-    }))
+    match fetch_latest_release_info().await {
+        Ok((latest_version, release_url, notes)) => {
+            let has_update = compare_semver(current_version, &latest_version) < 0;
+            Json(serde_json::json!({
+                "current": current_version,
+                "latest": latest_version,
+                "hasUpdate": has_update,
+                "releaseUrl": release_url,
+                "notes": notes.unwrap_or_default()
+            }))
+        }
+        Err(e) => {
+            Json(serde_json::json!({
+                "current": current_version,
+                "latest": current_version,
+                "hasUpdate": false,
+                "releaseUrl": "https://github.com/Aninda7479/AgentApp/releases",
+                "error": e.to_string()
+            }))
+        }
+    }
 }
 
 async fn apply_update() -> impl IntoResponse {
@@ -2427,13 +2533,38 @@ async fn handle_ipc(
         }
         "check-for-updates" | "check_for_updates" => {
             let current_version = env!("CARGO_PKG_VERSION");
-            Ok(Json(serde_json::json!({
-                "data": {
-                    "status": "not-available",
-                    "version": current_version,
-                    "message": "SuperAgent is up to date."
+            match fetch_latest_release_info().await {
+                Ok((latest_version, release_url, _notes)) => {
+                    let has_update = compare_semver(current_version, &latest_version) < 0;
+                    if has_update {
+                        Ok(Json(serde_json::json!({
+                            "data": {
+                                "status": "available",
+                                "version": latest_version,
+                                "message": format!("Version v{} is available!", latest_version),
+                                "releaseUrl": release_url
+                            }
+                        })))
+                    } else {
+                        Ok(Json(serde_json::json!({
+                            "data": {
+                                "status": "not-available",
+                                "version": current_version,
+                                "message": "SuperAgent is up to date."
+                            }
+                        })))
+                    }
                 }
-            })))
+                Err(e) => {
+                    Ok(Json(serde_json::json!({
+                        "data": {
+                            "status": "error",
+                            "version": current_version,
+                            "message": format!("Update check failed: {}", e)
+                        }
+                    })))
+                }
+            }
         }
         "auto-detect-providers" => {
             let mut providers = Vec::new();
