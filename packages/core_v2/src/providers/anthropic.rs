@@ -55,7 +55,23 @@ impl LlmProvider for AnthropicProvider {
                                     "text": text
                                 }));
                             }
+                            ContentBlock::Image { media_type, data } => {
+                                let clean_data = if let Some(idx) = data.find("base64,") {
+                                    &data[idx + 7..]
+                                } else {
+                                    data.as_str()
+                                };
+                                content_blocks.push(json!({
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": media_type,
+                                        "data": clean_data
+                                    }
+                                }));
+                            }
                             ContentBlock::ToolResult { tool_use_id, content, is_error } => {
+
                                 content_blocks.push(json!({
                                     "type": "tool_result",
                                     "tool_use_id": tool_use_id,

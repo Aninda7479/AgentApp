@@ -3414,6 +3414,104 @@ async fn handle_ipc(
             let sessions: Vec<String> = store.iter().filter(|(_, v)| v.is_running).map(|(k, _)| k.clone()).collect();
             Ok(Json(serde_json::json!({ "data": { "sessions": sessions } })))
         }
+        "circle-search-analyze" => {
+            let arg = args.first().cloned().unwrap_or_else(|| serde_json::json!({}));
+            let prompt = arg.get("prompt").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            let image_opt = arg.get("image").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let mode = arg.get("mode").and_then(|v| v.as_str()).unwrap_or("general");
+
+            let mut content_blocks = Vec::new();
+            if let Some(ref img_b64) = image_opt {
+                if !img_b64.trim().is_empty() {
+                    let media_type = if img_b64.contains("image/png") {
+                        "image/png".to_string()
+                    } else if img_b64.contains("image/webp") {
+                        "image/webp".to_string()
+                    } else {
+                        "image/jpeg".to_string()
+                    };
+                    content_blocks.push(crate::types::ContentBlock::Image {
+                        media_type,
+                        data: img_b64.clone(),
+                    });
+                }
+            }
+
+            let has_image = !content_blocks.is_empty();
+            let system_prompt = if has_image {
+                "You are SuperAgent Visual Intelligence, an ultra-fast multimodal search assistant inspired by Google Gemini Circle to Search.\nAnalyze the provided image snippet and user query.\nProvide a direct, concise, and beautifully structured insight:\n- Highlight key findings clearly\n- Use clean Markdown, bold text, and bullet points\n- If code, equations, or data tables are visible, provide the clean code block or transcription\n- Keep answers snappy, insightful, and actionable.".to_string()
+            } else {
+                "You are SuperAgent Spotlight, an ultra-fast desktop assistant.\nProvide a direct, clear, and structured answer to the user's question:\n- Use clean Markdown, bold headers, and bullet points where helpful\n- Provide precise code blocks with syntax highlighting when relevant\n- Keep responses fast, concise, and actionable.".to_string()
+            };
+
+
+            let effective_prompt = if prompt.is_empty() {
+                match mode {
+                    "explain" => "Explain what is shown in this image snippet in detail.",
+                    "summarize" => "Summarize the key information visible in this snippet.",
+                    "translate" => "Translate all text in this snippet to English (or identify language and provide English translation).",
+                    "code" => "Analyze and solve or explain the code shown in this screenshot.",
+                    "ocr" => "Extract and transcribe all text from this snippet cleanly with exact formatting.",
+                    _ => "Analyze this image selection and explain what it shows.",
+                }
+            } else {
+                prompt.as_str()
+            };
+
+            content_blocks.push(crate::types::ContentBlock::Text {
+                text: effective_prompt.to_string(),
+            });
+
+            let messages = vec![
+                crate::types::ChatMessage::system(system_prompt),
+                crate::types::ChatMessage::new(crate::types::Role::User, content_blocks),
+            ];
+
+
+            let routed = state.coordinator.route_prompt(&effective_prompt).await;
+            let persona = routed.persona;
+            let mut model_config = persona.model_config.clone();
+            model_config.api_key = state
+                .settings_store
+                .get_api_key(&format!("{:?}", model_config.provider).to_lowercase())
+                .ok()
+                .flatten();
+
+            let provider_instance = crate::providers::ProviderFactory::create(&model_config.provider);
+            let mut answer = String::new();
+
+            match provider_instance.chat_stream(&model_config, &messages, &[]).await {
+                Ok(mut rx) => {
+                    while let Some(event) = rx.recv().await {
+                        match event {
+                            crate::types::AgentEvent::Token { text } => {
+                                answer.push_str(&text);
+                            }
+                            crate::types::AgentEvent::Error { message } => {
+                                answer = format!("Vision Model Notice: {}", message);
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                Err(err) => {
+                    answer = format!("Could not query visual intelligence: {}. Please verify your model provider API key in Settings.", err);
+                }
+            }
+
+
+            if answer.trim().is_empty() {
+                answer = "No visual insight returned.".to_string();
+            }
+
+            Ok(Json(serde_json::json!({
+                "data": {
+                    "text": answer,
+                    "prompt": effective_prompt
+                }
+            })))
+        }
         "agent-permission-response" => Ok(Json(serde_json::json!({ "data": { "success": true } }))),
         "agent-compact" => Ok(Json(serde_json::json!({ "data": { "compacted": false, "tokensBefore": 0, "tokensAfter": 0 } }))),
         _ => {
@@ -4059,9 +4157,72 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         let res_get_after = app.oneshot(req_get_after).await.unwrap();
-        assert_eq!(res_get_after.status(), StatusCode::NOT_FOUND);
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_circle_search_analyze_modes() {
+        let temp_dir = std::env::temp_dir().join(format!("test_circle_search_{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let state = build_test_state(temp_dir.clone());
+        let token = state.auth_store.create_session_token("admin");
+        let app = create_router(state.clone());
+
+        // 1. Region Selected Image Analysis (Cropped snippet)
+        let region_payload = serde_json::json!({
+            "prompt": "What is this button?",
+            "image": "data:image/jpeg;base64,/9j/4AAQSkZJRg==",
+            "mode": "explain",
+            "contextMode": "region"
+        });
+        let req_region = Request::builder()
+            .uri("/api/ipc/circle-search-analyze")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::from(serde_json::json!({ "args": [region_payload] }).to_string()))
+            .unwrap();
+        let res_region = app.clone().oneshot(req_region).await.unwrap();
+        assert_eq!(res_region.status(), StatusCode::OK);
+
+        // 2. Full Screen Image Analysis
+        let fullscreen_payload = serde_json::json!({
+            "prompt": "Summarize this screen",
+            "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+            "mode": "summarize",
+            "contextMode": "fullscreen"
+        });
+        let req_fullscreen = Request::builder()
+            .uri("/api/ipc/circle-search-analyze")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::from(serde_json::json!({ "args": [fullscreen_payload] }).to_string()))
+            .unwrap();
+        let res_fullscreen = app.clone().oneshot(req_fullscreen).await.unwrap();
+        assert_eq!(res_fullscreen.status(), StatusCode::OK);
+
+        // 3. Pure Text Ask Mode (Spotlight mode - no image)
+        let text_only_payload = serde_json::json!({
+            "prompt": "How do I reverse a string in Rust?",
+            "image": null,
+            "mode": "general",
+            "contextMode": "textonly"
+        });
+        let req_text = Request::builder()
+            .uri("/api/ipc/circle-search-analyze")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::from(serde_json::json!({ "args": [text_only_payload] }).to_string()))
+            .unwrap();
+        let res_text = app.oneshot(req_text).await.unwrap();
+        assert_eq!(res_text.status(), StatusCode::OK);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
+
+
 

@@ -35,10 +35,29 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    use tauri_plugin_global_shortcut::ShortcutState;
+                    if event.state() == ShortcutState::Pressed {
+                        let shortcut_str = shortcut.to_string().to_lowercase();
+                        if shortcut_str.contains("shift") && (shortcut_str.contains('s') || shortcut_str.contains("space")) {
+                            let _ = circle_search_toggle(app.clone());
+                        } else if shortcut_str.contains("space") {
+                            let _ = circle_search_toggle(app.clone());
+                        }
+                    }
+                })
+                .build(),
+        )
         .on_window_event(|window, event| {
             if window.label() == "artifacts" {
                 if let WindowEvent::Focused(false) = event {
                     let _ = window.hide();
+                }
+            } else if window.label() == "circle_search" {
+                if let WindowEvent::Focused(false) = event {
+                    // Circle to Search overlay remains on top until explicitly closed with ESC or click
                 }
             } else if window.label() == "main" {
                 if let WindowEvent::CloseRequested { api, .. } = event {
@@ -125,6 +144,10 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            use tauri_plugin_global_shortcut::GlobalShortcutExt;
+            let _ = app.global_shortcut().register("CommandOrControl+Shift+S");
+            let _ = app.global_shortcut().register("CommandOrControl+Alt+Space");
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -178,9 +201,14 @@ pub fn run() {
             partner_pick_model_folder,
             autostart_enable,
             autostart_disable,
-            autostart_is_enabled
+            autostart_is_enabled,
+            circle_search_get_screen_image,
+            circle_search_show,
+            circle_search_hide,
+            circle_search_toggle
         ])
         .run(tauri::generate_context!())
         .expect("error while running SuperAgent tauri application");
 }
+
 

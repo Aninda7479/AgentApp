@@ -65,7 +65,21 @@ impl LlmProvider for GeminiProvider {
                             ContentBlock::Text { text } => {
                                 parts.push(json!({ "text": text }));
                             }
+                            ContentBlock::Image { media_type, data } => {
+                                let clean_data = if let Some(idx) = data.find("base64,") {
+                                    &data[idx + 7..]
+                                } else {
+                                    data.as_str()
+                                };
+                                parts.push(json!({
+                                    "inlineData": {
+                                        "mimeType": media_type,
+                                        "data": clean_data
+                                    }
+                                }));
+                            }
                             ContentBlock::ToolResult { tool_use_id, content, .. } => {
+
                                 parts.push(json!({
                                     "functionResponse": {
                                         "name": tool_use_id,

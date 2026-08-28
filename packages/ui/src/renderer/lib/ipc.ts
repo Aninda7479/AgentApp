@@ -68,7 +68,18 @@ const TAURI_COMMAND_MAP: Record<string, string> = {
   'kanban_load': 'kanban_load',
   'kanban-save': 'kanban_save',
   'kanban_save': 'kanban_save',
+  'circle-search-get-screen-image': 'circle_search_get_screen_image',
+  'circle_search_get_screen_image': 'circle_search_get_screen_image',
+  'circle-search-show': 'circle_search_show',
+  'circle_search_show': 'circle_search_show',
+  'circle-search-hide': 'circle_search_hide',
+  'circle_search_hide': 'circle_search_hide',
+  'circle-search-toggle': 'circle_search_toggle',
+  'circle_search_toggle': 'circle_search_toggle',
+  'overlay-capture-screen': 'circle_search_get_screen_image',
+  'overlay-hide': 'circle_search_hide',
 };
+
 
 const SAFE_EMPTY_CHANNELS = new Set<string>([
   'skills-catalog',
@@ -524,7 +535,19 @@ const SILENT_IPC_CHANNELS = new Set<string>([
   'autostart_enable',
   'autostart_disable',
   'autostart_is_enabled',
+  'circle-search-get-screen-image',
+  'circle_search_get_screen_image',
+  'circle-search-show',
+  'circle_search_show',
+  'circle-search-hide',
+  'circle_search_hide',
+  'circle-search-toggle',
+  'circle_search_toggle',
+  'circle-search-analyze',
+  'overlay-capture-screen',
+  'overlay-hide',
 ]);
+
 
 function wrapInvoke(fn: (channel: string, ...args: any[]) => Promise<any>) {
   return async (channel: string, ...args: any[]): Promise<any> => {

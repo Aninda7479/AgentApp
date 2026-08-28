@@ -30,11 +30,49 @@ impl OpenAiProvider {
                     }));
                 }
                 Role::User => {
-                    formatted.push(json!({
-                        "role": "user",
-                        "content": msg.text_content()
-                    }));
+                    let mut parts = Vec::new();
+                    for block in &msg.content {
+                        match block {
+                            ContentBlock::Text { text } => {
+                                parts.push(json!({
+                                    "type": "text",
+                                    "text": text
+                                }));
+                            }
+                            ContentBlock::Image { media_type, data } => {
+                                let url = if data.starts_with("data:") {
+                                    data.clone()
+                                } else {
+                                    format!("data:{};base64,{}", media_type, data)
+                                };
+                                parts.push(json!({
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": url
+                                    }
+                                }));
+                            }
+                            _ => {}
+                        }
+                    }
+                    if parts.len() == 1 && parts[0].get("type").and_then(|v| v.as_str()) == Some("text") {
+                        formatted.push(json!({
+                            "role": "user",
+                            "content": parts[0]["text"]
+                        }));
+                    } else if !parts.is_empty() {
+                        formatted.push(json!({
+                            "role": "user",
+                            "content": parts
+                        }));
+                    } else {
+                        formatted.push(json!({
+                            "role": "user",
+                            "content": msg.text_content()
+                        }));
+                    }
                 }
+
                 Role::Assistant => {
                     let mut tool_calls = Vec::new();
                     let mut text_parts = Vec::new();

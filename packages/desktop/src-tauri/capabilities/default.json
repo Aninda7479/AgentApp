@@ -12,6 +12,7 @@
     "process:allow-restart",
     "shell:default",
     "dialog:default",
-    "notification:default"
+    "notification:default",
+    "global-shortcut:default"
   ]
 }

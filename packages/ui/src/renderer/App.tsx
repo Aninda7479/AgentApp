@@ -1219,6 +1219,18 @@ export const App: React.FC = () => {
         e.preventDefault();
         handleNewChat();
       }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (ipc?.invoke) {
+          ipc.invoke('circle-search-show');
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.altKey && (e.code === 'Space' || e.key === ' ')) {
+        e.preventDefault();
+        if (ipc?.invoke) {
+          ipc.invoke('circle-search-show');
+        }
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault();
         setActiveTab('settings');
@@ -1227,7 +1239,8 @@ export const App: React.FC = () => {
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, []);
+  }, [ipc, handleNewChat, setActiveTab, setSettingsCategory]);
+
 
   // Keep the desktop 3D Partner in sync with the active Partner selection.
   useEffect(() => {
@@ -1250,6 +1263,22 @@ export const App: React.FC = () => {
     window.addEventListener('partner:say', onSay as EventListener);
     return () => window.removeEventListener('partner:say', onSay as EventListener);
   }, [ipc]);
+
+  // Handle open-chat-with-prompt from Circle to Search floating reply card
+  useEffect(() => {
+    if (!ipc) return;
+    const handleOpenChatWithPrompt = (_evt: any, data: any) => {
+      setActiveTab('trajectory');
+      if (data?.prompt) {
+        handleNewChat();
+      }
+    };
+    const cleanup = ipc('open-chat-with-prompt', handleOpenChatWithPrompt);
+    return () => {
+      if (typeof cleanup === 'function') cleanup();
+    };
+  }, [ipc, handleNewChat, setActiveTab]);
+
 
   // Surface renderer + main-process errors as red toasts & popup error modal for unhandled crashes.
   useEffect(() => {

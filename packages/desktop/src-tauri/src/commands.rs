@@ -1,10 +1,12 @@
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::io::Cursor;
 use std::path::PathBuf;
 use superagent_core_v2::artifact::{ArtifactManifest, ArtifactRuntimeState};
 use sysinfo::System;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Serialize, Deserialize, Debug)]
 
@@ -1167,5 +1169,56 @@ pub fn autostart_is_enabled() -> bool {
     }
     #[allow(unreachable_code)]
     false
+}
+
+#[tauri::command]
+pub fn circle_search_get_screen_image() -> Result<String, String> {
+    let screens = screenshots::Screen::all().map_err(|e| e.to_string())?;
+    let screen = screens.into_iter().next().ok_or_else(|| "No screens detected".to_string())?;
+    let image = screen.capture().map_err(|e| e.to_string())?;
+    let mut bytes: Vec<u8> = Vec::new();
+    image
+        .write_to(&mut Cursor::new(&mut bytes), screenshots::image::ImageOutputFormat::Jpeg(85))
+        .map_err(|e| e.to_string())?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:image/jpeg;base64,{}", b64))
+}
+
+
+#[tauri::command]
+pub fn circle_search_show(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("circle_search") {
+        if let Ok(Some(monitor)) = window.current_monitor() {
+            let size = monitor.size();
+            let pos = monitor.position();
+            let _ = window.set_position(tauri::Position::Physical(*pos));
+            let _ = window.set_size(tauri::Size::Physical(*size));
+        }
+        let _ = window.set_always_on_top(true);
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = window.emit("circle-search-window-shown", ());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn circle_search_hide(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("circle_search") {
+        let _ = window.hide();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn circle_search_toggle(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("circle_search") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
+            let _ = circle_search_show(app);
+        }
+    }
+    Ok(())
 }
 

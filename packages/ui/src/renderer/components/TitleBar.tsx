@@ -30,11 +30,15 @@ import {
   Square,
   X,
   Lock,
+  Sparkles,
 } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { ThemeMode } from '../types';
 import { LucideIcon } from 'lucide-react';
 import { WindowService } from '../logic/window';
+import { formatShortcut } from '../lib/platform';
+import { getIpc } from '../lib/ipc';
+
 
 /** Props for the TitleBar component. */
 interface TitleBarProps {
@@ -388,8 +392,23 @@ export const TitleBar: React.FC<TitleBarProps> = ({
               <span>PCB Workspace</span>
             </button>
           )}
+          <button
+            data-testid="titlebar-circle-search-link"
+            onClick={() => {
+              const ipc = getIpc();
+              if (ipc?.invoke) {
+                ipc.invoke('circle-search-show');
+              }
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gradient-to-r from-indigo-500/15 via-purple-500/15 to-pink-500/15 text-indigo-300 hover:text-white hover:border-indigo-400/50 border border-indigo-500/30 transition-all cursor-pointer shadow-xs"
+            title={`Google Gemini Circle to Search (${formatShortcut('CommandOrControl+Shift+S')})`}
+          >
+            <Sparkles size={12} className="text-indigo-400" />
+            <span>Circle Search</span>
+          </button>
         </div>
       </div>
+
 
       {/* Middle side: Window Title label */}
       <div className="hidden sm:block text-[9px] font-mono text-brand-textMuted/40 absolute left-1/2 -translate-x-1/2 pointer-events-none select-none tracking-widest uppercase">

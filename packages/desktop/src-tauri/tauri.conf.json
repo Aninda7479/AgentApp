@@ -37,8 +37,24 @@
         "resizable": false,
         "fullscreen": false,
         "label": "artifacts"
+      },
+      {
+        "title": "SuperAgent — Circle to Search & Spotlight",
+        "url": "circle-search.html",
+        "width": 1920,
+        "height": 1080,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "resizable": true,
+        "fullscreen": false,
+        "shadow": false,
+        "skipTaskbar": true,
+        "label": "circle_search"
       }
     ],
+
     "security": {
       "csp": null
     }
