@@ -1184,6 +1184,57 @@ pub fn circle_search_get_screen_image() -> Result<String, String> {
     Ok(format!("data:image/jpeg;base64,{}", b64))
 }
 
+#[tauri::command]
+pub fn circle_search_capture_area(
+    app: AppHandle,
+    x: Option<i32>,
+    y: Option<i32>,
+    width: Option<u32>,
+    height: Option<u32>,
+) -> Result<String, String> {
+    let window = app.get_webview_window("circle_search");
+    let was_visible = window.as_ref().and_then(|w| w.is_visible().ok()).unwrap_or(false);
+    if was_visible {
+        if let Some(ref w) = window {
+            let _ = w.hide();
+            std::thread::sleep(std::time::Duration::from_millis(30));
+        }
+    }
+
+    let screens = screenshots::Screen::all().map_err(|e| e.to_string())?;
+    let screen = if let (Some(px), Some(py)) = (x, y) {
+        screenshots::Screen::from_point(px, py).unwrap_or_else(|_| {
+            screens.into_iter().next().unwrap()
+        })
+    } else {
+        screens.into_iter().next().ok_or_else(|| "No screens detected".to_string())?
+    };
+
+    let image = if let (Some(rx), Some(ry), Some(rw), Some(rh)) = (x, y, width, height) {
+        if rw > 0 && rh > 0 {
+            screen.capture_area(rx, ry, rw, rh).map_err(|e| e.to_string())?
+        } else {
+            screen.capture().map_err(|e| e.to_string())?
+        }
+    } else {
+        screen.capture().map_err(|e| e.to_string())?
+    };
+
+    if was_visible {
+        if let Some(ref w) = window {
+            let _ = w.show();
+        }
+    }
+
+    let mut bytes: Vec<u8> = Vec::new();
+    image
+        .write_to(&mut Cursor::new(&mut bytes), screenshots::image::ImageOutputFormat::Jpeg(85))
+        .map_err(|e| e.to_string())?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:image/jpeg;base64,{}", b64))
+}
+
+
 
 #[tauri::command]
 pub fn circle_search_show(app: AppHandle) -> Result<(), String> {

@@ -76,9 +76,12 @@ const TAURI_COMMAND_MAP: Record<string, string> = {
   'circle_search_hide': 'circle_search_hide',
   'circle-search-toggle': 'circle_search_toggle',
   'circle_search_toggle': 'circle_search_toggle',
+  'circle-search-capture-area': 'circle_search_capture_area',
+  'circle_search_capture_area': 'circle_search_capture_area',
   'overlay-capture-screen': 'circle_search_get_screen_image',
   'overlay-hide': 'circle_search_hide',
 };
+
 
 
 const SAFE_EMPTY_CHANNELS = new Set<string>([

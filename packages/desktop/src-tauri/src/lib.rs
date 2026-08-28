@@ -203,10 +203,12 @@ pub fn run() {
             autostart_disable,
             autostart_is_enabled,
             circle_search_get_screen_image,
+            circle_search_capture_area,
             circle_search_show,
             circle_search_hide,
             circle_search_toggle
         ])
+
         .run(tauri::generate_context!())
         .expect("error while running SuperAgent tauri application");
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Sparkles,
   X,
@@ -8,7 +8,6 @@ import {
   Copy,
   Check,
   ExternalLink,
-  Camera,
   Layers,
   Code2,
   FileText,
@@ -29,7 +28,6 @@ export const CircleSearchOverlay: React.FC = () => {
   const platform = getPlatform();
   const keys = getKeySymbols();
 
-  const [screenImage, setScreenImage] = useState<string | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [currentPos, setCurrentPos] = useState({ x: 0, y: 0 });
@@ -48,29 +46,12 @@ export const CircleSearchOverlay: React.FC = () => {
   const dragStartRef = useRef<{ mouseX: number; mouseY: number; cardX: number; cardY: number }>({ mouseX: 0, mouseY: 0, cardX: 0, cardY: 0 });
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const omniboxInputRef = useRef<HTMLInputElement>(null);
   const floatingCardRef = useRef<HTMLDivElement>(null);
 
-  // Capture or refresh fullscreen screen capture
-  const fetchScreen = useCallback(async () => {
-    if (!ipc) return;
-    try {
-      const dataUrl = await ipc('circle-search-get-screen-image');
-      if (dataUrl) {
-        setScreenImage(dataUrl);
-      }
-    } catch (err: any) {
-      console.error('Failed to get screen capture:', err);
-      setErrorMsg('Screen recording permission might be required.');
-    }
-  }, []);
-
   useEffect(() => {
-    fetchScreen();
-
-    // Listen for window show events to refresh screenshot
-    const handleShow = async () => {
+    // Listen for window show events to reset state & focus input
+    const handleShow = () => {
       setSelection(null);
       setContextMode('fullscreen');
       setQuery('');
@@ -78,7 +59,6 @@ export const CircleSearchOverlay: React.FC = () => {
       setErrorMsg('');
       setFloatingCardPos(null);
       setFollowUpQuery('');
-      await fetchScreen();
       setTimeout(() => {
         omniboxInputRef.current?.focus();
       }, 80);
@@ -88,21 +68,18 @@ export const CircleSearchOverlay: React.FC = () => {
     return () => {
       if (typeof cleanup === 'function') cleanup();
     };
-  }, [fetchScreen]);
+  }, []);
 
-  // Keyboard shortcut listeners (Escape to close, Ctrl/Cmd+Shift+S to recapture)
+  // Keyboard shortcut listeners (Escape to close)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         handleDismiss();
-      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'S' || e.key === 's')) {
-        e.preventDefault();
-        fetchScreen();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [fetchScreen]);
+  }, []);
 
   const handleDismiss = () => {
     if (ipc?.send) {
@@ -124,7 +101,6 @@ export const CircleSearchOverlay: React.FC = () => {
     setStartPos({ x, y });
     setCurrentPos({ x, y });
     setIsDrawing(true);
-    // Reset floating card position to auto-anchor to the new selection
     setFloatingCardPos(null);
   };
 
@@ -209,40 +185,6 @@ export const CircleSearchOverlay: React.FC = () => {
     return { x, y };
   };
 
-  // ─── Image Crop Execution ──────────────────────────────────────────────────
-  const getCroppedImageBase64 = async (): Promise<string> => {
-    if (!selection || !screenImage || !canvasRef.current) return '';
-    try {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      const img = new Image();
-
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error('Failed to load screen capture'));
-        img.src = screenImage;
-      });
-
-      // Calculate scale in case of high-DPI scaling
-      const scaleX = img.naturalWidth / window.innerWidth;
-      const scaleY = img.naturalHeight / window.innerHeight;
-
-      const cropX = selection.x * scaleX;
-      const cropY = selection.y * scaleY;
-      const cropW = selection.w * scaleX;
-      const cropH = selection.h * scaleY;
-
-      canvas.width = Math.max(1, cropW);
-      canvas.height = Math.max(1, cropH);
-
-      ctx?.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
-      return canvas.toDataURL('image/jpeg', 0.9);
-    } catch (err) {
-      console.warn('Error cropping image:', err);
-      return '';
-    }
-  };
-
   // ─── AI Query Submission ───────────────────────────────────────────────────
   const executeQuery = async (customPrompt?: string, mode: string = 'general', forcedContext?: ScreenContextMode) => {
     const activePrompt = (customPrompt !== undefined ? customPrompt : query).trim();
@@ -260,9 +202,26 @@ export const CircleSearchOverlay: React.FC = () => {
       let imagePayload: string | undefined = undefined;
 
       if (activeContext === 'region' && selection) {
-        imagePayload = await getCroppedImageBase64();
-      } else if (activeContext === 'fullscreen' && screenImage) {
-        imagePayload = screenImage;
+        if (ipc?.invoke) {
+          try {
+            imagePayload = await ipc.invoke('circle-search-capture-area', {
+              x: Math.round(selection.x),
+              y: Math.round(selection.y),
+              width: Math.round(selection.w),
+              height: Math.round(selection.h),
+            });
+          } catch (e) {
+            console.warn('Native area capture fallback:', e);
+          }
+        }
+      } else if (activeContext === 'fullscreen') {
+        if (ipc?.invoke) {
+          try {
+            imagePayload = await ipc.invoke('circle-search-capture-area', {});
+          } catch (e) {
+            console.warn('Native full capture fallback:', e);
+          }
+        }
       } else {
         // textonly: no image payload sent
         imagePayload = undefined;
@@ -284,17 +243,17 @@ export const CircleSearchOverlay: React.FC = () => {
           setAiResponse('Insight synthesized successfully.');
         }
       } else {
-        // Simulated responsive preview for standalone dev
+        // Simulated responsive preview for dev
         setTimeout(() => {
           setAiResponse(
-            `### Visual Insight (${activeContext.toUpperCase()})\n\n- **Identified Element**: ${
+            `### Visual Insight (${activeContext.toUpperCase()})\n\n- **Target Area**: ${
               activeContext === 'region'
-                ? `Cropped screen region (${selection?.w || 0}x${selection?.h || 0})`
+                ? `Circled desktop region (${selection?.w || 0}×${selection?.h || 0})`
                 : activeContext === 'fullscreen'
-                ? 'Full Desktop View'
-                : 'Pure Text Ask (Spotlight Mode)'
+                ? 'Active Screen'
+                : 'Spotlight Text Mode'
             }\n- **Summary**: ${
-              activePrompt || 'Analysis of desktop query.'
+              activePrompt || 'Analysis of live screen content.'
             }\n\n\`\`\`json\n{\n  "status": "success",\n  "contextMode": "${activeContext}",\n  "hasImage": ${Boolean(
               imagePayload
             )},\n  "platform": "${platform}"\n}\n\`\`\``
@@ -356,7 +315,6 @@ export const CircleSearchOverlay: React.FC = () => {
     if (!ipc?.send) return;
     ipc.send('open-chat-with-prompt', {
       prompt: query || 'Analyze circled screen snippet',
-      image: selection ? undefined : screenImage,
     });
     handleDismiss();
   };
@@ -384,19 +342,14 @@ export const CircleSearchOverlay: React.FC = () => {
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      className="relative w-full h-full flex flex-col items-center justify-between overflow-hidden select-none bg-black/40"
+      className="relative w-full h-full flex flex-col items-center justify-between overflow-hidden select-none bg-transparent"
       style={{
-        backgroundImage: screenImage ? `url(${screenImage})` : 'none',
-        backgroundSize: '100% 100%',
         cursor: selection ? 'default' : 'crosshair',
         fontFamily: platform === 'macos' ? '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif' : '"Segoe UI", Roboto, sans-serif',
       }}
     >
       {/* Google Gemini Glowing Animated Border */}
       <div className="gemini-screen-border" />
-
-      {/* Helper crop canvas */}
-      <canvas ref={canvasRef} className="hidden" />
 
       {/* Top Floating Spotlight Omnibox Bar */}
       <div className="interactive-ui absolute top-6 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 w-full max-w-2xl px-4 animate-in fade-in slide-in-from-top-4 duration-200">
@@ -413,9 +366,9 @@ export const CircleSearchOverlay: React.FC = () => {
               type="text"
               placeholder={
                 selection
-                  ? `Ask anything about circled region (${selection.w}x${selection.h})...`
+                  ? `Ask anything about circled region (${selection.w}×${selection.h})...`
                   : contextMode === 'fullscreen'
-                  ? "Ask about your entire screen or type any question..."
+                  ? "Ask about your live screen or type any question..."
                   : "Ask SuperAgent anything (Spotlight text mode)..."
               }
               value={query}
@@ -432,8 +385,8 @@ export const CircleSearchOverlay: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleResetSelection}
-                  className="ml-1 hover:text-white transition-colors"
-                  title="Clear region (use full screen / text)"
+                  className="ml-1 hover:text-white transition-colors cursor-pointer"
+                  title="Clear region (switch to full screen / text)"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -448,10 +401,10 @@ export const CircleSearchOverlay: React.FC = () => {
                       ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
                       : 'bg-zinc-800/80 border-zinc-700 text-zinc-400 hover:text-zinc-200'
                   }`}
-                  title={contextMode === 'fullscreen' ? 'Sending entire screen context (Click for Text-only)' : 'Text-only ask (Click to attach full screen)'}
+                  title={contextMode === 'fullscreen' ? 'Live screen context attached (Click for Text-only)' : 'Text-only ask (Click to attach screen)'}
                 >
                   {contextMode === 'fullscreen' ? <Monitor className="w-3 h-3" /> : <MessageSquare className="w-3 h-3" />}
-                  <span>{contextMode === 'fullscreen' ? 'Full Screen' : 'Text Only'}</span>
+                  <span>{contextMode === 'fullscreen' ? 'Live Screen' : 'Text Only'}</span>
                 </button>
               </div>
             )}
@@ -466,16 +419,6 @@ export const CircleSearchOverlay: React.FC = () => {
               {isLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CornerDownLeft className="w-3.5 h-3.5" />}
             </button>
           </form>
-
-          {/* Quick Screen Recapture button */}
-          <button
-            type="button"
-            onClick={fetchScreen}
-            className="p-2 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors border border-zinc-700/50 flex-shrink-0 cursor-pointer"
-            title={`Recapture Screen (${formatShortcut('CommandOrControl+Shift+S')})`}
-          >
-            <Camera className="w-3.5 h-3.5" />
-          </button>
 
           {/* Close button */}
           <button
@@ -550,7 +493,7 @@ export const CircleSearchOverlay: React.FC = () => {
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 px-4 py-2 rounded-full gemini-card-glass text-xs font-medium text-zinc-300 flex items-center gap-3 pointer-events-none shadow-lg animate-fade-in">
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Circle/drag any area for box crop, or ask about full screen / text</span>
+            <span>Circle or drag around anything on your screen to search</span>
           </div>
           <div className="h-3 w-px bg-zinc-700" />
           <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
@@ -581,10 +524,10 @@ export const CircleSearchOverlay: React.FC = () => {
       {/* Darkened mask around selection */}
       {selection && (
         <>
-          <div className="absolute left-0 top-0 bottom-0 bg-black/40 pointer-events-none z-0" style={{ width: selection.x }} />
-          <div className="absolute right-0 top-0 bottom-0 bg-black/40 pointer-events-none z-0" style={{ left: selection.x + selection.w }} />
-          <div className="absolute top-0 bg-black/40 pointer-events-none z-0" style={{ left: selection.x, width: selection.w, height: selection.y }} />
-          <div className="absolute bottom-0 bg-black/40 pointer-events-none z-0" style={{ left: selection.x, width: selection.w, top: selection.y + selection.h }} />
+          <div className="absolute left-0 top-0 bottom-0 bg-black/45 pointer-events-none z-0" style={{ width: selection.x }} />
+          <div className="absolute right-0 top-0 bottom-0 bg-black/45 pointer-events-none z-0" style={{ left: selection.x + selection.w }} />
+          <div className="absolute top-0 bg-black/45 pointer-events-none z-0" style={{ left: selection.x, width: selection.w, height: selection.y }} />
+          <div className="absolute bottom-0 bg-black/45 pointer-events-none z-0" style={{ left: selection.x, width: selection.w, top: selection.y + selection.h }} />
         </>
       )}
 
@@ -611,7 +554,7 @@ export const CircleSearchOverlay: React.FC = () => {
                   {selection
                     ? 'Google Gemini Region Crop'
                     : contextMode === 'fullscreen'
-                    ? 'Google Gemini Full Screen'
+                    ? 'Google Gemini Screen Lens'
                     : 'SuperAgent Spotlight'}
                 </span>
               </div>
@@ -663,7 +606,7 @@ export const CircleSearchOverlay: React.FC = () => {
                   {selection
                     ? 'Analyzing circled region with Gemini...'
                     : contextMode === 'fullscreen'
-                    ? 'Analyzing full desktop screen...'
+                    ? 'Analyzing live screen content...'
                     : 'Querying SuperAgent assistant...'}
                 </span>
               </div>
