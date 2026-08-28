@@ -2269,6 +2269,16 @@ async fn handle_ipc(
         "app-version" | "get_app_version" => {
             Ok(Json(serde_json::json!({ "data": env!("CARGO_PKG_VERSION") })))
         }
+        "check-for-updates" | "check_for_updates" => {
+            let current_version = env!("CARGO_PKG_VERSION");
+            Ok(Json(serde_json::json!({
+                "data": {
+                    "status": "not-available",
+                    "version": current_version,
+                    "message": "SuperAgent is up to date."
+                }
+            })))
+        }
         "auto-detect-providers" => {
             let mut providers = Vec::new();
             if std::env::var("OPENAI_API_KEY").is_ok() {
@@ -2952,7 +2962,7 @@ async fn handle_ipc(
         }
 
         // Graceful handling for desktop-only features in web browser
-        "three-d-generate" | "three-d-list-models" | "three-d-delete-model" | "check-for-updates"
+        "three-d-generate" | "three-d-list-models" | "three-d-delete-model"
         | "pick-image-file" | "partner-install" | "partner-pick-model-file" | "partner-pick-model-folder"
         | "mcp-connect" | "mcp-disconnect" | "mcp-list" | "mcp-call" | "mcp-install"
         | "pet-start" | "pet-stop" | "pet-set-visible" | "pet-say" => {

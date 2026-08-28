@@ -45,7 +45,11 @@ export class UpdateService {
         if (
           lowerMsg.includes('404') ||
           lowerMsg.includes('not found') ||
-          lowerMsg.includes('could not fetch')
+          lowerMsg.includes('could not fetch') ||
+          lowerMsg.includes('error sending request') ||
+          lowerMsg.includes('fallback platforms') ||
+          lowerMsg.includes('platforms') ||
+          lowerMsg.includes('no release')
         ) {
           ctx.setUpdateStatus({
             status: 'not-available',

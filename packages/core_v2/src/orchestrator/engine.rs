@@ -88,56 +88,127 @@ impl AgentEngine {
 
             for _turn in 0..max_turns {
                 let schemas = tools.list_schemas();
-                let stream_res = provider
-                    .chat_stream(&config, &context.all_messages(), &schemas)
-                    .await;
-
-                let mut stream_rx = match stream_res {
-                    Ok(rx) => rx,
-                    Err(err) => {
-                        let _ = tx
-                            .send(AgentEvent::Error {
-                                message: err.to_string(),
-                            })
-                            .await;
-                        return;
-                    }
-                };
-
                 let mut turn_text = String::new();
                 let mut turn_tool_calls = Vec::new();
-                let mut stream_error = None;
+                let mut turn_succeeded = false;
+                let mut last_error_msg = String::new();
 
-                while let Some(event) = stream_rx.recv().await {
-                    match &event {
-                        AgentEvent::Token { text } => {
-                            turn_text.push_str(text);
-                            let _ = tx.send(event).await;
+                const MAX_RETRIES: usize = 3;
+                const RETRY_DELAY_SECS: u64 = 3;
+
+                for attempt in 1..=MAX_RETRIES {
+                    let stream_res = provider
+                        .chat_stream(&config, &context.all_messages(), &schemas)
+                        .await;
+
+                    let mut stream_rx = match stream_res {
+                        Ok(rx) => rx,
+                        Err(err) => {
+                            last_error_msg = err.to_string();
+                            if attempt < MAX_RETRIES {
+                                tracing::warn!(
+                                    "LLM stream request failed (attempt {}/{}): {}. Retrying in {}s...",
+                                    attempt,
+                                    MAX_RETRIES,
+                                    last_error_msg,
+                                    RETRY_DELAY_SECS
+                                );
+                                tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                                continue;
+                            } else {
+                                let _ = tx
+                                    .send(AgentEvent::Error {
+                                        message: format!("Failed after {} attempts: {}", MAX_RETRIES, last_error_msg),
+                                    })
+                                    .await;
+                                return;
+                            }
                         }
-                        AgentEvent::ToolCall { id, name, input } => {
-                            turn_tool_calls.push((id.clone(), name.clone(), input.clone()));
-                            let _ = tx.send(event).await;
-                        }
-                        AgentEvent::Error { message } => {
-                            stream_error = Some(message.clone());
-                            let _ = tx.send(event).await;
-                        }
-                        AgentEvent::ToolOutput { .. } => {
-                            let _ = tx.send(event).await;
-                        }
-                        AgentEvent::Finished { .. } => {
-                            // Suppress per-turn provider finish events until outer loop turn ends
-                        }
-                        AgentEvent::AgentHandover { .. }
-                        | AgentEvent::SubagentStart { .. }
-                        | AgentEvent::SubagentFinish { .. }
-                        | AgentEvent::WorkflowProgress { .. } => {
-                            let _ = tx.send(event).await;
+                    };
+
+                    turn_text.clear();
+                    turn_tool_calls.clear();
+                    let mut stream_error = None;
+
+                    while let Some(event) = stream_rx.recv().await {
+                        match &event {
+                            AgentEvent::Token { text } => {
+                                turn_text.push_str(text);
+                                let _ = tx.send(event).await;
+                            }
+                            AgentEvent::ToolCall { id, name, input } => {
+                                turn_tool_calls.push((id.clone(), name.clone(), input.clone()));
+                                let _ = tx.send(event).await;
+                            }
+                            AgentEvent::Error { message } => {
+                                stream_error = Some(message.clone());
+                            }
+                            AgentEvent::ToolOutput { .. } => {
+                                let _ = tx.send(event).await;
+                            }
+                            AgentEvent::Finished { .. } => {
+                                // Suppress per-turn provider finish events until outer loop turn ends
+                            }
+                            AgentEvent::AgentHandover { .. }
+                            | AgentEvent::SubagentStart { .. }
+                            | AgentEvent::SubagentFinish { .. }
+                            | AgentEvent::WorkflowProgress { .. } => {
+                                let _ = tx.send(event).await;
+                            }
                         }
                     }
+
+                    if let Some(err) = stream_error {
+                        last_error_msg = err;
+                        if attempt < MAX_RETRIES {
+                            tracing::warn!(
+                                "LLM stream error (attempt {}/{}): {}. Retrying in {}s...",
+                                attempt,
+                                MAX_RETRIES,
+                                last_error_msg,
+                                RETRY_DELAY_SECS
+                            );
+                            tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                            continue;
+                        } else {
+                            let _ = tx
+                                .send(AgentEvent::Error {
+                                    message: format!("Stream error after {} attempts: {}", MAX_RETRIES, last_error_msg),
+                                })
+                                .await;
+                            return;
+                        }
+                    }
+
+                    // Check if the model returned nothing at all (empty text and no tool calls)
+                    if turn_text.trim().is_empty() && turn_tool_calls.is_empty() {
+                        if attempt < MAX_RETRIES {
+                            tracing::warn!(
+                                "LLM returned empty completion (attempt {}/{}). Retrying in {}s...",
+                                attempt,
+                                MAX_RETRIES,
+                                RETRY_DELAY_SECS
+                            );
+                            tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                            continue;
+                        }
+                    }
+
+                    turn_succeeded = true;
+                    break;
                 }
 
-                if let Some(_err) = stream_error {
+                if !turn_succeeded {
+                    let err_detail = if last_error_msg.is_empty() {
+                        "Model failed to produce a valid response after 3 retries.".to_string()
+                    } else {
+                        format!("Model failed after 3 retries: {}", last_error_msg)
+                    };
+                    let _ = tx
+                        .send(AgentEvent::Error {
+                            message: err_detail,
+                        })
+                        .await;
                     return;
                 }
 

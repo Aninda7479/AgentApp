@@ -143,39 +143,64 @@ impl LlmProvider for OpenAiProvider {
             payload["tools"] = json!(formatted_tools);
         }
 
-        let mut req = self.client.post(&url).json(&payload);
-        if let Some(ref key) = config.api_key {
-            if !key.is_empty() {
-                req = req.bearer_auth(key);
-            }
-        }
+        let mut last_send_err = String::new();
+        let mut res_opt = None;
 
-        let mut res = req.send().await?;
-
-        if !res.status().is_success() {
-            let err_text = res.text().await.unwrap_or_default();
-            if !tools.is_empty() && (err_text.contains("does not support tools") || err_text.contains("tools are not supported")) {
-                let mut fallback_payload = payload.clone();
-                if let Some(obj) = fallback_payload.as_object_mut() {
-                    obj.remove("tools");
+        for attempt in 1..=3 {
+            let mut req = self.client.post(&url).json(&payload);
+            if let Some(ref key) = config.api_key {
+                if !key.is_empty() {
+                    req = req.bearer_auth(key);
                 }
-                let mut retry_req = self.client.post(&url).json(&fallback_payload);
-                if let Some(ref key) = config.api_key {
-                    if !key.is_empty() {
-                        retry_req = retry_req.bearer_auth(key);
+            }
+
+            match req.send().await {
+                Ok(response) => {
+                    let status = response.status();
+                    if status.is_success() {
+                        res_opt = Some(response);
+                        break;
+                    } else if (status.as_u16() == 429 || status.is_server_error()) && attempt < 3 {
+                        tracing::warn!("OpenAI request returned status {} (attempt {}/3). Retrying in 3s...", status, attempt);
+                        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                        continue;
+                    } else {
+                        let err_text = response.text().await.unwrap_or_default();
+                        if !tools.is_empty() && (err_text.contains("does not support tools") || err_text.contains("tools are not supported")) {
+                            let mut fallback_payload = payload.clone();
+                            if let Some(obj) = fallback_payload.as_object_mut() {
+                                obj.remove("tools");
+                            }
+                            let mut retry_req = self.client.post(&url).json(&fallback_payload);
+                            if let Some(ref key) = config.api_key {
+                                if !key.is_empty() {
+                                    retry_req = retry_req.bearer_auth(key);
+                                }
+                            }
+                            if let Ok(retry_res) = retry_req.send().await {
+                                if retry_res.status().is_success() {
+                                    res_opt = Some(retry_res);
+                                    break;
+                                }
+                            }
+                        }
+                        anyhow::bail!("OpenAI API error ({url}): {}", err_text);
                     }
                 }
-                let retry_res = retry_req.send().await?;
-                if retry_res.status().is_success() {
-                    res = retry_res;
-                } else {
-                    let retry_err = retry_res.text().await.unwrap_or_default();
-                    anyhow::bail!("OpenAI API error ({url}): {}", retry_err);
+                Err(err) => {
+                    last_send_err = err.to_string();
+                    if attempt < 3 {
+                        tracing::warn!("OpenAI request send error (attempt {}/3): {}. Retrying in 3s...", attempt, last_send_err);
+                        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                    }
                 }
-            } else {
-                anyhow::bail!("OpenAI API error ({url}): {}", err_text);
             }
         }
+
+        let res = match res_opt {
+            Some(r) => r,
+            None => anyhow::bail!("OpenAI request failed after 3 attempts: {}", last_send_err),
+        };
 
         let (tx, rx) = channel(100);
         let mut stream = res.bytes_stream();
@@ -256,9 +281,14 @@ impl LlmProvider for OpenAiProvider {
             indices.sort_unstable();
             for idx in indices {
                 if let Some((id, name, args_str)) = tool_calls_map.remove(&idx) {
+                    let final_id = if id.trim().is_empty() {
+                        format!("call_{}", uuid::Uuid::new_v4().simple())
+                    } else {
+                        id
+                    };
                     let input: serde_json::Value = serde_json::from_str(&args_str)
                         .unwrap_or_else(|_| json!({ "raw": args_str }));
-                    let _ = tx.send(AgentEvent::ToolCall { id, name, input }).await;
+                    let _ = tx.send(AgentEvent::ToolCall { id: final_id, name, input }).await;
                 }
             }
 
