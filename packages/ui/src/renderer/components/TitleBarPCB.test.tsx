@@ -7,6 +7,7 @@ import { PCB3DPreview } from '../pages/PCB/PCB3DPreview';
 import { runElectricalRulesCheck } from '../pages/PCB/ercEngine';
 import { STARTER_TEMPLATES } from '../pages/PCB/types';
 import { exportToKiCad, exportToAltiumNetlist, exportToSKiDL, exportToBOM } from '../pages/PCB/exporters';
+import { PCBProjectsModal } from '../pages/PCB/PCBProjectsModal';
 
 describe('TitleBar Top Bar - PCB Workspace Link', () => {
   it('renders TitleBar with PCB Workspace link in top bar and File menu', () => {
@@ -151,5 +152,22 @@ describe('ECAD Multi-Format Exporters', () => {
     const bom = exportToBOM(sampleGraph);
     expect(bom).toContain('Designator,Quantity,Name,Value,Package,Manufacturer,MPN,LCSC Part #,Description');
     expect(bom).toContain('C12345');
+  });
+});
+
+describe('PCBProjectsModal Component & Past Designs', () => {
+  it('renders PCB Projects modal with header, storage directory info, and search bar', () => {
+    const html = renderToStaticMarkup(
+      <PCBProjectsModal
+        isOpen={true}
+        onClose={vi.fn()}
+        currentProjectId="test-prj"
+        onSelectProject={vi.fn()}
+        onNewProject={vi.fn()}
+      />
+    );
+    expect(html).toContain('PCB Projects &amp; Past Designs');
+    expect(html).toContain('.superagent/pcb/');
+    expect(html).toContain('New Design');
   });
 });

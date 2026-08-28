@@ -45,6 +45,7 @@ import {
   Flame,
   LayoutGrid,
   Filter,
+  FolderOpen,
 } from 'lucide-react';
 import {
   PCBGraph,
@@ -65,11 +66,20 @@ import {
 } from './exporters';
 import { processHardwarePrompt, PCBSettingsConfig, DEFAULT_PCB_SETTINGS } from './hardwareAiEngine';
 import { PCBSettingsModal } from './PCBSettingsModal';
+import { PCBProjectsModal } from './PCBProjectsModal';
 import { PCBLayoutCanvas } from './PCBLayoutCanvas';
 import { ECADSchematicCanvas } from './ECADSchematicCanvas';
 import { PCB3DPreview } from './PCB3DPreview';
 import { useModelList } from '../../hooks/useModelList';
 import { useProviderStore } from '../../stores/providerStore';
+import {
+  listPcbProjects,
+  getPcbProject,
+  savePcbProject,
+  deletePcbProject,
+  PcbProject,
+  PcbChatMessage,
+} from '../../services/pcbService';
 
 interface PCBWorkspacePageProps {
   ipc?: any;
@@ -189,6 +199,167 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
 
   // Glass Type View Selector Dropdown
   const [showViewSelect, setShowViewSelect] = useState<boolean>(false);
+
+  // PCB Projects Manager Modal State
+  const [showProjectsModal, setShowProjectsModal] = useState<boolean>(false);
+  const [currentProjectId, setCurrentProjectId] = useState<string>(() => graph.metadata.projectId || `prj-${Date.now().toString(36)}`);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+
+  // Load latest project from Rust backend on initial mount
+  useEffect(() => {
+    let isMounted = true;
+    listPcbProjects().then(async (projects) => {
+      if (!isMounted) return;
+      if (projects && projects.length > 0) {
+        const latest = await getPcbProject(projects[0].id);
+        if (latest && isMounted) {
+          setGraph(latest.graph);
+          setCurrentProjectId(latest.id);
+          if (latest.messages && latest.messages.length > 0) {
+            setMessages(latest.messages);
+          }
+          if (latest.settings) {
+            setPcbSettings(latest.settings);
+          }
+        }
+      } else {
+        // Save initial blank project to .superagent/pcb/
+        const initialProj: PcbProject = {
+          id: graph.metadata.projectId || currentProjectId,
+          name: graph.metadata.name || 'Untitled PCB Design',
+          revision: graph.metadata.revision || 'v0.1',
+          created_at: Date.now(),
+          updated_at: Date.now(),
+          graph: graph,
+          messages: messages,
+          settings: pcbSettings,
+          tags: ['pcb'],
+        };
+        savePcbProject(initialProj).catch(console.error);
+      }
+    }).catch(console.error);
+    return () => { isMounted = false; };
+  }, []);
+
+  // Debounced auto-save to Rust backend (.superagent/pcb/)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitialMount = useRef(true);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    setSaveStatus('unsaved');
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      setSaveStatus('saving');
+      try {
+        const projectToSave: PcbProject = {
+          id: graph.metadata.projectId || currentProjectId || `prj-${Date.now().toString(36)}`,
+          name: graph.metadata.name || 'Untitled PCB Design',
+          revision: graph.metadata.revision || 'v0.1',
+          created_at: graph.metadata.created ? new Date(graph.metadata.created).getTime() : Date.now(),
+          updated_at: Date.now(),
+          graph: graph,
+          messages: messages,
+          settings: pcbSettings,
+          tags: ['pcb'],
+        };
+        await savePcbProject(projectToSave);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('Auto-save error:', err);
+        setSaveStatus('unsaved');
+      }
+    }, 800);
+
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [graph, messages, pcbSettings, currentProjectId]);
+
+  // Project Management Actions
+  const handleOpenProject = async (id: string) => {
+    try {
+      const proj = await getPcbProject(id);
+      if (proj) {
+        setGraph(proj.graph);
+        setCurrentProjectId(proj.id);
+        if (proj.messages && proj.messages.length > 0) {
+          setMessages(proj.messages);
+        }
+        if (proj.settings) {
+          setPcbSettings(proj.settings);
+        }
+        setHistory([]);
+        setHistoryIndex(-1);
+        triggerToast?.(`Opened design: ${proj.name}`);
+      }
+    } catch (err) {
+      console.error('Open project failed:', err);
+      triggerToast?.('Failed to open PCB project', 'error');
+    }
+  };
+
+  const handleNewProject = () => {
+    const newGraph = createEmptyProjectGraph();
+    const newId = `prj-${Date.now().toString(36)}`;
+    newGraph.metadata.projectId = newId;
+    setGraph(newGraph);
+    setCurrentProjectId(newId);
+    setMessages([
+      {
+        id: 'm1',
+        sender: 'agent',
+        text: 'New blank PCB design created. What circuit system would you like to build?',
+        timestamp: 'Just now',
+      },
+    ]);
+    setHistory([]);
+    setHistoryIndex(-1);
+    const newProj: PcbProject = {
+      id: newId,
+      name: newGraph.metadata.name,
+      revision: newGraph.metadata.revision,
+      created_at: Date.now(),
+      updated_at: Date.now(),
+      graph: newGraph,
+      messages: [],
+      settings: pcbSettings,
+      tags: ['pcb'],
+    };
+    savePcbProject(newProj).then(() => {
+      triggerToast?.('Created new blank PCB design');
+    }).catch(console.error);
+  };
+
+  const handleDuplicateProject = async (id: string) => {
+    try {
+      const source = await getPcbProject(id);
+      if (source) {
+        const copyId = `prj-${Date.now().toString(36)}`;
+        const copyGraph: PCBGraph = JSON.parse(JSON.stringify(source.graph));
+        copyGraph.metadata.projectId = copyId;
+        copyGraph.metadata.name = `${source.name} (Copy)`;
+        const copyProj: PcbProject = {
+          ...source,
+          id: copyId,
+          name: `${source.name} (Copy)`,
+          created_at: Date.now(),
+          updated_at: Date.now(),
+          graph: copyGraph,
+        };
+        await savePcbProject(copyProj);
+        triggerToast?.(`Duplicated project as "${copyProj.name}"`);
+      }
+    } catch (err) {
+      console.error('Duplicate failed:', err);
+      triggerToast?.('Failed to duplicate project', 'error');
+    }
+  };
 
   // Resolve active connected model dynamically
   const resolvedModelName = useMemo(() => {
@@ -523,7 +694,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
 
       {/* ── 3 Top Floating Glass Panels (Left, Center, Right) ── */}
       <div className="absolute top-3.5 left-4 right-4 z-30 flex items-center justify-between pointer-events-none">
-        {/* 1. Left Floating Glass Card: Back + Project Title + Template Picker */}
+        {/* 1. Left Floating Glass Card: Back + Projects Manager + Title + Revision + Template Picker */}
         <div className="pointer-events-auto flex items-center gap-2 bg-[#161b22]/80 backdrop-blur-2xl border border-white/15 rounded-2xl px-3.5 py-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all hover:border-white/25">
           {onBack && (
             <button
@@ -534,12 +705,31 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
               <ArrowRight className="w-4 h-4 rotate-180" />
             </button>
           )}
-          <span className="font-semibold text-xs text-white tracking-tight truncate max-w-[140px]">
+
+          {/* Past Designs / Projects Manager Trigger */}
+          <button
+            onClick={() => setShowProjectsModal(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white border border-white/10 text-[11px] font-medium transition-colors cursor-pointer shrink-0"
+            title="Open Past PCB Designs (.superagent/pcb/)"
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="font-semibold text-white">Projects</span>
+          </button>
+
+          <div className="h-4 w-px bg-white/10 mx-0.5 shrink-0" />
+
+          <span className="font-semibold text-xs text-white tracking-tight truncate max-w-[130px]" title={graph.metadata.name}>
             {graph.metadata.name}
           </span>
           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono border border-emerald-500/30 shrink-0 font-semibold">
             {graph.metadata.revision}
           </span>
+
+          {/* Auto-Save Indicator */}
+          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-black/40 border border-white/5 text-brand-textMuted/70 shrink-0 hidden sm:inline" title="Rust backend persistence (.superagent/pcb/)">
+            {saveStatus === 'saving' ? '💾 Saving...' : saveStatus === 'unsaved' ? '● Unsaved' : '✓ Saved'}
+          </span>
+
           <div className="h-4 w-px bg-white/10 mx-0.5 shrink-0" />
           <select
             onChange={(e) => {
@@ -1297,6 +1487,18 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
           triggerToast?.(`Model updated to ${newSettings.selectedModel}`);
         }}
       />
+
+      {/* ── Modal: Past PCB Projects / Designs ── */}
+      <PCBProjectsModal
+        isOpen={showProjectsModal}
+        onClose={() => setShowProjectsModal(false)}
+        currentProjectId={currentProjectId}
+        onSelectProject={handleOpenProject}
+        onNewProject={handleNewProject}
+        onDuplicateProject={handleDuplicateProject}
+        triggerToast={triggerToast}
+      />
     </div>
   );
 };
+

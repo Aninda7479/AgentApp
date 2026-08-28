@@ -48,6 +48,7 @@ use crate::storage::{
         get_active_partner, get_partner, import_partner_json, list_partners, partner_folder_path,
         remove_partner, set_active_partner,
     },
+    pcb_storage::{PcbProject, PcbProjectMetadata, PcbStorage},
     settings::{get_superagent_dir, SettingsStore},
 };
 use crate::tools::builtin::{
@@ -88,6 +89,7 @@ pub struct AppState {
     pub settings_store: Arc<SettingsStore>,
     pub auth_store: Arc<AuthStore>,
     pub chat_storage: Arc<ChatStorage>,
+    pub pcb_storage: Arc<PcbStorage>,
     pub artifact_runner: Arc<ArtifactRunner>,
     pub tool_registry: Arc<ToolRegistry>,
     pub persona_store: Arc<PersonaStore>,
@@ -488,6 +490,14 @@ pub fn create_router(state: AppState) -> Router {
         .route(
             "/api/conversations/:id",
             get(get_conversation).delete(delete_conversation),
+        )
+        .route(
+            "/api/pcb/projects",
+            get(list_pcb_projects).post(save_pcb_project),
+        )
+        .route(
+            "/api/pcb/projects/:id",
+            get(get_pcb_project).delete(delete_pcb_project),
         )
         .route("/api/artifacts", get(list_artifacts))
         .route("/api/artifacts/:id/start", post(start_artifact))
@@ -1229,6 +1239,51 @@ async fn delete_conversation(
     state
         .chat_storage
         .delete_session(&id)
+        .map(|_| Json(serde_json::json!({ "success": true })))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+// ─── PCB Workspace Projects Storage ───────────────────────────────────────────
+
+async fn list_pcb_projects(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<PcbProjectMetadata>>, StatusCode> {
+    state
+        .pcb_storage
+        .list_projects()
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn get_pcb_project(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<PcbProject>, StatusCode> {
+    state
+        .pcb_storage
+        .load_project(&id)
+        .map(Json)
+        .map_err(|_| StatusCode::NOT_FOUND)
+}
+
+async fn save_pcb_project(
+    State(state): State<AppState>,
+    Json(project): Json<PcbProject>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    state
+        .pcb_storage
+        .save_project(&project)
+        .map(|_| Json(serde_json::json!({ "success": true, "id": project.id })))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+async fn delete_pcb_project(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    state
+        .pcb_storage
+        .delete_project(&id)
         .map(|_| Json(serde_json::json!({ "success": true })))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
@@ -3234,6 +3289,7 @@ pub async fn start_server(port: u16, host: &str, workspace_root: PathBuf, custom
     let settings_store = Arc::new(SettingsStore::new());
     let auth_store = Arc::new(AuthStore::new(superagent_dir.clone()));
     let chat_storage = Arc::new(ChatStorage::new());
+    let pcb_storage = Arc::new(PcbStorage::new());
     let artifact_runner = Arc::new(ArtifactRunner::new());
 
     let persona_store = Arc::new(PersonaStore::new(&superagent_dir));
@@ -3282,6 +3338,7 @@ pub async fn start_server(port: u16, host: &str, workspace_root: PathBuf, custom
         settings_store,
         auth_store,
         chat_storage,
+        pcb_storage,
         artifact_runner,
         tool_registry: final_tool_registry,
         persona_store,
@@ -3353,6 +3410,7 @@ mod tests {
         let settings_store = Arc::new(SettingsStore::with_path(temp_dir.join("settings.json")));
         let auth_store = Arc::new(AuthStore::new(temp_dir.join("auth")));
         let chat_storage = Arc::new(ChatStorage::with_dir(temp_dir.join("chats")));
+        let pcb_storage = Arc::new(PcbStorage::with_dir(temp_dir.join("pcb")));
         let artifact_runner = Arc::new(ArtifactRunner::with_dir(temp_dir.join("artifacts")));
         let persona_store = Arc::new(PersonaStore::new(&temp_dir));
         let coordinator = Arc::new(Coordinator::new(persona_store.clone()));
@@ -3371,6 +3429,7 @@ mod tests {
             settings_store,
             auth_store,
             chat_storage,
+            pcb_storage,
             artifact_runner,
             tool_registry,
             persona_store,
@@ -3637,6 +3696,108 @@ mod tests {
             .unwrap();
         let res_artifact = app.oneshot(req_artifact).await.unwrap();
         assert_eq!(res_artifact.status(), StatusCode::OK);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_pcb_project_endpoints() {
+        let temp_dir = std::env::temp_dir().join(format!("test_pcb_{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let state = build_test_state(temp_dir.clone());
+        let token = state.auth_store.create_session_token("admin");
+        let app = create_router(state);
+
+        let project_payload = serde_json::json!({
+            "id": "pcb-test-123",
+            "name": "Solar Battery Charger",
+            "revision": "v1.2",
+            "description": "MPPT Solar Charger PCB",
+            "created_at": 1700000000,
+            "updated_at": 1700005000,
+            "graph": {
+                "metadata": { "name": "Solar Battery Charger", "revision": "v1.2" },
+                "components": [
+                    { "id": "U1", "name": "BQ24650", "mpn": "BQ24650RVAR" },
+                    { "id": "L1", "name": "10uH Inductor", "mpn": "IHLP" }
+                ],
+                "nets": [
+                    { "id": "VBUS", "name": "VBUS" },
+                    { "id": "GND", "name": "GND" }
+                ]
+            },
+            "messages": [
+                { "id": "m1", "sender": "user", "text": "Design MPPT Solar Charger" },
+                { "id": "m2", "sender": "agent", "text": "Synthesized circuit with BQ24650" }
+            ],
+            "settings": { "layerCount": 2, "copperWeight": 2 },
+            "tags": ["solar", "power"]
+        });
+
+        // 1. Save PCB Project (POST /api/pcb/projects)
+        let req_save = Request::builder()
+            .uri("/api/pcb/projects")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::from(project_payload.to_string()))
+            .unwrap();
+        let res_save = app.clone().oneshot(req_save).await.unwrap();
+        assert_eq!(res_save.status(), StatusCode::OK);
+
+        // 2. List PCB Projects (GET /api/pcb/projects)
+        let req_list = Request::builder()
+            .uri("/api/pcb/projects")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+        let res_list = app.clone().oneshot(req_list).await.unwrap();
+        assert_eq!(res_list.status(), StatusCode::OK);
+
+        let body_bytes = axum::body::to_bytes(res_list.into_body(), usize::MAX).await.unwrap();
+        let list_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(list_json.as_array().unwrap().len(), 1);
+        assert_eq!(list_json[0]["name"], "Solar Battery Charger");
+        assert_eq!(list_json[0]["components_count"], 2);
+        assert_eq!(list_json[0]["nets_count"], 2);
+        assert_eq!(list_json[0]["message_count"], 2);
+
+        // 3. Load Project (GET /api/pcb/projects/:id)
+        let req_get = Request::builder()
+            .uri("/api/pcb/projects/pcb-test-123")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+        let res_get = app.clone().oneshot(req_get).await.unwrap();
+        assert_eq!(res_get.status(), StatusCode::OK);
+
+        let body_bytes_get = axum::body::to_bytes(res_get.into_body(), usize::MAX).await.unwrap();
+        let get_json: serde_json::Value = serde_json::from_slice(&body_bytes_get).unwrap();
+        assert_eq!(get_json["name"], "Solar Battery Charger");
+        assert_eq!(get_json["messages"].as_array().unwrap().len(), 2);
+
+        // 4. Delete Project (DELETE /api/pcb/projects/:id)
+        let req_del = Request::builder()
+            .uri("/api/pcb/projects/pcb-test-123")
+            .method("DELETE")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+        let res_del = app.clone().oneshot(req_del).await.unwrap();
+        assert_eq!(res_del.status(), StatusCode::OK);
+
+        // 5. Verify deleted (GET -> 404 NOT FOUND)
+        let req_get_after = Request::builder()
+            .uri("/api/pcb/projects/pcb-test-123")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+        let res_get_after = app.oneshot(req_get_after).await.unwrap();
+        assert_eq!(res_get_after.status(), StatusCode::NOT_FOUND);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
