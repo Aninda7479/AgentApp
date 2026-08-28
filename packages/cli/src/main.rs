@@ -17,7 +17,7 @@ use superagent_core_v2::tools::builtin::{
 use superagent_core_v2::tools::ToolRegistry;
 use superagent_core_v2::types::{ModelConfig, ProviderType};
 
-use superagent_cli::cli::args::{Cli, Commands, PermissionLevelArg};
+use superagent_cli::cli::args::{Cli, Commands, PasswordAction, PermissionLevelArg};
 use superagent_cli::shortcuts::permissions::PermissionLevel;
 use superagent_cli::tui::app::AppState;
 use superagent_cli::tui::run_tui;
@@ -85,7 +85,13 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    // 9. --start-web / --serve / --server / serve subcommand daemon mode
+    // 9. password subcommand
+    if let Some(Commands::Password { action }) = &cli.command {
+        handle_password(action.as_ref())?;
+        return Ok(());
+    }
+
+    // 10. --start-web / --serve / --server / serve subcommand daemon mode
     let is_serve_cmd = match &cli.command {
         Some(Commands::Serve { port, host, ui_dir, no_auth }) => Some((*port, host.clone(), ui_dir.clone(), *no_auth)),
         _ => None,
@@ -791,6 +797,71 @@ async fn run_one_shot(
                 let _ = handle.flush();
             }
             _ => {}
+        }
+    }
+
+    Ok(())
+}
+
+fn handle_password(action: Option<&PasswordAction>) -> Result<()> {
+    let sa_dir = get_superagent_dir();
+    let auth_store = superagent_core_v2::storage::auth::AuthStore::new(sa_dir.clone());
+    let auth_file_path = superagent_core_v2::storage::auth::resolve_auth_file_path(Some(&sa_dir));
+
+    match action {
+        None | Some(PasswordAction::Status) => {
+            println!("========================================================");
+            println!("              SUPERAGENT PASSWORD STATUS");
+            println!("========================================================");
+            let is_set = auth_store.is_password_set();
+            let username = auth_store.get_username();
+            println!("Username:            {}", username);
+            if is_set {
+                println!("Password Status:     CONFIGURED (Custom password set)");
+                println!("Auth File:           {}", auth_file_path.display());
+                println!("Web UI Login:        http://localhost:1469/login");
+                println!();
+                println!("Tip: Use 'superagent password set' to change, or 'superagent password reset' to restore default.");
+            } else {
+                println!("Password Status:     DEFAULT (Using default 'admin' fallback)");
+                println!("Auth File:           {}", auth_file_path.display());
+                println!("Web UI Login:        http://localhost:1469/login (password: admin)");
+                println!();
+                println!("⚠️  Warning: Default password is in use.");
+                println!("Run 'superagent password set' to set a strong custom password.");
+            }
+            println!("========================================================");
+        }
+        Some(PasswordAction::Set { password }) => {
+            let pass = match password {
+                Some(p) => p.clone(),
+                None => {
+                    let p1 = rpassword::prompt_password("Enter new SuperAgent Web UI password: ")?;
+                    if p1.trim().is_empty() {
+                        anyhow::bail!("Password cannot be empty.");
+                    }
+                    let p2 = rpassword::prompt_password("Confirm new password: ")?;
+                    if p1 != p2 {
+                        anyhow::bail!("Passwords do not match.");
+                    }
+                    p1
+                }
+            };
+
+            let clean = pass.trim();
+            if clean.len() < 6 {
+                anyhow::bail!("Password must be at least 6 characters long.");
+            }
+
+            auth_store.set_password(clean, Some("admin"))?;
+            println!("✓ SuperAgent Web UI password updated successfully.");
+            println!("Saved to: {}", auth_file_path.display());
+            println!("You can now sign in at http://localhost:1469/login with your new password.");
+        }
+        Some(PasswordAction::Reset) => {
+            auth_store.set_password("admin", Some("admin"))?;
+            println!("✓ SuperAgent Web UI password reset to default ('admin').");
+            println!("Run 'superagent password set' anytime to configure a custom password.");
         }
     }
 

@@ -168,3 +168,48 @@ fn test_diff_generation() {
     assert!(diff_lines.iter().any(|l| l.tag == similar::ChangeTag::Delete && l.content.contains("old")));
     assert!(diff_lines.iter().any(|l| l.tag == similar::ChangeTag::Insert && l.content.contains("new")));
 }
+
+#[test]
+fn test_password_cli_parsing() {
+    use clap::Parser;
+    use superagent_cli::cli::args::{Cli, Commands, PasswordAction};
+
+    // 1. superagent password set
+    let cli = Cli::try_parse_from(["superagent", "password", "set"]).unwrap();
+    match cli.command {
+        Some(Commands::Password { action: Some(PasswordAction::Set { password }) }) => {
+            assert_eq!(password, None);
+        }
+        other => panic!("Expected Password Set, got {:?}", other),
+    }
+
+    // 2. superagent password set mysecret123
+    let cli = Cli::try_parse_from(["superagent", "password", "set", "mysecret123"]).unwrap();
+    match cli.command {
+        Some(Commands::Password { action: Some(PasswordAction::Set { password }) }) => {
+            assert_eq!(password, Some("mysecret123".to_string()));
+        }
+        other => panic!("Expected Password Set with secret, got {:?}", other),
+    }
+
+    // 3. superagent password status
+    let cli = Cli::try_parse_from(["superagent", "password", "status"]).unwrap();
+    match cli.command {
+        Some(Commands::Password { action: Some(PasswordAction::Status) }) => {}
+        other => panic!("Expected Password Status, got {:?}", other),
+    }
+
+    // 4. superagent password (no subcommand)
+    let cli = Cli::try_parse_from(["superagent", "password"]).unwrap();
+    match cli.command {
+        Some(Commands::Password { action: None }) => {}
+        other => panic!("Expected Password with None action, got {:?}", other),
+    }
+
+    // 5. superagent password reset
+    let cli = Cli::try_parse_from(["superagent", "password", "reset"]).unwrap();
+    match cli.command {
+        Some(Commands::Password { action: Some(PasswordAction::Reset) }) => {}
+        other => panic!("Expected Password Reset, got {:?}", other),
+    }
+}

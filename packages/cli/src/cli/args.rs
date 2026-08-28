@@ -194,6 +194,27 @@ pub enum Commands {
         #[arg(short = 'f', long)]
         file: Option<PathBuf>,
     },
+
+    /// Manage Web UI authentication password (status, set, reset)
+    Password {
+        #[command(subcommand)]
+        action: Option<PasswordAction>,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum PasswordAction {
+    /// Check if a custom Web UI password is configured
+    Status,
+
+    /// Set or update the Web UI admin password
+    Set {
+        /// New password (optional, will prompt securely if omitted)
+        password: Option<String>,
+    },
+
+    /// Reset Web UI admin password to default ('admin')
+    Reset,
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
