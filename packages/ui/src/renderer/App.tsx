@@ -95,7 +95,9 @@ const PAGE_LABELS: Record<string, string> = {
   'standalone-chat': 'Standalone Chat',
   studio: '3D Studio',
   settings: 'Settings',
-  diff: 'Diff Viewer'
+  diff: 'Diff Viewer',
+  partner: 'Partner',
+  companion: 'Companion'
 };
 
 export const App: React.FC = () => {

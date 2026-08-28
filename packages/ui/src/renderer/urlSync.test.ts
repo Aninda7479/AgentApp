@@ -90,4 +90,11 @@ describe('buildPath — emits canonical ids (never a friendly slug)', () => {
     const route = getRouteFromLocation();
     expect(route.activeTab).toBe('artifacts');
   });
+
+  it('correctly builds and parses the /pcb route', () => {
+    expect(buildPath({ activeTab: 'pcb', activeChatId: null, settingsCategory: 'general' })).toBe('/pcb');
+    withWindow('/pcb', 'http:');
+    const route = getRouteFromLocation();
+    expect(route.activeTab).toBe('pcb');
+  });
 });
