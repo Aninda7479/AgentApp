@@ -98,7 +98,12 @@ impl LlmProvider for OpenAiProvider {
         tools: &[serde_json::Value],
     ) -> anyhow::Result<Receiver<AgentEvent>> {
         let base_url = config.get_base_url();
-        let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+        let base_trimmed = base_url.trim_end_matches('/');
+        let url = if base_trimmed.ends_with("/chat/completions") {
+            base_trimmed.to_string()
+        } else {
+            format!("{}/chat/completions", base_trimmed)
+        };
 
         let mut payload = json!({
             "model": config.model_id,
@@ -113,7 +118,29 @@ impl LlmProvider for OpenAiProvider {
             payload["max_tokens"] = json!(max_t);
         }
         if !tools.is_empty() {
-            payload["tools"] = json!(tools);
+            let formatted_tools: Vec<serde_json::Value> = tools
+                .iter()
+                .map(|t| {
+                    if t.get("type").is_some() && t.get("function").is_some() {
+                        t.clone()
+                    } else if t.get("name").is_some() {
+                        json!({
+                            "type": "function",
+                            "function": {
+                                "name": t.get("name").and_then(|v| v.as_str()).unwrap_or_default(),
+                                "description": t.get("description").and_then(|v| v.as_str()).unwrap_or_default(),
+                                "parameters": t.get("parameters").cloned().unwrap_or(json!({
+                                    "type": "object",
+                                    "properties": {}
+                                }))
+                            }
+                        })
+                    } else {
+                        t.clone()
+                    }
+                })
+                .collect();
+            payload["tools"] = json!(formatted_tools);
         }
 
         let mut req = self.client.post(&url).json(&payload);
@@ -123,11 +150,31 @@ impl LlmProvider for OpenAiProvider {
             }
         }
 
-        let res = req.send().await?;
+        let mut res = req.send().await?;
 
         if !res.status().is_success() {
             let err_text = res.text().await.unwrap_or_default();
-            anyhow::bail!("OpenAI API error ({url}): {}", err_text);
+            if !tools.is_empty() && (err_text.contains("does not support tools") || err_text.contains("tools are not supported")) {
+                let mut fallback_payload = payload.clone();
+                if let Some(obj) = fallback_payload.as_object_mut() {
+                    obj.remove("tools");
+                }
+                let mut retry_req = self.client.post(&url).json(&fallback_payload);
+                if let Some(ref key) = config.api_key {
+                    if !key.is_empty() {
+                        retry_req = retry_req.bearer_auth(key);
+                    }
+                }
+                let retry_res = retry_req.send().await?;
+                if retry_res.status().is_success() {
+                    res = retry_res;
+                } else {
+                    let retry_err = retry_res.text().await.unwrap_or_default();
+                    anyhow::bail!("OpenAI API error ({url}): {}", retry_err);
+                }
+            } else {
+                anyhow::bail!("OpenAI API error ({url}): {}", err_text);
+            }
         }
 
         let (tx, rx) = channel(100);
@@ -219,5 +266,63 @@ impl LlmProvider for OpenAiProvider {
         });
 
         Ok(rx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::ProviderType;
+
+    #[test]
+    fn test_format_messages_basic() {
+        let msgs = vec![
+            ChatMessage::system("You are a helpful assistant."),
+            ChatMessage::user("Hello"),
+        ];
+
+        let formatted = OpenAiProvider::format_messages(&msgs);
+        assert_eq!(formatted.len(), 2);
+        assert_eq!(formatted[0]["role"], "system");
+        assert_eq!(formatted[0]["content"], "You are a helpful assistant.");
+        assert_eq!(formatted[1]["role"], "user");
+        assert_eq!(formatted[1]["content"], "Hello");
+    }
+
+    #[tokio::test]
+    async fn test_ollama_local_chat_stream_if_available() {
+        let provider = OpenAiProvider::new();
+        let mut config = ModelConfig::new(ProviderType::Ollama, "tinyllama:1.1b");
+        config.base_url = Some("http://localhost:11434".to_string());
+
+        let msgs = vec![ChatMessage::user("Say 'OK' and nothing else.")];
+
+        let tools = vec![serde_json::json!({
+            "name": "get_weather",
+            "description": "Get current weather",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": { "type": "string" }
+                }
+            }
+        })];
+
+        if let Ok(mut rx) = provider.chat_stream(&config, &msgs, &tools).await {
+            let mut received_tokens = String::new();
+            while let Some(evt) = rx.recv().await {
+                match evt {
+                    AgentEvent::Token { text } => received_tokens.push_str(&text),
+                    AgentEvent::Finished { .. } => break,
+                    AgentEvent::Error { message } => {
+                        println!("Ollama test notice: {}", message);
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            println!("Received from Ollama tinyllama:1.1b: {}", received_tokens);
+            assert!(!received_tokens.is_empty());
+        }
     }
 }

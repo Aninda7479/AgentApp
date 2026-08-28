@@ -107,21 +107,26 @@ async function main() {
 function mapPlatformSignature(updater, targetFileName, signature, url) {
   const lower = targetFileName.toLowerCase();
 
-  // macOS Apple Silicon (arm64 / aarch64) - must be app.tar.gz for in-place auto-update
-  if ((lower.includes('aarch64') || lower.includes('arm64')) && lower.includes('app.tar.gz')) {
+  // macOS Apple Silicon (arm64 / aarch64) - matches app.tar.gz, tar.gz, dmg
+  if ((lower.includes('aarch64') || lower.includes('arm64')) && (lower.includes('app.tar.gz') || lower.includes('.tar.gz') || lower.endsWith('.dmg'))) {
     updater.platforms['darwin-aarch64'] = { signature, url };
+    updater.platforms['darwin-aarch64-app'] = { signature, url };
+    updater.platforms['darwin-arm64'] = { signature, url };
   }
-  // macOS Intel (x64 / x86_64) - must be app.tar.gz
-  else if ((lower.includes('x64') || lower.includes('x86_64')) && lower.includes('app.tar.gz')) {
+  // macOS Intel (x64 / x86_64) - matches app.tar.gz, tar.gz, dmg
+  else if ((lower.includes('x64') || lower.includes('x86_64') || lower.includes('darwin')) && (lower.includes('app.tar.gz') || lower.includes('.tar.gz') || lower.endsWith('.dmg'))) {
     updater.platforms['darwin-x86_64'] = { signature, url };
+    updater.platforms['darwin-x86_64-app'] = { signature, url };
   }
   // Windows (x64) - NSIS setup exe or nsis.zip (exclude .msi for in-place updater)
   else if (lower.includes('x64') && (lower.endsWith('-setup.exe') || lower.endsWith('.nsis.zip') || (lower.endsWith('.exe') && !lower.includes('cli')))) {
     updater.platforms['windows-x86_64'] = { signature, url };
+    updater.platforms['windows-x64'] = { signature, url };
   }
   // Linux (x64) - AppImage or AppImage.tar.gz (exclude .deb and .rpm)
   else if ((lower.includes('amd64') || lower.includes('x86_64') || lower.includes('x64')) && (lower.endsWith('.appimage') || lower.includes('appimage.tar.gz'))) {
     updater.platforms['linux-x86_64'] = { signature, url };
+    updater.platforms['linux-x64'] = { signature, url };
   }
 }
 

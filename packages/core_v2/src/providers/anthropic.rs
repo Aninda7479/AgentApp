@@ -135,7 +135,33 @@ impl LlmProvider for AnthropicProvider {
             payload["temperature"] = json!(temp);
         }
         if !tools.is_empty() {
-            payload["tools"] = json!(tools);
+            let formatted_tools: Vec<serde_json::Value> = tools
+                .iter()
+                .map(|t| {
+                    if t.get("input_schema").is_some() {
+                        t.clone()
+                    } else {
+                        let mut tool_obj = serde_json::Map::new();
+                        if let Some(name) = t.get("name") {
+                            tool_obj.insert("name".to_string(), name.clone());
+                        }
+                        if let Some(desc) = t.get("description") {
+                            tool_obj.insert("description".to_string(), desc.clone());
+                        }
+                        let schema = t
+                            .get("parameters")
+                            .or_else(|| t.get("input_schema"))
+                            .cloned()
+                            .unwrap_or(json!({
+                                "type": "object",
+                                "properties": {}
+                            }));
+                        tool_obj.insert("input_schema".to_string(), schema);
+                        serde_json::Value::Object(tool_obj)
+                    }
+                })
+                .collect();
+            payload["tools"] = json!(formatted_tools);
         }
 
         let mut req = self
