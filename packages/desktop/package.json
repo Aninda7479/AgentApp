@@ -1,6 +1,6 @@
 {
   "name": "@superagent/desktop",
-  "version": "0.25.0",
+  "version": "0.25.1",
   "description": "SuperAgent Desktop — Tauri v2 host shell. All UI is in @superagent/ui.",
   "license": "GPL-3.0-or-later",
   "repository": {
