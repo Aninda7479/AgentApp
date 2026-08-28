@@ -99,3 +99,6 @@ new_doc
 **/.superagent/
 packages/*/tmp/
 legacy/
+
+# Tauri auto-generated JSON schemas
+**/src-tauri/gen/schemas/
