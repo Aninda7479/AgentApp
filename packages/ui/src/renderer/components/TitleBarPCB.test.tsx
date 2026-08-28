@@ -3,6 +3,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { TitleBar } from './TitleBar';
 import { PCBWorkspacePage } from '../pages/PCB/PCBWorkspacePage';
+import { PCB3DPreview } from '../pages/PCB/PCB3DPreview';
 import { runElectricalRulesCheck } from '../pages/PCB/ercEngine';
 import { STARTER_TEMPLATES } from '../pages/PCB/types';
 import { exportToKiCad, exportToAltiumNetlist, exportToSKiDL, exportToBOM } from '../pages/PCB/exporters';
@@ -29,8 +30,8 @@ describe('TitleBar Top Bar - PCB Workspace Link', () => {
   });
 });
 
-describe('PCBWorkspacePage Component', () => {
-  it('renders PCB Workspace header, chips canvas, and AI Co-Pilot', () => {
+describe('PCBWorkspacePage Infinite Dotted Canvas Component', () => {
+  it('renders Dotted Canvas Studio, multi-board previews, and floating AI Co-Pilot command deck', () => {
     const html = renderToStaticMarkup(
       <PCBWorkspacePage
         triggerToast={vi.fn()}
@@ -38,9 +39,29 @@ describe('PCBWorkspacePage Component', () => {
         onNewChat={vi.fn()}
       />
     );
+    expect(html).toContain('radial-gradient');
     expect(html).toContain('Schematic &amp; Chips');
-    expect(html).toContain('AI Hardware Co-Pilot');
-    expect(html).toContain('ECAD Export');
+    expect(html).toContain('PCB Layout &amp; Copper Traces');
+    expect(html).toContain('3D Board Preview');
+    expect(html).toContain('Power Tree &amp; Rails Budget');
+    expect(html).toContain('BOM &amp; SMT Sourcing');
+    expect(html).toContain('ERC Validation &amp; DRC Audit');
+    expect(html).toContain('Lossless ECAD Code Exporter');
+    expect(html).toContain('What would you like to change or create?');
+    expect(html).toContain('Export');
+  });
+
+  it('renders 3D physical board preview with solder mask & SMD chip packages', () => {
+    const sampleGraph = STARTER_TEMPLATES[0].graph;
+    const html = renderToStaticMarkup(
+      <PCB3DPreview
+        graph={sampleGraph}
+        selectedCompId={null}
+      />
+    );
+    expect(html).toContain('FR-4');
+    expect(html).toContain('ENIG Pads');
+    expect(html).toContain('Traces');
   });
 });
 
