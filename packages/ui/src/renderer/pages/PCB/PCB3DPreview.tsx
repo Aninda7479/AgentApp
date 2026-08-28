@@ -179,76 +179,79 @@ export const PCB3DPreview: React.FC<PCB3DPreviewProps> = ({
 
   return (
     <div className={`flex flex-col h-full bg-black/40 select-none overflow-hidden relative ${className}`}>
-      {/* 3D View Toolbar */}
-      <div className="px-3 py-2 border-b border-brand-border/30 flex items-center justify-between bg-black/30 backdrop-blur-sm text-xs shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-black/40 rounded-lg p-0.5 border border-brand-border/30">
-            {(
-              [
-                { id: 'black', label: 'Matte Black', color: '#18181b' },
-                { id: 'green', label: 'Classic Green', color: '#15803d' },
-                { id: 'blue', label: 'Royal Blue', color: '#1d4ed8' },
-                { id: 'purple', label: 'Purple OSH', color: '#7e22ce' },
-                { id: 'red', label: 'Crimson Red', color: '#b91c1c' },
-                { id: 'white', label: 'White Silk', color: '#e2e8f0' },
-              ] as const
-            ).map((c) => (
-              <button
-                key={c.id}
-                onClick={() => setMaskColor(c.id)}
-                className={`w-5 h-5 rounded-md transition-all cursor-pointer flex items-center justify-center ${
-                  maskColor === c.id ? 'ring-2 ring-emerald-400 scale-110' : 'opacity-70 hover:opacity-100'
-                }`}
-                style={{ backgroundColor: c.color }}
-                title={`Solder Mask: ${c.label}`}
-              />
-            ))}
-          </div>
-          <span className="text-[11px] text-brand-textMuted font-mono hidden sm:inline">
-            {maskColor.toUpperCase()} FR-4
-          </span>
+      {/* ── Vertical Right-Side Floating Glass Action Bar ── */}
+      <div className="absolute right-4 top-20 z-20 flex flex-col items-center gap-2 p-2 bg-[#161b22]/80 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] text-xs">
+        {/* Rotate 90deg Button */}
+        <button
+          onClick={() => setRotation((r) => (r + 90) % 360)}
+          className="p-2 rounded-xl text-brand-textMuted hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+          title="Rotate Board 90°"
+        >
+          <RotateCw className="w-4 h-4 text-emerald-400" />
+        </button>
+
+        <div className="w-5 h-px bg-white/10 my-0.5" />
+
+        {/* Solder Mask Color Palette Vertical Column */}
+        <div className="flex flex-col gap-1.5 p-1 bg-black/40 rounded-xl border border-white/10">
+          {(
+            [
+              { id: 'black', label: 'Matte Black', color: '#18181b' },
+              { id: 'green', label: 'Classic Green', color: '#15803d' },
+              { id: 'blue', label: 'Royal Blue', color: '#1d4ed8' },
+              { id: 'purple', label: 'Purple OSH', color: '#7e22ce' },
+              { id: 'red', label: 'Crimson Red', color: '#b91c1c' },
+              { id: 'white', label: 'White Silk', color: '#e2e8f0' },
+            ] as const
+          ).map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setMaskColor(c.id)}
+              className={`w-5 h-5 rounded-lg transition-all cursor-pointer flex items-center justify-center ${
+                maskColor === c.id ? 'ring-2 ring-emerald-400 scale-110 shadow-sm' : 'opacity-60 hover:opacity-100'
+              }`}
+              style={{ backgroundColor: c.color }}
+              title={`Solder Mask: ${c.label}`}
+            />
+          ))}
         </div>
 
-        {/* Layer Toggles & Rotation */}
-        <div className="flex items-center gap-1.5 text-xs">
-          <button
-            onClick={() => setShowSilkscreen(!showSilkscreen)}
-            className={`px-2 py-1 rounded text-[11px] font-medium border transition-colors cursor-pointer ${
-              showSilkscreen
-                ? 'bg-white/10 text-white border-white/20'
-                : 'text-brand-textMuted/50 border-brand-border/20 line-through'
-            }`}
-          >
-            Silk
-          </button>
-          <button
-            onClick={() => setShowPads(!showPads)}
-            className={`px-2 py-1 rounded text-[11px] font-medium border transition-colors cursor-pointer ${
-              showPads
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                : 'text-brand-textMuted/50 border-brand-border/20 line-through'
-            }`}
-          >
-            ENIG Pads
-          </button>
-          <button
-            onClick={() => setShowTraces(!showTraces)}
-            className={`px-2 py-1 rounded text-[11px] font-medium border transition-colors cursor-pointer ${
-              showTraces
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                : 'text-brand-textMuted/50 border-brand-border/20 line-through'
-            }`}
-          >
-            Traces
-          </button>
-          <button
-            onClick={() => setRotation((r) => (r + 90) % 360)}
-            className="p-1.5 rounded hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
-            title="Rotate Board 90°"
-          >
-            <RotateCw className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        <div className="w-5 h-px bg-white/10 my-0.5" />
+
+        {/* Layer Toggles */}
+        <button
+          onClick={() => setShowSilkscreen(!showSilkscreen)}
+          className={`px-2 py-1 rounded-xl text-[10px] font-mono font-medium border transition-all cursor-pointer w-full text-center ${
+            showSilkscreen
+              ? 'bg-white/10 text-white border-white/20'
+              : 'text-brand-textMuted/40 border-transparent'
+          }`}
+          title="Toggle Silkscreen"
+        >
+          Silk
+        </button>
+        <button
+          onClick={() => setShowPads(!showPads)}
+          className={`px-2 py-1 rounded-xl text-[10px] font-mono font-medium border transition-all cursor-pointer w-full text-center ${
+            showPads
+              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+              : 'text-brand-textMuted/40 border-transparent'
+          }`}
+          title="Toggle ENIG Pads"
+        >
+          Pads
+        </button>
+        <button
+          onClick={() => setShowTraces(!showTraces)}
+          className={`px-2 py-1 rounded-xl text-[10px] font-mono font-medium border transition-all cursor-pointer w-full text-center ${
+            showTraces
+              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+              : 'text-brand-textMuted/40 border-transparent'
+          }`}
+          title="Toggle Copper Traces"
+        >
+          Traces
+        </button>
       </div>
 
       {/* Interactive Board Rendering Area */}

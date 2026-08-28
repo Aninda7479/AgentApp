@@ -1305,106 +1305,94 @@ export const ECADSchematicCanvas: React.FC<ECADSchematicCanvasProps> = ({
       className="relative w-full h-full flex flex-col overflow-hidden select-none font-sans"
       style={{ backgroundColor: colors.bg }}
     >
-      {/* ── Top ECAD Toolbar ── */}
-      <div
-        className="h-10 px-4 border-b flex items-center justify-between shrink-0 text-xs shadow-sm z-20"
-        style={{ backgroundColor: colors.sheetBg, borderColor: colors.border }}
-      >
+      {/* ── Vertical Right-Side Floating Glass Action Bar ── */}
+      <div className="absolute right-4 top-20 z-20 flex flex-col items-center gap-1.5 p-2 bg-[#161b22]/80 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] text-xs">
         {/* Tool Palette */}
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => {
-              setActiveTool('select');
-              setWireStartPin(null);
-              setWireMousePos(null);
-            }}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition-all cursor-pointer border ${
-              activeTool === 'select'
-                ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
-                : 'bg-black/5 hover:bg-black/10 text-gray-700 dark:text-gray-300 border-transparent'
-            }`}
-            title="Select & Move Tool"
-          >
-            <MousePointer className="w-3.5 h-3.5" />
-            <span>Pointer</span>
-          </button>
+        <button
+          onClick={() => {
+            setActiveTool('select');
+            setWireStartPin(null);
+            setWireMousePos(null);
+          }}
+          className={`p-2 rounded-xl transition-all cursor-pointer ${
+            activeTool === 'select'
+              ? 'bg-blue-600 text-white shadow-md shadow-blue-900/50'
+              : 'text-brand-textMuted hover:text-white hover:bg-white/5'
+          }`}
+          title="Pointer Tool (Select & Move)"
+        >
+          <MousePointer className="w-4 h-4" />
+        </button>
 
-          <button
-            onClick={() => setActiveTool('wire')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition-all cursor-pointer border ${
-              activeTool === 'wire'
-                ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
-                : 'bg-black/5 hover:bg-black/10 text-gray-700 dark:text-gray-300 border-transparent'
-            }`}
-            title="Interactive Pin-to-Pin Wiring Tool"
-          >
-            <Zap className="w-3.5 h-3.5 text-blue-400" />
-            <span>Wire</span>
-          </button>
+        <button
+          onClick={() => setActiveTool('wire')}
+          className={`p-2 rounded-xl transition-all cursor-pointer ${
+            activeTool === 'wire'
+              ? 'bg-blue-600 text-white shadow-md shadow-blue-900/50'
+              : 'text-brand-textMuted hover:text-white hover:bg-white/5'
+          }`}
+          title="Interactive Pin Wiring Tool"
+        >
+          <Zap className="w-4 h-4 text-blue-400" />
+        </button>
 
-          <button
-            onClick={handleAutoLayout}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium bg-black/5 hover:bg-black/10 text-gray-700 dark:text-gray-300 transition-colors cursor-pointer"
-            title="Auto Format & Align Schematic Graph"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Auto Layout</span>
-          </button>
+        <button
+          onClick={handleAutoLayout}
+          className="p-2 rounded-xl text-brand-textMuted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+          title="Auto Layout Schematic"
+        >
+          <Sparkles className="w-4 h-4 text-emerald-400" />
+        </button>
 
-          <div className="h-4 w-px bg-gray-300 dark:bg-gray-700 mx-1" />
+        <div className="w-5 h-px bg-white/10 my-0.5" />
 
-          {/* Theme Toggle (Light / Dark) */}
-          <button
-            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium bg-black/5 hover:bg-black/10 text-gray-700 dark:text-gray-300 transition-colors cursor-pointer"
-            title="Toggle Light / Dark ECAD Theme"
-          >
-            {theme === 'light' ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5 text-yellow-400" />}
-            <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
-          </button>
-        </div>
+        {/* Theme Toggle (Light / Dark) */}
+        <button
+          onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+          className="p-2 rounded-xl text-brand-textMuted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+          title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+        >
+          {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4 text-yellow-400" />}
+        </button>
 
-        {/* Zoom & View Actions */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleExportSVG}
-            className="flex items-center gap-1.5 px-2 py-1 rounded bg-black/5 hover:bg-black/10 text-gray-700 dark:text-gray-300 text-[11px] font-medium transition-colors cursor-pointer"
-            title="Export Schematic as SVG"
-          >
-            <Download className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Export SVG</span>
-          </button>
+        <button
+          onClick={handleExportSVG}
+          className="p-2 rounded-xl text-brand-textMuted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+          title="Export Schematic as SVG"
+        >
+          <Download className="w-4 h-4 text-emerald-400" />
+        </button>
 
-          <div className="h-4 w-px bg-gray-300 dark:bg-gray-700 mx-1" />
+        <div className="w-5 h-px bg-white/10 my-0.5" />
 
-          <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded bg-black/5 dark:bg-white/5" style={{ color: colors.subText }}>
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            onClick={() => setZoom((z) => Math.max(0.25, z - 0.15))}
-            className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer"
-            style={{ color: colors.subText }}
-            title="Zoom Out"
-          >
-            <ZoomOut className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => setZoom((z) => Math.min(3.0, z + 0.15))}
-            className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer"
-            style={{ color: colors.subText }}
-            title="Zoom In"
-          >
-            <ZoomIn className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={handleFitToView}
-            className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer"
-            style={{ color: colors.subText }}
-            title="Fit Sheet to View (Center)"
-          >
-            <Maximize2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        {/* Zoom Controls */}
+        <button
+          onClick={() => setZoom((z) => Math.min(3.0, z + 0.15))}
+          className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+          title="Zoom In"
+        >
+          <ZoomIn className="w-3.5 h-3.5" />
+        </button>
+
+        <span className="text-[10px] font-mono font-semibold text-brand-textMuted py-0.5">
+          {Math.round(zoom * 100)}%
+        </span>
+
+        <button
+          onClick={() => setZoom((z) => Math.max(0.25, z - 0.15))}
+          className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+          title="Zoom Out"
+        >
+          <ZoomOut className="w-3.5 h-3.5" />
+        </button>
+
+        <button
+          onClick={handleFitToView}
+          className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+          title="Fit Schematic to View"
+        >
+          <Maximize2 className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {/* ── Main Interactive Schematic SVG Canvas ── */}

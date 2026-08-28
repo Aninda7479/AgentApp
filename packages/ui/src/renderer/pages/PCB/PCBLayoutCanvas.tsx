@@ -304,117 +304,122 @@ export const PCBLayoutCanvas: React.FC<PCBLayoutCanvasProps> = ({
       ref={containerRef}
       className="relative w-full h-full flex flex-col bg-[#080d14] overflow-hidden select-none font-sans"
     >
-      {/* ── Top PCB View Toolbar & Layer Switches ── */}
-      <div className="h-10 px-4 border-b border-brand-border/40 bg-black/40 flex items-center justify-between shrink-0 text-xs">
-        {/* Layer Visibility Pills */}
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-brand-textMuted uppercase tracking-wider flex items-center gap-1">
-            <Layers className="w-3.5 h-3.5 text-emerald-400" />
-            Layers:
-          </span>
-
-          {/* Top Copper F.Cu */}
-          <button
-            onClick={() => setShowTopCu(!showTopCu)}
-            className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium transition-colors cursor-pointer border ${
-              showTopCu ? 'bg-rose-950/60 border-rose-600/80 text-rose-300' : 'bg-white/5 border-white/10 text-white/40'
-            }`}
-            title="Toggle Top Copper Layer (F.Cu)"
-          >
-            <span className="w-2 h-2 rounded-full bg-rose-500" />
-            <span>F.Cu (Top)</span>
-          </button>
-
-          {/* Bottom Copper B.Cu */}
-          <button
-            onClick={() => setShowBottomCu(!showBottomCu)}
-            className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium transition-colors cursor-pointer border ${
-              showBottomCu ? 'bg-blue-950/60 border-blue-600/80 text-blue-300' : 'bg-white/5 border-white/10 text-white/40'
-            }`}
-            title="Toggle Bottom Copper Layer (B.Cu)"
-          >
-            <span className="w-2 h-2 rounded-full bg-blue-500" />
-            <span>B.Cu (Bottom)</span>
-          </button>
-
-          {/* Silkscreen F.SilkS */}
-          <button
-            onClick={() => setShowSilk(!showSilk)}
-            className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium transition-colors cursor-pointer border ${
-              showSilk ? 'bg-amber-950/60 border-amber-500/80 text-amber-200' : 'bg-white/5 border-white/10 text-white/40'
-            }`}
-            title="Toggle Silkscreen Layer (F.SilkS)"
-          >
-            <span className="w-2 h-2 rounded-full bg-amber-300" />
-            <span>F.SilkS</span>
-          </button>
-
-          {/* Pads */}
-          <button
-            onClick={() => setShowPads(!showPads)}
-            className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium transition-colors cursor-pointer border ${
-              showPads ? 'bg-emerald-950/60 border-emerald-600/80 text-emerald-300' : 'bg-white/5 border-white/10 text-white/40'
-            }`}
-            title="Toggle Solder Pads"
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span>Pads</span>
-          </button>
-
-          {/* Ratsnest Airwires */}
-          <button
-            onClick={() => setShowRatsnest(!showRatsnest)}
-            className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium transition-colors cursor-pointer border ${
-              showRatsnest ? 'bg-yellow-950/60 border-yellow-600/80 text-yellow-300' : 'bg-white/5 border-white/10 text-white/40'
-            }`}
-            title="Toggle Ratsnest Airwires"
-          >
-            <span className="w-2 h-2 rounded-full bg-yellow-400" />
-            <span>Ratsnest</span>
-          </button>
-
-          {/* Safety Isolation Barrier (Dynamic) */}
-          {hasHighVoltage && (
-            <button
-              onClick={() => setShowIsolation(!showIsolation)}
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium transition-colors cursor-pointer border ${
-                showIsolation ? 'bg-purple-950/60 border-purple-600/80 text-purple-300' : 'bg-white/5 border-white/10 text-white/40'
-              }`}
-              title="Toggle Safety Isolation Creepage Barrier"
-            >
-              <ShieldAlert className="w-3 h-3 text-purple-400" />
-              <span>Safety Isolation</span>
-            </button>
-          )}
+      {/* ── Vertical Right-Side Floating Glass Action Bar ── */}
+      <div className="absolute right-4 top-20 z-20 flex flex-col items-center gap-1.5 p-2 bg-[#161b22]/80 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] text-xs">
+        {/* Layer Icon Header */}
+        <div className="p-1.5 text-brand-textMuted" title="PCB Layer Controls">
+          <Layers className="w-4 h-4 text-emerald-400" />
         </div>
 
-        {/* Zoom & View Controls */}
-        <div className="flex items-center gap-2">
-          <div className="text-[11px] font-mono text-brand-textMuted bg-black/40 px-2 py-0.5 rounded border border-brand-border/30">
-            {Math.round(zoom * 100)}%
-          </div>
+        <div className="w-5 h-px bg-white/10 my-0.5" />
+
+        {/* Top Copper F.Cu */}
+        <button
+          onClick={() => setShowTopCu(!showTopCu)}
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-xl text-[10px] font-mono font-medium transition-all cursor-pointer border w-full justify-start ${
+            showTopCu ? 'bg-rose-950/60 border-rose-600/80 text-rose-300' : 'bg-white/5 border-white/10 text-white/40'
+          }`}
+          title="Toggle Top Copper Layer (F.Cu)"
+        >
+          <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+          <span>F.Cu</span>
+        </button>
+
+        {/* Bottom Copper B.Cu */}
+        <button
+          onClick={() => setShowBottomCu(!showBottomCu)}
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-xl text-[10px] font-mono font-medium transition-all cursor-pointer border w-full justify-start ${
+            showBottomCu ? 'bg-blue-950/60 border-blue-600/80 text-blue-300' : 'bg-white/5 border-white/10 text-white/40'
+          }`}
+          title="Toggle Bottom Copper Layer (B.Cu)"
+        >
+          <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+          <span>B.Cu</span>
+        </button>
+
+        {/* Silkscreen F.SilkS */}
+        <button
+          onClick={() => setShowSilk(!showSilk)}
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-xl text-[10px] font-mono font-medium transition-all cursor-pointer border w-full justify-start ${
+            showSilk ? 'bg-amber-950/60 border-amber-500/80 text-amber-200' : 'bg-white/5 border-white/10 text-white/40'
+          }`}
+          title="Toggle Silkscreen Layer (F.SilkS)"
+        >
+          <span className="w-2 h-2 rounded-full bg-amber-300 shrink-0" />
+          <span>Silk</span>
+        </button>
+
+        {/* Pads */}
+        <button
+          onClick={() => setShowPads(!showPads)}
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-xl text-[10px] font-mono font-medium transition-all cursor-pointer border w-full justify-start ${
+            showPads ? 'bg-emerald-950/60 border-emerald-600/80 text-emerald-300' : 'bg-white/5 border-white/10 text-white/40'
+          }`}
+          title="Toggle Solder Pads"
+        >
+          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+          <span>Pads</span>
+        </button>
+
+        {/* Ratsnest Airwires */}
+        <button
+          onClick={() => setShowRatsnest(!showRatsnest)}
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-xl text-[10px] font-mono font-medium transition-all cursor-pointer border w-full justify-start ${
+            showRatsnest ? 'bg-yellow-950/60 border-yellow-600/80 text-yellow-300' : 'bg-white/5 border-white/10 text-white/40'
+          }`}
+          title="Toggle Ratsnest Airwires"
+        >
+          <span className="w-2 h-2 rounded-full bg-yellow-400 shrink-0" />
+          <span>Rats</span>
+        </button>
+
+        {/* Safety Isolation Barrier (Dynamic) */}
+        {hasHighVoltage && (
           <button
-            onClick={() => setZoom((z) => Math.max(0.25, z - 0.15))}
-            className="p-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
-            title="Zoom Out"
+            onClick={() => setShowIsolation(!showIsolation)}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-xl text-[10px] font-mono font-medium transition-all cursor-pointer border w-full justify-start ${
+              showIsolation ? 'bg-purple-950/60 border-purple-600/80 text-purple-300' : 'bg-white/5 border-white/10 text-white/40'
+            }`}
+            title="Toggle Safety Isolation Barrier"
           >
-            <ZoomOut className="w-3.5 h-3.5" />
+            <ShieldAlert className="w-3 h-3 text-purple-400 shrink-0" />
+            <span>Iso</span>
           </button>
-          <button
-            onClick={() => setZoom((z) => Math.min(3.0, z + 0.15))}
-            className="p-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
-            title="Zoom In"
-          >
-            <ZoomIn className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={handleFitToView}
-            className="p-1 rounded bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
-            title="Fit Board to View (Center)"
-          >
-            <Maximize2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        )}
+
+        <div className="w-5 h-px bg-white/10 my-0.5" />
+
+        {/* Zoom & Reset Controls */}
+        <button
+          onClick={() => setZoom((z) => Math.min(3.0, z + 0.15))}
+          className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+          title="Zoom In"
+        >
+          <ZoomIn className="w-3.5 h-3.5" />
+        </button>
+
+        <span className="text-[10px] font-mono font-semibold text-brand-textMuted py-0.5">
+          {Math.round(zoom * 100)}%
+        </span>
+
+        <button
+          onClick={() => setZoom((z) => Math.max(0.25, z - 0.15))}
+          className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+          title="Zoom Out"
+        >
+          <ZoomOut className="w-3.5 h-3.5" />
+        </button>
+
+        <button
+          onClick={() => {
+            setZoom(1.0);
+            setPan({ x: 30, y: 30 });
+          }}
+          className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+          title="Reset Zoom & Pan"
+        >
+          <Maximize2 className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {/* ── Interactive SVG PCB Canvas ── */}

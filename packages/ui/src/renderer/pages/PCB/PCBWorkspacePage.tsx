@@ -521,26 +521,26 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
   return (
     <div className="flex-1 flex flex-col h-full bg-[#0d1117] text-brand-textMain overflow-hidden select-none relative font-sans">
 
-      {/* ── Top Header Bar with Glass View Selector ── */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.07] bg-[#161b22]/90 backdrop-blur-xl shrink-0 z-30 relative">
-        {/* Left: Back + Project Title + Template Picker */}
-        <div className="flex items-center gap-2 min-w-0">
+      {/* ── 3 Top Floating Glass Panels (Left, Center, Right) ── */}
+      <div className="absolute top-3.5 left-4 right-4 z-30 flex items-center justify-between pointer-events-none">
+        {/* 1. Left Floating Glass Card: Back + Project Title + Template Picker */}
+        <div className="pointer-events-auto flex items-center gap-2 bg-[#161b22]/80 backdrop-blur-2xl border border-white/15 rounded-2xl px-3.5 py-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all hover:border-white/25">
           {onBack && (
             <button
               onClick={onBack}
-              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white transition-colors cursor-pointer shrink-0"
+              className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white transition-colors cursor-pointer shrink-0"
               title="Return to Main App"
             >
               <ArrowRight className="w-4 h-4 rotate-180" />
             </button>
           )}
-          <span className="font-semibold text-xs text-white tracking-tight truncate max-w-[150px]">
+          <span className="font-semibold text-xs text-white tracking-tight truncate max-w-[140px]">
             {graph.metadata.name}
           </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono border border-emerald-500/30 shrink-0">
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono border border-emerald-500/30 shrink-0 font-semibold">
             {graph.metadata.revision}
           </span>
-          <div className="h-4 w-px bg-white/10 mx-1 shrink-0" />
+          <div className="h-4 w-px bg-white/10 mx-0.5 shrink-0" />
           <select
             onChange={(e) => {
               const tmpl = STARTER_TEMPLATES.find((t) => t.id === e.target.value);
@@ -550,7 +550,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
                 triggerToast?.(`Loaded ${tmpl.name}`);
               }
             }}
-            className="bg-black/40 border border-white/10 text-brand-textMuted text-[11px] rounded-lg px-2 py-1 focus:outline-none focus:border-emerald-500 cursor-pointer shrink-0"
+            className="bg-black/40 border border-white/10 text-brand-textMuted text-[11px] rounded-xl px-2 py-1 focus:outline-none focus:border-emerald-500 cursor-pointer shrink-0"
           >
             {STARTER_TEMPLATES.map((t) => (
               <option key={t.id} value={t.id}>
@@ -560,11 +560,11 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
           </select>
         </div>
 
-        {/* Center: Glass Type View Selector */}
-        <div className="relative">
+        {/* 2. Center Floating Glass Card: Glass Type View Selector */}
+        <div className="pointer-events-auto relative">
           <button
             onClick={() => setShowViewSelect((prev) => !prev)}
-            className="flex items-center gap-2.5 px-4 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/15 backdrop-blur-xl shadow-lg transition-all text-white cursor-pointer group hover:border-emerald-500/40"
+            className="flex items-center gap-2.5 px-4 py-1.5 rounded-2xl bg-[#161b22]/80 backdrop-blur-2xl border border-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all text-white cursor-pointer group hover:border-emerald-500/40"
           >
             <div className="w-5 h-5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
               <CurrentActiveIcon className="w-3.5 h-3.5" />
@@ -589,7 +589,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
               />
 
               {/* Glass Dropdown Menu */}
-              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-80 bg-[#161b22]/95 backdrop-blur-2xl border border-white/15 rounded-2xl p-1.5 shadow-2xl z-50 flex flex-col gap-1">
+              <div className="absolute top-full mt-2.5 left-1/2 -translate-x-1/2 w-80 bg-[#161b22]/95 backdrop-blur-2xl border border-white/15 rounded-2xl p-1.5 shadow-2xl z-50 flex flex-col gap-1">
                 <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-brand-textMuted/70 border-b border-white/[0.06] mb-0.5">
                   Workspace Views
                 </div>
@@ -639,37 +639,37 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
           )}
         </div>
 
-        {/* Right: Undo/Redo + Export + Share + Settings */}
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* 3. Right Floating Glass Card: Undo/Redo + Export + Share + Settings */}
+        <div className="pointer-events-auto flex items-center gap-1.5 bg-[#161b22]/80 backdrop-blur-2xl border border-white/15 rounded-2xl px-3 py-1.5 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all hover:border-white/25">
           <button onClick={handleUndo} disabled={historyIndex < 0}
-            className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 disabled:opacity-30 transition-colors cursor-pointer" title="Undo (Ctrl+Z)">
+            className="p-1.5 rounded-xl text-brand-textMuted hover:text-white hover:bg-white/5 disabled:opacity-30 transition-colors cursor-pointer" title="Undo (Ctrl+Z)">
             <Undo2 className="w-3.5 h-3.5" />
           </button>
           <button onClick={handleRedo} disabled={historyIndex + 1 >= history.length}
-            className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 disabled:opacity-30 transition-colors cursor-pointer" title="Redo (Ctrl+Y)">
+            className="p-1.5 rounded-xl text-brand-textMuted hover:text-white hover:bg-white/5 disabled:opacity-30 transition-colors cursor-pointer" title="Redo (Ctrl+Y)">
             <Redo2 className="w-3.5 h-3.5" />
           </button>
           <div className="h-4 w-px bg-white/10 mx-0.5" />
           <button onClick={() => setShowAddCompModal(true)}
-            className="p-1.5 rounded-lg text-emerald-400 hover:bg-emerald-500/15 transition-colors cursor-pointer" title="Add Component">
+            className="p-1.5 rounded-xl text-emerald-400 hover:bg-emerald-500/15 transition-colors cursor-pointer" title="Add Component">
             <Plus className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => setShowExportModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-950 transition-all cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export</span>
           </button>
           <button
             onClick={() => { navigator.clipboard.writeText(JSON.stringify(graph, null, 2)); triggerToast?.('Project JSON copied'); }}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white border border-white/10 text-xs font-medium transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white border border-white/10 text-xs font-medium transition-colors cursor-pointer"
           >
             <Share2 className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Share</span>
           </button>
           <button onClick={() => setShowSettingsModal(true)}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white border border-white/10 transition-colors cursor-pointer" title="Settings">
+            className="p-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white border border-white/10 transition-colors cursor-pointer" title="Settings">
             <Settings className="w-3.5 h-3.5 text-emerald-400" />
           </button>
         </div>
@@ -718,7 +718,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
 
         {/* POWER TREE TAB */}
         {focusedBoard === 'power' && (
-          <div className="absolute inset-0 flex flex-col overflow-auto p-6 gap-4">
+          <div className="absolute inset-0 flex flex-col overflow-auto pt-16 p-6 gap-4">
             <div className="flex items-center gap-2 mb-2">
               <Zap className="w-4 h-4 text-amber-400" />
               <span className="font-bold text-sm text-white">Power Tree & Rails Budget</span>
@@ -765,7 +765,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
 
         {/* BOM & SMT TAB */}
         {focusedBoard === 'bom' && (
-          <div className="absolute inset-0 flex flex-col overflow-hidden">
+          <div className="absolute inset-0 flex flex-col overflow-hidden pt-16">
             <div className="px-5 py-3 border-b border-white/[0.07] flex items-center justify-between bg-[#161b22]/60 shrink-0">
               <div className="flex items-center gap-2">
                 <Database className="w-4 h-4 text-blue-400" />
@@ -823,7 +823,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
 
         {/* ERC TAB */}
         {focusedBoard === 'erc' && (
-          <div className="absolute inset-0 flex flex-col overflow-hidden">
+          <div className="absolute inset-0 flex flex-col overflow-hidden pt-16">
             <div className="px-5 py-3 border-b border-white/[0.07] flex items-center justify-between bg-[#161b22]/60 shrink-0">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className={`w-4 h-4 ${ercErrors.length === 0 ? 'text-emerald-400' : 'text-rose-400'}`} />
@@ -882,7 +882,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
 
         {/* LOSSLESS ECAD CODE EXPORTER TAB */}
         {focusedBoard === 'exporter' && (
-          <div className="absolute inset-0 flex flex-col overflow-hidden">
+          <div className="absolute inset-0 flex flex-col overflow-hidden pt-16">
             <div className="px-4 py-2.5 border-b border-white/[0.07] flex items-center justify-between bg-[#161b22]/60 shrink-0">
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
                 {(

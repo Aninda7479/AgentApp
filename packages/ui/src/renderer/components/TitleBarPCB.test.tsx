@@ -52,8 +52,8 @@ describe('PCBWorkspacePage Glass View Selector Workspace Component', () => {
         selectedCompId={null}
       />
     );
-    expect(html).toContain('FR-4');
-    expect(html).toContain('ENIG Pads');
+    expect(html).toContain('Rotate Board 90°');
+    expect(html).toContain('Toggle ENIG Pads');
     expect(html).toContain('Traces');
   });
 });
