@@ -60,7 +60,9 @@ const fmtUptime = (ms: number): string => {
 
 // ── Period filtering ──────────────────────────────────────────────────────
 function inPeriod(ts: string, period: Period, custom: { start: string; end: string }): boolean {
+  if (!ts) return false;
   const d = new Date(ts);
+  if (isNaN(d.getTime())) return false;
   const now = new Date();
   if (period === 'this-month') {
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
@@ -481,7 +483,7 @@ export const UsageTrackerSettings: React.FC = () => {
                     <div className="text-[10px] text-brand-textMuted mt-0.5 font-mono flex items-center gap-1 justify-end">
                       <ArrowDown size={10} className="text-brand-accent" />
                       {fmtTokens(r.promptTokens)}
-                      <ArrowUp size={10} className="text-brand-text-muted" />
+                      <ArrowUp size={10} className="text-brand-textMuted" />
                       {fmtTokens(r.completionTokens)}
                     </div>
                   </div>

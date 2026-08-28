@@ -595,7 +595,42 @@ async fn spa_fallback_handler(
                 }
             }
 
-            if path_str == "login" {
+            // Fallback for nested asset requests (e.g. /settings/index.css or /settings/renderer/entry.bundle.js)
+            let mut segments: Vec<&str> = path_str.split('/').collect();
+            while segments.len() > 1 {
+                segments.remove(0);
+                let subpath = segments.join("/");
+                let candidate_path = dist.join(&subpath);
+                if candidate_path.is_file() {
+                    if let (Ok(canonical_dist), Ok(canonical_target)) =
+                        (dist.canonicalize(), candidate_path.canonicalize())
+                    {
+                        if canonical_target.starts_with(&canonical_dist) {
+                            if let Ok(bytes) = tokio::fs::read(&canonical_target).await {
+                                let mime = mime_guess::from_path(&canonical_target).first_or_octet_stream();
+                                let cache_header = if canonical_target
+                                    .extension()
+                                    .map_or(false, |ext| ext == "html" || ext == "js" || ext == "css" || ext == "map")
+                                {
+                                    "no-cache, no-store, must-revalidate"
+                                } else {
+                                    "public, max-age=3600"
+                                };
+                                return (
+                                    [
+                                        (header::CONTENT_TYPE, mime.to_string()),
+                                        (header::CACHE_CONTROL, cache_header.to_string()),
+                                    ],
+                                    bytes,
+                                )
+                                    .into_response();
+                            }
+                        }
+                    }
+                }
+            }
+
+            if path_str == "login" || path_str.ends_with("/login") {
                 let login_file = dist.join("login.html");
                 if let Ok(html) = tokio::fs::read_to_string(&login_file).await {
                     return (
@@ -649,7 +684,30 @@ async fn spa_fallback_handler(
                 .into_response();
         }
 
-        if path_str == "login" {
+        // Fallback for nested asset requests in EmbeddedUi
+        let mut segments: Vec<&str> = path_str.split('/').collect();
+        while segments.len() > 1 {
+            segments.remove(0);
+            let subpath = segments.join("/");
+            if let Some(file) = EmbeddedUi::get(&subpath) {
+                let mime = mime_guess::from_path(&subpath).first_or_octet_stream();
+                let cache_header = if subpath.ends_with(".html") || subpath.ends_with(".js") || subpath.ends_with(".css") || subpath.ends_with(".map") {
+                    "no-cache, no-store, must-revalidate"
+                } else {
+                    "public, max-age=3600"
+                };
+                return (
+                    [
+                        (header::CONTENT_TYPE, mime.to_string()),
+                        (header::CACHE_CONTROL, cache_header.to_string()),
+                    ],
+                    file.data.into_owned(),
+                )
+                    .into_response();
+            }
+        }
+
+        if path_str == "login" || path_str.ends_with("/login") {
             if let Some(file) = EmbeddedUi::get("login.html") {
                 return (
                     [
@@ -1812,6 +1870,11 @@ async fn handle_chat_stream(
     let persona_id = target_persona.id.clone();
 
     let stream = async_stream::stream! {
+        let start_time = std::time::Instant::now();
+        let mut completion_token_count = 0usize;
+        let mut has_error = false;
+        let mut total_text_len = 0usize;
+
         if explicit {
             let handover = AgentEvent::AgentHandover {
                 from_persona: "coordinator".to_string(),
@@ -1826,18 +1889,37 @@ async fn handle_chat_stream(
         match engine.run_loop(&model_config, &system_prompt, &prompt_to_run).await {
             Ok(mut rx) => {
                 while let Some(event) = rx.recv().await {
+                    if let AgentEvent::Token { ref text } = event {
+                        completion_token_count += 1;
+                        total_text_len += text.len();
+                    } else if let AgentEvent::Error { .. } = event {
+                        has_error = true;
+                    }
                     if let Ok(json_str) = serde_json::to_string(&event) {
                         yield Ok(Event::default().data(json_str));
                     }
                 }
             }
             Err(err) => {
+                has_error = true;
                 let err_event = AgentEvent::Error { message: err.to_string() };
                 if let Ok(json_str) = serde_json::to_string(&err_event) {
                     yield Ok(Event::default().data(json_str));
                 }
             }
         }
+
+        let duration_ms = start_time.elapsed().as_millis() as u64;
+        let prompt_token_count = std::cmp::max(1, (prompt_to_run.len() + 3) / 4);
+        let final_completion_tokens = std::cmp::max(completion_token_count, (total_text_len + 3) / 4);
+        record_usage(
+            &format!("{:?}", model_config.provider).to_lowercase(),
+            &model_config.model_id,
+            prompt_token_count,
+            final_completion_tokens,
+            duration_ms,
+            if has_error { "failure" } else { "success" },
+        );
     };
 
     Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
@@ -1970,6 +2052,76 @@ fn get_default_pricing_catalog() -> Vec<serde_json::Value> {
         serde_json::json!({ "model": "gemini-2.0-flash", "provider": "gemini", "inputPrice": 0.075, "outputPrice": 0.30 }),
         serde_json::json!({ "model": "deepseek-chat", "provider": "deepseek", "inputPrice": 0.14, "outputPrice": 0.28 }),
     ]
+}
+
+pub fn get_model_pricing(provider: &str, model: &str) -> (f64, f64) {
+    let clean_model = model.to_lowercase();
+    let clean_provider = provider.to_lowercase();
+
+    if clean_provider == "ollama" || clean_provider == "omniroute" || clean_model.contains("local") {
+        return (0.0, 0.0);
+    }
+    if clean_model.contains("gpt-4o-mini") {
+        return (0.15, 0.60);
+    }
+    if clean_model.contains("gpt-4o") {
+        return (2.50, 10.00);
+    }
+    if clean_model.contains("o3-mini") {
+        return (1.10, 4.40);
+    }
+    if clean_model.contains("claude-3-7-sonnet") || clean_model.contains("claude-3-5-sonnet") {
+        return (3.00, 15.00);
+    }
+    if clean_model.contains("claude-3-opus") {
+        return (15.00, 75.00);
+    }
+    if clean_model.contains("gemini-2.5-flash") || clean_model.contains("gemini-2.0-flash") || clean_model.contains("gemini-1.5-flash") {
+        return (0.075, 0.30);
+    }
+    if clean_model.contains("gemini-1.5-pro") || clean_model.contains("gemini-pro") {
+        return (1.25, 5.00);
+    }
+    if clean_model.contains("deepseek-reasoner") {
+        return (0.55, 2.19);
+    }
+    if clean_model.contains("deepseek-chat") || clean_model.contains("deepseek") {
+        return (0.14, 0.28);
+    }
+    (0.20, 0.60)
+}
+
+pub fn record_usage(
+    provider: &str,
+    model: &str,
+    prompt_tokens: usize,
+    completion_tokens: usize,
+    duration_ms: u64,
+    status: &str,
+) {
+    let (in_rate, out_rate) = get_model_pricing(provider, model);
+    let prompt_cost = (prompt_tokens as f64 * in_rate) / 1_000_000.0;
+    let completion_cost = (completion_tokens as f64 * out_rate) / 1_000_000.0;
+    let total_cost = prompt_cost + completion_cost;
+
+    let new_record = serde_json::json!({
+        "model": model,
+        "provider": provider,
+        "promptTokens": prompt_tokens,
+        "completionTokens": completion_tokens,
+        "totalTokens": prompt_tokens + completion_tokens,
+        "cost": total_cost,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "durationMs": duration_ms,
+        "status": status,
+    });
+
+    let mut records = load_usage_records();
+    records.push(new_record);
+    if records.len() > 5000 {
+        records.drain(0..(records.len() - 5000));
+    }
+    let _ = save_usage_records(&records);
 }
 
 // ─── Orchestrator Instruction Helpers ────────────────────────────────────────
@@ -2362,6 +2514,18 @@ async fn handle_ipc(
             Ok(Json(serde_json::json!({ "data": null })))
         }
         "usage-pricing" => Ok(Json(serde_json::json!({ "data": get_default_pricing_catalog() }))),
+        "usage-track" | "usage-record-add" => {
+            if let Some(arg) = args.first() {
+                let provider = arg.get("provider").and_then(|v| v.as_str()).unwrap_or("unknown");
+                let model = arg.get("model").and_then(|v| v.as_str()).unwrap_or("unknown");
+                let p_tok = arg.get("promptTokens").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                let c_tok = arg.get("completionTokens").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                let dur = arg.get("durationMs").and_then(|v| v.as_u64()).unwrap_or(0);
+                let status = arg.get("status").and_then(|v| v.as_str()).unwrap_or("success");
+                record_usage(provider, model, p_tok, c_tok, dur, status);
+            }
+            Ok(Json(serde_json::json!({ "data": { "success": true } })))
+        }
 
         // ─── Orchestrator Instructions Channels ──────────────────────────────
         "orchestrator-read-instructions" => {
@@ -2989,6 +3153,10 @@ async fn handle_ipc(
                     instructions
                 };
 
+                let start_time = std::time::Instant::now();
+                let mut has_error = false;
+                let mut completion_token_count = 0usize;
+
                 let run_result = engine.run_loop(&model_config, &sys_prompt, &prompt_clone).await;
                 let mut did_emit_done = false;
 
@@ -3017,6 +3185,7 @@ async fn handle_ipc(
 
                                             match &event {
                                                 crate::types::AgentEvent::Token { text } => {
+                                                    completion_token_count += 1;
                                                     data_obj["type"] = serde_json::json!("token");
                                                     data_obj["content"] = serde_json::json!(text);
                                                 }
@@ -3030,6 +3199,7 @@ async fn handle_ipc(
                                                     data_obj["toolResult"] = serde_json::json!(output);
                                                 }
                                                 crate::types::AgentEvent::Error { message } => {
+                                                    has_error = true;
                                                     data_obj["type"] = serde_json::json!("error");
                                                     data_obj["error"] = serde_json::json!(message);
                                                     did_emit_done = true;
@@ -3070,6 +3240,7 @@ async fn handle_ipc(
                         }
                     }
                     Err(err) => {
+                        has_error = true;
                         let err_msg = serde_json::json!({
                             "channel": "agent-event",
                             "data": {
@@ -3093,6 +3264,22 @@ async fn handle_ipc(
                     });
                     let _ = state_clone.ws_broadcast_tx.send(done_msg.to_string());
                 }
+
+                let duration_ms = start_time.elapsed().as_millis() as u64;
+                let prompt_token_count = std::cmp::max(1, (prompt_clone.len() + 3) / 4);
+                let full_text_len = {
+                    let store = state_clone.session_store.lock().unwrap();
+                    store.peek(&sid).map(|e| e.full_assistant_text.len()).unwrap_or(0)
+                };
+                let final_completion_tokens = std::cmp::max(completion_token_count, (full_text_len + 3) / 4);
+                record_usage(
+                    &format!("{:?}", model_config.provider).to_lowercase(),
+                    &model_config.model_id,
+                    prompt_token_count,
+                    final_completion_tokens,
+                    duration_ms,
+                    if has_error { "failure" } else { "success" },
+                );
 
                 // Mark session idle & clean cancellation token
                 {
