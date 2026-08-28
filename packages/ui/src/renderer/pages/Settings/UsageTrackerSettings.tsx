@@ -35,7 +35,7 @@ interface ModelPricing {
   outputPrice: number;
 }
 
-type Period = 'this-month' | 'last-month' | 'last-3-months' | 'custom';
+type Period = 'all' | 'this-month' | 'last-month' | 'last-3-months' | 'custom';
 
 /** Session uptime anchor — captured once when the renderer module loads. */
 const APP_LAUNCH = Date.now();
@@ -60,6 +60,7 @@ const fmtUptime = (ms: number): string => {
 
 // ── Period filtering ──────────────────────────────────────────────────────
 function inPeriod(ts: string, period: Period, custom: { start: string; end: string }): boolean {
+  if (period === 'all') return true;
   if (!ts) return false;
   const d = new Date(ts);
   if (isNaN(d.getTime())) return false;
@@ -191,6 +192,7 @@ function SectionTitle({ icon: Icon, children }: { icon: LucideIcon; children: Re
 }
 
 const PERIODS: { id: Period; label: string }[] = [
+  { id: 'all', label: 'All Time' },
   { id: 'this-month', label: 'This Month' },
   { id: 'last-month', label: 'Last Month' },
   { id: 'last-3-months', label: 'Last 3 Months' },
@@ -202,7 +204,7 @@ export const UsageTrackerSettings: React.FC = () => {
   const [records, setRecords] = useState<ModelUsageRecord[]>([]);
   const [pricing, setPricing] = useState<ModelPricing[]>([]);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState<Period>('this-month');
+  const [period, setPeriod] = useState<Period>('all');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [now, setNow] = useState(Date.now());
@@ -217,17 +219,20 @@ export const UsageTrackerSettings: React.FC = () => {
     setLoading(true);
     try {
       const [rec, price] = await Promise.all([
-        ipc.invoke('usage-records') as Promise<ModelUsageRecord[]>,
-        ipc.invoke('usage-pricing') as Promise<ModelPricing[]>
+        ipc.invoke('usage-records') as Promise<any>,
+        ipc.invoke('usage-pricing') as Promise<any>
       ]);
-      setRecords(rec || []);
-      setPricing(price || []);
+      const actualRecords = Array.isArray(rec) ? rec : rec?.data || [];
+      const actualPricing = Array.isArray(price) ? price : price?.data || [];
+      setRecords(actualRecords);
+      setPricing(actualPricing);
     } catch (e) {
       console.error('Failed to load usage statistics:', e);
     } finally {
       setLoading(false);
     }
   };
+
 
   const handleClear = async () => {
     if (!ipc) return;

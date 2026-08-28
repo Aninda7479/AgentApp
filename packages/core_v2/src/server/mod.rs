@@ -1800,6 +1800,67 @@ async fn stop_trace_session(
         .ok_or(StatusCode::NOT_FOUND)
 }
 
+// ─── Dynamic Workspace Model Resolver ────────────────────────────────────────
+
+pub fn resolve_active_workspace_model(
+    raw_settings: &serde_json::Value,
+    settings_store: &crate::storage::SettingsStore,
+) -> (ProviderType, String, Option<String>, Option<String>) {
+    // 1. Check lastUsedModel in settings
+    if let Some(last_used) = raw_settings.get("lastUsedModel").and_then(|v| v.as_str()) {
+        if !last_used.is_empty() && last_used != "auto" && last_used != "Orchestrator" {
+            if let Some(models) = raw_settings.get("models").and_then(|m| m.as_array()) {
+                if let Some(matched) = models.iter().find(|m| {
+                    m.get("id").and_then(|v| v.as_str()) == Some(last_used)
+                        || m.get("name").and_then(|v| v.as_str()) == Some(last_used)
+                }) {
+                    let pid = matched.get("providerId").and_then(|v| v.as_str()).unwrap_or("gemini");
+                    let id = matched.get("id").and_then(|v| v.as_str()).unwrap_or(last_used);
+                    let prefix = format!("{}-", pid);
+                    let clean_id = if id.starts_with(&prefix) { &id[prefix.len()..] } else { id };
+                    let prov_type = match pid.to_lowercase().as_str() {
+                        "gemini" | "google" => ProviderType::Gemini,
+                        "openai" => ProviderType::OpenAI,
+                        "anthropic" | "claude" => ProviderType::Anthropic,
+                        "ollama" => ProviderType::Ollama,
+                        "openrouter" => ProviderType::OpenRouter,
+                        "deepseek" => ProviderType::DeepSeek,
+                        "groq" => ProviderType::Groq,
+                        _ => ProviderType::Gemini,
+                    };
+                    let api_key = settings_store.get_api_key(pid).ok().flatten();
+                    return (prov_type, clean_id.to_string(), api_key, None);
+                }
+            }
+        }
+    }
+
+    // 2. Check first enabled model in user's workspace settings
+    if let Some(models) = raw_settings.get("models").and_then(|m| m.as_array()) {
+        if let Some(first_enabled) = models.iter().find(|m| m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true)) {
+            let pid = first_enabled.get("providerId").and_then(|v| v.as_str()).unwrap_or("gemini");
+            let id = first_enabled.get("id").and_then(|v| v.as_str()).unwrap_or("gemini-2.5-flash");
+            let prefix = format!("{}-", pid);
+            let clean_id = if id.starts_with(&prefix) { &id[prefix.len()..] } else { id };
+            let prov_type = match pid.to_lowercase().as_str() {
+                "gemini" | "google" => ProviderType::Gemini,
+                "openai" => ProviderType::OpenAI,
+                "anthropic" | "claude" => ProviderType::Anthropic,
+                "ollama" => ProviderType::Ollama,
+                "openrouter" => ProviderType::OpenRouter,
+                "deepseek" => ProviderType::DeepSeek,
+                "groq" => ProviderType::Groq,
+                _ => ProviderType::Gemini,
+            };
+            let api_key = settings_store.get_api_key(pid).ok().flatten();
+            return (prov_type, clean_id.to_string(), api_key, None);
+        }
+    }
+
+    // 3. Fallback to Gemini
+    (ProviderType::Gemini, "gemini-2.5-flash".to_string(), None, None)
+}
+
 async fn synthesize_trace(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
@@ -1811,7 +1872,15 @@ async fn synthesize_trace(
         .await
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let model_config = ModelConfig::new(ProviderType::OpenAI, "gpt-4o");
+    let raw_settings = state.settings_store.load_raw().unwrap_or_default();
+    let (prov_type, m_id, api_key, base_url) = resolve_active_workspace_model(&raw_settings, &state.settings_store);
+    let mut model_config = ModelConfig::new(prov_type, m_id);
+    if let Some(k) = api_key {
+        model_config.api_key = Some(k);
+    }
+    if let Some(u) = base_url {
+        model_config.base_url = Some(u);
+    }
 
     state
         .skill_synthesizer
@@ -1835,10 +1904,21 @@ async fn handle_chat_stream(
         routed.persona
     };
 
-    let mut model_config = req.provider.map(|p| {
-        let m_id = req.model_id.clone().unwrap_or_else(|| "gpt-4o".to_string());
+    let raw_settings = state.settings_store.load_raw().unwrap_or_default();
+    let mut model_config = if let Some(p) = req.provider {
+        let m_id = req.model_id.clone().unwrap_or_else(|| {
+            let (_, default_id, _, _) = resolve_active_workspace_model(&raw_settings, &state.settings_store);
+            default_id
+        });
         ModelConfig::new(p, m_id)
-    }).unwrap_or_else(|| target_persona.model_config.clone());
+    } else if req.model_id.is_some() {
+        let (prov_type, default_id, _, _) = resolve_active_workspace_model(&raw_settings, &state.settings_store);
+        let m_id = req.model_id.clone().unwrap_or(default_id);
+        ModelConfig::new(prov_type, m_id)
+    } else {
+        target_persona.model_config.clone()
+    };
+
 
     model_config.api_key = req.api_key.or_else(|| {
         state
@@ -2044,15 +2124,70 @@ fn calculate_usage_summary() -> Vec<serde_json::Value> {
 }
 
 fn get_default_pricing_catalog() -> Vec<serde_json::Value> {
-    vec![
-        serde_json::json!({ "model": "gpt-4o", "provider": "openai", "inputPrice": 2.50, "outputPrice": 10.00 }),
-        serde_json::json!({ "model": "gpt-4o-mini", "provider": "openai", "inputPrice": 0.15, "outputPrice": 0.60 }),
-        serde_json::json!({ "model": "claude-3-5-sonnet", "provider": "anthropic", "inputPrice": 3.00, "outputPrice": 15.00 }),
-        serde_json::json!({ "model": "gemini-1.5-pro", "provider": "gemini", "inputPrice": 1.25, "outputPrice": 5.00 }),
-        serde_json::json!({ "model": "gemini-2.0-flash", "provider": "gemini", "inputPrice": 0.075, "outputPrice": 0.30 }),
-        serde_json::json!({ "model": "deepseek-chat", "provider": "deepseek", "inputPrice": 0.14, "outputPrice": 0.28 }),
-    ]
+    let mut catalog: Vec<serde_json::Value> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    // 1. First populate all models configured in user's workspace settings
+    let raw_settings = crate::storage::SettingsStore::new().load_raw().unwrap_or_default();
+
+    if let Some(models) = raw_settings.get("models").and_then(|m| m.as_array()) {
+        for m in models {
+            let model_id = m.get("id").and_then(|v| v.as_str()).unwrap_or("");
+            let provider_id = m.get("providerId").and_then(|v| v.as_str()).unwrap_or("");
+            if !model_id.is_empty() && !provider_id.is_empty() {
+                let key = format!("{}:{}", provider_id, model_id);
+                if !seen.contains(&key) {
+                    seen.insert(key);
+                    let (in_rate, out_rate) = get_model_pricing(provider_id, model_id);
+                    let display_name = m.get("name").and_then(|v| v.as_str()).unwrap_or(model_id);
+                    catalog.push(serde_json::json!({
+                        "model": model_id,
+                        "name": display_name,
+                        "provider": provider_id,
+                        "inputPrice": in_rate,
+                        "outputPrice": out_rate,
+                    }));
+                }
+            }
+        }
+    }
+
+    // 2. Add standard known catalog entries
+    let defaults = [
+        ("gemini-2.5-flash", "gemini"),
+        ("gemini-2.5-pro", "gemini"),
+        ("gemini-3.5-flash-lite", "gemini"),
+        ("gemini-2.0-flash", "gemini"),
+        ("gemini-1.5-pro", "gemini"),
+        ("gpt-4o", "openai"),
+        ("gpt-4o-mini", "openai"),
+        ("o3-mini", "openai"),
+        ("claude-3-7-sonnet", "anthropic"),
+        ("claude-3-5-sonnet", "anthropic"),
+        ("claude-3-5-haiku", "anthropic"),
+        ("deepseek-chat", "deepseek"),
+        ("deepseek-reasoner", "deepseek"),
+        ("llama-3.3-70b", "groq"),
+    ];
+
+    for (mod_id, prov_id) in defaults {
+        let key = format!("{}:{}", prov_id, mod_id);
+        if !seen.contains(&key) {
+            seen.insert(key);
+            let (in_rate, out_rate) = get_model_pricing(prov_id, mod_id);
+            catalog.push(serde_json::json!({
+                "model": mod_id,
+                "name": mod_id,
+                "provider": prov_id,
+                "inputPrice": in_rate,
+                "outputPrice": out_rate,
+            }));
+        }
+    }
+
+    catalog
 }
+
 
 pub fn get_model_pricing(provider: &str, model: &str) -> (f64, f64) {
     let clean_model = model.to_lowercase();
@@ -2061,35 +2196,56 @@ pub fn get_model_pricing(provider: &str, model: &str) -> (f64, f64) {
     if clean_provider == "ollama" || clean_provider == "omniroute" || clean_model.contains("local") {
         return (0.0, 0.0);
     }
+    // Gemini models
+    if clean_model.contains("gemini-3.5-flash-lite") || clean_model.contains("flash-lite") {
+        return (0.05, 0.20);
+    }
+    if clean_model.contains("gemini-2.5-pro") {
+        return (1.25, 5.00);
+    }
+    if clean_model.contains("gemini-2.5-flash") || clean_model.contains("gemini-2.0-flash") || clean_model.contains("gemini-1.5-flash") || clean_model.contains("flash") {
+        return (0.075, 0.30);
+    }
+    if clean_model.contains("gemini-1.5-pro") || clean_model.contains("gemini-pro") || clean_model.contains("gemini") {
+        return (1.25, 5.00);
+    }
+    // OpenAI models
     if clean_model.contains("gpt-4o-mini") {
         return (0.15, 0.60);
     }
-    if clean_model.contains("gpt-4o") {
+    if clean_model.contains("gpt-4o") || clean_model.contains("chatgpt-4o") {
         return (2.50, 10.00);
     }
     if clean_model.contains("o3-mini") {
         return (1.10, 4.40);
     }
-    if clean_model.contains("claude-3-7-sonnet") || clean_model.contains("claude-3-5-sonnet") {
+    if clean_model.contains("o1") {
+        return (15.00, 60.00);
+    }
+    // Anthropic models
+    if clean_model.contains("claude-3-7-sonnet") || clean_model.contains("claude-3-5-sonnet") || clean_model.contains("sonnet") {
         return (3.00, 15.00);
     }
-    if clean_model.contains("claude-3-opus") {
+    if clean_model.contains("claude-3-5-haiku") || clean_model.contains("haiku") {
+        return (0.80, 4.00);
+    }
+    if clean_model.contains("claude-3-opus") || clean_model.contains("opus") {
         return (15.00, 75.00);
     }
-    if clean_model.contains("gemini-2.5-flash") || clean_model.contains("gemini-2.0-flash") || clean_model.contains("gemini-1.5-flash") {
-        return (0.075, 0.30);
-    }
-    if clean_model.contains("gemini-1.5-pro") || clean_model.contains("gemini-pro") {
-        return (1.25, 5.00);
-    }
-    if clean_model.contains("deepseek-reasoner") {
+    // DeepSeek models
+    if clean_model.contains("deepseek-reasoner") || clean_model.contains("r1") {
         return (0.55, 2.19);
     }
     if clean_model.contains("deepseek-chat") || clean_model.contains("deepseek") {
         return (0.14, 0.28);
     }
-    (0.20, 0.60)
+    // Groq models
+    if clean_provider.contains("groq") {
+        return (0.59, 0.79);
+    }
+    (0.15, 0.60)
 }
+
 
 pub fn record_usage(
     provider: &str,
@@ -2281,32 +2437,76 @@ async fn handle_ipc(
         }
         "auto-detect-providers" => {
             let mut providers = Vec::new();
-            if std::env::var("OPENAI_API_KEY").is_ok() {
+            let raw_settings = state.settings_store.load_raw().unwrap_or_default();
+            let configured_models = raw_settings.get("models").and_then(|m| m.as_array());
+
+            let get_models_for_prov = |prov_id: &str, default_models: Vec<(&str, &str)>| -> Vec<serde_json::Value> {
+                let mut list = Vec::new();
+                let mut seen = std::collections::HashSet::new();
+                if let Some(cms) = configured_models {
+                    for m in cms {
+                        let pid = m.get("providerId").and_then(|v| v.as_str()).unwrap_or("");
+                        if pid == prov_id || (prov_id == "gemini" && pid == "google") || (prov_id == "google" && pid == "gemini") {
+                            let id = m.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                            let name = m.get("name").and_then(|v| v.as_str()).unwrap_or(id);
+                            if !id.is_empty() && !seen.contains(id) {
+                                seen.insert(id.to_string());
+                                list.push(serde_json::json!({ "id": id, "name": name }));
+                            }
+                        }
+                    }
+                }
+                if list.is_empty() {
+                    for (id, name) in default_models {
+                        list.push(serde_json::json!({ "id": id, "name": name }));
+                    }
+                }
+                list
+            };
+
+            if std::env::var("OPENAI_API_KEY").is_ok() || state.settings_store.get_api_key("openai").ok().flatten().is_some() {
                 providers.push(serde_json::json!({
                     "id": "openai",
                     "name": "OpenAI",
                     "type": "env",
-                    "models": [{ "id": "gpt-4o", "name": "GPT-4o" }, { "id": "gpt-4o-mini", "name": "GPT-4o Mini" }]
+                    "models": get_models_for_prov("openai", vec![("gpt-4o", "GPT-4o"), ("gpt-4o-mini", "GPT-4o Mini"), ("o3-mini", "o3-mini")])
                 }));
             }
-            if std::env::var("ANTHROPIC_API_KEY").is_ok() {
+            if std::env::var("ANTHROPIC_API_KEY").is_ok() || state.settings_store.get_api_key("anthropic").ok().flatten().is_some() {
                 providers.push(serde_json::json!({
                     "id": "anthropic",
                     "name": "Anthropic",
                     "type": "env",
-                    "models": [{ "id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet" }]
+                    "models": get_models_for_prov("anthropic", vec![("claude-3-7-sonnet", "Claude 3.7 Sonnet"), ("claude-3-5-sonnet", "Claude 3.5 Sonnet"), ("claude-3-5-haiku", "Claude 3.5 Haiku")])
                 }));
             }
-            if std::env::var("GEMINI_API_KEY").is_ok() {
+            if std::env::var("GEMINI_API_KEY").is_ok() || std::env::var("GOOGLE_API_KEY").is_ok() || state.settings_store.get_api_key("gemini").ok().flatten().is_some() || state.settings_store.get_api_key("google").ok().flatten().is_some() {
                 providers.push(serde_json::json!({
                     "id": "gemini",
                     "name": "Google Gemini",
                     "type": "env",
-                    "models": [{ "id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro" }]
+                    "models": get_models_for_prov("gemini", vec![("gemini-2.5-flash", "Gemini 2.5 Flash"), ("gemini-2.5-pro", "Gemini 2.5 Pro"), ("gemini-3.5-flash-lite", "Gemini 3.5 Flash Lite"), ("gemini-2.0-flash", "Gemini 2.0 Flash")])
+                }));
+            }
+            if std::env::var("DEEPSEEK_API_KEY").is_ok() || state.settings_store.get_api_key("deepseek").ok().flatten().is_some() {
+                providers.push(serde_json::json!({
+                    "id": "deepseek",
+                    "name": "DeepSeek",
+                    "type": "env",
+                    "models": get_models_for_prov("deepseek", vec![("deepseek-chat", "DeepSeek V3"), ("deepseek-reasoner", "DeepSeek R1")])
+                }));
+            }
+            if std::env::var("GROQ_API_KEY").is_ok() || state.settings_store.get_api_key("groq").ok().flatten().is_some() {
+                providers.push(serde_json::json!({
+                    "id": "groq",
+                    "name": "Groq",
+                    "type": "env",
+                    "models": get_models_for_prov("groq", vec![("llama-3.3-70b-versatile", "Llama 3.3 70B")])
                 }));
             }
             Ok(Json(serde_json::json!({ "data": providers })))
         }
+
         "skills-catalog" => Ok(Json(serde_json::json!({ "data": [] }))),
         "plugins-catalog" => Ok(Json(serde_json::json!({ "data": [] }))),
         "mcp-catalog" | "mcp-catalog-get" => Ok(Json(serde_json::json!({ "data": [] }))),
@@ -3105,15 +3305,24 @@ async fn handle_ipc(
             };
 
             if model_str.is_empty() {
-                model_str = match provider_type {
-                    ProviderType::Anthropic => "claude-3-5-sonnet-20241022".to_string(),
-                    ProviderType::Gemini => "gemini-1.5-pro".to_string(),
-                    ProviderType::Ollama => "llama3".to_string(),
-                    ProviderType::DeepSeek => "deepseek-chat".to_string(),
-                    ProviderType::Groq => "llama-3.3-70b-versatile".to_string(),
-                    _ => "gpt-4o".to_string(),
-                };
+                if let Some(models) = raw_settings.get("models").and_then(|m| m.as_array()) {
+                    if let Some(m) = models.iter().find(|m| {
+                        let pid = m.get("providerId").and_then(|v| v.as_str()).unwrap_or("");
+                        let en = m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+                        en && (pid == provider_str || (provider_str == "gemini" && pid == "google") || (provider_str == "google" && pid == "gemini"))
+                    }) {
+                        if let Some(id) = m.get("id").and_then(|v| v.as_str()) {
+                            let prefix = format!("{}-", provider_str);
+                            model_str = if id.starts_with(&prefix) { id[prefix.len()..].to_string() } else { id.to_string() };
+                        }
+                    }
+                }
+                if model_str.is_empty() {
+                    let (_, fallback_id, _, _) = resolve_active_workspace_model(&raw_settings, &state.settings_store);
+                    model_str = fallback_id;
+                }
             }
+
 
             // Fallback to environment variables if still no API key
             if api_key.is_none() {
@@ -3586,17 +3795,20 @@ async fn handle_ipc(
 
             let provider_instance = crate::providers::ProviderFactory::create(&model_config.provider);
             let mut answer = String::new();
-
-
+            let start_time = std::time::Instant::now();
+            let mut completion_token_count = 0usize;
+            let mut has_error = false;
 
             match provider_instance.chat_stream(&model_config, &messages, &[]).await {
                 Ok(mut rx) => {
                     while let Some(event) = rx.recv().await {
                         match event {
                             crate::types::AgentEvent::Token { text } => {
+                                completion_token_count += 1;
                                 answer.push_str(&text);
                             }
                             crate::types::AgentEvent::Error { message } => {
+                                has_error = true;
                                 answer = format!("Vision Model Notice: {}", message);
                                 break;
                             }
@@ -3605,10 +3817,23 @@ async fn handle_ipc(
                     }
                 }
                 Err(err) => {
+                    has_error = true;
                     answer = format!("Could not query visual intelligence: {}. Please verify your model provider API key in Settings.", err);
                 }
             }
 
+            let duration_ms = start_time.elapsed().as_millis() as u64;
+            let prompt_token_count = std::cmp::max(1, (effective_prompt.len() + 3) / 4) + if has_image { 256 } else { 0 };
+            let final_completion_tokens = std::cmp::max(completion_token_count, (answer.len() + 3) / 4);
+
+            record_usage(
+                &format!("{:?}", model_config.provider).to_lowercase(),
+                &model_config.model_id,
+                prompt_token_count,
+                final_completion_tokens,
+                duration_ms,
+                if has_error { "failure" } else { "success" },
+            );
 
             if answer.trim().is_empty() {
                 answer = "No visual insight returned.".to_string();
@@ -3620,6 +3845,7 @@ async fn handle_ipc(
                     "prompt": effective_prompt
                 }
             })))
+
         }
         "agent-permission-response" => Ok(Json(serde_json::json!({ "data": { "success": true } }))),
         "agent-compact" => Ok(Json(serde_json::json!({ "data": { "compacted": false, "tokensBefore": 0, "tokensAfter": 0 } }))),
