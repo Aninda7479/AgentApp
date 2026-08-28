@@ -932,33 +932,20 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
 
 
 
-      {/* ── Bottom AI Prompt / Co-Pilot Command Deck ── */}
-      <div className="shrink-0 border-t border-white/[0.07] bg-[#161b22]/95 backdrop-blur-xl z-30">
-        <div className="flex flex-col max-w-3xl mx-auto">
+      {/* ── Floating Translucent Glass AI Prompt / Chat Card ── */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 w-full max-w-2xl px-4 pointer-events-none">
+        <div className="pointer-events-auto flex flex-col bg-[#161b22]/80 backdrop-blur-2xl border border-white/15 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.6)] overflow-hidden transition-all duration-300 hover:border-white/20">
 
-          {/* Expandable Agent Log / Chat Diff Drawer */}
+          {/* Expandable / Collapsible Chat History */}
           {isAgentLogOpen && (
-            <div className="p-3 border-b border-white/10 max-h-56 overflow-y-auto space-y-2 text-xs bg-black/40">
-              <div className="flex items-center justify-between text-[11px] font-bold text-brand-textMuted pb-1 border-b border-white/5">
-                <span className="flex items-center gap-1.5 text-emerald-400">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  AI Hardware Co-Pilot Activity Log
-                </span>
-                <button
-                  onClick={() => setIsAgentLogOpen(false)}
-                  className="text-brand-textMuted hover:text-white cursor-pointer text-xs"
-                >
-                  ✕
-                </button>
-              </div>
-
+            <div className="p-3.5 max-h-72 overflow-y-auto space-y-2.5 text-xs bg-black/40 border-b border-white/10">
               {messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`p-2.5 rounded-xl text-xs leading-relaxed ${
+                  className={`p-2.5 rounded-xl text-xs leading-relaxed transition-all ${
                     msg.sender === 'user'
                       ? 'bg-emerald-600/30 border border-emerald-500/40 text-emerald-200'
-                      : 'bg-black/30 border border-white/10 text-brand-textMain/90'
+                      : 'bg-white/[0.06] border border-white/10 text-brand-textMain/90'
                   }`}
                 >
                   <div className="whitespace-pre-wrap">{msg.text}</div>
@@ -977,7 +964,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
                       <span>{msg.timestamp}</span>
                       <button
                         onClick={() => handleCopyMessage(msg.id, msg.text)}
-                        className="flex items-center gap-1 hover:text-white cursor-pointer"
+                        className="flex items-center gap-1 hover:text-white cursor-pointer transition-colors"
                       >
                         {copiedMsgId === msg.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                         <span>{copiedMsgId === msg.id ? 'Copied' : 'Copy'}</span>
@@ -988,7 +975,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
               ))}
 
               {isAiThinking && (
-                <div className="flex items-center gap-2 text-xs text-emerald-400 p-2 bg-emerald-500/10 rounded-lg animate-pulse">
+                <div className="flex items-center gap-2 text-xs text-emerald-400 p-2.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20 animate-pulse">
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                   <span>Synthesizing PCB pinmux &amp; circuit topology diff...</span>
                 </div>
@@ -996,23 +983,26 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
             </div>
           )}
 
-
           {/* Prompt Bar Input Deck */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
               runAiCommand(chatInput);
             }}
-            className="px-3 py-2 flex items-center gap-2"
+            className="px-3 py-2.5 flex items-center gap-2"
           >
-            {/* Toggle Agent Log Button */}
+            {/* Expand / Collapse History Arrow Button */}
             <button
               type="button"
-              onClick={() => setIsAgentLogOpen(!isAgentLogOpen)}
-              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white transition-colors cursor-pointer shrink-0"
-              title="Toggle Agent Activity Log"
+              onClick={() => setIsAgentLogOpen((prev) => !prev)}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white transition-all cursor-pointer shrink-0"
+              title={isAgentLogOpen ? "Collapse Chat History" : "Expand Chat History"}
             >
-              <Sparkles className="w-4 h-4 text-emerald-400" />
+              {isAgentLogOpen ? (
+                <ChevronDown className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <ChevronUp className="w-4 h-4 text-emerald-400" />
+              )}
             </button>
 
             {/* Input */}
@@ -1028,7 +1018,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
             <button
               type="button"
               onClick={() => setShowSettingsModal(true)}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/40 border border-white/10 text-[10px] font-mono text-emerald-400 hover:bg-white/5 cursor-pointer shrink-0"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/40 border border-white/10 text-[10px] font-mono text-emerald-400 hover:bg-white/5 hover:border-emerald-500/30 cursor-pointer shrink-0 transition-colors"
               title="Change Connected Model"
             >
               <span className="max-w-[80px] truncate">{resolvedModelName}</span>
@@ -1039,7 +1029,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
             <button
               type="submit"
               disabled={!chatInput.trim() || isAiThinking}
-              className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white transition-all cursor-pointer shrink-0"
+              className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white transition-all cursor-pointer shrink-0 shadow-md shadow-emerald-900/40"
               title="Submit prompt"
             >
               <ArrowUp className="w-4 h-4" />
