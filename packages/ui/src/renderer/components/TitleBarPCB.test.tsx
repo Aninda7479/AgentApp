@@ -30,8 +30,8 @@ describe('TitleBar Top Bar - PCB Workspace Link', () => {
   });
 });
 
-describe('PCBWorkspacePage Infinite Dotted Canvas Component', () => {
-  it('renders Dotted Canvas Studio, multi-board previews, and floating AI Co-Pilot command deck', () => {
+describe('PCBWorkspacePage Glass View Selector Workspace Component', () => {
+  it('renders Glass View Selector Studio, view switcher, and AI Co-Pilot command deck', () => {
     const html = renderToStaticMarkup(
       <PCBWorkspacePage
         triggerToast={vi.fn()}
@@ -39,14 +39,7 @@ describe('PCBWorkspacePage Infinite Dotted Canvas Component', () => {
         onNewChat={vi.fn()}
       />
     );
-    expect(html).toContain('radial-gradient');
     expect(html).toContain('Schematic &amp; Chips');
-    expect(html).toContain('PCB Layout &amp; Copper Traces');
-    expect(html).toContain('3D Board Preview');
-    expect(html).toContain('Power Tree &amp; Rails Budget');
-    expect(html).toContain('BOM &amp; SMT Sourcing');
-    expect(html).toContain('ERC Validation &amp; DRC Audit');
-    expect(html).toContain('Lossless ECAD Code Exporter');
     expect(html).toContain('What would you like to change or create?');
     expect(html).toContain('Export');
   });

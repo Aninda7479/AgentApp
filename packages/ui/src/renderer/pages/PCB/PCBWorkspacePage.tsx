@@ -187,6 +187,9 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
   // Minimap visibility
   const [showMinimap, setShowMinimap] = useState<boolean>(false);
 
+  // Glass Type View Selector Dropdown
+  const [showViewSelect, setShowViewSelect] = useState<boolean>(false);
+
   // Resolve active connected model dynamically
   const resolvedModelName = useMemo(() => {
     if (
@@ -509,478 +512,35 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
     ];
   }, [graph, ercErrors]);
 
+  const currentActiveBoard = useMemo(() => {
+    return boardsList.find((b) => b.id === (focusedBoard ?? 'schematic')) || boardsList[0];
+  }, [boardsList, focusedBoard]);
+
+  const CurrentActiveIcon = currentActiveBoard.icon;
+
   return (
     <div className="flex-1 flex flex-col h-full bg-[#0d1117] text-brand-textMain overflow-hidden select-none relative font-sans">
-      {/* ── Dynamic Dotted Canvas Viewport ── */}
-      <div
-        ref={canvasViewportRef}
-        data-canvas-background="true"
-        onMouseDown={handleCanvasMouseDown}
-        onMouseMove={handleCanvasMouseMove}
-        onMouseUp={handleCanvasMouseUp}
-        onMouseLeave={handleCanvasMouseUp}
-        className={`flex-1 w-full h-full relative overflow-hidden ${
-          activeTool === 'hand' || spacePressed
-            ? 'cursor-grab active:cursor-grabbing'
-            : isDraggingCanvas
-            ? 'cursor-grabbing'
-            : 'cursor-default'
-        }`}
-        style={{
-          backgroundColor: '#0b0f15',
-          backgroundImage: 'radial-gradient(circle, rgba(255, 255, 255, 0.15) 1.25px, transparent 1.25px)',
-          backgroundSize: `${32 * zoom}px ${32 * zoom}px`,
-          backgroundPosition: `${pan.x}px ${pan.y}px`,
-        }}
-      >
-        {/* Transformable Canvas Content Layer */}
-        <div
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: '0 0',
-          }}
-          className="absolute top-0 left-0 transition-transform duration-75 will-change-transform"
-        >
-          {/* Multi-Board Canvas Strip / Grid */}
-          <div className="flex items-start gap-8 p-12 min-w-max">
-            {/* ── BOARD 1: Schematic & Chips ── */}
-            {(!focusedBoard || focusedBoard === 'schematic') && visibleBoards.schematic && (
-              <div
-                className={`flex flex-col bg-[#161b22]/95 border rounded-2xl shadow-2xl backdrop-blur-xl transition-all ${
-                  focusedBoard === 'schematic'
-                    ? 'w-[1400px] h-[850px] border-emerald-500/50 shadow-emerald-500/10'
-                    : 'w-[820px] h-[640px] border-white/10 hover:border-emerald-500/40'
-                }`}
-              >
-                {/* Board Header Bar */}
-                <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-black/40 rounded-t-2xl">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-                      <Cpu className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-xs text-white">Schematic &amp; Chips</span>
-                      <span className="text-[10px] text-brand-textMuted ml-2 font-mono">
-                        {graph.components.length} components • {graph.nets.length} nets
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleFocusBoard('schematic')}
-                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white transition-colors cursor-pointer"
-                      title={focusedBoard === 'schematic' ? 'Exit Focus View' : 'Focus Board'}
-                    >
-                      {focusedBoard === 'schematic' ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
 
-                {/* Board Content */}
-                <div className="flex-1 overflow-hidden relative rounded-b-2xl">
-                  <ECADSchematicCanvas
-                    graph={graph}
-                    selectedCompId={selectedCompId}
-                    selectedNetId={selectedNetId}
-                    onSelectComponent={(id) => {
-                      setSelectedCompId(id);
-                      setSelectedNetId(null);
-                    }}
-                    onSelectNet={(id) => {
-                      setSelectedNetId(id);
-                      setSelectedCompId(null);
-                    }}
-                    onUpdateGraph={updateGraph}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* ── BOARD 2: PCB 2D Layout & Copper Traces ── */}
-            {(!focusedBoard || focusedBoard === 'layout') && visibleBoards.layout && (
-              <div
-                className={`flex flex-col bg-[#161b22]/95 border rounded-2xl shadow-2xl backdrop-blur-xl transition-all ${
-                  focusedBoard === 'layout'
-                    ? 'w-[1400px] h-[850px] border-emerald-500/50 shadow-emerald-500/10'
-                    : 'w-[780px] h-[640px] border-white/10 hover:border-emerald-500/40'
-                }`}
-              >
-                <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-black/40 rounded-t-2xl">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-                      <Layers className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-xs text-white">PCB Layout &amp; Copper Traces</span>
-                      <span className="text-[10px] text-brand-textMuted ml-2 font-mono">
-                        Top/Bottom Cu • Pads • Ratsnest
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleFocusBoard('layout')}
-                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white transition-colors cursor-pointer"
-                      title={focusedBoard === 'layout' ? 'Exit Focus View' : 'Focus Board'}
-                    >
-                      {focusedBoard === 'layout' ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
-                <div className="flex-1 overflow-hidden relative rounded-b-2xl">
-                  <PCBLayoutCanvas
-                    graph={graph}
-                    selectedCompId={selectedCompId}
-                    selectedNetId={selectedNetId}
-                    onSelectComponent={(id) => {
-                      setSelectedCompId(id);
-                      setSelectedNetId(null);
-                    }}
-                    onSelectNet={(id) => {
-                      setSelectedNetId(id);
-                      setSelectedCompId(null);
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* ── BOARD 3: 3D Physical Board Preview ── */}
-            {(!focusedBoard || focusedBoard === '3d') && visibleBoards['3d'] && (
-              <div
-                className={`flex flex-col bg-[#161b22]/95 border rounded-2xl shadow-2xl backdrop-blur-xl transition-all ${
-                  focusedBoard === '3d'
-                    ? 'w-[1400px] h-[850px] border-emerald-500/50 shadow-emerald-500/10'
-                    : 'w-[780px] h-[640px] border-white/10 hover:border-emerald-500/40'
-                }`}
-              >
-                <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-black/40 rounded-t-2xl">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-                      <Box className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-xs text-white">3D Board Preview</span>
-                      <span className="text-[10px] text-brand-textMuted ml-2 font-mono">
-                        FR-4 Solder Mask • ENIG Pads • SMD 3D
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleFocusBoard('3d')}
-                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white transition-colors cursor-pointer"
-                      title={focusedBoard === '3d' ? 'Exit Focus View' : 'Focus Board'}
-                    >
-                      {focusedBoard === '3d' ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
-                <div className="flex-1 overflow-hidden relative rounded-b-2xl">
-                  <PCB3DPreview
-                    graph={graph}
-                    selectedCompId={selectedCompId}
-                    onSelectComponent={(id) => {
-                      setSelectedCompId(id);
-                      setSelectedNetId(null);
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* ── BOARD 4: Power Tree & Rails Budget ── */}
-            {(!focusedBoard || focusedBoard === 'power') && visibleBoards.power && (
-              <div
-                className={`flex flex-col bg-[#161b22]/95 border rounded-2xl shadow-2xl backdrop-blur-xl transition-all ${
-                  focusedBoard === 'power'
-                    ? 'w-[1200px] h-[800px] border-amber-500/50 shadow-amber-500/10'
-                    : 'w-[680px] h-[640px] border-white/10 hover:border-amber-500/40'
-                }`}
-              >
-                <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-black/40 rounded-t-2xl">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
-                      <Zap className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-xs text-white">Power Tree &amp; Rails Budget</span>
-                      <span className="text-[10px] text-brand-textMuted ml-2 font-mono">
-                        {graph.powerRails.length} Regulated Rails
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleFocusBoard('power')}
-                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white transition-colors cursor-pointer"
-                      title={focusedBoard === 'power' ? 'Exit Focus View' : 'Focus Board'}
-                    >
-                      {focusedBoard === 'power' ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
-                <div className="flex-1 overflow-auto p-5 space-y-4 rounded-b-2xl">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    {graph.powerRails.map((rail) => (
-                      <div key={rail.id} className="p-4 rounded-xl border border-white/10 bg-black/40 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono font-bold text-sm text-emerald-400">{rail.id}</span>
-                          <span className="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 font-mono">
-                            {rail.voltage}V
-                          </span>
-                        </div>
-                        <div className="text-xs text-brand-textMuted flex items-center justify-between">
-                          <span>Max Budget:</span>
-                          <span className="font-mono text-brand-textMain font-semibold">{rail.maxCurrent_mA} mA</span>
-                        </div>
-                        <div className="text-xs text-brand-textMuted flex items-center justify-between">
-                          <span>Source Component:</span>
-                          <span className="font-mono text-amber-300">{rail.sourceComponentId}.{rail.sourcePinNumber}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ── BOARD 5: BOM & SMT Sourcing ── */}
-            {(!focusedBoard || focusedBoard === 'bom') && visibleBoards.bom && (
-              <div
-                className={`flex flex-col bg-[#161b22]/95 border rounded-2xl shadow-2xl backdrop-blur-xl transition-all ${
-                  focusedBoard === 'bom'
-                    ? 'w-[1300px] h-[800px] border-blue-500/50 shadow-blue-500/10'
-                    : 'w-[750px] h-[640px] border-white/10 hover:border-blue-500/40'
-                }`}
-              >
-                <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-black/40 rounded-t-2xl">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
-                      <Database className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-xs text-white">BOM &amp; SMT Sourcing</span>
-                      <span className="text-[10px] text-brand-textMuted ml-2 font-mono">
-                        {graph.components.length} SMT Components
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleFocusBoard('bom')}
-                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white transition-colors cursor-pointer"
-                      title={focusedBoard === 'bom' ? 'Exit Focus View' : 'Focus Board'}
-                    >
-                      {focusedBoard === 'bom' ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
-                <div className="flex-1 overflow-auto p-4 rounded-b-2xl">
-                  <table className="w-full text-left text-xs border-collapse font-mono">
-                    <thead>
-                      <tr className="border-b border-white/10 text-brand-textMuted text-[11px]">
-                        <th className="pb-2">Designator</th>
-                        <th className="pb-2">Name</th>
-                        <th className="pb-2">MPN</th>
-                        <th className="pb-2">Package</th>
-                        <th className="pb-2">LCSC Part #</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {graph.components.map((comp) => (
-                        <tr key={comp.id} className="hover:bg-white/[0.03]">
-                          <td className="py-2.5 font-bold text-emerald-400">{comp.id}</td>
-                          <td className="py-2.5 font-sans text-brand-textMain font-medium">{comp.name}</td>
-                          <td className="py-2.5 text-brand-textMuted">{comp.mpn}</td>
-                          <td className="py-2.5 text-amber-300">{comp.package}</td>
-                          <td className="py-2.5 text-blue-400">{comp.lcscPart || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* ── BOARD 6: ERC Validation & DRC Audit ── */}
-            {(!focusedBoard || focusedBoard === 'erc') && visibleBoards.erc && (
-              <div
-                className={`flex flex-col bg-[#161b22]/95 border rounded-2xl shadow-2xl backdrop-blur-xl transition-all ${
-                  focusedBoard === 'erc'
-                    ? 'w-[1200px] h-[800px] border-emerald-500/50 shadow-emerald-500/10'
-                    : 'w-[680px] h-[640px] border-white/10 hover:border-emerald-500/40'
-                }`}
-              >
-                <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-black/40 rounded-t-2xl">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-                      <CheckCircle2 className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-xs text-white">ERC Validation &amp; DRC Audit</span>
-                      <span className="text-[10px] text-brand-textMuted ml-2 font-mono">
-                        {ercErrors.length === 0 ? 'Passed (0 Errors)' : `${ercErrors.length} Violations`}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleFocusBoard('erc')}
-                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white transition-colors cursor-pointer"
-                      title={focusedBoard === 'erc' ? 'Exit Focus View' : 'Focus Board'}
-                    >
-                      {focusedBoard === 'erc' ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
-                <div className="flex-1 overflow-auto p-5 space-y-3 rounded-b-2xl">
-                  {graph.ercReport.length === 0 ? (
-                    <div className="p-6 rounded-xl border border-emerald-500/30 bg-emerald-500/5 text-center text-xs text-emerald-300">
-                      ✅ 0 ERC Errors &amp; 0 Warnings. Circuit passes all electrical and pinmux rules checks.
-                    </div>
-                  ) : (
-                    graph.ercReport.map((erc) => (
-                      <div
-                        key={erc.id}
-                        className={`p-3.5 rounded-xl border ${
-                          erc.severity === 'error'
-                            ? 'border-rose-500/40 bg-rose-500/10'
-                            : 'border-amber-500/40 bg-amber-500/10'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 text-xs font-bold mb-1">
-                          {erc.severity === 'error' ? (
-                            <AlertTriangle className="w-4 h-4 text-rose-400" />
-                          ) : (
-                            <Info className="w-4 h-4 text-amber-400" />
-                          )}
-                          <span className={erc.severity === 'error' ? 'text-rose-300' : 'text-amber-300'}>
-                            {erc.title}
-                          </span>
-                        </div>
-                        <p className="text-xs text-brand-textMuted mb-2">{erc.message}</p>
-                        {erc.suggestedFix && (
-                          <div className="text-[11px] font-mono text-emerald-400 bg-black/40 p-2 rounded">
-                            💡 Suggestion: {erc.suggestedFix}
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ── BOARD 7: Lossless ECAD Code Exporter ── */}
-            {(!focusedBoard || focusedBoard === 'exporter') && visibleBoards.exporter && (
-              <div
-                className={`flex flex-col bg-[#161b22]/95 border rounded-2xl shadow-2xl backdrop-blur-xl transition-all ${
-                  focusedBoard === 'exporter'
-                    ? 'w-[1300px] h-[800px] border-purple-500/50 shadow-purple-500/10'
-                    : 'w-[750px] h-[640px] border-white/10 hover:border-purple-500/40'
-                }`}
-              >
-                <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-black/40 rounded-t-2xl">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400">
-                      <FileCode className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-xs text-white">Lossless ECAD Code Exporter</span>
-                      <span className="text-[10px] text-brand-textMuted ml-2 font-mono">
-                        KiCad 8/9 • Altium • SKiDL • EasyEDA
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleFocusBoard('exporter')}
-                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white transition-colors cursor-pointer"
-                      title={focusedBoard === 'exporter' ? 'Exit Focus View' : 'Focus Board'}
-                    >
-                      {focusedBoard === 'exporter' ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Exporter Formats Switcher */}
-                <div className="px-4 py-2 border-b border-white/10 flex items-center justify-between bg-black/30 text-xs">
-                  <div className="flex items-center gap-1.5 overflow-x-auto">
-                    {(
-                      [
-                        { id: 'kicad', label: 'KiCad 8/9' },
-                        { id: 'altium', label: 'Altium' },
-                        { id: 'skidl', label: 'SKiDL Python' },
-                        { id: 'easyeda', label: 'EasyEDA Pro' },
-                        { id: 'bom', label: 'BOM CSV' },
-                        { id: 'json', label: 'Graph JSON' },
-                      ] as const
-                    ).map((fmt) => (
-                      <button
-                        key={fmt.id}
-                        onClick={() => setExportFormat(fmt.id)}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
-                          exportFormat === fmt.id
-                            ? 'bg-emerald-600 text-white font-semibold shadow-sm'
-                            : 'text-brand-textMuted hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        {fmt.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={handleCopyExport}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 text-[11px] text-white border border-white/10 transition-colors cursor-pointer"
-                    >
-                      {copiedExport ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                      <span>{copiedExport ? 'Copied' : 'Copy'}</span>
-                    </button>
-                    <button
-                      onClick={handleDownloadExport}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-[11px] text-white font-semibold transition-colors cursor-pointer"
-                    >
-                      <Download className="w-3 h-3" />
-                      <span>Download</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex-1 overflow-auto p-4 bg-black/60 font-mono text-xs text-brand-textMain/90 rounded-b-2xl">
-                  <pre className="whitespace-pre-wrap">{exportPayload}</pre>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Floating Top Header Bar (Inspired by reference screenshot) ── */}
-      <div className="absolute top-3 left-4 right-4 z-40 flex items-center justify-between pointer-events-none">
-        {/* Left: Project Title & Navigation */}
-        <div className="flex items-center gap-2 pointer-events-auto bg-[#161b22]/90 backdrop-blur-md border border-white/10 rounded-xl px-3 py-1.5 shadow-xl">
+      {/* ── Top Header Bar with Glass View Selector ── */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.07] bg-[#161b22]/90 backdrop-blur-xl shrink-0 z-30 relative">
+        {/* Left: Back + Project Title + Template Picker */}
+        <div className="flex items-center gap-2 min-w-0">
           {onBack && (
             <button
               onClick={onBack}
-              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white transition-colors cursor-pointer shrink-0"
               title="Return to Main App"
             >
               <ArrowRight className="w-4 h-4 rotate-180" />
             </button>
           )}
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-xs text-white tracking-tight">
-              Remix of {graph.metadata.name}
-            </span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono border border-emerald-500/30">
-              {graph.metadata.revision}
-            </span>
-          </div>
-
-          {/* Quick Template Picker */}
-          <div className="h-4 w-px bg-white/10 mx-1" />
+          <span className="font-semibold text-xs text-white tracking-tight truncate max-w-[150px]">
+            {graph.metadata.name}
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono border border-emerald-500/30 shrink-0">
+            {graph.metadata.revision}
+          </span>
+          <div className="h-4 w-px bg-white/10 mx-1 shrink-0" />
           <select
             onChange={(e) => {
               const tmpl = STARTER_TEMPLATES.find((t) => t.id === e.target.value);
@@ -990,7 +550,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
                 triggerToast?.(`Loaded ${tmpl.name}`);
               }
             }}
-            className="bg-black/40 border border-white/10 text-brand-textMuted text-[11px] rounded-lg px-2 py-1 focus:outline-none focus:border-emerald-500 cursor-pointer"
+            className="bg-black/40 border border-white/10 text-brand-textMuted text-[11px] rounded-lg px-2 py-1 focus:outline-none focus:border-emerald-500 cursor-pointer shrink-0"
           >
             {STARTER_TEMPLATES.map((t) => (
               <option key={t.id} value={t.id}>
@@ -1000,8 +560,100 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
           </select>
         </div>
 
-        {/* Right: Actions (Export, Share, Settings) */}
-        <div className="flex items-center gap-2 pointer-events-auto bg-[#161b22]/90 backdrop-blur-md border border-white/10 rounded-xl px-3 py-1.5 shadow-xl">
+        {/* Center: Glass Type View Selector */}
+        <div className="relative">
+          <button
+            onClick={() => setShowViewSelect((prev) => !prev)}
+            className="flex items-center gap-2.5 px-4 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/15 backdrop-blur-xl shadow-lg transition-all text-white cursor-pointer group hover:border-emerald-500/40"
+          >
+            <div className="w-5 h-5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+              <CurrentActiveIcon className="w-3.5 h-3.5" />
+            </div>
+            <span className="text-xs font-semibold tracking-wide text-white">
+              {currentActiveBoard.title}
+            </span>
+            {currentActiveBoard.id === 'erc' && ercErrors.length > 0 ? (
+              <span className="px-1.5 py-0.2 rounded-full bg-rose-500/20 text-rose-400 text-[9px] font-bold border border-rose-500/30">
+                {ercErrors.length}
+              </span>
+            ) : null}
+            <ChevronDown className={`w-3.5 h-3.5 text-brand-textMuted group-hover:text-white transition-transform duration-200 ${showViewSelect ? 'rotate-180 text-emerald-400' : ''}`} />
+          </button>
+
+          {showViewSelect && (
+            <>
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowViewSelect(false)}
+              />
+
+              {/* Glass Dropdown Menu */}
+              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-80 bg-[#161b22]/95 backdrop-blur-2xl border border-white/15 rounded-2xl p-1.5 shadow-2xl z-50 flex flex-col gap-1">
+                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-brand-textMuted/70 border-b border-white/[0.06] mb-0.5">
+                  Workspace Views
+                </div>
+                {boardsList.map((b) => {
+                  const Icon = b.icon;
+                  const isSelected = (focusedBoard ?? 'schematic') === b.id;
+                  return (
+                    <button
+                      key={b.id}
+                      onClick={() => {
+                        setFocusedBoard(b.id as BoardViewId);
+                        setShowViewSelect(false);
+                      }}
+                      className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-500/15 border border-emerald-500/30 text-white'
+                          : 'hover:bg-white/[0.06] text-brand-textMuted hover:text-white border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                          isSelected ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/40' : 'bg-white/5 text-brand-textMuted border border-white/10'
+                        }`}>
+                          <Icon className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="truncate">
+                          <div className={`text-xs font-semibold ${isSelected ? 'text-emerald-300' : 'text-white'}`}>
+                            {b.title}
+                          </div>
+                          <div className="text-[10px] text-brand-textMuted font-mono truncate">
+                            {b.subtitle}
+                          </div>
+                        </div>
+                      </div>
+                      {b.id === 'erc' && ercErrors.length > 0 ? (
+                        <span className="px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 text-[9px] font-bold border border-rose-500/30 shrink-0 ml-1">
+                          {ercErrors.length}
+                        </span>
+                      ) : isSelected ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 ml-1" />
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Right: Undo/Redo + Export + Share + Settings */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button onClick={handleUndo} disabled={historyIndex < 0}
+            className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 disabled:opacity-30 transition-colors cursor-pointer" title="Undo (Ctrl+Z)">
+            <Undo2 className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={handleRedo} disabled={historyIndex + 1 >= history.length}
+            className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 disabled:opacity-30 transition-colors cursor-pointer" title="Redo (Ctrl+Y)">
+            <Redo2 className="w-3.5 h-3.5" />
+          </button>
+          <div className="h-4 w-px bg-white/10 mx-0.5" />
+          <button onClick={() => setShowAddCompModal(true)}
+            className="p-1.5 rounded-lg text-emerald-400 hover:bg-emerald-500/15 transition-colors cursor-pointer" title="Add Component">
+            <Plus className="w-3.5 h-3.5" />
+          </button>
           <button
             onClick={() => setShowExportModal(true)}
             className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer"
@@ -1009,125 +661,281 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
             <Download className="w-3.5 h-3.5" />
             <span>Export</span>
           </button>
-
           <button
-            onClick={() => {
-              navigator.clipboard.writeText(JSON.stringify(graph, null, 2));
-              triggerToast?.('Project JSON copied to clipboard');
-            }}
+            onClick={() => { navigator.clipboard.writeText(JSON.stringify(graph, null, 2)); triggerToast?.('Project JSON copied'); }}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white border border-white/10 text-xs font-medium transition-colors cursor-pointer"
-            title="Share or Copy Project JSON"
           >
             <Share2 className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Share</span>
           </button>
-
-          <button
-            onClick={() => setShowSettingsModal(true)}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white border border-white/10 transition-colors cursor-pointer"
-            title="Settings & Model"
-          >
+          <button onClick={() => setShowSettingsModal(true)}
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white border border-white/10 transition-colors cursor-pointer" title="Settings">
             <Settings className="w-3.5 h-3.5 text-emerald-400" />
           </button>
         </div>
       </div>
 
-      {/* ── Floating Right Tool Palette (Inspired by reference screenshot) ── */}
-      <div className="absolute right-4 top-20 z-40 flex flex-col gap-1.5 bg-[#161b22]/90 backdrop-blur-md border border-white/10 rounded-xl p-1.5 shadow-2xl">
-        <button
-          onClick={() => setActiveTool('select')}
-          className={`p-2 rounded-lg transition-colors cursor-pointer ${
-            activeTool === 'select'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-brand-textMuted hover:text-white hover:bg-white/5'
-          }`}
-          title="Select Tool (V)"
-        >
-          <MousePointer className="w-4 h-4" />
-        </button>
+      {/* ── Tab Panel Content ── */}
+      <div className="flex-1 overflow-hidden relative">
 
-        <button
-          onClick={() => setActiveTool('hand')}
-          className={`p-2 rounded-lg transition-colors cursor-pointer ${
-            activeTool === 'hand'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-brand-textMuted hover:text-white hover:bg-white/5'
-          }`}
-          title="Hand / Pan Tool (H / Space+Drag)"
-        >
-          <Hand className="w-4 h-4" />
-        </button>
+        {/* SCHEMATIC TAB */}
+        {(focusedBoard ?? 'schematic') === 'schematic' && (
+          <div className="absolute inset-0 flex flex-col">
+            <ECADSchematicCanvas
+              graph={graph}
+              selectedCompId={selectedCompId}
+              selectedNetId={selectedNetId}
+              onSelectComponent={(id) => { setSelectedCompId(id); setSelectedNetId(null); }}
+              onSelectNet={(id) => { setSelectedNetId(id); setSelectedCompId(null); }}
+              onUpdateGraph={updateGraph}
+            />
+          </div>
+        )}
 
-        <button
-          onClick={fitToScreen}
-          className="p-2 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-          title="Fit All Boards to View (Ctrl + 0)"
-        >
-          <Compass className="w-4 h-4" />
-        </button>
+        {/* PCB LAYOUT TAB */}
+        {focusedBoard === 'layout' && (
+          <div className="absolute inset-0 flex flex-col">
+            <PCBLayoutCanvas
+              graph={graph}
+              selectedCompId={selectedCompId}
+              selectedNetId={selectedNetId}
+              onSelectComponent={(id) => { setSelectedCompId(id); setSelectedNetId(null); }}
+              onSelectNet={(id) => { setSelectedNetId(id); setSelectedCompId(null); }}
+            />
+          </div>
+        )}
 
-        <button
-          onClick={() => setShowAddCompModal(true)}
-          className="p-2 rounded-lg text-emerald-400 hover:bg-emerald-500/20 transition-colors cursor-pointer"
-          title="Add Component (+)"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
+        {/* 3D PREVIEW TAB */}
+        {focusedBoard === '3d' && (
+          <div className="absolute inset-0 flex flex-col">
+            <PCB3DPreview
+              graph={graph}
+              selectedCompId={selectedCompId}
+              onSelectComponent={(id) => { setSelectedCompId(id); setSelectedNetId(null); }}
+            />
+          </div>
+        )}
 
-        <button
-          onClick={() => setShowMinimap(!showMinimap)}
-          className={`p-2 rounded-lg transition-colors cursor-pointer ${
-            showMinimap
-              ? 'bg-white/20 text-white'
-              : 'text-brand-textMuted hover:text-white hover:bg-white/5'
-          }`}
-          title="Toggle Canvas Minimap"
-        >
-          <LayoutGrid className="w-4 h-4" />
-        </button>
+        {/* POWER TREE TAB */}
+        {focusedBoard === 'power' && (
+          <div className="absolute inset-0 flex flex-col overflow-auto p-6 gap-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className="w-4 h-4 text-amber-400" />
+              <span className="font-bold text-sm text-white">Power Tree & Rails Budget</span>
+              <span className="text-[11px] text-brand-textMuted font-mono ml-1">{graph.powerRails.length} Regulated Rails</span>
+            </div>
+            {graph.powerRails.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center text-brand-textMuted text-xs space-y-2">
+                  <Zap className="w-8 h-8 mx-auto opacity-20" />
+                  <p>No power rails in current design.<br />Synthesize a circuit with a power supply to see the rail budget.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {graph.powerRails.map((rail) => (
+                  <div key={rail.id} className="p-4 rounded-xl border border-white/10 bg-[#161b22] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-bold text-sm text-emerald-400">{rail.id}</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 font-mono border border-amber-500/20">
+                        {rail.voltage}V
+                      </span>
+                    </div>
+                    <div className="space-y-1.5 text-xs text-brand-textMuted">
+                      <div className="flex items-center justify-between">
+                        <span>Max Budget</span>
+                        <span className="font-mono text-brand-textMain font-semibold">{rail.maxCurrent_mA} mA</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Source</span>
+                        <span className="font-mono text-amber-300">{rail.sourceComponentId}.{rail.sourcePinNumber}</span>
+                      </div>
+                    </div>
+                    {/* Mini current bar */}
+                    <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                      <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-emerald-500"
+                        style={{ width: `${Math.min(100, (rail.maxCurrent_mA / 2000) * 100)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-        <button
-          onClick={() => setShowShortcutsModal(true)}
-          className="p-2 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-          title="Keyboard Shortcuts & Gestures (?)"
-        >
-          <HelpCircle className="w-4 h-4" />
-        </button>
+        {/* BOM & SMT TAB */}
+        {focusedBoard === 'bom' && (
+          <div className="absolute inset-0 flex flex-col overflow-hidden">
+            <div className="px-5 py-3 border-b border-white/[0.07] flex items-center justify-between bg-[#161b22]/60 shrink-0">
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-blue-400" />
+                <span className="font-bold text-sm text-white">BOM & SMT Sourcing</span>
+                <span className="text-[11px] text-brand-textMuted font-mono ml-1">{graph.components.length} components</span>
+              </div>
+              <button
+                onClick={() => { const csv = exportToBOM(graph); const b = new Blob([csv], {type:'text/csv'}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${graph.metadata.name}_BOM.csv`; a.click(); }}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer transition-colors"
+              >
+                <Download className="w-3 h-3" />
+                <span>Download CSV</span>
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              {graph.components.length === 0 ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center text-brand-textMuted text-xs space-y-2">
+                    <Database className="w-8 h-8 mx-auto opacity-20" />
+                    <p>No components yet.<br />Synthesize a circuit to populate the BOM.</p>
+                  </div>
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs border-collapse font-mono">
+                  <thead>
+                    <tr className="border-b border-white/10 text-brand-textMuted text-[11px] sticky top-0 bg-[#0d1117]">
+                      <th className="pb-2.5 pr-4 font-semibold">Ref</th>
+                      <th className="pb-2.5 pr-4 font-semibold">Name</th>
+                      <th className="pb-2.5 pr-4 font-semibold">MPN</th>
+                      <th className="pb-2.5 pr-4 font-semibold">Package</th>
+                      <th className="pb-2.5 pr-4 font-semibold">Value</th>
+                      <th className="pb-2.5 font-semibold">LCSC #</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.04]">
+                    {graph.components.map((comp) => (
+                      <tr key={comp.id}
+                        onClick={() => { setSelectedCompId(comp.id); setSelectedNetId(null); }}
+                        className={`cursor-pointer transition-colors ${selectedCompId === comp.id ? 'bg-emerald-500/10' : 'hover:bg-white/[0.03]'}`}
+                      >
+                        <td className="py-2.5 pr-4 font-bold text-emerald-400">{comp.id}</td>
+                        <td className="py-2.5 pr-4 font-sans text-brand-textMain">{comp.name}</td>
+                        <td className="py-2.5 pr-4 text-brand-textMuted">{comp.mpn}</td>
+                        <td className="py-2.5 pr-4 text-amber-300">{comp.package}</td>
+                        <td className="py-2.5 pr-4 text-brand-textMuted">{comp.value || '—'}</td>
+                        <td className="py-2.5 text-blue-400">{comp.lcscPart || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ERC TAB */}
+        {focusedBoard === 'erc' && (
+          <div className="absolute inset-0 flex flex-col overflow-hidden">
+            <div className="px-5 py-3 border-b border-white/[0.07] flex items-center justify-between bg-[#161b22]/60 shrink-0">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className={`w-4 h-4 ${ercErrors.length === 0 ? 'text-emerald-400' : 'text-rose-400'}`} />
+                <span className="font-bold text-sm text-white">ERC Validation & DRC Audit</span>
+                <span className={`text-[11px] font-mono ml-1 ${ercErrors.length === 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {ercErrors.length === 0 ? '✅ Passed (0 Errors)' : `⚠ ${ercErrors.length} Violations`}
+                </span>
+              </div>
+              <button
+                onClick={() => runAiCommand('Analyze all Electrical Rules Check violations in this circuit and synthesize missing pullups, decoupling caps, and pin connections to fix them')}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Auto-Fix with AI</span>
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-5 space-y-3">
+              {graph.ercReport.length === 0 ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="p-8 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 text-center text-sm text-emerald-300 space-y-1">
+                    <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-400" />
+                    <p className="font-semibold">All Clear!</p>
+                    <p className="text-xs text-emerald-400/70">0 ERC errors · 0 warnings · Passes all electrical and pinmux rules.</p>
+                  </div>
+                </div>
+              ) : (
+                graph.ercReport.map((erc) => (
+                  <div
+                    key={erc.id}
+                    className={`p-4 rounded-xl border ${
+                      erc.severity === 'error'
+                        ? 'border-rose-500/40 bg-rose-500/[0.07]'
+                        : 'border-amber-500/40 bg-amber-500/[0.07]'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 text-xs font-bold mb-1.5">
+                      {erc.severity === 'error'
+                        ? <AlertTriangle className="w-4 h-4 text-rose-400" />
+                        : <Info className="w-4 h-4 text-amber-400" />}
+                      <span className={erc.severity === 'error' ? 'text-rose-300' : 'text-amber-300'}>
+                        {erc.title}
+                      </span>
+                    </div>
+                    <p className="text-xs text-brand-textMuted mb-2.5">{erc.message}</p>
+                    {erc.suggestedFix && (
+                      <div className="text-[11px] font-mono text-emerald-400 bg-black/40 px-3 py-2 rounded-lg">
+                        💡 {erc.suggestedFix}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* LOSSLESS ECAD CODE EXPORTER TAB */}
+        {focusedBoard === 'exporter' && (
+          <div className="absolute inset-0 flex flex-col overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-white/[0.07] flex items-center justify-between bg-[#161b22]/60 shrink-0">
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                {(
+                  [
+                    { id: 'kicad', label: 'KiCad 8/9' },
+                    { id: 'altium', label: 'Altium' },
+                    { id: 'skidl', label: 'SKiDL Python' },
+                    { id: 'easyeda', label: 'EasyEDA Pro' },
+                    { id: 'bom', label: 'BOM CSV' },
+                    { id: 'json', label: 'Graph JSON' },
+                  ] as const
+                ).map((fmt) => (
+                  <button
+                    key={fmt.id}
+                    onClick={() => setExportFormat(fmt.id)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer shrink-0 ${
+                      exportFormat === fmt.id
+                        ? 'bg-emerald-600 text-white font-semibold shadow-sm'
+                        : 'text-brand-textMuted hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {fmt.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0 ml-3">
+                <button onClick={handleCopyExport}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 text-[11px] text-white border border-white/10 transition-colors cursor-pointer">
+                  {copiedExport ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedExport ? 'Copied' : 'Copy'}</span>
+                </button>
+                <button onClick={handleDownloadExport}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-[11px] text-white font-semibold transition-colors cursor-pointer">
+                  <Download className="w-3 h-3" />
+                  <span>Download</span>
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-4 bg-black/60 font-mono text-xs text-brand-textMain/90 leading-relaxed">
+              <pre className="whitespace-pre-wrap">{exportPayload}</pre>
+            </div>
+          </div>
+        )}
+
       </div>
 
-      {/* ── Collapsible Minimap ── */}
-      {showMinimap && (
-        <div className="absolute left-4 bottom-24 z-40 bg-[#161b22]/95 border border-white/10 rounded-xl p-3 shadow-2xl backdrop-blur-md w-56">
-          <div className="flex items-center justify-between text-[11px] font-bold text-white mb-2">
-            <span>Canvas Minimap</span>
-            <button
-              onClick={() => setShowMinimap(false)}
-              className="text-brand-textMuted hover:text-white cursor-pointer"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono text-brand-textMuted">
-            {boardsList.map((b) => (
-              <button
-                key={b.id}
-                onClick={() => handleFocusBoard(b.id)}
-                className={`p-1.5 rounded text-left border transition-colors cursor-pointer truncate ${
-                  focusedBoard === b.id
-                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                    : 'bg-black/30 border-white/10 hover:bg-white/5'
-                }`}
-              >
-                {b.title}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* ── Floating Bottom AI Prompt / Co-Pilot Command Deck (Inspired by reference screenshot) ── */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 w-full max-w-2xl px-4 pointer-events-none">
-        <div className="pointer-events-auto flex flex-col bg-[#161b22]/95 backdrop-blur-xl border border-white/15 rounded-2xl shadow-2xl overflow-hidden">
+
+
+      {/* ── Bottom AI Prompt / Co-Pilot Command Deck ── */}
+      <div className="shrink-0 border-t border-white/[0.07] bg-[#161b22]/95 backdrop-blur-xl z-30">
+        <div className="flex flex-col max-w-3xl mx-auto">
+
           {/* Expandable Agent Log / Chat Diff Drawer */}
           {isAgentLogOpen && (
             <div className="p-3 border-b border-white/10 max-h-56 overflow-y-auto space-y-2 text-xs bg-black/40">
@@ -1188,33 +996,6 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
             </div>
           )}
 
-          {/* Quick Hardware Synthesis Action Chips */}
-          <div className="px-3 pt-2 pb-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar bg-black/20 text-[10px]">
-            <button
-              onClick={() => runAiCommand('Synthesize a regulated power supply circuit with input protection, filtering, and power rail outputs')}
-              className="px-2 py-0.5 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 shrink-0 cursor-pointer font-medium"
-            >
-              ⚡ Power Supply
-            </button>
-            <button
-              onClick={() => runAiCommand('Synthesize an STM32 MCU subsystem with crystal oscillator, decoupling caps, reset button, and SWD header')}
-              className="px-2 py-0.5 rounded-full bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white border border-white/10 shrink-0 cursor-pointer"
-            >
-              🧠 STM32 MCU
-            </button>
-            <button
-              onClick={() => runAiCommand('Synthesize an IoT sensor node circuit with environmental sensing, I2C bus, and status LEDs')}
-              className="px-2 py-0.5 rounded-full bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white border border-white/10 shrink-0 cursor-pointer"
-            >
-              📡 IoT Sensor Node
-            </button>
-            <button
-              onClick={() => runAiCommand('Analyze all Electrical Rules Check violations in this circuit and synthesize missing pullups, decoupling caps, and pin connections to fix them')}
-              className="px-2 py-0.5 rounded-full bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white border border-white/10 shrink-0 cursor-pointer"
-            >
-              🛡️ Auto-Fix ERC
-            </button>
-          </div>
 
           {/* Prompt Bar Input Deck */}
           <form
@@ -1267,96 +1048,6 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
         </div>
       </div>
 
-      {/* ── Floating Bottom-Right Zoom HUD & Navigation Dock (Inspired by reference screenshot) ── */}
-      <div className="absolute right-4 bottom-4 z-40 flex items-center gap-1.5 bg-[#161b22]/90 backdrop-blur-md border border-white/10 rounded-xl px-2 py-1 shadow-2xl">
-        <button
-          onClick={handleUndo}
-          disabled={historyIndex < 0}
-          className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 disabled:opacity-30 transition-colors cursor-pointer"
-          title="Undo (Ctrl+Z)"
-        >
-          <Undo2 className="w-3.5 h-3.5" />
-        </button>
-
-        <button
-          onClick={handleRedo}
-          disabled={historyIndex + 1 >= history.length}
-          className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 disabled:opacity-30 transition-colors cursor-pointer"
-          title="Redo (Ctrl+Y)"
-        >
-          <Redo2 className="w-3.5 h-3.5" />
-        </button>
-
-        <div className="h-4 w-px bg-white/10 mx-0.5" />
-
-        {/* Zoom Percentage Dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setShowZoomMenu(!showZoomMenu)}
-            className="px-2 py-1 rounded-lg bg-black/40 border border-white/10 text-[11px] font-mono font-semibold text-white hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-1"
-          >
-            <span>{Math.round(zoom * 100)}%</span>
-            <ChevronDown className="w-3 h-3 text-brand-textMuted" />
-          </button>
-
-          {showZoomMenu && (
-            <div className="absolute bottom-8 right-0 bg-[#161b22] border border-white/10 rounded-xl p-1 shadow-2xl w-28 text-xs font-mono space-y-0.5 z-50">
-              {[0.25, 0.5, 0.75, 1.0, 1.5, 2.0].map((zVal) => (
-                <button
-                  key={zVal}
-                  onClick={() => {
-                    setZoom(zVal);
-                    setShowZoomMenu(false);
-                  }}
-                  className={`w-full text-left px-2.5 py-1 rounded-lg text-[11px] transition-colors cursor-pointer ${
-                    Math.round(zoom * 100) === Math.round(zVal * 100)
-                      ? 'bg-emerald-600 text-white font-bold'
-                      : 'text-brand-textMuted hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  {Math.round(zVal * 100)}%
-                </button>
-              ))}
-              <div className="h-px bg-white/10 my-0.5" />
-              <button
-                onClick={() => {
-                  fitToScreen();
-                  setShowZoomMenu(false);
-                }}
-                className="w-full text-left px-2.5 py-1 rounded-lg text-[11px] text-emerald-400 hover:bg-emerald-500/10 transition-colors cursor-pointer"
-              >
-                Fit Screen
-              </button>
-            </div>
-          )}
-        </div>
-
-        <button
-          onClick={() => setZoom((z) => Math.max(0.05, z * 0.8))}
-          className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-          title="Zoom Out (Ctrl + -)"
-        >
-          <ZoomOut className="w-3.5 h-3.5" />
-        </button>
-
-        <button
-          onClick={() => setZoom((z) => Math.min(3.5, z * 1.2))}
-          className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-          title="Zoom In (Ctrl + +)"
-        >
-          <ZoomIn className="w-3.5 h-3.5" />
-        </button>
-
-        <div className="h-4 w-px bg-white/10 mx-0.5" />
-
-        <button
-          onClick={() => setShowShortcutsModal(true)}
-          className="p-1.5 rounded-lg text-brand-textMuted hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-          title="Keyboard Shortcuts & Gestures (?)"
-        >
-          <HelpCircle className="w-3.5 h-3.5" />
-        </button>
-      </div>
 
       {/* ── Modal: Keyboard Shortcuts & Gesture Cheat Sheet ── */}
       {showShortcutsModal && (
