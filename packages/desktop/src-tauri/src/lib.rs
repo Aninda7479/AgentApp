@@ -6,6 +6,9 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Builder, Manager, PhysicalPosition, Position, WebviewWindow, WindowEvent,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static IS_EXPLICIT_QUIT: AtomicBool = AtomicBool::new(false);
 
 fn position_artifacts_window(window: &WebviewWindow) {
     if let Ok(Some(monitor)) = window.current_monitor() {
@@ -131,6 +134,7 @@ pub fn run() {
                         }
                     }
                     "quit" => {
+                        IS_EXPLICIT_QUIT.store(true, Ordering::SeqCst);
                         app.exit(0);
                     }
                     _ => {}
@@ -252,9 +256,30 @@ pub fn run() {
             circle_search_toggle,
             voice_dictation_toggle
         ])
+        .build(tauri::generate_context!())
+        .expect("error while building SuperAgent tauri application")
+        .run(|app_handle, event| {
+            match event {
+                tauri::RunEvent::ExitRequested { api, .. } => {
+                    if !IS_EXPLICIT_QUIT.load(Ordering::SeqCst) {
+                        let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+                        let close_to_tray = saved_settings
+                            .get("general")
+                            .and_then(|g| g.get("closeToTray"))
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(true);
 
-        .run(tauri::generate_context!())
-        .expect("error while running SuperAgent tauri application");
+                        if close_to_tray {
+                            api.prevent_exit();
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                let _ = window.hide();
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        });
 }
 
 

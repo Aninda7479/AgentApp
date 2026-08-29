@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Check, Code2, MessageSquare, Moon, Sun, Monitor, Globe, Eye, Ban, Cpu, Copy, Server, HardDrive, Layers } from 'lucide-react';
+import { Check, Code2, MessageSquare, Moon, Sun, Monitor, Globe, Eye, Ban, Cpu, Copy, Server, HardDrive, Layers, Mic, Search, AppWindow } from 'lucide-react';
 import { ThemeMode } from '../../types';
 import { InternetAccessLevel, ModelConfig, ProviderConnection } from './types';
 import { getIpc } from '../../lib/ipc';
@@ -323,38 +323,120 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = (props) => {
       </p>
 
       <section className="mb-8">
-        <h3 className="settings-section-title mb-3">Background Service &amp; OS Startup</h3>
+        <h3 className="settings-section-title mb-3">Running Instances &amp; Process Isolation</h3>
         <p className="settings-section-sub mb-3 text-xs leading-relaxed text-brand-textMuted">
-          Control how SuperAgent runs in the background to host the Web App server (<code className="text-brand-textMain font-mono">--serve</code>), execute Artifacts micro-apps, and power Voice dictation and Circle Search.
+          SuperAgent is architected with modular, isolated running processes. Closing or ending one window/popup will never crash or kill the others.
         </p>
 
-        {/* Runtime Overview Badge */}
-        <div className="mb-3 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-          <div className="flex items-center gap-2.5 rounded-xl border border-brand-border/60 bg-brand-bg/40 p-3">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
-              <Server size={15} />
+        {/* 5-Instance Architecture Matrix */}
+        <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {/* 1. Desktop App */}
+          <div className="flex flex-col justify-between rounded-xl border border-brand-border/60 bg-brand-bg/40 p-3">
+            <div className="flex items-start gap-2.5">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+                <AppWindow size={15} />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-brand-textMain">Desktop App</span>
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                </div>
+                <div className="text-[11px] text-brand-textMuted mt-0.5">
+                  Main UI Shell &amp; Window Host. Closing minimizes to system tray.
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="text-xs font-semibold text-brand-textMain">Web Server</div>
-              <div className="text-[11px] text-brand-textMuted font-mono">--serve :1469</div>
+            <div className="mt-2.5 pt-2 border-t border-brand-border/40 text-[10px] text-brand-textMuted flex items-center justify-between">
+              <span>Isolation: <strong className="text-emerald-400">Isolated</strong></span>
+              <span className="font-mono">superagent.exe</span>
             </div>
           </div>
-          <div className="flex items-center gap-2.5 rounded-xl border border-brand-border/60 bg-brand-bg/40 p-3">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
-              <HardDrive size={15} />
+
+          {/* 2. Web Server */}
+          <div className="flex flex-col justify-between rounded-xl border border-brand-border/60 bg-brand-bg/40 p-3">
+            <div className="flex items-start gap-2.5">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+                <Server size={15} />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-brand-textMain">Background Web Server</span>
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                </div>
+                <div className="text-[11px] text-brand-textMuted mt-0.5">
+                  Core daemon on <code className="font-mono text-brand-textMain">:1469</code>. Survives window close.
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="text-xs font-semibold text-brand-textMain">Artifacts Runtime</div>
-              <div className="text-[11px] text-brand-textMuted">Micro-apps &amp; Daemons</div>
+            <div className="mt-2.5 pt-2 border-t border-brand-border/40 text-[10px] text-brand-textMuted flex items-center justify-between">
+              <span>Isolation: <strong className="text-emerald-400">Independent</strong></span>
+              <span className="font-mono">core-daemon</span>
             </div>
           </div>
-          <div className="flex items-center gap-2.5 rounded-xl border border-brand-border/60 bg-brand-bg/40 p-3">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-500/10 text-sky-400">
-              <Layers size={15} />
+
+          {/* 3. Artifact Manager */}
+          <div className="flex flex-col justify-between rounded-xl border border-brand-border/60 bg-brand-bg/40 p-3">
+            <div className="flex items-start gap-2.5">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
+                <HardDrive size={15} />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-brand-textMain">System Tray &amp; Artifacts</span>
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                </div>
+                <div className="text-[11px] text-brand-textMuted mt-0.5">
+                  Taskbar status icon &amp; popup for running background micro-apps.
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="text-xs font-semibold text-brand-textMain">Voice &amp; Spotlight</div>
-              <div className="text-[11px] text-brand-textMuted">Always-on shortcuts</div>
+            <div className="mt-2.5 pt-2 border-t border-brand-border/40 text-[10px] text-brand-textMuted flex items-center justify-between">
+              <span>Isolation: <strong className="text-emerald-400">Isolated Popup</strong></span>
+              <span className="font-mono">Tray / Window</span>
+            </div>
+          </div>
+
+          {/* 4. Circle to Search */}
+          <div className="flex flex-col justify-between rounded-xl border border-brand-border/60 bg-brand-bg/40 p-3">
+            <div className="flex items-start gap-2.5">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-400">
+                <Search size={15} />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-brand-textMain">Circle to Search</span>
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-sky-400" />
+                </div>
+                <div className="text-[11px] text-brand-textMuted mt-0.5">
+                  Native D3D12 process. Spawned on demand via hotkey.
+                </div>
+              </div>
+            </div>
+            <div className="mt-2.5 pt-2 border-t border-brand-border/40 text-[10px] text-brand-textMuted flex items-center justify-between">
+              <span>Isolation: <strong className="text-emerald-400">Separate Process</strong></span>
+              <span className="font-mono">circle-native.exe</span>
+            </div>
+          </div>
+
+          {/* 5. Voice & Dictation */}
+          <div className="flex flex-col justify-between rounded-xl border border-brand-border/60 bg-brand-bg/40 p-3">
+            <div className="flex items-start gap-2.5">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-purple-500/10 text-purple-400">
+                <Mic size={15} />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-brand-textMain">Voice &amp; Dictation</span>
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-purple-400" />
+                </div>
+                <div className="text-[11px] text-brand-textMuted mt-0.5">
+                  Native D3D12 HUD. Spawned on demand via hotkey.
+                </div>
+              </div>
+            </div>
+            <div className="mt-2.5 pt-2 border-t border-brand-border/40 text-[10px] text-brand-textMuted flex items-center justify-between">
+              <span>Isolation: <strong className="text-emerald-400">Separate Process</strong></span>
+              <span className="font-mono">dictation-native.exe</span>
             </div>
           </div>
         </div>
