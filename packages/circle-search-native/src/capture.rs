@@ -66,3 +66,33 @@ pub fn crop_to_base64_jpeg(
     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
     Ok(format!("data:image/jpeg;base64,{}", b64))
 }
+
+pub fn crop_to_color_image(
+    img: &image::RgbaImage,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+) -> Result<egui::ColorImage, String> {
+    let img_w = img.width();
+    let img_h = img.height();
+
+    let crop_x = x.min(img_w);
+    let crop_y = y.min(img_h);
+    let crop_w = w.min(img_w.saturating_sub(crop_x));
+    let crop_h = h.min(img_h.saturating_sub(crop_y));
+
+    if crop_w == 0 || crop_h == 0 {
+        return Err("Crop dimensions must be greater than zero".to_string());
+    }
+
+    let dynamic_img = DynamicImage::ImageRgba8(img.clone());
+    let cropped = dynamic_img.crop_imm(crop_x, crop_y, crop_w, crop_h).to_rgba8();
+
+    let raw = cropped.into_raw();
+    Ok(egui::ColorImage::from_rgba_unmultiplied(
+        [crop_w as usize, crop_h as usize],
+        &raw,
+    ))
+}
+

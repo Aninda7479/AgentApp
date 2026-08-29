@@ -8,6 +8,12 @@ use app::CircleSearchApp;
 use capture::capture_active_screen;
 
 fn main() -> eframe::Result<()> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to initialize tokio runtime");
+    let _guard = rt.enter();
+
     // 1. Capture screen before showing any window so there is zero latency/flicker
     let captured = match capture_active_screen() {
         Ok(c) => c,

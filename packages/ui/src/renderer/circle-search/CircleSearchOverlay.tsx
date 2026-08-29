@@ -350,14 +350,32 @@ export const CircleSearchOverlay: React.FC = () => {
     >
       {/* Top Floating Spotlight Omnibox Bar */}
       <div className="interactive-ui absolute top-6 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2.5 w-full max-w-2xl px-4 animate-in fade-in slide-in-from-top-4 duration-200">
-        <div className="w-full gemini-card-glass rounded-2xl p-2.5 flex items-center gap-2.5 shadow-[0_24px_60px_rgba(0,0,0,0.7)]">
-          {/* Sparkle Logo */}
-          <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/10 text-white border border-white/15 shadow-sm flex-shrink-0">
-            <Sparkles className="w-4 h-4 text-zinc-100" />
+        <div className="w-full gemini-card-glass rounded-2xl p-3.5 flex flex-col gap-2.5 shadow-[0_24px_60px_rgba(0,0,0,0.7)]">
+          {/* Header Row */}
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center w-6 h-6 rounded-full bg-[#4285f4] text-white font-bold text-xs shadow-sm">
+                G
+              </div>
+              <span className="text-xs font-semibold text-zinc-100">Google app</span>
+              <span className="text-[11px] font-mono text-zinc-400 bg-white/5 px-1.5 py-0.5 rounded border border-white/10">Alt + Space</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded-full bg-red-500/80 border border-white/20" />
+              <button
+                type="button"
+                onClick={handleDismiss}
+                className="p-1 rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                title="Close (Esc)"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
-          {/* Search Omnibox Input */}
-          <form onSubmit={handleOmniboxSubmit} className="flex-1 flex items-center gap-2">
+          {/* Search Omnibox Input Row */}
+          <form onSubmit={handleOmniboxSubmit} className="flex items-center gap-2 bg-white/5 p-2 rounded-xl border border-white/10">
             <input
               ref={omniboxInputRef}
               type="text"
