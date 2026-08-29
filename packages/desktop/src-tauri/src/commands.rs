@@ -303,7 +303,7 @@ pub fn settings_read() -> serde_json::Value {
 #[tauri::command]
 #[allow(non_snake_case)]
 pub fn settings_write(
-
+    app: AppHandle,
     content: Option<serde_json::Value>,
     data: Option<serde_json::Value>,
     settings: Option<serde_json::Value>,
@@ -321,6 +321,7 @@ pub fn settings_write(
     web_app: Option<serde_json::Value>,
     circle_search: Option<serde_json::Value>,
     circleSearch: Option<serde_json::Value>,
+    voice: Option<serde_json::Value>,
     chat_title: Option<serde_json::Value>,
     chatTitle: Option<serde_json::Value>,
 ) -> Result<(), String> {
@@ -345,7 +346,48 @@ pub fn settings_write(
     if let Some(v) = internet_access { patch_map.insert("internetAccess".to_string(), v); }
     if let Some(v) = web_app { patch_map.insert("webApp".to_string(), v); }
     if let Some(v) = circle_search.or(circleSearch) { patch_map.insert("circleSearch".to_string(), v); }
+    if let Some(v) = voice { patch_map.insert("voice".to_string(), v); }
     if let Some(v) = chat_title.or(chatTitle) { patch_map.insert("chatTitle".to_string(), v); }
+
+    if patch_map.contains_key("circleSearch") || patch_map.contains_key("voice") {
+        use tauri_plugin_global_shortcut::GlobalShortcutExt;
+        let full_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+        let _ = app.global_shortcut().unregister_all();
+
+        // 1. Circle to Search shortcut
+        let cs_enabled = patch_map.get("circleSearch")
+            .and_then(|cs| cs.get("enabled"))
+            .and_then(|v| v.as_bool())
+            .or_else(|| full_settings.get("circleSearch").and_then(|cs| cs.get("enabled")).and_then(|v| v.as_bool()))
+            .unwrap_or(true);
+
+        let cs_shortcut = patch_map.get("circleSearch")
+            .and_then(|cs| cs.get("shortcut"))
+            .and_then(|v| v.as_str())
+            .or_else(|| full_settings.get("circleSearch").and_then(|cs| cs.get("shortcut")).and_then(|v| v.as_str()))
+            .unwrap_or("CommandOrControl+Shift+S");
+
+        if cs_enabled {
+            let _ = app.global_shortcut().register(cs_shortcut);
+        }
+
+        // 2. Global Voice Dictation shortcut
+        let voice_enabled = patch_map.get("voice")
+            .and_then(|v| v.get("globalVoiceEnabled").or_else(|| v.get("typingEnabled")).or_else(|| v.get("enabled")))
+            .and_then(|b| b.as_bool())
+            .or_else(|| full_settings.get("voice").and_then(|v| v.get("globalVoiceEnabled").or_else(|| v.get("typingEnabled")).or_else(|| v.get("enabled"))).and_then(|b| b.as_bool()))
+            .unwrap_or(false);
+
+        let voice_shortcut = patch_map.get("voice")
+            .and_then(|v| v.get("typingShortcut").or_else(|| v.get("shortcut")))
+            .and_then(|s| s.as_str())
+            .or_else(|| full_settings.get("voice").and_then(|v| v.get("typingShortcut").or_else(|| v.get("shortcut"))).and_then(|s| s.as_str()))
+            .unwrap_or("CommandOrControl+Alt+V");
+
+        if voice_enabled {
+            let _ = app.global_shortcut().register(voice_shortcut);
+        }
+    }
 
     if !patch_map.is_empty() {
         superagent_core_v2::storage::SettingsStore::new()
@@ -1245,8 +1287,77 @@ pub fn circle_search_capture_area(
 
 
 
+fn spawn_native_circle_search() -> Result<(), String> {
+    // 1. Check directory of current executable
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(parent) = current_exe.parent() {
+            let candidate_names = [
+                "superagent-circle-native.exe",
+                "superagent-circle-native",
+            ];
+            for name in &candidate_names {
+                let candidate = parent.join(name);
+                if candidate.exists() {
+                    let _ = std::process::Command::new(&candidate)
+                        .spawn()
+                        .map_err(|e| format!("Failed to spawn native overlay: {}", e))?;
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    // 2. Check target/debug and target/release relative to current execution context
+    let dev_candidates = [
+        "target/debug/superagent-circle-native.exe",
+        "target/debug/superagent-circle-native",
+        "target/release/superagent-circle-native.exe",
+        "target/release/superagent-circle-native",
+        "../target/debug/superagent-circle-native.exe",
+        "../../target/debug/superagent-circle-native.exe",
+    ];
+    for rel in &dev_candidates {
+        let p = std::path::PathBuf::from(rel);
+        if p.exists() {
+            let _ = std::process::Command::new(&p)
+                .spawn()
+                .map_err(|e| format!("Failed to spawn dev native overlay: {}", e))?;
+            return Ok(());
+        }
+    }
+
+    // 3. Fallback: try PATH
+    std::process::Command::new("superagent-circle-native")
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Native overlay binary not found: {}", e))
+}
+
 #[tauri::command]
 pub fn circle_search_show(app: AppHandle) -> Result<(), String> {
+    let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+    let is_enabled = saved_settings
+        .get("circleSearch")
+        .and_then(|cs| cs.get("enabled"))
+        .and_then(|e| e.as_bool())
+        .unwrap_or(true);
+
+    if !is_enabled {
+        return Ok(());
+    }
+
+    let use_native = saved_settings
+        .get("circleSearch")
+        .and_then(|cs| cs.get("useNativeOverlay"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    if use_native {
+        if let Ok(()) = spawn_native_circle_search() {
+            return Ok(());
+        }
+    }
+
     if let Some(window) = app.get_webview_window("circle_search") {
         if let Ok(Some(monitor)) = window.current_monitor() {
             let size = monitor.size();
@@ -1272,6 +1383,29 @@ pub fn circle_search_hide(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn circle_search_toggle(app: AppHandle) -> Result<(), String> {
+    let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+    let is_enabled = saved_settings
+        .get("circleSearch")
+        .and_then(|cs| cs.get("enabled"))
+        .and_then(|e| e.as_bool())
+        .unwrap_or(true);
+
+    if !is_enabled {
+        return Ok(());
+    }
+
+    let use_native = saved_settings
+        .get("circleSearch")
+        .and_then(|cs| cs.get("useNativeOverlay"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+
+    if use_native {
+        if let Ok(()) = spawn_native_circle_search() {
+            return Ok(());
+        }
+    }
+
     if let Some(window) = app.get_webview_window("circle_search") {
         if window.is_visible().unwrap_or(false) {
             let _ = window.hide();
@@ -1280,5 +1414,61 @@ pub fn circle_search_toggle(app: AppHandle) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+pub fn spawn_native_voice_dictation() -> Result<(), String> {
+    // 1. Try sidecar bundled path
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let candidate = parent.join("superagent-dictation-native.exe");
+            if candidate.exists() {
+                let _ = std::process::Command::new(&candidate)
+                    .spawn()
+                    .map_err(|e| format!("Failed to spawn native dictation: {}", e))?;
+                return Ok(());
+            }
+        }
+    }
+
+    // 2. Try workspace target/debug or target/release
+    let dev_candidates = [
+        "target/debug/superagent-dictation-native.exe",
+        "target/debug/superagent-dictation-native",
+        "target/release/superagent-dictation-native.exe",
+        "target/release/superagent-dictation-native",
+        "../target/debug/superagent-dictation-native.exe",
+        "../../target/debug/superagent-dictation-native.exe",
+    ];
+    for rel in &dev_candidates {
+        let p = std::path::PathBuf::from(rel);
+        if p.exists() {
+            let _ = std::process::Command::new(&p)
+                .spawn()
+                .map_err(|e| format!("Failed to spawn dev native dictation: {}", e))?;
+            return Ok(());
+        }
+    }
+
+    // 3. Fallback: try PATH
+    std::process::Command::new("superagent-dictation-native")
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Native dictation binary not found: {}", e))
+}
+
+#[tauri::command]
+pub fn voice_dictation_toggle(_app: AppHandle) -> Result<(), String> {
+    let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+    let is_enabled = saved_settings
+        .get("voice")
+        .and_then(|v| v.get("globalVoiceEnabled").or_else(|| v.get("typingEnabled")).or_else(|| v.get("enabled")))
+        .and_then(|e| e.as_bool())
+        .unwrap_or(false);
+
+    if !is_enabled {
+        return Ok(());
+    }
+
+    spawn_native_voice_dictation()
 }
 

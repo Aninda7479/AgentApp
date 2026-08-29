@@ -4,6 +4,7 @@ pub mod helpers;
 pub mod integrations;
 pub mod memory;
 pub mod usage;
+pub mod voice;
 
 pub use helpers::*;
 pub use usage::{get_model_pricing, record_usage};
@@ -76,13 +77,19 @@ pub async fn handle_ipc(
     _headers: HeaderMap,
     Json(req): Json<IpcRequest>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
-    let args = req.args;
+    let mut args = req.args;
+    if args.is_empty() && !req.extra.is_empty() {
+        args.push(serde_json::Value::Object(req.extra.into_iter().collect()));
+    }
     let ch = channel.as_str();
 
     if let Some(res) = agent::handle_agent_channel(ch, &state, args.clone()).await {
         return res;
     }
     if let Some(res) = circle_search::handle_circle_search_channel(ch, &state, args.clone()).await {
+        return res;
+    }
+    if let Some(res) = voice::handle_voice_channel(ch, &state, args.clone()).await {
         return res;
     }
     if let Some(res) = memory::handle_memory_channel(ch, &state, args.clone()).await {

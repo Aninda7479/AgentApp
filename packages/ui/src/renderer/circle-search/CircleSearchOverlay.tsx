@@ -348,15 +348,12 @@ export const CircleSearchOverlay: React.FC = () => {
         fontFamily: platform === 'macos' ? '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif' : '"Segoe UI", Roboto, sans-serif',
       }}
     >
-      {/* Google Gemini Glowing Animated Border */}
-      <div className="gemini-screen-border" />
-
       {/* Top Floating Spotlight Omnibox Bar */}
-      <div className="interactive-ui absolute top-6 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 w-full max-w-2xl px-4 animate-in fade-in slide-in-from-top-4 duration-200">
-        <div className="w-full gemini-card-glass rounded-2xl p-2.5 flex items-center gap-2.5 shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
-          {/* Gemini Sparkle Logo */}
-          <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 text-white shadow-md flex-shrink-0 animate-pulse">
-            <Sparkles className="w-4 h-4" />
+      <div className="interactive-ui absolute top-6 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2.5 w-full max-w-2xl px-4 animate-in fade-in slide-in-from-top-4 duration-200">
+        <div className="w-full gemini-card-glass rounded-2xl p-2.5 flex items-center gap-2.5 shadow-[0_24px_60px_rgba(0,0,0,0.7)]">
+          {/* Sparkle Logo */}
+          <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-white/10 text-white border border-white/15 shadow-sm flex-shrink-0">
+            <Sparkles className="w-4 h-4 text-zinc-100" />
           </div>
 
           {/* Search Omnibox Input */}
@@ -531,11 +528,11 @@ export const CircleSearchOverlay: React.FC = () => {
         </>
       )}
 
-      {/* Floating Google Gemini Reply Card */}
+      {/* Floating Insight Reply Card */}
       {(selection || aiResponse || isLoading || errorMsg) && (
         <div
           ref={floatingCardRef}
-          className="interactive-ui absolute z-30 w-[420px] max-w-[92vw] gemini-card-glass rounded-2xl flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-200 border border-zinc-700/60 overflow-hidden"
+          className="interactive-ui absolute z-30 w-[440px] max-w-[92vw] gemini-card-glass rounded-2xl flex flex-col shadow-[0_30px_80px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 duration-200 overflow-hidden"
           style={{
             left: `${cardPos.x}px`,
             top: `${cardPos.y}px`,
@@ -544,17 +541,17 @@ export const CircleSearchOverlay: React.FC = () => {
           {/* Card Header (Draggable Handle) */}
           <div
             onMouseDown={startDragCard}
-            className="flex items-center justify-between px-3.5 py-2.5 bg-zinc-900/60 border-b border-zinc-800/80 cursor-grab active:cursor-grabbing select-none"
+            className="flex items-center justify-between px-4 py-3 bg-white/[0.04] border-b border-white/10 cursor-grab active:cursor-grabbing select-none"
           >
             <div className="flex items-center gap-2">
-              <GripHorizontal className="w-4 h-4 text-zinc-500" />
-              <div className="flex items-center gap-1.5 text-xs font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent uppercase tracking-wider">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-400 inline" />
+              <GripHorizontal className="w-4 h-4 text-zinc-400" />
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-100 uppercase tracking-wider">
+                <Sparkles className="w-3.5 h-3.5 text-zinc-200 inline" />
                 <span>
                   {selection
-                    ? 'Google Gemini Region Crop'
+                    ? 'Visual Intelligence Region Crop'
                     : contextMode === 'fullscreen'
-                    ? 'Google Gemini Screen Lens'
+                    ? 'Visual Intelligence Screen Lens'
                     : 'SuperAgent Spotlight'}
                 </span>
               </div>

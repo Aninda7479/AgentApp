@@ -122,6 +122,8 @@ pub struct AuthPasswordRequest {
 pub struct IpcRequest {
     #[serde(default)]
     pub args: Vec<serde_json::Value>,
+    #[serde(flatten, default)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]

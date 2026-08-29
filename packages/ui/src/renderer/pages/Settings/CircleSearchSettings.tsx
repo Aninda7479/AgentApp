@@ -19,6 +19,7 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
   const platform = getPlatform();
 
   const [enabled, setEnabled] = useState<boolean>(true);
+  const [useNativeOverlay, setUseNativeOverlay] = useState<boolean>(true);
   const [shortcut, setShortcut] = useState<string>('CommandOrControl+Shift+S');
   const [displayShortcut, setDisplayShortcut] = useState<string>('');
 
@@ -40,6 +41,9 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
         if (settings?.circleSearch) {
           if (settings.circleSearch.enabled !== undefined) {
             setEnabled(Boolean(settings.circleSearch.enabled));
+          }
+          if (settings.circleSearch.useNativeOverlay !== undefined) {
+            setUseNativeOverlay(Boolean(settings.circleSearch.useNativeOverlay));
           }
           if (settings.circleSearch.shortcut) {
             initialShortcut = settings.circleSearch.shortcut;
@@ -131,7 +135,8 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
     newEnabled: boolean,
     rawShortcutInput: string,
     newProvider?: string,
-    newModel?: string
+    newModel?: string,
+    newUseNative?: boolean
   ) => {
     if (!ipc) return;
     try {
@@ -139,6 +144,7 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
       const currentSettings = await ipc.invoke('settings-read');
       const providerToSave = newProvider !== undefined ? newProvider : selectedProvider;
       const modelToSave = newModel !== undefined ? newModel : selectedModel;
+      const nativeToSave = newUseNative !== undefined ? newUseNative : useNativeOverlay;
 
       await ipc.invoke('settings-write', {
         ...currentSettings,
@@ -148,6 +154,7 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
         },
         circleSearch: {
           enabled: newEnabled,
+          useNativeOverlay: nativeToSave,
           shortcut: canonicalAccelerator,
           provider: providerToSave,
           model: modelToSave,
@@ -158,6 +165,7 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
       setDisplayShortcut(toDisplayShortcut(canonicalAccelerator));
       setSelectedProvider(providerToSave);
       setSelectedModel(modelToSave);
+      setUseNativeOverlay(nativeToSave);
 
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2400);
@@ -312,6 +320,43 @@ export const CircleSearchSettings: React.FC<CircleSearchSettingsProps> = ({
           <span
             className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
               enabled ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </section>
+
+      {/* 1.1 Native Engine Toggle */}
+      <section className="flex items-center justify-between p-4 rounded-xl border border-brand-border bg-brand-card">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-brand-textMain">
+              Lightweight Native Pop-up (egui / GPU)
+            </h2>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              Instant (&lt;5ms)
+            </span>
+          </div>
+          <p className="text-xs text-brand-textMuted">
+            Uses pure native Rust GPU rendering (~10MB RAM). Turn off to revert to the legacy HTML Webview window.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          role="switch"
+          aria-checked={useNativeOverlay}
+          onClick={() => {
+            const next = !useNativeOverlay;
+            setUseNativeOverlay(next);
+            saveSettings(enabled, shortcut, selectedProvider, selectedModel, next);
+          }}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+            useNativeOverlay ? 'bg-[color:var(--brand-accent)]' : 'bg-brand-bg border border-brand-border'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              useNativeOverlay ? 'translate-x-6' : 'translate-x-1'
             }`}
           />
         </button>

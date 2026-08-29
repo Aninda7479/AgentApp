@@ -37,10 +37,26 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
+                .with_handler(|app, shortcut, event| {
                     use tauri_plugin_global_shortcut::ShortcutState;
                     if event.state() == ShortcutState::Pressed {
-                        let _ = circle_search_toggle(app.clone());
+                        let sc_str = shortcut.to_string();
+                        let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+
+                        let voice_shortcut = saved_settings
+                            .get("voice")
+                            .and_then(|v| v.get("typingShortcut").or_else(|| v.get("shortcut")))
+                            .and_then(|s| s.as_str())
+                            .unwrap_or("CommandOrControl+Alt+V");
+
+                        if sc_str.eq_ignore_ascii_case(voice_shortcut)
+                            || (voice_shortcut.contains("Alt") && sc_str.contains("Alt") && sc_str.contains("KeyV"))
+                            || (voice_shortcut.contains("Super") && sc_str.contains("Super"))
+                        {
+                            let _ = voice_dictation_toggle(app.clone());
+                        } else {
+                            let _ = circle_search_toggle(app.clone());
+                        }
                     }
                 })
                 .build(),
@@ -158,6 +174,22 @@ pub fn run() {
                 let _ = app.global_shortcut().register(shortcut_str);
             }
 
+            let voice_shortcut = saved_settings
+                .get("voice")
+                .and_then(|v| v.get("typingShortcut").or_else(|| v.get("shortcut")))
+                .and_then(|s| s.as_str())
+                .unwrap_or("CommandOrControl+Alt+V");
+
+            let voice_enabled = saved_settings
+                .get("voice")
+                .and_then(|v| v.get("globalVoiceEnabled").or_else(|| v.get("typingEnabled")).or_else(|| v.get("enabled")))
+                .and_then(|e| e.as_bool())
+                .unwrap_or(false);
+
+            if voice_enabled {
+                let _ = app.global_shortcut().register(voice_shortcut);
+            }
+
             Ok(())
 
         })
@@ -217,7 +249,8 @@ pub fn run() {
             circle_search_capture_area,
             circle_search_show,
             circle_search_hide,
-            circle_search_toggle
+            circle_search_toggle,
+            voice_dictation_toggle
         ])
 
         .run(tauri::generate_context!())
