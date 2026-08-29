@@ -1,5 +1,5 @@
-﻿use egui::{
-    vec2, Color32, FontId, Margin, Pos2, Rect, Rounding, Stroke,
+use egui::{
+    vec2, Align2, Color32, FontId, Key, Pos2, Rect, Rounding, Stroke,
 };
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::{Duration, Instant};
@@ -33,13 +33,13 @@ impl DictationApp {
         let state = if recorder.is_some() {
             DictationState::Listening
         } else {
-            DictationState::Error("Could not access microphone. Please check system permissions.".to_string())
+            DictationState::Error("Mic unavailable".to_string())
         };
 
         Self {
             state,
             recorder,
-            level_history: vec![0.05; 16],
+            level_history: vec![0.08; 12],
             start_time: Instant::now(),
             tx,
             rx,
@@ -69,7 +69,7 @@ impl DictationApp {
                 }
             });
         } else {
-            self.state = DictationState::Error("No active audio recording found.".to_string());
+            self.state = DictationState::Error("No audio".to_string());
         }
     }
 
@@ -82,7 +82,6 @@ impl DictationApp {
     fn inject_paste(&mut self, text: &str) {
         self.copy_to_clipboard(text);
 
-        // Simulate Ctrl+V on Windows/Linux or Cmd+V on macOS
         #[cfg(target_os = "windows")]
         {
             use enigo::{Enigo, Key, Keyboard, Settings};
@@ -99,248 +98,214 @@ impl DictationApp {
 
 impl eframe::App for DictationApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        ctx.request_repaint_after(Duration::from_millis(30));
-
-        // 1. Process asynchronous transcription result
+        // 1. Poll backend transcription response
         if let Ok(res) = self.rx.try_recv() {
             match res {
                 Ok(text) => {
                     let trimmed = text.trim().to_string();
-                    if trimmed.is_empty() {
-                        self.state = DictationState::Error("No speech detected in audio recording.".to_string());
-                    } else {
-                        if !self.auto_paste_done {
-                            self.inject_paste(&trimmed);
-                            self.auto_paste_done = true;
-                            self.auto_dismiss_at = Some(Instant::now() + Duration::from_millis(3200));
-                        }
-                        self.state = DictationState::Done(trimmed);
+                    if !trimmed.is_empty() && !self.auto_paste_done {
+                        self.inject_paste(&trimmed);
+                        self.auto_paste_done = true;
                     }
+                    self.state = DictationState::Done(trimmed);
+                    self.auto_dismiss_at = Some(Instant::now() + Duration::from_millis(600));
                 }
                 Err(err) => {
                     self.state = DictationState::Error(err);
+                    self.auto_dismiss_at = Some(Instant::now() + Duration::from_millis(1500));
                 }
             }
         }
 
         // 2. Auto-dismiss timer
-        if let Some(target) = self.auto_dismiss_at {
-            if Instant::now() >= target {
+        if let Some(dismiss_time) = self.auto_dismiss_at {
+            if Instant::now() >= dismiss_time {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
         }
 
-        // 3. Global hotkeys within overlay
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+        // 3. Key handling: ESC cancels, ENTER submits
+        if ctx.input(|i| i.key_pressed(Key::Escape)) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
 
-        if self.state == DictationState::Listening {
-            if ctx.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Space)) {
+        if ctx.input(|i| i.key_pressed(Key::Enter)) && self.state == DictationState::Listening {
+            self.stop_and_transcribe();
+        }
+
+        // 4. Update audio levels
+        if let Some(ref rec) = self.recorder {
+            let current_level = rec.get_current_level();
+            self.level_history.remove(0);
+            self.level_history.push(current_level);
+        }
+
+        ctx.request_repaint();
+
+        let screen_rect = ctx.screen_rect();
+        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("dictation_pill")));
+
+        // 5. Draw Centered Floating Pill (Matte Charcoal Black)
+        let pill_w = 186.0f32;
+        let pill_h = 42.0f32;
+        let pill_rect = Rect::from_center_size(screen_rect.center(), vec2(pill_w, pill_h));
+
+        painter.rect_filled(
+            pill_rect,
+            Rounding::same(21.0),
+            Color32::from_rgb(28, 28, 30),
+        );
+        painter.rect_stroke(
+            pill_rect,
+            Rounding::same(21.0),
+            Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 20)),
+        );
+
+        // 6. Left Cancel Button (Vector ✕ in Gray Circle)
+        let left_btn_center = Pos2::new(pill_rect.min.x + 21.0, pill_rect.center().y);
+        let left_btn_radius = 15.0;
+        let left_btn_rect = Rect::from_center_size(left_btn_center, vec2(30.0, 30.0));
+
+        let left_hovered = ctx.input(|i| i.pointer.hover_pos().map_or(false, |p| left_btn_rect.contains(p)));
+        let left_bg = if left_hovered {
+            Color32::from_rgb(85, 85, 90)
+        } else {
+            Color32::from_rgb(68, 68, 72)
+        };
+
+        painter.circle_filled(left_btn_center, left_btn_radius, left_bg);
+
+        let x_size = 4.0;
+        let x_color = Color32::from_rgb(240, 240, 245);
+        let x_stroke = Stroke::new(1.8, x_color);
+        painter.line_segment(
+            [
+                Pos2::new(left_btn_center.x - x_size, left_btn_center.y - x_size),
+                Pos2::new(left_btn_center.x + x_size, left_btn_center.y + x_size),
+            ],
+            x_stroke,
+        );
+        painter.line_segment(
+            [
+                Pos2::new(left_btn_center.x - x_size, left_btn_center.y + x_size),
+                Pos2::new(left_btn_center.x + x_size, left_btn_center.y - x_size),
+            ],
+            x_stroke,
+        );
+
+        if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary) && left_hovered) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+
+        // 7. Right Done / Submit Button (Vector ✓ in Pure White Circle)
+        let right_btn_center = Pos2::new(pill_rect.max.x - 21.0, pill_rect.center().y);
+        let right_btn_radius = 15.0;
+        let right_btn_rect = Rect::from_center_size(right_btn_center, vec2(30.0, 30.0));
+
+        let right_hovered = ctx.input(|i| i.pointer.hover_pos().map_or(false, |p| right_btn_rect.contains(p)));
+        let right_bg = if right_hovered {
+            Color32::from_rgb(235, 235, 240)
+        } else {
+            Color32::WHITE
+        };
+
+        painter.circle_filled(right_btn_center, right_btn_radius, right_bg);
+
+        let check_color = Color32::from_rgb(24, 24, 26);
+        let check_stroke = Stroke::new(2.2, check_color);
+        let p1 = Pos2::new(right_btn_center.x - 4.5, right_btn_center.y + 0.5);
+        let p2 = Pos2::new(right_btn_center.x - 1.2, right_btn_center.y + 4.2);
+        let p3 = Pos2::new(right_btn_center.x + 5.0, right_btn_center.y - 3.5);
+        painter.line_segment([p1, p2], check_stroke);
+        painter.line_segment([p2, p3], check_stroke);
+
+        if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary) && right_hovered) {
+            if self.state == DictationState::Listening {
                 self.stop_and_transcribe();
             }
         }
 
-        // 4. Sample live audio level
-        if let Some(ref rec) = self.recorder {
-            let lvl = rec.get_current_level();
-            self.level_history.remove(0);
-            self.level_history.push(lvl);
-        }
+        // 8. Center Audio Equalizer Soundwave Bars
+        let center_x = pill_rect.center().x;
+        let center_y = pill_rect.center().y;
 
-        // 5. Render Floating Frosted Glass Voice Pill
-        let card_w = 420.0f32;
-        let screen_rect = ctx.screen_rect();
-        let active_pos = Pos2::new(
-            (screen_rect.center().x - (card_w / 2.0)).max(20.0),
-            (screen_rect.max.y - 180.0).max(40.0),
-        );
+        match &self.state {
+            DictationState::Listening => {
+                let num_bars = 12;
+                let bar_spacing = 6.0f32;
+                let total_wave_w = (num_bars as f32 - 1.0) * bar_spacing;
+                let start_x = center_x - (total_wave_w / 2.0);
 
-        egui::Window::new("SuperAgent Voice Dictation HUD")
-            .id(egui::Id::new("superagent_dictation_hud"))
-            .title_bar(false)
-            .resizable(false)
-            .fixed_pos(active_pos)
-            .fixed_size(vec2(card_w, 0.0))
-            .frame(
-                egui::Frame::none()
-                    .fill(Color32::from_rgba_unmultiplied(13, 16, 23, 230))
-                    .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 38)))
-                    .rounding(Rounding::same(20.0))
-                    .inner_margin(Margin::symmetric(18.0, 14.0))
-                    .shadow(egui::epaint::Shadow {
-                        offset: vec2(0.0, 16.0),
-                        blur: 32.0,
-                        spread: 0.0,
-                        color: Color32::from_black_alpha(200),
-                    }),
-            )
-            .show(ctx, |ui| {
-                ui.set_width(card_w - 36.0);
+                let elapsed = self.start_time.elapsed().as_secs_f32();
 
-                match &self.state {
-                    DictationState::Listening => {
-                        let elapsed = self.start_time.elapsed().as_secs();
-                        let mins = elapsed / 60;
-                        let secs = elapsed % 60;
+                for idx in 0..num_bars {
+                    let bx = start_x + (idx as f32 * bar_spacing);
 
-                        ui.horizontal(|ui| {
-                            // Pulsating red/purple recording dot
-                            let (rect, _) = ui.allocate_exact_size(vec2(14.0, 14.0), egui::Sense::hover());
-                            let pulse = (self.start_time.elapsed().as_millis() as f32 / 300.0).sin().abs();
-                            ui.painter().circle_filled(
-                                rect.center(),
-                                5.0 + pulse * 2.0,
-                                Color32::from_rgba_unmultiplied(239, 68, 68, (180.0 + pulse * 75.0) as u8),
-                            );
+                    let dist_from_mid = ((idx as f32 - (num_bars as f32 / 2.0)).abs() / (num_bars as f32 / 2.0)).clamp(0.0, 1.0);
+                    let shape_factor = 1.0 - (dist_from_mid * 0.45);
 
-                            ui.label(
-                                egui::RichText::new("✦ SuperAgent Voice")
-                                    .font(FontId::proportional(13.5))
-                                    .strong()
-                                    .color(Color32::from_rgb(240, 245, 255)),
-                            );
+                    let hist_idx = (idx % self.level_history.len()) as usize;
+                    let raw_level = self.level_history[hist_idx];
 
-                            ui.label(
-                                egui::RichText::new(format!("{:02}:{:02}", mins, secs))
-                                    .font(FontId::monospace(12.0))
-                                    .color(Color32::from_rgb(150, 165, 185)),
-                            );
+                    let idle_wave = (elapsed * 5.0 + idx as f32 * 0.7).sin() * 0.2 + 0.3;
+                    let combined_level = (raw_level * 3.5 + idle_wave * 0.2).clamp(0.05, 1.0);
 
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let close_btn = egui::Button::new(egui::RichText::new("✕").size(11.0).color(Color32::from_rgb(180, 190, 205)))
-                                    .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 12))
-                                    .rounding(Rounding::same(6.0));
-                                if ui.add(close_btn).clicked() {
-                                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                                }
-                            });
-                        });
+                    let min_h = 3.5f32;
+                    let max_h = 24.0f32;
+                    let bar_h = (min_h + (max_h - min_h) * combined_level * shape_factor).clamp(min_h, max_h);
 
-                        ui.add_space(8.0);
+                    let bar_top = center_y - (bar_h / 2.0);
+                    let bar_bot = center_y + (bar_h / 2.0);
 
-                        // Animated Dynamic Sound Waveform Bars
-                        ui.horizontal(|ui| {
-                            let available_w = ui.available_width() - 110.0;
-                            let bar_count = 20;
-                            let bar_w = (available_w / (bar_count as f32)).max(4.0) - 2.0;
-
-                            for i in 0..bar_count {
-                                let hist_idx = (i * self.level_history.len()) / bar_count;
-                                let lvl = self.level_history.get(hist_idx).copied().unwrap_or(0.05);
-                                let jitter = ((i as f32 * 1.7 + self.start_time.elapsed().as_millis() as f32 / 120.0).sin().abs()) * 0.15;
-                                let h = (8.0 + (lvl + jitter) * 32.0).clamp(4.0, 28.0);
-
-                                let (bar_rect, _) = ui.allocate_exact_size(vec2(bar_w, 28.0), egui::Sense::hover());
-                                let top = bar_rect.center().y - (h / 2.0);
-                                let draw_rect = Rect::from_min_size(Pos2::new(bar_rect.min.x, top), vec2(bar_w, h));
-
-                                let color = if lvl > 0.3 {
-                                    Color32::from_rgb(96, 165, 250) // Bright blue
-                                } else {
-                                    Color32::from_rgb(167, 139, 250) // Soft lavender purple
-                                };
-
-                                ui.painter().rect_filled(draw_rect, Rounding::same(2.0), color);
-                            }
-
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let stop_btn = egui::Button::new(
-                                    egui::RichText::new("Done ↵")
-                                        .size(12.0)
-                                        .strong()
-                                        .color(Color32::WHITE),
-                                )
-                                .fill(Color32::from_rgb(79, 70, 229))
-                                .rounding(Rounding::same(10.0))
-                                .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 50)));
-
-                                if ui.add(stop_btn).clicked() {
-                                    self.stop_and_transcribe();
-                                }
-                            });
-                        });
-                    }
-
-                    DictationState::Transcribing => {
-                        ui.horizontal(|ui| {
-                            ui.spinner();
-                            ui.add_space(6.0);
-                            ui.label(
-                                egui::RichText::new("Transcribing with AI Whisper...")
-                                    .font(FontId::proportional(13.0))
-                                    .color(Color32::from_rgb(220, 230, 245)),
-                            );
-                        });
-                    }
-
-                    DictationState::Done(text) => {
-                        ui.horizontal(|ui| {
-                            ui.label(
-                                egui::RichText::new("✓ Transcribed & Typed")
-                                    .font(FontId::proportional(12.5))
-                                    .strong()
-                                    .color(Color32::from_rgb(52, 211, 153)),
-                            );
-
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let close_btn = egui::Button::new(egui::RichText::new("✕").size(11.0).color(Color32::from_rgb(180, 190, 205)))
-                                    .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 12))
-                                    .rounding(Rounding::same(6.0));
-                                if ui.add(close_btn).clicked() {
-                                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                                }
-
-                                let copy_btn = egui::Button::new(egui::RichText::new("📋 Copy").size(11.0).color(Color32::from_rgb(220, 230, 245)))
-                                    .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 16))
-                                    .rounding(Rounding::same(6.0));
-                                if ui.add(copy_btn).clicked() {
-                                    self.copy_to_clipboard(text);
-                                }
-                            });
-                        });
-
-                        ui.add_space(6.0);
-                        egui::Frame::none()
-                            .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 10))
-                            .rounding(Rounding::same(8.0))
-                            .inner_margin(Margin::symmetric(10.0, 8.0))
-                            .show(ui, |ui| {
-                                ui.label(
-                                    egui::RichText::new(text)
-                                        .font(FontId::proportional(13.0))
-                                        .color(Color32::from_rgb(245, 247, 250)),
-                                );
-                            });
-                    }
-
-                    DictationState::Error(err) => {
-                        ui.horizontal(|ui| {
-                            ui.label(
-                                egui::RichText::new("⚠ Notice")
-                                    .font(FontId::proportional(12.5))
-                                    .strong()
-                                    .color(Color32::from_rgb(251, 146, 60)),
-                            );
-
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                let close_btn = egui::Button::new(egui::RichText::new("✕").size(11.0).color(Color32::from_rgb(180, 190, 205)))
-                                    .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 12))
-                                    .rounding(Rounding::same(6.0));
-                                if ui.add(close_btn).clicked() {
-                                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                                }
-                            });
-                        });
-
-                        ui.add_space(4.0);
-                        ui.label(
-                            egui::RichText::new(err)
-                                .font(FontId::proportional(12.0))
-                                .color(Color32::from_rgb(254, 202, 202)),
-                        );
-                    }
+                    painter.line_segment(
+                        [Pos2::new(bx, bar_top), Pos2::new(bx, bar_bot)],
+                        Stroke::new(2.4, Color32::from_rgb(245, 245, 250)),
+                    );
                 }
-            });
+            }
+            DictationState::Transcribing => {
+                let elapsed = self.start_time.elapsed().as_secs_f32();
+                let num_dots = 3;
+                let dot_spacing = 10.0f32;
+                let start_x = center_x - (((num_dots - 1) as f32 * dot_spacing) / 2.0);
+
+                for idx in 0..num_dots {
+                    let dx = start_x + (idx as f32 * dot_spacing);
+                    let phase = elapsed * 6.0 - (idx as f32 * 1.2);
+                    let dy = center_y + phase.sin() * 3.0;
+
+                    painter.circle_filled(
+                        Pos2::new(dx, dy),
+                        2.5,
+                        Color32::from_rgb(240, 240, 250),
+                    );
+                }
+            }
+            DictationState::Done(_) => {
+                painter.text(
+                    Pos2::new(center_x, center_y),
+                    Align2::CENTER_CENTER,
+                    "Pasted",
+                    FontId::proportional(12.0),
+                    Color32::from_rgb(140, 235, 170),
+                );
+            }
+            DictationState::Error(err) => {
+                let display_err = if err.to_lowercase().contains("no voice stt") || err.to_lowercase().contains("key") {
+                    "No STT Key"
+                } else if err.to_lowercase().contains("reach") || err.to_lowercase().contains("engine") {
+                    "Engine Offline"
+                } else {
+                    "STT Error"
+                };
+                painter.text(
+                    Pos2::new(center_x, center_y),
+                    Align2::CENTER_CENTER,
+                    display_err,
+                    FontId::proportional(11.5),
+                    Color32::from_rgb(255, 130, 130),
+                );
+            }
+        }
     }
 }

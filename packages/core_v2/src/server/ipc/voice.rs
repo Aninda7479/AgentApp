@@ -1,4 +1,4 @@
-﻿use axum::{http::StatusCode, Json};
+use axum::{http::StatusCode, Json};
 use base64::Engine;
 use reqwest::multipart::{Form, Part};
 use tracing::{error, info, warn};
@@ -48,24 +48,30 @@ pub async fn handle_voice_channel(
             let prompt = arg.get("prompt").and_then(|v| v.as_str()).map(|s| s.to_string());
 
             let raw_settings = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
-            let providers_list = raw_settings.get("providers").and_then(|p| p.as_array());
-
-            // 2. Discover available STT keys (Groq > OpenAI > Gemini)
+            
+            // 2. Discover available STT keys (Groq > OpenAI > Gemini) across all schema variations
             let mut groq_key: Option<String> = None;
             let mut openai_key: Option<String> = None;
             let mut gemini_key: Option<String> = None;
 
-            if let Some(list) = providers_list {
+            // Check providers array
+            if let Some(list) = raw_settings.get("providers").and_then(|p| p.as_array()) {
                 for p in list {
-                    let id = p.get("id").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
-                    let key = p.get("apiKey").and_then(|v| v.as_str()).map(|s| s.trim().to_string());
+                    let id = p.get("id").or_else(|| p.get("provider")).and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+                    let key = p.get("apiKey")
+                        .or_else(|| p.get("key"))
+                        .or_else(|| p.get("token"))
+                        .or_else(|| p.get("api_key"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.trim().to_string());
+
                     if let Some(k) = key {
                         if !k.is_empty() {
-                            if id == "groq" {
+                            if id == "groq" && groq_key.is_none() {
                                 groq_key = Some(k);
-                            } else if id == "openai" {
+                            } else if (id == "openai" || id == "open_ai") && openai_key.is_none() {
                                 openai_key = Some(k);
-                            } else if id == "gemini" || id == "google" {
+                            } else if (id == "gemini" || id == "google" || id.contains("gemini")) && gemini_key.is_none() {
                                 gemini_key = Some(k);
                             }
                         }
@@ -73,15 +79,46 @@ pub async fn handle_voice_channel(
                 }
             }
 
+            // Check providers map/object
+            if let Some(map) = raw_settings.get("providers").and_then(|p| p.as_object()) {
+                for (id_raw, val) in map {
+                    let id = id_raw.to_lowercase();
+                    let key = val.get("apiKey")
+                        .or_else(|| val.get("key"))
+                        .or_else(|| val.get("token"))
+                        .or_else(|| val.get("api_key"))
+                        .or_else(|| if val.is_string() { Some(val) } else { None })
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.trim().to_string());
+
+                    if let Some(k) = key {
+                        if !k.is_empty() {
+                            if id == "groq" && groq_key.is_none() {
+                                groq_key = Some(k);
+                            } else if (id == "openai" || id == "open_ai") && openai_key.is_none() {
+                                openai_key = Some(k);
+                            } else if (id == "gemini" || id == "google" || id.contains("gemini")) && gemini_key.is_none() {
+                                gemini_key = Some(k);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check settings_store get_api_key and environment variables
             if groq_key.is_none() {
-                groq_key = state.settings_store.get_api_key("groq").ok().flatten().or_else(|| std::env::var("GROQ_API_KEY").ok());
+                groq_key = state.settings_store.get_api_key("groq").ok().flatten()
+                    .or_else(|| std::env::var("GROQ_API_KEY").ok());
             }
             if openai_key.is_none() {
-                openai_key = state.settings_store.get_api_key("openai").ok().flatten().or_else(|| std::env::var("OPENAI_API_KEY").ok());
+                openai_key = state.settings_store.get_api_key("openai").ok().flatten()
+                    .or_else(|| state.settings_store.get_api_key("open_ai").ok().flatten())
+                    .or_else(|| std::env::var("OPENAI_API_KEY").ok());
             }
             if gemini_key.is_none() {
                 gemini_key = state.settings_store.get_api_key("gemini").ok().flatten()
                     .or_else(|| state.settings_store.get_api_key("google").ok().flatten())
+                    .or_else(|| state.settings_store.get_api_key("google-gemini").ok().flatten())
                     .or_else(|| std::env::var("GEMINI_API_KEY").or_else(|_| std::env::var("GOOGLE_API_KEY")).ok());
             }
 
@@ -187,7 +224,7 @@ pub async fn handle_voice_channel(
                 }
             }
 
-            // 3C. Try Gemini Multimodal STT
+            // 3C. Try Gemini Multimodal STT (gemini-2.0-flash / gemini-1.5-flash)
             if transcribed_text.is_none() {
                 if let Some(ref key) = gemini_key {
                     let audio_b64 = base64::engine::general_purpose::STANDARD.encode(&audio_bytes);
@@ -195,7 +232,7 @@ pub async fn handle_voice_channel(
                         "contents": [{
                             "parts": [
                                 {
-                                    "text": "Transcribe this spoken audio accurately. Output strictly the verbatim speech text with proper capitalization and punctuation. Do not add explanations or formatting."
+                                    "text": "Transcribe this spoken audio recording accurately. Output strictly the verbatim speech transcript with correct punctuation and capitalization. Do not output anything else."
                                 },
                                 {
                                     "inlineData": {
@@ -207,36 +244,44 @@ pub async fn handle_voice_channel(
                         }]
                     });
 
-                    let url = format!(
-                        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={}",
-                        key
-                    );
+                    // Try gemini-2.0-flash first, fallback to gemini-1.5-flash
+                    let gemini_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
+                    for model in gemini_models {
+                        let url = format!(
+                            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+                            model, key
+                        );
 
-                    match http_client.post(&url).json(&body).send().await {
-                        Ok(resp) if resp.status().is_success() => {
-                            if let Ok(res_json) = resp.json::<serde_json::Value>().await {
-                                if let Some(text) = res_json
-                                    .get("candidates")
-                                    .and_then(|c| c.get(0))
-                                    .and_then(|c| c.get("content"))
-                                    .and_then(|c| c.get("parts"))
-                                    .and_then(|p| p.get(0))
-                                    .and_then(|p| p.get("text"))
-                                    .and_then(|v| v.as_str())
-                                {
-                                    transcribed_text = Some(text.trim().to_string());
+                        match http_client.post(&url).json(&body).send().await {
+                            Ok(resp) if resp.status().is_success() => {
+                                if let Ok(res_json) = resp.json::<serde_json::Value>().await {
+                                    if let Some(text) = res_json
+                                        .get("candidates")
+                                        .and_then(|c| c.get(0))
+                                        .and_then(|c| c.get("content"))
+                                        .and_then(|c| c.get("parts"))
+                                        .and_then(|p| p.get(0))
+                                        .and_then(|p| p.get("text"))
+                                        .and_then(|v| v.as_str())
+                                    {
+                                        let trimmed = text.trim().to_string();
+                                        if !trimmed.is_empty() {
+                                            transcribed_text = Some(trimmed);
+                                            break;
+                                        }
+                                    }
                                 }
                             }
-                        }
-                        Ok(resp) => {
-                            let status = resp.status();
-                            let body = resp.text().await.unwrap_or_default();
-                            warn!("Gemini STT error {}: {}", status, body);
-                            last_error = Some(format!("Gemini STT error {}: {}", status, body));
-                        }
-                        Err(e) => {
-                            warn!("Gemini STT request failed: {}", e);
-                            last_error = Some(format!("Gemini connection error: {}", e));
+                            Ok(resp) => {
+                                let status = resp.status();
+                                let body_txt = resp.text().await.unwrap_or_default();
+                                warn!("Gemini STT ({}) error {}: {}", model, status, body_txt);
+                                last_error = Some(format!("Gemini STT error {}: {}", status, body_txt));
+                            }
+                            Err(e) => {
+                                warn!("Gemini STT ({}) request failed: {}", model, e);
+                                last_error = Some(format!("Gemini connection error: {}", e));
+                            }
                         }
                     }
                 }

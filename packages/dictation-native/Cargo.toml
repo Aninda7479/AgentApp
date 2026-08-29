@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "superagent-dictation-native"
 version = "0.29.0"
 edition = "2021"
@@ -21,3 +21,4 @@ serde_json = { workspace = true }
 base64 = "0.22"
 arboard = "3.4"
 enigo = { version = "0.2", default-features = false }
+screenshots = "0.8"

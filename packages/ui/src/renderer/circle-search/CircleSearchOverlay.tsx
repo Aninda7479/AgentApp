@@ -16,6 +16,7 @@ import {
   GripHorizontal,
   Monitor,
   MessageSquare,
+  Camera,
 } from 'lucide-react';
 import { getIpc } from '../lib/ipc';
 import { getPlatform, getKeySymbols, formatShortcut } from '../lib/platform';
@@ -379,31 +380,61 @@ export const CircleSearchOverlay: React.FC = () => {
             <input
               ref={omniboxInputRef}
               type="text"
-              placeholder={
-                selection
-                  ? `Ask anything about circled region (${selection.w}×${selection.h})...`
-                  : contextMode === 'fullscreen'
-                  ? "Ask about your live screen or type any question..."
-                  : "Ask SuperAgent anything (Spotlight text mode)..."
-              }
+              placeholder="Ask anything"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="w-full bg-transparent border-none outline-none text-sm text-zinc-100 placeholder-zinc-400/60 font-medium"
               autoFocus
             />
 
-            {/* Context Mode Indicators & Selectors */}
+            {/* Selection actions */}
             {selection ? (
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-500/20 border border-indigo-500/40 text-[11px] font-semibold text-indigo-300 flex-shrink-0">
-                <Layers className="w-3 h-3" />
-                <span>Region {selection.w}×{selection.h}</span>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
                 <button
                   type="button"
-                  onClick={handleResetSelection}
-                  className="ml-1 hover:text-white transition-colors cursor-pointer"
-                  title="Clear region (switch to full screen / text)"
+                  onClick={async () => {
+                    try {
+                      if (!selection) return;
+                      let b64: string | undefined;
+                      if (ipc?.invoke) {
+                        b64 = await ipc.invoke('circle-search-capture-area', {
+                          x: Math.round(selection.x),
+                          y: Math.round(selection.y),
+                          width: Math.round(selection.w),
+                          height: Math.round(selection.h),
+                        });
+                      }
+                      if (b64) {
+                        const img = new Image();
+                        img.onload = () => {
+                          const canvas = document.createElement('canvas');
+                          canvas.width = img.naturalWidth || img.width;
+                          canvas.height = img.naturalHeight || img.height;
+                          const ctx = canvas.getContext('2d');
+                          if (ctx) {
+                            ctx.drawImage(img, 0, 0);
+                            canvas.toBlob(async (pngBlob) => {
+                              if (pngBlob && navigator.clipboard && (window as any).ClipboardItem) {
+                                await navigator.clipboard.write([
+                                  new ClipboardItem({ 'image/png': pngBlob }),
+                                ]);
+                                setCopied(true);
+                                setTimeout(() => setCopied(false), 2000);
+                              }
+                            }, 'image/png');
+                          }
+                        };
+                        img.src = b64;
+                      }
+                    } catch (e) {
+                      console.error('Failed to copy image', e);
+                    }
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 text-[11px] font-medium text-zinc-200 hover:text-white transition-colors cursor-pointer"
+                  title="Copy circled area as image to clipboard"
                 >
-                  <X className="w-3 h-3" />
+                  <Camera className="w-3 h-3 text-sky-400" />
+                  <span>{copied ? '✓ Copied' : 'Copy Image'}</span>
                 </button>
               </div>
             ) : (
@@ -416,7 +447,7 @@ export const CircleSearchOverlay: React.FC = () => {
                       ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
                       : 'bg-zinc-800/80 border-zinc-700 text-zinc-400 hover:text-zinc-200'
                   }`}
-                  title={contextMode === 'fullscreen' ? 'Live screen context attached (Click for Text-only)' : 'Text-only ask (Click to attach screen)'}
+                  title={contextMode === 'fullscreen' ? 'Live screen context attached' : 'Text-only ask'}
                 >
                   {contextMode === 'fullscreen' ? <Monitor className="w-3 h-3" /> : <MessageSquare className="w-3 h-3" />}
                   <span>{contextMode === 'fullscreen' ? 'Live Screen' : 'Text Only'}</span>

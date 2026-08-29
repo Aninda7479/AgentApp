@@ -1,4 +1,4 @@
-﻿use base64::Engine;
+use base64::Engine;
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -85,9 +85,13 @@ pub async fn query_voice_transcribe(wav_bytes: &[u8]) -> Result<String, String> 
         .map_err(|e| format!("Failed to reach SuperAgent core engine (port 1469): {}. Is the app running?", e))?;
 
     if !resp.status().is_success() {
-        let status = resp.status();
         let err_text = resp.text().await.unwrap_or_default();
-        return Err(format!("Server returned error {}: {}", status, err_text));
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&err_text) {
+            if let Some(msg) = val.get("error").and_then(|v| v.as_str()) {
+                return Err(msg.to_string());
+            }
+        }
+        return Err(err_text);
     }
 
     let parsed: serde_json::Value = resp

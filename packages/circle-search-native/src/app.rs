@@ -35,6 +35,7 @@ pub struct CircleSearchApp {
     ai_response: Option<String>,
     error_msg: Option<String>,
     copied_toast_timer: f32,
+    copied_toast_msg: String,
 
     card_pos: Option<Pos2>,
     is_dragging_card: bool,
@@ -76,6 +77,7 @@ impl CircleSearchApp {
             ai_response: None,
             error_msg: None,
             copied_toast_timer: 0.0,
+            copied_toast_msg: String::new(),
             card_pos: None,
             is_dragging_card: false,
             response_rx: rx,
@@ -83,12 +85,21 @@ impl CircleSearchApp {
         }
     }
 
+    fn get_pixel_crop_coords(&self, ctx: &egui::Context, rect: Rect) -> (u32, u32, u32, u32) {
+        let screen_rect = ctx.screen_rect();
+        let scale_x = self.screen_info.image.width() as f32 / screen_rect.width().max(1.0);
+        let scale_y = self.screen_info.image.height() as f32 / screen_rect.height().max(1.0);
+
+        let px = (rect.min.x * scale_x).round().max(0.0) as u32;
+        let py = (rect.min.y * scale_y).round().max(0.0) as u32;
+        let pw = (rect.width() * scale_x).round().max(1.0) as u32;
+        let ph = (rect.height() * scale_y).round().max(1.0) as u32;
+
+        (px, py, pw, ph)
+    }
+
     fn update_crop_texture(&mut self, ctx: &egui::Context, rect: Rect) {
-        let scale = self.screen_info.scale_factor as f32;
-        let px = (rect.min.x * scale).max(0.0) as u32;
-        let py = (rect.min.y * scale).max(0.0) as u32;
-        let pw = (rect.width() * scale).max(1.0) as u32;
-        let ph = (rect.height() * scale).max(1.0) as u32;
+        let (px, py, pw, ph) = self.get_pixel_crop_coords(ctx, rect);
 
         if let Ok(color_img) = crop_to_color_image(&self.screen_info.image, px, py, pw, ph) {
             self.crop_texture = Some(ctx.load_texture(
@@ -122,18 +133,13 @@ impl CircleSearchApp {
             prompt
         };
 
-        let scale = self.screen_info.scale_factor as f32;
         let img_w = self.screen_info.image.width();
         let img_h = self.screen_info.image.height();
 
         let img_base64 = if self.is_fullscreen_mode || self.selection_rect.is_none() {
             crop_to_base64_jpeg(&self.screen_info.image, 0, 0, img_w, img_h).ok()
         } else if let Some(rect) = self.selection_rect {
-            let px = (rect.min.x * scale).max(0.0) as u32;
-            let py = (rect.min.y * scale).max(0.0) as u32;
-            let pw = (rect.width() * scale).max(1.0) as u32;
-            let ph = (rect.height() * scale).max(1.0) as u32;
-
+            let (px, py, pw, ph) = self.get_pixel_crop_coords(ctx, rect);
             self.update_crop_texture(ctx, rect);
             crop_to_base64_jpeg(&self.screen_info.image, px, py, pw, ph).ok()
         } else {
@@ -146,10 +152,25 @@ impl CircleSearchApp {
         });
     }
 
-    fn copy_to_clipboard(&mut self, text: &str) {
+    fn copy_text_to_clipboard(&mut self, text: &str) {
         if let Ok(mut clipboard) = arboard::Clipboard::new() {
             let _ = clipboard.set_text(text.to_string());
-            self.copied_toast_timer = 2.5;
+            self.copied_toast_timer = 2.2;
+            self.copied_toast_msg = "✓ Text Copied".to_string();
+        }
+    }
+
+    fn copy_image_to_clipboard(&mut self, ctx: &egui::Context) {
+        if let Some(rect) = self.selection_rect {
+            let (px, py, pw, ph) = self.get_pixel_crop_coords(ctx, rect);
+
+            if let Ok(img_data) = crate::capture::crop_to_image_data(&self.screen_info.image, px, py, pw, ph) {
+                if let Ok(mut cb) = arboard::Clipboard::new() {
+                    let _ = cb.set_image(img_data);
+                    self.copied_toast_timer = 2.2;
+                    self.copied_toast_msg = "✓ Image Copied".to_string();
+                }
+            }
         }
     }
 }
@@ -270,8 +291,62 @@ impl eframe::App for CircleSearchApp {
                 FontId::proportional(12.0),
                 Color32::WHITE,
             );
+
+            // Quick Copy Image Floating Button Pill above selection
+            let copy_btn_rect = Rect::from_min_max(
+                Pos2::new(rect.min.x, (rect.min.y - 28.0).max(8.0)),
+                Pos2::new(rect.min.x + 105.0, (rect.min.y - 4.0).max(32.0)),
+            );
+            let copy_hovered = ctx.input(|i| i.pointer.hover_pos().map_or(false, |p| copy_btn_rect.contains(p)));
+
+            painter.rect_filled(
+                copy_btn_rect,
+                Rounding::same(12.0),
+                if copy_hovered { Color32::from_rgba_unmultiplied(30, 35, 48, 245) } else { Color32::from_rgba_unmultiplied(20, 24, 34, 225) },
+            );
+            painter.rect_stroke(
+                copy_btn_rect,
+                Rounding::same(12.0),
+                Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 40)),
+            );
+            painter.text(
+                copy_btn_rect.center(),
+                Align2::CENTER_CENTER,
+                "📷 Copy Image",
+                FontId::proportional(11.0),
+                if copy_hovered { Color32::WHITE } else { Color32::from_rgb(210, 225, 245) },
+            );
+
+            if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary) && copy_hovered) {
+                self.copy_image_to_clipboard(ctx);
+            }
         } else if self.is_lens_active {
             painter.rect_filled(screen_rect, Rounding::ZERO, Color32::from_rgba_unmultiplied(0, 0, 0, 50));
+        }
+
+        // 4. Floating Toast Notification (When Copied)
+        if self.copied_toast_timer > 0.0 && !self.copied_toast_msg.is_empty() {
+            let toast_w = 210.0f32;
+            let toast_h = 34.0f32;
+            let toast_rect = Rect::from_center_size(Pos2::new(screen_rect.center().x, 42.0), vec2(toast_w, toast_h));
+
+            painter.rect_filled(
+                toast_rect,
+                Rounding::same(17.0),
+                Color32::from_rgb(16, 24, 20),
+            );
+            painter.rect_stroke(
+                toast_rect,
+                Rounding::same(17.0),
+                Stroke::new(1.0, Color32::from_rgb(52, 211, 153)),
+            );
+            painter.text(
+                toast_rect.center(),
+                Align2::CENTER_CENTER,
+                &self.copied_toast_msg,
+                FontId::proportional(12.0),
+                Color32::from_rgb(167, 243, 208),
+            );
         }
 
         // 4. Floating Omnibox / Intelligence Panel (Hero Redesign)
@@ -451,18 +526,26 @@ impl eframe::App for CircleSearchApp {
                             }
 
                             if self.ai_response.is_some() {
-                                let label = if self.copied_toast_timer > 0.0 { "✓ Copied" } else { "📋" };
+                                let label = if self.copied_toast_timer > 0.0 && self.copied_toast_msg.contains("Text") { "✓ Text" } else { "📋 Text" };
                                 let copy_btn = egui::Button::new(egui::RichText::new(label).size(11.0).color(Color32::from_rgb(200, 215, 235)))
                                     .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 14))
                                     .rounding(Rounding::same(8.0));
                                 if ui.add(copy_btn).clicked() {
                                     if let Some(ref text) = self.ai_response.clone() {
-                                        self.copy_to_clipboard(text);
+                                        self.copy_text_to_clipboard(text);
                                     }
                                 }
                             }
 
                             if self.selection_rect.is_some() {
+                                let label = if self.copied_toast_timer > 0.0 && self.copied_toast_msg.contains("Image") { "✓ Image" } else { "📷 Image" };
+                                let copy_img_btn = egui::Button::new(egui::RichText::new(label).size(11.0).color(Color32::from_rgb(200, 220, 245)))
+                                    .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 14))
+                                    .rounding(Rounding::same(8.0));
+                                if ui.add(copy_img_btn).clicked() {
+                                    self.copy_image_to_clipboard(ctx);
+                                }
+
                                 let redraw_btn = egui::Button::new(egui::RichText::new("🔄").size(11.0).color(Color32::from_rgb(200, 215, 235)))
                                     .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 14))
                                     .rounding(Rounding::same(8.0));
@@ -556,14 +639,40 @@ impl eframe::App for CircleSearchApp {
                                     }
                                 });
 
-                                // Upper-Right Cropped Selection Thumbnail
+                                // Upper-Right Cropped Selection Thumbnail (Clickable to Copy Image)
                                 if let Some(ref crop_tex) = self.crop_texture {
-                                    egui::Frame::none()
-                                        .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 50)))
-                                        .rounding(Rounding::same(12.0))
-                                        .show(ui, |ui| {
-                                            ui.image((crop_tex.id(), vec2(110.0, 125.0)));
-                                        });
+                                    let (rect, response) = ui.allocate_exact_size(vec2(110.0, 125.0), egui::Sense::click());
+
+                                    ui.painter().image(
+                                        crop_tex.id(),
+                                        rect,
+                                        Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                                        Color32::WHITE,
+                                    );
+                                    ui.painter().rect_stroke(
+                                        rect,
+                                        Rounding::same(12.0),
+                                        Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 50)),
+                                    );
+
+                                    if response.hovered() {
+                                        ui.painter().rect_filled(
+                                            rect,
+                                            Rounding::same(12.0),
+                                            Color32::from_rgba_unmultiplied(0, 0, 0, 120),
+                                        );
+                                        ui.painter().text(
+                                            rect.center(),
+                                            Align2::CENTER_CENTER,
+                                            "📷 Copy Image",
+                                            FontId::proportional(11.0),
+                                            Color32::WHITE,
+                                        );
+                                    }
+
+                                    if response.clicked() {
+                                        self.copy_image_to_clipboard(ctx);
+                                    }
                                 }
                             });
                         });

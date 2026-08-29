@@ -6,6 +6,7 @@ pub struct CapturedScreen {
     pub image: image::RgbaImage,
     pub width: u32,
     pub height: u32,
+    #[allow(dead_code)]
     pub scale_factor: f64,
 }
 
@@ -95,4 +96,35 @@ pub fn crop_to_color_image(
         &raw,
     ))
 }
+
+pub fn crop_to_image_data(
+    img: &image::RgbaImage,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+) -> Result<arboard::ImageData<'static>, String> {
+    let img_w = img.width();
+    let img_h = img.height();
+
+    let crop_x = x.min(img_w);
+    let crop_y = y.min(img_h);
+    let crop_w = w.min(img_w.saturating_sub(crop_x));
+    let crop_h = h.min(img_h.saturating_sub(crop_y));
+
+    if crop_w == 0 || crop_h == 0 {
+        return Err("Crop dimensions must be greater than zero".to_string());
+    }
+
+    let dynamic_img = DynamicImage::ImageRgba8(img.clone());
+    let cropped = dynamic_img.crop_imm(crop_x, crop_y, crop_w, crop_h).to_rgba8();
+
+    let raw = cropped.into_raw();
+    Ok(arboard::ImageData {
+        width: crop_w as usize,
+        height: crop_h as usize,
+        bytes: std::borrow::Cow::Owned(raw),
+    })
+}
+
 

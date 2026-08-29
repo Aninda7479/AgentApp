@@ -1,4 +1,4 @@
-﻿#![windows_subsystem = "windows"]
+#![windows_subsystem = "windows"]
 
 mod api;
 mod audio;
@@ -7,6 +7,28 @@ mod app;
 use app::DictationApp;
 use eframe::egui;
 
+#[cfg(target_os = "windows")]
+fn get_screen_center_pos() -> (f32, f32) {
+    extern "system" {
+        fn GetSystemMetrics(nIndex: i32) -> i32;
+    }
+    let (sw, sh) = unsafe {
+        let w = GetSystemMetrics(0); // SM_CXSCREEN
+        let h = GetSystemMetrics(1); // SM_CYSCREEN
+        if w > 0 && h > 0 {
+            (w as f32, h as f32)
+        } else {
+            (1920.0, 1080.0)
+        }
+    };
+    ((sw - 200.0) / 2.0, sh - 140.0)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_screen_center_pos() -> (f32, f32) {
+    (860.0, 940.0)
+}
+
 fn main() -> eframe::Result<()> {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -14,13 +36,17 @@ fn main() -> eframe::Result<()> {
         .expect("Failed to initialize tokio runtime");
     let _guard = rt.enter();
 
+    let (pos_x, pos_y) = get_screen_center_pos();
+
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
+            .with_title("SuperAgent Voice Dictation")
             .with_decorations(false)
             .with_transparent(true)
             .with_always_on_top()
-            .with_fullsize_content_view(true)
-            .with_maximized(true)
+            .with_resizable(false)
+            .with_inner_size([200.0, 50.0])
+            .with_position([pos_x, pos_y])
             .with_active(true)
             .with_visible(true),
         wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
@@ -34,6 +60,9 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "SuperAgent Voice Dictation",
         native_options,
-        Box::new(|_cc| Ok(Box::new(DictationApp::new()))),
+        Box::new(|cc| {
+            cc.egui_ctx.set_visuals(egui::Visuals::dark());
+            Ok(Box::new(DictationApp::new()))
+        }),
     )
 }

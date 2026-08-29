@@ -1253,23 +1253,8 @@ pub fn circle_search_capture_area(
     }
 
     let screens = screenshots::Screen::all().map_err(|e| e.to_string())?;
-    let screen = if let (Some(px), Some(py)) = (x, y) {
-        screenshots::Screen::from_point(px, py).unwrap_or_else(|_| {
-            screens.into_iter().next().unwrap()
-        })
-    } else {
-        screens.into_iter().next().ok_or_else(|| "No screens detected".to_string())?
-    };
-
-    let image = if let (Some(rx), Some(ry), Some(rw), Some(rh)) = (x, y, width, height) {
-        if rw > 0 && rh > 0 {
-            screen.capture_area(rx, ry, rw, rh).map_err(|e| e.to_string())?
-        } else {
-            screen.capture().map_err(|e| e.to_string())?
-        }
-    } else {
-        screen.capture().map_err(|e| e.to_string())?
-    };
+    let screen = screens.into_iter().next().ok_or_else(|| "No screens detected".to_string())?;
+    let full_image = screen.capture().map_err(|e| e.to_string())?;
 
     if was_visible {
         if let Some(ref w) = window {
@@ -1277,12 +1262,41 @@ pub fn circle_search_capture_area(
         }
     }
 
+    let img_w = full_image.width();
+    let img_h = full_image.height();
+    let scale_factor = screen.display_info.scale_factor as f64;
+
+    let cropped = if let (Some(rx), Some(ry), Some(rw), Some(rh)) = (x, y, width, height) {
+        if rw > 0 && rh > 0 {
+            let phys_x = ((rx as f64) * scale_factor).round().max(0.0) as u32;
+            let phys_y = ((ry as f64) * scale_factor).round().max(0.0) as u32;
+            let phys_w = ((rw as f64) * scale_factor).round().max(1.0) as u32;
+            let phys_h = ((rh as f64) * scale_factor).round().max(1.0) as u32;
+
+            let crop_x = phys_x.min(img_w);
+            let crop_y = phys_y.min(img_h);
+            let crop_w = phys_w.min(img_w.saturating_sub(crop_x));
+            let crop_h = phys_h.min(img_h.saturating_sub(crop_y));
+
+            if crop_w > 0 && crop_h > 0 {
+                use screenshots::image::GenericImageView;
+                full_image.view(crop_x, crop_y, crop_w, crop_h).to_image()
+            } else {
+                full_image
+            }
+        } else {
+            full_image
+        }
+    } else {
+        full_image
+    };
+
     let mut bytes: Vec<u8> = Vec::new();
-    image
-        .write_to(&mut Cursor::new(&mut bytes), screenshots::image::ImageOutputFormat::Jpeg(85))
+    cropped
+        .write_to(&mut Cursor::new(&mut bytes), screenshots::image::ImageOutputFormat::Png)
         .map_err(|e| e.to_string())?;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    Ok(format!("data:image/jpeg;base64,{}", b64))
+    Ok(format!("data:image/png;base64,{}", b64))
 }
 
 
