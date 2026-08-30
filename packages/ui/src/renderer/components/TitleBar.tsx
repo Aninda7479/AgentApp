@@ -57,7 +57,7 @@ interface TitleBarProps {
   onOpenFolder?: () => void;
   onOpenArtifacts?: () => void;
   onOpenPCBWorkspace?: () => void;
-  onOpen3DStudio?: () => void;
+  onOpen3DWorkspace?: () => void;
   onOpenPartner?: () => void;
   onScheduleTask?: () => void;
   onOpenSettings?: () => void;
@@ -116,7 +116,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onOpenFolder,
   onOpenArtifacts,
   onOpenPCBWorkspace,
-  onOpen3DStudio,
+  onOpen3DWorkspace,
   onOpenPartner,
   onScheduleTask,
   onOpenSettings,
@@ -176,7 +176,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         'sep',
         { label: 'Artifacts', icon: Package, onClick: () => onOpenArtifacts?.() },
         { label: 'PCB Workspace', icon: Cpu, onClick: () => onOpenPCBWorkspace?.() },
-        { label: 'Open 3D Studio', icon: Box, onClick: () => onOpen3DStudio?.() },
+        { label: 'Open 3D Workspace', icon: Box, onClick: () => onOpen3DWorkspace?.() },
         { label: 'Partner', icon: PersonStanding, onClick: () => onOpenPartner?.() },
         { label: 'Schedule Task', icon: Clock, onClick: () => onScheduleTask?.() },
         'sep',

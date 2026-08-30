@@ -57,7 +57,7 @@ export interface SidebarProps {
   mobileOpen?: boolean;
   /** Invoked to request closing the mobile drawer. */
   onMobileClose?: () => void;
-  /** When true, the dedicated 3D Studio nav entry is shown. */
+  /** When true, the dedicated 3D Workspace nav entry is shown. */
   showStudio?: boolean;
 }
 

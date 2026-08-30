@@ -59,7 +59,7 @@ function modelHasMedia(m: ModelConfig, kind: 'image' | 'video' | 'audio'): boole
  *  - image/video/audio → an enabled model in the catalog whose modality matches,
  *    owned by a usable provider.
  *  - pdf → any usable provider (PDF create/read/edit is LLM + local doc tooling).
- *  - 3d → the 3D Studio feature is enabled AND a usable provider exists.
+ *  - 3d → the 3D Workspace feature is enabled AND a usable provider exists.
  */
 export function hasCapableProvider(
   ctx: AppContext,

@@ -54,7 +54,7 @@ export interface SlashDeps {
   runLoopX?: (prompt: string, count: number) => void;
   /** Pre-fills the composer with a (usually sample-prompt) seed for capability commands. */
   seedComposer?: (text: string) => void;
-  /** Whether the dedicated 3D Studio surface is enabled (gates the `/3d` routing). */
+  /** Whether the dedicated 3D Workspace surface is enabled (gates the `/3d` routing). */
   is3dEnabled?: boolean;
 }
 
@@ -343,7 +343,7 @@ export class SlashRouter {
         return { consumed: true, keepComposer: true };
       }
       case '3d': {
-        // 3D needs the Studio feature enabled AND a usable provider. Without
+        // 3D needs the 3D Workspace feature enabled AND a usable provider. Without
         // both, point the user at the right settings instead of a silent no-op.
         if (!hasCapableProvider(ctx, '3d', { is3dEnabled: deps.is3dEnabled })) {
           ctx.triggerToast(
@@ -356,11 +356,11 @@ export class SlashRouter {
         }
         if (deps.is3dEnabled) {
           ctx.setActiveTab('studio');
-          ctx.triggerToast('Opened the 3D Studio — describe a model to generate');
+          ctx.triggerToast('Opened the 3D Workspace — describe a model to generate');
           return { consumed: true };
         }
         deps.seedComposer?.(`Generate a 3D model of${parsed.rawArgs ? ` ${parsed.rawArgs}` : ' '}`);
-        ctx.triggerToast('Tip: enable 3D Model Gen in Settings to open the dedicated Studio');
+        ctx.triggerToast('Tip: enable 3D Model Gen in Settings to open the dedicated 3D Workspace');
         return { consumed: true, keepComposer: true };
       }
       default:

@@ -87,7 +87,7 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
           setStudioMode(threeD.studioPersona === 'pro' ? 'pro' : 'kid');
         }
         if (threeD.enabled && threeD.provider) {
-          triggerToast(`3D Studio Engine active: ${threeD.provider}`, 'info');
+          triggerToast(`3D Workspace Engine active: ${threeD.provider}`, 'info');
         }
       }).catch(() => {});
     }
@@ -273,7 +273,7 @@ export const ThreeDStudio: React.FC<ThreeDStudioProps> = ({ partners, triggerToa
             <Box size={16} className="text-white" />
           </div>
           <div className="flex flex-col">
-            <span className="text-xs font-bold uppercase tracking-wider text-sky-400">SuperAgent 3DStudio</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-sky-400">SuperAgent 3D Workspace</span>
             <span className="text-[10px] text-slate-400 font-medium">Asset: {name}</span>
           </div>
         </div>

@@ -976,7 +976,7 @@ body {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   3D Studio Upgraded styles
+   3D Workspace Upgraded styles
    ════════════════════════════════════════════════════════════════════════ */
 .studio-glass {
   background: color-mix(in srgb, var(--brand-bg) 85%, transparent);

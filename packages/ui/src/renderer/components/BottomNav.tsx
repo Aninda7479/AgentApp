@@ -22,7 +22,7 @@ const TABS: { id: BottomNavTab; label: string; Icon: LucideIcon }[] = [
 /**
  * Mobile-only bottom tab bar. Visible beneath the `md` breakpoint, it gives
  * thumb-reach navigation to the primary surfaces and mirrors the sidebar.
- * (MCP and the 3D Studio are intentionally absent here — they remain reachable
+ * (MCP and the 3D Workspace are intentionally absent here — they remain reachable
  * from the desktop sidebar / Settings, but are not part of the phone nav.)
  */
 export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onSelectTab }) => {

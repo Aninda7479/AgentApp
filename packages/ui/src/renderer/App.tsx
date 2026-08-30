@@ -94,7 +94,7 @@ const PAGE_LABELS: Record<string, string> = {
   pcb: 'PCB Workspace',
   'project-settings': 'Project Settings',
   'standalone-chat': 'Standalone Chat',
-  studio: '3D Studio',
+  studio: '3D Workspace',
   settings: 'Settings',
   diff: 'Diff Viewer',
   partner: 'Partner',
@@ -153,7 +153,7 @@ export const App: React.FC = () => {
   // URL-driven initial route (web: history path, desktop: file:// hash).
   const [initialRoute] = useState(() => getRouteFromLocation());
   const [activeTab, setActiveTab] = useState<string>(initialRoute.activeTab);
-  // Whether the dedicated 3D Studio nav entry is shown: only when 3D Model Gen
+  // Whether the dedicated 3D Workspace nav entry is shown: only when 3D Model Gen
   // is enabled AND its mode is "studio" (per the user's chat-vs-page decision).
   const [showStudio, setShowStudio] = useState<boolean>(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
@@ -1007,7 +1007,7 @@ export const App: React.FC = () => {
       .catch(() => {});
   }, [ipc]);
 
-  // ── 3D Studio visibility (depends on the user's 3D settings: enabled + mode) ──
+  // ── 3D Workspace visibility (depends on the user's 3D settings: enabled + mode) ──
   useEffect(() => {
     if (!ipc) return;
     ipc
@@ -1556,7 +1556,7 @@ export const App: React.FC = () => {
         onOpenFolder={handleOpenFolder}
         onOpenArtifacts={() => setActiveTab('artifacts')}
         onOpenPCBWorkspace={() => setActiveTab('pcb')}
-        onOpen3DStudio={() => setActiveTab('studio')}
+        onOpen3DWorkspace={() => setActiveTab('studio')}
         onOpenPartner={() => setActiveTab('partner')}
         onScheduleTask={() => setActiveTab('scheduled')}
         onOpenSettings={() => {
@@ -1604,7 +1604,7 @@ export const App: React.FC = () => {
                 setActiveTab('settings');
                 setSettingsCategory('general');
               } else if (tab === 'studio-settings') {
-                // Ghost "3D Studio" entry when 3D is disabled: open its settings
+                // Ghost "3D Workspace" entry when 3D is disabled: open its settings
                 // so the user can enable the capability rather than hiding it.
                 setActiveTab('settings');
                 setSettingsCategory('3d');
@@ -1731,9 +1731,9 @@ export const App: React.FC = () => {
             <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-950/20 text-center">
               <div className="max-w-md p-6 rounded-2xl bg-brand-popover/40 border border-brand-border/60 backdrop-blur-md shadow-xl">
                 <Box className="w-12 h-12 text-brand-textMuted mx-auto mb-4 animate-pulse" />
-                <h3 className="text-lg font-semibold text-brand-textMain mb-2">3D Studio is Disabled</h3>
+                <h3 className="text-lg font-semibold text-brand-textMain mb-2">3D Workspace is Disabled</h3>
                 <p className="text-sm text-brand-textMuted mb-6">
-                  To access the 3D Studio, you need to enable 3D Model Generation features in your Settings.
+                  To access the 3D Workspace, you need to enable 3D Model Generation features in your Settings.
                 </p>
                 <button
                   onClick={() => {

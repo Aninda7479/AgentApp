@@ -175,13 +175,13 @@ describe('SlashRouter capability commands — provider gate', () => {
     expect(state.settingsCategory).toBe('3d');
   });
 
-  it('/3d with studio enabled + provider opens the studio', async () => {
+  it('/3d with 3D workspace enabled + provider opens the 3D workspace', async () => {
     const { ctx, state, toast } = makeCtx([mkProvider('openai')], []);
     const seed = vi.fn();
     await run(ctx, '/3d', mkDeps({ seedComposer: seed, is3dEnabled: true }));
 
     expect(seed).not.toHaveBeenCalled();
     expect(state.activeTab).toBe('studio');
-    expect(toast).toHaveBeenCalledWith('Opened the 3D Studio — describe a model to generate');
+    expect(toast).toHaveBeenCalledWith('Opened the 3D Workspace — describe a model to generate');
   });
 });
