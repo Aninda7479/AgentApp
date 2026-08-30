@@ -1419,7 +1419,7 @@ export const ECADSchematicCanvas: React.FC<ECADSchematicCanvasProps> = ({
           {/* ── Transformed Drawing Plane ── */}
           <g
             transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}
-            transformOrigin="0 0"
+            style={{ transformOrigin: '0 0' }}
           >
             {/* ── Drawing Sheet Substrate & Frame (Dynamic Dimensions) ── */}
             <g id="schematic-sheet-frame">
