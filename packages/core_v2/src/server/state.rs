@@ -63,6 +63,7 @@ pub struct AppState {
     pub ws_broadcast_tx: tokio::sync::broadcast::Sender<String>,
     pub active_cancellations: Arc<Mutex<HashMap<String, tokio::sync::broadcast::Sender<()>>>>,
     pub pending_client_tools: Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<serde_json::Value>>>>,
+    pub image_workspace: Arc<crate::image_workspace::ImageWorkspaceManager>,
 }
 
 #[derive(Debug, Deserialize)]

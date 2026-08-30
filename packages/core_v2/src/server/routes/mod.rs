@@ -1,6 +1,7 @@
 pub mod artifacts;
 pub mod chat;
 pub mod conversations;
+pub mod images;
 pub mod pcb;
 pub mod routines;
 pub mod system;
@@ -8,6 +9,7 @@ pub mod system;
 pub use artifacts::*;
 pub use chat::*;
 pub use conversations::*;
+pub use images::*;
 pub use pcb::*;
 pub use routines::*;
 pub use system::*;
@@ -87,6 +89,23 @@ pub fn create_router(state: AppState) -> Router {
             "/api/pcb/projects/:id",
             get(get_pcb_project).delete(delete_pcb_project),
         )
+        .route("/api/images/engine/status", get(get_engine_status))
+        .route("/api/images/engine/install", post(install_engine))
+        .route("/api/images/engine/update", post(update_engine))
+        .route("/api/images/engine/rollback", post(rollback_engine))
+        .route("/api/images/engine", delete(uninstall_engine))
+        .route("/api/images/engine/check-update", get(check_engine_update))
+        .route("/api/images/hardware", get(get_hardware_profile))
+        .route("/api/images/models", get(list_image_models))
+        .route("/api/images/models/pull", post(pull_image_model))
+        .route("/api/images/models/:id", delete(delete_image_model))
+        .route("/api/images/generate", post(generate_image))
+        .route("/api/images/generations", get(list_generations))
+        .route(
+            "/api/images/generations/:id",
+            get(get_generation).delete(delete_generation),
+        )
+        .route("/api/images/generations/:id/file", get(get_generation_file))
         .route("/api/artifacts", get(list_artifacts))
         .route("/api/artifacts/:id/start", post(start_artifact))
         .route("/api/artifacts/:id/stop", post(stop_artifact))

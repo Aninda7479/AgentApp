@@ -17,7 +17,7 @@ export interface RouteState {
   settingsCategory: string;
 }
 
-const KNOWN_TABS = ['trajectory', 'settings', 'scheduled', 'tasks', 'diff', 'studio', 'project-settings', 'standalone-chat', 'partner', 'companion', 'artifacts', 'pcb'];
+const KNOWN_TABS = ['trajectory', 'settings', 'scheduled', 'tasks', 'diff', 'studio', 'project-settings', 'standalone-chat', 'partner', 'companion', 'artifacts', 'pcb', 'image'];
 
 // Sentinel id used by the app for a chat that is being composed but not yet
 // saved. It is not a real, shareable chat, so it must map to the home
@@ -32,7 +32,11 @@ const SETTINGS_SLUG_TO_ID: Record<string, string> = {
   '3d-model-gen': '3d',
   '3d-model-generation': '3d',
   'model-governance': 'model-gov',
-  'model-government': 'model-gov'
+  'model-government': 'model-gov',
+  'local-image': 'local-image-model',
+  'local-images': 'local-image-model',
+  'local-text-model': 'local-model',
+  'local-text': 'local-model',
 };
 
 function normalizeSettingsCategory(raw: string): string {

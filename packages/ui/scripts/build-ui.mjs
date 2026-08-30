@@ -7,6 +7,7 @@
 
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync, spawn } from 'node:child_process';
@@ -20,6 +21,8 @@ const srcAssetsDir = path.join(ROOT, 'assets');
 
 const isWatch = process.argv.includes('--watch') || process.argv.includes('--serve') || process.argv.includes('dev');
 const DEV_PORT = process.env.UI_DEV_PORT ? parseInt(process.env.UI_DEV_PORT, 10) : 5173;
+const BACKEND_PORT = process.env.CORE_PORT ? parseInt(process.env.CORE_PORT, 10) : 1469;
+const BACKEND_HOST = process.env.CORE_HOST || '127.0.0.1';
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -124,7 +127,7 @@ copyStaticAssets();
 function startDevServer(port = DEV_PORT) {
   const server = http.createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, DELETE, PATCH, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', '*');
 
     if (req.method === 'OPTIONS') {
@@ -135,6 +138,43 @@ function startDevServer(port = DEV_PORT) {
 
     const parsedUrl = new URL(req.url, `http://localhost:${port}`);
     let reqPath = decodeURIComponent(parsedUrl.pathname);
+
+    // Forward API and WebSocket HTTP handshake requests to the core backend
+    if (reqPath.startsWith('/api/') || reqPath === '/api' || reqPath.startsWith('/ws')) {
+      const proxyReq = http.request(
+        {
+          host: BACKEND_HOST,
+          port: BACKEND_PORT,
+          path: req.url,
+          method: req.method,
+          headers: {
+            ...req.headers,
+            host: `${BACKEND_HOST}:${BACKEND_PORT}`,
+          },
+        },
+        (proxyRes) => {
+          res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+          proxyRes.pipe(res);
+        }
+      );
+
+      proxyReq.on('error', (err) => {
+        console.warn(`[build-ui] Backend proxy error connecting to ${BACKEND_HOST}:${BACKEND_PORT}:`, err.message);
+        if (!res.headersSent) {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              error: 'Backend Offline',
+              message: `SuperAgent core backend is not running or unreachable on port ${BACKEND_PORT}.`,
+            })
+          );
+        }
+      });
+
+      req.pipe(proxyReq);
+      return;
+    }
+
     if (reqPath === '/' || reqPath === '') reqPath = '/index.html';
 
     let filePath = path.join(distDir, reqPath);
@@ -160,6 +200,32 @@ function startDevServer(port = DEV_PORT) {
     } else {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('404 Not Found');
+    }
+  });
+
+  server.on('upgrade', (req, socket, head) => {
+    const parsedUrl = new URL(req.url, `http://localhost:${port}`);
+    if (parsedUrl.pathname.startsWith('/ws') || parsedUrl.pathname.startsWith('/api/ws')) {
+      const proxySocket = net.connect(BACKEND_PORT, BACKEND_HOST, () => {
+        proxySocket.write(
+          `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n` +
+            Object.entries(req.headers)
+              .map(([key, val]) => `${key}: ${val}`)
+              .join('\r\n') +
+            '\r\n\r\n'
+        );
+        if (head && head.length > 0) {
+          proxySocket.write(head);
+        }
+        socket.pipe(proxySocket).pipe(socket);
+      });
+
+      proxySocket.on('error', (err) => {
+        console.warn('[build-ui] WS proxy error:', err.message);
+        socket.destroy();
+      });
+    } else {
+      socket.destroy();
     }
   });
 

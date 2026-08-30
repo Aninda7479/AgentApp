@@ -39,7 +39,7 @@ fn build_test_state(temp_dir: PathBuf) -> AppState {
     let (ws_broadcast_tx, _) = tokio::sync::broadcast::channel::<String>(256);
 
     AppState {
-        workspace_root: temp_dir,
+        workspace_root: temp_dir.clone(),
         ui_dist_dir: None,
         settings_store,
         auth_store,
@@ -58,6 +58,11 @@ fn build_test_state(temp_dir: PathBuf) -> AppState {
         ws_broadcast_tx,
         active_cancellations: Arc::new(Mutex::new(HashMap::new())),
         pending_client_tools: Arc::new(Mutex::new(HashMap::new())),
+        image_workspace: Arc::new(crate::image_workspace::ImageWorkspaceManager::with_dirs(
+            temp_dir.join("engines"),
+            temp_dir.join("models"),
+            temp_dir.join("images"),
+        )),
     }
 }
 

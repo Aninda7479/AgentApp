@@ -1,5 +1,6 @@
 pub mod artifact;
 pub mod automation;
+pub mod image_workspace;
 pub mod integrations;
 pub mod mcp;
 pub mod media;

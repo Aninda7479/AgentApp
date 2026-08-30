@@ -95,6 +95,8 @@ pub async fn start_server(
         std::num::NonZeroUsize::new(50).unwrap(),
     )));
 
+    let image_workspace = Arc::new(crate::image_workspace::ImageWorkspaceManager::new());
+
     let state = AppState {
         workspace_root,
         ui_dist_dir,
@@ -115,6 +117,7 @@ pub async fn start_server(
         ws_broadcast_tx,
         active_cancellations: Arc::new(Mutex::new(HashMap::new())),
         pending_client_tools: Arc::new(Mutex::new(HashMap::new())),
+        image_workspace,
     };
 
     let app = create_router(state);

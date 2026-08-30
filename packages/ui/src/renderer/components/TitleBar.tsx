@@ -31,6 +31,7 @@ import {
   X,
   Lock,
   Sparkles,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { ThemeMode } from '../types';
@@ -57,6 +58,7 @@ interface TitleBarProps {
   onOpenFolder?: () => void;
   onOpenArtifacts?: () => void;
   onOpenPCBWorkspace?: () => void;
+  onOpenImageWorkspace?: () => void;
   onOpen3DWorkspace?: () => void;
   onOpenPartner?: () => void;
   onScheduleTask?: () => void;
@@ -116,6 +118,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onOpenFolder,
   onOpenArtifacts,
   onOpenPCBWorkspace,
+  onOpenImageWorkspace,
   onOpen3DWorkspace,
   onOpenPartner,
   onScheduleTask,
@@ -176,6 +179,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         'sep',
         { label: 'Artifacts', icon: Package, onClick: () => onOpenArtifacts?.() },
         { label: 'PCB Workspace', icon: Cpu, onClick: () => onOpenPCBWorkspace?.() },
+        { label: 'Image Workspace', icon: ImageIcon, onClick: () => onOpenImageWorkspace?.() },
         { label: 'Open 3D Workspace', icon: Box, onClick: () => onOpen3DWorkspace?.() },
         { label: 'Partner', icon: PersonStanding, onClick: () => onOpenPartner?.() },
         { label: 'Schedule Task', icon: Clock, onClick: () => onScheduleTask?.() },

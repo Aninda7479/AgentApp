@@ -90,6 +90,20 @@ pub async fn spa_fallback_handler(
     uri: Uri,
     State(state): State<AppState>,
 ) -> Response {
+    // Never serve SPA HTML for missing /api routes
+    if uri.path().starts_with("/api/") || uri.path() == "/api" {
+        return (
+            StatusCode::NOT_FOUND,
+            [(header::CONTENT_TYPE, "application/json")],
+            serde_json::json!({
+                "error": "Not Found",
+                "message": format!("API endpoint not found: {}", uri.path())
+            })
+            .to_string(),
+        )
+            .into_response();
+    }
+
     let dist_opt = state
         .ui_dist_dir
         .as_ref()

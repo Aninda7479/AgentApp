@@ -39,25 +39,59 @@ export interface PcbProjectMetadata {
   tags: string[];
 }
 
-function getBaseUrl(): string {
-  if (typeof window !== 'undefined' && window.location) {
-    return `${window.location.protocol}//${window.location.host}`;
+import { getAuthHeaders, getCoreApiBaseUrl } from '../lib/ipc';
+
+export function getApiBaseUrl(): string {
+  return getCoreApiBaseUrl();
+}
+
+async function requestJson<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}${endpoint}`;
+  const headers = getAuthHeaders((options.headers as Record<string, string>) || {});
+
+  const res = await fetch(url, { ...options, headers });
+  const contentType = res.headers.get('content-type') || '';
+
+  if (contentType.includes('text/html')) {
+    throw new Error(
+      `Received HTML response instead of JSON from ${endpoint}. Ensure SuperAgent Core backend is running on port 1469.`
+    );
   }
-  return 'http://localhost:1469';
+
+  if (!res.ok) {
+    let errorMsg = `Failed request (${res.status})`;
+    try {
+      const errJson = await res.json();
+      if (errJson && (errJson.message || errJson.error)) {
+        errorMsg = errJson.message || errJson.error;
+      }
+    } catch {
+      const errText = await res.text().catch(() => '');
+      if (errText) errorMsg = errText;
+    }
+    throw new Error(errorMsg);
+  }
+
+  const text = await res.text();
+  if (text.trim().startsWith('<')) {
+    throw new Error(
+      `Received HTML document instead of JSON from ${endpoint}. Ensure SuperAgent Core backend is running on port 1469.`
+    );
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch (err: any) {
+    throw new Error(`Failed to parse JSON response from ${endpoint}: ${err.message}`);
+  }
 }
 
 export async function listPcbProjects(): Promise<PcbProjectMetadata[]> {
   try {
-    const res = await fetch(`${getBaseUrl()}/api/pcb/projects`, {
+    return await requestJson<PcbProjectMetadata[]>('/api/pcb/projects', {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
     });
-    if (!res.ok) {
-      throw new Error(`Failed to list PCB projects: HTTP ${res.status}`);
-    }
-    return await res.json();
   } catch (err) {
     console.error('Error fetching PCB projects list:', err);
     return [];
@@ -66,16 +100,9 @@ export async function listPcbProjects(): Promise<PcbProjectMetadata[]> {
 
 export async function getPcbProject(id: string): Promise<PcbProject | null> {
   try {
-    const res = await fetch(`${getBaseUrl()}/api/pcb/projects/${encodeURIComponent(id)}`, {
+    return await requestJson<PcbProject>(`/api/pcb/projects/${encodeURIComponent(id)}`, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
     });
-    if (!res.ok) {
-      throw new Error(`Failed to load PCB project [${id}]: HTTP ${res.status}`);
-    }
-    return await res.json();
   } catch (err) {
     console.error(`Error loading PCB project ${id}:`, err);
     return null;
@@ -83,29 +110,14 @@ export async function getPcbProject(id: string): Promise<PcbProject | null> {
 }
 
 export async function savePcbProject(project: PcbProject): Promise<{ success: boolean; id: string }> {
-  const res = await fetch(`${getBaseUrl()}/api/pcb/projects`, {
+  return await requestJson<{ success: boolean; id: string }>('/api/pcb/projects', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    },
     body: JSON.stringify(project),
   });
-  if (!res.ok) {
-    throw new Error(`Failed to save PCB project: HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function deletePcbProject(id: string): Promise<{ success: boolean }> {
-  const res = await fetch(`${getBaseUrl()}/api/pcb/projects/${encodeURIComponent(id)}`, {
+  return await requestJson<{ success: boolean }>(`/api/pcb/projects/${encodeURIComponent(id)}`, {
     method: 'DELETE',
-    headers: {
-      'Accept': 'application/json',
-    },
   });
-  if (!res.ok) {
-    throw new Error(`Failed to delete PCB project: HTTP ${res.status}`);
-  }
-  return await res.json();
 }

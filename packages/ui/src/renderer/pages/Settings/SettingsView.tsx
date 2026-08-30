@@ -8,6 +8,7 @@ import { IntegrationsSettings, IntegrationsSkill, IntegrationsPlugin } from './I
 import { ProvidersSettings } from './ProvidersSettings';
 import { ModelsSettings } from './ModelsSettings';
 import { LocalModelSettings } from './LocalModelSettings';
+import { LocalImageModelSettings } from './LocalImageModelSettings';
 import { PlaceholderSettings } from './PlaceholderSettings';
 import { CompanionSettings } from './companion/CompanionSettings';
 import { UsageTrackerSettings } from './UsageTrackerSettings';
@@ -34,7 +35,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   memory: 'Memory',
   providers: 'Providers',
   models: 'Models',
-  'local-model': 'Local Model',
+  'local-model': 'Local Text Model',
+  'local-image-model': 'Local Image Model',
   'model-gov': 'Orchestrator',
   voice: 'Voice & Mic',
   'circle-search': 'Circle Search',
@@ -418,6 +420,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             enrichModel={enrichModel}
             onToast={onToast}
           />
+        )}
+        {activeCategory === 'local-image-model' && (
+          <LocalImageModelSettings onToast={onToast} />
         )}
         {activeCategory === 'model-gov' && (
           <OrchestratorSettings

@@ -149,7 +149,7 @@ export function getAuthHeaders(extra?: Record<string, string>): Record<string, s
   return headers;
 }
 
-function getCoreApiBaseUrl(): string {
+export function getCoreApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
     if (window.location && window.location.port && window.location.port !== '5173') {
       return window.location.origin;

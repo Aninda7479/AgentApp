@@ -22,8 +22,10 @@ describe('TitleBar Top Bar - PCB Workspace Link', () => {
         canNavigateForward={false}
         onOpenArtifacts={vi.fn()}
         onOpenPCBWorkspace={vi.fn()}
+        onOpenImageWorkspace={vi.fn()}
       />
     );
+    expect(html).toContain('data-testid="title-bar"');
   });
 });
 

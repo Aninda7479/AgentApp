@@ -23,7 +23,8 @@ import {
   Network,
   RefreshCw,
   Globe,
-  Send
+  Send,
+  Image as ImageIcon
 } from 'lucide-react';
 
 /** A single navigation entry in the settings sidebar. */
@@ -53,7 +54,8 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
   "AI Config": [
     { id: 'providers', label: 'Providers', Icon: SlidersHorizontal },
     { id: 'models', label: 'Models', Icon: Bot },
-    { id: 'local-model', label: 'Local Model', Icon: HardDrive },
+    { id: 'local-model', label: 'Local Text Model', Icon: HardDrive },
+    { id: 'local-image-model', label: 'Local Image Model', Icon: ImageIcon },
     { id: 'model-gov', label: 'Orchestrator', Icon: Network },
     { id: 'voice', label: 'Voice & Mic', Icon: Mic },
     { id: 'circle-search', label: 'Circle Search', Icon: Search },
