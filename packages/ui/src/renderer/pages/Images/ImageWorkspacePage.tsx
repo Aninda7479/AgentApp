@@ -19,6 +19,7 @@ import {
   Sliders,
   Check,
   ExternalLink,
+  Palette,
 } from 'lucide-react';
 import {
   generateImage,
@@ -207,31 +208,29 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-brand-bg select-none">
       {/* ── Top Bar ── */}
-      <div className="h-12 border-b border-brand-border/40 px-4 flex items-center justify-between shrink-0 bg-brand-surface/50 backdrop-blur-md">
+      <div className="h-12 border-b border-brand-border/60 px-4 flex items-center justify-between shrink-0 bg-brand-card/50 backdrop-blur-md">
         <div className="flex items-center gap-3">
           {onBack && (
             <button
               onClick={onBack}
-              className="p-1.5 rounded-lg hover:bg-white/5 text-brand-textMuted hover:text-brand-textMain transition-all cursor-pointer"
+              className="ui-btn-ghost p-1.5 text-brand-textMuted hover:text-brand-textMain"
               title="Back"
             >
               <ArrowLeft size={16} />
             </button>
           )}
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              <ImageIcon size={17} />
-            </div>
+            <Palette size={18} className="text-[var(--brand-accent)]" />
             <h1 className="text-sm font-bold text-brand-textMain">Image Workspace</h1>
           </div>
 
-          <div className="h-4 w-px bg-brand-border/40 mx-1" />
+          <div className="h-4 w-px bg-brand-border mx-1" />
 
           {/* Engine status indicator */}
           <div className="flex items-center gap-2 text-xs">
             <div
               className={`w-2 h-2 rounded-full ${
-                engineStatus?.installed ? 'bg-emerald-400' : 'bg-amber-400'
+                engineStatus?.installed ? 'bg-[color:var(--neon-constructive)]' : 'bg-[color:var(--neon-attention)]'
               }`}
             />
             <span className="text-brand-textMuted text-[11px]">
@@ -242,27 +241,27 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
 
         <div className="flex items-center gap-2">
           {/* Mode Selector */}
-          <div className="flex p-0.5 rounded-lg bg-brand-surface border border-brand-border/60 text-[11px]">
+          <div className="flex p-0.5 rounded-lg bg-brand-bg border border-brand-border text-xs">
             <button
               onClick={() => setMode('auto')}
-              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                mode === 'auto' ? 'bg-purple-600 text-white font-semibold' : 'text-brand-textMuted'
+              className={`ui-chip transition-colors ${
+                mode === 'auto' ? 'bg-[var(--brand-accent)] text-white font-medium' : 'bg-transparent text-brand-textMuted hover:text-brand-textMain'
               }`}
             >
               Auto
             </button>
             <button
               onClick={() => setMode('local')}
-              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                mode === 'local' ? 'bg-purple-600 text-white font-semibold' : 'text-brand-textMuted'
+              className={`ui-chip transition-colors ${
+                mode === 'local' ? 'bg-[var(--brand-accent)] text-white font-medium' : 'bg-transparent text-brand-textMuted hover:text-brand-textMain'
               }`}
             >
               Local (GGUF)
             </button>
             <button
               onClick={() => setMode('cloud')}
-              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                mode === 'cloud' ? 'bg-purple-600 text-white font-semibold' : 'text-brand-textMuted'
+              className={`ui-chip transition-colors ${
+                mode === 'cloud' ? 'bg-[var(--brand-accent)] text-white font-medium' : 'bg-transparent text-brand-textMuted hover:text-brand-textMain'
               }`}
             >
               Cloud
@@ -272,7 +271,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
           {onOpenSettings && (
             <button
               onClick={onOpenSettings}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-surface hover:bg-white/5 border border-brand-border/60 text-xs text-brand-textMuted hover:text-brand-textMain transition-all cursor-pointer"
+              className="ui-btn flex items-center gap-1.5 text-xs"
               title="Open Local Image Model settings to manage engine and download weights"
             >
               <Settings size={13} />
@@ -285,19 +284,19 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
       {/* ── Main Studio Grid ── */}
       <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
         {/* Left: Controls Panel */}
-        <div className="w-full md:w-84 lg:w-96 border-r border-brand-border/40 flex flex-col shrink-0 bg-brand-surface/20 overflow-y-auto p-4 space-y-4">
+        <div className="w-full md:w-84 lg:w-96 border-r border-brand-border flex flex-col shrink-0 bg-brand-card/30 overflow-y-auto p-4 space-y-4">
           {/* Prompt input */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-brand-textMain flex items-center justify-between">
+            <label className="ui-label flex items-center justify-between">
               <span>Prompt</span>
-              <Sparkles size={12} className="text-purple-400" />
+              <Sparkles size={13} className="text-[var(--brand-accent)]" />
             </label>
             <textarea
               rows={3}
               placeholder="Describe the image you want to generate in rich visual detail..."
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              className="w-full p-2.5 text-xs bg-brand-surface border border-brand-border/60 rounded-xl text-brand-textMain focus:outline-none focus:border-purple-500 resize-none transition-all placeholder:text-brand-textMuted/50"
+              className="ui-input w-full p-2.5 text-xs resize-none transition-all placeholder:text-brand-textMuted/50"
             />
           </div>
 
@@ -316,21 +315,21 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
                 placeholder="What to exclude (e.g. blurry, low quality, artifacts)..."
                 value={negativePrompt}
                 onChange={(e) => setNegativePrompt(e.target.value)}
-                className="w-full p-2 text-xs bg-brand-surface border border-brand-border/60 rounded-xl text-brand-textMain focus:outline-none focus:border-purple-500 resize-none transition-all placeholder:text-brand-textMuted/50"
+                className="ui-input w-full p-2 text-xs resize-none transition-all placeholder:text-brand-textMuted/50"
               />
             )}
           </div>
 
           {/* Model Selector */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-brand-textMain flex items-center justify-between">
+            <label className="ui-label flex items-center justify-between">
               <span>Model</span>
               {onOpenSettings && (
                 <button
                   onClick={onOpenSettings}
-                  className="text-[10px] text-purple-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                  className="text-[10px] text-[var(--brand-accent)] hover:underline flex items-center gap-0.5 cursor-pointer"
                 >
-                  <span>Manage</span>
+                  <span>Catalog</span>
                   <ExternalLink size={9} />
                 </button>
               )}
@@ -338,7 +337,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
             <select
               value={selectedModel}
               onChange={(e) => handleModelChange(e.target.value)}
-              className="w-full p-2 bg-brand-surface border border-brand-border/60 rounded-xl text-xs text-brand-textMain focus:outline-none focus:border-purple-500 cursor-pointer"
+              className="ui-select w-full"
             >
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -350,7 +349,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
 
           {/* Aspect Ratio / Dimensions */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-brand-textMain">Aspect Ratio</label>
+            <label className="ui-label">Aspect Ratio</label>
             <div className="grid grid-cols-2 gap-1.5">
               {ASPECT_RATIOS.map((ratio) => {
                 const isSel = dimensions.label === ratio.label;
@@ -358,10 +357,10 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
                   <button
                     key={ratio.label}
                     onClick={() => setDimensions(ratio)}
-                    className={`px-2 py-1.5 rounded-lg text-left text-xs transition-all cursor-pointer border ${
+                    className={`px-2.5 py-1.5 rounded-lg text-left text-xs transition-all cursor-pointer border ${
                       isSel
-                        ? 'bg-purple-500/15 border-purple-500/40 text-purple-400 font-semibold'
-                        : 'bg-brand-surface/40 border-brand-border/40 text-brand-textMuted hover:border-brand-border hover:text-brand-textMain'
+                        ? 'bg-[var(--brand-accent)]/10 border-[var(--brand-accent-border)] text-brand-textMain font-medium'
+                        : 'bg-brand-bg/40 border-brand-border text-brand-textMuted hover:border-brand-border hover:text-brand-textMain'
                     }`}
                   >
                     <div className="truncate">{ratio.label}</div>
@@ -375,11 +374,11 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
           </div>
 
           {/* Steps & CFG Sliders */}
-          <div className="space-y-3 pt-1 border-t border-brand-border/40">
+          <div className="space-y-3 pt-1 border-t border-brand-border">
             <div className="space-y-1">
               <div className="flex justify-between text-xs">
                 <span className="text-brand-textMain font-medium">Steps</span>
-                <span className="font-mono text-purple-400">{steps}</span>
+                <span className="font-mono text-brand-textMuted">{steps}</span>
               </div>
               <input
                 type="range"
@@ -387,14 +386,14 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
                 max={50}
                 value={steps}
                 onChange={(e) => setSteps(Number(e.target.value))}
-                className="w-full accent-purple-500 cursor-pointer"
+                className="w-full accent-[var(--brand-accent)] cursor-pointer"
               />
             </div>
 
             <div className="space-y-1">
               <div className="flex justify-between text-xs">
                 <span className="text-brand-textMain font-medium">CFG Scale</span>
-                <span className="font-mono text-purple-400">{cfgScale.toFixed(1)}</span>
+                <span className="font-mono text-brand-textMuted">{cfgScale.toFixed(1)}</span>
               </div>
               <input
                 type="range"
@@ -403,18 +402,18 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
                 step={0.5}
                 value={cfgScale}
                 onChange={(e) => setCfgScale(Number(e.target.value))}
-                className="w-full accent-purple-500 cursor-pointer"
+                className="w-full accent-[var(--brand-accent)] cursor-pointer"
               />
             </div>
           </div>
 
           {/* Seed Input */}
-          <div className="space-y-1.5 pt-1 border-t border-brand-border/40">
+          <div className="space-y-1.5 pt-1 border-t border-brand-border">
             <div className="flex items-center justify-between text-xs">
               <span className="font-medium text-brand-textMain">Seed</span>
               <button
                 onClick={handleRandomSeed}
-                className="flex items-center gap-1 text-[11px] text-purple-400 hover:text-purple-300 transition-colors cursor-pointer"
+                className="flex items-center gap-1 text-[11px] text-[var(--brand-accent)] hover:underline transition-colors cursor-pointer"
               >
                 <Dice5 size={12} />
                 <span>Randomize</span>
@@ -425,7 +424,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
               placeholder="Random (leave empty or click dice)"
               value={seed !== null ? seed : ''}
               onChange={(e) => setSeed(e.target.value ? Number(e.target.value) : null)}
-              className="w-full p-2 text-xs font-mono bg-brand-surface border border-brand-border/60 rounded-xl text-brand-textMain focus:outline-none focus:border-purple-500 placeholder:text-brand-textMuted/40"
+              className="ui-input w-full p-2 text-xs font-mono placeholder:text-brand-textMuted/40"
             />
           </div>
 
@@ -434,12 +433,12 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
             <button
               onClick={handleGenerate}
               disabled={generating || !prompt.trim()}
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="ui-btn-primary w-full py-2.5 px-4 font-semibold text-xs shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {generating ? (
                 <>
                   <RefreshCw size={14} className="animate-spin" />
-                  <span>Generating ({generationTime}s)...</span>
+                  <span>Synthesizing ({generationTime}s)...</span>
                 </>
               ) : (
                 <>
@@ -456,14 +455,14 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
           <div className="flex-1 flex items-center justify-center p-6 min-h-0 overflow-auto">
             {generating ? (
               <div className="text-center space-y-4 max-w-sm">
-                <div className="relative w-24 h-24 mx-auto">
-                  <div className="absolute inset-0 rounded-2xl bg-purple-500/20 animate-ping" />
-                  <div className="relative w-24 h-24 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-xl shadow-purple-500/30">
-                    <Sparkles size={36} className="animate-pulse" />
+                <div className="relative w-20 h-20 mx-auto">
+                  <div className="absolute inset-0 rounded-2xl bg-[var(--brand-accent)]/15 animate-ping" />
+                  <div className="relative w-20 h-20 rounded-2xl bg-brand-card border border-brand-border flex items-center justify-center text-[var(--brand-accent)] shadow-xl">
+                    <Sparkles size={32} className="animate-pulse" />
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-brand-textMain">Synthesizing Pixels...</h3>
+                  <h3 className="text-base font-semibold text-brand-textMain">Synthesizing Pixels</h3>
                   <p className="text-xs text-brand-textMuted mt-1">
                     Running diffusion on {dimensions.width}x{dimensions.height} with {steps} steps ({generationTime}s)
                   </p>
@@ -471,7 +470,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
               </div>
             ) : selectedRecord ? (
               <div className="max-w-full max-h-full flex flex-col items-center justify-center space-y-3">
-                <div className="relative group rounded-2xl overflow-hidden shadow-2xl border border-brand-border/60 max-h-[70vh] bg-black/40">
+                <div className="relative group rounded-xl overflow-hidden shadow-xl border border-brand-border max-h-[70vh] bg-black/40">
                   <img
                     src={getImageUrl(selectedRecord.id)}
                     alt={selectedRecord.prompt}
@@ -506,34 +505,35 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
                 </div>
 
                 {/* Info Bar */}
-                <div className="flex items-center gap-3 text-[11px] text-brand-textMuted bg-brand-surface/70 px-4 py-1.5 rounded-full border border-brand-border/40 flex-wrap justify-center">
+                <div className="flex items-center gap-3 text-[11px] text-brand-textMuted bg-brand-card/80 px-4 py-1.5 rounded-full border border-brand-border flex-wrap justify-center">
                   <span>Model: <strong className="text-brand-textMain">{selectedRecord.model_id}</strong></span>
-                  <span>Size: <strong className="text-brand-textMain">{selectedRecord.width}x{selectedRecord.height}</strong></span>
-                  <span>Time: <strong className="text-brand-textMain">{(selectedRecord.generation_time_ms / 1000).toFixed(1)}s</strong></span>
+                  <span>Dimensions: <strong className="text-brand-textMain">{selectedRecord.width}x{selectedRecord.height}</strong></span>
+                  <span>Elapsed: <strong className="text-brand-textMain">{(selectedRecord.generation_time_ms / 1000).toFixed(1)}s</strong></span>
                   <span>Seed: <strong className="text-brand-textMain font-mono">{selectedRecord.seed}</strong></span>
                 </div>
               </div>
             ) : (
               /* Empty State */
               <div className="text-center max-w-md p-8 space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-purple-500/10 text-purple-400 border border-purple-500/20 mx-auto flex items-center justify-center">
-                  <ImageIcon size={32} />
+                <div className="w-12 h-12 rounded-xl bg-brand-hover flex items-center justify-center mx-auto text-brand-textMuted">
+                  <ImageIcon size={24} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-brand-textMain">Local Image Workspace</h2>
+                  <h2 className="text-base font-semibold text-brand-textMain">Local Image Workspace</h2>
                   <p className="text-xs text-brand-textMuted mt-1">
                     {!hasDownloadedModel
-                      ? 'Download your first quantized model (FLUX.1 Schnell or SDXL) in Settings -> Local Image Model to generate local images.'
-                      : 'Type a prompt on the left or try one of the starter templates below to begin generating images locally.'}
+                      ? 'Download your first quantized model (such as FLUX.1 Schnell or SDXL) in Settings -> Local Image Model to generate local images.'
+                      : 'Type a prompt on the left or try one of the starter templates below to begin generating artwork.'}
                   </p>
                 </div>
 
                 {!hasDownloadedModel && onOpenSettings && (
                   <button
                     onClick={onOpenSettings}
-                    className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-all shadow-md cursor-pointer"
+                    className="ui-btn-primary inline-flex items-center gap-1.5 text-xs shadow-sm mt-1"
                   >
-                    Open Local Image Model Settings
+                    <Sparkles size={14} />
+                    Open Model Catalog
                   </button>
                 )}
 
@@ -546,7 +546,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
                     <button
                       key={idx}
                       onClick={() => setPrompt(p)}
-                      className="w-full text-left p-2 rounded-lg bg-brand-surface/50 hover:bg-brand-surface border border-brand-border/40 text-xs text-brand-textMuted hover:text-brand-textMain transition-all cursor-pointer truncate"
+                      className="w-full text-left p-2 rounded-lg bg-brand-card hover:bg-brand-hover border border-brand-border text-xs text-brand-textMuted hover:text-brand-textMain transition-all cursor-pointer truncate"
                     >
                       "{p}"
                     </button>
@@ -558,7 +558,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
 
           {/* ── Bottom: Gallery Strip ── */}
           {history.length > 0 && (
-            <div className="h-24 border-t border-brand-border/40 p-2.5 bg-brand-surface/30 shrink-0 flex items-center gap-2 overflow-x-auto">
+            <div className="h-24 border-t border-brand-border p-2.5 bg-brand-card/40 shrink-0 flex items-center gap-2 overflow-x-auto">
               <span className="text-[10px] font-semibold uppercase text-brand-textMuted tracking-wider shrink-0 px-2">
                 History ({history.length})
               </span>
@@ -568,10 +568,10 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
                   <button
                     key={record.id}
                     onClick={() => setSelectedRecord(record)}
-                    className={`relative w-18 h-18 rounded-lg overflow-hidden shrink-0 border transition-all cursor-pointer group ${
+                    className={`relative w-18 h-18 rounded-lg overflow-hidden shrink-0 border transition-all cursor-pointer ${
                       isSelected
-                        ? 'border-purple-500 ring-2 ring-purple-500/30'
-                        : 'border-brand-border/50 hover:border-brand-border opacity-70 hover:opacity-100'
+                        ? 'border-[var(--brand-accent)] ring-2 ring-[var(--brand-accent)]/30'
+                        : 'border-brand-border opacity-70 hover:opacity-100 hover:border-brand-border'
                     }`}
                   >
                     <img
@@ -589,3 +589,5 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
     </div>
   );
 };
+
+export default ImageWorkspacePage;

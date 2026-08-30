@@ -221,6 +221,12 @@ export async function deleteImageModel(modelId: string): Promise<{ success: bool
   });
 }
 
+export async function openModelsFolder(): Promise<{ success: boolean; path: string }> {
+  return await requestJson<{ success: boolean; path: string }>('/api/images/models/open-dir', {
+    method: 'POST',
+  });
+}
+
 // ─── Generation API ─────────────────────────────────────────────────────────
 
 export async function generateImage(req: GenerateImageRequest): Promise<GenerateImageResponse> {

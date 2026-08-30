@@ -127,6 +127,18 @@ pub async fn delete_image_model(
         .map_err(|_| StatusCode::BAD_REQUEST)
 }
 
+pub async fn open_models_dir(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let folder = state.image_workspace.models.models_dir().to_path_buf();
+    let _ = std::fs::create_dir_all(&folder);
+    #[cfg(target_os = "windows")]
+    let _ = std::process::Command::new("explorer").arg(&folder).spawn();
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("open").arg(&folder).spawn();
+    #[cfg(target_os = "linux")]
+    let _ = std::process::Command::new("xdg-open").arg(&folder).spawn();
+    Json(serde_json::json!({ "success": true, "path": folder.to_string_lossy() }))
+}
+
 // ─── Generation Routes ──────────────────────────────────────────────────────
 
 pub async fn generate_image(

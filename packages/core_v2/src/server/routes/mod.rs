@@ -98,6 +98,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/images/hardware", get(get_hardware_profile))
         .route("/api/images/models", get(list_image_models))
         .route("/api/images/models/pull", post(pull_image_model))
+        .route("/api/images/models/open-dir", post(open_models_dir))
         .route("/api/images/models/:id", delete(delete_image_model))
         .route("/api/images/generate", post(generate_image))
         .route("/api/images/generations", get(list_generations))

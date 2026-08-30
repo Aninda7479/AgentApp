@@ -48,6 +48,7 @@ describe('LocalImageModelSettings Component', () => {
     expect(html).toContain('Local Image Model');
     expect(html).toContain('stable-diffusion.cpp');
     expect(html).toContain('Install Image Engine');
-    expect(html).toContain('Image Models (GGUF Quantized)');
+    expect(html).toContain('Installed Image Models');
+    expect(html).toContain('Hardware &amp; Diffusion Budget');
   });
 });
