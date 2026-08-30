@@ -513,11 +513,68 @@ impl AgentEngine {
     }
 }
 
-/// Attempts to parse and recover a tool call emitted as raw JSON or markdown text
-/// by smaller models (e.g. Llama 3.2 3B, Ollama local models).
+/// Attempts to parse and recover a tool call emitted as raw JSON, XML tags, or markdown text
+/// by smaller models (e.g. Llama 3.2 3B, Gemma 2 9B, Ollama local models).
 fn try_recover_text_tool_call(text: &str, valid_tool_names: &[String]) -> Option<(String, serde_json::Value)> {
     let trimmed = text.trim();
-    // 1. Try stripping markdown code fences if wrapped in ```json ... ```
+
+    // 1. Check for XML <artifact id="...">...</artifact> tags
+    if valid_tool_names.iter().any(|v| v == "create_artifact") {
+        if let (Some(start_tag), Some(end_tag)) = (trimmed.find("<artifact"), trimmed.rfind("</artifact>")) {
+            let tag_content = &trimmed[start_tag..=end_tag + 10];
+            let id = if let Some(id_start) = tag_content.find("id=\"") {
+                let rest = &tag_content[id_start + 4..];
+                rest.find('"').map(|end| rest[..end].to_string()).unwrap_or_else(|| "app".to_string())
+            } else {
+                "app".to_string()
+            };
+
+            let inner = if let Some(tag_end) = tag_content.find('>') {
+                let rest = &tag_content[tag_end + 1..];
+                if let Some(close_idx) = rest.rfind("</artifact>") {
+                    rest[..close_idx].trim()
+                } else {
+                    rest.trim()
+                }
+            } else {
+                ""
+            };
+
+            if !inner.is_empty() {
+                return Some((
+                    "create_artifact".to_string(),
+                    serde_json::json!({
+                        "id": id,
+                        "name": "Interactive App",
+                        "type": "web",
+                        "entry": "index.html",
+                        "files": {
+                            "index.html": inner
+                        }
+                    }),
+                ));
+            }
+        }
+    }
+
+    // 2. Check for Hermes/XML <tool_call>...</tool_call> or <function=...>{...}</function>
+    if let (Some(start), Some(end)) = (trimmed.find("<tool_call>"), trimmed.rfind("</tool_call>")) {
+        let inside = &trimmed[start + 11..end].trim();
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(inside) {
+            if let Some(name) = val.get("name").and_then(|n| n.as_str()) {
+                if valid_tool_names.iter().any(|v| v == name) {
+                    let params = val.get("parameters")
+                        .or_else(|| val.get("arguments"))
+                        .or_else(|| val.get("input"))
+                        .cloned()
+                        .unwrap_or_else(|| serde_json::json!({}));
+                    return Some((name.to_string(), params));
+                }
+            }
+        }
+    }
+
+    // 3. Try stripping markdown code fences if wrapped in ```json ... ```
     let candidate = if let Some(code_block) = trimmed.strip_prefix("```json").or_else(|| trimmed.strip_prefix("```")) {
         if let Some(end) = code_block.rfind("```") {
             code_block[..end].trim()
@@ -528,7 +585,7 @@ fn try_recover_text_tool_call(text: &str, valid_tool_names: &[String]) -> Option
         trimmed
     };
 
-    // 2. Look for JSON object enclosed in { ... }
+    // 4. Look for JSON object enclosed in { ... }
     if let (Some(start), Some(end)) = (candidate.find('{'), candidate.rfind('}')) {
         if start <= end {
             let json_slice = &candidate[start..=end];

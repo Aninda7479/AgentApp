@@ -204,11 +204,9 @@ impl LlmProvider for OpenAiProvider {
                         continue;
                     } else {
                         let err_text = response.text().await.unwrap_or_default();
-                        if !tools.is_empty() && (err_text.contains("does not support tools") || err_text.contains("tools are not supported")) {
+                        if !tools.is_empty() && (err_text.contains("does not support tools") || err_text.contains("tools are not supported") || err_text.contains("tool_calls")) {
                             let mut fallback_payload = payload.clone();
-                            if let Some(obj) = fallback_payload.as_object_mut() {
-                                obj.remove("tools");
-                            }
+                            sanitize_and_inject_prompt_tools(&mut fallback_payload, tools);
                             let mut retry_req = self.client.post(&url).json(&fallback_payload);
                             if let Some(ref key) = config.api_key {
                                 if !key.is_empty() {
@@ -334,6 +332,71 @@ impl LlmProvider for OpenAiProvider {
         });
 
         Ok(rx)
+    }
+}
+
+/// Modifies the outgoing payload when an LLM provider (e.g. Ollama with Gemma 2)
+/// does not support native OpenAI function calling / tools.
+/// It converts tools into a prompt-based guide and removes tool-specific roles that cause errors.
+fn sanitize_and_inject_prompt_tools(payload: &mut serde_json::Value, tools: &[serde_json::Value]) {
+    if let Some(obj) = payload.as_object_mut() {
+        obj.remove("tools");
+
+        // Build tool instruction text
+        let mut tools_guide = String::from("\n\n# TOOL INVOCATION INSTRUCTIONS\nWhen you need to perform an action (such as creating an artifact, game, web app, or querying tools), you MUST output ONLY a JSON code block in this format:\n```json\n{\n  \"name\": \"tool_name\",\n  \"parameters\": { ... }\n}\n```\nDo not include conversational text when calling a tool.\n\nAvailable tools in this session:\n");
+        for t in tools {
+            let name = t.get("name")
+                .or_else(|| t.get("function").and_then(|f| f.get("name")))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let desc = t.get("description")
+                .or_else(|| t.get("function").and_then(|f| f.get("description")))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            tools_guide.push_str(&format!("- **{}**: {}\n", name, desc));
+        }
+
+        if let Some(messages) = obj.get_mut("messages").and_then(|m| m.as_array_mut()) {
+            // Clean up any role: "tool" or assistant tool_calls that non-tool models reject
+            for msg in messages.iter_mut() {
+                if let Some(msg_obj) = msg.as_object_mut() {
+                    let role = msg_obj.get("role").and_then(|r| r.as_str()).unwrap_or("");
+                    if role == "tool" {
+                        msg_obj.insert("role".to_string(), serde_json::json!("user"));
+                        let content = msg_obj.get("content").and_then(|c| c.as_str()).unwrap_or("");
+                        let tool_id = msg_obj.get("tool_call_id").and_then(|id| id.as_str()).unwrap_or("");
+                        msg_obj.insert("content".to_string(), serde_json::json!(format!("[Tool Result for {}]: {}", tool_id, content)));
+                    } else if role == "assistant" {
+                        if let Some(tool_calls) = msg_obj.remove("tool_calls") {
+                            let text = msg_obj.get("content").and_then(|c| c.as_str()).unwrap_or("").to_string();
+                            let tc_str = tool_calls.to_string();
+                            msg_obj.insert("content".to_string(), serde_json::json!(format!("{}\n[Invoked Tools]: {}", text, tc_str)));
+                        }
+                    }
+                }
+            }
+
+            // Append tools_guide to the system message or prepend a new system message
+            let mut found_system = false;
+            for msg in messages.iter_mut() {
+                if msg.get("role").and_then(|r| r.as_str()) == Some("system") {
+                    if let Some(content) = msg.get_mut("content") {
+                        if let Some(s) = content.as_str() {
+                            *content = serde_json::json!(format!("{}{}", s, tools_guide));
+                            found_system = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if !found_system {
+                messages.insert(0, serde_json::json!({
+                    "role": "system",
+                    "content": tools_guide
+                }));
+            }
+        }
     }
 }
 

@@ -327,7 +327,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 const isMenuOpen = openMenuProject === proj.name;
 
                 return (
-                  <div key={(proj as any).id || `${proj.name}-${projIdx}`} className="flex flex-col">
+                  <div key={`proj-item-${proj.name || 'item'}-${(proj as any).id || projIdx}-${projIdx}`} className="flex flex-col">
                     {/* ── Project row ── */}
                     <div
                       data-testid={`project-item-${proj.name}`}
@@ -443,13 +443,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           </div>
                         ) : (
                           <>
-                            {(expandedProjectChats[proj.name] ? projectChats : projectChats.slice(0, MAX_INITIAL_CHATS)).map((chat) => {
+                            {(expandedProjectChats[proj.name] ? projectChats : projectChats.slice(0, MAX_INITIAL_CHATS)).map((chat, chatIdx) => {
                               const isChatSelected = activeChatId === chat.id && activeTab === 'trajectory';
                               const isChatRunning = Boolean(chat.isRunning);
                               const queuedCount = chat.queuedCount ?? 0;
                               return (
                                 <div
-                                  key={chat.id}
+                                  key={`pchat-${proj.name}-${chat.id || chatIdx}-${chatIdx}`}
                                   onClick={() => {
                                     if (onSelectChat) onSelectChat(chat.id);
                                     onSelectTab('trajectory');
@@ -593,13 +593,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </div>
                 ) : (
                   <>
-                    {(showAllStandaloneChats ? standaloneChats : standaloneChats.slice(0, MAX_INITIAL_CHATS)).map((chat) => {
+                    {(showAllStandaloneChats ? standaloneChats : standaloneChats.slice(0, MAX_INITIAL_CHATS)).map((chat, chatIdx) => {
                       const isSelected = activeChatId === chat.id && activeTab === 'trajectory';
                       const isChatRunning = Boolean(chat.isRunning);
                       const queuedCount = chat.queuedCount ?? 0;
                       return (
                         <div
-                          key={chat.id}
+                          key={`schat-${chat.id || chatIdx}-${chatIdx}`}
                           data-testid={`chat-item-${chat.title.replace(/\s+/g, '-')}`}
                           className={`group relative flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-[13px] transition-all duration-150 cursor-pointer select-none ${
                             isSelected
