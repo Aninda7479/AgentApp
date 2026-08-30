@@ -147,4 +147,80 @@ describe('LocalModelSettings - System Info Normalization', () => {
     const toolsModel = catalog.find((c) => c.name === 'llama3.2:3b' || c.name === 'qwen2.5-coder:7b');
     expect(toolsModel?.tags).toContain('tools');
   });
+
+  it('correctly formats sizes in MB, GB, and TB with fmtSizeGB', async () => {
+    const { fmtSizeGB } = await import('./LocalModelSettings');
+    expect(fmtSizeGB(0.3)).toBe('307 MB');
+    expect(fmtSizeGB(4.7)).toBe('4.7 GB');
+    expect(fmtSizeGB(14.0)).toBe('14 GB');
+    expect(fmtSizeGB(1331.2)).toBe('1.3 TB');
+  });
+
+  it('accurately evaluates massive TB models and prevents false 1.2GB memory ratings', () => {
+    const sampleCatalog = [
+      {
+        name: 'llama3.2:3b',
+        family: 'Llama 3.2',
+        params: '3B',
+        diskGB: 2.0,
+        contextK: 128,
+        inputModalities: ['text'],
+        outputModalities: ['text'],
+        description: 'Lightweight Llama 3.2',
+        tags: ['chat' as const],
+      },
+      {
+        name: 'cogito-2.1:671b',
+        family: 'Cogito 2.1',
+        params: '671B',
+        diskGB: 1331.2, // 1.3 TB
+        contextK: 160,
+        inputModalities: ['text'],
+        outputModalities: ['text'],
+        description: 'Ultra massive 671B model',
+        tags: ['chat' as const],
+      },
+      {
+        name: 'mistral-large-3:675b-cloud',
+        family: 'Mistral Large 3',
+        params: '675B',
+        diskGB: 0,
+        contextK: 256,
+        inputModalities: ['text', 'image'],
+        outputModalities: ['text'],
+        description: 'Cloud hosted flagship endpoint',
+        tags: ['chat' as const, 'tools' as const],
+        isCloud: true,
+      },
+    ];
+
+    const macM5 = normalizeSystemInfo({
+      os_name: 'macOS',
+      cpu_brand: 'Apple M5',
+      total_memory_mb: 16384,
+      used_memory_mb: 8192,
+      is_unified_memory: true,
+    });
+
+    const ranked = rankModels(sampleCatalog, macM5);
+
+    // 1. Local best match should be the realistic 3B model, NOT the 671B or cloud model
+    expect(ranked[0].model.name).toBe('llama3.2:3b');
+    expect(ranked[0].fit).toBe('best');
+    expect(ranked[0].isHardwareRecommended).toBe(true);
+
+    // 2. The 1.3 TB 671B model must be marked too-large and require > 1000 GB
+    const cogito = ranked.find((r) => r.model.name === 'cogito-2.1:671b');
+    expect(cogito?.fit).toBe('too-large');
+    expect(cogito?.needGB).toBeGreaterThan(1300);
+    expect(cogito?.reason).toContain('1.3TB');
+    expect(cogito?.isHardwareRecommended).toBeFalsy();
+
+    // 3. Cloud model must NOT be marked as local Apple Silicon hardware match
+    const cloudModel = ranked.find((r) => r.model.name === 'mistral-large-3:675b-cloud');
+    expect(cloudModel?.fit).toBe('runnable');
+    expect(cloudModel?.needGB).toBe(0);
+    expect(cloudModel?.reason).toContain('Cloud');
+    expect(cloudModel?.isHardwareRecommended).toBe(false);
+  });
 });

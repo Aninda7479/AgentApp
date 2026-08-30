@@ -68,6 +68,13 @@ interface LocalModelSettingsProps {
 }
 
 const fmtGB = (n: number): string => (n >= 10 ? Math.round(n).toString() : (Math.round(n * 10) / 10).toString());
+export const fmtSizeGB = (n: number): string => {
+  if (!n || n <= 0) return '0 GB';
+  if (n >= 1000) return `${(n / 1024).toFixed(1)} TB`;
+  if (n >= 10) return `${Math.round(n)} GB`;
+  if (n < 0.5) return `${Math.round(n * 1024)} MB`;
+  return `${Math.round(n * 10) / 10} GB`;
+};
 const fmtBytes = (bytes: number): string => {
   if (!bytes || bytes <= 0) return '0 B';
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
@@ -1193,12 +1200,24 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
                             <span className="ui-chip bg-brand-bg border border-brand-border/60 text-brand-textMain font-mono font-medium text-[11px] flex items-center gap-1">
                               ⚡ {model.params} Parameters
                             </span>
-                            <span className="ui-chip bg-brand-bg border border-brand-border/60 text-brand-textMuted font-mono text-[11px] flex items-center gap-1">
-                              ⬇️ ~{fmtGB(model.diskGB)} GB Download
-                            </span>
-                            <span className="ui-chip bg-brand-bg border border-brand-border/60 text-brand-textMuted font-mono text-[11px] flex items-center gap-1">
-                              🧠 ~{needGB} GB Memory
-                            </span>
+                            {model.isCloud ? (
+                              <span className="ui-chip bg-blue-500/10 border border-blue-500/30 text-blue-400 font-mono text-[11px] flex items-center gap-1">
+                                ☁️ Cloud Hosted
+                              </span>
+                            ) : (
+                              <span className="ui-chip bg-brand-bg border border-brand-border/60 text-brand-textMuted font-mono text-[11px] flex items-center gap-1">
+                                ⬇️ ~{fmtSizeGB(model.diskGB)} Download
+                              </span>
+                            )}
+                            {model.isCloud ? (
+                              <span className="ui-chip bg-blue-500/10 border border-blue-500/30 text-blue-400 font-mono text-[11px] flex items-center gap-1">
+                                🧠 Remote Inference
+                              </span>
+                            ) : (
+                              <span className="ui-chip bg-brand-bg border border-brand-border/60 text-brand-textMuted font-mono text-[11px] flex items-center gap-1">
+                                🧠 ~{fmtSizeGB(needGB)} Memory
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex flex-wrap items-center gap-3 text-[11px] text-brand-textMuted pt-0.5">

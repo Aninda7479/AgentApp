@@ -49,6 +49,8 @@ export interface OllamaCatalogModel {
   outputModalities: string[];
   description: string;
   tags: ModelTag[];
+  /** True if this is a cloud-hosted Ollama model/endpoint (runs remotely). */
+  isCloud?: boolean;
 }
 
 export interface RankedModel {
@@ -73,7 +75,17 @@ const OVERHEAD_GB = 1.2; // KV cache + runtime overhead per model
 
 /** VRAM/RAM a model needs to load, in GB. */
 export function estimateRequirement(m: OllamaCatalogModel): number {
-  return Math.round((m.diskGB + OVERHEAD_GB) * 10) / 10;
+  if (m.isCloud) {
+    return 0;
+  }
+  if (m.diskGB > 0) {
+    return Math.round((m.diskGB + OVERHEAD_GB) * 10) / 10;
+  }
+  const paramsB = parseParamBillions(m.params);
+  if (paramsB > 0) {
+    return Math.round((paramsB * 0.75 + OVERHEAD_GB) * 10) / 10;
+  }
+  return 2.0;
 }
 
 // ── HTML helpers ────────────────────────────────────────────────────────────
@@ -202,7 +214,14 @@ function deriveTags(fam: LibFamily): ModelTag[] {
 }
 
 function parseModelPage(html: string, fam: LibFamily): OllamaCatalogModel[] {
-  const raw: { tag: string; sizeGB: number; contextK: number; modality: string; isLatestAlias: boolean }[] = [];
+  const raw: {
+    tag: string;
+    sizeGB: number;
+    contextK: number;
+    modality: string;
+    isLatestAlias: boolean;
+    isCloud: boolean;
+  }[] = [];
   const re =
     /<a href="\/library\/[a-z0-9][a-z0-9.\-]*:([a-z0-9][a-z0-9.\-]*)" class="sm:hidden flex flex-col space-y-\[6px\] group text-\[13px\] px-4 py-3">([\s\S]*?)<p class="flex text-neutral-500">([\s\S]*?)<\/p>/gi;
   let m: RegExpExecArray | null;
@@ -210,18 +229,51 @@ function parseModelPage(html: string, fam: LibFamily): OllamaCatalogModel[] {
     const tag = m[1];
     const block = m[2];
     const meta = m[3];
-    const sizeMt = /([\d.]+)\s*(GB|MB)/i.exec(meta);
-    const sizeGB = sizeMt
-      ? Math.round((sizeMt[2].toUpperCase() === 'MB' ? parseFloat(sizeMt[1]) / 1024 : parseFloat(sizeMt[1])) * 10) / 10
-      : 0;
-    const ctxMt = /([\d.]+)\s*K context window/i.exec(meta);
-    const contextK = ctxMt ? Math.round(parseFloat(ctxMt[1]) * 1000) : 0;
+
+    // Detect cloud endpoints (e.g. 675b-cloud, cloud, or usage tiers without local file sizes)
+    const isCloud =
+      tag.endsWith('-cloud') ||
+      tag === 'cloud' ||
+      /cloud/i.test(meta) ||
+      (/usage/i.test(meta) && !/(?:TB|GB|MB|KB)/i.test(meta));
+
+    const sizeMt = /([\d.]+)\s*(TB|GB|MB|KB)/i.exec(meta);
+    let sizeGB = 0;
+    if (sizeMt) {
+      const val = parseFloat(sizeMt[1]);
+      const unit = sizeMt[2].toUpperCase();
+      if (unit === 'TB') {
+        sizeGB = Math.round(val * 1024 * 10) / 10;
+      } else if (unit === 'GB') {
+        sizeGB = Math.round(val * 10) / 10;
+      } else if (unit === 'MB') {
+        sizeGB = Math.round((val / 1024) * 100) / 100;
+      } else if (unit === 'KB') {
+        sizeGB = Math.round((val / (1024 * 1024)) * 1000) / 1000;
+      }
+    } else if (!isCloud) {
+      // Fallback: estimate approximate footprint from parameter count if not provided
+      const pStr = deriveParams(tag, fam);
+      const paramsB = parseParamBillions(pStr);
+      if (paramsB > 0) {
+        sizeGB = Math.round(paramsB * 0.65 * 10) / 10;
+      }
+    }
+
+    const ctxMt = /([\d.]+)\s*(M|K)?\s*context window/i.exec(meta);
+    let contextK = 0;
+    if (ctxMt) {
+      const val = parseFloat(ctxMt[1]);
+      const unit = (ctxMt[2] || 'K').toUpperCase();
+      contextK = unit === 'M' ? Math.round(val * 1000) : Math.round(val);
+    }
+
     const modality = meta.split('·').map((s) => s.trim())[2] ?? 'Text';
     const hasLatestBadge =
       /<span class="ml-2 inline-flex items-center rounded-full px-2 py-px text-xs font-medium border border-blue-500 text-blue-600">latest<\/span>/.test(
         block
       );
-    raw.push({ tag, sizeGB, contextK, modality, isLatestAlias: !hasLatestBadge && tag === 'latest' });
+    raw.push({ tag, sizeGB, contextK, modality, isLatestAlias: !hasLatestBadge && tag === 'latest', isCloud });
   }
 
   const realTags = raw.filter((r) => !r.isLatestAlias);
@@ -238,7 +290,8 @@ function parseModelPage(html: string, fam: LibFamily): OllamaCatalogModel[] {
       inputModalities,
       outputModalities: ['text'],
       description: fam.description,
-      tags: deriveTags(fam)
+      tags: deriveTags(fam),
+      isCloud: r.isCloud
     };
   });
 }
@@ -707,9 +760,15 @@ export function calculateModelScore(
   vramBudgetGB: number,
   ramFreeGB: number
 ): number {
+  if (r.model.isCloud) {
+    // Cloud models run remotely — give a clean baseline runnable score
+    const paramsB = parseParamBillions(r.model.params);
+    return 500 + Math.min(paramsB, 70) * 5;
+  }
+
   const paramsB = parseParamBillions(r.model.params);
-  const diskGB = r.model.diskGB || 1.0;
-  const needGB = r.needGB || 1.0;
+  const diskGB = r.model.diskGB > 0 ? r.model.diskGB : Math.max(0.5, paramsB * 0.65);
+  const needGB = r.needGB > 0 ? r.needGB : 1.0;
 
   // Base tier bonus
   let tierScore = 0;
@@ -749,7 +808,7 @@ export function rankModels(
       .map((m) => ({
         model: m,
         fit: 'runnable' as ModelFit,
-        reason: 'Hardware detection pending',
+        reason: m.isCloud ? 'Cloud Hosted — Runs remotely' : 'Hardware detection pending',
         needGB: estimateRequirement(m),
         storageWarning: false,
         isHardwareRecommended: false,
@@ -779,39 +838,53 @@ export function rankModels(
   const fitsTotalRam = (m: OllamaCatalogModel) => need(m) <= ramGB * 0.9;
 
   const ranked: RankedModel[] = catalog.map((m) => {
+    if (m.isCloud) {
+      return {
+        model: m,
+        fit: 'runnable' as ModelFit,
+        reason: 'Cloud Hosted — Runs remotely with minimal local memory',
+        needGB: 0,
+        storageWarning: false,
+        isHardwareRecommended: false,
+      };
+    }
+
     const n = need(m);
-    const storageWarning = n > maxFreeDisk;
+    const storageWarning = maxFreeDisk !== Infinity && (n > maxFreeDisk || (m.diskGB > 0 && m.diskGB > maxFreeDisk));
 
     let fit: ModelFit;
     let reason: string;
 
+    const formattedNeed = n >= 1000 ? `${(n / 1024).toFixed(1)}TB` : `${n}GB`;
+
     if (!fitsTotalRam(m)) {
       fit = 'too-large';
       reason = isUnified
-        ? `Too heavy — needs ~${n}GB (total unified memory: ${ramGB}GB)`
-        : `Too heavy — needs ~${n}GB (total RAM: ${ramGB}GB)`;
+        ? `Too heavy — needs ~${formattedNeed} (total unified memory: ${ramGB}GB)`
+        : `Too heavy — needs ~${formattedNeed} (total RAM: ${ramGB}GB)`;
     } else if (fitsVram(m)) {
       fit = 'runnable';
       reason = `GPU Acceleration — fits 100% in ${vramBudgetGB}GB VRAM`;
     } else if (fitsUnified(m)) {
       fit = 'runnable';
-      reason = `Apple Silicon Unified Memory — optimal speed (~${n}GB / ${ramFreeGB}GB free)`;
+      reason = `Apple Silicon Unified Memory — optimal speed (~${formattedNeed} / ${ramFreeGB}GB free)`;
     } else if (fitsFreeRam(m)) {
       fit = 'runnable';
       reason = isUnified
-        ? `Runs in unified memory (~${n}GB / ${ramFreeGB}GB free)`
-        : `Fits in free RAM (~${n}GB / ${ramFreeGB}GB free; CPU inference)`;
+        ? `Runs in unified memory (~${formattedNeed} / ${ramFreeGB}GB free)`
+        : `Fits in free RAM (~${formattedNeed} / ${ramFreeGB}GB free; CPU inference)`;
     } else {
       fit = 'runnable';
-      reason = `Runs on CPU (needs ~${n}GB; ${ramFreeGB}GB free RAM may use memory swap)`;
+      reason = `Runs on CPU (needs ~${formattedNeed}; ${ramFreeGB}GB free RAM may use memory swap)`;
     }
 
     return { model: m, fit, reason, needGB: n, storageWarning, isHardwareRecommended: false };
   });
 
-  // Pick top recommended models that fit best in hardware:
+  // Pick top recommended models that fit best in local hardware (excluding cloud models from local hardware benchmarks):
   const topPicks = ranked
     .filter((r) => {
+      if (r.model.isCloud) return false;
       if (r.fit !== 'runnable' && r.fit !== 'best') return false;
       if (isUnified) return r.needGB <= Math.min(ramGB * 0.75, ramFreeGB + 1.0);
       if (vramBudgetGB > 0) return r.needGB <= vramBudgetGB || r.needGB <= ramFreeGB;
@@ -827,11 +900,13 @@ export function rankModels(
   if (topPicks.length > 0) {
     topPicks[0].fit = 'best';
     topPicks[0].isHardwareRecommended = true;
+    const bestNeedFormatted =
+      topPicks[0].needGB >= 1000 ? `${(topPicks[0].needGB / 1024).toFixed(1)}TB` : `${topPicks[0].needGB}GB`;
     topPicks[0].reason = isUnified
-      ? `⭐ Best match for your Apple Silicon (${topPicks[0].needGB}GB / ${ramFreeGB}GB free unified RAM)`
+      ? `⭐ Best match for your Apple Silicon (${bestNeedFormatted} / ${ramFreeGB}GB free unified RAM)`
       : vramBudgetGB > 0 && topPicks[0].needGB <= vramBudgetGB
-      ? `⭐ Best match for your GPU (${topPicks[0].needGB}GB in ${vramBudgetGB}GB VRAM)`
-      : `⭐ Best match for your hardware (${topPicks[0].needGB}GB / ${ramFreeGB}GB free RAM)`;
+      ? `⭐ Best match for your GPU (${bestNeedFormatted} in ${vramBudgetGB}GB VRAM)`
+      : `⭐ Best match for your hardware (${bestNeedFormatted} / ${ramFreeGB}GB free RAM)`;
   }
 
   // Also mark top 2-3 runnable models as recommended
