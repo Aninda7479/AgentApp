@@ -23,13 +23,15 @@ import {
   Terminal,
   Layers,
   Activity,
-  Sliders
+  Sliders,
+  ArrowUpDown
 } from 'lucide-react';
 import { ProviderConnection, ModelConfig } from './types';
 import { SystemInfo, normalizeSystemInfo } from '../../logic/systemInfo';
 import {
   rankModels,
   fetchLiveCatalog,
+  parseParamBillions,
   RankedModel,
   OllamaCatalogModel
 } from '../../logic/ollama-catalog';
@@ -110,6 +112,7 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
   const [storeSearch, setStoreSearch] = useState('');
   const [storeTagFilter, setStoreTagFilter] = useState<string>('all');
   const [storeRunnableOnly, setStoreRunnableOnly] = useState(false);
+  const [storeSortBy, setStoreSortBy] = useState<'top-match' | 'params-desc' | 'params-asc' | 'download-asc' | 'memory-asc'>('top-match');
 
   const [searchInstalled, setSearchInstalled] = useState('');
   const [pulling, setPulling] = useState<Record<string, PullProgress>>({});
@@ -404,23 +407,41 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
     return m.name.toLowerCase().includes(q) || (m.family && m.family.toLowerCase().includes(q));
   });
 
-  const filteredStore = ranked.filter((r) => {
-    if (storeRunnableOnly && r.fit === 'too-large') return false;
-    if (storeTagFilter !== 'all') {
-      if (!r.model.tags.includes(storeTagFilter as any)) return false;
+  const filteredStore = useMemo(() => {
+    const list = ranked.filter((r) => {
+      if (storeRunnableOnly && r.fit === 'too-large') return false;
+      if (storeTagFilter !== 'all') {
+        if (!r.model.tags.includes(storeTagFilter as any)) return false;
+      }
+      if (storeSearch) {
+        const q = storeSearch.toLowerCase();
+        const m = r.model;
+        return (
+          m.name.toLowerCase().includes(q) ||
+          m.family.toLowerCase().includes(q) ||
+          m.description.toLowerCase().includes(q) ||
+          m.tags.some((t) => t.includes(q))
+        );
+      }
+      return true;
+    });
+
+    if (storeSortBy === 'top-match') {
+      return list; // Preserves enhanced top match & hardware-efficiency ranking
     }
-    if (storeSearch) {
-      const q = storeSearch.toLowerCase();
-      const m = r.model;
-      return (
-        m.name.toLowerCase().includes(q) ||
-        m.family.toLowerCase().includes(q) ||
-        m.description.toLowerCase().includes(q) ||
-        m.tags.some((t) => t.includes(q))
-      );
+
+    const copy = [...list];
+    if (storeSortBy === 'params-desc') {
+      copy.sort((a, b) => parseParamBillions(b.model.params) - parseParamBillions(a.model.params));
+    } else if (storeSortBy === 'params-asc') {
+      copy.sort((a, b) => parseParamBillions(a.model.params) - parseParamBillions(b.model.params));
+    } else if (storeSortBy === 'download-asc') {
+      copy.sort((a, b) => a.model.diskGB - b.model.diskGB);
+    } else if (storeSortBy === 'memory-asc') {
+      copy.sort((a, b) => a.needGB - b.needGB);
     }
-    return true;
-  });
+    return copy;
+  }, [ranked, storeRunnableOnly, storeTagFilter, storeSearch, storeSortBy]);
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
@@ -1012,8 +1033,23 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
                 ))}
               </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <div className="ui-input flex items-center gap-2 flex-1 sm:w-60 bg-brand-bg px-2.5 py-1">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                <div className="flex items-center gap-1.5 bg-brand-bg px-2.5 py-1 rounded-lg border border-brand-border text-xs">
+                  <ArrowUpDown size={13} className="text-brand-textMuted flex-shrink-0" />
+                  <select
+                    value={storeSortBy}
+                    onChange={(e) => setStoreSortBy(e.target.value as any)}
+                    className="bg-transparent border-none text-xs text-brand-textMain outline-none cursor-pointer"
+                  >
+                    <option value="top-match">Top Match & Efficiency</option>
+                    <option value="params-desc">Parameters (Largest First)</option>
+                    <option value="params-asc">Parameters (Smallest First)</option>
+                    <option value="download-asc">Download Size (Smallest First)</option>
+                    <option value="memory-asc">Memory Needed (Lowest First)</option>
+                  </select>
+                </div>
+
+                <div className="ui-input flex items-center gap-2 flex-1 sm:w-52 bg-brand-bg px-2.5 py-1">
                   <Search size={13} className="text-brand-textMuted flex-shrink-0" />
                   <input
                     type="text"
@@ -1069,7 +1105,7 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1 space-y-1">
+                        <div className="min-w-0 flex-1 space-y-1.5">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-semibold text-sm text-brand-textMain">{model.family}</span>
                             <span className="ui-chip bg-brand-popover text-brand-textMuted">{model.params}</span>
@@ -1105,10 +1141,21 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
                             {model.description}
                           </p>
 
-                          <div className="flex flex-wrap items-center gap-3 text-[11px] text-brand-textMuted pt-1">
+                          {/* Parameters vs Download Size vs Memory Needed Comparison Badges */}
+                          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                            <span className="ui-chip bg-brand-bg border border-brand-border/60 text-brand-textMain font-mono font-medium text-[11px] flex items-center gap-1">
+                              ⚡ {model.params} Parameters
+                            </span>
+                            <span className="ui-chip bg-brand-bg border border-brand-border/60 text-brand-textMuted font-mono text-[11px] flex items-center gap-1">
+                              ⬇️ ~{fmtGB(model.diskGB)} GB Download
+                            </span>
+                            <span className="ui-chip bg-brand-bg border border-brand-border/60 text-brand-textMuted font-mono text-[11px] flex items-center gap-1">
+                              🧠 ~{needGB} GB Memory
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-3 text-[11px] text-brand-textMuted pt-0.5">
                             <span>Tag: <code className="text-brand-textMain">{model.name}</code></span>
-                            <span>Download: ~{fmtGB(model.diskGB)} GB</span>
-                            <span>RAM/VRAM needed: ~{needGB} GB</span>
                             <span className="text-brand-textMain font-medium">{reason}</span>
                           </div>
                         </div>

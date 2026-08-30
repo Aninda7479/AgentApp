@@ -648,23 +648,82 @@ export async function fetchLiveCatalog(
   );
 }
 
+/** Parses parameter string into numeric billions (e.g. "7B" -> 7, "135M" -> 0.135). */
+export function parseParamBillions(paramsStr: string): number {
+  const s = (paramsStr || '').trim().toUpperCase();
+  const bMatch = /^([\d.]+)\s*B$/.exec(s);
+  if (bMatch) return parseFloat(bMatch[1]);
+  const mMatch = /^([\d.]+)\s*M$/.exec(s);
+  if (mMatch) return parseFloat(mMatch[1]) / 1000.0;
+  const num = parseFloat(s);
+  return Number.isFinite(num) ? num : 0;
+}
+
+/**
+ * Calculates a balanced multi-criteria score for a model based on:
+ * 1. Hardware Fit Tier (Top match / Best fit in GPU/RAM > Runnable > Too-large)
+ * 2. Parameters (Capability & Intelligence: higher parameters deliver smarter reasoning)
+ * 3. Download Size (Smaller download footprint for given parameters)
+ * 4. Memory Needed (Optimized RAM/VRAM usage)
+ */
+export function calculateModelScore(
+  r: { model: OllamaCatalogModel; fit: ModelFit; needGB: number; isHardwareRecommended?: boolean },
+  vramBudgetGB: number,
+  ramFreeGB: number
+): number {
+  const paramsB = parseParamBillions(r.model.params);
+  const diskGB = r.model.diskGB || 1.0;
+  const needGB = r.needGB || 1.0;
+
+  // Base tier bonus
+  let tierScore = 0;
+  if (r.fit === 'best') tierScore = 10000;
+  else if (r.isHardwareRecommended) tierScore = 5000;
+  else if (r.fit === 'runnable') tierScore = 1000;
+  else tierScore = -10000; // too-large
+
+  if (r.fit === 'too-large') {
+    // For models exceeding system capacity, closest to fitting comes first
+    return tierScore - needGB * 10;
+  }
+
+  // GPU Acceleration bonus if it fits entirely in dedicated VRAM
+  let gpuBonus = 0;
+  if (vramBudgetGB > 0 && needGB <= vramBudgetGB) {
+    gpuBonus = 2500;
+  }
+
+  // Parameter efficiency ratio: parameters (in B) / (needGB + diskGB * 0.35)
+  const efficiencyRatio = (paramsB * 100) / (needGB + diskGB * 0.35);
+
+  return tierScore + gpuBonus + paramsB * 60 + efficiencyRatio - diskGB * 2;
+}
+
 /**
  * Ranks the catalog against detected hardware. Evaluates free RAM, GPU VRAM,
  * Apple Silicon unified memory, CPU, and disk space across Windows, macOS, and Linux.
+ * Sorts by Top Match and multi-criteria balance (Parameters vs Download Size vs Memory Needed).
  */
 export function rankModels(
   catalog: OllamaCatalogModel[],
   sys: SystemInfo | null
 ): RankedModel[] {
   if (!sys || sys.ramGB <= 0) {
-    return catalog.map((m) => ({
-      model: m,
-      fit: 'runnable' as ModelFit,
-      reason: 'Hardware detection pending',
-      needGB: estimateRequirement(m),
-      storageWarning: false,
-      isHardwareRecommended: false,
-    }));
+    return catalog
+      .map((m) => ({
+        model: m,
+        fit: 'runnable' as ModelFit,
+        reason: 'Hardware detection pending',
+        needGB: estimateRequirement(m),
+        storageWarning: false,
+        isHardwareRecommended: false,
+      }))
+      .sort((a, b) => {
+        const pA = parseParamBillions(a.model.params);
+        const pB = parseParamBillions(b.model.params);
+        if (pA !== pB) return pB - pA;
+        return a.needGB - b.needGB;
+      });
   }
 
   const need = (m: OllamaCatalogModel) => estimateRequirement(m);
@@ -722,7 +781,12 @@ export function rankModels(
       if (vramBudgetGB > 0) return r.needGB <= vramBudgetGB || r.needGB <= ramFreeGB;
       return r.needGB <= ramFreeGB;
     })
-    .sort((a, b) => b.model.diskGB - a.model.diskGB);
+    .sort((a, b) => {
+      const pA = parseParamBillions(a.model.params);
+      const pB = parseParamBillions(b.model.params);
+      if (pA !== pB) return pB - pA;
+      return a.needGB - b.needGB;
+    });
 
   if (topPicks.length > 0) {
     topPicks[0].fit = 'best';
@@ -740,11 +804,31 @@ export function rankModels(
   }
 
   const order: Record<ModelFit, number> = { best: 0, runnable: 1, 'too-large': 2 };
+
+  // Sort by: Top Match first, then multi-criteria balance (Parameters vs Download Size vs Memory Needed)
   ranked.sort((a, b) => {
+    // 1. Top Recommended first
+    const aRec = a.isHardwareRecommended || a.fit === 'best' ? 1 : 0;
+    const bRec = b.isHardwareRecommended || b.fit === 'best' ? 1 : 0;
+    if (aRec !== bRec) return bRec - aRec;
+
+    // 2. Fit tier
     if (order[a.fit] !== order[b.fit]) return order[a.fit] - order[b.fit];
-    return a.fit === 'too-large'
-      ? a.model.diskGB - b.model.diskGB
-      : b.model.diskGB - a.model.diskGB;
+
+    // 3. Multi-criteria score (Parameters vs Download Size vs Memory Needed)
+    if (a.fit !== 'too-large') {
+      const scoreA = calculateModelScore(a, vramBudgetGB, ramFreeGB);
+      const scoreB = calculateModelScore(b, vramBudgetGB, ramFreeGB);
+      if (Math.abs(scoreA - scoreB) > 0.001) return scoreB - scoreA;
+
+      const pA = parseParamBillions(a.model.params);
+      const pB = parseParamBillions(b.model.params);
+      if (pA !== pB) return pB - pA;
+      return a.needGB - b.needGB;
+    }
+
+    // 4. For too-large: show closest to fitting first
+    return a.needGB - b.needGB;
   });
 
   return ranked;
