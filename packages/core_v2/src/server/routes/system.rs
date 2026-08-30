@@ -36,7 +36,9 @@ pub fn check_ollama_port_listening() -> bool {
     false
 }
 
-pub fn detect_ollama_installation() -> serde_json::Value {
+static OLLAMA_STATIC_CACHE: std::sync::Mutex<Option<(bool, Option<String>, Option<String>)>> = std::sync::Mutex::new(None);
+
+fn do_detect_ollama_installation() -> (bool, Option<String>, Option<String>) {
     let mut installed = false;
     let mut path: Option<String> = None;
     let mut version: Option<String> = None;
@@ -124,6 +126,27 @@ pub fn detect_ollama_installation() -> serde_json::Value {
             }
         }
     }
+
+    (installed, path, version)
+}
+
+pub fn detect_ollama_installation() -> serde_json::Value {
+    let (installed, path, version) = {
+        let mut lock = OLLAMA_STATIC_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((inst, ref p, ref v)) = *lock {
+            if inst {
+                (inst, p.clone(), v.clone())
+            } else {
+                let res = do_detect_ollama_installation();
+                *lock = Some(res.clone());
+                res
+            }
+        } else {
+            let res = do_detect_ollama_installation();
+            *lock = Some(res.clone());
+            res
+        }
+    };
 
     let running = check_ollama_port_listening();
 

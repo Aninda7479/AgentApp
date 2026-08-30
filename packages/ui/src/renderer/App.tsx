@@ -1431,8 +1431,8 @@ export const App: React.FC = () => {
             setIsBackendDisconnected((prev) => (prev !== nextVal ? nextVal : prev));
           }
         } else {
-          // In Desktop mode (Tauri), check IPC connection
-          const res = await ipc.invoke('system-info').catch(() => null);
+          // In Desktop mode (Tauri), check IPC connection with lightweight app-version ping
+          const res = await ipc.invoke('app-version').catch(() => null);
           if (isMounted) {
             const nextVal = res === null;
             setIsBackendDisconnected((prev) => (prev !== nextVal ? nextVal : prev));
