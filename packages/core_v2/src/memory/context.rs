@@ -7,6 +7,8 @@ pub struct ConversationContext {
     system_prompt: Option<String>,
     history: Vec<ChatMessage>,
     max_token_limit: usize,
+    summarize_threshold: f64,
+    summarized_prefix: Option<String>,
 }
 
 impl Default for ConversationContext {
@@ -22,6 +24,8 @@ impl ConversationContext {
             system_prompt: None,
             history: Vec::new(),
             max_token_limit,
+            summarize_threshold: 0.75,
+            summarized_prefix: None,
         }
     }
 
@@ -72,6 +76,9 @@ impl ConversationContext {
         if let Some(ref sys) = self.system_prompt {
             msgs.push(ChatMessage::system(sys));
         }
+        if let Some(ref prefix) = self.summarized_prefix {
+            msgs.push(ChatMessage::system(prefix));
+        }
         msgs.extend(self.history.clone());
         msgs
     }
@@ -82,6 +89,9 @@ impl ConversationContext {
         let mut total_chars = 0;
         if let Some(ref sys) = self.system_prompt {
             total_chars += sys.len();
+        }
+        if let Some(ref prefix) = self.summarized_prefix {
+            total_chars += prefix.len();
         }
         for msg in &self.history {
             for block in &msg.content {
@@ -120,6 +130,28 @@ impl ConversationContext {
         if self.max_token_limit == 0 {
             return;
         }
+        
+        let threshold_limit = (self.max_token_limit as f64 * self.summarize_threshold) as usize;
+        
+        if self.estimate_tokens() > threshold_limit {
+            let keep_count = 6;
+            if self.history.len() > keep_count {
+                let summarize_count = self.history.len() - keep_count;
+                let mut summary_text = String::new();
+                for msg in self.history.drain(0..summarize_count) {
+                    summary_text.push_str(&format!("{:?}: {}\n", msg.role, msg.text_content()));
+                }
+                
+                let new_summary = format!("[Previous conversation summary]:\n{}", summary_text);
+                
+                if let Some(existing) = &self.summarized_prefix {
+                    self.summarized_prefix = Some(format!("{}\n{}", existing, new_summary));
+                } else {
+                    self.summarized_prefix = Some(new_summary);
+                }
+            }
+        }
+        
         while self.estimate_tokens() > self.max_token_limit && !self.history.is_empty() {
             self.history.remove(0);
         }

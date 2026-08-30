@@ -212,6 +212,25 @@ impl AgentEngine {
                     return;
                 }
 
+                if turn_tool_calls.is_empty() && !turn_text.is_empty() {
+                    let valid_names: Vec<String> = schemas
+                        .iter()
+                        .filter_map(|s| s.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                        .collect();
+                    if let Some((name, input)) = try_recover_text_tool_call(&turn_text, &valid_names) {
+                        let call_id = format!("call_{}", uuid::Uuid::new_v4().simple());
+                        let _ = tx
+                            .send(AgentEvent::ToolCall {
+                                id: call_id.clone(),
+                                name: name.clone(),
+                                input: input.clone(),
+                            })
+                            .await;
+                        turn_tool_calls.push((call_id, name, input));
+                        turn_text.clear();
+                    }
+                }
+
                 if !turn_tool_calls.is_empty() {
                     let mut content_blocks = Vec::new();
                     if !turn_text.is_empty() {
@@ -266,4 +285,278 @@ impl AgentEngine {
 
         Ok(rx)
     }
+
+    /// Runs the multi-turn agent interaction loop with prior conversation history.
+    ///
+    /// Pre-populates the conversation context with `initial_history` messages
+    /// before adding the new `user_prompt`, enabling multi-turn memory.
+    /// Returns a tuple of (event receiver, collected new messages for this run).
+    pub async fn run_loop_with_history(
+        &self,
+        config: &ModelConfig,
+        system_prompt: &str,
+        user_prompt: &str,
+        initial_history: Vec<ChatMessage>,
+    ) -> anyhow::Result<(mpsc::Receiver<AgentEvent>, mpsc::Receiver<Vec<ChatMessage>>)> {
+        let (tx, rx) = mpsc::channel::<AgentEvent>(200);
+        let (history_tx, history_rx) = mpsc::channel::<Vec<ChatMessage>>(1);
+
+        let config = config.clone();
+        let system_prompt = system_prompt.to_string();
+        let user_prompt = user_prompt.to_string();
+        let tools = Arc::clone(&self.tools);
+        let max_turns = self.max_turns;
+
+        tokio::spawn(async move {
+            let provider = ProviderFactory::create(&config.provider);
+            let mut context = ConversationContext::default();
+            if !system_prompt.is_empty() {
+                context.set_system_prompt(system_prompt);
+            }
+
+            // Restore prior conversation history
+            for msg in &initial_history {
+                context.add_message(msg.clone());
+            }
+
+            // Track new messages generated in this run
+            let mut new_messages: Vec<ChatMessage> = Vec::new();
+
+            // Add the new user message
+            let user_msg = ChatMessage::user(&user_prompt);
+            context.add_message(user_msg.clone());
+            new_messages.push(user_msg);
+
+            for _turn in 0..max_turns {
+                let schemas = tools.list_schemas();
+                let mut turn_text = String::new();
+                let mut turn_tool_calls = Vec::new();
+                let mut turn_succeeded = false;
+                let mut last_error_msg = String::new();
+
+                const MAX_RETRIES: usize = 3;
+                const RETRY_DELAY_SECS: u64 = 3;
+
+                for attempt in 1..=MAX_RETRIES {
+                    let stream_res = provider
+                        .chat_stream(&config, &context.all_messages(), &schemas)
+                        .await;
+
+                    let mut stream_rx = match stream_res {
+                        Ok(rx) => rx,
+                        Err(err) => {
+                            last_error_msg = err.to_string();
+                            if attempt < MAX_RETRIES {
+                                tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                                continue;
+                            } else {
+                                let _ = tx
+                                    .send(AgentEvent::Error {
+                                        message: format!("Failed after {} attempts: {}", MAX_RETRIES, last_error_msg),
+                                    })
+                                    .await;
+                                let _ = history_tx.send(new_messages).await;
+                                return;
+                            }
+                        }
+                    };
+
+                    turn_text.clear();
+                    turn_tool_calls.clear();
+                    let mut stream_error = None;
+
+                    while let Some(event) = stream_rx.recv().await {
+                        match &event {
+                            AgentEvent::Token { text } => {
+                                turn_text.push_str(text);
+                                let _ = tx.send(event).await;
+                            }
+                            AgentEvent::ToolCall { id, name, input } => {
+                                turn_tool_calls.push((id.clone(), name.clone(), input.clone()));
+                                let _ = tx.send(event).await;
+                            }
+                            AgentEvent::Error { message } => {
+                                stream_error = Some(message.clone());
+                            }
+                            AgentEvent::ToolOutput { .. } => {
+                                let _ = tx.send(event).await;
+                            }
+                            AgentEvent::Finished { .. } => {}
+                            _ => {
+                                let _ = tx.send(event).await;
+                            }
+                        }
+                    }
+
+                    if let Some(err) = stream_error {
+                        last_error_msg = err;
+                        if attempt < MAX_RETRIES {
+                            tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                            continue;
+                        } else {
+                            let _ = tx
+                                .send(AgentEvent::Error {
+                                    message: format!("Stream error after {} attempts: {}", MAX_RETRIES, last_error_msg),
+                                })
+                                .await;
+                            let _ = history_tx.send(new_messages).await;
+                            return;
+                        }
+                    }
+
+                    if turn_text.trim().is_empty() && turn_tool_calls.is_empty() {
+                        if attempt < MAX_RETRIES {
+                            tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                            continue;
+                        }
+                    }
+
+                    turn_succeeded = true;
+                    break;
+                }
+
+                if !turn_succeeded {
+                    let err_detail = if last_error_msg.is_empty() {
+                        "Model failed to produce a valid response after 3 retries.".to_string()
+                    } else {
+                        format!("Model failed after 3 retries: {}", last_error_msg)
+                    };
+                    let _ = tx
+                        .send(AgentEvent::Error {
+                            message: err_detail,
+                        })
+                        .await;
+                    let _ = history_tx.send(new_messages).await;
+                    return;
+                }
+
+                if turn_tool_calls.is_empty() && !turn_text.is_empty() {
+                    let valid_names: Vec<String> = schemas
+                        .iter()
+                        .filter_map(|s| s.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                        .collect();
+                    if let Some((name, input)) = try_recover_text_tool_call(&turn_text, &valid_names) {
+                        let call_id = format!("call_{}", uuid::Uuid::new_v4().simple());
+                        let _ = tx
+                            .send(AgentEvent::ToolCall {
+                                id: call_id.clone(),
+                                name: name.clone(),
+                                input: input.clone(),
+                            })
+                            .await;
+                        turn_tool_calls.push((call_id, name, input));
+                        turn_text.clear();
+                    }
+                }
+
+                if !turn_tool_calls.is_empty() {
+                    let mut content_blocks = Vec::new();
+                    if !turn_text.is_empty() {
+                        content_blocks.push(ContentBlock::Text {
+                            text: turn_text.clone(),
+                        });
+                    }
+                    for (id, name, input) in &turn_tool_calls {
+                        content_blocks.push(ContentBlock::ToolUse {
+                            id: id.clone(),
+                            name: name.clone(),
+                            input: input.clone(),
+                        });
+                    }
+                    let assistant_msg = ChatMessage::new(Role::Assistant, content_blocks);
+                    context.add_message(assistant_msg.clone());
+                    new_messages.push(assistant_msg);
+
+                    for (id, name, input) in turn_tool_calls {
+                        let (output, is_error) = match tools.execute_tool(&name, input).await {
+                            Ok(out) => (out, false),
+                            Err(err) => (err.to_string(), true),
+                        };
+
+                        let _ = tx
+                            .send(AgentEvent::ToolOutput {
+                                tool_use_id: id.clone(),
+                                output: output.clone(),
+                                is_error,
+                            })
+                            .await;
+
+                        let tool_msg = ChatMessage::tool_result(&id, &output, is_error);
+                        context.add_message(tool_msg.clone());
+                        new_messages.push(tool_msg);
+                    }
+                } else {
+                    if !turn_text.is_empty() {
+                        let assistant_msg = ChatMessage::assistant(&turn_text);
+                        context.add_message(assistant_msg.clone());
+                        new_messages.push(assistant_msg);
+                    }
+                    let _ = tx
+                        .send(AgentEvent::Finished {
+                            stop_reason: "end_turn".to_string(),
+                        })
+                        .await;
+                    let _ = history_tx.send(new_messages).await;
+                    return;
+                }
+            }
+
+            let _ = tx
+                .send(AgentEvent::Finished {
+                    stop_reason: "max_turns_exceeded".to_string(),
+                })
+                .await;
+            let _ = history_tx.send(new_messages).await;
+        });
+
+        Ok((rx, history_rx))
+    }
+}
+
+/// Attempts to parse and recover a tool call emitted as raw JSON or markdown text
+/// by smaller models (e.g. Llama 3.2 3B, Ollama local models).
+fn try_recover_text_tool_call(text: &str, valid_tool_names: &[String]) -> Option<(String, serde_json::Value)> {
+    let trimmed = text.trim();
+    // 1. Try stripping markdown code fences if wrapped in ```json ... ```
+    let candidate = if let Some(code_block) = trimmed.strip_prefix("```json").or_else(|| trimmed.strip_prefix("```")) {
+        if let Some(end) = code_block.rfind("```") {
+            code_block[..end].trim()
+        } else {
+            code_block.trim()
+        }
+    } else {
+        trimmed
+    };
+
+    // 2. Look for JSON object enclosed in { ... }
+    if let (Some(start), Some(end)) = (candidate.find('{'), candidate.rfind('}')) {
+        if start <= end {
+            let json_slice = &candidate[start..=end];
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(json_slice) {
+                // Shape A: { "name": "...", "parameters": { ... } } or { "name": "...", "arguments": { ... } }
+                if let Some(name) = val.get("name").and_then(|n| n.as_str()) {
+                    if valid_tool_names.iter().any(|v| v == name) {
+                        let params = val.get("parameters")
+                            .or_else(|| val.get("arguments"))
+                            .or_else(|| val.get("input"))
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({}));
+                        return Some((name.to_string(), params));
+                    }
+                }
+                // Shape B: { "tool": "...", "input": { ... } } or { "tool_name": "...", "tool_args": { ... } }
+                if let Some(name) = val.get("tool").or_else(|| val.get("tool_name")).and_then(|n| n.as_str()) {
+                    if valid_tool_names.iter().any(|v| v == name) {
+                        let params = val.get("input")
+                            .or_else(|| val.get("tool_args"))
+                            .or_else(|| val.get("parameters"))
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({}));
+                        return Some((name.to_string(), params));
+                    }
+                }
+            }
+        }
+    }
+    None
 }

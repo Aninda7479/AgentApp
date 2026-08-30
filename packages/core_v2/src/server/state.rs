@@ -15,7 +15,7 @@ use crate::storage::{
     settings::SettingsStore,
 };
 use crate::tools::ToolRegistry;
-use crate::types::{AgentEvent, ProviderType, WorkflowDefinition};
+use crate::types::{AgentEvent, ChatMessage, ProviderType, WorkflowDefinition};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SessionStateEntry {
@@ -24,6 +24,9 @@ pub struct SessionStateEntry {
     pub full_assistant_text: String,
     pub full_thought_text: String,
     pub last_updated: i64,
+    /// Persisted conversation history for multi-turn context across runs.
+    #[serde(default)]
+    pub conversation_history: Vec<ChatMessage>,
 }
 
 impl Default for SessionStateEntry {
@@ -34,6 +37,7 @@ impl Default for SessionStateEntry {
             full_assistant_text: String::new(),
             full_thought_text: String::new(),
             last_updated: chrono::Utc::now().timestamp_millis(),
+            conversation_history: Vec::new(),
         }
     }
 }

@@ -14,6 +14,7 @@ use crate::tools::r#trait::Tool;
 pub struct RunCommandTool {
     workspace_root: PathBuf,
     default_timeout_secs: u64,
+    allowed_commands: Vec<String>,
 }
 
 impl RunCommandTool {
@@ -21,6 +22,7 @@ impl RunCommandTool {
         Self {
             workspace_root,
             default_timeout_secs: 60,
+            allowed_commands: Vec::new(),
         }
     }
 
@@ -28,6 +30,15 @@ impl RunCommandTool {
         Self {
             workspace_root,
             default_timeout_secs,
+            allowed_commands: Vec::new(),
+        }
+    }
+
+    pub fn with_allowed_commands(workspace_root: PathBuf, allowed_commands: Vec<String>) -> Self {
+        Self {
+            workspace_root,
+            default_timeout_secs: 60,
+            allowed_commands,
         }
     }
 }
@@ -67,6 +78,22 @@ impl Tool for RunCommandTool {
         let command_str = input["command"]
             .as_str()
             .ok_or_else(|| anyhow!("Missing required string parameter 'command'"))?;
+
+        // Enforce allowed_commands whitelist if configured
+        if !self.allowed_commands.is_empty() {
+            let cmd_base = command_str.split_whitespace().next().unwrap_or("").to_lowercase();
+            let is_allowed = self.allowed_commands.iter().any(|allowed| {
+                let a = allowed.trim().to_lowercase();
+                a == "*" || a == cmd_base || command_str.to_lowercase().starts_with(&a)
+            });
+            if !is_allowed {
+                anyhow::bail!(
+                    "Security policy violation: Command '{}' is not in the allowed commands whitelist ({:?})",
+                    command_str,
+                    self.allowed_commands
+                );
+            }
+        }
 
         let cwd_str = input["cwd"].as_str();
         let timeout_secs = input["timeout_secs"]

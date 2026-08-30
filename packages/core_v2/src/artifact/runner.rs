@@ -13,6 +13,8 @@ use crate::storage::settings::get_superagent_dir;
 pub struct ArtifactRunner {
     storage_dir: PathBuf,
     active_ports: Arc<Mutex<HashMap<String, u16>>>,
+    child_processes: Arc<Mutex<HashMap<String, tokio::process::Child>>>,
+    log_buffers: Arc<Mutex<HashMap<String, Vec<String>>>>,
 }
 
 impl ArtifactRunner {
@@ -27,6 +29,8 @@ impl ArtifactRunner {
         Self {
             storage_dir,
             active_ports: Arc::new(Mutex::new(HashMap::new())),
+            child_processes: Arc::new(Mutex::new(HashMap::new())),
+            log_buffers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -72,7 +76,53 @@ impl ArtifactRunner {
             .find(|a| a.id == id)
             .ok_or_else(|| anyhow!("Artifact with id '{}' not found", id))?;
 
-        let port = artifact.port.unwrap_or(3080);
+        let mut port = artifact.port.unwrap_or(3080);
+        
+        let a_type = artifact.manifest.artifact_type.as_str();
+        if a_type == "python" || a_type == "node" {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+            port = listener.local_addr()?.port();
+            
+            let cmd = if a_type == "python" { "python" } else { "node" };
+            let mut child = tokio::process::Command::new(cmd)
+                .arg(&artifact.manifest.entry)
+                .current_dir(self.storage_dir.join(id))
+                .env("PORT", port.to_string())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()?;
+            
+            if let Some(stdout) = child.stdout.take() {
+                let id_clone = id.to_string();
+                let logs = self.log_buffers.clone();
+                tokio::spawn(async move {
+                    use tokio::io::AsyncBufReadExt;
+                    let reader = tokio::io::BufReader::new(stdout);
+                    let mut lines = reader.lines();
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        let mut lock = logs.lock().await;
+                        lock.entry(id_clone.clone()).or_default().push(line);
+                    }
+                });
+            }
+            if let Some(stderr) = child.stderr.take() {
+                let id_clone = id.to_string();
+                let logs = self.log_buffers.clone();
+                tokio::spawn(async move {
+                    use tokio::io::AsyncBufReadExt;
+                    let reader = tokio::io::BufReader::new(stderr);
+                    let mut lines = reader.lines();
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        let mut lock = logs.lock().await;
+                        lock.entry(id_clone.clone()).or_default().push(format!("STDERR: {}", line));
+                    }
+                });
+            }
+            
+            let mut processes = self.child_processes.lock().await;
+            processes.insert(id.to_string(), child);
+        }
+
         let mut ports = self.active_ports.lock().await;
         ports.insert(id.to_string(), port);
 
@@ -85,6 +135,10 @@ impl ArtifactRunner {
 
     /// Stops an active artifact runner instance.
     pub async fn stop_artifact(&self, id: &str) -> Result<()> {
+        let mut processes = self.child_processes.lock().await;
+        if let Some(mut child) = processes.remove(id) {
+            let _ = child.kill().await;
+        }
         let mut ports = self.active_ports.lock().await;
         ports.remove(id);
         Ok(())
@@ -191,7 +245,16 @@ impl ArtifactRunner {
     }
 
     /// Returns recent logs for an artifact.
-    pub fn get_artifact_logs(&self, _id: &str, _limit: usize) -> Vec<String> {
+    pub fn get_artifact_logs(&self, id: &str, limit: usize) -> Vec<String> {
+        if let Ok(lock) = self.log_buffers.try_lock() {
+            if let Some(logs) = lock.get(id) {
+                let start = logs.len().saturating_sub(limit);
+                let msgs = logs[start..].to_vec();
+                if !msgs.is_empty() {
+                    return msgs;
+                }
+            }
+        }
         vec!["[artifact] Ready".to_string()]
     }
 }

@@ -13,8 +13,8 @@ use crate::server::routes::chat::resolve_active_workspace_model;
 use crate::server::state::{AppState, SessionStateEntry};
 use crate::storage::settings::get_superagent_dir;
 use crate::tools::builtin::{
-    EditFileTool, GrepSearchTool, ListDirTool, ReadFileTool, RunCommandTool, RunSubagentTool,
-    WriteFileTool,
+    CreateArtifactTool, EditFileTool, GrepSearchTool, ListArtifactsTool, ListDirTool,
+    ReadArtifactTool, ReadFileTool, RunCommandTool, RunSubagentTool, WriteFileTool,
 };
 use crate::tools::ToolRegistry;
 use crate::types::{ModelConfig, ProviderType};
@@ -27,7 +27,7 @@ pub async fn handle_agent_channel(
     match ch {
         "agent-run" => {
             let arg = match args.first() {
-                Some(a) => a,
+                Some(a) => a.clone(),
                 None => {
                     return Some(Err((
                         StatusCode::BAD_REQUEST,
@@ -187,7 +187,7 @@ pub async fn handle_agent_channel(
                 };
             }
 
-            let mut model_config = ModelConfig::new(provider_type, model_str);
+            let mut model_config = ModelConfig::new(provider_type, model_str.clone());
             model_config.api_key = api_key;
             model_config.base_url = base_url;
 
@@ -224,8 +224,8 @@ pub async fn handle_agent_channel(
             let prompt_clone = prompt.clone();
 
             tokio::spawn(async move {
-                // 1. Mark session running in session_store
-                {
+                // 1. Mark session running in session_store, preserve conversation history
+                let prior_history = {
                     let mut store = state_clone.session_store.lock().unwrap();
                     if let Some(entry) = store.get_mut(&sid) {
                         entry.is_running = true;
@@ -233,6 +233,8 @@ pub async fn handle_agent_channel(
                         entry.full_assistant_text.clear();
                         entry.full_thought_text.clear();
                         entry.last_updated = chrono::Utc::now().timestamp_millis();
+                        // Preserve conversation_history across runs for multi-turn context
+                        entry.conversation_history.clone()
                     } else {
                         store.put(
                             sid.clone(),
@@ -242,10 +244,57 @@ pub async fn handle_agent_channel(
                                 full_assistant_text: String::new(),
                                 full_thought_text: String::new(),
                                 last_updated: chrono::Utc::now().timestamp_millis(),
+                                conversation_history: Vec::new(),
                             },
                         );
+                        Vec::new()
                     }
-                }
+                };
+
+                // If server-side history is empty, try to hydrate from client-sent history
+                let initial_history = if prior_history.is_empty() {
+                    // Parse client-sent history from the payload (LRU eviction fallback)
+                    if let Some(client_history) = arg.get("history").and_then(|v| v.as_array()) {
+                        let mut msgs = Vec::new();
+                        for item in client_history {
+                            let role_str = item.get("role").and_then(|v| v.as_str()).unwrap_or("");
+                            let content = item.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            match role_str {
+                                "user" => msgs.push(crate::types::ChatMessage::user(content)),
+                                "assistant" => {
+                                    // Check if this has tool_calls
+                                    if let Some(tool_calls) = item.get("tool_calls").and_then(|v| v.as_array()) {
+                                        let mut blocks = Vec::new();
+                                        if !content.is_empty() {
+                                            blocks.push(crate::types::ContentBlock::Text { text: content });
+                                        }
+                                        for tc in tool_calls {
+                                            let id = tc.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                            let name = tc.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                            let args_str = tc.get("arguments").and_then(|v| v.as_str()).unwrap_or("{}");
+                                            let input: serde_json::Value = serde_json::from_str(args_str).unwrap_or_else(|_| serde_json::json!({}));
+                                            blocks.push(crate::types::ContentBlock::ToolUse { id, name, input });
+                                        }
+                                        msgs.push(crate::types::ChatMessage::new(crate::types::Role::Assistant, blocks));
+                                    } else {
+                                        msgs.push(crate::types::ChatMessage::assistant(content));
+                                    }
+                                }
+                                "tool" => {
+                                    let tool_call_id = item.get("tool_call_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                    let is_error = item.get("is_error").and_then(|v| v.as_bool()).unwrap_or(false);
+                                    msgs.push(crate::types::ChatMessage::tool_result(tool_call_id, content, is_error));
+                                }
+                                _ => {}
+                            }
+                        }
+                        msgs
+                    } else {
+                        Vec::new()
+                    }
+                } else {
+                    prior_history
+                };
 
                 // 2. Broadcast context event
                 let ctx_evt = serde_json::json!({
@@ -258,18 +307,70 @@ pub async fn handle_agent_channel(
                 });
                 let _ = state_clone.ws_broadcast_tx.send(ctx_evt.to_string());
 
+                // 3. Model tier detection (auto + manual override)
+                //    Tier 1 (>30B): All tools
+                //    Tier 2 (7-30B): Core tools (no browser/media tools)
+                //    Tier 3 (<7B): No tools — pure text generation
+                let model_tier: u8 = {
+                    // Check for manual override in settings
+                    let manual_tier = raw_settings.get("modelTiers")
+                        .and_then(|tiers| tiers.get(&model_str))
+                        .and_then(|v| v.as_u64())
+                        .map(|v| v as u8);
+
+                    if let Some(tier) = manual_tier {
+                        tier
+                    } else {
+                        // Auto-detect from model name heuristics
+                        let lower = model_str.to_lowercase();
+                        if lower.contains("1b") || lower.contains("1.5b") || lower.contains("2b")
+                            || lower.contains("3b") || lower.contains("4b")
+                            || lower.contains(":1b") || lower.contains(":3b")
+                            || lower.contains("phi-2") || lower.contains("tinyllama")
+                        {
+                            3 // Tier 3: < 7B
+                        } else if lower.contains("7b") || lower.contains("8b")
+                            || lower.contains("13b") || lower.contains("14b")
+                            || lower.contains("22b") || lower.contains("27b")
+                            || lower.contains(":7b") || lower.contains(":8b")
+                            || lower.contains("mistral-small") || lower.contains("gemma-2")
+                        {
+                            2 // Tier 2: 7-30B
+                        } else {
+                            1 // Tier 1: >30B or unknown (assume capable)
+                        }
+                    }
+                };
+
+                // 4. Build adaptive tool registry based on model tier
                 let mut session_tool_registry = ToolRegistry::new();
-                session_tool_registry.register(ReadFileTool::new(effective_workspace.clone()));
-                session_tool_registry.register(WriteFileTool::new(effective_workspace.clone()));
-                session_tool_registry.register(EditFileTool::new(effective_workspace.clone()));
-                session_tool_registry.register(ListDirTool::new(effective_workspace.clone()));
-                session_tool_registry.register(RunCommandTool::new(effective_workspace.clone()));
-                session_tool_registry.register(GrepSearchTool::new(effective_workspace.clone()));
-                session_tool_registry.register(GeneratePdfTool::new(effective_workspace.clone()));
-                session_tool_registry.register(GeneratePresentationTool::new(effective_workspace.clone()));
-                session_tool_registry.register(BrowserNavigateTool::new());
-                session_tool_registry.register(BrowserScreenshotTool::new(effective_workspace.clone()));
-                session_tool_registry.register(WebSearchTool::new());
+
+                let allowed_commands: Vec<String> = config_val.get("allowedCommands")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().filter_map(|c| c.as_str().map(|s| s.to_string())).collect())
+                    .unwrap_or_default();
+
+                if model_tier <= 2 {
+                    // Core file and code tools for Tier 1 & 2
+                    session_tool_registry.register(ReadFileTool::new(effective_workspace.clone()));
+                    session_tool_registry.register(WriteFileTool::new(effective_workspace.clone()));
+                    session_tool_registry.register(EditFileTool::new(effective_workspace.clone()));
+                    session_tool_registry.register(ListDirTool::new(effective_workspace.clone()));
+                    session_tool_registry.register(RunCommandTool::with_allowed_commands(effective_workspace.clone(), allowed_commands));
+                    session_tool_registry.register(GrepSearchTool::new(effective_workspace.clone()));
+                    session_tool_registry.register(CreateArtifactTool::new());
+                    session_tool_registry.register(ListArtifactsTool::new());
+                    session_tool_registry.register(ReadArtifactTool::new());
+                }
+
+                if model_tier == 1 {
+                    // Full tools for Tier 1 only (large, capable models)
+                    session_tool_registry.register(GeneratePdfTool::new(effective_workspace.clone()));
+                    session_tool_registry.register(GeneratePresentationTool::new(effective_workspace.clone()));
+                    session_tool_registry.register(BrowserNavigateTool::new());
+                    session_tool_registry.register(BrowserScreenshotTool::new(effective_workspace.clone()));
+                    session_tool_registry.register(WebSearchTool::new());
+                }
 
                 let session_tool_registry_arc = Arc::new(session_tool_registry);
                 let subagent_runner = Arc::new(SubagentRunner::new(
@@ -278,24 +379,54 @@ pub async fn handle_agent_channel(
                 ));
 
                 let mut complete_registry = (*session_tool_registry_arc).clone();
-                complete_registry.register(RunSubagentTool::new(subagent_runner));
+                if model_tier <= 2 {
+                    complete_registry.register(RunSubagentTool::new(subagent_runner));
+                }
 
-                let engine = AgentEngine::new(Arc::new(complete_registry));
+                // 5. Build enriched system prompt
                 let sys_prompt = if instructions.is_empty() {
-                    "You are SuperAgent, an expert autonomous AI software engineer and problem solver.".to_string()
+                    let tool_names: Vec<String> = complete_registry.list_schemas()
+                        .iter()
+                        .filter_map(|s| s.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                        .collect();
+
+                    let tools_section = if tool_names.is_empty() {
+                        "You do NOT have access to any tools. Respond with helpful text, code snippets in markdown code blocks, and explanations.".to_string()
+                    } else {
+                        format!(
+                            "You have access to these tools: {}.\n\
+                            Use tools strategically — only when the user's request clearly requires file operations, code execution, web browsing, or artifact creation.\n\
+                            When asked to create interactive apps, games, widgets, or micro-apps, use the 'create_artifact' tool to build a complete HTML/CSS/JS application.",
+                            tool_names.join(", ")
+                        )
+                    };
+
+                    format!(
+                        "You are SuperAgent, an expert autonomous AI software engineer and problem solver.\n\n\
+                        IMPORTANT BEHAVIORAL GUIDELINES:\n\
+                        - For casual greetings (hi, hello, hey), respond naturally and conversationally. Do NOT call tools for simple greetings.\n\
+                        - For coding tasks, write complete, working solutions.\n\
+                        - For interactive apps, games, or widgets, use 'create_artifact' to build a self-contained web app with HTML, CSS, and JavaScript.\n\
+                        - Always maintain context from prior messages in the conversation.\n\
+                        - If the user asks to continue or refers to something from earlier, use the conversation history.\n\n\
+                        {}", tools_section
+                    )
                 } else {
                     instructions
                 };
+
+                let engine = AgentEngine::new(Arc::new(complete_registry));
 
                 let start_time = std::time::Instant::now();
                 let mut has_error = false;
                 let mut completion_token_count = 0usize;
 
-                let run_result = engine.run_loop(&model_config, &sys_prompt, &prompt_clone).await;
+                // 6. Use run_loop_with_history for multi-turn context
+                let run_result = engine.run_loop_with_history(&model_config, &sys_prompt, &prompt_clone, initial_history).await;
                 let mut did_emit_done = false;
 
                 match run_result {
-                    Ok(mut rx) => {
+                    Ok((mut rx, mut history_rx)) => {
                         loop {
                             tokio::select! {
                                 _ = cancel_rx.recv() => {
@@ -370,6 +501,14 @@ pub async fn handle_agent_channel(
                                         }
                                     }
                                 }
+                            }
+                        }
+
+                        // 7. Persist new messages into conversation_history
+                        if let Ok(new_messages) = history_rx.try_recv() {
+                            let mut store = state_clone.session_store.lock().unwrap();
+                            if let Some(entry) = store.get_mut(&sid) {
+                                entry.conversation_history.extend(new_messages);
                             }
                         }
                     }

@@ -121,6 +121,27 @@ impl TriggerEngine {
         Ok(deleted)
     }
 
+    pub async fn handle_webhook(&self, token: &str, payload: serde_json::Value) -> anyhow::Result<String> {
+        let routines = self.list().await;
+        let mut target_routine = None;
+        for r in routines {
+            if r.trigger_type == RoutineTriggerType::Webhook && r.enabled {
+                if let Some(ref t) = r.webhook_token {
+                    if t == token {
+                        target_routine = Some(r.clone());
+                        break;
+                    }
+                }
+            }
+        }
+        
+        let routine = target_routine.ok_or_else(|| anyhow!("No enabled webhook routine found for token"))?;
+        let prompt_with_payload = format!("{}\nWebhook Payload:\n{}", routine.prompt, serde_json::to_string_pretty(&payload).unwrap_or_default());
+        let result = self.subagent_runner.execute_subagent(&routine.persona_id, &prompt_with_payload).await?;
+        
+        Ok(result)
+    }
+
     /// Manually or scheduled execution of a routine.
     pub async fn execute_routine(&self, id: &str) -> Result<RoutineExecutionLog> {
         let routine = self

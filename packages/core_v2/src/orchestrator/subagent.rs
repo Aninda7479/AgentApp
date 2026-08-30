@@ -1,15 +1,57 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use anyhow::{anyhow, Result};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
+use chrono::Utc;
 
 use crate::orchestrator::AgentEngine;
 use crate::roster::PersonaStore;
 use crate::tools::ToolRegistry;
 use crate::types::{AgentEvent, AgentPersona};
 
+#[derive(Clone, Debug)]
+pub struct AgentMail {
+    pub from: String,
+    pub content: String,
+    pub timestamp: i64,
+}
+
+#[derive(Clone)]
+pub struct AgentMailbox {
+    inbox: Arc<Mutex<HashMap<String, Vec<AgentMail>>>>,
+}
+
+impl AgentMailbox {
+    pub fn new() -> Self {
+        Self {
+            inbox: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    pub async fn send_mail(&self, from: String, to: String, content: String) {
+        let mut lock = self.inbox.lock().await;
+        lock.entry(to).or_default().push(AgentMail {
+            from,
+            content,
+            timestamp: Utc::now().timestamp(),
+        });
+    }
+
+    pub async fn check_mail(&self, agent_id: &str) -> Vec<AgentMail> {
+        let lock = self.inbox.lock().await;
+        lock.get(agent_id).cloned().unwrap_or_default()
+    }
+
+    pub async fn clear_mail(&self, agent_id: &str) {
+        let mut lock = self.inbox.lock().await;
+        lock.remove(agent_id);
+    }
+}
+
 pub struct SubagentRunner {
     roster: Arc<PersonaStore>,
     tool_registry: Arc<ToolRegistry>,
+    mailbox: AgentMailbox,
 }
 
 impl SubagentRunner {
@@ -17,7 +59,16 @@ impl SubagentRunner {
         Self {
             roster,
             tool_registry,
+            mailbox: AgentMailbox::new(),
         }
+    }
+
+    pub fn mailbox(&self) -> &AgentMailbox {
+        &self.mailbox
+    }
+
+    pub async fn check_mailbox(&self, agent_id: &str) -> Vec<AgentMail> {
+        self.mailbox.check_mail(agent_id).await
     }
 
     /// Spawns and executes a subagent persona run synchronously (collecting full output text).

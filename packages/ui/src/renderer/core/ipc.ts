@@ -69,6 +69,12 @@ export class IpcBridge {
     prompt: string;
     config: Record<string, unknown>;
     currentAttachments?: string[];
+    history?: {
+      role: string;
+      content: string;
+      tool_call_id?: string;
+      tool_calls?: { id: string; name: string; arguments: string }[];
+    }[];
   }): Promise<{ success?: boolean; error?: string }> {
     return IpcBridge.invoke('agent-run', payload);
   }

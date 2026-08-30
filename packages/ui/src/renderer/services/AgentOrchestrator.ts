@@ -162,6 +162,31 @@ export class AgentOrchestrator {
       selectedTools: options.selectedTools,
     };
 
+    const priorSteps = chatStore.getSteps(targetChatId);
+    const history = priorSteps.map((step) => {
+      if (step.type === 'user') {
+        return { role: 'user', content: step.content };
+      }
+      if (step.type === 'assistant') {
+        return { role: 'assistant', content: step.content };
+      }
+      if (step.type === 'tool_call') {
+        return {
+          role: 'assistant',
+          content: '',
+          tool_calls: [{
+            id: step.id,
+            name: step.toolName || '',
+            arguments: JSON.stringify(step.metadata?.toolArgs || {})
+          }]
+        };
+      }
+      if (step.type === 'tool_result') {
+        return { role: 'tool', content: step.content, tool_call_id: step.id };
+      }
+      return null;
+    }).filter((h): h is NonNullable<typeof h> => h !== null);
+
     try {
       const sessionId = targetChatId.startsWith('session-') ? targetChatId : `session-${targetChatId}`;
       const result = await IpcBridge.runAgent({
@@ -169,6 +194,7 @@ export class AgentOrchestrator {
         prompt: trimmedPrompt,
         config: runConfig,
         currentAttachments,
+        history,
       });
 
       if (result && result.success === false) {
@@ -262,6 +288,31 @@ export class AgentOrchestrator {
       selectedTools: options.selectedTools,
     };
 
+    const priorSteps = chatStore.getSteps(chatId);
+    const history = priorSteps.map((step) => {
+      if (step.type === 'user') {
+        return { role: 'user', content: step.content };
+      }
+      if (step.type === 'assistant') {
+        return { role: 'assistant', content: step.content };
+      }
+      if (step.type === 'tool_call') {
+        return {
+          role: 'assistant',
+          content: '',
+          tool_calls: [{
+            id: step.id,
+            name: step.toolName || '',
+            arguments: JSON.stringify(step.metadata?.toolArgs || {})
+          }]
+        };
+      }
+      if (step.type === 'tool_result') {
+        return { role: 'tool', content: step.content, tool_call_id: step.id };
+      }
+      return null;
+    }).filter((h): h is NonNullable<typeof h> => h !== null);
+
     try {
       const sessionId = chatId.startsWith('session-') ? chatId : `session-${chatId}`;
       const result = await IpcBridge.runAgent({
@@ -269,6 +320,7 @@ export class AgentOrchestrator {
         prompt: promptText.trim(),
         config: runConfig,
         currentAttachments,
+        history,
       });
 
       if (result && result.success === false) {

@@ -120,6 +120,7 @@ pub fn create_router(state: AppState) -> Router {
             get(get_routine).delete(delete_routine),
         )
         .route("/api/routines/:id/run", post(run_routine_now))
+        .route("/api/triggers/webhook/:token", post(handle_webhook_route))
         .route("/api/workflows/run", post(run_workflow))
         .route("/api/skills", get(list_skills))
         .route("/api/skills/trace/start", post(start_trace_session))

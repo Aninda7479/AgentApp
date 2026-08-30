@@ -111,6 +111,19 @@ pub async fn run_routine_now(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
+pub async fn handle_webhook_route(
+    State(state): State<AppState>,
+    AxumPath(token): AxumPath<String>,
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    state
+        .trigger_engine
+        .handle_webhook(&token, payload)
+        .await
+        .map(|res| Json(serde_json::json!({ "success": true, "result": res })))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
 // ─── Workflow Execution Endpoints ─────────────────────────────────────────────
 
 pub async fn run_workflow(
