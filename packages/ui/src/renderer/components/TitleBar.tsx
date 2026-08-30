@@ -368,45 +368,6 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           ))}
         </div>
 
-        {/* Top bar direct links beside Artifacts */}
-        <div className="hidden xl:flex items-center gap-1 border-l border-brand-border/30 pl-3">
-          {onOpenArtifacts && (
-            <button
-              data-testid="titlebar-artifacts-link"
-              onClick={onOpenArtifacts}
-              className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
-              title="Open Artifacts"
-            >
-              <Package size={12} className="text-brand-textMuted" />
-              <span>Artifacts</span>
-            </button>
-          )}
-          {onOpenPCBWorkspace && (
-            <button
-              data-testid="titlebar-pcb-workspace-link"
-              onClick={onOpenPCBWorkspace}
-              className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors cursor-pointer border border-emerald-500/25 shadow-xs"
-              title="Open PCB Workspace"
-            >
-              <Cpu size={12} className="text-emerald-400" />
-              <span>PCB Workspace</span>
-            </button>
-          )}
-          <button
-            data-testid="titlebar-circle-search-link"
-            onClick={() => {
-              const ipc = getIpc();
-              if (ipc?.invoke) {
-                ipc.invoke('circle-search-show');
-              }
-            }}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-gradient-to-r from-indigo-500/15 via-purple-500/15 to-pink-500/15 text-indigo-300 hover:text-white hover:border-indigo-400/50 border border-indigo-500/30 transition-all cursor-pointer shadow-xs"
-            title={`Google Gemini Circle to Search (${formatShortcut('CommandOrControl+Shift+S')})`}
-          >
-            <Sparkles size={12} className="text-indigo-400" />
-            <span>Circle Search</span>
-          </button>
-        </div>
       </div>
 
 
