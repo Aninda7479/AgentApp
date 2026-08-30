@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronRight, ChevronDown, ChevronLeft, Copy, FileText, FolderOpen, Check, Eye, RotateCcw, Edit, RefreshCw, Trash2, Loader2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, ChevronLeft, Copy, FileText, FolderOpen, Check, Eye, RotateCcw, Edit, RefreshCw, Trash2, Loader2, Code2, Play, ExternalLink, Sparkles, Download } from 'lucide-react';
 import { TrajectoryService } from '../../logic/trajectory';
+import { getIpc } from '../../lib/ipc';
 
 /** A single step in the agent execution trajectory. */
 export interface TrajectoryStep {
@@ -381,9 +382,274 @@ const ToolCallCard: React.FC<ToolCallCardProps> = ({ step, isLast }) => {
   );
 };
 
-// ─── Simple Markdown renderer (lightweight, no deps) ─────────────────────────
+// ─── Interactive Artifact Card & Code Block Component ─────────────────────────
+interface InteractiveArtifactCardProps {
+  content: string;
+  language?: string;
+  artifactId?: string;
+  title?: string;
+}
+
+const InteractiveArtifactCard: React.FC<InteractiveArtifactCardProps> = ({
+  content,
+  language = 'html',
+  artifactId = 'app',
+  title = 'Interactive Web App',
+}) => {
+  const isWebHtml = language.toLowerCase() === 'html' || content.includes('<!DOCTYPE html>') || content.includes('<html') || content.includes('<script') || content.includes('<style');
+  const [activeTab, setActiveTab] = useState<'preview' | 'code'>(isWebHtml ? 'preview' : 'code');
+  const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const cleanId = artifactId.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^-+|-+$/g, '') || 'app';
+  const displayTitle = title || (isWebHtml ? 'Interactive Web App / Game' : `${language.toUpperCase()} Code`);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const handleSaveToArtifacts = async () => {
+    const ipc = getIpc();
+    if (!ipc) return;
+    setSaving(true);
+    try {
+      await ipc.invoke('artifact:create', {
+        id: cleanId,
+        name: displayTitle,
+        description: 'Created from SuperAgent Standalone Chat',
+        type: 'web',
+        entry: 'index.html',
+        files: {
+          'index.html': content,
+        },
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      console.error('[ArtifactCard] Failed to save artifact:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleOpenExternal = () => {
+    try {
+      const blob = new Blob([content], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (err) {
+      console.error('[ArtifactCard] Failed to open in new tab:', err);
+    }
+  };
+
+  return (
+    <div className="my-3 rounded-xl border border-brand-border/80 bg-brand-card shadow-md overflow-hidden animate-fade-in">
+      {/* Header bar */}
+      <div className="px-3.5 py-2.5 bg-brand-popover/60 border-b border-brand-border/60 flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="p-1 rounded-md bg-brand-highlight/20 text-brand-highlight text-xs">
+            {isWebHtml ? '🎮' : '📄'}
+          </span>
+          <span className="text-xs font-bold text-brand-textMain truncate">
+            {displayTitle}
+          </span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-brand-card border border-brand-border/60 text-brand-textMuted uppercase">
+            {language}
+          </span>
+        </div>
+
+        {/* Tab & Action buttons */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {isWebHtml && (
+            <div className="flex items-center bg-brand-card p-0.5 rounded-lg border border-brand-border/40 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setActiveTab('preview')}
+                className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer flex items-center gap-1 ${
+                  activeTab === 'preview'
+                    ? 'bg-brand-highlight text-brand-highlight-text font-semibold shadow-xs'
+                    : 'text-brand-textMuted hover:text-brand-textMain'
+                }`}
+              >
+                <Play size={11} />
+                <span>Live App</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('code')}
+                className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer flex items-center gap-1 ${
+                  activeTab === 'code'
+                    ? 'bg-brand-highlight text-brand-highlight-text font-semibold shadow-xs'
+                    : 'text-brand-textMuted hover:text-brand-textMain'
+                }`}
+              >
+                <Code2 size={11} />
+                <span>Code</span>
+              </button>
+            </div>
+          )}
+
+          {isWebHtml && (
+            <button
+              type="button"
+              onClick={handleSaveToArtifacts}
+              disabled={saving || saved}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+                saved
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                  : 'bg-brand-card hover:bg-[color:var(--brand-hover-strong)] text-brand-textMain border-brand-border/60'
+              }`}
+              title="Save directly to ~/.superagent/artifacts"
+            >
+              {saved ? <Check size={12} className="text-emerald-400" /> : <Download size={12} />}
+              <span>{saved ? 'Saved!' : saving ? 'Saving...' : 'Save to Gallery'}</span>
+            </button>
+          )}
+
+          {isWebHtml && (
+            <button
+              type="button"
+              onClick={handleOpenExternal}
+              className="p-1.5 rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover-strong)] transition-colors cursor-pointer border border-brand-border/40"
+              title="Open in new window"
+            >
+              <ExternalLink size={12} />
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover-strong)] transition-colors cursor-pointer border border-brand-border/40"
+            title="Copy code"
+          >
+            {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+            <span>{copied ? 'Copied' : 'Copy'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Body Content */}
+      <div className="p-3 bg-brand-bg/50">
+        {activeTab === 'preview' && isWebHtml ? (
+          <div className="w-full h-84 rounded-lg overflow-hidden border border-brand-border/60 bg-white shadow-inner">
+            <iframe
+              srcDoc={content}
+              sandbox="allow-scripts allow-forms allow-modals allow-same-origin"
+              className="w-full h-full border-0"
+              title={displayTitle}
+            />
+          </div>
+        ) : (
+          <pre className="text-xs font-mono text-brand-textMain bg-brand-card/80 p-3.5 rounded-lg border border-brand-border/40 overflow-x-auto max-h-80 overflow-y-auto leading-relaxed whitespace-pre select-text">
+            <code>{content}</code>
+          </pre>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── Markdown Renderer with Code & Artifact Block Support ──────────────────────
 const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ content, streaming }) => {
-  // Very lightweight inline markdown: bold, code, italic
+  // Parse multi-line blocks (code blocks, artifact tags, and text)
+  const renderBlocks = () => {
+    const blocks: React.ReactNode[] = [];
+    let remaining = content;
+    let blockIdx = 0;
+
+    // First, process any <artifact ...>...</artifact> tags
+    const artifactRegex = /<artifact(?:\s+id="([^"]*)")?(?:\s+title="([^"]*)")?[^>]*>([\s\S]*?)<\/artifact>/gi;
+    let match: RegExpExecArray | null;
+    let lastIndex = 0;
+
+    while ((match = artifactRegex.exec(content)) !== null) {
+      const precedingText = content.slice(lastIndex, match.index);
+      if (precedingText.trim()) {
+        blocks.push(renderTextAndCodeFences(precedingText, blockIdx++));
+      }
+      const artifactId = match[1] || 'app';
+      const title = match[2] || 'Interactive App';
+      const innerContent = match[3].trim();
+      blocks.push(
+        <InteractiveArtifactCard
+          key={`art-${blockIdx++}`}
+          content={innerContent}
+          language="html"
+          artifactId={artifactId}
+          title={title}
+        />
+      );
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < content.length) {
+      const trailingText = content.slice(lastIndex);
+      if (trailingText.trim()) {
+        blocks.push(renderTextAndCodeFences(trailingText, blockIdx++));
+      }
+    }
+
+    if (blocks.length === 0) {
+      blocks.push(renderTextAndCodeFences(content, 0));
+    }
+
+    return blocks;
+  };
+
+  const renderTextAndCodeFences = (text: string, baseIdx: number) => {
+    const elements: React.ReactNode[] = [];
+    const fenceRegex = /```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g;
+    let lastIdx = 0;
+    let m: RegExpExecArray | null;
+    let subIdx = 0;
+
+    while ((m = fenceRegex.exec(text)) !== null) {
+      const before = text.slice(lastIdx, m.index);
+      if (before.trim()) {
+        elements.push(renderParagraphs(before, `${baseIdx}-${subIdx++}`));
+      }
+      const lang = m[1] || 'text';
+      const code = m[2];
+      elements.push(
+        <InteractiveArtifactCard
+          key={`code-${baseIdx}-${subIdx++}`}
+          content={code}
+          language={lang}
+          artifactId="app"
+          title={lang.toLowerCase() === 'html' ? 'Interactive App' : `${lang.toUpperCase()} Code`}
+        />
+      );
+      lastIdx = m.index + m[0].length;
+    }
+
+    if (lastIdx < text.length) {
+      const after = text.slice(lastIdx);
+      if (after.trim()) {
+        elements.push(renderParagraphs(after, `${baseIdx}-${subIdx++}`));
+      }
+    }
+
+    if (elements.length === 0) {
+      return renderParagraphs(text, `${baseIdx}-0`);
+    }
+
+    return <React.Fragment key={`frag-${baseIdx}`}>{elements}</React.Fragment>;
+  };
+
+  const renderParagraphs = (text: string, keyPrefix: string) => {
+    const lines = text.split('\n');
+    return (
+      <div key={`p-${keyPrefix}`} className="text-brand-textMain font-sans text-[14px] leading-[1.7] tracking-[0.01em] break-words">
+        {lines.map((line, i) => renderLine(line, i))}
+      </div>
+    );
+  };
+
   const renderLine = (line: string, idx: number) => {
     // Heading
     if (line.startsWith('### ')) {
@@ -445,13 +711,11 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
   };
 
   const renderInline = (text: string): React.ReactNode => {
-    // Split on code spans, bold, italic
     const parts: React.ReactNode[] = [];
     let remaining = text;
     let keyIdx = 0;
 
     while (remaining.length > 0) {
-      // Inline code
       const codeMatch = remaining.match(/^(.*?)`([^`]+)`(.*)/s);
       if (codeMatch) {
         if (codeMatch[1]) parts.push(<span key={keyIdx++}>{renderBoldItalic(codeMatch[1])}</span>);
@@ -470,7 +734,6 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
   };
 
   const renderBoldItalic = (text: string): React.ReactNode => {
-    // Bold: **text**
     const parts = text.split(/(\*\*[^*]+\*\*)/g);
     return parts.map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) {
@@ -480,11 +743,9 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
     });
   };
 
-  const lines = content.split('\n');
-
   return (
-    <div className="text-brand-textMain font-sans text-[14px] leading-[1.7] tracking-[0.01em] break-words">
-      {lines.map((line, i) => renderLine(line, i))}
+    <div className="flex flex-col gap-1 w-full">
+      {renderBlocks()}
       {streaming && <StreamingCursor />}
     </div>
   );

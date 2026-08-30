@@ -437,3 +437,45 @@ mod tests {
         assert!(list_res.contains("unit-test-timer"));
     }
 }
+
+/// Tool that allows any model (including Tier 3 small models) to query its enabled capabilities and tools.
+pub struct GetAvailableToolsTool {
+    tools_summary: Vec<(String, String)>,
+}
+
+impl GetAvailableToolsTool {
+    pub fn new(tools_summary: Vec<(String, String)>) -> Self {
+        Self { tools_summary }
+    }
+}
+
+#[async_trait]
+impl Tool for GetAvailableToolsTool {
+    fn name(&self) -> &str {
+        "get_available_tools"
+    }
+
+    fn description(&self) -> &str {
+        "Returns the list of all tools and capabilities currently enabled for you in this session, with their names and descriptions. Call this when asked about your tools or capabilities."
+    }
+
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {}
+        })
+    }
+
+    async fn execute(&self, _input: Value) -> Result<String> {
+        if self.tools_summary.is_empty() {
+            return Ok("No tools are currently enabled in this session. You can provide direct text and code responses.".to_string());
+        }
+
+        let mut out = String::from("Currently available tools in this session:\n\n");
+        for (name, desc) in &self.tools_summary {
+            out.push_str(&format!("- **{}**: {}\n", name, desc));
+        }
+        out.push_str("\nYou can call any of the tools listed above to fulfill user requests.");
+        Ok(out)
+    }
+}

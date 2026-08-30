@@ -13,8 +13,8 @@ use crate::server::routes::chat::resolve_active_workspace_model;
 use crate::server::state::{AppState, SessionStateEntry};
 use crate::storage::settings::get_superagent_dir;
 use crate::tools::builtin::{
-    CreateArtifactTool, EditFileTool, GrepSearchTool, ListArtifactsTool, ListDirTool,
-    ReadArtifactTool, ReadFileTool, RunCommandTool, RunSubagentTool, WriteFileTool,
+    CreateArtifactTool, EditFileTool, GetAvailableToolsTool, GrepSearchTool, ListArtifactsTool,
+    ListDirTool, ReadArtifactTool, ReadFileTool, RunCommandTool, RunSubagentTool, WriteFileTool,
 };
 use crate::tools::ToolRegistry;
 use crate::types::{ModelConfig, ProviderType};
@@ -350,6 +350,11 @@ pub async fn handle_agent_channel(
                     .map(|arr| arr.iter().filter_map(|c| c.as_str().map(|s| s.to_string())).collect())
                     .unwrap_or_default();
 
+                // Artifact tools are enabled across ALL tiers (Tier 1, 2, and 3)
+                session_tool_registry.register(CreateArtifactTool::new());
+                session_tool_registry.register(ListArtifactsTool::new());
+                session_tool_registry.register(ReadArtifactTool::new());
+
                 if model_tier <= 2 {
                     // Core file and code tools for Tier 1 & 2
                     session_tool_registry.register(ReadFileTool::new(effective_workspace.clone()));
@@ -358,19 +363,27 @@ pub async fn handle_agent_channel(
                     session_tool_registry.register(ListDirTool::new(effective_workspace.clone()));
                     session_tool_registry.register(RunCommandTool::with_allowed_commands(effective_workspace.clone(), allowed_commands));
                     session_tool_registry.register(GrepSearchTool::new(effective_workspace.clone()));
-                    session_tool_registry.register(CreateArtifactTool::new());
-                    session_tool_registry.register(ListArtifactsTool::new());
-                    session_tool_registry.register(ReadArtifactTool::new());
                 }
 
                 if model_tier == 1 {
-                    // Full tools for Tier 1 only (large, capable models)
+                    // Heavy automation & media tools for Tier 1 only (large, capable models)
                     session_tool_registry.register(GeneratePdfTool::new(effective_workspace.clone()));
                     session_tool_registry.register(GeneratePresentationTool::new(effective_workspace.clone()));
                     session_tool_registry.register(BrowserNavigateTool::new());
                     session_tool_registry.register(BrowserScreenshotTool::new(effective_workspace.clone()));
                     session_tool_registry.register(WebSearchTool::new());
                 }
+
+                // Register GetAvailableToolsTool for ALL tiers so any model can query its enabled capabilities
+                let tools_summary: Vec<(String, String)> = session_tool_registry.list_schemas()
+                    .iter()
+                    .map(|s| {
+                        let name = s.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                        let desc = s.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                        (name, desc)
+                    })
+                    .collect();
+                session_tool_registry.register(GetAvailableToolsTool::new(tools_summary));
 
                 let session_tool_registry_arc = Arc::new(session_tool_registry);
                 let subagent_runner = Arc::new(SubagentRunner::new(
@@ -390,21 +403,18 @@ pub async fn handle_agent_channel(
                         .filter_map(|s| s.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
                         .collect();
 
-                    let tools_section = if tool_names.is_empty() {
-                        "You do NOT have access to any tools. Respond with helpful text, code snippets in markdown code blocks, and explanations.".to_string()
-                    } else {
-                        format!(
-                            "You have access to these tools: {}.\n\
-                            Use tools strategically — only when the user's request clearly requires file operations, code execution, web browsing, or artifact creation.\n\
-                            When asked to create interactive apps, games, widgets, or micro-apps, use the 'create_artifact' tool to build a complete HTML/CSS/JS application.",
-                            tool_names.join(", ")
-                        )
-                    };
+                    let tools_section = format!(
+                        "You have access to these tools: {}.\n\
+                        You can also call 'get_available_tools' at any time to verify what tools you have access to.\n\
+                        When asked to create an artifact, game, web app, calculator, or interactive widget, use the 'create_artifact' tool to build a complete HTML/CSS/JS application.",
+                        tool_names.join(", ")
+                    );
 
                     format!(
                         "You are SuperAgent, an expert autonomous AI software engineer and problem solver.\n\n\
                         IMPORTANT BEHAVIORAL GUIDELINES:\n\
                         - For casual greetings (hi, hello, hey), respond naturally and conversationally. Do NOT call tools for simple greetings.\n\
+                        - You can query what tools you have access to at any time by calling the 'get_available_tools' tool.\n\
                         - For coding tasks, write complete, working solutions.\n\
                         - For interactive apps, games, or widgets, use 'create_artifact' to build a self-contained web app with HTML, CSS, and JavaScript.\n\
                         - Always maintain context from prior messages in the conversation.\n\
