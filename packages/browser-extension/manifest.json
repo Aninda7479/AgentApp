@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SuperAgent — AI Companion & Browser Agent",
-  "version": "0.38.0",
+  "version": "0.39.0",
   "description": "On the way chat and autonomous agentic work with global memory, site storage access, and deep network/DOM inspection.",
   "icons": {
     "16": "icons/icon-16.png",
