@@ -2,10 +2,12 @@ use std::path::PathBuf;
 
 use axum::{http::StatusCode, Json};
 use base64::Engine as _;
-use sysinfo::System;
 
 use crate::server::ipc::lan_addresses;
-use crate::server::routes::system::{compare_semver, fetch_latest_release_info};
+use crate::server::routes::system::{
+    compare_semver, detect_ollama_installation, fetch_latest_release_info,
+    get_full_system_info_value, scan_ollama_models_from_disk, start_ollama_daemon,
+};
 use crate::server::state::AppState;
 use crate::storage::partner::{
     get_active_partner, get_partner, import_partner_json, list_partners, partner_folder_path,
@@ -108,18 +110,47 @@ pub async fn handle_integrations_channel(
         }
 
         "system-info" | "get_system_info" => {
-            let mut sys = System::new_all();
-            sys.refresh_all();
-            Some(Ok(Json(serde_json::json!({
-                "data": {
-                    "os_name": System::name().unwrap_or_else(|| "Unknown".into()),
-                    "os_version": System::os_version().unwrap_or_else(|| "Unknown".into()),
-                    "total_memory_mb": sys.total_memory() / (1024 * 1024),
-                    "used_memory_mb": sys.used_memory() / (1024 * 1024),
-                    "cpu_count": sys.cpus().len(),
-                    "hostname": System::host_name().unwrap_or_else(|| "localhost".into())
+            let info = get_full_system_info_value();
+            Some(Ok(Json(serde_json::json!({ "data": info }))))
+        }
+        "ollama-status" | "check-ollama-installed" | "ollama_status" | "check_ollama_installed" => {
+            let status = detect_ollama_installation();
+            Some(Ok(Json(serde_json::json!({ "data": status }))))
+        }
+        "ollama-installed-models" | "ollama_installed_models" | "ollama-models" | "ollama_models" => {
+            let models = scan_ollama_models_from_disk();
+            Some(Ok(Json(serde_json::json!({ "data": models }))))
+        }
+        "ollama-start" | "start-ollama-service" | "ollama_start" | "start_ollama_service" => {
+            match start_ollama_daemon() {
+                Ok(running) => Some(Ok(Json(serde_json::json!({
+                    "data": { "success": running, "running": running }
+                })))),
+                Err(e) => Some(Ok(Json(serde_json::json!({
+                    "data": { "success": false, "error": e }
+                })))),
+            }
+        }
+        "ollama-settings-get" => {
+            let settings = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
+            let ollama_cfg = settings.get("ollama").cloned().unwrap_or_else(|| serde_json::json!({
+                "baseUrl": "http://localhost:11434",
+                "defaultContextLimit": "8k",
+                "defaultTemperature": 0.7,
+                "keepAlive": "5m",
+                "autoStart": true
+            }));
+            Some(Ok(Json(serde_json::json!({ "data": ollama_cfg }))))
+        }
+        "ollama-settings-save" => {
+            if let Some(arg) = args.first() {
+                let mut current = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
+                if let Some(c_obj) = current.as_object_mut() {
+                    c_obj.insert("ollama".to_string(), arg.clone());
+                    let _ = state.settings_store.save_raw(&current);
                 }
-            }))))
+            }
+            Some(Ok(Json(serde_json::json!({ "data": { "success": true } }))))
         }
         "app-version" | "get_app_version" => {
             Some(Ok(Json(serde_json::json!({ "data": env!("CARGO_PKG_VERSION") }))))

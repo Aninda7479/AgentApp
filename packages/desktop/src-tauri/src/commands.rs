@@ -5,7 +5,6 @@ use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
 use superagent_core_v2::artifact::{ArtifactManifest, ArtifactRuntimeState};
-use sysinfo::System;
 use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -203,31 +202,8 @@ pub fn artifact_open_folder() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn get_system_info() -> SystemInfoResponse {
-    let mut sys = System::new();
-    sys.refresh_memory();
-    sys.refresh_cpu_usage();
-
-    let total_mem = sys.total_memory() / 1024 / 1024;
-    let used_mem = sys.used_memory() / 1024 / 1024;
-    let cpus = sys.cpus();
-    let cpu_count = cpus.len();
-
-    let cpu_usage: f32 = if cpu_count > 0 {
-        cpus.iter().map(|c| c.cpu_usage()).sum::<f32>() / cpu_count as f32
-    } else {
-        0.0
-    };
-
-    SystemInfoResponse {
-        os_name: System::name().unwrap_or_else(|| "Unknown".to_string()),
-        os_version: System::os_version().unwrap_or_else(|| "Unknown".to_string()),
-        total_memory_mb: total_mem,
-        used_memory_mb: used_mem,
-        cpu_count,
-        cpu_usage_percent: cpu_usage,
-        hostname: System::host_name().unwrap_or_else(|| "SuperAgent-Device".to_string()),
-    }
+pub fn get_system_info() -> serde_json::Value {
+    superagent_core_v2::server::routes::system::get_full_system_info_value()
 }
 
 #[tauri::command]
@@ -254,13 +230,66 @@ pub fn get_app_version() -> String {
 }
 
 #[tauri::command]
-pub fn system_info() -> SystemInfoResponse {
+pub fn system_info() -> serde_json::Value {
     get_system_info()
 }
 
 #[tauri::command]
 pub fn app_version() -> String {
     get_app_version()
+}
+
+#[tauri::command]
+pub fn ollama_status() -> serde_json::Value {
+    superagent_core_v2::server::routes::system::detect_ollama_installation()
+}
+
+#[tauri::command]
+pub fn check_ollama_installed() -> serde_json::Value {
+    ollama_status()
+}
+
+#[tauri::command]
+pub fn ollama_installed_models() -> Vec<serde_json::Value> {
+    superagent_core_v2::server::routes::system::scan_ollama_models_from_disk()
+}
+
+#[tauri::command]
+pub fn ollama_start() -> serde_json::Value {
+    match superagent_core_v2::server::routes::system::start_ollama_daemon() {
+        Ok(running) => serde_json::json!({ "success": running, "running": running }),
+        Err(e) => serde_json::json!({ "success": false, "error": e }),
+    }
+}
+
+#[tauri::command]
+pub fn start_ollama_service() -> serde_json::Value {
+    ollama_start()
+}
+
+#[tauri::command]
+pub fn ollama_settings_get() -> serde_json::Value {
+    let settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_else(|_| serde_json::json!({}));
+    settings.get("ollama").cloned().unwrap_or_else(|| serde_json::json!({
+        "baseUrl": "http://localhost:11434",
+        "defaultContextLimit": "8k",
+        "defaultTemperature": 0.7,
+        "keepAlive": "5m",
+        "autoStart": true
+    }))
+}
+
+#[tauri::command]
+pub fn ollama_settings_save(payload: Option<serde_json::Value>, data: Option<serde_json::Value>) -> Result<(), String> {
+    let arg = payload.or(data);
+    if let Some(val) = arg {
+        let mut current = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_else(|_| serde_json::json!({}));
+        if let Some(c_obj) = current.as_object_mut() {
+            c_obj.insert("ollama".to_string(), val);
+            superagent_core_v2::storage::SettingsStore::new().save_raw(&current).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 fn get_user_data_dir() -> PathBuf {

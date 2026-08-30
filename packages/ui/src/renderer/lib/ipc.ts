@@ -80,9 +80,22 @@ const TAURI_COMMAND_MAP: Record<string, string> = {
   'circle_search_capture_area': 'circle_search_capture_area',
   'overlay-capture-screen': 'circle_search_get_screen_image',
   'overlay-hide': 'circle_search_hide',
+  'ollama-status': 'ollama_status',
+  'ollama_status': 'ollama_status',
+  'check-ollama-installed': 'check_ollama_installed',
+  'check_ollama_installed': 'check_ollama_installed',
+  'ollama-installed-models': 'ollama_installed_models',
+  'ollama_installed_models': 'ollama_installed_models',
+  'ollama-models': 'ollama_installed_models',
+  'ollama_models': 'ollama_installed_models',
+  'ollama-start': 'ollama_start',
+  'ollama_start': 'ollama_start',
+  'start-ollama-service': 'start_ollama_service',
+  'start_ollama_service': 'start_ollama_service',
+  'ollama-settings-get': 'ollama_settings_get',
+  'ollama_settings_get': 'ollama_settings_get',
+  'ollama-settings-save': 'ollama_settings_save',
 };
-
-
 
 const SAFE_EMPTY_CHANNELS = new Set<string>([
   'skills-catalog',
@@ -97,6 +110,8 @@ const SAFE_EMPTY_CHANNELS = new Set<string>([
   'skills_import_check',
   'kanban-load',
   'kanban_load',
+  'ollama-installed-models',
+  'ollama_installed_models',
 ]);
 
 let cachedBridge: any = null;
@@ -556,6 +571,22 @@ const SILENT_IPC_CHANNELS = new Set<string>([
   'circle-search-analyze',
   'overlay-capture-screen',
   'overlay-hide',
+  'ollama-status',
+  'ollama_status',
+  'check-ollama-installed',
+  'check_ollama_installed',
+  'ollama-installed-models',
+  'ollama_installed_models',
+  'ollama-models',
+  'ollama_models',
+  'ollama-start',
+  'ollama_start',
+  'start-ollama-service',
+  'start_ollama_service',
+  'ollama-settings-get',
+  'ollama_settings_get',
+  'ollama-settings-save',
+  'ollama_settings_save',
 ]);
 
 

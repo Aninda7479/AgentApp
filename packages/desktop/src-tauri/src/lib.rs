@@ -263,7 +263,14 @@ pub fn run() {
             circle_search_show,
             circle_search_hide,
             circle_search_toggle,
-            voice_dictation_toggle
+            voice_dictation_toggle,
+            ollama_status,
+            check_ollama_installed,
+            ollama_installed_models,
+            ollama_start,
+            start_ollama_service,
+            ollama_settings_get,
+            ollama_settings_save
         ])
         .build(tauri::generate_context!())
         .expect("error while building SuperAgent tauri application")

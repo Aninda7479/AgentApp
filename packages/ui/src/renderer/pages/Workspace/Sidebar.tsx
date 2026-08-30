@@ -320,14 +320,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {/* Project list */}
             <div className="flex flex-col gap-0.5">
-              {projects.map((proj) => {
+              {projects.map((proj, projIdx) => {
                 const isExpanded = !collapsedProjects[proj.name];
                 const isProjectActive = activeProject === proj.name && activeTab === 'trajectory';
                 const projectChats = chats.filter((c) => c.project === proj.name).sort(sortChatsChronologically);
                 const isMenuOpen = openMenuProject === proj.name;
 
                 return (
-                  <div key={proj.name} className="flex flex-col">
+                  <div key={(proj as any).id || `${proj.name}-${projIdx}`} className="flex flex-col">
                     {/* ── Project row ── */}
                     <div
                       data-testid={`project-item-${proj.name}`}
