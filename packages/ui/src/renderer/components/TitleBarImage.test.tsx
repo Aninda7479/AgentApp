@@ -37,6 +37,11 @@ describe('ImageWorkspacePage Component', () => {
     expect(html).toContain('Prompt');
     expect(html).toContain('Aspect Ratio');
     expect(html).toContain('Generate Image');
+    expect(html).toContain('Advanced Settings');
+    expect(html).toContain('+ Image');
+    expect(html).toContain('+ Brand Logo');
+    expect(html).toContain('+ Palette');
+    expect(html).toContain('Magic Polish');
   });
 });
 

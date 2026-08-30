@@ -729,6 +729,15 @@ impl EngineManager {
             }
         }
 
+        if let Some(ref init_img_path) = req.init_image {
+            if !init_img_path.is_empty() {
+                cmd.args(["--init-img", init_img_path]);
+                if let Some(strength) = req.strength {
+                    cmd.args(["--strength", &strength.to_string()]);
+                }
+            }
+        }
+
         info!("Spawning sd-cli: {:?}", cmd);
         let output = cmd.output().map_err(|e| anyhow!("Failed to execute sd-cli: {}", e))?;
 

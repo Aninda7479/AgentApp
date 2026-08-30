@@ -107,6 +107,8 @@ pub struct GenerateImageRequest {
     pub cfg_scale: Option<f32>,
     pub seed: Option<i64>,
     pub sampler: Option<String>,
+    pub init_image: Option<String>,
+    pub strength: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

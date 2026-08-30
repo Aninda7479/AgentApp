@@ -102,9 +102,35 @@ impl ImageWorkspaceManager {
             model_id, req.prompt
         );
 
-        let elapsed_ms = self
+        // Check if init_image is provided as base64 data url or path
+        let mut temp_init_input: Option<PathBuf> = None;
+        let mut effective_req = req.clone();
+
+        if let Some(ref init_data) = req.init_image {
+            if init_data.starts_with("data:image/") {
+                if let Some(comma_pos) = init_data.find(',') {
+                    let base64_str = &init_data[comma_pos + 1..];
+                    use base64::Engine;
+                    if let Ok(decoded_bytes) = base64::engine::general_purpose::STANDARD.decode(base64_str.trim()) {
+                        let temp_in = std::env::temp_dir().join(format!("init_{}.png", Uuid::new_v4()));
+                        if std::fs::write(&temp_in, &decoded_bytes).is_ok() {
+                            effective_req.init_image = Some(temp_in.to_string_lossy().to_string());
+                            temp_init_input = Some(temp_in);
+                        }
+                    }
+                }
+            }
+        }
+
+        let gen_result = self
             .engine
-            .execute_generation(req, &model_path, &temp_output)?;
+            .execute_generation(&effective_req, &model_path, &temp_output);
+
+        if let Some(ref temp_in) = temp_init_input {
+            let _ = std::fs::remove_file(temp_in);
+        }
+
+        let elapsed_ms = gen_result?;
 
         let bytes = std::fs::read(&temp_output)
             .map_err(|e| anyhow!("Failed to read generated image: {}", e))?;

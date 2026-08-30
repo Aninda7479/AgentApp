@@ -64,6 +64,8 @@ export interface GenerateImageRequest {
   cfg_scale?: number;
   seed?: number;
   sampler?: string;
+  init_image?: string;
+  strength?: number;
 }
 
 export interface GenerateImageResponse {

@@ -1,25 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Image as ImageIcon,
   Sparkles,
-  Download,
-  Copy,
-  Trash2,
-  Dice5,
-  Settings,
-  ChevronDown,
-  ChevronUp,
-  Maximize2,
-  RefreshCw,
-  Zap,
-  HardDrive,
-  Cpu,
-  Layers,
   ArrowLeft,
-  Sliders,
-  Check,
+  Settings,
   ExternalLink,
+  RefreshCw,
   Palette,
+  Check,
 } from 'lucide-react';
 import {
   generateImage,
@@ -33,26 +20,34 @@ import {
   ImageModelInfo,
   EngineStatus,
 } from '../../services/imageService';
+import {
+  AspectRatioOption,
+  AttachedReferenceImage,
+  BrandLogoConfig,
+  ColorPaletteConfig,
+  StylePreset,
+  AdvancedSettingsState,
+} from './types';
+import { ImageComposer } from './components/ImageComposer';
+import { AttachmentShelf } from './components/AttachmentShelf';
+import { AdvancedSettingsDrawer } from './components/AdvancedSettingsDrawer';
+import { CanvasStage } from './components/CanvasStage';
+import { GalleryFilmstrip } from './components/GalleryFilmstrip';
+import { ColorPaletteModal } from './components/ColorPaletteModal';
+import { BrandLogoModal } from './components/BrandLogoModal';
 
-interface ImageWorkspacePageProps {
+export interface ImageWorkspacePageProps {
   onBack?: () => void;
   onOpenSettings?: () => void;
   triggerToast?: (message: string) => void;
 }
 
-const ASPECT_RATIOS = [
+export const ASPECT_RATIOS: AspectRatioOption[] = [
   { label: 'Square (1:1)', width: 1024, height: 1024 },
   { label: 'Landscape (16:9)', width: 1280, height: 720 },
   { label: 'Portrait (9:16)', width: 720, height: 1280 },
   { label: 'Photo (4:3)', width: 1024, height: 768 },
   { label: 'Classic (3:2)', width: 1024, height: 682 },
-];
-
-const SAMPLE_PROMPTS = [
-  'A cybernetic cyberpunk detective looking over a rainy neo-Tokyo skyline, neon reflections, 8k cinematic lighting',
-  'A serene Japanese zen garden with cherry blossom petals falling into a koi pond at dawn, photorealistic',
-  'A high-tech laboratory with glowing quantum holographic computer interfaces, hyperrealistic detail',
-  'An astronaut standing on a crimson alien planet gazing at a massive swirling ringed gas giant, unreal engine 5',
 ];
 
 export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
@@ -64,17 +59,38 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
     if (triggerToast) triggerToast(msg);
   };
 
-  // State
+  // ── Core Generation Inputs ──
   const [prompt, setPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('');
-  const [showNegative, setShowNegative] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>('');
-  const [dimensions, setDimensions] = useState(ASPECT_RATIOS[0]);
-  const [steps, setSteps] = useState(20);
-  const [cfgScale, setCfgScale] = useState(7.0);
-  const [seed, setSeed] = useState<number | null>(null);
-  const [mode, setMode] = useState<'local' | 'cloud' | 'auto'>('auto');
+  const [dimensions, setDimensions] = useState<AspectRatioOption>(ASPECT_RATIOS[0]);
 
+  // ── Attachments ──
+  const [referenceImage, setReferenceImage] = useState<AttachedReferenceImage | null>(null);
+  const [brandLogo, setBrandLogo] = useState<BrandLogoConfig>({
+    enabled: false,
+    source: 'superagent',
+    placement: 'bottom-right',
+    opacity: 0.85,
+    scale: 0.18,
+  });
+  const [selectedPalette, setSelectedPalette] = useState<ColorPaletteConfig | null>(null);
+  const [activePreset, setActivePreset] = useState<StylePreset | null>(null);
+
+  // ── Modals ──
+  const [isColorModalOpen, setIsColorModalOpen] = useState(false);
+  const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
+
+  // ── Advanced Settings ──
+  const [advanced, setAdvanced] = useState<AdvancedSettingsState>({
+    steps: 20,
+    cfgScale: 7.0,
+    seed: null,
+    sampler: 'euler_a',
+    negativePrompt: '',
+    mode: 'auto',
+  });
+
+  // ── Backend / Gallery State ──
   const [models, setModels] = useState<ImageModelInfo[]>([]);
   const [engineStatus, setEngineStatus] = useState<EngineStatus | null>(null);
   const [history, setHistory] = useState<GenerationRecord[]>([]);
@@ -84,7 +100,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
   const [generationTime, setGenerationTime] = useState(0);
   const [copied, setCopied] = useState(false);
 
-  // Load initial data
+  // Load models, engine status, and generations
   const loadData = useCallback(async () => {
     try {
       const [modelsList, status, gens] = await Promise.all([
@@ -96,12 +112,14 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
       setEngineStatus(status);
       setHistory(gens);
 
-      // Auto-select first downloaded model if available
       const downloaded = modelsList.find((m) => m.is_downloaded);
       if (downloaded && !selectedModel) {
         setSelectedModel(downloaded.id);
-        setSteps(downloaded.default_steps);
-        setCfgScale(downloaded.default_cfg);
+        setAdvanced((prev) => ({
+          ...prev,
+          steps: downloaded.default_steps,
+          cfgScale: downloaded.default_cfg,
+        }));
       } else if (!selectedModel && modelsList.length > 0) {
         setSelectedModel(modelsList[0].id);
       }
@@ -118,24 +136,91 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
     loadData();
   }, [loadData]);
 
-  // Update steps and CFG when selected model changes
+  // Model selection handler
   const handleModelChange = (modelId: string) => {
     setSelectedModel(modelId);
     const m = models.find((item) => item.id === modelId);
     if (m) {
-      setSteps(m.default_steps);
-      setCfgScale(m.default_cfg);
+      setAdvanced((prev) => ({
+        ...prev,
+        steps: m.default_steps,
+        cfgScale: m.default_cfg,
+      }));
     }
   };
 
-  const handleRandomSeed = () => {
-    setSeed(Math.floor(Math.random() * 2147483647));
+  // 1-Click Remix past generation
+  const handleRemix = (record: GenerationRecord) => {
+    setPrompt(record.prompt);
+    if (record.negative_prompt) {
+      setAdvanced((prev) => ({ ...prev, negativePrompt: record.negative_prompt || '' }));
+    }
+    const matchedRatio = ASPECT_RATIOS.find(
+      (r) => r.width === record.width && r.height === record.height
+    );
+    if (matchedRatio) setDimensions(matchedRatio);
+    if (record.model_id) setSelectedModel(record.model_id);
+    if (record.steps) setAdvanced((prev) => ({ ...prev, steps: record.steps }));
+    if (record.cfg_scale) setAdvanced((prev) => ({ ...prev, cfgScale: record.cfg_scale }));
+    if (record.seed) setAdvanced((prev) => ({ ...prev, seed: record.seed }));
+    notify('Loaded generation parameters into composer');
   };
 
+  // Clipboard paste listener (Ctrl+V / Cmd+V image paste)
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (loadEvt) => {
+              const dataUrl = loadEvt.target?.result as string;
+              if (dataUrl) {
+                setReferenceImage({
+                  name: file.name || 'Pasted Reference',
+                  dataUrl,
+                  sizeBytes: file.size,
+                  strength: 0.65,
+                });
+                notify('Image pasted as Reference Image');
+              }
+            };
+            reader.readAsDataURL(file);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, []);
+
+  // Main Generate Image handler
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       notify('Please enter a prompt');
       return;
+    }
+
+    // Build synthesized prompt with style preset and color palette
+    let effectivePrompt = prompt.trim();
+    if (activePreset) {
+      effectivePrompt += activePreset.promptSuffix;
+    }
+    if (selectedPalette && selectedPalette.colors.length > 0) {
+      effectivePrompt += `, color palette inspired by ${selectedPalette.name} with harmonic tones (${selectedPalette.colors.join(', ')})`;
+    }
+
+    let effectiveNegative = advanced.negativePrompt.trim();
+    if (activePreset?.negativeSuffix) {
+      effectiveNegative = effectiveNegative
+        ? `${effectiveNegative}${activePreset.negativeSuffix}`
+        : activePreset.negativeSuffix.replace(/^,\s*/, '');
     }
 
     setGenerating(true);
@@ -146,21 +231,23 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
 
     try {
       const req: GenerateImageRequest = {
-        prompt: prompt.trim(),
-        negative_prompt: showNegative && negativePrompt.trim() ? negativePrompt.trim() : undefined,
+        prompt: effectivePrompt,
+        negative_prompt: effectiveNegative || undefined,
         model_id: selectedModel || undefined,
-        mode,
+        mode: advanced.mode,
         width: dimensions.width,
         height: dimensions.height,
-        steps,
-        cfg_scale: cfgScale,
-        seed: seed !== null ? seed : undefined,
+        steps: advanced.steps,
+        cfg_scale: advanced.cfgScale,
+        seed: advanced.seed !== null ? advanced.seed : undefined,
+        sampler: advanced.sampler,
+        init_image: referenceImage?.dataUrl,
+        strength: referenceImage ? referenceImage.strength : undefined,
       };
 
       const res = await generateImage(req);
       notify(`Image generated in ${(res.generation_time_ms / 1000).toFixed(1)}s!`);
 
-      // Refresh gallery and select new image
       const gens = await listGenerations();
       setHistory(gens);
       if (gens.length > 0) {
@@ -203,7 +290,9 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
     }
   };
 
-  const hasDownloadedModel = models.some((m) => m.is_downloaded);
+  const currentModel = models.find((m) => m.id === selectedModel);
+  const defaultSteps = currentModel?.default_steps || 20;
+  const defaultCfg = currentModel?.default_cfg || 7.0;
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-brand-bg select-none">
@@ -213,7 +302,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
           {onBack && (
             <button
               onClick={onBack}
-              className="ui-btn-ghost p-1.5 text-brand-textMuted hover:text-brand-textMain"
+              className="ui-btn-ghost p-1.5 text-brand-textMuted hover:text-brand-textMain cursor-pointer"
               title="Back"
             >
               <ArrowLeft size={16} />
@@ -230,7 +319,9 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
           <div className="flex items-center gap-2 text-xs">
             <div
               className={`w-2 h-2 rounded-full ${
-                engineStatus?.installed ? 'bg-[color:var(--neon-constructive)]' : 'bg-[color:var(--neon-attention)]'
+                engineStatus?.installed
+                  ? 'bg-[color:var(--neon-constructive)]'
+                  : 'bg-[color:var(--neon-attention)]'
               }`}
             />
             <span className="text-brand-textMuted text-[11px]">
@@ -242,30 +333,19 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
         <div className="flex items-center gap-2">
           {/* Mode Selector */}
           <div className="flex p-0.5 rounded-lg bg-brand-bg border border-brand-border text-xs">
-            <button
-              onClick={() => setMode('auto')}
-              className={`ui-chip transition-colors ${
-                mode === 'auto' ? 'bg-[var(--brand-accent)] text-white font-medium' : 'bg-transparent text-brand-textMuted hover:text-brand-textMain'
-              }`}
-            >
-              Auto
-            </button>
-            <button
-              onClick={() => setMode('local')}
-              className={`ui-chip transition-colors ${
-                mode === 'local' ? 'bg-[var(--brand-accent)] text-white font-medium' : 'bg-transparent text-brand-textMuted hover:text-brand-textMain'
-              }`}
-            >
-              Local (GGUF)
-            </button>
-            <button
-              onClick={() => setMode('cloud')}
-              className={`ui-chip transition-colors ${
-                mode === 'cloud' ? 'bg-[var(--brand-accent)] text-white font-medium' : 'bg-transparent text-brand-textMuted hover:text-brand-textMain'
-              }`}
-            >
-              Cloud
-            </button>
+            {(['auto', 'local', 'cloud'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setAdvanced({ ...advanced, mode: m })}
+                className={`ui-chip transition-colors capitalize ${
+                  advanced.mode === m
+                    ? 'bg-[var(--brand-accent)] text-white font-medium'
+                    : 'bg-transparent text-brand-textMuted hover:text-brand-textMain'
+                }`}
+              >
+                {m}
+              </button>
+            ))}
           </div>
 
           {onOpenSettings && (
@@ -281,46 +361,33 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
         </div>
       </div>
 
-      {/* ── Main Studio Grid ── */}
+      {/* ── Main Studio Split ── */}
       <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
-        {/* Left: Controls Panel */}
-        <div className="w-full md:w-84 lg:w-96 border-r border-brand-border flex flex-col shrink-0 bg-brand-card/30 overflow-y-auto p-4 space-y-4">
-          {/* Prompt input */}
-          <div className="space-y-1.5">
-            <label className="ui-label flex items-center justify-between">
-              <span>Prompt</span>
-              <Sparkles size={13} className="text-[var(--brand-accent)]" />
-            </label>
-            <textarea
-              rows={3}
-              placeholder="Describe the image you want to generate in rich visual detail..."
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              className="ui-input w-full p-2.5 text-xs resize-none transition-all placeholder:text-brand-textMuted/50"
-            />
-          </div>
+        {/* Left: Adaptive Control Panel & Composer */}
+        <div className="w-full md:w-88 lg:w-96 border-r border-brand-border flex flex-col shrink-0 bg-brand-card/30 overflow-y-auto p-4 space-y-4">
+          {/* 1. Prompt Composer */}
+          <ImageComposer
+            prompt={prompt}
+            onChangePrompt={setPrompt}
+            onGenerate={handleGenerate}
+            generating={generating}
+          />
 
-          {/* Negative Prompt toggle */}
-          <div className="space-y-1.5">
-            <button
-              onClick={() => setShowNegative(!showNegative)}
-              className="flex items-center gap-1 text-[11px] text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer"
-            >
-              {showNegative ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              <span>Negative Prompt</span>
-            </button>
-            {showNegative && (
-              <textarea
-                rows={2}
-                placeholder="What to exclude (e.g. blurry, low quality, artifacts)..."
-                value={negativePrompt}
-                onChange={(e) => setNegativePrompt(e.target.value)}
-                className="ui-input w-full p-2 text-xs resize-none transition-all placeholder:text-brand-textMuted/50"
-              />
-            )}
-          </div>
+          {/* 2. Unified Attachment Shelf (Ref Image, Brand Logo, Color Palette, Presets) */}
+          <AttachmentShelf
+            referenceImage={referenceImage}
+            onSetReferenceImage={setReferenceImage}
+            brandLogo={brandLogo}
+            onOpenBrandLogoModal={() => setIsLogoModalOpen(true)}
+            onRemoveBrandLogo={() => setBrandLogo({ ...brandLogo, enabled: false })}
+            selectedPalette={selectedPalette}
+            onOpenColorPaletteModal={() => setIsColorModalOpen(true)}
+            onRemoveColorPalette={() => setSelectedPalette(null)}
+            activePreset={activePreset}
+            onSelectPreset={setActivePreset}
+          />
 
-          {/* Model Selector */}
+          {/* 3. Model Selector */}
           <div className="space-y-1.5">
             <label className="ui-label flex items-center justify-between">
               <span>Model</span>
@@ -341,13 +408,14 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
             >
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name} ({m.quantization}) {m.is_downloaded ? '✓ [Installed]' : '⬇ [Not Downloaded]'}
+                  {m.name} ({m.quantization}){' '}
+                  {m.is_downloaded ? '✓ [Installed]' : '⬇ [Not Downloaded]'}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Aspect Ratio / Dimensions */}
+          {/* 4. Aspect Ratio Chips */}
           <div className="space-y-1.5">
             <label className="ui-label">Aspect Ratio</label>
             <div className="grid grid-cols-2 gap-1.5">
@@ -359,7 +427,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
                     onClick={() => setDimensions(ratio)}
                     className={`px-2.5 py-1.5 rounded-lg text-left text-xs transition-all cursor-pointer border ${
                       isSel
-                        ? 'bg-[var(--brand-accent)]/10 border-[var(--brand-accent-border)] text-brand-textMain font-medium'
+                        ? 'bg-[var(--brand-accent)]/15 border-[var(--brand-accent-border)] text-brand-textMain font-medium'
                         : 'bg-brand-bg/40 border-brand-border text-brand-textMuted hover:border-brand-border hover:text-brand-textMain'
                     }`}
                   >
@@ -373,67 +441,24 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
             </div>
           </div>
 
-          {/* Steps & CFG Sliders */}
-          <div className="space-y-3 pt-1 border-t border-brand-border">
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs">
-                <span className="text-brand-textMain font-medium">Steps</span>
-                <span className="font-mono text-brand-textMuted">{steps}</span>
-              </div>
-              <input
-                type="range"
-                min={1}
-                max={50}
-                value={steps}
-                onChange={(e) => setSteps(Number(e.target.value))}
-                className="w-full accent-[var(--brand-accent)] cursor-pointer"
-              />
-            </div>
+          {/* 5. Single-Click Advanced Settings Drawer */}
+          <AdvancedSettingsDrawer
+            settings={advanced}
+            onChangeSettings={setAdvanced}
+            defaultSteps={defaultSteps}
+            defaultCfg={defaultCfg}
+            referenceImage={referenceImage}
+            onChangeRefStrength={(strength) =>
+              referenceImage && setReferenceImage({ ...referenceImage, strength })
+            }
+          />
 
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs">
-                <span className="text-brand-textMain font-medium">CFG Scale</span>
-                <span className="font-mono text-brand-textMuted">{cfgScale.toFixed(1)}</span>
-              </div>
-              <input
-                type="range"
-                min={1.0}
-                max={15.0}
-                step={0.5}
-                value={cfgScale}
-                onChange={(e) => setCfgScale(Number(e.target.value))}
-                className="w-full accent-[var(--brand-accent)] cursor-pointer"
-              />
-            </div>
-          </div>
-
-          {/* Seed Input */}
-          <div className="space-y-1.5 pt-1 border-t border-brand-border">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-brand-textMain">Seed</span>
-              <button
-                onClick={handleRandomSeed}
-                className="flex items-center gap-1 text-[11px] text-[var(--brand-accent)] hover:underline transition-colors cursor-pointer"
-              >
-                <Dice5 size={12} />
-                <span>Randomize</span>
-              </button>
-            </div>
-            <input
-              type="number"
-              placeholder="Random (leave empty or click dice)"
-              value={seed !== null ? seed : ''}
-              onChange={(e) => setSeed(e.target.value ? Number(e.target.value) : null)}
-              className="ui-input w-full p-2 text-xs font-mono placeholder:text-brand-textMuted/40"
-            />
-          </div>
-
-          {/* Generate Button */}
-          <div className="pt-2">
+          {/* 6. Primary Generate Button */}
+          <div className="pt-1">
             <button
               onClick={handleGenerate}
               disabled={generating || !prompt.trim()}
-              className="ui-btn-primary w-full py-2.5 px-4 font-semibold text-xs shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+              className="ui-btn-primary w-full py-2.5 px-4 font-semibold text-xs shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               {generating ? (
                 <>
@@ -450,142 +475,43 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
           </div>
         </div>
 
-        {/* Center: Stage Canvas & Preview */}
-        <div className="flex-1 flex flex-col min-h-0 bg-brand-bg relative overflow-hidden">
-          <div className="flex-1 flex items-center justify-center p-6 min-h-0 overflow-auto">
-            {generating ? (
-              <div className="text-center space-y-4 max-w-sm">
-                <div className="relative w-20 h-20 mx-auto">
-                  <div className="absolute inset-0 rounded-2xl bg-[var(--brand-accent)]/15 animate-ping" />
-                  <div className="relative w-20 h-20 rounded-2xl bg-brand-card border border-brand-border flex items-center justify-center text-[var(--brand-accent)] shadow-xl">
-                    <Sparkles size={32} className="animate-pulse" />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-base font-semibold text-brand-textMain">Synthesizing Pixels</h3>
-                  <p className="text-xs text-brand-textMuted mt-1">
-                    Running diffusion on {dimensions.width}x{dimensions.height} with {steps} steps ({generationTime}s)
-                  </p>
-                </div>
-              </div>
-            ) : selectedRecord ? (
-              <div className="max-w-full max-h-full flex flex-col items-center justify-center space-y-3">
-                <div className="relative group rounded-xl overflow-hidden shadow-xl border border-brand-border max-h-[70vh] bg-black/40">
-                  <img
-                    src={getImageUrl(selectedRecord.id)}
-                    alt={selectedRecord.prompt}
-                    className="max-h-[70vh] max-w-full object-contain"
-                  />
-
-                  {/* Hover Overlay Toolbar */}
-                  <div className="absolute top-3 right-3 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 backdrop-blur-md p-1.5 rounded-xl border border-white/10 shadow-lg">
-                    <button
-                      onClick={() => handleCopyImage(getImageUrl(selectedRecord.id))}
-                      className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                      title="Copy Image"
-                    >
-                      {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                    </button>
-                    <a
-                      href={getImageUrl(selectedRecord.id)}
-                      download={`superagent-${selectedRecord.id}.png`}
-                      className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                      title="Download PNG"
-                    >
-                      <Download size={14} />
-                    </a>
-                    <button
-                      onClick={() => handleDelete(selectedRecord.id)}
-                      className="p-1.5 text-rose-400 hover:text-rose-300 rounded-lg hover:bg-rose-500/20 transition-colors cursor-pointer"
-                      title="Delete image"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Info Bar */}
-                <div className="flex items-center gap-3 text-[11px] text-brand-textMuted bg-brand-card/80 px-4 py-1.5 rounded-full border border-brand-border flex-wrap justify-center">
-                  <span>Model: <strong className="text-brand-textMain">{selectedRecord.model_id}</strong></span>
-                  <span>Dimensions: <strong className="text-brand-textMain">{selectedRecord.width}x{selectedRecord.height}</strong></span>
-                  <span>Elapsed: <strong className="text-brand-textMain">{(selectedRecord.generation_time_ms / 1000).toFixed(1)}s</strong></span>
-                  <span>Seed: <strong className="text-brand-textMain font-mono">{selectedRecord.seed}</strong></span>
-                </div>
-              </div>
-            ) : (
-              /* Empty State */
-              <div className="text-center max-w-md p-8 space-y-4">
-                <div className="w-12 h-12 rounded-xl bg-brand-hover flex items-center justify-center mx-auto text-brand-textMuted">
-                  <ImageIcon size={24} />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold text-brand-textMain">Local Image Workspace</h2>
-                  <p className="text-xs text-brand-textMuted mt-1">
-                    {!hasDownloadedModel
-                      ? 'Download your first quantized model (such as FLUX.1 Schnell or SDXL) in Settings -> Local Image Model to generate local images.'
-                      : 'Type a prompt on the left or try one of the starter templates below to begin generating artwork.'}
-                  </p>
-                </div>
-
-                {!hasDownloadedModel && onOpenSettings && (
-                  <button
-                    onClick={onOpenSettings}
-                    className="ui-btn-primary inline-flex items-center gap-1.5 text-xs shadow-sm mt-1"
-                  >
-                    <Sparkles size={14} />
-                    Open Model Catalog
-                  </button>
-                )}
-
-                {/* Sample Prompt Suggestions */}
-                <div className="space-y-2 text-left pt-2">
-                  <span className="text-[11px] font-semibold text-brand-textMuted uppercase tracking-wider">
-                    Starter Prompts
-                  </span>
-                  {SAMPLE_PROMPTS.map((p, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setPrompt(p)}
-                      className="w-full text-left p-2 rounded-lg bg-brand-card hover:bg-brand-hover border border-brand-border text-xs text-brand-textMuted hover:text-brand-textMain transition-all cursor-pointer truncate"
-                    >
-                      "{p}"
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ── Bottom: Gallery Strip ── */}
-          {history.length > 0 && (
-            <div className="h-24 border-t border-brand-border p-2.5 bg-brand-card/40 shrink-0 flex items-center gap-2 overflow-x-auto">
-              <span className="text-[10px] font-semibold uppercase text-brand-textMuted tracking-wider shrink-0 px-2">
-                History ({history.length})
-              </span>
-              {history.map((record) => {
-                const isSelected = selectedRecord?.id === record.id;
-                return (
-                  <button
-                    key={record.id}
-                    onClick={() => setSelectedRecord(record)}
-                    className={`relative w-18 h-18 rounded-lg overflow-hidden shrink-0 border transition-all cursor-pointer ${
-                      isSelected
-                        ? 'border-[var(--brand-accent)] ring-2 ring-[var(--brand-accent)]/30'
-                        : 'border-brand-border opacity-70 hover:opacity-100 hover:border-brand-border'
-                    }`}
-                  >
-                    <img
-                      src={getImageUrl(record.id)}
-                      alt={record.prompt}
-                      className="w-full h-full object-cover"
-                    />
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        {/* Center: Interactive Canvas Stage */}
+        <CanvasStage
+          generating={generating}
+          generationTime={generationTime}
+          selectedRecord={selectedRecord}
+          referenceImage={referenceImage}
+          brandLogo={brandLogo}
+          onCopyImage={handleCopyImage}
+          onDeleteRecord={handleDelete}
+          onRemixPrompt={handleRemix}
+          copied={copied}
+        />
       </div>
+
+      {/* ── Bottom: Gallery Strip ── */}
+      <GalleryFilmstrip
+        history={history}
+        selectedRecord={selectedRecord}
+        onSelectRecord={setSelectedRecord}
+        onDeleteRecord={handleDelete}
+        onRemixPrompt={handleRemix}
+      />
+
+      {/* ── Modals ── */}
+      <ColorPaletteModal
+        isOpen={isColorModalOpen}
+        onClose={() => setIsColorModalOpen(false)}
+        selectedPalette={selectedPalette}
+        onSelectPalette={setSelectedPalette}
+      />
+
+      <BrandLogoModal
+        isOpen={isLogoModalOpen}
+        onClose={() => setIsLogoModalOpen(false)}
+        config={brandLogo}
+        onChange={setBrandLogo}
+      />
     </div>
   );
 };
