@@ -8,6 +8,9 @@ export interface HardwareProfile {
   total_ram_mb: number;
   recommended_backend: GpuBackend;
   recommended_model_id: string;
+  storage_free_gb?: number;
+  storage_total_gb?: number;
+  storage_mount?: string;
 }
 
 export interface EngineStatus {

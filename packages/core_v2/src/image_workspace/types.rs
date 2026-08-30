@@ -29,6 +29,9 @@ pub struct HardwareProfile {
     pub total_ram_mb: u64,
     pub recommended_backend: GpuBackend,
     pub recommended_model_id: String,
+    pub storage_free_gb: Option<f64>,
+    pub storage_total_gb: Option<f64>,
+    pub storage_mount: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

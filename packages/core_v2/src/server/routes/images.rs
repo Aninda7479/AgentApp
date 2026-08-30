@@ -105,14 +105,14 @@ pub async fn list_image_models(State(state): State<AppState>) -> Json<Vec<ImageM
 pub async fn pull_image_model(
     State(state): State<AppState>,
     Json(payload): Json<PullModelPayload>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     state
         .image_workspace
         .models
         .pull_model(&payload.model_id)
         .await
         .map(|_| Json(serde_json::json!({ "success": true, "message": "Model download started" })))
-        .map_err(|_| StatusCode::BAD_REQUEST)
+        .map_err(|e| (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e.to_string(), "message": e.to_string() }))))
 }
 
 pub async fn delete_image_model(

@@ -198,7 +198,7 @@ impl EngineManager {
         }
     }
 
-    /// Detect system hardware (OS, GPU, VRAM, RAM) and recommend backend & model
+    /// Detect system hardware (OS, GPU, VRAM, RAM, Storage) and recommend backend & model
     pub fn detect_hardware() -> HardwareProfile {
         let mut sys = System::new_all();
         sys.refresh_all();
@@ -240,7 +240,7 @@ impl EngineManager {
         {
             if arch == "aarch64" {
                 gpu_name = Some("Apple Silicon GPU".to_string());
-                vram_mb = Some(total_ram_mb); // Unified memory
+                vram_mb = Some((total_ram_mb * 3) / 4); // Unified memory (~75% process budget)
             }
         }
 
@@ -266,7 +266,10 @@ impl EngineManager {
 
         // Determine recommended backend
         let is_apple_silicon = os == "macos" && arch == "aarch64";
-        let has_nvidia = gpu_name.as_ref().map(|n| n.to_lowercase().contains("nvidia") || n.to_lowercase().contains("geforce") || n.to_lowercase().contains("rtx") || n.to_lowercase().contains("gtx")).unwrap_or(false);
+        let has_nvidia = gpu_name.as_ref().map(|n| {
+            let lower = n.to_lowercase();
+            lower.contains("nvidia") || lower.contains("geforce") || lower.contains("rtx") || lower.contains("gtx") || lower.contains("quadro") || lower.contains("tesla")
+        }).unwrap_or(false);
 
         let recommended_backend = if is_apple_silicon {
             GpuBackend::Metal
@@ -278,11 +281,44 @@ impl EngineManager {
             GpuBackend::Cpu
         };
 
-        // Determine recommended model based on available VRAM
-        let effective_vram = vram_mb.unwrap_or(if is_apple_silicon { total_ram_mb } else { 2048 });
-        let recommended_model_id = if effective_vram >= 8192 {
-            "flux-schnell".to_string()
-        } else if effective_vram >= 4096 {
+        // Determine storage space
+        let disks = sysinfo::Disks::new_with_refreshed_list();
+        let (storage_free_gb, storage_total_gb, storage_mount) = if let Some(first_disk) = disks.iter().next() {
+            let free_gb = ((first_disk.available_space() as f64) / (1024.0 * 1024.0 * 1024.0) * 10.0).round() / 10.0;
+            let total_gb = ((first_disk.total_space() as f64) / (1024.0 * 1024.0 * 1024.0) * 10.0).round() / 10.0;
+            let mount = first_disk.mount_point().to_string_lossy().to_string();
+            (Some(free_gb), Some(total_gb), Some(mount))
+        } else {
+            (None, None, None)
+        };
+
+        // Determine recommended model based on available VRAM / unified memory & GPU capabilities
+        let effective_vram = if is_apple_silicon {
+            (total_ram_mb * 3) / 4
+        } else {
+            vram_mb.unwrap_or(2048)
+        };
+
+        let recommended_model_id = if is_apple_silicon {
+            if total_ram_mb >= 16384 {
+                "flux-schnell".to_string()
+            } else if total_ram_mb >= 12288 {
+                "sdxl".to_string()
+            } else {
+                // 8GB unified memory Mac
+                "sd15".to_string()
+            }
+        } else if has_nvidia {
+            if effective_vram >= 12288 {
+                "flux-schnell".to_string()
+            } else if effective_vram >= 6144 {
+                "sdxl".to_string()
+            } else {
+                // 4GB VRAM or less (e.g. GTX 1650, RTX 3050 4GB):
+                // SD 1.5 generates in 15-30s within VRAM; SDXL causes heavy 5+ min memory paging
+                "sd15".to_string()
+            }
+        } else if effective_vram >= 8192 {
             "sdxl".to_string()
         } else {
             "sd15".to_string()
@@ -296,6 +332,9 @@ impl EngineManager {
             total_ram_mb,
             recommended_backend,
             recommended_model_id,
+            storage_free_gb,
+            storage_total_gb,
+            storage_mount,
         }
     }
 
@@ -322,6 +361,10 @@ impl EngineManager {
             info!("Starting engine installation for backend: {:?}", backend);
             let client = reqwest::Client::builder()
                 .user_agent("SuperAgent-EngineManager/1.0")
+                .tcp_keepalive(Some(std::time::Duration::from_secs(30)))
+                .connect_timeout(std::time::Duration::from_secs(30))
+                .pool_idle_timeout(std::time::Duration::from_secs(90))
+                .redirect(reqwest::redirect::Policy::limited(10))
                 .build()
                 .unwrap_or_default();
 

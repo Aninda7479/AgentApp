@@ -26,6 +26,8 @@ import {
   FolderOpen,
   Info,
 } from 'lucide-react';
+import { getIpc } from '../../lib/ipc';
+import { SystemInfo, normalizeSystemInfo } from '../../logic/systemInfo';
 import {
   getEngineStatus,
   installEngine,
@@ -64,6 +66,7 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
   };
 
   // State
+  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [engineStatus, setEngineStatus] = useState<EngineStatus>({
     installed: false,
     is_running: false,
@@ -110,16 +113,19 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
   const refreshData = useCallback(async () => {
     setStatusLoading(true);
     try {
-      const [status, hw, modelList, update] = await Promise.all([
+      const ipc = getIpc();
+      const [status, hw, modelList, update, sys] = await Promise.all([
         getEngineStatus(),
         getHardwareProfile(),
         listImageModels(),
         checkEngineUpdate(),
+        ipc?.invoke('system-info').catch(() => null),
       ]);
       setEngineStatus(status);
       setHardware(hw);
       setModels(modelList);
       setUpdateInfo(update);
+      if (sys) setSystemInfo(normalizeSystemInfo(sys));
     } catch (err) {
       console.error('Failed to load image engine settings:', err);
     } finally {
@@ -191,7 +197,22 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
     }
   };
 
-  const handlePullModel = async (modelId: string) => {
+  // Storage information from systemInfo or hardware profile
+  const storageFreeGB = systemInfo?.storage && systemInfo.storage.length > 0
+    ? systemInfo.storage[0].freeGB
+    : hardware?.storage_free_gb;
+  const storageTotalGB = systemInfo?.storage && systemInfo.storage.length > 0
+    ? systemInfo.storage[0].sizeGB
+    : hardware?.storage_total_gb;
+  const storageMount = systemInfo?.storage && systemInfo.storage.length > 0
+    ? systemInfo.storage[0].mount
+    : hardware?.storage_mount || 'System Disk';
+
+  const handlePullModel = async (modelId: string, modelSizeGB?: number) => {
+    if (storageFreeGB !== undefined && modelSizeGB !== undefined && storageFreeGB < modelSizeGB + 0.5) {
+      notify(`Insufficient disk space: Model requires ~${fmtGB(modelSizeGB)} GB, but only ${fmtGB(storageFreeGB)} GB is available on ${storageMount}.`);
+      return;
+    }
     setActionLoading(`pull_${modelId}`);
     try {
       await pullImageModel(modelId);
@@ -244,18 +265,27 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
 
   // Model catalog with hardware fitness analysis
   const catalogWithFit = useMemo(() => {
-    const vram = hardware?.vram_mb || 2048;
+    const isUnified = (hardware?.os?.toLowerCase().includes('mac') || hardware?.os?.toLowerCase().includes('darwin')) && hardware?.arch === 'aarch64';
+    const effectiveVram = isUnified
+      ? Math.round((hardware?.total_ram_mb || 16384) * 0.75)
+      : (hardware?.vram_mb || 2048);
+
     return models.map((model) => {
       const needVram = model.vram_required_mb;
-      const fitsGpu = vram >= needVram;
+      const fitsGpu = effectiveVram >= needVram;
       const isRecommended = hardware?.recommended_model_id === model.id;
+      const modelSizeGB = model.size_bytes / (1024 * 1024 * 1024);
+      const hasEnoughDisk = storageFreeGB !== undefined ? storageFreeGB >= modelSizeGB + 0.5 : true;
 
       let fitLabel = 'Fits GPU (Optimal Match)';
       let fitColor = 'text-[color:var(--neon-constructive)] bg-[color:var(--neon-constructive)]/15 border-[color:var(--neon-constructive)]/25';
       if (!fitsGpu) {
-        fitLabel = 'Offloads to System RAM';
+        fitLabel = 'Offloads to System RAM (Slower)';
         fitColor = 'text-amber-400 bg-amber-500/15 border-amber-500/25';
-      } else if (!isRecommended) {
+      } else if (isRecommended) {
+        fitLabel = 'Recommended for your Hardware';
+        fitColor = 'text-[color:var(--neon-constructive)] bg-[color:var(--neon-constructive)]/20 border-[color:var(--neon-constructive)]/40 font-semibold';
+      } else {
         fitLabel = 'Runs on GPU';
         fitColor = 'text-brand-textMain bg-brand-popover border-brand-border';
       }
@@ -264,11 +294,13 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
         model,
         fitsGpu,
         isRecommended,
+        modelSizeGB,
+        hasEnoughDisk,
         fitLabel,
         fitColor,
       };
     });
-  }, [models, hardware]);
+  }, [models, hardware, storageFreeGB]);
 
   // Filtered store models
   const filteredStore = useMemo(() => {
@@ -491,22 +523,30 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard
             icon={<Cpu size={15} />}
             label="GPU Acceleration"
-            value={hardware?.gpu_name || 'System Graphics'}
+            value={hardware?.gpu_name || (hardware?.recommended_backend === 'metal' ? 'Apple Silicon GPU' : 'System Graphics')}
             sub={`Backend: ${hardware?.recommended_backend.toUpperCase() || 'AUTO'} · ${hardware?.arch || 'x64'}`}
           />
           <StatCard
             icon={<Zap size={15} />}
             label="VRAM Capacity"
-            value={hardware?.vram_mb ? `${fmtGB(hardware.vram_mb / 1024)} GB Dedicated` : 'Shared / CPU RAM'}
+            value={
+              (hardware?.os?.toLowerCase().includes('mac') || hardware?.os?.toLowerCase().includes('darwin')) && hardware?.arch === 'aarch64'
+                ? `${fmtGB(((hardware.total_ram_mb || 16384) * 0.75) / 1024)} GB Unified`
+                : hardware?.vram_mb
+                ? `${fmtGB(hardware.vram_mb / 1024)} GB Dedicated`
+                : 'Shared / CPU RAM'
+            }
             sub={
-              hardware?.vram_mb && hardware.vram_mb >= 8192
+              (hardware?.vram_mb && hardware.vram_mb >= 8192) || ((hardware?.total_ram_mb || 0) >= 16384 && hardware?.arch === 'aarch64')
                 ? 'High VRAM (Full FLUX & SDXL)'
-                : hardware?.vram_mb && hardware.vram_mb >= 4096
+                : (hardware?.vram_mb && hardware.vram_mb >= 6144)
                 ? 'Medium VRAM (SDXL / SD 3.5)'
+                : (hardware?.vram_mb && hardware.vram_mb >= 4096)
+                ? '4 GB VRAM (SD 1.5 Fast / SDXL Paged)'
                 : 'Lightweight models recommended'
             }
           />
@@ -517,9 +557,23 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
             sub="System working memory"
           />
           <StatCard
+            icon={<HardDrive size={15} />}
+            label="Storage"
+            value={
+              storageFreeGB !== undefined
+                ? `${fmtGB(storageFreeGB)} GB Free`
+                : 'Available'
+            }
+            sub={
+              storageTotalGB !== undefined
+                ? `${storageMount} (${fmtGB(storageTotalGB)} GB total)`
+                : 'System Disk'
+            }
+          />
+          <StatCard
             icon={<Sparkles size={15} />}
             label="Recommended Model"
-            value={hardware?.recommended_model_id ? hardware.recommended_model_id.toUpperCase() : 'SDXL'}
+            value={hardware?.recommended_model_id ? hardware.recommended_model_id.toUpperCase() : 'SD 1.5'}
             sub="Auto-matched for your hardware"
           />
         </div>
@@ -855,7 +909,7 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
                   No image models match your search criteria.
                 </div>
               ) : (
-                filteredStore.map(({ model, isRecommended, fitLabel, fitColor }) => {
+                filteredStore.map(({ model, isRecommended, modelSizeGB, hasEnoughDisk, fitLabel, fitColor }) => {
                   const isInstalled = model.is_downloaded;
                   const isPulling = model.is_downloading;
 
@@ -883,6 +937,14 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
                             <span className={`ui-badge text-[10px] font-medium border ${fitColor}`}>
                               {fitLabel}
                             </span>
+
+                            {/* Storage Warning Badge */}
+                            {!hasEnoughDisk && (
+                              <span className="ui-badge text-[10px] font-medium border text-[color:var(--neon-destructive)] bg-[color:var(--neon-destructive)]/15 border-[color:var(--neon-destructive)]/30 flex items-center gap-1">
+                                <HardDrive size={10} />
+                                Low Storage (~{fmtGB(modelSizeGB)} GB needed)
+                              </span>
+                            )}
                           </div>
 
                           <div className="text-xs text-brand-textMuted flex items-center gap-3 flex-wrap">
@@ -900,12 +962,21 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
                             </span>
                           ) : (
                             <button
-                              onClick={() => handlePullModel(model.id)}
-                              disabled={isPulling || actionLoading === `pull_${model.id}`}
-                              className="ui-btn-primary flex items-center gap-1.5 text-xs shadow-sm disabled:opacity-50"
+                              onClick={() => handlePullModel(model.id, modelSizeGB)}
+                              disabled={isPulling || !hasEnoughDisk || actionLoading === `pull_${model.id}`}
+                              className={`flex items-center gap-1.5 text-xs shadow-sm disabled:opacity-50 ${
+                                !hasEnoughDisk
+                                  ? 'ui-btn-ghost text-[color:var(--neon-destructive)] border border-[color:var(--neon-destructive)]/30'
+                                  : 'ui-btn-primary'
+                              }`}
+                              title={
+                                !hasEnoughDisk
+                                  ? `Insufficient disk space: Needs ~${fmtGB(modelSizeGB)} GB, but only ${fmtGB(storageFreeGB || 0)} GB is free on ${storageMount}`
+                                  : 'Install model'
+                              }
                             >
                               <Download size={13} className={isPulling ? 'animate-bounce' : ''} />
-                              <span>{isPulling ? 'Downloading...' : 'Install'}</span>
+                              <span>{isPulling ? 'Downloading...' : !hasEnoughDisk ? 'Low Disk Space' : 'Install'}</span>
                             </button>
                           )}
                         </div>

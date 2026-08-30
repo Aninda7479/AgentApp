@@ -377,16 +377,59 @@ impl ModelRegistry {
         list
     }
 
+    /// Check available disk space on the models filesystem
+    pub fn check_disk_space(&self, required_bytes: u64) -> Result<()> {
+        let disks = sysinfo::Disks::new_with_refreshed_list();
+        let canonical = self.models_dir.canonicalize().unwrap_or_else(|_| self.models_dir.clone());
+        let mut best_match: Option<&sysinfo::Disk> = None;
+        let mut best_len = 0;
+
+        for disk in &disks {
+            let mount = disk.mount_point();
+            if canonical.starts_with(mount) {
+                let len = mount.as_os_str().len();
+                if len >= best_len {
+                    best_len = len;
+                    best_match = Some(disk);
+                }
+            }
+        }
+
+        let (free_bytes, mount_name) = if let Some(disk) = best_match {
+            (disk.available_space(), disk.mount_point().to_string_lossy().to_string())
+        } else if let Some(first) = disks.iter().next() {
+            (first.available_space(), first.mount_point().to_string_lossy().to_string())
+        } else {
+            (u64::MAX, "System Disk".to_string())
+        };
+
+        let safety_buffer: u64 = 512 * 1024 * 1024; // 512 MB safety buffer
+        if free_bytes < required_bytes.saturating_add(safety_buffer) {
+            let needed_gb = (required_bytes as f64) / (1024.0 * 1024.0 * 1024.0);
+            let free_gb = (free_bytes as f64) / (1024.0 * 1024.0 * 1024.0);
+            return Err(anyhow!(
+                "Insufficient disk space on {}: Model requires {:.1} GB, but only {:.1} GB is available. Please free up disk space.",
+                mount_name,
+                needed_gb,
+                free_gb
+            ));
+        }
+        Ok(())
+    }
+
     pub fn get_model_path(&self, id: &str) -> Option<PathBuf> {
         let models = self.list_models();
         models.iter().find(|m| m.id == id && m.is_downloaded).map(|m| self.models_dir.join(&m.filename))
     }
 
-    /// Pull / download a model by ID
+    /// Pull / download a model by ID with automatic resume, retry, and disk space validation
     pub async fn pull_model(&self, model_id: &str) -> Result<()> {
         let catalog = self.curated_catalog();
         let target = catalog.into_iter().find(|m| m.id == model_id)
             .ok_or_else(|| anyhow!("Model not found in catalog: {}", model_id))?;
+
+        // 1. Verify available disk space before starting
+        self.check_disk_space(target.size_bytes)?;
 
         let dest_path = self.models_dir.join(&target.filename);
         let temp_path = self.models_dir.join(format!("{}.tmp", target.filename));
@@ -404,9 +447,10 @@ impl ModelRegistry {
         let m_id = model_id.to_string();
         let url = target.download_url.clone();
         let models_dir = self.models_dir.clone();
+        let target_size = target.size_bytes;
 
         tokio::spawn(async move {
-            info!("Starting download for image model '{}' from {}", m_id, url);
+            info!("Starting resilient download for image model '{}' from {}", m_id, url);
             let update_status = |prog: f32, is_dl: bool, err: Option<String>| {
                 if let Ok(mut states) = download_states.write() {
                     states.insert(m_id.clone(), DownloadState { progress: prog, is_downloading: is_dl, error: err });
@@ -422,7 +466,10 @@ impl ModelRegistry {
             }
 
             let client = match reqwest::Client::builder()
-                .user_agent("SuperAgent/0.34.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)")
+                .user_agent("SuperAgent/0.36.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)")
+                .tcp_keepalive(Some(std::time::Duration::from_secs(30)))
+                .connect_timeout(std::time::Duration::from_secs(30))
+                .pool_idle_timeout(std::time::Duration::from_secs(90))
                 .redirect(reqwest::redirect::Policy::limited(10))
                 .build() {
                     Ok(c) => c,
@@ -434,75 +481,152 @@ impl ModelRegistry {
                     }
                 };
 
-            let res = match client.get(&url).send().await {
-                Ok(r) if r.status().is_success() => r,
-                Ok(r) => {
-                    let err = format!("Download failed with HTTP {}", r.status());
-                    error!("Model download failed: {}", err);
-                    update_status(0.0, false, Some(err));
-                    return;
+            let max_retries = 8;
+            let mut retry_count = 0;
+            let mut total_size: u64 = target_size;
+            let mut last_progress_report = 0.0f32;
+            let mut success = false;
+
+            while retry_count < max_retries {
+                let downloaded_bytes: u64 = if temp_path.exists() {
+                    tokio::fs::metadata(&temp_path).await.map(|m| m.len()).unwrap_or(0)
+                } else {
+                    0
+                };
+
+                // If existing temp file is already complete
+                if total_size > 0 && downloaded_bytes >= total_size {
+                    success = true;
+                    break;
                 }
-                Err(e) => {
-                    let err = format!("Connection error: {}", e);
-                    error!("Model download failed: {}", err);
-                    update_status(0.0, false, Some(err));
-                    return;
+
+                let mut req = client.get(&url);
+                if downloaded_bytes > 0 {
+                    info!("Resuming model download '{}' from offset {} bytes", m_id, downloaded_bytes);
+                    req = req.header(reqwest::header::RANGE, format!("bytes={}-", downloaded_bytes));
                 }
-            };
 
-            let total_size = res.content_length().unwrap_or(target.size_bytes);
-            let mut downloaded: u64 = 0;
-            let mut stream = res.bytes_stream();
-
-            let file_res = tokio::fs::File::create(&temp_path).await;
-            let mut file = match file_res {
-                Ok(f) => f,
-                Err(e) => {
-                    let err = format!("Failed to create file: {}", e);
-                    error!("{}", err);
-                    update_status(0.0, false, Some(err));
-                    return;
-                }
-            };
-
-            use tokio::io::AsyncWriteExt;
-            let mut last_progress_report = 0.0;
-
-            while let Some(item) = stream.next().await {
-                match item {
-                    Ok(chunk) => {
-                        if let Err(e) = file.write_all(&chunk).await {
-                            let err = format!("Disk write error: {}", e);
-                            error!("{}", err);
-                            update_status(0.0, false, Some(err));
-                            let _ = tokio::fs::remove_file(&temp_path).await;
-                            return;
-                        }
-                        downloaded += chunk.len() as u64;
-                        if total_size > 0 {
-                            let prog = (downloaded as f32 / total_size as f32).min(1.0);
-                            if (prog - last_progress_report).abs() > 0.01 || prog >= 1.0 {
-                                last_progress_report = prog;
-                                update_status(prog, true, None);
-                            }
-                        }
-                    }
+                let res = match req.send().await {
+                    Ok(r) => r,
                     Err(e) => {
-                        let err = format!("Stream error: {}", e);
+                        retry_count += 1;
+                        let wait_secs = (2u64).pow(retry_count.min(4));
+                        let warn_msg = format!("Download connection failed: {} (retry {}/{}, waiting {}s)", e, retry_count, max_retries, wait_secs);
+                        tracing::warn!("{}", warn_msg);
+                        update_status((downloaded_bytes as f32 / total_size.max(1) as f32).min(0.99), true, Some(warn_msg));
+                        tokio::time::sleep(std::time::Duration::from_secs(wait_secs)).await;
+                        continue;
+                    }
+                };
+
+                let status = res.status();
+                let is_partial = status == reqwest::StatusCode::PARTIAL_CONTENT;
+
+                if status == reqwest::StatusCode::RANGE_NOT_SATISFIABLE {
+                    // Range error: file might already be complete or invalid offset
+                    if downloaded_bytes > 0 {
+                        let _ = tokio::fs::remove_file(&temp_path).await;
+                        retry_count += 1;
+                        continue;
+                    }
+                } else if is_partial {
+                    if let Some(cl) = res.content_length() {
+                        total_size = downloaded_bytes + cl;
+                    }
+                } else if status.is_success() {
+                    // Server returned 200 OK (fresh download or Range not supported)
+                    if downloaded_bytes > 0 {
+                        let _ = tokio::fs::remove_file(&temp_path).await;
+                    }
+                    if let Some(cl) = res.content_length() {
+                        total_size = cl;
+                    }
+                } else {
+                    let err = format!("Download failed with HTTP {}", status);
+                    error!("Model download failed: {}", err);
+                    update_status(0.0, false, Some(err));
+                    return;
+                }
+
+                use tokio::io::AsyncWriteExt;
+                let file_res = tokio::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .append(true)
+                    .open(&temp_path)
+                    .await;
+
+                let mut file = match file_res {
+                    Ok(f) => f,
+                    Err(e) => {
+                        let err = format!("Failed to open destination file: {}", e);
                         error!("{}", err);
                         update_status(0.0, false, Some(err));
-                        let _ = tokio::fs::remove_file(&temp_path).await;
                         return;
                     }
+                };
+
+                let mut stream = res.bytes_stream();
+                let mut stream_error = false;
+                let mut current_bytes = if is_partial { downloaded_bytes } else { 0 };
+
+                while let Some(item) = stream.next().await {
+                    match item {
+                        Ok(chunk) => {
+                            if let Err(e) = file.write_all(&chunk).await {
+                                let err = format!("Disk write error: {}", e);
+                                error!("{}", err);
+                                update_status(0.0, false, Some(err));
+                                return;
+                            }
+                            current_bytes += chunk.len() as u64;
+                            if total_size > 0 {
+                                let prog = (current_bytes as f32 / total_size as f32).min(0.999);
+                                if (prog - last_progress_report).abs() > 0.005 || prog >= 0.99 {
+                                    last_progress_report = prog;
+                                    update_status(prog, true, None);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            let warn_msg = format!("Download stream interrupted: {}. Resuming from byte {}...", e, current_bytes);
+                            tracing::warn!("{}", warn_msg);
+                            stream_error = true;
+                            break;
+                        }
+                    }
                 }
+
+                let _ = file.flush().await;
+                drop(file);
+
+                if !stream_error && (total_size == 0 || current_bytes >= total_size) {
+                    success = true;
+                    break;
+                }
+
+                retry_count += 1;
+                let wait_secs = (2u64).pow(retry_count.min(4));
+                let retry_msg = format!("Stream interrupted. Resuming download (retry {}/{}, waiting {}s)...", retry_count, max_retries, wait_secs);
+                tracing::info!("{}", retry_msg);
+                update_status(
+                    if total_size > 0 { (current_bytes as f32 / total_size as f32).min(0.99) } else { 0.0 },
+                    true,
+                    Some(retry_msg)
+                );
+                tokio::time::sleep(std::time::Duration::from_secs(wait_secs)).await;
             }
 
-            let _ = file.flush().await;
-            drop(file);
+            if !success {
+                let err = format!("Download failed after {} retries due to unstable connection", max_retries);
+                error!("{}", err);
+                update_status(0.0, false, Some(err));
+                return;
+            }
 
             // Rename temp file to final file
             if let Err(e) = tokio::fs::rename(&temp_path, &dest_path).await {
-                let err = format!("Failed to finalize file: {}", e);
+                let err = format!("Failed to finalize model file: {}", e);
                 error!("{}", err);
                 update_status(0.0, false, Some(err));
                 return;
