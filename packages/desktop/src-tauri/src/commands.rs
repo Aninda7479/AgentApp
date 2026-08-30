@@ -4,8 +4,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use superagent_core_v2::artifact::{ArtifactManifest, ArtifactRuntimeState};
 use tauri::{AppHandle, Emitter, Manager};
+
+static CACHED_SCREENSHOT: Mutex<Option<screenshots::image::RgbaImage>> = Mutex::new(None);
 
 #[derive(Serialize, Deserialize, Debug)]
 
@@ -1295,43 +1298,73 @@ pub fn circle_search_capture_area(
     y: Option<i32>,
     width: Option<u32>,
     height: Option<u32>,
+    screen_width: Option<f64>,
+    screen_height: Option<f64>,
 ) -> Result<String, String> {
-    let window = app.get_webview_window("circle_search");
-    let was_visible = window.as_ref().and_then(|w| w.is_visible().ok()).unwrap_or(false);
-    if was_visible {
-        if let Some(ref w) = window {
-            let _ = w.hide();
-            std::thread::sleep(std::time::Duration::from_millis(30));
+    // 1. First retrieve the pre-captured clean desktop screenshot taken BEFORE the overlay was shown
+    let cached_img = {
+        if let Ok(lock) = CACHED_SCREENSHOT.lock() {
+            lock.clone()
+        } else {
+            None
         }
-    }
+    };
 
-    let screens = screenshots::Screen::all().map_err(|e| e.to_string())?;
-    let screen = screens.into_iter().next().ok_or_else(|| "No screens detected".to_string())?;
-    let full_image = screen.capture().map_err(|e| e.to_string())?;
+    let full_image = match cached_img {
+        Some(img) => img,
+        None => {
+            // Fallback: hide window and capture freshly
+            let window = app.get_webview_window("circle_search");
+            let was_visible = window.as_ref().and_then(|w| w.is_visible().ok()).unwrap_or(false);
+            if was_visible {
+                if let Some(ref w) = window {
+                    let _ = w.hide();
+                    std::thread::sleep(std::time::Duration::from_millis(80));
+                }
+            }
 
-    if was_visible {
-        if let Some(ref w) = window {
-            let _ = w.show();
+            let screens = screenshots::Screen::all().map_err(|e| e.to_string())?;
+            let screen = screens.into_iter().next().ok_or_else(|| "No screens detected".to_string())?;
+            let shot = screen.capture().map_err(|e| e.to_string())?;
+
+            if was_visible {
+                if let Some(ref w) = window {
+                    let _ = w.show();
+                }
+            }
+            shot
         }
-    }
+    };
 
     let img_w = full_image.width();
     let img_h = full_image.height();
-    let scale_factor = screen.display_info.scale_factor as f64;
+
+    // Map logical client coordinates to exact physical pixel bounds
+    let scale_x = if let Some(sw) = screen_width {
+        if sw > 0.0 { img_w as f64 / sw } else { 1.0 }
+    } else {
+        1.0
+    };
+
+    let scale_y = if let Some(sh) = screen_height {
+        if sh > 0.0 { img_h as f64 / sh } else { 1.0 }
+    } else {
+        1.0
+    };
 
     let cropped = if let (Some(rx), Some(ry), Some(rw), Some(rh)) = (x, y, width, height) {
         if rw > 0 && rh > 0 {
-            let phys_x = ((rx as f64) * scale_factor).round().max(0.0) as u32;
-            let phys_y = ((ry as f64) * scale_factor).round().max(0.0) as u32;
-            let phys_w = ((rw as f64) * scale_factor).round().max(1.0) as u32;
-            let phys_h = ((rh as f64) * scale_factor).round().max(1.0) as u32;
+            let phys_x = ((rx as f64) * scale_x).round().max(0.0) as u32;
+            let phys_y = ((ry as f64) * scale_y).round().max(0.0) as u32;
+            let phys_w = ((rw as f64) * scale_x).round().max(1.0) as u32;
+            let phys_h = ((rh as f64) * scale_y).round().max(1.0) as u32;
 
-            let crop_x = phys_x.min(img_w);
-            let crop_y = phys_y.min(img_h);
-            let crop_w = phys_w.min(img_w.saturating_sub(crop_x));
-            let crop_h = phys_h.min(img_h.saturating_sub(crop_y));
+            let crop_x = phys_x.min(img_w.saturating_sub(1));
+            let crop_y = phys_y.min(img_h.saturating_sub(1));
+            let crop_w = phys_w.min(img_w.saturating_sub(crop_x)).max(1);
+            let crop_h = phys_h.min(img_h.saturating_sub(crop_y)).max(1);
 
-            if crop_w > 0 && crop_h > 0 {
+            if crop_w > 0 && crop_h > 0 && (crop_x + crop_w <= img_w) && (crop_y + crop_h <= img_h) {
                 use screenshots::image::GenericImageView;
                 full_image.view(crop_x, crop_y, crop_w, crop_h).to_image()
             } else {
@@ -1422,6 +1455,17 @@ pub fn circle_search_show(app: AppHandle) -> Result<(), String> {
     if use_native {
         if let Ok(()) = spawn_native_circle_search() {
             return Ok(());
+        }
+    }
+
+    // Capture the pristine desktop screenshot BEFORE showing any overlay window
+    if let Ok(screens) = screenshots::Screen::all() {
+        if let Some(screen) = screens.into_iter().next() {
+            if let Ok(shot) = screen.capture() {
+                if let Ok(mut lock) = CACHED_SCREENSHOT.lock() {
+                    *lock = Some(shot);
+                }
+            }
         }
     }
 

@@ -210,6 +210,8 @@ export const CircleSearchOverlay: React.FC = () => {
               y: Math.round(selection.y),
               width: Math.round(selection.w),
               height: Math.round(selection.h),
+              screenWidth: window.innerWidth,
+              screenHeight: window.innerHeight,
             });
           } catch (e) {
             console.warn('Native area capture fallback:', e);
@@ -218,7 +220,10 @@ export const CircleSearchOverlay: React.FC = () => {
       } else if (activeContext === 'fullscreen') {
         if (ipc?.invoke) {
           try {
-            imagePayload = await ipc.invoke('circle-search-capture-area', {});
+            imagePayload = await ipc.invoke('circle-search-capture-area', {
+              screenWidth: window.innerWidth,
+              screenHeight: window.innerHeight,
+            });
           } catch (e) {
             console.warn('Native full capture fallback:', e);
           }
@@ -337,6 +342,53 @@ export const CircleSearchOverlay: React.FC = () => {
 
   const cardPos = getComputedCardPos();
 
+  const handleCopyCircledImage = async () => {
+    try {
+      if (!selection) return;
+      let b64: string | undefined;
+      if (ipc?.invoke) {
+        b64 = await ipc.invoke('circle-search-capture-area', {
+          x: Math.round(selection.x),
+          y: Math.round(selection.y),
+          width: Math.round(selection.w),
+          height: Math.round(selection.h),
+          screenWidth: window.innerWidth,
+          screenHeight: window.innerHeight,
+        });
+      }
+      if (!b64) return;
+
+      let mimeType = 'image/png';
+      let pureB64 = b64;
+      if (b64.startsWith('data:')) {
+        const match = b64.match(/^data:([^;]+);base64,(.+)$/);
+        if (match) {
+          mimeType = match[1];
+          pureB64 = match[2];
+        }
+      }
+
+      // Direct binary Uint8Array decode -> Blob (instant, lossless, 100% valid image)
+      const binaryString = atob(pureB64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: mimeType });
+
+      if (navigator.clipboard && (window as any).ClipboardItem) {
+        await navigator.clipboard.write([
+          new ClipboardItem({ [blob.type || 'image/png']: blob }),
+        ]);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } catch (e) {
+      console.error('Failed to copy image to clipboard:', e);
+    }
+  };
+
   return (
     <div
       ref={containerRef}
@@ -392,44 +444,7 @@ export const CircleSearchOverlay: React.FC = () => {
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 <button
                   type="button"
-                  onClick={async () => {
-                    try {
-                      if (!selection) return;
-                      let b64: string | undefined;
-                      if (ipc?.invoke) {
-                        b64 = await ipc.invoke('circle-search-capture-area', {
-                          x: Math.round(selection.x),
-                          y: Math.round(selection.y),
-                          width: Math.round(selection.w),
-                          height: Math.round(selection.h),
-                        });
-                      }
-                      if (b64) {
-                        const img = new Image();
-                        img.onload = () => {
-                          const canvas = document.createElement('canvas');
-                          canvas.width = img.naturalWidth || img.width;
-                          canvas.height = img.naturalHeight || img.height;
-                          const ctx = canvas.getContext('2d');
-                          if (ctx) {
-                            ctx.drawImage(img, 0, 0);
-                            canvas.toBlob(async (pngBlob) => {
-                              if (pngBlob && navigator.clipboard && (window as any).ClipboardItem) {
-                                await navigator.clipboard.write([
-                                  new ClipboardItem({ 'image/png': pngBlob }),
-                                ]);
-                                setCopied(true);
-                                setTimeout(() => setCopied(false), 2000);
-                              }
-                            }, 'image/png');
-                          }
-                        };
-                        img.src = b64;
-                      }
-                    } catch (e) {
-                      console.error('Failed to copy image', e);
-                    }
-                  }}
+                  onClick={handleCopyCircledImage}
                   className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 text-[11px] font-medium text-zinc-200 hover:text-white transition-colors cursor-pointer"
                   title="Copy circled area as image to clipboard"
                 >
