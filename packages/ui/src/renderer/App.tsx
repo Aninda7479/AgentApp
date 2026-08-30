@@ -42,6 +42,7 @@ import { useThemeMode } from './theme';
 import { getRouteFromLocation, pushRoute, subscribeRouteChange, buildPath } from './urlSync';
 import { getIpc } from './lib/ipc';
 import { BrandLogo } from './BrandLogo';
+import { SetupService } from './logic/setup';
 
 import { WorkspaceStage } from './workspace/WorkspaceStage';
 import { chatStore } from './stores/chatStore';
@@ -1945,16 +1946,17 @@ export const App: React.FC = () => {
       <VoiceIndicator />
 
       {/* Onboarding Wizard for first-run users */}
-      {!bootstrapping && !setupCompleted && !onboardingDismissed && (!authStatus.authRequired || authStatus.authenticated) && (
+      {SetupService.shouldShowOnboardingWizard({
+        bootstrapping,
+        setupCompleted,
+        onboardingDismissed,
+        authStatus,
+      }) && (
         <OnboardingWizard
           onComplete={() => {
             setOnboardingDismissed(true);
             setSetupCompleted(true);
-            try {
-              if (typeof localStorage !== 'undefined') {
-                localStorage.setItem('superagent_setup_completed', 'true');
-              }
-            } catch {}
+            void SetupService.completeSetup();
           }}
           onConnectProvider={handleConnectProvider}
           onConnectProviders={handleConnectProviders}
@@ -1962,7 +1964,7 @@ export const App: React.FC = () => {
       )}
 
       {/* In-App Password Protection & Lock Screen */}
-      {authStatus.authRequired && !authStatus.authenticated && (
+      {SetupService.shouldShowLockScreen(authStatus) && (
         <DesktopLockScreen
           authStatus={authStatus}
           onUnlocked={() => {
