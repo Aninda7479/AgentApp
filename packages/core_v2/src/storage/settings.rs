@@ -380,21 +380,6 @@ impl SettingsStore {
             }
         }
 
-        // Ensure setupState.completed is true whenever providers array is configured
-        if let Some(providers_arr) = settings_val.get("providers").and_then(|p| p.as_array()) {
-            if !providers_arr.is_empty() {
-                if let Some(map) = settings_val.as_object_mut() {
-                    let general = map.entry("general".to_string()).or_insert_with(|| serde_json::json!({}));
-                    if let Some(gen_map) = general.as_object_mut() {
-                        let setup_state = gen_map.entry("setupState".to_string()).or_insert_with(|| serde_json::json!({}));
-                        if let Some(ss_map) = setup_state.as_object_mut() {
-                            ss_map.insert("completed".to_string(), serde_json::Value::Bool(true));
-                        }
-                    }
-                }
-            }
-        }
-
         Ok(settings_val)
     }
 
@@ -687,6 +672,11 @@ mod tests {
             "lastUsedModel": {
                 "provider": "groq",
                 "model": "llama-3.3-70b-versatile"
+            },
+            "general": {
+                "setupState": {
+                    "completed": true
+                }
             },
             "ownerName": "Aninda"
         });

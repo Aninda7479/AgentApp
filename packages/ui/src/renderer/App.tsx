@@ -265,11 +265,18 @@ export const App: React.FC = () => {
     ipc.invoke('settings-read')
       .then((current: any) => {
         setEnabledSkills(current?.skills || {});
-        if (current?.general?.setupState?.completed || (Array.isArray(current?.providers) && current.providers.length > 0)) {
+        if (current?.general?.setupState?.completed === true) {
           setSetupCompleted(true);
           try {
             if (typeof localStorage !== 'undefined') {
               localStorage.setItem('superagent_setup_completed', 'true');
+            }
+          } catch {}
+        } else if (current?.general?.setupState?.completed === false) {
+          setSetupCompleted(false);
+          try {
+            if (typeof localStorage !== 'undefined') {
+              localStorage.removeItem('superagent_setup_completed');
             }
           } catch {}
         }
@@ -423,14 +430,6 @@ export const App: React.FC = () => {
       const resolvedProviders = providers.length > 0 ? providers : (stateRef.current.connectedProviders.length > 0 ? stateRef.current.connectedProviders : providers);
       const resolvedModels = models.length > 0 ? models : (stateRef.current.modelsCatalog.length > 0 ? stateRef.current.modelsCatalog : models);
 
-      if (resolvedProviders.length > 0) {
-        setSetupCompleted(true);
-        try {
-          if (typeof localStorage !== 'undefined') {
-            localStorage.setItem('superagent_setup_completed', 'true');
-          }
-        } catch {}
-      }
       if (persistDebounceRef.current) clearTimeout(persistDebounceRef.current);
       persistDebounceRef.current = setTimeout(() => {
         persistDebounceRef.current = null;
@@ -1946,7 +1945,7 @@ export const App: React.FC = () => {
       <VoiceIndicator />
 
       {/* Onboarding Wizard for first-run users */}
-      {!bootstrapping && !setupCompleted && connectedProviders.length === 0 && !onboardingDismissed && (
+      {!bootstrapping && !setupCompleted && !onboardingDismissed && (!authStatus.authRequired || authStatus.authenticated) && (
         <OnboardingWizard
           onComplete={() => {
             setOnboardingDismissed(true);

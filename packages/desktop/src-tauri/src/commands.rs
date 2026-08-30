@@ -792,6 +792,19 @@ pub fn toggle_window_maximize(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
         if window.is_maximized().unwrap_or(false) {
             window.unmaximize().map_err(|e| e.to_string())?;
+            if let Ok(Some(monitor)) = window.current_monitor() {
+                let mon_size = monitor.size();
+                let scale = monitor.scale_factor();
+                let logical_w = mon_size.width as f64 / scale;
+                let logical_h = mon_size.height as f64 / scale;
+                let target_w = (logical_w * 0.75).max(960.0).min(logical_w - 40.0);
+                let target_h = (logical_h * 0.80).max(640.0).min(logical_h - 60.0);
+                let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+                    width: target_w,
+                    height: target_h,
+                }));
+                let _ = window.center();
+            }
         } else {
             window.maximize().map_err(|e| e.to_string())?;
         }
@@ -810,7 +823,18 @@ pub fn minimize_window(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn close_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
-        window.close().map_err(|e| e.to_string())?;
+        let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+        let close_to_tray = saved_settings
+            .get("general")
+            .and_then(|g| g.get("closeToTray"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+
+        if close_to_tray {
+            let _ = window.hide();
+        } else {
+            window.close().map_err(|e| e.to_string())?;
+        }
     }
     Ok(())
 }

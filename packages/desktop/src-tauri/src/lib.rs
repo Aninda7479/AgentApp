@@ -11,22 +11,30 @@ use std::sync::atomic::{AtomicBool, Ordering};
 static IS_EXPLICIT_QUIT: AtomicBool = AtomicBool::new(false);
 
 fn position_artifacts_window(window: &WebviewWindow) {
-    if let Ok(Some(monitor)) = window.current_monitor() {
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten());
+
+    if let Some(monitor) = monitor {
         let monitor_size = monitor.size();
         let scale_factor = monitor.scale_factor();
+        let monitor_pos = monitor.position();
 
         let window_width = (380.0 * scale_factor) as i32;
         let window_height = (540.0 * scale_factor) as i32;
 
-        let x = (monitor_size.width as i32) - window_width - 16;
+        let x = monitor_pos.x + (monitor_size.width as i32) - window_width - 16;
 
         #[cfg(target_os = "macos")]
-        let y = (32.0 * scale_factor) as i32; // Drops down directly from macOS top menu bar
+        let y = monitor_pos.y + (32.0 * scale_factor) as i32; // Drops down directly from macOS top menu bar
 
         #[cfg(not(target_os = "macos"))]
-        let y = (monitor_size.height as i32) - window_height - 56; // Above bottom taskbar on Windows/Linux
+        let y = monitor_pos.y + (monitor_size.height as i32) - window_height - 56; // Above bottom taskbar on Windows/Linux
 
         let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
+        let _ = window.set_always_on_top(true);
     }
 }
 
@@ -98,6 +106,7 @@ pub fn run() {
                     let _ = main_window.hide();
                 } else {
                     let _ = main_window.show();
+                    let _ = main_window.maximize();
                     let _ = main_window.set_focus();
                 }
             }
@@ -260,6 +269,16 @@ pub fn run() {
         .expect("error while building SuperAgent tauri application")
         .run(|app_handle, event| {
             match event {
+                #[cfg(target_os = "macos")]
+                tauri::RunEvent::Reopen { has_visible_windows, .. } => {
+                    if !has_visible_windows {
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                }
                 tauri::RunEvent::ExitRequested { api, .. } => {
                     if !IS_EXPLICIT_QUIT.load(Ordering::SeqCst) {
                         let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();

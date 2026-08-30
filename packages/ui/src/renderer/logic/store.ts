@@ -116,12 +116,6 @@ export class StoreService {
 
     if (providers.length > 0) {
       providerStore.setProviders(providers);
-      ctx.setSetupCompleted(true);
-      try {
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('superagent_setup_completed', 'true');
-        }
-      } catch {}
     }
     if (models.length > 0) {
       providerStore.setModels(models);

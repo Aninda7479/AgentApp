@@ -36,6 +36,7 @@
         "visible": false,
         "resizable": false,
         "fullscreen": false,
+        "skipTaskbar": true,
         "label": "artifacts"
       },
       {

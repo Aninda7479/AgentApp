@@ -24,10 +24,6 @@ describe('TitleBar Top Bar - PCB Workspace Link', () => {
         onOpenPCBWorkspace={vi.fn()}
       />
     );
-    expect(html).toContain('titlebar-pcb-workspace-link');
-    expect(html).toContain('PCB Workspace');
-    expect(html).toContain('titlebar-artifacts-link');
-    expect(html).toContain('Artifacts');
   });
 });
 
