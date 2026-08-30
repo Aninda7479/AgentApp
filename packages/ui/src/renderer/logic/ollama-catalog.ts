@@ -22,13 +22,13 @@
 import { browserSafeFetch } from '../web-fetch';
 import type { SystemInfo } from './systemInfo';
 
-export type ModelFit = 'best' | 'runnable' | 'too-large';
-
 export type ModelTag =
   | 'chat'
   | 'code'
   | 'vision'
   | 'embedding'
+  | 'tools'
+  | 'thinking'
   | 'reasoning'
   | 'multilingual'
   | 'math'
@@ -152,16 +152,52 @@ function deriveTags(fam: LibFamily): ModelTag[] {
   const tags = new Set<ModelTag>();
   const slug = fam.slug.toLowerCase();
   const desc = fam.description.toLowerCase();
+
   for (const cap of fam.capabilityChips) {
     if (cap === 'vision') tags.add('vision');
     else if (cap === 'embedding') tags.add('embedding');
+    else if (cap === 'tools' || cap === 'tool') tags.add('tools');
+    else if (cap === 'thinking' || cap === 'reasoning') {
+      tags.add('thinking');
+      tags.add('reasoning');
+    }
   }
-  if (slug.includes('coder')) tags.add('code');
-  if (slug.includes('math')) tags.add('math');
+
+  // Capability heuristics
+  if (slug.includes('coder') || desc.includes('code') || desc.includes('programming')) tags.add('code');
+  if (slug.includes('math') || desc.includes('math')) tags.add('math');
   if (slug.includes('instruct')) tags.add('instruct');
-  if (slug.includes('r1') || slug.includes('reasoning') || desc.includes('reasoning')) tags.add('reasoning');
+  if (
+    slug.includes('r1') ||
+    slug.includes('qwq') ||
+    slug.includes('reasoning') ||
+    desc.includes('reasoning') ||
+    desc.includes('thinking') ||
+    desc.includes('chain-of-thought')
+  ) {
+    tags.add('thinking');
+    tags.add('reasoning');
+  }
+  if (
+    slug.startsWith('llama3') ||
+    slug.startsWith('qwen2.5') ||
+    slug.startsWith('mistral') ||
+    slug.startsWith('command') ||
+    desc.includes('tools') ||
+    desc.includes('tool calling') ||
+    desc.includes('function calling')
+  ) {
+    tags.add('tools');
+  }
+  if (slug.includes('embed') || desc.includes('embedding')) {
+    tags.add('embedding');
+  }
+  if (slug.includes('vision') || desc.includes('vision') || desc.includes('multimodal') || slug.includes('llava') || slug.includes('moondream')) {
+    tags.add('vision');
+  }
   if (desc.includes('multilingual') || /^(qwen|gemma|command|mistral)/.test(slug)) tags.add('multilingual');
-  if (tags.size === 0) tags.add('chat');
+  if (!tags.has('embedding')) tags.add('chat');
+
   return [...tags];
 }
 
@@ -248,7 +284,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: "Meta's ultra-lightweight 1B model, exceptionally fast on edge devices and low-RAM hardware.",
-    tags: ['chat', 'instruct']
+    tags: ['chat', 'tools', 'instruct']
   },
   {
     name: 'llama3.2:3b',
@@ -259,7 +295,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: "Meta's efficient 3B model balancing high speed with strong multilingual reasoning and tool calling.",
-    tags: ['chat', 'instruct']
+    tags: ['chat', 'tools', 'instruct']
   },
   {
     name: 'llama3.2-vision:11b',
@@ -270,7 +306,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text', 'image'],
     outputModalities: ['text'],
     description: 'Multimodal model capable of visual understanding, chart analysis, and image reasoning.',
-    tags: ['vision', 'chat']
+    tags: ['vision', 'tools', 'chat']
   },
   {
     name: 'llama3.3:70b',
@@ -281,7 +317,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: "Meta's flagship open-weights 70B model with industry-leading intelligence across reasoning and coding.",
-    tags: ['chat', 'reasoning', 'instruct']
+    tags: ['chat', 'tools', 'thinking', 'reasoning', 'instruct']
   },
   {
     name: 'llama3.1:8b',
@@ -291,8 +327,8 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     contextK: 128,
     inputModalities: ['text'],
     outputModalities: ['text'],
-    description: 'Versatile 8B model with 128k context window, excellent general conversational abilities.',
-    tags: ['chat', 'instruct']
+    description: 'Versatile 8B model with 128k context window, excellent general conversational abilities and tools.',
+    tags: ['chat', 'tools', 'instruct']
   },
   {
     name: 'llama3.1:70b',
@@ -303,7 +339,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'High-capability 70B model with 128k context window for complex synthesis and agent workflows.',
-    tags: ['chat', 'reasoning']
+    tags: ['chat', 'tools', 'reasoning']
   },
 
   // DeepSeek Reasoning family
@@ -316,7 +352,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Ultra-fast distilled reasoning model based on Qwen 1.5B with step-by-step thinking traces.',
-    tags: ['reasoning', 'math', 'chat']
+    tags: ['thinking', 'reasoning', 'math', 'chat']
   },
   {
     name: 'deepseek-r1:7b',
@@ -327,7 +363,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Distilled 7B reasoning model demonstrating deep chain-of-thought analysis in math and logic.',
-    tags: ['reasoning', 'math', 'code']
+    tags: ['thinking', 'reasoning', 'math', 'code']
   },
   {
     name: 'deepseek-r1:8b',
@@ -338,7 +374,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Llama-distilled 8B reasoning model with enhanced conversational flow and structured deduction.',
-    tags: ['reasoning', 'math', 'chat']
+    tags: ['thinking', 'reasoning', 'math', 'chat']
   },
   {
     name: 'deepseek-r1:14b',
@@ -349,7 +385,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Powerful 14B reasoning model capable of high-level algorithmic logic and complex problem solving.',
-    tags: ['reasoning', 'math', 'code']
+    tags: ['thinking', 'reasoning', 'math', 'code']
   },
   {
     name: 'deepseek-r1:32b',
@@ -359,8 +395,8 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     contextK: 64,
     inputModalities: ['text'],
     outputModalities: ['text'],
-    description: 'Near-frontier reasoning performance distilled into a 32B footprint.',
-    tags: ['reasoning', 'math', 'code']
+    description: 'Near-frontier reasoning performance distilled into a 32B footprint with full thinking tokens.',
+    tags: ['thinking', 'reasoning', 'math', 'code']
   },
   {
     name: 'deepseek-r1:70b',
@@ -371,7 +407,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Frontier-grade reasoning model with exhaustive chain-of-thought mathematical proofing.',
-    tags: ['reasoning', 'math', 'chat']
+    tags: ['thinking', 'reasoning', 'math', 'chat']
   },
 
   // Qwen Code & General family
@@ -384,7 +420,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Lightweight code assistant for inline autocomplete and fast script generation.',
-    tags: ['code', 'chat']
+    tags: ['code', 'tools', 'chat']
   },
   {
     name: 'qwen2.5-coder:7b',
@@ -395,7 +431,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Industry-leading 7B code model rivaling much larger systems across 92+ programming languages.',
-    tags: ['code', 'chat', 'reasoning']
+    tags: ['code', 'tools', 'chat', 'reasoning']
   },
   {
     name: 'qwen2.5-coder:14b',
@@ -406,7 +442,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Advanced code intelligence for full repository comprehension, refactoring, and test synthesis.',
-    tags: ['code', 'reasoning']
+    tags: ['code', 'tools', 'reasoning']
   },
   {
     name: 'qwen2.5-coder:32b',
@@ -417,7 +453,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Top-tier code model matching frontier proprietary models on coding benchmarks.',
-    tags: ['code', 'reasoning']
+    tags: ['code', 'tools', 'reasoning']
   },
   {
     name: 'qwen2.5:3b',
@@ -428,7 +464,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Compact general intelligence model with strong multilingual and structured JSON capabilities.',
-    tags: ['chat', 'multilingual']
+    tags: ['chat', 'tools', 'multilingual']
   },
   {
     name: 'qwen2.5:7b',
@@ -438,8 +474,8 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     contextK: 32,
     inputModalities: ['text'],
     outputModalities: ['text'],
-    description: 'Balanced 7B general foundation model with exceptional instruction adherence.',
-    tags: ['chat', 'multilingual', 'instruct']
+    description: 'Balanced 7B general foundation model with exceptional instruction and tool adherence.',
+    tags: ['chat', 'tools', 'multilingual', 'instruct']
   },
 
   // Mistral & Mixtral family
@@ -451,8 +487,8 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     contextK: 32,
     inputModalities: ['text'],
     outputModalities: ['text'],
-    description: 'Fast, high-quality 7B model by Mistral AI with sliding-window attention.',
-    tags: ['chat', 'instruct']
+    description: 'Fast, high-quality 7B model by Mistral AI with sliding-window attention and function calling.',
+    tags: ['chat', 'tools', 'instruct']
   },
   {
     name: 'mistral-small:24b',
@@ -463,7 +499,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Mistral AI’s updated 24B parameter model fine-tuned for enterprise agent tasks and coding.',
-    tags: ['chat', 'reasoning', 'code']
+    tags: ['chat', 'tools', 'thinking', 'reasoning', 'code']
   },
 
   // Gemma 2 family
@@ -487,7 +523,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Google’s 9B model built on Gemini architecture, highly competitive against larger models.',
-    tags: ['chat', 'reasoning']
+    tags: ['chat', 'tools', 'reasoning']
   },
 
   // Microsoft Phi family
@@ -500,7 +536,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Microsoft’s 14B state-of-the-art small model trained with synthetic data for peak reasoning.',
-    tags: ['reasoning', 'math', 'chat']
+    tags: ['thinking', 'reasoning', 'math', 'chat']
   },
   {
     name: 'phi3.5:3.8b',

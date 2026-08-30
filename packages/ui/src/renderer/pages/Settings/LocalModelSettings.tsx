@@ -24,7 +24,11 @@ import {
   Layers,
   Activity,
   Sliders,
-  ArrowUpDown
+  ArrowUpDown,
+  Eye,
+  Brain,
+  Wrench,
+  Code
 } from 'lucide-react';
 import { ProviderConnection, ModelConfig } from './types';
 import { SystemInfo, normalizeSystemInfo } from '../../logic/systemInfo';
@@ -411,7 +415,11 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
     const list = ranked.filter((r) => {
       if (storeRunnableOnly && r.fit === 'too-large') return false;
       if (storeTagFilter !== 'all') {
-        if (!r.model.tags.includes(storeTagFilter as any)) return false;
+        if (storeTagFilter === 'thinking') {
+          if (!r.model.tags.includes('thinking') && !r.model.tags.includes('reasoning')) return false;
+        } else if (!r.model.tags.includes(storeTagFilter as any)) {
+          return false;
+        }
       }
       if (storeSearch) {
         const q = storeSearch.toLowerCase();
@@ -1018,19 +1026,31 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
             {/* Store Controls */}
             <div className="p-4 border-b border-brand-border bg-brand-card/50 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap gap-1.5 text-xs">
-                {['all', 'chat', 'code', 'vision', 'reasoning', 'math', 'embedding'].map((tag) => (
-                  <button
-                    key={tag}
-                    onClick={() => setStoreTagFilter(tag)}
-                    className={`ui-chip capitalize transition-colors ${
-                      storeTagFilter === tag
-                        ? 'bg-[var(--brand-accent)] text-white font-medium'
-                        : 'bg-brand-popover text-brand-textMuted hover:text-brand-textMain'
-                    }`}
-                  >
-                    {tag}
-                  </button>
-                ))}
+                {[
+                  { id: 'all', label: 'All' },
+                  { id: 'tools', label: 'Tools', icon: Wrench },
+                  { id: 'thinking', label: 'Thinking', icon: Brain },
+                  { id: 'vision', label: 'Vision', icon: Eye },
+                  { id: 'embedding', label: 'Embedding', icon: Layers },
+                  { id: 'code', label: 'Code', icon: Code },
+                  { id: 'chat', label: 'Chat', icon: Zap }
+                ].map((tab) => {
+                  const Icon = tab.icon;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setStoreTagFilter(tab.id)}
+                      className={`ui-chip transition-colors flex items-center gap-1.5 ${
+                        storeTagFilter === tab.id
+                          ? 'bg-[var(--brand-accent)] text-white font-medium'
+                          : 'bg-brand-popover text-brand-textMuted hover:text-brand-textMain'
+                      }`}
+                    >
+                      {Icon && <Icon size={12} />}
+                      {tab.label}
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
@@ -1110,6 +1130,33 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
                             <span className="font-semibold text-sm text-brand-textMain">{model.family}</span>
                             <span className="ui-chip bg-brand-popover text-brand-textMuted">{model.params}</span>
                             
+                            {/* Capability Tags: Tools, Thinking, Vision, Embedding */}
+                            {model.tags.includes('tools') && (
+                              <span className="ui-badge bg-amber-500/15 text-amber-400 border border-amber-500/25 flex items-center gap-1 text-[11px] font-medium">
+                                <Wrench size={10} /> Tools
+                              </span>
+                            )}
+                            {(model.tags.includes('thinking') || model.tags.includes('reasoning')) && (
+                              <span className="ui-badge bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 flex items-center gap-1 text-[11px] font-medium">
+                                <Brain size={10} /> Thinking
+                              </span>
+                            )}
+                            {model.tags.includes('vision') && (
+                              <span className="ui-badge bg-cyan-500/15 text-cyan-400 border border-cyan-500/25 flex items-center gap-1 text-[11px] font-medium">
+                                <Eye size={10} /> Vision
+                              </span>
+                            )}
+                            {model.tags.includes('embedding') && (
+                              <span className="ui-badge bg-purple-500/15 text-purple-400 border border-purple-500/25 flex items-center gap-1 text-[11px] font-medium">
+                                <Layers size={10} /> Embedding
+                              </span>
+                            )}
+                            {model.tags.includes('code') && (
+                              <span className="ui-badge bg-blue-500/15 text-blue-400 border border-blue-500/25 flex items-center gap-1 text-[11px] font-medium">
+                                <Code size={10} /> Code
+                              </span>
+                            )}
+
                             {isHardwareRecommended && (
                               <span className="ui-badge bg-[var(--brand-accent)]/15 text-[var(--brand-accent)] font-semibold flex items-center gap-1">
                                 <Sparkles size={11} /> Top Match

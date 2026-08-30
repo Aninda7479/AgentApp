@@ -130,4 +130,21 @@ describe('LocalModelSettings - System Info Normalization', () => {
     expect(names).toContain('deepseek-r1:7b');
     expect(names).toContain('qwen2.5-coder:7b');
   });
+
+  it('correctly associates Embedding, Vision, Tools, Thinking tags with models', async () => {
+    const { fetchLiveCatalog } = await import('../../logic/ollama-catalog');
+    const catalog = await fetchLiveCatalog();
+    
+    const embedModel = catalog.find((c) => c.name.includes('embed'));
+    expect(embedModel?.tags).toContain('embedding');
+
+    const visionModel = catalog.find((c) => c.name.includes('vision') || c.name.includes('llava'));
+    expect(visionModel?.tags).toContain('vision');
+
+    const thinkingModel = catalog.find((c) => c.name.includes('r1'));
+    expect(thinkingModel?.tags).toContain('thinking');
+
+    const toolsModel = catalog.find((c) => c.name === 'llama3.2:3b' || c.name === 'qwen2.5-coder:7b');
+    expect(toolsModel?.tags).toContain('tools');
+  });
 });
