@@ -65,6 +65,34 @@ impl ImageWorkspaceManager {
             )
         })?;
 
+        // Pre-flight memory verification
+        let catalog = self.models.curated_catalog();
+        let model_info = catalog.iter().find(|m| m.id == model_id);
+        let mut sys = sysinfo::System::new_all();
+        sys.refresh_memory();
+        let total_ram_mb = sys.total_memory() / (1024 * 1024);
+        let available_ram_mb = sys.available_memory() / (1024 * 1024);
+        let used_ram_mb = total_ram_mb.saturating_sub(available_ram_mb);
+
+        let is_flux = model_id.contains("flux") || model_info.map(|m| m.family == ModelFamily::Flux).unwrap_or(false);
+        let is_sdxl = model_id.contains("sdxl") || model_id.contains("sd35") || model_info.map(|m| m.family == ModelFamily::Sdxl || m.family == ModelFamily::Sd35).unwrap_or(false);
+
+        if is_flux && available_ram_mb < 7168 {
+            let avail_gb = (available_ram_mb as f64) / 1024.0;
+            let used_gb = (used_ram_mb as f64) / 1024.0;
+            return Err(anyhow!(
+                "Out of Memory: FLUX.1 requires ~9 GB of available RAM/VRAM, but only {:.1} GB is currently available ({:.1} GB is in use by system and other applications). Please close memory-heavy applications to free up RAM, or switch to Stable Diffusion 1.5.",
+                avail_gb, used_gb
+            ));
+        } else if is_sdxl && available_ram_mb < 2560 {
+            let avail_gb = (available_ram_mb as f64) / 1024.0;
+            let used_gb = (used_ram_mb as f64) / 1024.0;
+            return Err(anyhow!(
+                "Out of Memory: SDXL requires ~4 GB of available RAM/VRAM, but only {:.1} GB is currently available ({:.1} GB in use). Please close unused applications or switch to Stable Diffusion 1.5.",
+                avail_gb, used_gb
+            ));
+        }
+
         let id = format!("img_{}", Uuid::new_v4());
         let filename = format!("{}.png", id);
         let temp_output = std::env::temp_dir().join(format!("{}.png", Uuid::new_v4()));

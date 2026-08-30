@@ -208,10 +208,22 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
     ? systemInfo.storage[0].mount
     : hardware?.storage_mount || 'System Disk';
 
-  const handlePullModel = async (modelId: string, modelSizeGB?: number) => {
+  const handlePullModel = async (
+    modelId: string,
+    modelSizeGB?: number,
+    isSupported: boolean = true,
+    memoryWarning?: string
+  ) => {
+    if (!isSupported) {
+      notify(`This model is incompatible with your system architecture. We recommend installing Stable Diffusion 1.5.`);
+      return;
+    }
     if (storageFreeGB !== undefined && modelSizeGB !== undefined && storageFreeGB < modelSizeGB + 0.5) {
       notify(`Insufficient disk space: Model requires ~${fmtGB(modelSizeGB)} GB, but only ${fmtGB(storageFreeGB)} GB is available on ${storageMount}.`);
       return;
+    }
+    if (memoryWarning) {
+      notify(`Memory note: ${memoryWarning}`);
     }
     setActionLoading(`pull_${modelId}`);
     try {
@@ -265,10 +277,20 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
 
   // Model catalog with hardware fitness analysis
   const catalogWithFit = useMemo(() => {
-    const isUnified = (hardware?.os?.toLowerCase().includes('mac') || hardware?.os?.toLowerCase().includes('darwin')) && hardware?.arch === 'aarch64';
-    const effectiveVram = isUnified
+    const isMac = hardware?.os?.toLowerCase().includes('mac') || hardware?.os?.toLowerCase().includes('darwin');
+    const isAppleSilicon = isMac && hardware?.arch === 'aarch64';
+    const isIntelMac = isMac && hardware?.arch !== 'aarch64';
+
+    const effectiveVram = isAppleSilicon
       ? Math.round((hardware?.total_ram_mb || 16384) * 0.75)
       : (hardware?.vram_mb || 2048);
+
+    const availableRamGB = systemInfo?.ramFreeGB !== undefined
+      ? systemInfo.ramFreeGB
+      : hardware?.available_ram_mb
+      ? hardware.available_ram_mb / 1024
+      : undefined;
+    const totalRamGB = (hardware?.total_ram_mb || 16384) / 1024;
 
     return models.map((model) => {
       const needVram = model.vram_required_mb;
@@ -279,7 +301,47 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
 
       let fitLabel = 'Fits GPU (Optimal Match)';
       let fitColor = 'text-[color:var(--neon-constructive)] bg-[color:var(--neon-constructive)]/15 border-[color:var(--neon-constructive)]/25';
-      if (!fitsGpu) {
+      let isSupported = true;
+      let memoryWarning: string | undefined;
+
+      if (model.family === 'flux') {
+        if (isIntelMac) {
+          fitLabel = 'Incompatible with Intel Mac CPU/iGPU';
+          fitColor = 'text-[color:var(--neon-destructive)] bg-[color:var(--neon-destructive)]/15 border-[color:var(--neon-destructive)]/30';
+          isSupported = false;
+          memoryWarning = 'FLUX.1 requires Apple Silicon (M1/M2/M3/M4) or a dedicated NVIDIA CUDA GPU.';
+        } else if (totalRamGB < 16) {
+          fitLabel = 'Requires ≥ 16 GB RAM (High Memory)';
+          fitColor = 'text-amber-400 bg-amber-500/15 border-amber-500/25';
+          memoryWarning = `System has ${fmtGB(totalRamGB)} GB RAM. FLUX.1 requires ~9 GB of free RAM to generate images.`;
+        } else if (availableRamGB !== undefined && availableRamGB < 7.5) {
+          fitLabel = 'High Memory (Needs ~9 GB Free RAM)';
+          fitColor = 'text-amber-400 bg-amber-500/15 border-amber-500/25';
+          memoryWarning = `Only ${fmtGB(availableRamGB)} GB RAM currently free. Close background applications before generating.`;
+        } else if (isRecommended) {
+          fitLabel = 'Recommended for your Hardware';
+          fitColor = 'text-[color:var(--neon-constructive)] bg-[color:var(--neon-constructive)]/20 border-[color:var(--neon-constructive)]/40 font-semibold';
+        }
+      } else if (model.family === 'sdxl') {
+        if (isIntelMac) {
+          fitLabel = 'Heavy on CPU (SD 1.5 Recommended)';
+          fitColor = 'text-amber-400 bg-amber-500/15 border-amber-500/25';
+        } else if (!fitsGpu) {
+          fitLabel = 'Offloads to System RAM (Slower)';
+          fitColor = 'text-amber-400 bg-amber-500/15 border-amber-500/25';
+        } else if (isRecommended) {
+          fitLabel = 'Recommended for your Hardware';
+          fitColor = 'text-[color:var(--neon-constructive)] bg-[color:var(--neon-constructive)]/20 border-[color:var(--neon-constructive)]/40 font-semibold';
+        } else {
+          fitLabel = 'Runs on GPU';
+          fitColor = 'text-brand-textMain bg-brand-popover border-brand-border';
+        }
+      } else if (model.family === 'sd15') {
+        fitLabel = isRecommended ? 'Recommended (Fast & Lightweight)' : 'Runs on GPU / Fast';
+        fitColor = isRecommended
+          ? 'text-[color:var(--neon-constructive)] bg-[color:var(--neon-constructive)]/20 border-[color:var(--neon-constructive)]/40 font-semibold'
+          : 'text-brand-textMain bg-brand-popover border-brand-border';
+      } else if (!fitsGpu) {
         fitLabel = 'Offloads to System RAM (Slower)';
         fitColor = 'text-amber-400 bg-amber-500/15 border-amber-500/25';
       } else if (isRecommended) {
@@ -296,11 +358,13 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
         isRecommended,
         modelSizeGB,
         hasEnoughDisk,
+        isSupported,
+        memoryWarning,
         fitLabel,
         fitColor,
       };
     });
-  }, [models, hardware, storageFreeGB]);
+  }, [models, hardware, storageFreeGB, systemInfo]);
 
   // Filtered store models
   const filteredStore = useMemo(() => {
@@ -909,7 +973,7 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
                   No image models match your search criteria.
                 </div>
               ) : (
-                filteredStore.map(({ model, isRecommended, modelSizeGB, hasEnoughDisk, fitLabel, fitColor }) => {
+                filteredStore.map(({ model, isRecommended, modelSizeGB, hasEnoughDisk, isSupported, memoryWarning, fitLabel, fitColor }) => {
                   const isInstalled = model.is_downloaded;
                   const isPulling = model.is_downloading;
 
@@ -952,6 +1016,13 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
                             <span>Default Steps: <strong className="text-brand-textMain">{model.default_steps}</strong></span>
                             <span>Default CFG: <strong className="text-brand-textMain">{model.default_cfg}</strong></span>
                           </div>
+
+                          {memoryWarning && isSupported && (
+                            <div className="text-[11px] text-amber-400/90 flex items-center gap-1.5 pt-0.5">
+                              <CircleAlert size={12} className="shrink-0" />
+                              <span>{memoryWarning}</span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Action buttons */}
@@ -962,21 +1033,35 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
                             </span>
                           ) : (
                             <button
-                              onClick={() => handlePullModel(model.id, modelSizeGB)}
-                              disabled={isPulling || !hasEnoughDisk || actionLoading === `pull_${model.id}`}
+                              onClick={() => handlePullModel(model.id, modelSizeGB, isSupported, memoryWarning)}
+                              disabled={isPulling || !hasEnoughDisk || !isSupported || actionLoading === `pull_${model.id}`}
                               className={`flex items-center gap-1.5 text-xs shadow-sm disabled:opacity-50 ${
-                                !hasEnoughDisk
+                                !isSupported
+                                  ? 'ui-btn-ghost text-brand-textMuted border border-brand-border cursor-not-allowed'
+                                  : !hasEnoughDisk
                                   ? 'ui-btn-ghost text-[color:var(--neon-destructive)] border border-[color:var(--neon-destructive)]/30'
                                   : 'ui-btn-primary'
                               }`}
                               title={
-                                !hasEnoughDisk
+                                !isSupported
+                                  ? memoryWarning || 'Incompatible with current hardware architecture'
+                                  : !hasEnoughDisk
                                   ? `Insufficient disk space: Needs ~${fmtGB(modelSizeGB)} GB, but only ${fmtGB(storageFreeGB || 0)} GB is free on ${storageMount}`
+                                  : memoryWarning
+                                  ? `Notice: ${memoryWarning}`
                                   : 'Install model'
                               }
                             >
                               <Download size={13} className={isPulling ? 'animate-bounce' : ''} />
-                              <span>{isPulling ? 'Downloading...' : !hasEnoughDisk ? 'Low Disk Space' : 'Install'}</span>
+                              <span>
+                                {isPulling
+                                  ? 'Downloading...'
+                                  : !isSupported
+                                  ? 'Incompatible'
+                                  : !hasEnoughDisk
+                                  ? 'Low Disk Space'
+                                  : 'Install'}
+                              </span>
                             </button>
                           )}
                         </div>

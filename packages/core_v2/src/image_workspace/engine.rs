@@ -206,6 +206,7 @@ impl EngineManager {
         let os = std::env::consts::OS.to_string();
         let arch = std::env::consts::ARCH.to_string();
         let total_ram_mb = sys.total_memory() / (1024 * 1024);
+        let available_ram_mb = Some(sys.available_memory() / (1024 * 1024));
 
         let mut gpu_name: Option<String> = None;
         let mut vram_mb: Option<u64> = None;
@@ -235,12 +236,15 @@ impl EngineManager {
             }
         }
 
-        // macOS Apple Silicon detection
+        // macOS Apple Silicon vs Intel Mac detection
         #[cfg(target_os = "macos")]
         {
             if arch == "aarch64" {
                 gpu_name = Some("Apple Silicon GPU".to_string());
                 vram_mb = Some((total_ram_mb * 3) / 4); // Unified memory (~75% process budget)
+            } else {
+                gpu_name = Some("Intel Mac Integrated / Dedicated GPU".to_string());
+                vram_mb = Some(2048); // Intel Mac baseline
             }
         }
 
@@ -275,6 +279,9 @@ impl EngineManager {
             GpuBackend::Metal
         } else if has_nvidia {
             GpuBackend::Cuda
+        } else if os == "macos" {
+            // Intel Mac CPU
+            GpuBackend::Cpu
         } else if gpu_name.is_some() {
             GpuBackend::Vulkan
         } else {
@@ -330,6 +337,7 @@ impl EngineManager {
             gpu_name,
             vram_mb,
             total_ram_mb,
+            available_ram_mb,
             recommended_backend,
             recommended_model_id,
             storage_free_gb,
@@ -727,6 +735,34 @@ impl EngineManager {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let stdout = String::from_utf8_lossy(&output.stdout);
+            let combined = format!("{}\n{}", stderr, stdout).to_lowercase();
+
+            // Detect Out of Memory / Metal buffer allocation failures
+            let is_oom = combined.contains("out of memory")
+                || combined.contains("bad_alloc")
+                || combined.contains("failed to allocate")
+                || combined.contains("cannot allocate")
+                || combined.contains("exceeded memory")
+                || combined.contains("metal: failed to allocate memory")
+                || combined.contains("cuda out of memory")
+                || combined.contains("killed")
+                || combined.contains("abort trap")
+                || combined.contains("segmentation fault");
+
+            #[cfg(unix)]
+            let is_sigkill = {
+                use std::os::unix::process::ExitStatusExt;
+                output.status.signal() == Some(9) || output.status.code() == Some(137)
+            };
+            #[cfg(not(unix))]
+            let is_sigkill = false;
+
+            if is_oom || is_sigkill {
+                return Err(anyhow!(
+                    "Out of Memory: The system ran out of available memory (RAM/VRAM) while generating the image. We recommend closing background applications to free up RAM, or switching to Stable Diffusion 1.5 which requires significantly less memory."
+                ));
+            }
+
             return Err(anyhow!("sd-cli execution failed: {}\n{}", stderr, stdout));
         }
 

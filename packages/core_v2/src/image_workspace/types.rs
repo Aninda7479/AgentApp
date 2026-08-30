@@ -27,6 +27,7 @@ pub struct HardwareProfile {
     pub gpu_name: Option<String>,
     pub vram_mb: Option<u64>,
     pub total_ram_mb: u64,
+    pub available_ram_mb: Option<u64>,
     pub recommended_backend: GpuBackend,
     pub recommended_model_id: String,
     pub storage_free_gb: Option<f64>,

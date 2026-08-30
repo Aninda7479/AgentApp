@@ -6,6 +6,7 @@ export interface HardwareProfile {
   gpu_name?: string;
   vram_mb?: number;
   total_ram_mb: number;
+  available_ram_mb?: number;
   recommended_backend: GpuBackend;
   recommended_model_id: string;
   storage_free_gb?: number;
@@ -122,14 +123,20 @@ async function requestJson<T>(endpoint: string, options: RequestInit = {}): Prom
   if (!res.ok) {
     let errorMsg = `Failed request (${res.status})`;
     try {
-      const errJson = await res.json();
-      if (errJson && (errJson.message || errJson.error)) {
-        errorMsg = errJson.message || errJson.error;
+      const text = await res.text();
+      if (text) {
+        try {
+          const errJson = JSON.parse(text);
+          if (errJson && (errJson.message || errJson.error)) {
+            errorMsg = errJson.message || errJson.error;
+          } else {
+            errorMsg = text;
+          }
+        } catch {
+          errorMsg = text;
+        }
       }
-    } catch {
-      const errText = await res.text().catch(() => '');
-      if (errText) errorMsg = errText;
-    }
+    } catch {}
     throw new Error(errorMsg);
   }
 

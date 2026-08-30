@@ -144,27 +144,35 @@ pub async fn open_models_dir(State(state): State<AppState>) -> Json<serde_json::
 pub async fn generate_image(
     State(state): State<AppState>,
     Json(req): Json<GenerateImageRequest>,
-) -> Result<Json<GenerateImageResponse>, (StatusCode, String)> {
+) -> Result<Json<GenerateImageResponse>, (StatusCode, Json<serde_json::Value>)> {
     let mode = req.mode.as_deref().unwrap_or("auto");
 
     // Local or Auto mode
     if mode == "local" || (mode == "auto" && state.image_workspace.engine.is_installed()) {
         match state.image_workspace.generate_local(&req).await {
             Ok(resp) => return Ok(Json(resp)),
-            Err(e) if mode == "local" => {
-                return Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
-            }
-            Err(_e) => {
-                // In auto mode, fallback to cloud if local fails or models missing
+            Err(e) => {
+                let err_str = e.to_string();
+                let is_oom = err_str.to_lowercase().contains("out of memory") || err_str.to_lowercase().contains("memory");
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": err_str,
+                        "message": err_str,
+                        "error_type": if is_oom { "out_of_memory" } else { "generation_failed" }
+                    })),
+                ));
             }
         }
     }
 
-    // Cloud mode (fallback or explicit)
-    // Cloud generation connects to the user's configured AI model
+    // Local image engine or model not ready
     Err((
         StatusCode::BAD_REQUEST,
-        "Local image engine or model is not ready. Please install the engine and download a model in Settings -> Local Image Model.".to_string(),
+        Json(serde_json::json!({
+            "error": "Local image engine is not ready. Please install the engine and download a model in Settings -> Local Image Model.",
+            "message": "Local image engine is not ready. Please install the engine and download a model in Settings -> Local Image Model."
+        })),
     ))
 }
 
