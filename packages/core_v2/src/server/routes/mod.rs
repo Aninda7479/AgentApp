@@ -101,6 +101,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/images/models/open-dir", post(open_models_dir))
         .route("/api/images/models/:id", delete(delete_image_model))
         .route("/api/images/generate", post(generate_image))
+        .route("/api/images/generate/stream", post(generate_image_stream))
         .route("/api/images/generations", get(list_generations))
         .route(
             "/api/images/generations/:id",

@@ -132,3 +132,29 @@ pub struct GenerateImageResponse {
     pub generation_time_ms: u64,
     pub created_at: i64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenerationProgressEvent {
+    pub step: u32,
+    pub total_steps: u32,
+    pub progress: f32, // 0.0 to 1.0
+    pub phase: String, // e.g. "loading", "sampling", "decoding", "finalizing"
+    pub step_time_ms: Option<u64>,
+    pub eta_seconds: Option<f32>,
+    pub elapsed_seconds: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview_data_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum GenerationStreamMessage {
+    Progress(GenerationProgressEvent),
+    Complete {
+        result: GenerateImageResponse,
+    },
+    Error {
+        message: String,
+        error_type: String,
+    },
+}

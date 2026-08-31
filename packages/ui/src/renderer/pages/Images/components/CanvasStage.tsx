@@ -13,31 +13,47 @@ import {
   Columns,
   Image as ImageIcon,
   Share2,
+  X,
+  Activity,
+  Clock,
+  Zap,
+  Loader2,
 } from 'lucide-react';
 import { GenerationRecord } from '../../../services/imageService';
-import { AttachedReferenceImage, BrandLogoConfig } from '../types';
+import {
+  AttachedReferenceImage,
+  BrandLogoConfig,
+  GenerationStepProgress,
+  AspectRatioOption,
+} from '../types';
 
 interface CanvasStageProps {
   generating: boolean;
   generationTime: number;
+  generationProgress?: GenerationStepProgress | null;
+  dimensions?: AspectRatioOption;
   selectedRecord: GenerationRecord | null;
   referenceImage: AttachedReferenceImage | null;
   brandLogo: BrandLogoConfig;
   onCopyImage: (url: string) => void;
   onDeleteRecord: (id: string) => void;
   onRemixPrompt?: (record: GenerationRecord) => void;
+  onCancelGeneration?: () => void;
   copied: boolean;
 }
 
 export const CanvasStage: React.FC<CanvasStageProps> = ({
   generating,
   generationTime,
+  generationProgress,
+  dimensions,
   selectedRecord,
   referenceImage,
   brandLogo,
   onCopyImage,
   onDeleteRecord,
   onRemixPrompt,
+  onCancelGeneration,
   copied,
 }) => {
   // Zoom & Pan state
@@ -173,21 +189,134 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
       {/* ── Viewport Area ── */}
       <div className="flex-1 flex items-center justify-center p-4 sm:p-6 min-h-0 overflow-auto relative">
         {generating ? (
-          /* Generating State */
-          <div className="text-center space-y-4 max-w-sm animate-in fade-in zoom-in-95 duration-200">
-            <div className="relative w-20 h-20 mx-auto">
-              <div className="absolute inset-0 rounded-2xl bg-[var(--brand-accent)]/20 animate-ping" />
-              <div className="relative w-20 h-20 rounded-2xl bg-brand-card border border-brand-border flex items-center justify-center text-[var(--brand-accent)] shadow-2xl">
-                <Sparkles size={32} className="animate-pulse" />
-              </div>
+          /* Progressive Step-by-Step Generating State */
+          <div className="w-full max-w-2xl max-h-[75vh] flex flex-col items-center justify-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            {/* Step Preview Canvas Container with Aspect Ratio */}
+            <div
+              className="relative w-full rounded-2xl overflow-hidden shadow-2xl border border-brand-border/80 bg-black/50 flex items-center justify-center"
+              style={{
+                aspectRatio: `${dimensions?.width || 1024} / ${dimensions?.height || 1024}`,
+                maxHeight: '55vh',
+                maxWidth: '100%',
+              }}
+            >
+              {generationProgress?.previewDataUrl || generationProgress?.previewUrl ? (
+                /* Real Intermediate Step Preview Image */
+                <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+                  <img
+                    src={generationProgress.previewDataUrl || generationProgress.previewUrl}
+                    alt="Denoising step preview"
+                    className="w-full h-full object-contain filter contrast-105 transition-all duration-300"
+                  />
+                  {/* Subtle live scanline shimmer */}
+                  <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                    <div className="w-full h-1.5 bg-gradient-to-r from-transparent via-[var(--brand-accent)]/80 to-transparent animate-pulse shadow-[0_0_20px_var(--brand-accent)]" />
+                  </div>
+                </div>
+              ) : (
+                /* Generative Latent Diffusion Matrix Shimmer */
+                <div className="relative w-full h-full flex items-center justify-center overflow-hidden bg-gradient-to-br from-brand-card/70 via-brand-bg/50 to-black/80">
+                  <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#a5b4fc_1px,transparent_1px)] [background-size:20px_20px] animate-pulse" />
+                  <div className="relative z-10 flex flex-col items-center justify-center p-6 text-center space-y-3">
+                    <div className="relative w-16 h-16 rounded-2xl bg-brand-card/90 border border-brand-border flex items-center justify-center text-[var(--brand-accent)] shadow-2xl">
+                      <Sparkles size={28} className="animate-spin" />
+                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[color:var(--neon-live)] opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-[color:var(--neon-live)]"></span>
+                      </span>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-bold text-brand-textMain">
+                        Synthesizing Diffusion Artwork
+                      </div>
+                      <div className="text-xs text-brand-textMuted max-w-xs truncate">
+                        {generationProgress?.phase || 'Calculating latent steps...'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <div>
-              <h3 className="text-base font-bold text-brand-textMain">
-                Synthesizing Pixels
-              </h3>
-              <p className="text-xs text-brand-textMuted mt-1">
-                Running diffusion inference ({generationTime}s)
-              </p>
+
+            {/* Glassmorphic Step Progression HUD Pill */}
+            <div className="w-full max-w-lg bg-brand-card/90 backdrop-blur-xl border border-brand-border rounded-2xl p-3.5 sm:p-4 shadow-2xl space-y-3">
+              {/* Top Row: Step count & Percentage */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="relative flex h-2.5 w-2.5 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[color:var(--neon-live)] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[color:var(--neon-live)]"></span>
+                  </span>
+                  <span className="font-bold text-xs sm:text-sm text-brand-textMain truncate">
+                    {generationProgress?.step
+                      ? `Step ${generationProgress.step} of ${generationProgress.totalSteps || 20}`
+                      : 'Preparing Pipeline...'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-[var(--brand-accent)]/15 text-[var(--brand-accent)] border border-[var(--brand-accent-border)]">
+                    {Math.round(
+                      (generationProgress?.progress ||
+                        (generationTime > 0 ? Math.min(generationTime * 4, 90) / 100 : 0)) * 100
+                    )}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Smooth Animated Progress Bar */}
+              <div className="w-full h-2 bg-brand-hover rounded-full overflow-hidden p-0.5 border border-brand-border/40">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[var(--brand-accent)] via-sky-400 to-[color:var(--neon-constructive)] transition-all duration-300 shadow-[0_0_12px_rgba(165,180,252,0.6)]"
+                  style={{
+                    width: `${Math.max(
+                      4,
+                      Math.round(
+                        (generationProgress?.progress ||
+                          (generationTime > 0 ? Math.min(generationTime * 4, 90) / 100 : 0.04)) * 100
+                      )
+                    )}%`,
+                  }}
+                />
+              </div>
+
+              {/* Status Message & Live Metrics */}
+              <div className="flex items-center justify-between text-[11px] text-brand-textMuted flex-wrap gap-2 pt-0.5">
+                <div className="flex items-center gap-1.5 min-w-0 truncate max-w-[200px] sm:max-w-xs">
+                  <Activity size={12} className="text-[var(--brand-accent)] shrink-0" />
+                  <span className="truncate text-brand-textMain font-medium">
+                    {generationProgress?.phase || 'Running local GPU inference...'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0 font-mono text-[10px]">
+                  {generationProgress?.stepTimeMs ? (
+                    <span title="Inference speed per step">
+                      {(generationProgress.stepTimeMs / 1000).toFixed(2)}s/it
+                    </span>
+                  ) : null}
+                  {generationProgress?.etaSeconds !== undefined && generationProgress.etaSeconds > 0 ? (
+                    <span className="text-[var(--brand-accent)]" title="Estimated time remaining">
+                      ~{Math.ceil(generationProgress.etaSeconds)}s left
+                    </span>
+                  ) : (
+                    <span>{generationTime}s elapsed</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Cancel Button Action */}
+              {onCancelGeneration && (
+                <div className="pt-1 border-t border-brand-border/50">
+                  <button
+                    type="button"
+                    onClick={onCancelGeneration}
+                    className="w-full py-1 px-2.5 rounded-lg text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors flex items-center justify-center gap-1.5 cursor-pointer font-medium"
+                  >
+                    <X size={13} />
+                    <span>Cancel Generation</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ) : selectedRecord ? (

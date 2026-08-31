@@ -10,7 +10,8 @@ use tokio::io::AsyncWriteExt;
 use tracing::{error, info};
 
 use crate::image_workspace::types::{
-    EngineManifest, EngineStatus, GenerateImageRequest, GpuBackend, HardwareProfile, UpdateInfo,
+    EngineManifest, EngineStatus, GenerateImageRequest, GenerationProgressEvent, GpuBackend,
+    HardwareProfile, UpdateInfo,
 };
 use crate::storage::settings::get_superagent_dir;
 
@@ -695,7 +696,242 @@ impl EngineManager {
         Ok(())
     }
 
-    /// Execute a local image generation via sd-cli
+    /// Execute a local image generation via sd-cli asynchronously with real-time step progress streaming
+    pub async fn execute_generation_streaming(
+        &self,
+        req: &GenerateImageRequest,
+        model_path: &Path,
+        output_path: &Path,
+        progress_tx: Option<tokio::sync::mpsc::Sender<GenerationProgressEvent>>,
+    ) -> Result<u64> {
+        let bin = self.binary_path();
+        if !bin.exists() {
+            return Err(anyhow!(
+                "Image engine binary not found at '{}'. Please install the local image engine first.",
+                bin.display()
+            ));
+        }
+
+        let start = Instant::now();
+        let width = req.width.unwrap_or(1024);
+        let height = req.height.unwrap_or(1024);
+        let steps = req.steps.unwrap_or(20);
+        let cfg_scale = req.cfg_scale.unwrap_or(7.0);
+
+        let mut cmd = tokio::process::Command::new(&bin);
+        #[cfg(target_os = "windows")]
+        {
+            cmd.creation_flags(0x08000000);
+        }
+
+        cmd.args([
+            "-m",
+            &model_path.to_string_lossy(),
+            "-p",
+            &req.prompt,
+            "-o",
+            &output_path.to_string_lossy(),
+            "-W",
+            &width.to_string(),
+            "-H",
+            &height.to_string(),
+            "--steps",
+            &steps.to_string(),
+            "--cfg-scale",
+            &cfg_scale.to_string(),
+        ]);
+
+        if let Some(ref neg) = req.negative_prompt {
+            if !neg.is_empty() {
+                cmd.args(["-n", neg]);
+            }
+        }
+
+        if let Some(seed) = req.seed {
+            cmd.args(["-s", &seed.to_string()]);
+        }
+
+        if let Some(ref sampler) = req.sampler {
+            if !sampler.is_empty() {
+                cmd.args(["--sampling-method", sampler]);
+            }
+        }
+
+        if let Some(ref init_img_path) = req.init_image {
+            if !init_img_path.is_empty() {
+                cmd.args(["--init-img", init_img_path]);
+                if let Some(strength) = req.strength {
+                    cmd.args(["--strength", &strength.to_string()]);
+                }
+            }
+        }
+
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
+
+        info!("Spawning async sd-cli: {:?}", cmd);
+        let mut child = cmd.spawn().map_err(|e| anyhow!("Failed to spawn sd-cli: {}", e))?;
+
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+
+        // Send initial progress event
+        if let Some(ref tx) = progress_tx {
+            let _ = tx.send(GenerationProgressEvent {
+                step: 0,
+                total_steps: steps,
+                progress: 0.0,
+                phase: "Loading model weights into VRAM...".to_string(),
+                step_time_ms: None,
+                eta_seconds: None,
+                elapsed_seconds: 0.0,
+                preview_data_url: None,
+            }).await;
+        }
+
+        let mut all_logs = String::new();
+        let mut last_step = 0u32;
+        let mut last_step_time = Instant::now();
+        let mut step_durations: Vec<f32> = Vec::new();
+
+        use tokio::io::{AsyncBufReadExt, BufReader};
+
+        let (line_tx, mut line_rx) = tokio::sync::mpsc::channel::<String>(100);
+
+        if let Some(out) = stdout {
+            let tx = line_tx.clone();
+            tokio::spawn(async move {
+                let mut reader = BufReader::new(out).lines();
+                while let Ok(Some(line)) = reader.next_line().await {
+                    if tx.send(line).await.is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+
+        if let Some(err) = stderr {
+            let tx = line_tx;
+            tokio::spawn(async move {
+                let mut reader = BufReader::new(err).lines();
+                while let Ok(Some(line)) = reader.next_line().await {
+                    if tx.send(line).await.is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+
+        while let Some(line) = line_rx.recv().await {
+            all_logs.push_str(&line);
+            all_logs.push('\n');
+
+            let lower = line.to_lowercase();
+            let mut detected_phase = None;
+
+            if lower.contains("load model") || lower.contains("loading model") {
+                detected_phase = Some("Loading model weights...".to_string());
+            } else if lower.contains("vae") || lower.contains("decoding") {
+                detected_phase = Some("Decoding VAE latents into pixels...".to_string());
+            } else if lower.contains("saving") || lower.contains("save output") || lower.contains("writing") {
+                detected_phase = Some("Finalizing & saving output image...".to_string());
+            }
+
+            if let Some((cur_step, tot_steps, progress_frac)) = parse_step_from_line(&line, steps) {
+                let now = Instant::now();
+                let step_elapsed_s = now.duration_since(last_step_time).as_secs_f32();
+                last_step_time = now;
+
+                if cur_step > last_step && cur_step > 1 {
+                    step_durations.push(step_elapsed_s);
+                    if step_durations.len() > 10 {
+                        step_durations.remove(0);
+                    }
+                }
+                last_step = cur_step;
+
+                let avg_step_s = if !step_durations.is_empty() {
+                    step_durations.iter().sum::<f32>() / step_durations.len() as f32
+                } else {
+                    step_elapsed_s
+                };
+
+                let remaining_steps = tot_steps.saturating_sub(cur_step);
+                let eta_s = remaining_steps as f32 * avg_step_s;
+                let step_ms = (avg_step_s * 1000.0) as u64;
+                let elapsed_s = start.elapsed().as_secs_f32();
+                let frac = progress_frac.unwrap_or(cur_step as f32 / tot_steps.max(1) as f32);
+
+                let phase = detected_phase.unwrap_or_else(|| {
+                    format!("Sampling diffusion latents (Step {}/{})", cur_step, tot_steps)
+                });
+
+                if let Some(ref tx) = progress_tx {
+                    let _ = tx.send(GenerationProgressEvent {
+                        step: cur_step,
+                        total_steps: tot_steps,
+                        progress: frac.clamp(0.0, 1.0),
+                        phase,
+                        step_time_ms: Some(step_ms),
+                        eta_seconds: Some(eta_s),
+                        elapsed_seconds: elapsed_s,
+                        preview_data_url: None,
+                    }).await;
+                }
+            } else if let Some(phase_text) = detected_phase {
+                if let Some(ref tx) = progress_tx {
+                    let frac = (last_step as f32 / steps.max(1) as f32).clamp(0.0, 1.0);
+                    let _ = tx.send(GenerationProgressEvent {
+                        step: last_step,
+                        total_steps: steps,
+                        progress: frac,
+                        phase: phase_text,
+                        step_time_ms: None,
+                        eta_seconds: None,
+                        elapsed_seconds: start.elapsed().as_secs_f32(),
+                        preview_data_url: None,
+                    }).await;
+                }
+            }
+        }
+
+        let status = child.wait().await.map_err(|e| anyhow!("Failed to wait on sd-cli: {}", e))?;
+
+        if !status.success() {
+            let combined = all_logs.to_lowercase();
+            let is_oom = combined.contains("out of memory")
+                || combined.contains("bad_alloc")
+                || combined.contains("failed to allocate")
+                || combined.contains("cannot allocate")
+                || combined.contains("exceeded memory")
+                || combined.contains("metal: failed to allocate memory")
+                || combined.contains("cuda out of memory")
+                || combined.contains("killed")
+                || combined.contains("abort trap")
+                || combined.contains("segmentation fault");
+
+            #[cfg(unix)]
+            let is_sigkill = {
+                use std::os::unix::process::ExitStatusExt;
+                status.signal() == Some(9) || status.code() == Some(137)
+            };
+            #[cfg(not(unix))]
+            let is_sigkill = false;
+
+            if is_oom || is_sigkill {
+                return Err(anyhow!(
+                    "Out of Memory: The system ran out of available memory (RAM/VRAM) while generating the image. We recommend closing background applications to free up RAM, or switching to Stable Diffusion 1.5 which requires significantly less memory."
+                ));
+            }
+
+            return Err(anyhow!("sd-cli execution failed:\n{}", all_logs));
+        }
+
+        let elapsed = start.elapsed().as_millis() as u64;
+        Ok(elapsed)
+    }
+
+    /// Execute a local image generation via sd-cli (synchronous wrapper)
     pub fn execute_generation(
         &self,
         req: &GenerateImageRequest,
@@ -767,7 +1003,6 @@ impl EngineManager {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let combined = format!("{}\n{}", stderr, stdout).to_lowercase();
 
-            // Detect Out of Memory / Metal buffer allocation failures
             let is_oom = combined.contains("out of memory")
                 || combined.contains("bad_alloc")
                 || combined.contains("failed to allocate")
@@ -799,4 +1034,80 @@ impl EngineManager {
         let elapsed = start.elapsed().as_millis() as u64;
         Ok(elapsed)
     }
+}
+
+/// Helper to parse step progress from sd-cli stdout/stderr line
+fn parse_step_from_line(line: &str, default_total_steps: u32) -> Option<(u32, u32, Option<f32>)> {
+    let lower = line.to_lowercase();
+
+    // Check for "step X/Y" or "step X of Y" or "step: X/Y"
+    if let Some(pos) = lower.find("step") {
+        let after = &lower[pos + 4..];
+        let cleaned = after.trim_start_matches(|c: char| c == ':' || c == ' ' || c == '[' || c == '(');
+        let parts: Vec<&str> = cleaned
+            .split(|c: char| c == '/' || c == ' ' || c == '-' || c == '[' || c == ']' || c == ',' || c == ')')
+            .filter(|s| !s.is_empty())
+            .collect();
+        if parts.len() >= 2 {
+            if let (Ok(cur), Ok(tot)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
+                if tot > 0 && cur <= tot {
+                    return Some((cur, tot, Some(cur as f32 / tot as f32)));
+                }
+            }
+        }
+        if parts.len() >= 3 && parts[1] == "of" {
+            if let (Ok(cur), Ok(tot)) = (parts[0].parse::<u32>(), parts[2].parse::<u32>()) {
+                if tot > 0 && cur <= tot {
+                    return Some((cur, tot, Some(cur as f32 / tot as f32)));
+                }
+            }
+        }
+        if let Some(first) = parts.first() {
+            if let Ok(cur) = first.parse::<u32>() {
+                let tot = if default_total_steps > 0 { default_total_steps } else { 20 };
+                if cur <= tot && cur > 0 {
+                    return Some((cur, tot, Some(cur as f32 / tot as f32)));
+                }
+            }
+        }
+    }
+
+    // Check for "sampling: X/Y"
+    if let Some(pos) = lower.find("sampling:") {
+        let after = &lower[pos + 9..];
+        let parts: Vec<&str> = after
+            .split(|c: char| c == '/' || c == ' ' || c == '-' || c == '[' || c == ']' || c == ',' || c == ')')
+            .filter(|s| !s.is_empty())
+            .collect();
+        if parts.len() >= 2 {
+            if let (Ok(cur), Ok(tot)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
+                if tot > 0 && cur <= tot {
+                    return Some((cur, tot, Some(cur as f32 / tot as f32)));
+                }
+            }
+        }
+    }
+
+    // Check for percentage e.g. " 45%" or "[45%]"
+    if let Some(pct_idx) = lower.find('%') {
+        let before = &lower[..pct_idx];
+        let num_str: String = before
+            .chars()
+            .rev()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
+        if let Ok(pct) = num_str.parse::<f32>() {
+            let frac = (pct / 100.0).clamp(0.0, 1.0);
+            let tot = if default_total_steps > 0 { default_total_steps } else { 20 };
+            let cur = ((frac * tot as f32).round() as u32).min(tot);
+            if cur > 0 {
+                return Some((cur, tot, Some(frac)));
+            }
+        }
+    }
+
+    None
 }

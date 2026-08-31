@@ -55,3 +55,15 @@ export interface AdvancedSettingsState {
   negativePrompt: string;
   mode: 'auto' | 'local' | 'cloud';
 }
+
+export interface GenerationStepProgress {
+  step: number;
+  totalSteps: number;
+  progress: number; // 0.0 to 1.0
+  phase: string;
+  stepTimeMs?: number;
+  etaSeconds?: number;
+  elapsedSeconds: number;
+  previewDataUrl?: string;
+  previewUrl?: string;
+}

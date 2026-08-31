@@ -250,6 +250,131 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
   });
 }
 
+export interface StepProgressEvent {
+  step: number;
+  total_steps: number;
+  progress: number;
+  phase: string;
+  step_time_ms?: number;
+  eta_seconds?: number;
+  elapsed_seconds: number;
+  preview_data_url?: string;
+}
+
+export async function generateImageStream(
+  req: GenerateImageRequest,
+  onProgress?: (progress: StepProgressEvent) => void,
+  signal?: AbortSignal
+): Promise<GenerateImageResponse> {
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/api/images/generate/stream`;
+  const headers = getAuthHeaders({ 'Content-Type': 'application/json' });
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(req),
+    signal,
+  });
+
+  if (!res.ok) {
+    let errorMsg = `Failed generation (${res.status})`;
+    try {
+      const errJson = await res.json();
+      if (errJson && (errJson.message || errJson.error)) {
+        errorMsg = errJson.message || errJson.error;
+      }
+    } catch {}
+    throw new Error(errorMsg);
+  }
+
+  if (!res.body) {
+    return await generateImage(req);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalResult: GenerateImageResponse | null = null;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      let currentEvent = '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          currentEvent = '';
+          continue;
+        }
+
+        if (trimmed.startsWith('event:')) {
+          currentEvent = trimmed.slice(6).trim();
+        } else if (trimmed.startsWith('data:')) {
+          const dataStr = trimmed.slice(5).trim();
+          if (!dataStr) continue;
+
+          try {
+            const data = JSON.parse(dataStr);
+            if (currentEvent === 'progress' || (data.step !== undefined && data.total_steps !== undefined)) {
+              if (onProgress) {
+                onProgress(data);
+              }
+            } else if (currentEvent === 'complete' || data.success) {
+              finalResult = data as GenerateImageResponse;
+            } else if (currentEvent === 'error') {
+              throw new Error(data.message || data.error || 'Generation failed');
+            }
+          } catch (e: any) {
+            if (currentEvent === 'error' || e.message?.includes('Generation failed') || e.message?.includes('Memory')) {
+              throw e;
+            }
+          }
+        }
+      }
+    }
+  } catch (err: any) {
+    if (signal?.aborted) {
+      throw new Error('Generation cancelled');
+    }
+    throw err;
+  }
+
+  if (finalResult) {
+    return finalResult;
+  }
+
+  // Fallback: fetch most recent generation
+  const recent = await listGenerations();
+  if (recent.length > 0) {
+    const r = recent[0];
+    return {
+      success: true,
+      id: r.id,
+      image_url: getImageUrl(r.id),
+      prompt: r.prompt,
+      negative_prompt: r.negative_prompt,
+      model_id: r.model_id,
+      source: r.source,
+      width: r.width,
+      height: r.height,
+      steps: r.steps,
+      cfg_scale: r.cfg_scale,
+      seed: r.seed,
+      generation_time_ms: r.generation_time_ms,
+      created_at: r.created_at,
+    };
+  }
+
+  throw new Error('Image generation completed without returning output metadata');
+}
+
 export async function listGenerations(): Promise<GenerationRecord[]> {
   try {
     return await requestJson<GenerationRecord[]>('/api/images/generations', { method: 'GET' });

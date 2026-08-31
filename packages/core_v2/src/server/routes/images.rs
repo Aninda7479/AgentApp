@@ -1,10 +1,16 @@
+use std::time::Duration;
+
 use axum::{
     body::Body,
     extract::{Path as AxumPath, State},
     http::{header, StatusCode},
-    response::Response,
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        Response,
+    },
     Json,
 };
+use futures_util::stream::Stream;
 use serde::Deserialize;
 
 use crate::image_workspace::{
@@ -174,6 +180,73 @@ pub async fn generate_image(
             "message": "Local image engine is not ready. Please install the engine and download a model in Settings -> Local Image Model."
         })),
     ))
+}
+
+pub async fn generate_image_stream(
+    State(state): State<AppState>,
+    Json(req): Json<GenerateImageRequest>,
+) -> Sse<impl Stream<Item = Result<Event, axum::Error>>> {
+    let stream = async_stream::stream! {
+        let mode = req.mode.as_deref().unwrap_or("auto");
+
+        if mode == "local" || (mode == "auto" && state.image_workspace.engine.is_installed()) {
+            let (tx, mut rx) = tokio::sync::mpsc::channel(100);
+
+            let state_clone = state.clone();
+            let req_clone = req.clone();
+
+            let join_handle = tokio::spawn(async move {
+                state_clone.image_workspace.generate_local_streaming(&req_clone, tx).await
+            });
+
+            while let Some(prog) = rx.recv().await {
+                if let Ok(json_str) = serde_json::to_string(&prog) {
+                    yield Ok(Event::default().event("progress").data(json_str));
+                }
+            }
+
+            match join_handle.await {
+                Ok(Ok(resp)) => {
+                    if let Ok(json_str) = serde_json::to_string(&resp) {
+                        yield Ok(Event::default().event("complete").data(json_str));
+                    }
+                }
+                Ok(Err(e)) => {
+                    let err_str = e.to_string();
+                    let is_oom = err_str.to_lowercase().contains("out of memory") || err_str.to_lowercase().contains("memory");
+                    let err_obj = serde_json::json!({
+                        "message": err_str,
+                        "error": err_str,
+                        "error_type": if is_oom { "out_of_memory" } else { "generation_failed" }
+                    });
+                    if let Ok(json_str) = serde_json::to_string(&err_obj) {
+                        yield Ok(Event::default().event("error").data(json_str));
+                    }
+                }
+                Err(join_err) => {
+                    let err_obj = serde_json::json!({
+                        "message": format!("Generation task failed: {}", join_err),
+                        "error": format!("Generation task failed: {}", join_err),
+                        "error_type": "generation_failed"
+                    });
+                    if let Ok(json_str) = serde_json::to_string(&err_obj) {
+                        yield Ok(Event::default().event("error").data(json_str));
+                    }
+                }
+            }
+        } else {
+            let err_obj = serde_json::json!({
+                "message": "Local image engine is not ready. Please install the engine and download a model in Settings -> Local Image Model.",
+                "error": "Local image engine is not ready. Please install the engine and download a model in Settings -> Local Image Model.",
+                "error_type": "engine_not_ready"
+            });
+            if let Ok(json_str) = serde_json::to_string(&err_obj) {
+                yield Ok(Event::default().event("error").data(json_str));
+            }
+        }
+    };
+
+    Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15)))
 }
 
 pub async fn list_generations(

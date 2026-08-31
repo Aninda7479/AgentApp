@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Sparkles,
   ArrowLeft,
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import {
   generateImage,
+  generateImageStream,
   listGenerations,
   deleteGeneration,
   getImageUrl,
@@ -19,6 +20,7 @@ import {
   GenerationRecord,
   ImageModelInfo,
   EngineStatus,
+  StepProgressEvent,
 } from '../../services/imageService';
 import {
   AspectRatioOption,
@@ -27,6 +29,7 @@ import {
   ColorPaletteConfig,
   StylePreset,
   AdvancedSettingsState,
+  GenerationStepProgress,
 } from './types';
 import { ImageComposer } from './components/ImageComposer';
 import { AttachmentShelf } from './components/AttachmentShelf';
@@ -99,6 +102,8 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
 
   const [generating, setGenerating] = useState(false);
   const [generationTime, setGenerationTime] = useState(0);
+  const [generationProgress, setGenerationProgress] = useState<GenerationStepProgress | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [copied, setCopied] = useState(false);
 
   // Load models, engine status, and generations
@@ -219,7 +224,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
     return () => window.removeEventListener('paste', handlePaste);
   }, []);
 
-  // Main Generate Image handler
+  // Main Generate Image handler with real-time step streaming
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       notify('Please enter a prompt');
@@ -255,6 +260,16 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
 
     setGenerating(true);
     setGenerationTime(0);
+    setGenerationProgress({
+      step: 0,
+      totalSteps: advanced.steps,
+      progress: 0,
+      phase: 'Initializing engine & loading model...',
+      elapsedSeconds: 0,
+    });
+
+    abortControllerRef.current = new AbortController();
+
     const timer = setInterval(() => {
       setGenerationTime((prev) => prev + 1);
     }, 1000);
@@ -275,7 +290,23 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
         strength: referenceImage ? referenceImage.strength : undefined,
       };
 
-      const res = await generateImage(req);
+      const res = await generateImageStream(
+        req,
+        (prog: StepProgressEvent) => {
+          setGenerationProgress({
+            step: prog.step,
+            totalSteps: prog.total_steps,
+            progress: prog.progress,
+            phase: prog.phase,
+            stepTimeMs: prog.step_time_ms,
+            etaSeconds: prog.eta_seconds,
+            elapsedSeconds: prog.elapsed_seconds,
+            previewDataUrl: prog.preview_data_url,
+          });
+        },
+        abortControllerRef.current.signal
+      );
+
       notify(`Image generated in ${(res.generation_time_ms / 1000).toFixed(1)}s!`);
 
       const gens = await listGenerations();
@@ -284,11 +315,26 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
         setSelectedRecord(gens[0]);
       }
     } catch (err: any) {
-      notify(err.message || 'Generation failed');
+      if (err.message === 'Generation cancelled' || err.name === 'AbortError') {
+        notify('Generation cancelled');
+      } else {
+        notify(err.message || 'Generation failed');
+      }
     } finally {
       clearInterval(timer);
       setGenerating(false);
+      setGenerationProgress(null);
+      abortControllerRef.current = null;
     }
+  };
+
+  const handleCancelGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setGenerating(false);
+    setGenerationProgress(null);
+    notify('Generation cancelled');
   };
 
   const handleDelete = async (id: string) => {
@@ -487,10 +533,14 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
               className="ui-btn-primary w-full py-2.5 px-4 font-semibold text-xs shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               {generating ? (
-                <>
-                  <RefreshCw size={14} className="animate-spin" />
-                  <span>Synthesizing ({generationTime}s)...</span>
-                </>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <RefreshCw size={13} className="animate-spin shrink-0" />
+                  <span className="truncate">
+                    {generationProgress?.step
+                      ? `Step ${generationProgress.step}/${generationProgress.totalSteps || advanced.steps} (${Math.round((generationProgress.progress || 0) * 100)}%)`
+                      : `Synthesizing (${generationTime}s)...`}
+                  </span>
+                </div>
               ) : (
                 <>
                   <Sparkles size={14} />
@@ -505,12 +555,15 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
         <CanvasStage
           generating={generating}
           generationTime={generationTime}
+          generationProgress={generationProgress}
+          dimensions={dimensions}
           selectedRecord={selectedRecord}
           referenceImage={referenceImage}
           brandLogo={brandLogo}
           onCopyImage={handleCopyImage}
           onDeleteRecord={handleDelete}
           onRemixPrompt={handleRemix}
+          onCancelGeneration={handleCancelGeneration}
           copied={copied}
         />
       </div>
