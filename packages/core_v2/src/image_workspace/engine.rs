@@ -739,6 +739,8 @@ impl EngineManager {
             &steps.to_string(),
             "--cfg-scale",
             &cfg_scale.to_string(),
+            "--vae-tiling",
+            "--offload-to-cpu",
         ]);
 
         if let Some(ref neg) = req.negative_prompt {
@@ -794,30 +796,70 @@ impl EngineManager {
         let mut last_step_time = Instant::now();
         let mut step_durations: Vec<f32> = Vec::new();
 
-        use tokio::io::{AsyncBufReadExt, BufReader};
+        use tokio::io::AsyncReadExt;
 
-        let (line_tx, mut line_rx) = tokio::sync::mpsc::channel::<String>(100);
+        let (line_tx, mut line_rx) = tokio::sync::mpsc::channel::<String>(200);
 
-        if let Some(out) = stdout {
+        if let Some(mut out) = stdout {
             let tx = line_tx.clone();
             tokio::spawn(async move {
-                let mut reader = BufReader::new(out).lines();
-                while let Ok(Some(line)) = reader.next_line().await {
-                    if tx.send(line).await.is_err() {
+                let mut buf = [0u8; 2048];
+                let mut accumulator = Vec::new();
+                while let Ok(n) = out.read(&mut buf).await {
+                    if n == 0 {
                         break;
                     }
+                    for &byte in &buf[..n] {
+                        if byte == b'\r' || byte == b'\n' {
+                            if !accumulator.is_empty() {
+                                let s = String::from_utf8_lossy(&accumulator).trim().to_string();
+                                accumulator.clear();
+                                if !s.is_empty() {
+                                    if tx.send(s).await.is_err() {
+                                        return;
+                                    }
+                                }
+                            }
+                        } else {
+                            accumulator.push(byte);
+                        }
+                    }
+                }
+                if !accumulator.is_empty() {
+                    let s = String::from_utf8_lossy(&accumulator).trim().to_string();
+                    let _ = tx.send(s).await;
                 }
             });
         }
 
-        if let Some(err) = stderr {
+        if let Some(mut err) = stderr {
             let tx = line_tx;
             tokio::spawn(async move {
-                let mut reader = BufReader::new(err).lines();
-                while let Ok(Some(line)) = reader.next_line().await {
-                    if tx.send(line).await.is_err() {
+                let mut buf = [0u8; 2048];
+                let mut accumulator = Vec::new();
+                while let Ok(n) = err.read(&mut buf).await {
+                    if n == 0 {
                         break;
                     }
+                    for &byte in &buf[..n] {
+                        if byte == b'\r' || byte == b'\n' {
+                            if !accumulator.is_empty() {
+                                let s = String::from_utf8_lossy(&accumulator).trim().to_string();
+                                accumulator.clear();
+                                if !s.is_empty() {
+                                    if tx.send(s).await.is_err() {
+                                        return;
+                                    }
+                                }
+                            }
+                        } else {
+                            accumulator.push(byte);
+                        }
+                    }
+                }
+                if !accumulator.is_empty() {
+                    let s = String::from_utf8_lossy(&accumulator).trim().to_string();
+                    let _ = tx.send(s).await;
                 }
             });
         }
@@ -826,21 +868,13 @@ impl EngineManager {
             all_logs.push_str(&line);
             all_logs.push('\n');
 
-            let lower = line.to_lowercase();
-            let mut detected_phase = None;
-
-            if lower.contains("load model") || lower.contains("loading model") {
-                detected_phase = Some("Loading model weights...".to_string());
-            } else if lower.contains("vae") || lower.contains("decoding") {
-                detected_phase = Some("Decoding VAE latents into pixels...".to_string());
-            } else if lower.contains("saving") || lower.contains("save output") || lower.contains("writing") {
-                detected_phase = Some("Finalizing & saving output image...".to_string());
-            }
-
-            if let Some((cur_step, tot_steps, progress_frac)) = parse_step_from_line(&line, steps) {
+            if let Some(parsed) = parse_step_from_line(&line, steps) {
                 let now = Instant::now();
                 let step_elapsed_s = now.duration_since(last_step_time).as_secs_f32();
                 last_step_time = now;
+
+                let cur_step = parsed.current_step;
+                let tot_steps = parsed.total_steps;
 
                 if cur_step > last_step && cur_step > 1 {
                     step_durations.push(step_elapsed_s);
@@ -848,9 +882,13 @@ impl EngineManager {
                         step_durations.remove(0);
                     }
                 }
-                last_step = cur_step;
+                if cur_step > 0 {
+                    last_step = cur_step;
+                }
 
-                let avg_step_s = if !step_durations.is_empty() {
+                let avg_step_s = if let Some(speed) = parsed.speed_s_per_it {
+                    speed
+                } else if !step_durations.is_empty() {
                     step_durations.iter().sum::<f32>() / step_durations.len() as f32
                 } else {
                     step_elapsed_s
@@ -860,10 +898,14 @@ impl EngineManager {
                 let eta_s = remaining_steps as f32 * avg_step_s;
                 let step_ms = (avg_step_s * 1000.0) as u64;
                 let elapsed_s = start.elapsed().as_secs_f32();
-                let frac = progress_frac.unwrap_or(cur_step as f32 / tot_steps.max(1) as f32);
+                let frac = parsed.progress;
 
-                let phase = detected_phase.unwrap_or_else(|| {
-                    format!("Sampling diffusion latents (Step {}/{})", cur_step, tot_steps)
+                let phase = parsed.phase.unwrap_or_else(|| {
+                    if cur_step > 0 {
+                        format!("Sampling diffusion latents (Step {}/{})", cur_step, tot_steps)
+                    } else {
+                        "Processing diffusion pipeline...".to_string()
+                    }
                 });
 
                 if let Some(ref tx) = progress_tx {
@@ -872,23 +914,9 @@ impl EngineManager {
                         total_steps: tot_steps,
                         progress: frac.clamp(0.0, 1.0),
                         phase,
-                        step_time_ms: Some(step_ms),
-                        eta_seconds: Some(eta_s),
+                        step_time_ms: if cur_step > 0 { Some(step_ms) } else { None },
+                        eta_seconds: if cur_step > 0 { Some(eta_s) } else { None },
                         elapsed_seconds: elapsed_s,
-                        preview_data_url: None,
-                    }).await;
-                }
-            } else if let Some(phase_text) = detected_phase {
-                if let Some(ref tx) = progress_tx {
-                    let frac = (last_step as f32 / steps.max(1) as f32).clamp(0.0, 1.0);
-                    let _ = tx.send(GenerationProgressEvent {
-                        step: last_step,
-                        total_steps: steps,
-                        progress: frac,
-                        phase: phase_text,
-                        step_time_ms: None,
-                        eta_seconds: None,
-                        elapsed_seconds: start.elapsed().as_secs_f32(),
                         preview_data_url: None,
                     }).await;
                 }
@@ -968,6 +996,8 @@ impl EngineManager {
             &steps.to_string(),
             "--cfg-scale",
             &cfg_scale.to_string(),
+            "--vae-tiling",
+            "--offload-to-cpu",
         ]);
 
         if let Some(ref neg) = req.negative_prompt {
@@ -1036,61 +1066,41 @@ impl EngineManager {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ParsedStepInfo {
+    pub current_step: u32,
+    pub total_steps: u32,
+    pub progress: f32,
+    pub speed_s_per_it: Option<f32>,
+    pub phase: Option<String>,
+}
+
 /// Helper to parse step progress from sd-cli stdout/stderr line
-fn parse_step_from_line(line: &str, default_total_steps: u32) -> Option<(u32, u32, Option<f32>)> {
+fn parse_step_from_line(line: &str, default_total_steps: u32) -> Option<ParsedStepInfo> {
     let lower = line.to_lowercase();
-
-    // Check for "step X/Y" or "step X of Y" or "step: X/Y"
-    if let Some(pos) = lower.find("step") {
-        let after = &lower[pos + 4..];
-        let cleaned = after.trim_start_matches(|c: char| c == ':' || c == ' ' || c == '[' || c == '(');
-        let parts: Vec<&str> = cleaned
-            .split(|c: char| c == '/' || c == ' ' || c == '-' || c == '[' || c == ']' || c == ',' || c == ')')
-            .filter(|s| !s.is_empty())
-            .collect();
-        if parts.len() >= 2 {
-            if let (Ok(cur), Ok(tot)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
-                if tot > 0 && cur <= tot {
-                    return Some((cur, tot, Some(cur as f32 / tot as f32)));
-                }
-            }
-        }
-        if parts.len() >= 3 && parts[1] == "of" {
-            if let (Ok(cur), Ok(tot)) = (parts[0].parse::<u32>(), parts[2].parse::<u32>()) {
-                if tot > 0 && cur <= tot {
-                    return Some((cur, tot, Some(cur as f32 / tot as f32)));
-                }
-            }
-        }
-        if let Some(first) = parts.first() {
-            if let Ok(cur) = first.parse::<u32>() {
-                let tot = if default_total_steps > 0 { default_total_steps } else { 20 };
-                if cur <= tot && cur > 0 {
-                    return Some((cur, tot, Some(cur as f32 / tot as f32)));
-                }
-            }
-        }
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return None;
     }
 
-    // Check for "sampling: X/Y"
-    if let Some(pos) = lower.find("sampling:") {
-        let after = &lower[pos + 9..];
-        let parts: Vec<&str> = after
-            .split(|c: char| c == '/' || c == ' ' || c == '-' || c == '[' || c == ']' || c == ',' || c == ')')
-            .filter(|s| !s.is_empty())
-            .collect();
-        if parts.len() >= 2 {
-            if let (Ok(cur), Ok(tot)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
-                if tot > 0 && cur <= tot {
-                    return Some((cur, tot, Some(cur as f32 / tot as f32)));
-                }
-            }
-        }
+    // 1. Detect phase keywords
+    let mut phase: Option<String> = None;
+    if lower.contains("decoding") || lower.contains("decode_first_stage") || lower.contains("decoding 1 latents") {
+        phase = Some("Decoding VAE latents into pixels...".to_string());
+    } else if lower.contains("sampling completed") {
+        phase = Some("Sampling complete. Preparing VAE decoding...".to_string());
+    } else if lower.contains("sampling using") || lower.contains("get_sigmas") {
+        phase = Some(format!("Sampling diffusion latents (0/{})...", default_total_steps));
+    } else if lower.contains("loading model") || lower.contains("loading tensors") || lower.contains("load ") {
+        phase = Some("Loading model weights into GPU VRAM...".to_string());
+    } else if lower.contains("save result") || lower.contains("saving") || lower.contains("images saved") {
+        phase = Some("Finalizing & saving output image...".to_string());
     }
 
-    // Check for percentage e.g. " 45%" or "[45%]"
-    if let Some(pct_idx) = lower.find('%') {
-        let before = &lower[..pct_idx];
+    // 2. Extract speed if present (e.g. "4.13s/it", "500ms/it", "2.15it/s")
+    let mut speed_s_per_it: Option<f32> = None;
+    if let Some(pos) = lower.rfind("s/it") {
+        let before = &lower[..pos];
         let num_str: String = before
             .chars()
             .rev()
@@ -1099,15 +1109,123 @@ fn parse_step_from_line(line: &str, default_total_steps: u32) -> Option<(u32, u3
             .chars()
             .rev()
             .collect();
-        if let Ok(pct) = num_str.parse::<f32>() {
-            let frac = (pct / 100.0).clamp(0.0, 1.0);
-            let tot = if default_total_steps > 0 { default_total_steps } else { 20 };
-            let cur = ((frac * tot as f32).round() as u32).min(tot);
-            if cur > 0 {
-                return Some((cur, tot, Some(frac)));
+        if let Ok(v) = num_str.parse::<f32>() {
+            speed_s_per_it = Some(v);
+        }
+    } else if let Some(pos) = lower.rfind("it/s") {
+        let before = &lower[..pos];
+        let num_str: String = before
+            .chars()
+            .rev()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
+        if let Ok(v) = num_str.parse::<f32>() {
+            if v > 0.0 {
+                speed_s_per_it = Some(1.0 / v);
             }
         }
     }
 
+    // 3. Extract "X/Y" step fraction.
+    // If multiple "X/Y" exist in the line (due to \r or multi-token logging), pick the LAST valid one.
+    let tokens: Vec<&str> = line
+        .split(|c: char| c == ' ' || c == '|' || c == '[' || c == ']' || c == '(' || c == ')' || c == '\t')
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let mut last_fraction: Option<(u32, u32)> = None;
+
+    for token in tokens {
+        if let Some(slash_idx) = token.find('/') {
+            let left = &token[..slash_idx];
+            let right = &token[slash_idx + 1..];
+            if let (Ok(cur), Ok(tot)) = (left.parse::<u32>(), right.parse::<u32>()) {
+                if tot > 0 && cur <= tot {
+                    last_fraction = Some((cur, tot));
+                }
+            }
+        }
+    }
+
+    if let Some((cur, tot)) = last_fraction {
+        // Classify the step based on total count and line context
+        let detected_phase = if (line.contains('#') || lower.contains("mb/s") || lower.contains("gb/s")) && tot > 100 {
+            Some(format!("Loading model weights ({}/{})", cur, tot))
+        } else if tot != default_total_steps || lower.contains("latent") || lower.contains("decod") || lower.contains("tile") {
+            Some(format!("Decoding VAE latent tiles (Tile {}/{})", cur, tot))
+        } else {
+            Some(format!("Sampling diffusion latents (Step {}/{})", cur, tot))
+        };
+
+        let frac = (cur as f32 / tot as f32).clamp(0.0, 1.0);
+        return Some(ParsedStepInfo {
+            current_step: cur,
+            total_steps: tot,
+            progress: frac,
+            speed_s_per_it,
+            phase: detected_phase.or(phase),
+        });
+    }
+
+    // 4. If no fraction found but phase was detected
+    if let Some(p) = phase {
+        return Some(ParsedStepInfo {
+            current_step: 0,
+            total_steps: default_total_steps,
+            progress: 0.0,
+            speed_s_per_it,
+            phase: Some(p),
+        });
+    }
+
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_sampling_step() {
+        let line = "[INFO ]   |=========================>                        | 12/25 - 4.13s/it";
+        let parsed = parse_step_from_line(line, 25).expect("Should parse step");
+        assert_eq!(parsed.current_step, 12);
+        assert_eq!(parsed.total_steps, 25);
+        assert_eq!(parsed.speed_s_per_it, Some(4.13));
+        assert!(parsed.phase.unwrap().contains("Step 12/25"));
+    }
+
+    #[test]
+    fn test_parse_vae_tile_decoding() {
+        let line = "[INFO ]   |=====>                                            | 1/9 - 2.31s/it";
+        let parsed = parse_step_from_line(line, 20).expect("Should parse VAE tile");
+        assert_eq!(parsed.current_step, 1);
+        assert_eq!(parsed.total_steps, 9);
+        assert_eq!(parsed.speed_s_per_it, Some(2.31));
+        assert!(parsed.phase.unwrap().contains("Tile 1/9"));
+    }
+
+    #[test]
+    fn test_parse_multi_chunk_line() {
+        let line = "[INFO ]   |=========================>                        | 1/2 - 5.50s/it  |==================================================| 2/2 - 4.13s/it";
+        let parsed = parse_step_from_line(line, 2).expect("Should parse last chunk");
+        assert_eq!(parsed.current_step, 2);
+        assert_eq!(parsed.total_steps, 2);
+        assert_eq!(parsed.speed_s_per_it, Some(4.13));
+    }
+
+    #[test]
+    fn test_parse_phase_transitions() {
+        let line1 = "stable-diffusion.cpp:5335 - decoding 1 latents";
+        let parsed1 = parse_step_from_line(line1, 20).expect("Should parse decoding phase");
+        assert!(parsed1.phase.unwrap().contains("Decoding VAE"));
+
+        let line2 = "main.cpp:497  - save result image 0 to 'test.png' (success)";
+        let parsed2 = parse_step_from_line(line2, 20).expect("Should parse save phase");
+        assert!(parsed2.phase.unwrap().contains("saving output"));
+    }
+}
+
