@@ -1,6 +1,6 @@
 {
   "name": "@superagent/browser-extension",
-  "version": "0.41.0",
+  "version": "0.42.0",
   "description": "SuperAgent Browser Extension — On the way chat and agentic browser automation connected to core_v2 and global memory",
   "type": "module",
   "scripts": {
