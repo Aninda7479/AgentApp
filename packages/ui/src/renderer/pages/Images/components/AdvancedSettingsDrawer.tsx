@@ -8,6 +8,9 @@ import {
   Sparkles,
   Layers,
   Cpu,
+  Info,
+  HelpCircle,
+  Zap,
 } from 'lucide-react';
 import { AdvancedSettingsState, AttachedReferenceImage } from '../types';
 import { Select } from '../../../components/ui/Select';
@@ -122,12 +125,64 @@ export const AdvancedSettingsDrawer: React.FC<AdvancedSettingsDrawerProps> = ({
       {/* ── Collapsible Content Panel ── */}
       {isOpen && (
         <div className="p-3 border-t border-brand-border/60 space-y-3.5 bg-brand-bg/30 animate-in fade-in duration-150">
+          {/* Quick Quality Presets */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-brand-textMuted font-medium flex items-center gap-1">
+                <Zap size={11} className="text-amber-400" />
+                <span>Quick Presets</span>
+              </span>
+              <span className="text-[10px] text-brand-textMuted font-mono">Steps & Guidance</span>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() =>
+                  onChangeSettings({
+                    ...settings,
+                    steps: Math.max(8, Math.round(defaultSteps * 0.7)),
+                    cfgScale: Math.max(3.5, defaultCfg - 1.0),
+                  })
+                }
+                className="px-2 py-1 rounded-lg text-[11px] bg-brand-card/70 border border-brand-border hover:border-brand-textMuted/50 hover:text-brand-textMain text-brand-textMuted transition-colors cursor-pointer text-center"
+              >
+                ⚡ Fast Draft
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onChangeSettings({
+                    ...settings,
+                    steps: defaultSteps,
+                    cfgScale: defaultCfg,
+                  })
+                }
+                className="px-2 py-1 rounded-lg text-[11px] bg-brand-card/70 border border-brand-border hover:border-brand-textMuted/50 hover:text-brand-textMain text-brand-textMuted transition-colors cursor-pointer text-center"
+              >
+                ⚖️ Balanced
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onChangeSettings({
+                    ...settings,
+                    steps: Math.min(50, Math.round(defaultSteps * 1.4)),
+                    cfgScale: Math.min(12, defaultCfg + 1.0),
+                  })
+                }
+                className="px-2 py-1 rounded-lg text-[11px] bg-brand-card/70 border border-brand-border hover:border-brand-textMuted/50 hover:text-brand-textMain text-brand-textMuted transition-colors cursor-pointer text-center"
+              >
+                ✨ Ultra Detail
+              </button>
+            </div>
+          </div>
+
           {/* Reference Image Denoising Strength (if attached) */}
           {referenceImage && (
-            <div className="p-2 rounded-lg bg-[var(--brand-accent)]/10 border border-[var(--brand-accent)]/20 space-y-1">
+            <div className="p-2.5 rounded-lg bg-[var(--brand-accent)]/10 border border-[var(--brand-accent)]/20 space-y-1.5">
               <div className="flex justify-between text-xs">
-                <span className="font-semibold text-brand-textMain">
-                  Image Influence (Strength)
+                <span className="font-semibold text-brand-textMain flex items-center gap-1">
+                  <span>Image Influence (Strength)</span>
                 </span>
                 <span className="font-mono text-[var(--brand-accent)] font-bold">
                   {referenceImage.strength.toFixed(2)}
@@ -143,8 +198,9 @@ export const AdvancedSettingsDrawer: React.FC<AdvancedSettingsDrawerProps> = ({
                 className="w-full accent-[var(--brand-accent)] cursor-pointer"
               />
               <div className="flex justify-between text-[10px] text-brand-textMuted">
-                <span>Subtle Variation</span>
-                <span>Complete Reimagine</span>
+                <span>Subtle Variation (0.2)</span>
+                <span>Balanced (0.65)</span>
+                <span>Reimagine (0.9)</span>
               </div>
             </div>
           )}
@@ -153,7 +209,9 @@ export const AdvancedSettingsDrawer: React.FC<AdvancedSettingsDrawerProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <div className="flex justify-between text-xs">
-                <span className="text-brand-textMain font-medium">Steps</span>
+                <span className="text-brand-textMain font-medium" title="Number of denoising iterations">
+                  Steps
+                </span>
                 <span className="font-mono text-brand-textMuted">{settings.steps}</span>
               </div>
               <input
@@ -166,11 +224,16 @@ export const AdvancedSettingsDrawer: React.FC<AdvancedSettingsDrawerProps> = ({
                 }
                 className="w-full accent-[var(--brand-accent)] cursor-pointer"
               />
+              <p className="text-[10px] text-brand-textMuted">
+                Denoising passes (FLUX: 4-8, SD: 20-30)
+              </p>
             </div>
 
             <div className="space-y-1">
               <div className="flex justify-between text-xs">
-                <span className="text-brand-textMain font-medium">CFG Scale</span>
+                <span className="text-brand-textMain font-medium" title="Classifier-Free Guidance weight">
+                  CFG Scale
+                </span>
                 <span className="font-mono text-brand-textMuted">
                   {settings.cfgScale.toFixed(1)}
                 </span>
@@ -186,12 +249,18 @@ export const AdvancedSettingsDrawer: React.FC<AdvancedSettingsDrawerProps> = ({
                 }
                 className="w-full accent-[var(--brand-accent)] cursor-pointer"
               />
+              <p className="text-[10px] text-brand-textMuted">
+                Prompt adherence strictness (default ~7.0)
+              </p>
             </div>
           </div>
 
           {/* Sampler Selector */}
           <div className="space-y-1">
-            <label className="ui-label">Sampling Method</label>
+            <div className="flex items-center justify-between text-xs">
+              <label className="ui-label">Sampling Method</label>
+              <span className="text-[10px] text-brand-textMuted">ODE / SDE Solver</span>
+            </div>
             <Select
               options={SAMPLER_OPTIONS}
               value={settings.sampler}
@@ -205,7 +274,7 @@ export const AdvancedSettingsDrawer: React.FC<AdvancedSettingsDrawerProps> = ({
           {/* Seed Input */}
           <div className="space-y-1">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-brand-textMain">Seed</span>
+              <span className="font-medium text-brand-textMain">Generation Seed</span>
               <button
                 type="button"
                 onClick={handleRandomSeed}
@@ -217,7 +286,7 @@ export const AdvancedSettingsDrawer: React.FC<AdvancedSettingsDrawerProps> = ({
             </div>
             <input
               type="number"
-              placeholder="Random (leave empty or click dice)"
+              placeholder="Random seed (leave empty for new result)"
               value={settings.seed !== null ? settings.seed : ''}
               onChange={(e) =>
                 onChangeSettings({
@@ -231,10 +300,13 @@ export const AdvancedSettingsDrawer: React.FC<AdvancedSettingsDrawerProps> = ({
 
           {/* Negative Prompt */}
           <div className="space-y-1.5">
-            <label className="ui-label">Negative Prompt</label>
+            <div className="flex items-center justify-between text-xs">
+              <label className="ui-label">Negative Prompt</label>
+              <span className="text-[10px] text-brand-textMuted">Suppressed tokens</span>
+            </div>
             <textarea
               rows={2}
-              placeholder="What to exclude from the image (e.g. blurry, low quality, artifacts)..."
+              placeholder="What to exclude (e.g. blurry, low quality, bad anatomy, cropped)..."
               value={settings.negativePrompt}
               onChange={(e) =>
                 onChangeSettings({ ...settings, negativePrompt: e.target.value })
