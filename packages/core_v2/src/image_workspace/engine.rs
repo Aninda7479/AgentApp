@@ -226,21 +226,34 @@ impl EngineManager {
 
         let mut gpu_name: Option<String> = None;
         let mut vram_mb: Option<u64> = None;
+        #[allow(unused_mut)]
+        let mut has_rocm_driver = false;
 
         // Try detecting GPU on Windows via powershell WMI or nvidia-smi
         #[cfg(windows)]
         {
             if let Ok(output) = crate::server::routes::system::silent_command("powershell")
-                .args(["-NoProfile", "-Command", "Get-CimInstance Win32_VideoController | Select-Object -First 1 -ExpandProperty Name"])
+                .args(["-NoProfile", "-Command", "Get-CimInstance Win32_VideoController | Sort-Object -Property AdapterRAM -Descending | Select-Object -First 1 Name, AdapterRAM | ConvertTo-Json"])
                 .output()
             {
-                let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !name.is_empty() {
-                    gpu_name = Some(name);
+                if output.status.success() {
+                    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) {
+                        if let Some(n) = val.get("Name").and_then(|v| v.as_str()) {
+                            if !n.is_empty() {
+                                gpu_name = Some(n.to_string());
+                            }
+                        }
+                        if let Some(bytes) = val.get("AdapterRAM").and_then(|v| v.as_u64()) {
+                            if bytes > 0 {
+                                vram_mb = Some(bytes / (1024 * 1024));
+                            }
+                        }
+                    }
                 }
             }
 
-            // Try nvidia-smi for VRAM
+            // Prefer nvidia-smi for NVIDIA precise VRAM if available
             if let Ok(output) = crate::server::routes::system::silent_command("nvidia-smi")
                 .args(["--query-gpu=memory.total", "--format=csv,noheader,nounits"])
                 .output()
@@ -252,21 +265,44 @@ impl EngineManager {
             }
         }
 
-        // macOS Apple Silicon vs Intel Mac detection
+        // macOS Apple Silicon (M1/M2/M3/M4/M5) vs Intel Mac detection
         #[cfg(target_os = "macos")]
         {
             if arch == "aarch64" {
-                gpu_name = Some("Apple Silicon GPU".to_string());
-                vram_mb = Some((total_ram_mb * 3) / 4); // Unified memory (~75% process budget)
+                let mut chip_name = "Apple Silicon GPU".to_string();
+                if let Ok(output) = crate::server::routes::system::silent_command("sysctl")
+                    .args(["-n", "machdep.cpu.brand_string"])
+                    .output()
+                {
+                    let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !name.is_empty() {
+                        chip_name = format!("{} (Metal)", name);
+                    }
+                }
+                gpu_name = Some(chip_name);
+
+                // Unified memory budget scaling:
+                // >= 32GB: 85% budget for AI compute
+                // >= 16GB: 80% budget
+                // Base 8GB: 75% budget
+                let factor = if total_ram_mb >= 32768 {
+                    85
+                } else if total_ram_mb >= 16384 {
+                    80
+                } else {
+                    75
+                };
+                vram_mb = Some((total_ram_mb * factor) / 100);
             } else {
                 gpu_name = Some("Intel Mac Integrated / Dedicated GPU".to_string());
-                vram_mb = Some(2048); // Intel Mac baseline
+                vram_mb = Some(2048);
             }
         }
 
-        // Linux GPU detection
+        // Linux GPU detection: NVIDIA, AMD ROCm/Vulkan, and Intel Arc
         #[cfg(target_os = "linux")]
         {
+            // 1. Check NVIDIA via nvidia-smi
             if let Ok(output) = crate::server::routes::system::silent_command("nvidia-smi")
                 .args(["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"])
                 .output()
@@ -282,24 +318,56 @@ impl EngineManager {
                     }
                 }
             }
+
+            // 2. Check for AMD ROCm kernel driver (/dev/kfd)
+            if std::path::Path::new("/dev/kfd").exists() {
+                has_rocm_driver = true;
+            }
+
+            // 3. Fallback: Check sysfs for AMD / Intel Arc GPU
+            if gpu_name.is_none() {
+                if let Ok(entries) = std::fs::read_dir("/sys/class/drm") {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        let name_str = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                        if name_str.starts_with("card") && !name_str.contains('-') {
+                            let vram_path = path.join("device").join("mem_info_vram_total");
+                            if vram_path.exists() {
+                                if let Ok(content) = std::fs::read_to_string(&vram_path) {
+                                    if let Ok(bytes) = content.trim().parse::<u64>() {
+                                        vram_mb = Some(bytes / (1024 * 1024));
+                                        if has_rocm_driver {
+                                            gpu_name = Some("AMD Radeon GPU (ROCm)".to_string());
+                                        } else {
+                                            gpu_name = Some("AMD Radeon GPU (Vulkan)".to_string());
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Determine recommended backend
         let is_apple_silicon = os == "macos" && arch == "aarch64";
-        let has_nvidia = gpu_name.as_ref().map(|n| {
-            let lower = n.to_lowercase();
-            lower.contains("nvidia") || lower.contains("geforce") || lower.contains("rtx") || lower.contains("gtx") || lower.contains("quadro") || lower.contains("tesla")
-        }).unwrap_or(false);
+        let gpu_lower = gpu_name.as_ref().map(|n| n.to_lowercase()).unwrap_or_default();
+        let has_nvidia = gpu_lower.contains("nvidia") || gpu_lower.contains("geforce") || gpu_lower.contains("rtx") || gpu_lower.contains("gtx") || gpu_lower.contains("quadro") || gpu_lower.contains("tesla");
+        let has_amd = gpu_lower.contains("amd") || gpu_lower.contains("radeon");
+        let has_intel_arc = gpu_lower.contains("intel") && (gpu_lower.contains("arc") || gpu_lower.contains("iris") || gpu_lower.contains("xe"));
 
         let recommended_backend = if is_apple_silicon {
             GpuBackend::Metal
         } else if has_nvidia {
             GpuBackend::Cuda
-        } else if os == "macos" {
-            // Intel Mac CPU
-            GpuBackend::Cpu
-        } else if gpu_name.is_some() {
+        } else if has_amd && has_rocm_driver {
+            GpuBackend::Rocm
+        } else if has_amd || has_intel_arc || gpu_name.is_some() {
             GpuBackend::Vulkan
+        } else if os == "macos" {
+            GpuBackend::Cpu
         } else {
             GpuBackend::Cpu
         };
@@ -323,22 +391,21 @@ impl EngineManager {
         };
 
         let recommended_model_id = if is_apple_silicon {
-            if total_ram_mb >= 16384 {
+            if total_ram_mb >= 32768 {
                 "flux-schnell".to_string()
-            } else if total_ram_mb >= 12288 {
+            } else if total_ram_mb >= 16384 {
                 "sdxl".to_string()
             } else {
-                // 8GB unified memory Mac
+                // 8GB - 12GB unified memory Mac
                 "sd15".to_string()
             }
-        } else if has_nvidia {
+        } else if has_nvidia || has_amd || has_intel_arc {
             if effective_vram >= 12288 {
                 "flux-schnell".to_string()
             } else if effective_vram >= 6144 {
                 "sdxl".to_string()
             } else {
-                // 4GB VRAM or less (e.g. GTX 1650, RTX 3050 4GB):
-                // SD 1.5 generates in 15-30s within VRAM; SDXL causes heavy 5+ min memory paging
+                // 4GB VRAM or less (e.g. GTX 1650, RTX 3050 4GB, Radeon RX 6400):
                 "sd15".to_string()
             }
         } else if effective_vram >= 8192 {
@@ -484,6 +551,13 @@ impl EngineManager {
                     GpuBackend::Metal => {
                         if name.contains("arm64") || name.contains("macos") || name.contains("metal") {
                             score += 50;
+                        }
+                    }
+                    GpuBackend::Rocm => {
+                        if name.contains("rocm") || name.contains("hip") {
+                            score += 50;
+                        } else if name.contains("vulkan") {
+                            score += 40; // Fallback to Vulkan for AMD GPUs if no ROCm binary in release
                         }
                     }
                     GpuBackend::Cpu => {
@@ -696,6 +770,96 @@ impl EngineManager {
         Ok(())
     }
 
+    /// Dynamically construct hardware-acceleration, backend, and memory management arguments for sd-cli
+    pub fn build_acceleration_args(&self, req: &GenerateImageRequest, model_path: &Path) -> Vec<String> {
+        let hw = Self::detect_hardware();
+        let mut args: Vec<String> = Vec::new();
+
+        let is_apple_silicon = hw.os == "macos" && hw.arch == "aarch64";
+        let available_vram_mb = hw.vram_mb.unwrap_or(2048);
+
+        // 1. Model size estimation
+        let model_size_mb = if let Ok(meta) = std::fs::metadata(model_path) {
+            (meta.len() / (1024 * 1024)) as u64
+        } else {
+            3000
+        };
+
+        // 2. RNG method and Backend targeting
+        match hw.recommended_backend {
+            GpuBackend::Cuda => {
+                args.push("--rng".to_string());
+                args.push("cuda".to_string());
+            }
+            GpuBackend::Metal => {
+                // Metal auto-targets Apple Silicon GPU
+                args.push("--rng".to_string());
+                args.push("cpu".to_string());
+            }
+            GpuBackend::Vulkan | GpuBackend::Rocm => {
+                args.push("--rng".to_string());
+                args.push("cpu".to_string());
+            }
+            GpuBackend::Cpu => {
+                args.push("--rng".to_string());
+                args.push("cpu".to_string());
+                let threads = std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(4)
+                    .max(1);
+                args.push("-t".to_string());
+                args.push(threads.to_string());
+            }
+        }
+
+        // 3. Dynamic Offload Strategy:
+        // - On Apple Silicon (Metal): NEVER offload to CPU because memory is 100% unified.
+        // - On CPU mode: Offloading to CPU is not applicable.
+        // - On Discrete GPUs (CUDA / Vulkan / ROCm):
+        //   If model size > 85% of available VRAM, offload weights to CPU RAM to prevent CUDA Out Of Memory.
+        //   If model fits in VRAM (e.g. SD 1.5 ~1.5GB on 4GB VRAM), DO NOT offload, keeping execution 100% inside GPU VRAM.
+        let needs_offload = if is_apple_silicon || hw.recommended_backend == GpuBackend::Cpu {
+            false
+        } else {
+            model_size_mb > (available_vram_mb * 85 / 100)
+        };
+
+        if needs_offload {
+            args.push("--offload-to-cpu".to_string());
+        }
+
+        // 4. VAE Tiling:
+        // VAE decode is memory-intensive at high resolutions.
+        // Tiling is enabled if model is large (>2.2GB weights) or available VRAM is under 6GB on high-res (>512x512).
+        let width = req.width.unwrap_or(1024);
+        let height = req.height.unwrap_or(1024);
+        let is_high_res = (width * height) > (512 * 512);
+        let needs_tiling = !is_apple_silicon && (model_size_mb > 2200 || available_vram_mb < 6144 || is_high_res);
+        if needs_tiling {
+            args.push("--vae-tiling".to_string());
+        }
+
+        // 5. Flash Attention:
+        // Accelerates attention matrices and reduces memory footprint
+        if matches!(
+            hw.recommended_backend,
+            GpuBackend::Cuda | GpuBackend::Metal | GpuBackend::Vulkan | GpuBackend::Rocm
+        ) {
+            args.push("--fa".to_string());
+        }
+
+        // 6. Max VRAM budget for discrete GPUs (when model fits in VRAM)
+        if !is_apple_silicon && hw.recommended_backend != GpuBackend::Cpu && !needs_offload && available_vram_mb >= 3072 {
+            let budget_gib = (available_vram_mb as f64 / 1024.0 * 0.90).floor();
+            if budget_gib >= 2.0 {
+                args.push("--max-vram".to_string());
+                args.push(format!("{}", budget_gib as u32));
+            }
+        }
+
+        args
+    }
+
     /// Execute a local image generation via sd-cli asynchronously with real-time step progress streaming
     pub async fn execute_generation_streaming(
         &self,
@@ -739,9 +903,10 @@ impl EngineManager {
             &steps.to_string(),
             "--cfg-scale",
             &cfg_scale.to_string(),
-            "--vae-tiling",
-            "--offload-to-cpu",
         ]);
+
+        let perf_args = self.build_acceleration_args(req, model_path);
+        cmd.args(&perf_args);
 
         if let Some(ref neg) = req.negative_prompt {
             if !neg.is_empty() {
@@ -996,9 +1161,10 @@ impl EngineManager {
             &steps.to_string(),
             "--cfg-scale",
             &cfg_scale.to_string(),
-            "--vae-tiling",
-            "--offload-to-cpu",
         ]);
+
+        let perf_args = self.build_acceleration_args(req, model_path);
+        cmd.args(&perf_args);
 
         if let Some(ref neg) = req.negative_prompt {
             if !neg.is_empty() {
@@ -1226,6 +1392,38 @@ mod tests {
         let line2 = "main.cpp:497  - save result image 0 to 'test.png' (success)";
         let parsed2 = parse_step_from_line(line2, 20).expect("Should parse save phase");
         assert!(parsed2.phase.unwrap().contains("saving output"));
+    }
+
+    #[test]
+    fn test_hardware_detection() {
+        let hw = EngineManager::detect_hardware();
+        assert!(!hw.os.is_empty());
+        assert!(!hw.arch.is_empty());
+        assert!(hw.total_ram_mb > 0);
+        assert!(!hw.recommended_model_id.is_empty());
+    }
+
+    #[test]
+    fn test_build_acceleration_args() {
+        let engine = EngineManager::new();
+        let req = GenerateImageRequest {
+            prompt: "a majestic lion".to_string(),
+            negative_prompt: None,
+            model_id: Some("sd15".to_string()),
+            mode: Some("local".to_string()),
+            width: Some(512),
+            height: Some(512),
+            steps: Some(20),
+            cfg_scale: Some(7.0),
+            seed: None,
+            sampler: None,
+            init_image: None,
+            strength: None,
+        };
+        let dummy_path = PathBuf::from("sd_model.gguf");
+        let args = engine.build_acceleration_args(&req, &dummy_path);
+        // Ensure acceleration arguments are populated
+        assert!(!args.is_empty());
     }
 }
 

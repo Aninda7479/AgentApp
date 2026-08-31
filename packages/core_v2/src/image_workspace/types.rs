@@ -6,6 +6,7 @@ pub enum GpuBackend {
     Cuda,
     Vulkan,
     Metal,
+    Rocm,
     Cpu,
 }
 
@@ -15,6 +16,7 @@ impl GpuBackend {
             GpuBackend::Cuda => "cuda",
             GpuBackend::Vulkan => "vulkan",
             GpuBackend::Metal => "metal",
+            GpuBackend::Rocm => "rocm",
             GpuBackend::Cpu => "cpu",
         }
     }

@@ -1,4 +1,4 @@
-export type GpuBackend = 'cuda' | 'vulkan' | 'metal' | 'cpu';
+export type GpuBackend = 'cuda' | 'vulkan' | 'metal' | 'rocm' | 'cpu';
 
 export interface HardwareProfile {
   os: string;
