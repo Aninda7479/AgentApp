@@ -1,6 +1,6 @@
 [package]
 name = "superagent-desktop"
-version = "0.39.0"
+version = "0.40.0"
 description = "SuperAgent Desktop App - Powered by Tauri v2 and Rust"
 authors = ["SuperAgent Contributors"]
 edition = "2021"
