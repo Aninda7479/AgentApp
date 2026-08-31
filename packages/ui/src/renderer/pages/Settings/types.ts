@@ -8,7 +8,11 @@ export type InternetAccessLevel = 'all' | 'observation' | 'none';
 export interface UpdateStatus {
   status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error' | 'downloading' | 'downloaded';
   version?: string;
+  currentVersion?: string;
   message?: string;
+  releaseUrl?: string;
+  releaseNotes?: string;
+  error?: string;
   progress?: {
     percent: number;
     bytesPerSecond: number;

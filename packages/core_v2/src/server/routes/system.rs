@@ -878,7 +878,8 @@ pub fn compare_semver(a: &str, b: &str) -> i32 {
 pub async fn fetch_latest_release_info() -> Result<(String, String, Option<String>), anyhow::Error> {
     let client = reqwest::Client::builder()
         .user_agent("SuperAgent-App")
-        .timeout(Duration::from_secs(6))
+        .connect_timeout(Duration::from_secs(3))
+        .timeout(Duration::from_secs(4))
         .build()?;
 
     // 1. Try redirect on releases/latest

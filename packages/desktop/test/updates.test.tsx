@@ -66,4 +66,46 @@ describe('UpdatesSettings UI', () => {
     expect(html).toContain('Update downloaded: v0.3.0');
     expect(html).toContain('Restart and Install');
   });
+
+  it('renders Download and Install + Download from Browser when update is available', () => {
+    const html = renderToString(
+      <UpdatesSettings 
+        appVersion="0.39.0"
+        updateStatus={{
+          status: 'available',
+          message: 'Version v0.40.0 is available!',
+          version: '0.40.0',
+          releaseUrl: 'https://github.com/Aninda7479/AgentApp/releases/tag/v0.40.0',
+          releaseNotes: 'Awesome new features'
+        }}
+        onCheckForUpdates={() => {}}
+        checking={false}
+      />
+    );
+    expect(html).toContain('Version v0.40.0 is available!');
+    expect(html).toContain('Download and Install');
+    expect(html).toContain('Download from Browser');
+    expect(html).toContain('See What');
+  });
+
+  it('renders Retry Download and Download via Browser when update download fails', () => {
+    const html = renderToString(
+      <UpdatesSettings 
+        appVersion="0.39.0"
+        updateStatus={{
+          status: 'error',
+          message: 'Download failed: connection reset. Please check your network and try again.',
+          version: '0.40.0',
+          releaseUrl: 'https://github.com/Aninda7479/AgentApp/releases/tag/v0.40.0'
+        }}
+        onCheckForUpdates={() => {}}
+        checking={false}
+      />
+    );
+    expect(html).toContain('Download failed');
+    expect(html).toContain('Retry Download');
+    expect(html).toContain('Download via Browser');
+    expect(html).toContain('Check Again');
+  });
 });
+

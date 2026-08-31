@@ -190,6 +190,32 @@ pub async fn handle_integrations_channel(
                 }
             }
         }
+        "download-update" | "download_update" => {
+            let current_version = env!("CARGO_PKG_VERSION");
+            match fetch_latest_release_info().await {
+                Ok((latest_version, release_url, notes)) => {
+                    Some(Ok(Json(serde_json::json!({
+                        "data": {
+                            "status": "available",
+                            "version": latest_version,
+                            "currentVersion": current_version,
+                            "releaseUrl": release_url,
+                            "releaseNotes": notes.unwrap_or_default(),
+                            "message": "Please download the installer from GitHub Releases or apply in desktop app."
+                        }
+                    }))))
+                }
+                Err(e) => {
+                    Some(Ok(Json(serde_json::json!({
+                        "data": {
+                            "status": "error",
+                            "message": format!("Could not initiate download: {}", e),
+                            "releaseUrl": "https://github.com/Aninda7479/AgentApp/releases/latest"
+                        }
+                    }))))
+                }
+            }
+        }
         "auto-detect-providers" => {
             let mut providers = Vec::new();
             let raw_settings = state.settings_store.load_raw().unwrap_or_default();

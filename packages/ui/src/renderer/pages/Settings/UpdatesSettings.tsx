@@ -1,17 +1,10 @@
-import { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { RefreshCw, CheckCircle2, AlertTriangle, Info, ExternalLink, Download, ChevronDown, ChevronUp, Globe } from 'lucide-react';
+import { BrandLogo } from '../../BrandLogo';
+import { getIpc } from '../../lib/ipc';
+import type { UpdateStatus } from './types';
 
-/** Status returned by the main-process update check. */
-export interface UpdateStatus {
-  status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error' | 'downloading' | 'downloaded';
-  version?: string;
-  message?: string;
-  progress?: {
-    percent: number;
-    bytesPerSecond: number;
-    transferred: number;
-    total: number;
-  };
-}
+export type { UpdateStatus };
 
 /** Props for the updates/about settings panel. */
 interface UpdatesSettingsProps {
@@ -25,11 +18,6 @@ interface UpdatesSettingsProps {
 
 const REPO_URL = 'https://github.com/Aninda7479/AgentApp';
 
-/** Renders the current version and a "Check for updates" action. */
-import React, { useState } from 'react';
-import { RefreshCw, CheckCircle2, AlertTriangle, Info, ExternalLink, Download } from 'lucide-react';
-import { BrandLogo } from '../../BrandLogo';
-import { getIpc } from '../../lib/ipc';
 export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
   appVersion,
   updateStatus,
@@ -40,8 +28,10 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
 }) => {
   const [githubUrl] = useState(REPO_URL);
   const [releaseChannel, setReleaseChannel] = useState<'stable' | 'beta'>('stable');
+  const [showNotes, setShowNotes] = useState(false);
 
   const ipc = getIpc();
+  const currentVer = appVersion || '0.39.0';
 
   useEffect(() => {
     if (ipc) {
@@ -87,11 +77,12 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
     }
   };
 
-  const openInBrowser = (url: string) => {
+  const openInBrowser = (url?: string) => {
+    const target = url || (updateStatus?.version ? `${REPO_URL}/releases/tag/v${updateStatus.version}` : `${REPO_URL}/releases/latest`);
     if (ipc) {
-      ipc.invoke('open-external', url);
+      ipc.invoke('open-external', target);
     } else if (typeof window !== 'undefined') {
-      window.open(url, '_blank', 'noopener');
+      window.open(target, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -112,35 +103,72 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
       spin: false
     };
     const { Icon } = cfg;
+
     return (
-      <div className={`mt-4 flex flex-col gap-3 rounded-lg border px-4 py-3 text-sm ${cfg.cls}`}>
-        <div className="flex items-start gap-2">
+      <div className={`mt-4 flex flex-col gap-3 rounded-lg border px-4 py-3.5 text-sm ${cfg.cls}`}>
+        <div className="flex items-start gap-2.5">
           <Icon size={16} className={`mt-0.5 flex-shrink-0 ${cfg.spin ? 'animate-spin' : ''}`} />
-          <div className="flex-1">
-            <span>{updateStatus.message || 'Checking for updates…'}</span>
-            {updateStatus.status === 'downloading' && updateStatus.progress && (
-              <div className="mt-2.5">
-                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-[color:var(--neon-live)] transition-all duration-300"
-                    style={{ width: `${updateStatus.progress.percent}%` }}
-                  />
-                </div>
-                {updateStatus.progress.total > 0 && (
-                  <div className="mt-1 flex items-center justify-between text-[11px] text-brand-textMuted font-mono">
-                    <span>
-                      {((updateStatus.progress.transferred || 0) / (1024 * 1024)).toFixed(1)} MB / 
-                      {((updateStatus.progress.total || 0) / (1024 * 1024)).toFixed(1)} MB
-                    </span>
-                    <span>{updateStatus.progress.percent}%</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium">{updateStatus.message || 'Checking for updates…'}</span>
+              {updateStatus.version && (
+                <span className="text-xs px-2 py-0.5 rounded-full font-mono bg-white/10 text-brand-textMain">
+                  v{currentVer} → v{updateStatus.version}
+                </span>
+              )}
+            </div>
+
+            {/* Release Notes expander */}
+            {updateStatus.releaseNotes && (
+              <div className="mt-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setShowNotes(prev => !prev)}
+                  className="inline-flex items-center gap-1 text-[var(--brand-accent)] hover:underline font-medium"
+                >
+                  {showNotes ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  {showNotes ? 'Hide Release Notes' : "See What's New"}
+                </button>
+                {showNotes && (
+                  <div className="mt-2 p-3 rounded bg-black/20 text-brand-textMain whitespace-pre-wrap max-h-48 overflow-y-auto font-mono text-[11px] leading-relaxed border border-white/5">
+                    {updateStatus.releaseNotes}
                   </div>
                 )}
               </div>
             )}
+
+            {/* Downloading Progress Bar */}
+            {updateStatus.status === 'downloading' && updateStatus.progress && (
+              <div className="mt-2.5">
+                <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-[color:var(--neon-live)] transition-all duration-300 rounded-full"
+                    style={{ width: `${updateStatus.progress.percent}%` }}
+                  />
+                </div>
+                <div className="mt-1.5 flex items-center justify-between text-[11px] text-brand-textMuted font-mono">
+                  <span>
+                    {((updateStatus.progress.transferred || 0) / (1024 * 1024)).toFixed(1)} MB
+                    {updateStatus.progress.total > 0 ? ` / ${((updateStatus.progress.total || 0) / (1024 * 1024)).toFixed(1)} MB` : ''}
+                  </span>
+                  <span>{updateStatus.progress.percent}%</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Available State Actions */}
         {updateStatus.status === 'available' && (
-          <div className="flex justify-end pt-1">
+          <div className="flex flex-wrap items-center justify-end gap-2.5 pt-1 border-t border-white/10">
+            <button
+              type="button"
+              onClick={() => openInBrowser(updateStatus.releaseUrl)}
+              className="ui-btn btn-sm flex items-center gap-1.5 text-xs"
+              title="Download standalone installer directly from GitHub"
+            >
+              <Globe size={13} /> Download from Browser
+            </button>
             <button
               type="button"
               onClick={handleDownload}
@@ -150,8 +178,37 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
             </button>
           </div>
         )}
+
+        {/* Error State Actions — Adaptable Retry & Fallbacks */}
+        {updateStatus.status === 'error' && (
+          <div className="flex flex-wrap items-center justify-end gap-2.5 pt-1 border-t border-white/10">
+            <button
+              type="button"
+              onClick={onCheckForUpdates}
+              className="ui-btn btn-sm flex items-center gap-1.5 text-xs"
+            >
+              <RefreshCw size={12} /> Check Again
+            </button>
+            <button
+              type="button"
+              onClick={() => openInBrowser(updateStatus.releaseUrl)}
+              className="ui-btn btn-sm flex items-center gap-1.5 text-xs"
+            >
+              <ExternalLink size={12} /> Download via Browser
+            </button>
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="ui-btn ui-btn-primary btn-sm flex items-center gap-1.5 text-xs"
+            >
+              <RefreshCw size={12} /> Retry Download
+            </button>
+          </div>
+        )}
+
+        {/* Downloaded State Actions */}
         {updateStatus.status === 'downloaded' && (
-          <div className="flex justify-end pt-1">
+          <div className="flex justify-end pt-1 border-t border-white/10">
             <button
               type="button"
               onClick={handleRestart}
@@ -200,7 +257,7 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
             <div>
               <div className="mb-0.5 text-sm font-medium text-brand-textMain">SuperAgent</div>
               <div className="text-xs leading-5 text-brand-textMuted">
-                v{appVersion || '0.1.0'}
+                v{currentVer}
               </div>
             </div>
             <button
@@ -236,7 +293,8 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
               </select>
             </div>
             <div className="text-xs text-brand-textMuted">
-              Stable updates are published on <a
+              Stable updates are published on{' '}
+              <a
                 href={githubUrl}
                 target="_blank"
                 rel="noreferrer"

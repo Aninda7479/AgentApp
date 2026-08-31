@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { compareSemver, UpdateService } from './updates';
 import type { AppContext } from './types';
 
@@ -104,3 +104,57 @@ describe('UpdateService.check', () => {
     });
   });
 });
+
+describe('UpdateService.downloadAndInstall', () => {
+  let mockCtx: Partial<AppContext>;
+  let updateStatusState: any = null;
+
+  beforeEach(() => {
+    updateStatusState = {
+      status: 'available',
+      version: '0.40.0',
+      releaseUrl: 'https://github.com/Aninda7479/AgentApp/releases/tag/v0.40.0',
+      releaseNotes: 'Performance improvements and bug fixes.'
+    };
+    mockCtx = {
+      setActiveTab: vi.fn(),
+      setSettingsCategory: vi.fn(),
+      setUpdateStatus: vi.fn((status) => {
+        updateStatusState = typeof status === 'function' ? status(updateStatusState) : status;
+      }),
+      ipc: null
+    };
+    vi.restoreAllMocks();
+  });
+
+  it('handles offline state cleanly without losing release context', async () => {
+    Object.defineProperty(navigator, 'onLine', { value: false, configurable: true });
+
+    await UpdateService.downloadAndInstall(mockCtx as AppContext);
+
+    expect(updateStatusState).toMatchObject({
+      status: 'error',
+      version: '0.40.0',
+      releaseUrl: 'https://github.com/Aninda7479/AgentApp/releases/tag/v0.40.0',
+      message: expect.stringContaining('offline')
+    });
+
+    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
+  });
+
+  it('triggers web mode apply when fetch is available', async () => {
+    Object.defineProperty(navigator, 'onLine', { value: true, configurable: true });
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ok: true })
+    } as any);
+
+    await UpdateService.downloadAndInstall(mockCtx as AppContext);
+
+    expect(updateStatusState).toMatchObject({
+      status: 'downloading',
+      message: expect.stringContaining('restarting automatically')
+    });
+  });
+});
+
