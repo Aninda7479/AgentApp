@@ -90,16 +90,20 @@ export class SettingsService {
         ctx.setLastUsedModel(settings.lastUsedModel.model);
       }
       if (Array.isArray(settings.providers) && settings.providers.length > 0) {
-        ctx.setConnectedProviders(settings.providers);
-        try {
-          providerStore.setProviders(settings.providers);
-        } catch {}
+        if (ctx.getConnectedProviders().length === 0) {
+          ctx.setConnectedProviders(settings.providers);
+          try {
+            providerStore.setProviders(settings.providers);
+          } catch {}
+        }
       }
       if (Array.isArray(settings.models) && settings.models.length > 0) {
-        ctx.setModelsCatalog(settings.models);
-        try {
-          providerStore.setModels(settings.models);
-        } catch {}
+        if (ctx.getModelsCatalog().length === 0) {
+          ctx.setModelsCatalog(settings.models);
+          try {
+            providerStore.setModels(settings.models);
+          } catch {}
+        }
       }
       if (settings.general?.setupState?.completed || (Array.isArray(settings.providers) && settings.providers.length > 0)) {
         ctx.setSetupCompleted(true);

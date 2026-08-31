@@ -94,6 +94,7 @@ const CONTEXT_OPTIONS = [
 ];
 
 export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
+  modelsCatalog = [],
   onConnectProvider,
   enrichModel,
   onToast
@@ -168,6 +169,9 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
     } catch {}
   }, []);
 
+  const modelsCatalogRef = useRef(modelsCatalog);
+  modelsCatalogRef.current = modelsCatalog;
+
   const onConnectProviderRef = useRef(onConnectProvider);
   onConnectProviderRef.current = onConnectProvider;
 
@@ -216,7 +220,14 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
             inputModalities: inputMod,
             outputModalities: outputMod
           };
-          enriched.push(enrichModelRef.current(raw, 'ollama'));
+          const baseConfig = enrichModelRef.current(raw, 'ollama');
+          const existing = modelsCatalogRef.current.find(
+            (em) => em.id === baseConfig.id || em.id === m.name || (em.providerId === 'ollama' && em.name === m.name)
+          );
+          enriched.push({
+            ...baseConfig,
+            enabled: existing?.enabled ?? baseConfig.enabled
+          });
         }
         onConnectProviderRef.current(
           {

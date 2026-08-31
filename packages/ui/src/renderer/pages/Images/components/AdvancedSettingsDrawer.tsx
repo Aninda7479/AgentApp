@@ -10,6 +10,7 @@ import {
   Cpu,
 } from 'lucide-react';
 import { AdvancedSettingsState, AttachedReferenceImage } from '../types';
+import { Select } from '../../../components/ui/Select';
 
 interface AdvancedSettingsDrawerProps {
   settings: AdvancedSettingsState;
@@ -37,6 +38,8 @@ const SAMPLERS = [
   { id: 'dpm++2m_karras', label: 'DPM++ 2M Karras' },
   { id: 'ddim', label: 'DDIM (Deterministic)' },
 ];
+
+const SAMPLER_OPTIONS = SAMPLERS.map((s) => ({ value: s.id, label: s.label }));
 
 export const AdvancedSettingsDrawer: React.FC<AdvancedSettingsDrawerProps> = ({
   settings,
@@ -189,19 +192,14 @@ export const AdvancedSettingsDrawer: React.FC<AdvancedSettingsDrawerProps> = ({
           {/* Sampler Selector */}
           <div className="space-y-1">
             <label className="ui-label">Sampling Method</label>
-            <select
+            <Select
+              options={SAMPLER_OPTIONS}
               value={settings.sampler}
-              onChange={(e) =>
-                onChangeSettings({ ...settings, sampler: e.target.value })
+              onChange={(value) =>
+                onChangeSettings({ ...settings, sampler: value })
               }
-              className="ui-select w-full text-xs"
-            >
-              {SAMPLERS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+              className="w-full text-xs"
+            />
           </div>
 
           {/* Seed Input */}

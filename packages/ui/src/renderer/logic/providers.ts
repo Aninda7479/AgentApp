@@ -9,6 +9,7 @@ import { providerStore } from '../stores/providerStore';
 export class ProvidersService {
   /**
    * Connects multiple providers at once atomically: merges their models and persists.
+   * Preserves previously enabled state for existing models if incoming models default to disabled.
    */
   static connectBatch(
     ctx: AppContext,
@@ -20,7 +21,16 @@ export class ProvidersService {
       ...ctx.getConnectedProviders().filter((p) => !batchProviderIds.has(p.id)),
       ...batch.map((b) => b.provider)
     ];
-    const newModels = batch.flatMap((b) => b.models);
+    const existingModelsMap = new Map(ctx.getModelsCatalog().map((m) => [m.id, m]));
+    const newModels = batch.flatMap((b) =>
+      b.models.map((m) => {
+        const existing = existingModelsMap.get(m.id);
+        if (existing && existing.enabled && !m.enabled) {
+          return { ...m, enabled: true };
+        }
+        return m;
+      })
+    );
     const nextModels = [
       ...ctx.getModelsCatalog().filter((m) => !batchProviderIds.has(m.providerId)),
       ...newModels
@@ -47,16 +57,24 @@ export class ProvidersService {
 
   /**
    * Connects a new provider: replaces any existing entry with the same id, merges
-   * its models (replacing that provider's previous models), and persists.
+   * its models (replacing that provider's previous models, but preserving enabled status), and persists.
    */
   static connect(ctx: AppContext, provider: ProviderConnection, newModels: ModelConfig[]): void {
     const nextProviders = [
       ...ctx.getConnectedProviders().filter((p) => p.id !== provider.id),
       provider
     ];
+    const existingModelsMap = new Map(ctx.getModelsCatalog().map((m) => [m.id, m]));
+    const mergedNewModels = newModels.map((m) => {
+      const existing = existingModelsMap.get(m.id);
+      if (existing && existing.enabled && !m.enabled) {
+        return { ...m, enabled: true };
+      }
+      return m;
+    });
     const nextModels = [
       ...ctx.getModelsCatalog().filter((m) => m.providerId !== provider.id),
-      ...newModels
+      ...mergedNewModels
     ];
     ctx.setConnectedProviders(nextProviders);
     ctx.setModelsCatalog(nextModels);

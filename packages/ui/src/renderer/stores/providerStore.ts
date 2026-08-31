@@ -83,7 +83,15 @@ class ProviderStoreManager {
   public connect(provider: ProviderConnection, newModels: ModelConfig[]): void {
     this.setState((prev) => {
       const providers = [...prev.providers.filter((p) => p.id !== provider.id), provider];
-      const models = [...prev.models.filter((m) => m.providerId !== provider.id), ...newModels];
+      const existingModelsMap = new Map(prev.models.map((m) => [m.id, m]));
+      const mergedNewModels = newModels.map((m) => {
+        const existing = existingModelsMap.get(m.id);
+        if (existing && existing.enabled && !m.enabled) {
+          return { ...m, enabled: true };
+        }
+        return m;
+      });
+      const models = [...prev.models.filter((m) => m.providerId !== provider.id), ...mergedNewModels];
       return { providers, models };
     });
   }

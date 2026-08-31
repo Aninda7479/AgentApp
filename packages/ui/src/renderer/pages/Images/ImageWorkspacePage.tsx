@@ -35,6 +35,7 @@ import { CanvasStage } from './components/CanvasStage';
 import { GalleryFilmstrip } from './components/GalleryFilmstrip';
 import { ColorPaletteModal } from './components/ColorPaletteModal';
 import { BrandLogoModal } from './components/BrandLogoModal';
+import { ImageModelSelect } from './components/ImageModelSelect';
 
 export interface ImageWorkspacePageProps {
   onBack?: () => void;
@@ -112,16 +113,23 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
       setEngineStatus(status);
       setHistory(gens);
 
-      const downloaded = modelsList.find((m) => m.is_downloaded);
-      if (downloaded && !selectedModel) {
-        setSelectedModel(downloaded.id);
-        setAdvanced((prev) => ({
-          ...prev,
-          steps: downloaded.default_steps,
-          cfgScale: downloaded.default_cfg,
-        }));
-      } else if (!selectedModel && modelsList.length > 0) {
-        setSelectedModel(modelsList[0].id);
+      const downloaded = modelsList.filter((m) => m.is_downloaded);
+      if (downloaded.length > 0) {
+        // If no model is selected or the selected model is not installed, select first downloaded
+        setSelectedModel((prev) => {
+          if (!prev || !downloaded.some((m) => m.id === prev)) {
+            const first = downloaded[0];
+            setAdvanced((adv) => ({
+              ...adv,
+              steps: first.default_steps,
+              cfgScale: first.default_cfg,
+            }));
+            return first.id;
+          }
+          return prev;
+        });
+      } else {
+        setSelectedModel('');
       }
 
       if (gens.length > 0 && !selectedRecord) {
@@ -130,11 +138,22 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
     } catch (err) {
       console.error('Failed to load image workspace data:', err);
     }
-  }, [selectedModel, selectedRecord]);
+  }, [selectedRecord]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Poll if any download is in progress
+  const isDownloadingAny =
+    (engineStatus?.is_downloading ?? false) || models.some((m) => m.is_downloading);
+  useEffect(() => {
+    if (!isDownloadingAny) return;
+    const interval = setInterval(() => {
+      loadData();
+    }, 2500);
+    return () => clearInterval(interval);
+  }, [isDownloadingAny, loadData]);
 
   // Model selection handler
   const handleModelChange = (modelId: string) => {
@@ -204,6 +223,17 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       notify('Please enter a prompt');
+      return;
+    }
+
+    const downloadedModels = models.filter((m) => m.is_downloaded);
+    if (downloadedModels.length === 0 || !selectedModel) {
+      notify('No local image models installed. Please download a model from Settings before generating.');
+      return;
+    }
+
+    if (engineStatus && !engineStatus.installed) {
+      notify('Image generation engine is not installed. Please install it in Settings.');
       return;
     }
 
@@ -393,6 +423,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
               <span>Model</span>
               {onOpenSettings && (
                 <button
+                  type="button"
                   onClick={onOpenSettings}
                   className="text-[10px] text-[var(--brand-accent)] hover:underline flex items-center gap-0.5 cursor-pointer"
                 >
@@ -401,18 +432,13 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
                 </button>
               )}
             </label>
-            <select
-              value={selectedModel}
-              onChange={(e) => handleModelChange(e.target.value)}
-              className="ui-select w-full"
-            >
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} ({m.quantization}){' '}
-                  {m.is_downloaded ? '✓ [Installed]' : '⬇ [Not Downloaded]'}
-                </option>
-              ))}
-            </select>
+            <ImageModelSelect
+              models={models}
+              selectedModelId={selectedModel}
+              onSelectModel={handleModelChange}
+              onOpenSettings={onOpenSettings}
+              engineStatus={engineStatus}
+            />
           </div>
 
           {/* 4. Aspect Ratio Chips */}

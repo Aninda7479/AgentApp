@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ProvidersService } from './providers';
+import { SettingsService } from './settings';
 import type { AppContext, ModelConfig, ProviderConnection } from './types';
 
 const mkProvider = (id: string): ProviderConnection => ({
@@ -152,5 +153,84 @@ describe('ProvidersService', () => {
     expect(getModels()).toHaveLength(4);
     expect(getPersisted()?.providers).toHaveLength(3);
     expect(getPersisted()?.models).toHaveLength(4);
+  });
+
+  it('connect() preserves enabled: true state of existing models when incoming model defaults to disabled', () => {
+    const { ctx, getModels } = makeCtx();
+    // Initial connect with enabled models
+    ProvidersService.connect(ctx, mkProvider('ollama'), [
+      mkModel('ollama-llama3', 'ollama', true),
+      mkModel('ollama-tinyllama', 'ollama', false)
+    ]);
+
+    expect(getModels().find((m) => m.id === 'ollama-llama3')?.enabled).toBe(true);
+
+    // Refresh / re-sync where all incoming models default to enabled: false
+    ProvidersService.connect(ctx, mkProvider('ollama'), [
+      mkModel('ollama-llama3', 'ollama', false),
+      mkModel('ollama-tinyllama', 'ollama', false),
+      mkModel('ollama-mistral', 'ollama', false)
+    ]);
+
+    expect(getModels().find((m) => m.id === 'ollama-llama3')?.enabled).toBe(true);
+    expect(getModels().find((m) => m.id === 'ollama-tinyllama')?.enabled).toBe(false);
+    expect(getModels().find((m) => m.id === 'ollama-mistral')?.enabled).toBe(false);
+  });
+
+  it('connectBatch() preserves enabled: true state of existing models', () => {
+    const { ctx, getModels } = makeCtx();
+    ProvidersService.connect(ctx, mkProvider('ollama'), [
+      mkModel('ollama-llama3', 'ollama', true)
+    ]);
+
+    ProvidersService.connectBatch(ctx, [
+      {
+        provider: mkProvider('ollama'),
+        models: [
+          mkModel('ollama-llama3', 'ollama', false),
+          mkModel('ollama-qwen', 'ollama', false)
+        ]
+      }
+    ]);
+
+    expect(getModels().find((m) => m.id === 'ollama-llama3')?.enabled).toBe(true);
+    expect(getModels().find((m) => m.id === 'ollama-qwen')?.enabled).toBe(false);
+  });
+});
+
+describe('SettingsService', () => {
+  it('readInto() does NOT overwrite non-empty modelsCatalog or connectedProviders with stale settings', async () => {
+    const { ctx, getModels, getProviders } = makeCtx();
+    // Pre-populate with live state (e.g. loaded from store.json)
+    ProvidersService.connect(ctx, mkProvider('ollama'), [
+      mkModel('ollama-llama3', 'ollama', true)
+    ]);
+
+    // Stale settings.json returning empty/different/disabled models
+    (ctx.ipc as any).invoke = vi.fn().mockResolvedValue({
+      providers: [mkProvider('ollama'), mkProvider('stale-prov')],
+      models: [mkModel('ollama-llama3', 'ollama', false), mkModel('stale-model', 'stale', false)]
+    });
+
+    await SettingsService.readInto(ctx);
+
+    // Live catalog and providers must be untouched
+    expect(getProviders().map((p) => p.id)).toEqual(['ollama']);
+    expect(getModels().find((m) => m.id === 'ollama-llama3')?.enabled).toBe(true);
+    expect(getModels().find((m) => m.id === 'stale-model')).toBeUndefined();
+  });
+
+  it('readInto() populates models and providers when current lists are empty (first boot fallback)', async () => {
+    const { ctx, getModels, getProviders } = makeCtx();
+
+    (ctx.ipc as any).invoke = vi.fn().mockResolvedValue({
+      providers: [mkProvider('ollama')],
+      models: [mkModel('ollama-llama3', 'ollama', true)]
+    });
+
+    await SettingsService.readInto(ctx);
+
+    expect(getProviders().map((p) => p.id)).toEqual(['ollama']);
+    expect(getModels().map((m) => m.id)).toEqual(['ollama-llama3']);
   });
 });
