@@ -180,9 +180,12 @@ export const AdvancedSettingsDrawer: React.FC<AdvancedSettingsDrawerProps> = ({
           {/* Reference Image Denoising Strength (if attached) */}
           {referenceImage && (
             <div className="p-2.5 rounded-lg bg-[var(--brand-accent)]/10 border border-[var(--brand-accent)]/20 space-y-1.5">
-              <div className="flex justify-between text-xs">
-                <span className="font-semibold text-brand-textMain flex items-center gap-1">
-                  <span>Image Influence (Strength)</span>
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-semibold text-brand-textMain flex items-center gap-1.5">
+                  <span>{referenceImage.guidanceMode === 'face_lock' ? '👤 Face Lock Influence' : '🎨 Style & Pose Influence'}</span>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${referenceImage.guidanceMode === 'face_lock' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-indigo-500/20 text-indigo-300'}`}>
+                    {referenceImage.guidanceMode === 'face_lock' ? 'Face Lock' : 'Style/Pose'}
+                  </span>
                 </span>
                 <span className="font-mono text-[var(--brand-accent)] font-bold">
                   {referenceImage.strength.toFixed(2)}
@@ -198,9 +201,9 @@ export const AdvancedSettingsDrawer: React.FC<AdvancedSettingsDrawerProps> = ({
                 className="w-full accent-[var(--brand-accent)] cursor-pointer"
               />
               <div className="flex justify-between text-[10px] text-brand-textMuted">
-                <span>Subtle Variation (0.2)</span>
-                <span>Balanced (0.65)</span>
-                <span>Reimagine (0.9)</span>
+                <span>{referenceImage.guidanceMode === 'face_lock' ? 'Keep More Clothes (0.6)' : 'Subtle Variation (0.3)'}</span>
+                <span>{referenceImage.guidanceMode === 'face_lock' ? 'Optimal Face + New Scene (0.85)' : 'Balanced (0.65)'}</span>
+                <span>Complete Redraw (0.95)</span>
               </div>
             </div>
           )}

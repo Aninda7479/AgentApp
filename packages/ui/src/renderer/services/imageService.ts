@@ -68,6 +68,7 @@ export interface GenerateImageRequest {
   sampler?: string;
   init_image?: string;
   strength?: number;
+  guidance_mode?: 'face_lock' | 'style_pose';
 }
 
 export interface GenerateImageResponse {

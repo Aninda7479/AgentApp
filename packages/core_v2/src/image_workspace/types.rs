@@ -115,6 +115,7 @@ pub struct GenerateImageRequest {
     pub sampler: Option<String>,
     pub init_image: Option<String>,
     pub strength: Option<f32>,
+    pub guidance_mode: Option<String>, // "face_lock" | "style_pose"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

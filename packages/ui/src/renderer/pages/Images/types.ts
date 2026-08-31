@@ -4,11 +4,14 @@ export interface AspectRatioOption {
   height: number;
 }
 
+export type GuidanceMode = 'face_lock' | 'style_pose';
+
 export interface AttachedReferenceImage {
   name: string;
   dataUrl: string;
   sizeBytes?: number;
-  strength: number; // 0.1 to 0.9, default ~0.65
+  strength: number; // 0.1 to 0.95
+  guidanceMode: GuidanceMode;
 }
 
 export type BrandLogoPlacement =

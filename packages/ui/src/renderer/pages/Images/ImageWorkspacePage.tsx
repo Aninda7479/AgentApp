@@ -50,13 +50,34 @@ export interface ImageWorkspacePageProps {
   triggerToast?: (message: string) => void;
 }
 
-export const ASPECT_RATIOS: AspectRatioOption[] = [
-  { label: 'Square (1:1)', width: 1024, height: 1024 },
-  { label: 'Landscape (16:9)', width: 1280, height: 720 },
-  { label: 'Portrait (9:16)', width: 720, height: 1280 },
-  { label: 'Photo (4:3)', width: 1024, height: 768 },
-  { label: 'Classic (3:2)', width: 1024, height: 682 },
-];
+export function getAdaptiveAspectRatios(modelId?: string): AspectRatioOption[] {
+  const isSd15 =
+    modelId?.toLowerCase().includes('sd15') ||
+    modelId?.toLowerCase().includes('v1-5') ||
+    modelId?.toLowerCase().includes('sd-1-5') ||
+    modelId?.toLowerCase().includes('v1.5');
+
+  if (isSd15) {
+    return [
+      { label: 'Square (1:1)', width: 512, height: 512 },
+      { label: 'Landscape (16:9)', width: 768, height: 432 },
+      { label: 'Portrait (9:16)', width: 432, height: 768 },
+      { label: 'Photo (4:3)', width: 640, height: 480 },
+      { label: 'Classic (3:2)', width: 768, height: 512 },
+    ];
+  }
+
+  // SDXL, SD 3.5, Flux native high-resolution profiles
+  return [
+    { label: 'Square (1:1)', width: 1024, height: 1024 },
+    { label: 'Landscape (16:9)', width: 1024, height: 576 },
+    { label: 'Portrait (9:16)', width: 576, height: 1024 },
+    { label: 'Photo (4:3)', width: 1024, height: 768 },
+    { label: 'Classic (3:2)', width: 1024, height: 680 },
+  ];
+}
+
+export const ASPECT_RATIOS: AspectRatioOption[] = getAdaptiveAspectRatios('sdxl');
 
 export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
   onBack,
@@ -70,7 +91,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
   // ── Core Generation Inputs ──
   const [prompt, setPrompt] = useState('');
   const [selectedModel, setSelectedModel] = useState<string>('');
-  const [dimensions, setDimensions] = useState<AspectRatioOption>(ASPECT_RATIOS[0]);
+  const [dimensions, setDimensions] = useState<AspectRatioOption>(ASPECT_RATIOS[1]); // Default 16:9 Landscape
 
   // ── Attachments ──
   const [referenceImage, setReferenceImage] = useState<AttachedReferenceImage | null>(null);
@@ -125,16 +146,20 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
 
       const downloaded = modelsList.filter((m) => m.is_downloaded);
       if (downloaded.length > 0) {
-        // If no model is selected or the selected model is not installed, select first downloaded
+        // Prioritize SDXL / high-quality model for best facial fidelity, else first downloaded
         setSelectedModel((prev) => {
           if (!prev || !downloaded.some((m) => m.id === prev)) {
-            const first = downloaded[0];
+            const preferred =
+              downloaded.find((m) => m.id.toLowerCase().includes('sdxl') || m.family === 'sdxl') ||
+              downloaded[0];
             setAdvanced((adv) => ({
               ...adv,
-              steps: first.default_steps,
-              cfgScale: first.default_cfg,
+              steps: preferred.default_steps,
+              cfgScale: preferred.default_cfg,
             }));
-            return first.id;
+            const ratios = getAdaptiveAspectRatios(preferred.id);
+            setDimensions(ratios[1] || ratios[0]); // Default 16:9 Landscape
+            return preferred.id;
           }
           return prev;
         });
@@ -176,6 +201,11 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
         cfgScale: m.default_cfg,
       }));
     }
+    const ratios = getAdaptiveAspectRatios(modelId);
+    setDimensions((prev) => {
+      const match = ratios.find((r) => r.label === prev.label) || ratios[1] || ratios[0];
+      return match;
+    });
   };
 
   // 1-Click Remix past generation
@@ -216,9 +246,10 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
                   name: file.name || 'Pasted Reference',
                   dataUrl,
                   sizeBytes: file.size,
-                  strength: 0.65,
+                  strength: 0.85,
+                  guidanceMode: 'face_lock',
                 });
-                notify('Image pasted as Reference Image');
+                notify('Image pasted with Face Lock active');
               }
             };
             reader.readAsDataURL(file);
@@ -258,17 +289,34 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
     // Build synthesized prompt with style preset and color palette
     let effectivePrompt = prompt.trim();
     if (activePreset) {
-      effectivePrompt += activePreset.promptSuffix;
+      // In Face Lock mode, avoid injecting "studio photography" into outdoor / non-studio scenes
+      let suffix = activePreset.promptSuffix;
+      if (referenceImage?.guidanceMode === 'face_lock' && activePreset.id === 'photorealistic') {
+        suffix = ', raw photo, ultra detailed, 8k resolution, natural lighting, sharp focus';
+      }
+      effectivePrompt += suffix;
     }
     if (selectedPalette && selectedPalette.colors.length > 0) {
       effectivePrompt += `, color palette inspired by ${selectedPalette.name} with harmonic tones (${selectedPalette.colors.join(', ')})`;
     }
 
+    // Universal high-quality negative prompt baseline to prevent distorted faces and deformed anatomy
+    const qualityNegative = 'distorted faces, blurry eyes, bad anatomy, deformed fingers, extra limbs, low resolution, artifacts';
     let effectiveNegative = advanced.negativePrompt.trim();
+    if (!effectiveNegative) {
+      effectiveNegative = qualityNegative;
+    } else if (!effectiveNegative.toLowerCase().includes('distorted faces')) {
+      effectiveNegative = `${effectiveNegative}, ${qualityNegative}`;
+    }
+
     if (activePreset?.negativeSuffix) {
-      effectiveNegative = effectiveNegative
-        ? `${effectiveNegative}${activePreset.negativeSuffix}`
-        : activePreset.negativeSuffix.replace(/^,\s*/, '');
+      effectiveNegative = `${effectiveNegative}${activePreset.negativeSuffix}`;
+    }
+
+    // In Face Lock mode, automatically suppress formal studio clothing if generating a custom scene
+    if (referenceImage?.guidanceMode === 'face_lock') {
+      const faceLockNegatives = 'suit, tuxedo, tie, blazer, formal wear, indoor, studio, dark background, watch';
+      effectiveNegative = `${effectiveNegative}, ${faceLockNegatives}`;
     }
 
     setGenerating(true);
@@ -301,6 +349,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
         sampler: advanced.sampler,
         init_image: referenceImage?.dataUrl,
         strength: referenceImage ? referenceImage.strength : undefined,
+        guidance_mode: referenceImage?.guidanceMode,
       };
 
       const res = await generateImageStream(
@@ -541,7 +590,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
             <div className="space-y-1.5">
               <label className="ui-label">Aspect Ratio</label>
               <div className="grid grid-cols-2 gap-1.5">
-                {ASPECT_RATIOS.map((ratio) => {
+                {getAdaptiveAspectRatios(selectedModel).map((ratio) => {
                   const isSel = dimensions.label === ratio.label;
                   return (
                     <button

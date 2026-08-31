@@ -7,12 +7,15 @@ import {
   Sliders,
   X,
   Plus,
+  UserCheck,
+  Layers,
 } from 'lucide-react';
 import {
   AttachedReferenceImage,
   BrandLogoConfig,
   ColorPaletteConfig,
   StylePreset,
+  GuidanceMode,
 } from '../types';
 
 export const STYLE_PRESETS: StylePreset[] = [
@@ -97,30 +100,76 @@ export const AttachmentShelf: React.FC<AttachmentShelfProps> = ({
           name: file.name,
           dataUrl,
           sizeBytes: file.size,
-          strength: 0.65,
+          strength: 0.85,
+          guidanceMode: 'face_lock',
         });
       }
     };
     reader.readAsDataURL(file);
   };
 
+  const handleToggleGuidanceMode = () => {
+    if (!referenceImage) return;
+    const nextMode: GuidanceMode =
+      referenceImage.guidanceMode === 'face_lock' ? 'style_pose' : 'face_lock';
+    onSetReferenceImage({
+      ...referenceImage,
+      guidanceMode: nextMode,
+      strength: nextMode === 'face_lock' ? 0.85 : 0.65,
+    });
+  };
+
   return (
     <div className="space-y-3">
       {/* ── Guidance & Attachments Row ── */}
       <div className="space-y-1.5">
-        <label className="ui-label">Guidance & Attachments</label>
+        <div className="flex items-center justify-between">
+          <label className="ui-label">Guidance & Attachments</label>
+          {referenceImage && (
+            <span className="text-[10px] text-brand-textMuted font-mono">
+              {referenceImage.guidanceMode === 'face_lock'
+                ? '👤 Face Locked (New Scene)'
+                : '🎨 Style & Pose (Img2Img)'}
+            </span>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {/* 1. Reference Image Attachment Pill */}
           {referenceImage ? (
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--brand-accent)]/15 border border-[var(--brand-accent)]/30 text-xs text-brand-textMain">
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[var(--brand-accent)]/15 border border-[var(--brand-accent)]/30 text-xs text-brand-textMain">
               <img
                 src={referenceImage.dataUrl}
                 alt="Ref"
-                className="w-4 h-4 object-cover rounded"
+                className="w-5 h-5 object-cover rounded shadow-sm"
               />
-              <span className="truncate max-w-[100px] text-[11px] font-medium">
+              <span className="truncate max-w-[90px] text-[11px] font-medium">
                 {referenceImage.name}
               </span>
+
+              {/* Mode Switcher Button */}
+              <button
+                type="button"
+                onClick={handleToggleGuidanceMode}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer flex items-center gap-1 ${
+                  referenceImage.guidanceMode === 'face_lock'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
+                    : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30'
+                }`}
+                title="Click to toggle between Face Lock (preserves faces in new scene) and Style/Pose (standard Img2Img)"
+              >
+                {referenceImage.guidanceMode === 'face_lock' ? (
+                  <>
+                    <UserCheck size={10} />
+                    <span>Face Lock</span>
+                  </>
+                ) : (
+                  <>
+                    <Layers size={10} />
+                    <span>Style/Pose</span>
+                  </>
+                )}
+              </button>
+
               <span className="text-[10px] text-brand-textMuted font-mono">
                 ({Math.round(referenceImage.strength * 100)}%)
               </span>
@@ -138,10 +187,10 @@ export const AttachmentShelf: React.FC<AttachmentShelfProps> = ({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-brand-bg/60 hover:bg-brand-hover border border-brand-border text-xs text-brand-textMuted hover:text-brand-textMain transition-all cursor-pointer"
-                title="Upload reference image for img2img guidance"
+                title="Upload reference photo to lock faces or guide generation"
               >
-                <ImageIcon size={12} className="text-[var(--brand-accent)]" />
-                <span>+ Image</span>
+                <UserCheck size={12} className="text-[var(--brand-accent)]" />
+                <span>+ Face / Image</span>
               </button>
               <input
                 type="file"

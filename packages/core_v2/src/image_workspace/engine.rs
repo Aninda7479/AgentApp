@@ -860,6 +860,49 @@ impl EngineManager {
         args
     }
 
+    /// Build reference image and face-lock arguments for sd-cli
+    pub fn build_reference_args(&self, req: &GenerateImageRequest) -> Vec<String> {
+        let mut args = Vec::new();
+        if let Some(ref init_img_path) = req.init_image {
+            if !init_img_path.is_empty() {
+                let strength = req.strength.unwrap_or(0.75);
+                let is_face_lock = req.guidance_mode.as_deref() == Some("face_lock");
+
+                // Check if specialized IP-Adapter face weight exists in models directory
+                let models_dir = crate::storage::settings::get_superagent_dir().join("models").join("images");
+                let ip_adapter_face = models_dir.join("ip-adapter-plus-face_sdxl.gguf");
+                let ip_adapter_sd15 = models_dir.join("ip-adapter-plus-face_sd15.gguf");
+                let clip_vision = models_dir.join("clip_vision.gguf");
+
+                if is_face_lock && ip_adapter_face.exists() && clip_vision.exists() {
+                    args.push("--ip-adapter".to_string());
+                    args.push(ip_adapter_face.to_string_lossy().to_string());
+                    args.push("--clip_vision".to_string());
+                    args.push(clip_vision.to_string_lossy().to_string());
+                    args.push("--ip-adapter-image".to_string());
+                    args.push(init_img_path.clone());
+                    args.push("--ip-adapter-strength".to_string());
+                    args.push(strength.to_string());
+                } else if is_face_lock && ip_adapter_sd15.exists() && clip_vision.exists() {
+                    args.push("--ip-adapter".to_string());
+                    args.push(ip_adapter_sd15.to_string_lossy().to_string());
+                    args.push("--clip_vision".to_string());
+                    args.push(clip_vision.to_string_lossy().to_string());
+                    args.push("--ip-adapter-image".to_string());
+                    args.push(init_img_path.clone());
+                    args.push("--ip-adapter-strength".to_string());
+                    args.push(strength.to_string());
+                } else {
+                    args.push("--init-img".to_string());
+                    args.push(init_img_path.clone());
+                    args.push("--strength".to_string());
+                    args.push(strength.to_string());
+                }
+            }
+        }
+        args
+    }
+
     /// Execute a local image generation via sd-cli asynchronously with real-time step progress streaming
     pub async fn execute_generation_streaming(
         &self,
@@ -908,6 +951,9 @@ impl EngineManager {
         let perf_args = self.build_acceleration_args(req, model_path);
         cmd.args(&perf_args);
 
+        let ref_args = self.build_reference_args(req);
+        cmd.args(&ref_args);
+
         if let Some(ref neg) = req.negative_prompt {
             if !neg.is_empty() {
                 cmd.args(["-n", neg]);
@@ -921,15 +967,6 @@ impl EngineManager {
         if let Some(ref sampler) = req.sampler {
             if !sampler.is_empty() {
                 cmd.args(["--sampling-method", sampler]);
-            }
-        }
-
-        if let Some(ref init_img_path) = req.init_image {
-            if !init_img_path.is_empty() {
-                cmd.args(["--init-img", init_img_path]);
-                if let Some(strength) = req.strength {
-                    cmd.args(["--strength", &strength.to_string()]);
-                }
             }
         }
 
@@ -1166,6 +1203,9 @@ impl EngineManager {
         let perf_args = self.build_acceleration_args(req, model_path);
         cmd.args(&perf_args);
 
+        let ref_args = self.build_reference_args(req);
+        cmd.args(&ref_args);
+
         if let Some(ref neg) = req.negative_prompt {
             if !neg.is_empty() {
                 cmd.args(["-n", neg]);
@@ -1179,15 +1219,6 @@ impl EngineManager {
         if let Some(ref sampler) = req.sampler {
             if !sampler.is_empty() {
                 cmd.args(["--sampling-method", sampler]);
-            }
-        }
-
-        if let Some(ref init_img_path) = req.init_image {
-            if !init_img_path.is_empty() {
-                cmd.args(["--init-img", init_img_path]);
-                if let Some(strength) = req.strength {
-                    cmd.args(["--strength", &strength.to_string()]);
-                }
             }
         }
 
@@ -1419,11 +1450,35 @@ mod tests {
             sampler: None,
             init_image: None,
             strength: None,
+            guidance_mode: None,
         };
         let dummy_path = PathBuf::from("sd_model.gguf");
         let args = engine.build_acceleration_args(&req, &dummy_path);
         // Ensure acceleration arguments are populated
         assert!(!args.is_empty());
+    }
+
+    #[test]
+    fn test_build_reference_args() {
+        let engine = EngineManager::new();
+        let req = GenerateImageRequest {
+            prompt: "farmers in a field".to_string(),
+            negative_prompt: None,
+            model_id: Some("sd15".to_string()),
+            mode: Some("local".to_string()),
+            width: Some(512),
+            height: Some(512),
+            steps: Some(20),
+            cfg_scale: Some(7.0),
+            seed: None,
+            sampler: None,
+            init_image: Some("test_ref.png".to_string()),
+            strength: Some(0.85),
+            guidance_mode: Some("face_lock".to_string()),
+        };
+        let args = engine.build_reference_args(&req);
+        assert!(!args.is_empty());
+        assert!(args.contains(&"--strength".to_string()) || args.contains(&"--ip-adapter-strength".to_string()));
     }
 }
 
