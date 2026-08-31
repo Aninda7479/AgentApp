@@ -25,6 +25,7 @@ import {
   Check,
   FolderOpen,
   Info,
+  MonitorSmartphone,
 } from 'lucide-react';
 import { getIpc } from '../../lib/ipc';
 import { SystemInfo, normalizeSystemInfo } from '../../logic/systemInfo';
@@ -110,22 +111,26 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
     }
   }, [hardware?.os]);
 
-  const refreshData = useCallback(async () => {
+  const refreshData = useCallback(async (checkUpdate: boolean = false) => {
     setStatusLoading(true);
     try {
       const ipc = getIpc();
-      const [status, hw, modelList, update, sys] = await Promise.all([
+      const [status, hw, modelList, sys] = await Promise.all([
         getEngineStatus(),
         getHardwareProfile(),
         listImageModels(),
-        checkEngineUpdate(),
         ipc?.invoke('system-info').catch(() => null),
       ]);
       setEngineStatus(status);
       setHardware(hw);
       setModels(modelList);
-      setUpdateInfo(update);
       if (sys) setSystemInfo(normalizeSystemInfo(sys));
+
+      if (checkUpdate) {
+        checkEngineUpdate()
+          .then((update) => setUpdateInfo(update))
+          .catch(() => {});
+      }
     } catch (err) {
       console.error('Failed to load image engine settings:', err);
     } finally {
@@ -134,14 +139,31 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
     }
   }, []);
 
+  const pollDownloadProgress = useCallback(async () => {
+    try {
+      const [status, modelList] = await Promise.all([
+        getEngineStatus(),
+        listImageModels(),
+      ]);
+      setEngineStatus(status);
+      setModels(modelList);
+    } catch {}
+  }, []);
+
   useEffect(() => {
-    refreshData();
-    // Poll while downloading engine or models
-    const interval = setInterval(() => {
-      refreshData();
-    }, 2500);
-    return () => clearInterval(interval);
+    refreshData(true);
   }, [refreshData]);
+
+  // Only poll when actively downloading engine or models
+  const isDownloadingAny = engineStatus.is_downloading || models.some((m) => m.is_downloading);
+  useEffect(() => {
+    if (!isDownloadingAny) return;
+
+    const interval = setInterval(() => {
+      pollDownloadProgress();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [isDownloadingAny, pollDownloadProgress]);
 
   // Actions
   const handleInstallEngine = async () => {
@@ -641,6 +663,18 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
             sub="Auto-matched for your hardware"
           />
         </div>
+
+        {(hardware?.npu_detected || systemInfo?.npuTpu?.detected) && (
+          <div className="mt-3.5 flex items-center gap-2 rounded bg-brand-bg/60 px-3 py-1.5 border border-brand-border text-xs text-brand-textMuted">
+            <MonitorSmartphone size={14} className="text-[var(--brand-accent)]" />
+            <span>
+              AI Accelerator Detected:{' '}
+              <strong className="text-brand-textMain">
+                {hardware?.npu_label || systemInfo?.npuTpu?.label || 'Intel AI Boost (NPU)'}
+              </strong>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ── Collapsible Engine Settings ─────────────────────────────────── */}

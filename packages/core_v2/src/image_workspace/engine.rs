@@ -1,6 +1,5 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
@@ -56,6 +55,8 @@ pub struct EngineManager {
     download_progress: Arc<RwLock<f32>>,
     last_error: Arc<RwLock<Option<String>>>,
 }
+
+static HARDWARE_PROFILE_CACHE: std::sync::Mutex<Option<(std::time::Instant, HardwareProfile)>> = std::sync::Mutex::new(None);
 
 impl EngineManager {
     pub fn new() -> Self {
@@ -200,6 +201,15 @@ impl EngineManager {
 
     /// Detect system hardware (OS, GPU, VRAM, RAM, Storage) and recommend backend & model
     pub fn detect_hardware() -> HardwareProfile {
+        {
+            let lock = HARDWARE_PROFILE_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some((instant, ref hw)) = *lock {
+                if instant.elapsed() < std::time::Duration::from_secs(30) {
+                    return hw.clone();
+                }
+            }
+        }
+
         let mut sys = System::new_all();
         sys.refresh_all();
 
@@ -208,13 +218,18 @@ impl EngineManager {
         let total_ram_mb = sys.total_memory() / (1024 * 1024);
         let available_ram_mb = Some(sys.available_memory() / (1024 * 1024));
 
+        let cpu_brand = sys.cpus().first().map(|c| c.brand().to_string()).unwrap_or_default();
+        let npu_info = crate::server::routes::system::detect_npu_tpu(&cpu_brand);
+        let npu_detected = npu_info.get("detected").and_then(|v| v.as_bool());
+        let npu_label = npu_info.get("label").and_then(|v| v.as_str()).map(|s| s.to_string()).filter(|s| !s.is_empty());
+
         let mut gpu_name: Option<String> = None;
         let mut vram_mb: Option<u64> = None;
 
         // Try detecting GPU on Windows via powershell WMI or nvidia-smi
         #[cfg(windows)]
         {
-            if let Ok(output) = Command::new("powershell")
+            if let Ok(output) = crate::server::routes::system::silent_command("powershell")
                 .args(["-NoProfile", "-Command", "Get-CimInstance Win32_VideoController | Select-Object -First 1 -ExpandProperty Name"])
                 .output()
             {
@@ -225,7 +240,7 @@ impl EngineManager {
             }
 
             // Try nvidia-smi for VRAM
-            if let Ok(output) = Command::new("nvidia-smi")
+            if let Ok(output) = crate::server::routes::system::silent_command("nvidia-smi")
                 .args(["--query-gpu=memory.total", "--format=csv,noheader,nounits"])
                 .output()
             {
@@ -251,7 +266,7 @@ impl EngineManager {
         // Linux GPU detection
         #[cfg(target_os = "linux")]
         {
-            if let Ok(output) = Command::new("nvidia-smi")
+            if let Ok(output) = crate::server::routes::system::silent_command("nvidia-smi")
                 .args(["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"])
                 .output()
             {
@@ -331,7 +346,7 @@ impl EngineManager {
             "sd15".to_string()
         };
 
-        HardwareProfile {
+        let profile = HardwareProfile {
             os,
             arch,
             gpu_name,
@@ -343,7 +358,13 @@ impl EngineManager {
             storage_free_gb,
             storage_total_gb,
             storage_mount,
-        }
+            npu_detected,
+            npu_label,
+        };
+
+        let mut lock = HARDWARE_PROFILE_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        *lock = Some((std::time::Instant::now(), profile.clone()));
+        profile
     }
 
     /// Install or download the stable-diffusion.cpp engine from upstream GitHub Releases
@@ -695,7 +716,7 @@ impl EngineManager {
         let steps = req.steps.unwrap_or(20);
         let cfg_scale = req.cfg_scale.unwrap_or(7.0);
 
-        let mut cmd = Command::new(&bin);
+        let mut cmd = crate::server::routes::system::silent_command(&bin);
         cmd.args([
             "-m",
             &model_path.to_string_lossy(),

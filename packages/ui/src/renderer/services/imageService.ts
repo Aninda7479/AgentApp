@@ -12,6 +12,8 @@ export interface HardwareProfile {
   storage_free_gb?: number;
   storage_total_gb?: number;
   storage_mount?: string;
+  npu_detected?: boolean;
+  npu_label?: string;
 }
 
 export interface EngineStatus {

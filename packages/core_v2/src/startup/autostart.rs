@@ -23,7 +23,9 @@ impl AutostartManager {
                 AutostartTarget::Cli => Self::APP_NAME_CLI,
             };
 
-            let output = tokio::process::Command::new("reg")
+            let mut cmd = tokio::process::Command::new("reg");
+            cmd.creation_flags(0x08000000);
+            let output = cmd
                 .args(["query", Self::REG_KEY, "/v", app_name])
                 .output()
                 .await;
@@ -51,7 +53,9 @@ impl AutostartManager {
                 AutostartTarget::Cli => Self::APP_NAME_CLI,
             };
 
-            let status = tokio::process::Command::new("reg")
+            let mut cmd = tokio::process::Command::new("reg");
+            cmd.creation_flags(0x08000000);
+            let status = cmd
                 .args(["add", Self::REG_KEY, "/v", app_name, "/t", "REG_SZ", "/d", exec_path, "/f"])
                 .status()
                 .await?;
@@ -78,7 +82,9 @@ impl AutostartManager {
                 AutostartTarget::Cli => Self::APP_NAME_CLI,
             };
 
-            let _ = tokio::process::Command::new("reg")
+            let mut cmd = tokio::process::Command::new("reg");
+            cmd.creation_flags(0x08000000);
+            let _ = cmd
                 .args(["delete", Self::REG_KEY, "/v", app_name, "/f"])
                 .status()
                 .await;

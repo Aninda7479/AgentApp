@@ -107,6 +107,8 @@ impl Tool for RunCommandTool {
 
         let mut cmd = if cfg!(target_os = "windows") {
             let mut c = Command::new("powershell");
+            #[cfg(target_os = "windows")]
+            c.creation_flags(0x08000000);
             c.args(["-NoProfile", "-Command", command_str]);
             c
         } else {

@@ -47,6 +47,8 @@ impl McpClient {
         envs: Option<HashMap<String, String>>,
     ) -> Result<Self> {
         let mut cmd = Command::new(command);
+        #[cfg(target_os = "windows")]
+        cmd.creation_flags(0x08000000);
         cmd.args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

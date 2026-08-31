@@ -36,6 +36,16 @@ pub fn check_ollama_port_listening() -> bool {
     false
 }
 
+pub fn silent_command<S: AsRef<std::ffi::OsStr>>(program: S) -> std::process::Command {
+    let mut cmd = std::process::Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    cmd
+}
+
 static OLLAMA_STATIC_CACHE: std::sync::Mutex<Option<(bool, Option<String>, Option<String>)>> = std::sync::Mutex::new(None);
 
 fn do_detect_ollama_installation() -> (bool, Option<String>, Option<String>) {
@@ -89,9 +99,9 @@ fn do_detect_ollama_installation() -> (bool, Option<String>, Option<String>) {
 
     if !installed {
         #[cfg(target_os = "windows")]
-        let cmd = std::process::Command::new("where").arg("ollama.exe").output();
+        let cmd = silent_command("where").arg("ollama.exe").output();
         #[cfg(not(target_os = "windows"))]
-        let cmd = std::process::Command::new("which").arg("ollama").output();
+        let cmd = silent_command("which").arg("ollama").output();
 
         if let Ok(output) = cmd {
             if output.status.success() {
@@ -111,7 +121,7 @@ fn do_detect_ollama_installation() -> (bool, Option<String>, Option<String>) {
     }
 
     let exec_cmd = path.clone().unwrap_or_else(|| "ollama".to_string());
-    if let Ok(ver_output) = std::process::Command::new(&exec_cmd).arg("--version").output() {
+    if let Ok(ver_output) = silent_command(&exec_cmd).arg("--version").output() {
         if ver_output.status.success() {
             installed = true;
             let ver_str = String::from_utf8_lossy(&ver_output.stdout).trim().to_string();
@@ -314,11 +324,11 @@ pub fn start_ollama_daemon() -> Result<bool, String> {
     #[cfg(target_os = "windows")]
     {
         if let Some(ref exe) = exe_path {
-            let _ = std::process::Command::new("cmd")
+            let _ = silent_command("cmd")
                 .args(["/C", "start", "/B", exe, "serve"])
                 .spawn();
         } else {
-            let _ = std::process::Command::new("cmd")
+            let _ = silent_command("cmd")
                 .args(["/C", "start", "/B", "ollama", "serve"])
                 .spawn();
         }
@@ -362,13 +372,24 @@ pub fn start_ollama_daemon() -> Result<bool, String> {
     Ok(check_ollama_port_listening())
 }
 
+static GPU_CACHE: std::sync::Mutex<Option<(std::time::Instant, Vec<serde_json::Value>)>> = std::sync::Mutex::new(None);
+
 #[allow(unused_variables)]
 pub fn detect_system_gpus(is_unified: bool, ram_gb: f64) -> Vec<serde_json::Value> {
+    {
+        let lock = GPU_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((instant, ref gpus)) = *lock {
+            if instant.elapsed() < Duration::from_secs(30) {
+                return gpus.clone();
+            }
+        }
+    }
+
     let mut gpus = Vec::new();
 
     #[cfg(target_os = "windows")]
     {
-        if let Ok(out) = std::process::Command::new("powershell")
+        if let Ok(out) = silent_command("powershell")
             .args(["-NoProfile", "-Command", "Get-CimInstance Win32_VideoController | Select-Object -Property Name, AdapterRAM | ConvertTo-Json"])
             .output()
         {
@@ -407,7 +428,7 @@ pub fn detect_system_gpus(is_unified: bool, ram_gb: f64) -> Vec<serde_json::Valu
 
     #[cfg(target_os = "linux")]
     {
-        if let Ok(out) = std::process::Command::new("nvidia-smi")
+        if let Ok(out) = silent_command("nvidia-smi")
             .args(["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"])
             .output()
         {
@@ -428,45 +449,157 @@ pub fn detect_system_gpus(is_unified: bool, ram_gb: f64) -> Vec<serde_json::Valu
         }
     }
 
+    let mut lock = GPU_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    *lock = Some((std::time::Instant::now(), gpus.clone()));
     gpus
 }
 
+static NPU_CACHE: std::sync::Mutex<Option<(std::time::Instant, serde_json::Value)>> = std::sync::Mutex::new(None);
+
 pub fn detect_npu_tpu(cpu_brand: &str) -> serde_json::Value {
+    {
+        let lock = NPU_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((instant, ref val)) = *lock {
+            if instant.elapsed() < Duration::from_secs(60) {
+                return val.clone();
+            }
+        }
+    }
+
     let lower = cpu_brand.to_lowercase();
     let arch = std::env::consts::ARCH;
 
+    // 1. macOS Apple Silicon Neural Engine
     if lower.contains("apple") || (cfg!(target_os = "macos") && arch == "aarch64") {
-        return serde_json::json!({
+        let res = serde_json::json!({
             "detected": true,
             "label": "Apple Neural Engine (ANE)"
         });
+        let mut lock = NPU_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        *lock = Some((std::time::Instant::now(), res.clone()));
+        return res;
     }
-    if lower.contains("ultra") || (lower.contains("intel") && lower.contains("core ultra")) {
-        return serde_json::json!({
+
+    // 2. CPU descriptor matching
+    if lower.contains("ultra") || lower.contains("ai boost") || (lower.contains("intel") && (lower.contains("core ultra") || lower.contains("meteor lake") || lower.contains("lunar lake") || lower.contains("arrow lake") || lower.contains("panther lake"))) {
+        let res = serde_json::json!({
             "detected": true,
             "label": "Intel AI Boost (NPU)"
         });
+        let mut lock = NPU_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        *lock = Some((std::time::Instant::now(), res.clone()));
+        return res;
     }
-    if lower.contains("ryzen ai") || lower.contains("8040") || lower.contains("8845") || lower.contains("8945") || lower.contains("hx 370") {
-        return serde_json::json!({
+
+    if lower.contains("ryzen ai") || lower.contains("xdna") || lower.contains("hx 370") || lower.contains("hx 365") || lower.contains("ai 9") || lower.contains("ai 7") || lower.contains("ai 5") || lower.contains("ai max") || lower.contains("8040") || lower.contains("8845") || lower.contains("8945") || lower.contains("8645") || lower.contains("8540") || lower.contains("7940") || lower.contains("7840") || lower.contains("7640") {
+        let res = serde_json::json!({
             "detected": true,
             "label": "AMD XDNA NPU (Ryzen AI)"
         });
+        let mut lock = NPU_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        *lock = Some((std::time::Instant::now(), res.clone()));
+        return res;
     }
-    if lower.contains("snapdragon") || lower.contains("x elite") || lower.contains("x plus") {
-        return serde_json::json!({
+
+    if lower.contains("snapdragon") || lower.contains("x elite") || lower.contains("x plus") || lower.contains("hexagon") || lower.contains("x1e") || lower.contains("x1p") {
+        let res = serde_json::json!({
             "detected": true,
             "label": "Qualcomm Hexagon NPU"
         });
+        let mut lock = NPU_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        *lock = Some((std::time::Instant::now(), res.clone()));
+        return res;
     }
 
-    serde_json::json!({
+    if lower.contains("coral") || lower.contains("edge tpu") {
+        let res = serde_json::json!({
+            "detected": true,
+            "label": "Google Coral Edge TPU"
+        });
+        let mut lock = NPU_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        *lock = Some((std::time::Instant::now(), res.clone()));
+        return res;
+    }
+
+    // 3. Platform Device Enumeration on Windows
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(out) = silent_command("powershell")
+            .args(["-NoProfile", "-Command", "Get-CimInstance Win32_PnPEntity | Where-Object { $_.Name -match 'AI Boost|Intel.*NPU|Neural.*Engine|Ryzen AI|AMD IPU|XDNA|Hexagon|Coral|Edge TPU|DirectML' } | Select-Object -First 1 -ExpandProperty Name"])
+            .output()
+        {
+            if out.status.success() {
+                let dev_name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !dev_name.is_empty() {
+                    let d_lower = dev_name.to_lowercase();
+                    let label = if d_lower.contains("ai boost") || d_lower.contains("intel") {
+                        "Intel AI Boost (NPU)".to_string()
+                    } else if d_lower.contains("xdna") || d_lower.contains("ipu") || d_lower.contains("ryzen") {
+                        "AMD XDNA NPU (Ryzen AI)".to_string()
+                    } else if d_lower.contains("hexagon") || d_lower.contains("snapdragon") {
+                        "Qualcomm Hexagon NPU".to_string()
+                    } else if d_lower.contains("coral") || d_lower.contains("tpu") {
+                        "Google Coral Edge TPU".to_string()
+                    } else {
+                        format!("{} (NPU)", dev_name)
+                    };
+
+                    let res = serde_json::json!({
+                        "detected": true,
+                        "label": label
+                    });
+                    let mut lock = NPU_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+                    *lock = Some((std::time::Instant::now(), res.clone()));
+                    return res;
+                }
+            }
+        }
+    }
+
+    // 4. Linux Kernel Accelerator Subsystem check
+    #[cfg(target_os = "linux")]
+    {
+        if std::path::Path::new("/dev/accel").exists() || std::path::Path::new("/sys/class/accel").exists() {
+            let res = serde_json::json!({
+                "detected": true,
+                "label": "Linux NPU / Compute Accelerator (/dev/accel)"
+            });
+            let mut lock = NPU_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+            *lock = Some((std::time::Instant::now(), res.clone()));
+            return res;
+        }
+        if std::path::Path::new("/dev/apex_0").exists() {
+            let res = serde_json::json!({
+                "detected": true,
+                "label": "Google Coral Edge TPU (/dev/apex_0)"
+            });
+            let mut lock = NPU_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+            *lock = Some((std::time::Instant::now(), res.clone()));
+            return res;
+        }
+    }
+
+    let res = serde_json::json!({
         "detected": false,
         "label": ""
-    })
+    });
+    let mut lock = NPU_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    *lock = Some((std::time::Instant::now(), res.clone()));
+    res
 }
 
+static SYSTEM_INFO_CACHE: std::sync::Mutex<Option<(std::time::Instant, serde_json::Value)>> = std::sync::Mutex::new(None);
+
 pub fn get_full_system_info_value() -> serde_json::Value {
+    {
+        let lock = SYSTEM_INFO_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((instant, ref val)) = *lock {
+            if instant.elapsed() < Duration::from_secs(3) {
+                return val.clone();
+            }
+        }
+    }
+
     let mut sys = System::new_all();
     sys.refresh_all();
 
@@ -527,7 +660,7 @@ pub fn get_full_system_info_value() -> serde_json::Value {
     let ollama = detect_ollama_installation();
     let hostname = System::host_name().unwrap_or_else(|| "localhost".to_string());
 
-    serde_json::json!({
+    let res = serde_json::json!({
         "os_name": os_name,
         "os_version": os_version,
         "arch": std::env::consts::ARCH,
@@ -553,7 +686,11 @@ pub fn get_full_system_info_value() -> serde_json::Value {
         "npuTpu": npu_tpu,
         "npu_tpu": npu_tpu,
         "ollama": ollama
-    })
+    });
+
+    let mut lock = SYSTEM_INFO_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    *lock = Some((std::time::Instant::now(), res.clone()));
+    res
 }
 
 pub async fn get_system_info() -> impl IntoResponse {

@@ -40,6 +40,8 @@ pub async fn transcode_media(options: &MediaTranscodeOptions, workspace_root: &P
     }
 
     let mut cmd = Command::new("ffmpeg");
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
     cmd.arg("-y").arg("-i").arg(&resolved_input);
 
     if options.audio_only.unwrap_or(false) {

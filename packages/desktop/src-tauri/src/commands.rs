@@ -72,6 +72,16 @@ pub fn artifact_list() -> Vec<ArtifactRuntimeState> {
     items
 }
 
+fn silent_command<S: AsRef<std::ffi::OsStr>>(program: S) -> std::process::Command {
+    let mut cmd = std::process::Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    cmd
+}
+
 #[tauri::command]
 pub fn artifact_start(id: String) -> Result<ArtifactRuntimeState, String> {
     let list = artifact_list();
@@ -82,13 +92,13 @@ pub fn artifact_start(id: String) -> Result<ArtifactRuntimeState, String> {
         let entry_path = dir.join(&art.manifest.entry);
 
         if art.manifest.artifact_type == "node" {
-            let _ = std::process::Command::new("node")
+            let _ = silent_command("node")
                 .arg(&entry_path)
                 .current_dir(&dir)
                 .env("PORT", port.to_string())
                 .spawn();
         } else if art.manifest.artifact_type == "python" {
-            let _ = std::process::Command::new("python")
+            let _ = silent_command("python")
                 .arg(&entry_path)
                 .current_dir(&dir)
                 .env("PORT", port.to_string())
@@ -133,13 +143,13 @@ pub fn artifact_open(id: String) -> Result<(), String> {
             let entry_path = dir.join(&entry);
 
             if manifest.artifact_type == "node" {
-                let _ = std::process::Command::new("node")
+                let _ = silent_command("node")
                     .arg(&entry_path)
                     .current_dir(&dir)
                     .env("PORT", port.to_string())
                     .spawn();
             } else if manifest.artifact_type == "python" {
-                let _ = std::process::Command::new("python")
+                let _ = silent_command("python")
                     .arg(&entry_path)
                     .current_dir(&dir)
                     .env("PORT", port.to_string())
@@ -152,7 +162,7 @@ pub fn artifact_open(id: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        let _ = std::process::Command::new("cmd")
+        let _ = silent_command("cmd")
             .args(["/C", "start", "", &live_url])
             .spawn();
     }
@@ -185,10 +195,7 @@ pub fn artifact_open_folder() -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        let _ = std::process::Command::new("cmd")
-            .args(["/C", "start", "", &path_str])
-            .spawn();
-        let _ = std::process::Command::new("explorer")
+        let _ = silent_command("explorer")
             .arg(&path_str)
             .spawn();
     }
@@ -1150,7 +1157,7 @@ pub fn autostart_enable() -> Result<String, String> {
         if let Ok(current_exe) = std::env::current_exe() {
             let exe_str = current_exe.to_string_lossy().to_string();
             let val = format!("\"{}\" --autostart", exe_str);
-            let status = std::process::Command::new("reg")
+            let status = silent_command("reg")
                 .args(["add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "SuperAgentDesktop", "/t", "REG_SZ", "/d", &val, "/f"])
                 .status()
                 .map_err(|e| e.to_string())?;
@@ -1216,7 +1223,7 @@ pub fn autostart_enable() -> Result<String, String> {
 pub fn autostart_disable() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
-        let _ = std::process::Command::new("reg")
+        let _ = silent_command("reg")
             .args(["delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "SuperAgentDesktop", "/f"])
             .status();
         return Ok("Autostart disabled for Windows".to_string());
@@ -1249,7 +1256,7 @@ pub fn autostart_disable() -> Result<String, String> {
 pub fn autostart_is_enabled() -> bool {
     #[cfg(target_os = "windows")]
     {
-        if let Ok(output) = std::process::Command::new("reg")
+        if let Ok(output) = silent_command("reg")
             .args(["query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "SuperAgentDesktop"])
             .output()
         {
@@ -1398,7 +1405,7 @@ fn spawn_native_circle_search() -> Result<(), String> {
             for name in &candidate_names {
                 let candidate = parent.join(name);
                 if candidate.exists() {
-                    let _ = std::process::Command::new(&candidate)
+                    let _ = silent_command(&candidate)
                         .spawn()
                         .map_err(|e| format!("Failed to spawn native overlay: {}", e))?;
                     return Ok(());
@@ -1419,7 +1426,7 @@ fn spawn_native_circle_search() -> Result<(), String> {
     for rel in &dev_candidates {
         let p = std::path::PathBuf::from(rel);
         if p.exists() {
-            let _ = std::process::Command::new(&p)
+            let _ = silent_command(&p)
                 .spawn()
                 .map_err(|e| format!("Failed to spawn dev native overlay: {}", e))?;
             return Ok(());
@@ -1427,7 +1434,7 @@ fn spawn_native_circle_search() -> Result<(), String> {
     }
 
     // 3. Fallback: try PATH
-    std::process::Command::new("superagent-circle-native")
+    silent_command("superagent-circle-native")
         .spawn()
         .map(|_| ())
         .map_err(|e| format!("Native overlay binary not found: {}", e))
@@ -1533,7 +1540,7 @@ pub fn spawn_native_voice_dictation() -> Result<(), String> {
         if let Some(parent) = exe.parent() {
             let candidate = parent.join("superagent-dictation-native.exe");
             if candidate.exists() {
-                let _ = std::process::Command::new(&candidate)
+                let _ = silent_command(&candidate)
                     .spawn()
                     .map_err(|e| format!("Failed to spawn native dictation: {}", e))?;
                 return Ok(());
@@ -1553,7 +1560,7 @@ pub fn spawn_native_voice_dictation() -> Result<(), String> {
     for rel in &dev_candidates {
         let p = std::path::PathBuf::from(rel);
         if p.exists() {
-            let _ = std::process::Command::new(&p)
+            let _ = silent_command(&p)
                 .spawn()
                 .map_err(|e| format!("Failed to spawn dev native dictation: {}", e))?;
             return Ok(());
@@ -1561,7 +1568,7 @@ pub fn spawn_native_voice_dictation() -> Result<(), String> {
     }
 
     // 3. Fallback: try PATH
-    std::process::Command::new("superagent-dictation-native")
+    silent_command("superagent-dictation-native")
         .spawn()
         .map(|_| ())
         .map_err(|e| format!("Native dictation binary not found: {}", e))

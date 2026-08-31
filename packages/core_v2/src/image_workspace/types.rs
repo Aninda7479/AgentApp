@@ -33,6 +33,10 @@ pub struct HardwareProfile {
     pub storage_free_gb: Option<f64>,
     pub storage_total_gb: Option<f64>,
     pub storage_mount: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub npu_detected: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub npu_label: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
