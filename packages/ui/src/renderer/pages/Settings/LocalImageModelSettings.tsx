@@ -47,6 +47,7 @@ import {
   UpdateInfo,
   GpuBackend,
 } from '../../services/imageService';
+import { SettingsLoadingProgressBar } from '../../components/SettingsLoadingProgressBar';
 
 interface LocalImageModelSettingsProps {
   onToast?: (message: string) => void;
@@ -79,6 +80,7 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
 
   const [loading, setLoading] = useState(true);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // Settings & Engine Collapsible
@@ -138,6 +140,15 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
       setStatusLoading(false);
     }
   }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshData(true);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshData]);
 
   const pollDownloadProgress = useCallback(async () => {
     try {
@@ -432,6 +443,8 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
     return list;
   }, [catalogWithFit, storeTagFilter, storeSearch, storeRunnableOnly, storeSortBy]);
 
+  const isLoading = loading || isRefreshing;
+
   return (
     <div className="space-y-6 max-w-5xl pb-12">
       {/* ── Header ──────────────────────────────────────────────────────── */}
@@ -448,31 +461,44 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
         <div className="flex items-center gap-2">
           <button
             onClick={() => setStoreOpen(true)}
-            className="ui-btn-primary flex items-center gap-1.5 shadow-sm"
+            disabled={isLoading}
+            className="ui-btn-primary flex items-center gap-1.5 shadow-sm disabled:opacity-50"
           >
             <Sparkles size={15} />
             Explore & Download Models
           </button>
           <button
             onClick={handleOpenFolder}
-            className="ui-btn flex items-center gap-1.5"
+            disabled={isLoading}
+            className="ui-btn flex items-center gap-1.5 disabled:opacity-50"
             title="Open models directory in file manager"
           >
             <FolderOpen size={14} />
             Models Folder
           </button>
           <button
-            onClick={refreshData}
-            className="ui-btn flex items-center gap-1.5"
+            onClick={handleRefresh}
+            disabled={isLoading}
+            className="ui-btn flex items-center gap-1.5 disabled:opacity-50"
             title="Refresh hardware status and models"
           >
-            <RefreshCw size={14} className={statusLoading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>
       </div>
 
-      {/* ── Status Banner (Installation & Daemon Running State) ─────────── */}
+      {/* ── Main Content Area ───────────────────────────────────────────── */}
+      {isLoading ? (
+        <SettingsLoadingProgressBar
+          title={isRefreshing ? 'Refreshing Local Image Engine...' : 'Loading Image Engine & Hardware Budget...'}
+          description="Scanning stable-diffusion.cpp binaries, local model weights, VRAM allocation, and CUDA/Metal acceleration..."
+          isRefreshing={isRefreshing}
+          iconType="image"
+        />
+      ) : (
+        <>
+          {/* ── Status Banner (Installation & Daemon Running State) ─────────── */}
       {!engineStatus.installed ? (
         <div className="ui-card p-6 border-l-4 border-l-[color:var(--neon-attention)] bg-brand-card/90">
           <div className="flex items-start gap-4">
@@ -897,6 +923,8 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* ── Model Store Modal / Drawer (Popup to prevent page bloat) ───── */}
       {storeOpen && (

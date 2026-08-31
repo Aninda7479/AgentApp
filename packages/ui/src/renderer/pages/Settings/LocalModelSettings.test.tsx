@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { LocalModelSettings } from './LocalModelSettings';
+import { SettingsLoadingProgressBar } from '../../components/SettingsLoadingProgressBar';
 import { normalizeSystemInfo } from '../../logic/systemInfo';
 import { rankModels } from '../../logic/ollama-catalog';
 import { DEFAULT_OLLAMA_SETTINGS } from '../../logic/ollama-manager';
@@ -170,7 +171,7 @@ describe('LocalModelSettings - System Info Normalization', () => {
     expect(DEFAULT_OLLAMA_SETTINGS.keepAlive).toBe('5m');
   });
 
-  it('renders LocalModelSettings component without crashing when systemInfo is empty', () => {
+  it('renders LocalModelSettings loading progress bar and hides details while loading', () => {
     const html = renderToStaticMarkup(
       <LocalModelSettings
         connectedProviders={[]}
@@ -183,6 +184,11 @@ describe('LocalModelSettings - System Info Normalization', () => {
     expect(html).toContain('Local AI Models');
     expect(html).toContain('Ollama');
     expect(html).toContain('Explore &amp; Download Models');
+    expect(html).toContain('settings-loading-progress-bar');
+    expect(html).toContain('Loading Local AI Models &amp; Hardware Profile...');
+    // While loading, detail sections must be hidden
+    expect(html).not.toContain('Ollama is not installed on this system');
+    expect(html).not.toContain('Hardware &amp; Inference Budget');
   });
 
   it('reliably returns catalog models across multiple domains without CORS failure', async () => {
@@ -289,5 +295,41 @@ describe('LocalModelSettings - System Info Normalization', () => {
     expect(cloudModel?.needGB).toBe(0);
     expect(cloudModel?.reason).toContain('Cloud');
     expect(cloudModel?.isHardwareRecommended).toBe(false);
+  });
+});
+
+describe('SettingsLoadingProgressBar Component', () => {
+  it('renders loading progress bar with default title and description', () => {
+    const html = renderToStaticMarkup(
+      <SettingsLoadingProgressBar />
+    );
+    expect(html).toContain('data-testid="settings-loading-progress-bar"');
+    expect(html).toContain('Loading Local AI Model Settings...');
+    expect(html).toContain('animate-settings-progress');
+    expect(html).toContain('Scanning hardware &amp; runtime');
+  });
+
+  it('renders refreshing state when isRefreshing is true', () => {
+    const html = renderToStaticMarkup(
+      <SettingsLoadingProgressBar
+        isRefreshing={true}
+        title="Refreshing Local AI Models..."
+        iconType="text"
+      />
+    );
+    expect(html).toContain('Refreshing Local AI Models...');
+    expect(html).toContain('Refreshing...');
+  });
+
+  it('supports image model icon and custom descriptions', () => {
+    const html = renderToStaticMarkup(
+      <SettingsLoadingProgressBar
+        title="Loading Image Engine & Hardware Budget..."
+        description="Scanning stable-diffusion.cpp binaries..."
+        iconType="image"
+      />
+    );
+    expect(html).toContain('Loading Image Engine &amp; Hardware Budget...');
+    expect(html).toContain('Scanning stable-diffusion.cpp binaries...');
   });
 });

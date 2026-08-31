@@ -57,6 +57,7 @@ import {
   DEFAULT_OLLAMA_SETTINGS,
   DEFAULT_OLLAMA_URL
 } from '../../logic/ollama-manager';
+import { SettingsLoadingProgressBar } from '../../components/SettingsLoadingProgressBar';
 
 /** Props for the Local Model (Ollama) settings panel. */
 interface LocalModelSettingsProps {
@@ -110,6 +111,7 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
     baseUrl: DEFAULT_OLLAMA_URL
   });
   const [statusLoading, setStatusLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [installed, setInstalled] = useState<InstalledModel[]>([]);
   const [runningModels, setRunningModels] = useState<RunningModelInfo[]>([]);
@@ -299,11 +301,16 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
   }, [catalog, systemInfo]);
 
   const refreshAll = async () => {
-    await loadSystemInfo();
-    await loadSettingsData();
-    await checkStatusAndModels();
-    if (catalog.length > 0) {
-      await loadCatalogData();
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        loadSystemInfo(),
+        loadSettingsData(),
+        checkStatusAndModels(),
+        catalog.length > 0 ? loadCatalogData() : Promise.resolve()
+      ]);
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -458,6 +465,8 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
     return copy;
   }, [ranked, storeRunnableOnly, storeTagFilter, storeSearch, storeSortBy]);
 
+  const isLoading = systemLoading || statusLoading || isRefreshing;
+
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
       {/* ── Header ──────────────────────────────────────────────────────── */}
@@ -477,23 +486,35 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
               if (catalog.length === 0) loadCatalogData();
               setStoreOpen(true);
             }}
-            className="ui-btn-primary flex items-center gap-1.5 shadow-sm"
+            disabled={isLoading}
+            className="ui-btn-primary flex items-center gap-1.5 shadow-sm disabled:opacity-50"
           >
             <Sparkles size={15} />
             Explore & Download Models
           </button>
           <button
             onClick={refreshAll}
-            className="ui-btn flex items-center gap-1.5"
+            disabled={isLoading}
+            className="ui-btn flex items-center gap-1.5 disabled:opacity-50"
             title="Refresh hardware, status and models"
           >
-            <RefreshCw size={14} className={statusLoading || systemLoading ? 'animate-spin' : ''} />
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>
       </div>
 
-      {/* ── Status Banner (Installation & Daemon Running State) ─────────── */}
+      {/* ── Main Content Area ───────────────────────────────────────────── */}
+      {isLoading ? (
+        <SettingsLoadingProgressBar
+          title={isRefreshing ? 'Refreshing Local AI Models...' : 'Loading Local AI Models & Hardware Profile...'}
+          description="Probing Ollama daemon, scanning installed model weights, GPU acceleration, and system memory limits..."
+          isRefreshing={isRefreshing}
+          iconType="text"
+        />
+      ) : (
+        <>
+          {/* ── Status Banner (Installation & Daemon Running State) ─────────── */}
       {!ollamaStatus.installed ? (
         <div className="ui-card p-6 border-l-4 border-l-[color:var(--neon-attention)] bg-brand-card/90">
           <div className="flex items-start gap-4">
@@ -1006,6 +1027,8 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* ── Model Store Modal / Drawer (Popup to prevent page bloat) ───── */}
       {storeOpen && (

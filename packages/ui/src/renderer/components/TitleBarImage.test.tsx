@@ -46,14 +46,16 @@ describe('ImageWorkspacePage Component', () => {
 });
 
 describe('LocalImageModelSettings Component', () => {
-  it('renders Local Image Model settings panel with engine and model catalog', () => {
+  it('renders loading progress bar while loading and hides detail panels', () => {
     const html = renderToStaticMarkup(
       <LocalImageModelSettings onToast={vi.fn()} />
     );
     expect(html).toContain('Local Image Model');
-    expect(html).toContain('stable-diffusion.cpp');
-    expect(html).toContain('Install Image Engine');
-    expect(html).toContain('Installed Image Models');
-    expect(html).toContain('Hardware &amp; Diffusion Budget');
+    expect(html).toContain('Explore &amp; Download Models');
+    expect(html).toContain('settings-loading-progress-bar');
+    expect(html).toContain('Loading Image Engine &amp; Hardware Budget...');
+    // While loading, detail sections must be hidden
+    expect(html).not.toContain('Install Image Engine');
+    expect(html).not.toContain('Installed Image Models');
   });
 });
