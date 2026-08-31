@@ -1171,16 +1171,30 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
                             )}
                             
                             {fit === 'best' && !isHardwareRecommended && (
-                              <span className="ui-badge bg-[color:var(--neon-constructive)]/15 text-[color:var(--neon-constructive)]">
-                                Best Performance
+                              <span className="ui-badge bg-[color:var(--neon-constructive)]/15 text-[color:var(--neon-constructive)] font-semibold flex items-center gap-1">
+                                <Check size={11} /> Best Performance
                               </span>
                             )}
                             {fit === 'runnable' && (
-                              <span className="ui-badge bg-brand-popover text-brand-textMuted">Runnable</span>
+                              <span className="ui-badge bg-[color:var(--neon-constructive)]/15 text-[color:var(--neon-constructive)] font-medium flex items-center gap-1">
+                                <Zap size={11} /> Runnable
+                              </span>
+                            )}
+                            {fit === 'quantized' && (
+                              <>
+                                <span className="ui-badge bg-amber-500/15 text-amber-400 border border-amber-500/30 font-medium flex items-center gap-1 text-[11px]">
+                                  <Sliders size={11} /> Quantized Runnable
+                                </span>
+                                {(systemInfo?.vramBudgetGB ?? 0) > 0 && needGB > (systemInfo?.vramBudgetGB ?? 0) && (
+                                  <span className="ui-badge bg-orange-500/15 text-orange-400 border border-orange-500/30 font-medium flex items-center gap-1 text-[11px]">
+                                    <CircleAlert size={10} /> VRAM Overflow
+                                  </span>
+                                )}
+                              </>
                             )}
                             {fit === 'too-large' && (
-                              <span className="ui-badge bg-[color:var(--neon-attention)]/15 text-[color:var(--neon-attention)]">
-                                Heavy (Low RAM)
+                              <span className="ui-badge bg-[color:var(--neon-attention)]/15 text-[color:var(--neon-attention)] border border-[color:var(--neon-attention)]/30 font-semibold flex items-center gap-1">
+                                <CircleAlert size={11} /> Memory Overflow
                               </span>
                             )}
 
@@ -1242,6 +1256,8 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
                                   ? 'Start Ollama to download'
                                   : fit === 'too-large'
                                   ? 'Exceeds system memory'
+                                  : fit === 'quantized'
+                                  ? `Download ${model.name} (Runs quantized with CPU offload)`
                                   : `Download ${model.name}`
                               }
                             >

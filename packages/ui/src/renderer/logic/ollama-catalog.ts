@@ -53,6 +53,8 @@ export interface OllamaCatalogModel {
   isCloud?: boolean;
 }
 
+export type ModelFit = 'best' | 'runnable' | 'quantized' | 'too-large';
+
 export interface RankedModel {
   model: OllamaCatalogModel;
   fit: ModelFit;
@@ -327,7 +329,18 @@ async function fetchText(url: string): Promise<string | null> {
 }
 
 export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
-  // Llama family
+  // ── Llama 3.3, 3.2, 3.1 & CodeLlama family ─────────────────────────────────
+  {
+    name: 'llama3.3:70b',
+    family: 'Llama 3.3',
+    params: '70B',
+    diskGB: 42.0,
+    contextK: 128,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: "Meta's flagship open-weights 70B model with industry-leading intelligence across reasoning, agents and coding.",
+    tags: ['chat', 'tools', 'thinking', 'reasoning', 'instruct']
+  },
   {
     name: 'llama3.2:1b',
     family: 'Llama 3.2',
@@ -358,19 +371,19 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     contextK: 128,
     inputModalities: ['text', 'image'],
     outputModalities: ['text'],
-    description: 'Multimodal model capable of visual understanding, chart analysis, and image reasoning.',
+    description: 'Multimodal model capable of visual understanding, chart analysis, document OCR, and image reasoning.',
     tags: ['vision', 'tools', 'chat']
   },
   {
-    name: 'llama3.3:70b',
-    family: 'Llama 3.3',
-    params: '70B',
-    diskGB: 42.0,
+    name: 'llama3.2-vision:90b',
+    family: 'Llama 3.2 Vision',
+    params: '90B',
+    diskGB: 55.0,
     contextK: 128,
-    inputModalities: ['text'],
+    inputModalities: ['text', 'image'],
     outputModalities: ['text'],
-    description: "Meta's flagship open-weights 70B model with industry-leading intelligence across reasoning and coding.",
-    tags: ['chat', 'tools', 'thinking', 'reasoning', 'instruct']
+    description: 'Frontier-grade multimodal visual intelligence for complex diagrammatic, document, and image reasoning.',
+    tags: ['vision', 'tools', 'thinking', 'reasoning']
   },
   {
     name: 'llama3.1:8b',
@@ -380,7 +393,7 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     contextK: 128,
     inputModalities: ['text'],
     outputModalities: ['text'],
-    description: 'Versatile 8B model with 128k context window, excellent general conversational abilities and tools.',
+    description: 'Versatile 8B model with 128k context window, excellent general conversational abilities and structured tool calling.',
     tags: ['chat', 'tools', 'instruct']
   },
   {
@@ -391,11 +404,99 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     contextK: 128,
     inputModalities: ['text'],
     outputModalities: ['text'],
-    description: 'High-capability 70B model with 128k context window for complex synthesis and agent workflows.',
+    description: 'High-capability 70B model with 128k context window for complex synthesis, deep reasoning, and agent workflows.',
     tags: ['chat', 'tools', 'reasoning']
   },
+  {
+    name: 'llama3.1:405b',
+    family: 'Llama 3.1',
+    params: '405B',
+    diskGB: 243.0,
+    contextK: 128,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: "Meta's peak 405B frontier open-weights flagship rivaling proprietary closed frontier models.",
+    tags: ['thinking', 'reasoning', 'tools', 'code']
+  },
+  {
+    name: 'codellama:7b',
+    family: 'Code Llama',
+    params: '7B',
+    diskGB: 3.8,
+    contextK: 16,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Code-specialized Llama model for infilling, syntax generation, and multi-language script synthesis.',
+    tags: ['code', 'chat', 'instruct']
+  },
+  {
+    name: 'codellama:13b',
+    family: 'Code Llama',
+    params: '13B',
+    diskGB: 7.4,
+    contextK: 16,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Medium-size code specialist for multi-file code editing and debugging.',
+    tags: ['code', 'tools', 'reasoning']
+  },
+  {
+    name: 'codellama:34b',
+    family: 'Code Llama',
+    params: '34B',
+    diskGB: 19.0,
+    contextK: 16,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Powerful 34B code intelligence for deep architecture understanding and algorithmic design.',
+    tags: ['code', 'tools', 'reasoning']
+  },
+  {
+    name: 'codellama:70b',
+    family: 'Code Llama',
+    params: '70B',
+    diskGB: 39.0,
+    contextK: 16,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Meta’s 70B code foundation model trained on 1TB+ code tokens for industrial software development.',
+    tags: ['code', 'tools', 'reasoning']
+  },
+  {
+    name: 'llama2:7b',
+    family: 'Llama 2',
+    params: '7B',
+    diskGB: 3.8,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Classic foundational 7B conversational model fine-tuned for dialog safety and assistant tasks.',
+    tags: ['chat', 'instruct']
+  },
+  {
+    name: 'llama2:13b',
+    family: 'Llama 2',
+    params: '13B',
+    diskGB: 7.4,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Balanced 13B Llama 2 model with robust conversational flow and general knowledge.',
+    tags: ['chat', 'instruct']
+  },
+  {
+    name: 'llama2:70b',
+    family: 'Llama 2',
+    params: '70B',
+    diskGB: 39.0,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Foundational 70B model with broad general intelligence and factual recall.',
+    tags: ['chat', 'reasoning']
+  },
 
-  // DeepSeek Reasoning family
+  // ── DeepSeek Reasoning & Coding family ──────────────────────────────────────
   {
     name: 'deepseek-r1:1.5b',
     family: 'DeepSeek R1',
@@ -462,8 +563,162 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     description: 'Frontier-grade reasoning model with exhaustive chain-of-thought mathematical proofing.',
     tags: ['thinking', 'reasoning', 'math', 'chat']
   },
+  {
+    name: 'deepseek-r1:671b',
+    family: 'DeepSeek R1',
+    params: '671B',
+    diskGB: 404.0,
+    contextK: 64,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Full un-distilled 671B MoE reasoning model with 37B active parameters and breakthrough benchmark performance.',
+    tags: ['thinking', 'reasoning', 'math', 'code']
+  },
+  {
+    name: 'deepseek-coder-v2:16b',
+    family: 'DeepSeek Coder V2',
+    params: '16B',
+    diskGB: 8.9,
+    contextK: 128,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Mixture-of-Experts 16B code model (2.4B active params) supporting 338+ programming languages and 128k context.',
+    tags: ['code', 'tools', 'thinking', 'reasoning']
+  },
+  {
+    name: 'deepseek-coder-v2:236b',
+    family: 'DeepSeek Coder V2',
+    params: '236B',
+    diskGB: 133.0,
+    contextK: 128,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Large MoE coding frontier model (21B active params) rivaling top proprietary code models.',
+    tags: ['code', 'tools', 'reasoning']
+  },
+  {
+    name: 'deepseek-coder:6.7b',
+    family: 'DeepSeek Coder',
+    params: '6.7B',
+    diskGB: 3.8,
+    contextK: 16,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Compact code completion and instruction model trained on project-level repositories.',
+    tags: ['code', 'tools']
+  },
+  {
+    name: 'deepseek-coder:33b',
+    family: 'DeepSeek Coder',
+    params: '33B',
+    diskGB: 19.0,
+    contextK: 16,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Extensive 33B code intelligence for comprehensive software engineering and architecture design.',
+    tags: ['code', 'tools', 'reasoning']
+  },
+  {
+    name: 'deepseek-v2.5:236b',
+    family: 'DeepSeek V2.5',
+    params: '236B',
+    diskGB: 133.0,
+    contextK: 128,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Integrated general conversational and coding MoE model combining deep reasoning with high efficiency.',
+    tags: ['chat', 'code', 'tools', 'reasoning']
+  },
 
-  // Qwen Code & General family
+  // ── Qwen 2.5, Qwen 2.5 Coder & QwQ family ──────────────────────────────────
+  {
+    name: 'qwen2.5:0.5b',
+    family: 'Qwen 2.5',
+    params: '0.5B',
+    diskGB: 0.4,
+    contextK: 32,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Ultra-compact 0.5B model for resource-constrained edge computing and real-time classification.',
+    tags: ['chat', 'multilingual']
+  },
+  {
+    name: 'qwen2.5:1.5b',
+    family: 'Qwen 2.5',
+    params: '1.5B',
+    diskGB: 1.0,
+    contextK: 32,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Lightweight 1.5B multilingual general intelligence model for quick local assistance.',
+    tags: ['chat', 'multilingual', 'tools']
+  },
+  {
+    name: 'qwen2.5:3b',
+    family: 'Qwen 2.5',
+    params: '3B',
+    diskGB: 1.9,
+    contextK: 32,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Compact general intelligence model with strong multilingual and structured JSON capabilities.',
+    tags: ['chat', 'tools', 'multilingual']
+  },
+  {
+    name: 'qwen2.5:7b',
+    family: 'Qwen 2.5',
+    params: '7B',
+    diskGB: 4.7,
+    contextK: 32,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Balanced 7B general foundation model with exceptional instruction and tool adherence.',
+    tags: ['chat', 'tools', 'multilingual', 'instruct']
+  },
+  {
+    name: 'qwen2.5:14b',
+    family: 'Qwen 2.5',
+    params: '14B',
+    diskGB: 9.0,
+    contextK: 32,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Strong 14B model offering frontier-grade reasoning, math proofing, and complex instruction following.',
+    tags: ['chat', 'tools', 'reasoning', 'math']
+  },
+  {
+    name: 'qwen2.5:32b',
+    family: 'Qwen 2.5',
+    params: '32B',
+    diskGB: 20.0,
+    contextK: 32,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'High-end 32B model with deep domain expertise in coding, math, and multilingual text generation.',
+    tags: ['chat', 'tools', 'reasoning', 'code']
+  },
+  {
+    name: 'qwen2.5:72b',
+    family: 'Qwen 2.5',
+    params: '72B',
+    diskGB: 47.0,
+    contextK: 32,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Flagship 72B open foundation model matching frontier closed models across knowledge benchmarks.',
+    tags: ['chat', 'tools', 'thinking', 'reasoning']
+  },
+  {
+    name: 'qwen2.5-coder:0.5b',
+    family: 'Qwen 2.5 Coder',
+    params: '0.5B',
+    diskGB: 0.4,
+    contextK: 32,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Sub-billion parameter code model for instantaneous inline autocomplete and lint fixes.',
+    tags: ['code', 'tools']
+  },
   {
     name: 'qwen2.5-coder:1.5b',
     family: 'Qwen 2.5 Coder',
@@ -473,6 +728,17 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Lightweight code assistant for inline autocomplete and fast script generation.',
+    tags: ['code', 'tools', 'chat']
+  },
+  {
+    name: 'qwen2.5-coder:3b',
+    family: 'Qwen 2.5 Coder',
+    params: '3B',
+    diskGB: 1.9,
+    contextK: 32,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Fast 3B code specialist capable of multi-language function generation and unit test drafting.',
     tags: ['code', 'tools', 'chat']
   },
   {
@@ -509,29 +775,18 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     tags: ['code', 'tools', 'reasoning']
   },
   {
-    name: 'qwen2.5:3b',
-    family: 'Qwen 2.5',
-    params: '3B',
-    diskGB: 1.9,
+    name: 'qwq:32b',
+    family: 'QwQ',
+    params: '32B',
+    diskGB: 20.0,
     contextK: 32,
     inputModalities: ['text'],
     outputModalities: ['text'],
-    description: 'Compact general intelligence model with strong multilingual and structured JSON capabilities.',
-    tags: ['chat', 'tools', 'multilingual']
-  },
-  {
-    name: 'qwen2.5:7b',
-    family: 'Qwen 2.5',
-    params: '7B',
-    diskGB: 4.7,
-    contextK: 32,
-    inputModalities: ['text'],
-    outputModalities: ['text'],
-    description: 'Balanced 7B general foundation model with exceptional instruction and tool adherence.',
-    tags: ['chat', 'tools', 'multilingual', 'instruct']
+    description: 'Qwen experimental 32B reasoning model specialized in complex mathematical proofs and logical deduction.',
+    tags: ['thinking', 'reasoning', 'math', 'code']
   },
 
-  // Mistral & Mixtral family
+  // ── Mistral, Mixtral & Codestral family ────────────────────────────────────
   {
     name: 'mistral:7b',
     family: 'Mistral',
@@ -544,6 +799,17 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     tags: ['chat', 'tools', 'instruct']
   },
   {
+    name: 'mistral-nemo:12b',
+    family: 'Mistral NeMo',
+    params: '12B',
+    diskGB: 7.1,
+    contextK: 128,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: '12B model built by Mistral AI and NVIDIA with a 128k context window and Tekken tokenizer.',
+    tags: ['chat', 'tools', 'multilingual']
+  },
+  {
     name: 'mistral-small:24b',
     family: 'Mistral Small',
     params: '24B',
@@ -554,8 +820,63 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     description: 'Mistral AI’s updated 24B parameter model fine-tuned for enterprise agent tasks and coding.',
     tags: ['chat', 'tools', 'thinking', 'reasoning', 'code']
   },
+  {
+    name: 'mistral-large:123b',
+    family: 'Mistral Large',
+    params: '123B',
+    diskGB: 69.0,
+    contextK: 128,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Mistral AI’s premier flagship model with 128k context, fluent across dozens of languages and reasoning.',
+    tags: ['chat', 'tools', 'reasoning']
+  },
+  {
+    name: 'mixtral:8x7b',
+    family: 'Mixtral',
+    params: '47B',
+    diskGB: 26.0,
+    contextK: 32,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Breakthrough 8x7B Mixture-of-Experts model using 13B active parameters per token for blazing speed.',
+    tags: ['chat', 'tools', 'code']
+  },
+  {
+    name: 'mixtral:8x22b',
+    family: 'Mixtral',
+    params: '141B',
+    diskGB: 79.0,
+    contextK: 64,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Enterprise 8x22B MoE model (39B active params) designed for multi-turn agent workflows and math.',
+    tags: ['chat', 'tools', 'reasoning', 'code']
+  },
+  {
+    name: 'codestral:22b',
+    family: 'Codestral',
+    params: '22B',
+    diskGB: 12.0,
+    contextK: 32,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Mistral AI’s 22B dedicated generative code model trained on 80+ programming languages.',
+    tags: ['code', 'tools', 'reasoning']
+  },
+  {
+    name: 'mathstral:7b',
+    family: 'Mathstral',
+    params: '7B',
+    diskGB: 4.1,
+    contextK: 32,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Mistral AI’s 7B model specialized in STEM, advanced mathematics, and step-by-step scientific problem solving.',
+    tags: ['math', 'thinking', 'reasoning']
+  },
 
-  // Gemma 2 family
+  // ── Google Gemma 2 family ──────────────────────────────────────────────────
   {
     name: 'gemma2:2b',
     family: 'Gemma 2',
@@ -578,8 +899,41 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     description: 'Google’s 9B model built on Gemini architecture, highly competitive against larger models.',
     tags: ['chat', 'tools', 'reasoning']
   },
+  {
+    name: 'gemma2:27b',
+    family: 'Gemma 2',
+    params: '27B',
+    diskGB: 16.0,
+    contextK: 8,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Google’s high-capacity 27B model delivering enterprise intelligence in a single-GPU footprint.',
+    tags: ['chat', 'tools', 'reasoning']
+  },
+  {
+    name: 'codegemma:2b',
+    family: 'CodeGemma',
+    params: '2B',
+    diskGB: 1.6,
+    contextK: 8,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Google’s lightweight model for low-latency code completion and fill-in-the-middle syntax.',
+    tags: ['code']
+  },
+  {
+    name: 'codegemma:7b',
+    family: 'CodeGemma',
+    params: '7B',
+    diskGB: 5.0,
+    contextK: 8,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Google’s 7B code model trained on billions of code tokens for multi-language programming and refactoring.',
+    tags: ['code', 'instruct']
+  },
 
-  // Microsoft Phi family
+  // ── Microsoft Phi & WizardLM family ────────────────────────────────────────
   {
     name: 'phi4:14b',
     family: 'Phi-4',
@@ -602,8 +956,265 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     description: 'Lightweight model with long 128k context and robust logical reasoning.',
     tags: ['chat', 'reasoning']
   },
+  {
+    name: 'phi3:3.8b',
+    family: 'Phi-3',
+    params: '3.8B',
+    diskGB: 2.2,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Microsoft’s classic 3.8B small language model with high benchmark efficiency.',
+    tags: ['chat', 'instruct']
+  },
+  {
+    name: 'phi3:14b',
+    family: 'Phi-3',
+    params: '14B',
+    diskGB: 7.9,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Medium 14B model by Microsoft balancing resource consumption with deep analytical reasoning.',
+    tags: ['chat', 'reasoning']
+  },
+  {
+    name: 'wizardlm2:7b',
+    family: 'WizardLM 2',
+    params: '7B',
+    diskGB: 4.1,
+    contextK: 32,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Microsoft AI’s conversational 7B model tuned for sophisticated multi-turn dialogue.',
+    tags: ['chat', 'instruct', 'reasoning']
+  },
+  {
+    name: 'wizardlm2:8x22b',
+    family: 'WizardLM 2',
+    params: '141B',
+    diskGB: 80.0,
+    contextK: 64,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Premier open-source MoE model trained with synthetic data for frontier multi-domain intelligence.',
+    tags: ['chat', 'tools', 'thinking', 'reasoning']
+  },
 
-  // Lightweight & Edge Models
+  // ── IBM Granite & Cohere Command-R family ──────────────────────────────────
+  {
+    name: 'granite3-dense:2b',
+    family: 'Granite 3 Dense',
+    params: '2B',
+    diskGB: 1.5,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'IBM’s efficient 2B enterprise foundation model optimized for business workflows and tool invocation.',
+    tags: ['chat', 'tools', 'instruct']
+  },
+  {
+    name: 'granite3-dense:8b',
+    family: 'Granite 3 Dense',
+    params: '8B',
+    diskGB: 4.9,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'IBM’s 8B enterprise model with robust safety guardrails, function calling, and structured JSON output.',
+    tags: ['chat', 'tools', 'instruct']
+  },
+  {
+    name: 'granite-code:8b',
+    family: 'Granite Code',
+    params: '8B',
+    diskGB: 4.6,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'IBM’s 8B code model trained on 116 programming languages for enterprise software development.',
+    tags: ['code', 'tools']
+  },
+  {
+    name: 'granite-code:20b',
+    family: 'Granite Code',
+    params: '20B',
+    diskGB: 12.0,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'IBM’s 20B code intelligence for large-scale enterprise modernization, code translation, and testing.',
+    tags: ['code', 'tools', 'reasoning']
+  },
+  {
+    name: 'command-r:35b',
+    family: 'Command R',
+    params: '35B',
+    diskGB: 20.0,
+    contextK: 128,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Cohere’s 35B model engineered specifically for retrieval-augmented generation (RAG) and tool use.',
+    tags: ['tools', 'chat', 'multilingual']
+  },
+  {
+    name: 'command-r-plus:104b',
+    family: 'Command R+',
+    params: '104B',
+    diskGB: 59.0,
+    contextK: 128,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Cohere’s state-of-the-art enterprise 104B RAG powerhouse with multilingual verification and multi-step tool use.',
+    tags: ['tools', 'chat', 'reasoning', 'multilingual']
+  },
+
+  // ── StarCoder, Solar, Yi, Hermes & Aya family ──────────────────────────────
+  {
+    name: 'starcoder2:3b',
+    family: 'StarCoder 2',
+    params: '3B',
+    diskGB: 1.7,
+    contextK: 16,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'BigCode’s transparent 3B code generation model trained on 600+ programming languages.',
+    tags: ['code']
+  },
+  {
+    name: 'starcoder2:7b',
+    family: 'StarCoder 2',
+    params: '7B',
+    diskGB: 4.3,
+    contextK: 16,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'BigCode’s 7B code model trained on 17+ programming languages with 16k context.',
+    tags: ['code', 'tools']
+  },
+  {
+    name: 'starcoder2:15b',
+    family: 'StarCoder 2',
+    params: '15B',
+    diskGB: 9.1,
+    contextK: 16,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'BigCode’s 15B code model built with NVIDIA for full repository synthesis and understanding.',
+    tags: ['code', 'tools', 'reasoning']
+  },
+  {
+    name: 'solar:10.7b',
+    family: 'Solar',
+    params: '10.7B',
+    diskGB: 6.1,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Upstage’s 10.7B model utilizing depth up-scaling for strong reasoning and mathematical skills.',
+    tags: ['chat', 'reasoning', 'instruct']
+  },
+  {
+    name: 'solar-pro:22b',
+    family: 'Solar Pro',
+    params: '22B',
+    diskGB: 13.0,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Upstage’s 22B advanced model with high instruction adherence and multi-lingual translation.',
+    tags: ['chat', 'reasoning', 'tools']
+  },
+  {
+    name: 'yi:6b',
+    family: 'Yi',
+    params: '6B',
+    diskGB: 3.5,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: '01.AI’s compact 6B bilingual foundation model with solid reasoning metrics.',
+    tags: ['chat', 'multilingual']
+  },
+  {
+    name: 'yi:9b',
+    family: 'Yi',
+    params: '9B',
+    diskGB: 5.0,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: '01.AI’s 9B model excelling at coding, mathematics, and bilingual logic.',
+    tags: ['chat', 'reasoning', 'multilingual']
+  },
+  {
+    name: 'yi:34b',
+    family: 'Yi',
+    params: '34B',
+    diskGB: 19.0,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: '01.AI’s high-performing 34B open foundation model delivering near-frontier intelligence.',
+    tags: ['chat', 'reasoning', 'multilingual']
+  },
+  {
+    name: 'yi-coder:9b',
+    family: 'Yi Coder',
+    params: '9B',
+    diskGB: 5.0,
+    contextK: 128,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: '01.AI’s 9B dedicated code model with 128k context for repository-wide code comprehension.',
+    tags: ['code', 'tools']
+  },
+  {
+    name: 'nous-hermes2:10.7b',
+    family: 'Nous Hermes 2',
+    params: '10.7B',
+    diskGB: 6.1,
+    contextK: 4,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Nous Research’s 10.7B model trained on high-quality synthetic data for complex multi-turn chats.',
+    tags: ['chat', 'instruct', 'reasoning']
+  },
+  {
+    name: 'nous-hermes2-mixtral:8x7b',
+    family: 'Nous Hermes 2 Mixtral',
+    params: '47B',
+    diskGB: 26.0,
+    contextK: 32,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Nous Research’s MoE flagship tuned on GPT-4 synthetic conversations and tool usage.',
+    tags: ['chat', 'tools', 'reasoning']
+  },
+  {
+    name: 'aya:8b',
+    family: 'Aya',
+    params: '8B',
+    diskGB: 4.8,
+    contextK: 8,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Cohere For AI’s 8B multilingual model covering 101 languages for inclusive NLP.',
+    tags: ['multilingual', 'chat', 'instruct']
+  },
+  {
+    name: 'aya:35b',
+    family: 'Aya',
+    params: '35B',
+    diskGB: 20.0,
+    contextK: 8,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Cohere For AI’s 35B model expanding high-accuracy multilingual reasoning to under-represented languages.',
+    tags: ['multilingual', 'chat', 'reasoning']
+  },
+
+  // ── Lightweight & Edge Models ──────────────────────────────────────────────
   {
     name: 'tinyllama:1.1b',
     family: 'TinyLlama',
@@ -613,6 +1224,28 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text'],
     outputModalities: ['text'],
     description: 'Compact 1.1B model designed for constrained devices, quick testing, and CPU inference.',
+    tags: ['chat']
+  },
+  {
+    name: 'smollm2:135m',
+    family: 'SmolLM2',
+    params: '135M',
+    diskGB: 0.1,
+    contextK: 8,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Ultra-compact 135M model for embedded microcontrollers, browser edge apps, and low-latency tests.',
+    tags: ['chat']
+  },
+  {
+    name: 'smollm2:360m',
+    family: 'SmolLM2',
+    params: '360M',
+    diskGB: 0.3,
+    contextK: 8,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Sub-billion 360M parameter model engineered by Hugging Face for fast on-device assistant tasks.',
     tags: ['chat']
   },
   {
@@ -626,8 +1259,41 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     description: 'Hugging Face’s curated compact 1.7B model optimized for local assistants.',
     tags: ['chat', 'instruct']
   },
+  {
+    name: 'orca-mini:3b',
+    family: 'Orca Mini',
+    params: '3B',
+    diskGB: 1.9,
+    contextK: 2,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Compact 3B model trained with rich explanation traces for transparent reasoning on edge devices.',
+    tags: ['chat', 'reasoning']
+  },
+  {
+    name: 'dolphin-llama3:8b',
+    family: 'Dolphin Llama 3',
+    params: '8B',
+    diskGB: 4.7,
+    contextK: 8,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Eric Hartford’s uncensored 8B assistant model fine-tuned for versatile instruction execution.',
+    tags: ['chat', 'instruct', 'code']
+  },
+  {
+    name: 'dolphin-mistral:7b',
+    family: 'Dolphin Mistral',
+    params: '7B',
+    diskGB: 4.1,
+    contextK: 8,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Uncensored 7B assistant tuned for creative writing, debugging, and open-ended analysis.',
+    tags: ['chat', 'instruct']
+  },
 
-  // Vision Models
+  // ── Vision & Multimodal Models ─────────────────────────────────────────────
   {
     name: 'llava:7b',
     family: 'LLaVA',
@@ -637,6 +1303,50 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     inputModalities: ['text', 'image'],
     outputModalities: ['text'],
     description: 'Popular multimodal vision-language model for image description, OCR, and visual Q&A.',
+    tags: ['vision', 'chat']
+  },
+  {
+    name: 'llava:13b',
+    family: 'LLaVA',
+    params: '13B',
+    diskGB: 8.0,
+    contextK: 4,
+    inputModalities: ['text', 'image'],
+    outputModalities: ['text'],
+    description: '13B visual instruction model with enhanced spatial resolution and detailed object detection.',
+    tags: ['vision', 'chat']
+  },
+  {
+    name: 'llava:34b',
+    family: 'LLaVA',
+    params: '34B',
+    diskGB: 20.0,
+    contextK: 4,
+    inputModalities: ['text', 'image'],
+    outputModalities: ['text'],
+    description: 'High-capability 34B multimodal model for deep scientific diagram and chart understanding.',
+    tags: ['vision', 'chat', 'reasoning']
+  },
+  {
+    name: 'llava-llama3:8b',
+    family: 'LLaVA Llama 3',
+    params: '8B',
+    diskGB: 5.5,
+    contextK: 8,
+    inputModalities: ['text', 'image'],
+    outputModalities: ['text'],
+    description: 'Multimodal vision model combining LLaVA’s visual encoder with Llama 3 8B conversational flow.',
+    tags: ['vision', 'chat', 'instruct']
+  },
+  {
+    name: 'llava-phi3:3.8b',
+    family: 'LLaVA Phi 3',
+    params: '3.8B',
+    diskGB: 2.9,
+    contextK: 4,
+    inputModalities: ['text', 'image'],
+    outputModalities: ['text'],
+    description: 'Compact multimodal assistant combining Microsoft Phi-3 with visual perception.',
     tags: ['vision', 'chat']
   },
   {
@@ -650,8 +1360,30 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     description: 'Tiny vision-language model engineered to run smoothly on edge hardware.',
     tags: ['vision']
   },
+  {
+    name: 'bakllava:7b',
+    family: 'BakLLaVA',
+    params: '7B',
+    diskGB: 4.7,
+    contextK: 4,
+    inputModalities: ['text', 'image'],
+    outputModalities: ['text'],
+    description: 'Mistral 7B-powered multimodal vision model for fine-grained image inspection.',
+    tags: ['vision', 'chat']
+  },
+  {
+    name: 'minicpm-v:8b',
+    family: 'MiniCPM V',
+    params: '8B',
+    diskGB: 5.5,
+    contextK: 8,
+    inputModalities: ['text', 'image'],
+    outputModalities: ['text'],
+    description: 'State-of-the-art 8B multimodal model with high-resolution image and OCR perception.',
+    tags: ['vision', 'reasoning']
+  },
 
-  // Embedding Models
+  // ── Embedding & RAG Models ─────────────────────────────────────────────────
   {
     name: 'nomic-embed-text:latest',
     family: 'Nomic Embed Text',
@@ -675,6 +1407,17 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     tags: ['embedding', 'multilingual']
   },
   {
+    name: 'bge-large:latest',
+    family: 'BGE Large',
+    params: '335M',
+    diskGB: 0.7,
+    contextK: 1,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'BAAI’s 335M high-accuracy English text embedding model for semantic search pipelines.',
+    tags: ['embedding']
+  },
+  {
     name: 'mxbai-embed-large:latest',
     family: 'mxbai-embed-large',
     params: '335M',
@@ -684,6 +1427,39 @@ export const BUILTIN_OLLAMA_CATALOG: OllamaCatalogModel[] = [
     outputModalities: ['text'],
     description: 'Large state-of-the-art embedding model for semantic search and classification.',
     tags: ['embedding']
+  },
+  {
+    name: 'snowflake-arctic-embed:latest',
+    family: 'Snowflake Arctic Embed',
+    params: '137M',
+    diskGB: 0.3,
+    contextK: 1,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Snowflake’s optimized embedding model achieving top-tier retrieval efficiency.',
+    tags: ['embedding']
+  },
+  {
+    name: 'all-minilm:latest',
+    family: 'All-MiniLM',
+    params: '33M',
+    diskGB: 0.1,
+    contextK: 1,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Ultra-fast lightweight embedding model for instant sentence similarity and clustering.',
+    tags: ['embedding']
+  },
+  {
+    name: 'paraphrase-multilingual:latest',
+    family: 'Paraphrase Multilingual',
+    params: '278M',
+    diskGB: 0.6,
+    contextK: 1,
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+    description: 'Multi-lingual sentence transformer embedding model mapping 50+ languages into a shared vector space.',
+    tags: ['embedding', 'multilingual']
   }
 ];
 
@@ -774,8 +1550,9 @@ export function calculateModelScore(
   let tierScore = 0;
   if (r.fit === 'best') tierScore = 10000;
   else if (r.isHardwareRecommended) tierScore = 5000;
-  else if (r.fit === 'runnable') tierScore = 1000;
-  else tierScore = -10000; // too-large
+  else if (r.fit === 'runnable') tierScore = 1500;
+  else if (r.fit === 'quantized') tierScore = 300;
+  else tierScore = -10000; // too-large (memory overflow)
 
   if (r.fit === 'too-large') {
     // For models exceeding system capacity, closest to fitting comes first
@@ -860,34 +1637,41 @@ export function rankModels(
     if (!fitsTotalRam(m)) {
       fit = 'too-large';
       reason = isUnified
-        ? `Too heavy — needs ~${formattedNeed} (total unified memory: ${ramGB}GB)`
-        : `Too heavy — needs ~${formattedNeed} (total RAM: ${ramGB}GB)`;
+        ? `Memory Overflow — needs ~${formattedNeed} (total unified memory: ${ramGB}GB). Exceeds capacity.`
+        : `Memory Overflow — needs ~${formattedNeed} (total RAM: ${ramGB}GB). Exceeds capacity.`;
     } else if (fitsVram(m)) {
       fit = 'runnable';
       reason = `GPU Acceleration — fits 100% in ${vramBudgetGB}GB VRAM`;
     } else if (fitsUnified(m)) {
       fit = 'runnable';
       reason = `Apple Silicon Unified Memory — optimal speed (~${formattedNeed} / ${ramFreeGB}GB free)`;
-    } else if (fitsFreeRam(m)) {
+    } else if (fitsFreeRam(m) && !vramBudgetGB) {
       fit = 'runnable';
-      reason = isUnified
-        ? `Runs in unified memory (~${formattedNeed} / ${ramFreeGB}GB free)`
-        : `Fits in free RAM (~${formattedNeed} / ${ramFreeGB}GB free; CPU inference)`;
+      reason = `Fits in free RAM limit (~${formattedNeed} / ${ramFreeGB}GB free; CPU inference)`;
+    } else if (vramBudgetGB > 0) {
+      // Discrete GPU present, but model exceeds dedicated VRAM
+      fit = 'quantized';
+      if (fitsFreeRam(m)) {
+        reason = `VRAM Overflow (needs ~${formattedNeed}, exceeds ${vramBudgetGB}GB VRAM) — Quantized execution offloaded to ${ramFreeGB}GB free RAM`;
+      } else {
+        reason = `VRAM Overflow (needs ~${formattedNeed}, exceeds ${vramBudgetGB}GB VRAM) — Runs via quantized weights & CPU offload`;
+      }
     } else {
-      fit = 'runnable';
-      reason = `Runs on CPU (needs ~${formattedNeed}; ${ramFreeGB}GB free RAM may use memory swap)`;
+      // CPU only, but exceeds free RAM (fits in total RAM)
+      fit = 'quantized';
+      reason = `RAM Overflow (needs ~${formattedNeed}; ${ramFreeGB}GB free) — Runs via CPU quantized execution & memory paging`;
     }
 
     return { model: m, fit, reason, needGB: n, storageWarning, isHardwareRecommended: false };
   });
 
-  // Pick top recommended models that fit best in local hardware (excluding cloud models from local hardware benchmarks):
+  // Pick top recommended models that fit best in local fast memory (excluding cloud models):
   const topPicks = ranked
     .filter((r) => {
       if (r.model.isCloud) return false;
       if (r.fit !== 'runnable' && r.fit !== 'best') return false;
       if (isUnified) return r.needGB <= Math.min(ramGB * 0.75, ramFreeGB + 1.0);
-      if (vramBudgetGB > 0) return r.needGB <= vramBudgetGB || r.needGB <= ramFreeGB;
+      if (vramBudgetGB > 0) return r.needGB <= vramBudgetGB;
       return r.needGB <= ramFreeGB;
     })
     .sort((a, b) => {
@@ -914,7 +1698,7 @@ export function rankModels(
     topPicks[i].isHardwareRecommended = true;
   }
 
-  const order: Record<ModelFit, number> = { best: 0, runnable: 1, 'too-large': 2 };
+  const order: Record<ModelFit, number> = { best: 0, runnable: 1, quantized: 2, 'too-large': 3 };
 
   // Sort by: Top Match first, then multi-criteria balance (Parameters vs Download Size vs Memory Needed)
   ranked.sort((a, b) => {

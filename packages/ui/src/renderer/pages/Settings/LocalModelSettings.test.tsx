@@ -99,6 +99,70 @@ describe('LocalModelSettings - System Info Normalization', () => {
     expect(ranked[0].reason).toContain('GPU');
   });
 
+  it('differentiates small in-memory models (runnable) from large models (quantized VRAM overflow) and oversized models (memory overflow)', () => {
+    const sampleCatalog = [
+      {
+        name: 'llama3.2:3b',
+        family: 'Llama 3.2',
+        params: '3B',
+        diskGB: 2.0,
+        contextK: 128,
+        inputModalities: ['text'],
+        outputModalities: ['text'],
+        description: 'Small 3B model',
+        tags: ['chat' as const],
+      },
+      {
+        name: 'qwen2.5-coder:7b',
+        family: 'Qwen 2.5 Coder',
+        params: '7B',
+        diskGB: 4.7,
+        contextK: 32,
+        inputModalities: ['text'],
+        outputModalities: ['text'],
+        description: 'Medium 7B code model',
+        tags: ['code' as const],
+      },
+      {
+        name: 'llama3.3:70b',
+        family: 'Llama 3.3',
+        params: '70B',
+        diskGB: 42.0,
+        contextK: 128,
+        inputModalities: ['text'],
+        outputModalities: ['text'],
+        description: 'Large 70B model',
+        tags: ['chat' as const],
+      },
+    ];
+
+    // Hardware setup: 4GB VRAM GPU, 16GB Total RAM (8GB free)
+    const pc4GbGpu = normalizeSystemInfo({
+      os_name: 'Windows 11',
+      total_memory_mb: 16384,
+      used_memory_mb: 8192,
+      gpus: [{ model: 'NVIDIA GeForce GTX 1650', vramGB: 4 }],
+      vram_budget_gb: 4,
+    });
+
+    const ranked = rankModels(sampleCatalog, pc4GbGpu);
+
+    // 1. Small model fits in 4GB VRAM -> best / runnable
+    const smallModel = ranked.find((r) => r.model.name === 'llama3.2:3b');
+    expect(smallModel?.fit).toBe('best');
+    expect(smallModel?.reason).toContain('GPU');
+
+    // 2. 7B model exceeds 4GB VRAM but fits in RAM -> quantized (VRAM Overflow)
+    const mediumModel = ranked.find((r) => r.model.name === 'qwen2.5-coder:7b');
+    expect(mediumModel?.fit).toBe('quantized');
+    expect(mediumModel?.reason).toContain('VRAM Overflow');
+
+    // 3. 70B model exceeds 16GB total RAM -> too-large (Memory Overflow)
+    const largeModel = ranked.find((r) => r.model.name === 'llama3.3:70b');
+    expect(largeModel?.fit).toBe('too-large');
+    expect(largeModel?.reason).toContain('Memory Overflow');
+  });
+
   it('provides default Ollama settings with configurable parameters', () => {
     expect(DEFAULT_OLLAMA_SETTINGS.baseUrl).toBe('http://localhost:11434');
     expect(DEFAULT_OLLAMA_SETTINGS.defaultContextLimit).toBe('8k');
@@ -124,11 +188,14 @@ describe('LocalModelSettings - System Info Normalization', () => {
   it('reliably returns catalog models across multiple domains without CORS failure', async () => {
     const { fetchLiveCatalog } = await import('../../logic/ollama-catalog');
     const catalog = await fetchLiveCatalog();
-    expect(catalog.length).toBeGreaterThan(15);
+    expect(catalog.length).toBeGreaterThan(60);
     const names = catalog.map((c) => c.name);
     expect(names).toContain('llama3.2:1b');
     expect(names).toContain('deepseek-r1:7b');
     expect(names).toContain('qwen2.5-coder:7b');
+    expect(names).toContain('codellama:7b');
+    expect(names).toContain('mixtral:8x7b');
+    expect(names).toContain('starcoder2:7b');
   });
 
   it('correctly associates Embedding, Vision, Tools, Thinking tags with models', async () => {
