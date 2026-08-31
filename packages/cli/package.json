@@ -1,6 +1,6 @@
 {
   "name": "@superagent/cli",
-  "version": "0.40.0",
+  "version": "0.41.0",
   "description": "SuperAgent Terminal CLI & TUI — Pure Native Rust Application",
   "license": "GPL-3.0-or-later",
   "repository": {
