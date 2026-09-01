@@ -123,78 +123,44 @@ const WorkedHeader: React.FC<WorkedHeaderProps> = ({
   editedFiles = [],
   children,
   initialExpanded = false,
-  isWorking = false
+  isWorking = false,
 }) => {
   const [expanded, setExpanded] = useState(isWorking || initialExpanded);
 
   useEffect(() => {
     if (isWorking) {
       setExpanded(true);
-    } else {
-      setExpanded(false);
     }
   }, [isWorking]);
 
   return (
-    <div className="flex flex-col gap-1 select-none">
-      {/* "Worked for Xs >" toggle */}
+    <div className="flex flex-col gap-1 select-none w-full text-left mb-1 font-sans">
+      {/* "Worked for Xs ˅" toggle */}
       <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1.5 text-brand-textMuted hover:text-brand-textMain text-[12px] font-medium transition-colors w-fit group"
+        className="flex items-center gap-1.5 text-brand-textMuted hover:text-brand-textMain text-[13px] font-medium transition-colors w-fit group cursor-pointer"
       >
         {expanded ? (
-          <ChevronDown size={13} className="text-brand-textMuted group-hover:text-brand-textMain transition-colors" />
+          <ChevronDown size={13} className="text-brand-textMuted group-hover:text-brand-textMain transition-colors shrink-0" />
         ) : (
-          <ChevronRight size={13} className="text-brand-textMuted group-hover:text-brand-textMain transition-colors" />
+          <ChevronRight size={13} className="text-brand-textMuted group-hover:text-brand-textMain transition-colors shrink-0" />
         )}
         {isWorking ? (
-          <span className="flex items-center gap-1.5 text-[color:var(--neon-live)] font-semibold animate-pulse font-sans">
+          <span className="flex items-center gap-1.5 text-[color:var(--neon-live)] font-semibold animate-pulse">
             <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)]" />
             <span>Thinking... ({duration})</span>
           </span>
         ) : (
-          <span className="font-sans italic text-brand-textMuted/70">
-            {expanded ? `Thought for ${duration}` : `Thought for ${duration}`}
+          <span className="font-medium text-brand-textMuted">
+            Worked for {duration}
           </span>
         )}
       </button>
 
-      {/* Collapsible detail pills styled as a chat stream */}
+      {/* Collapsible detail steps */}
       {expanded && (
-        <div className="ml-2.5 pl-4 border-l-2 border-dashed border-brand-border/30 flex flex-col gap-4 animate-fade-in mt-2 w-full">
-          {/* Files + Folders explored chip */}
-          {(filesExplored !== undefined || foldersExplored !== undefined) && (
-            <button className="flex items-center gap-1.5 text-brand-textMuted hover:text-brand-textMain text-[11px] transition-colors w-fit group">
-              <FolderOpen size={11} className="text-brand-textMuted/70" />
-              <span>
-                Explored{' '}
-                {filesExplored !== undefined && (
-                  <span className="text-brand-textMain font-semibold">{filesExplored} files</span>
-                )}
-                {filesExplored !== undefined && foldersExplored !== undefined && ', '}
-                {foldersExplored !== undefined && (
-                  <span className="text-brand-textMain font-semibold">{foldersExplored} folders</span>
-                )}
-              </span>
-              <ChevronRight size={11} className="text-brand-textMuted/60 group-hover:text-brand-textMain transition-colors" />
-            </button>
-          )}
-
-          {/* Edited files */}
-          {editedFiles.map((ef, i) => (
-            <div key={i} className="flex items-center gap-2 text-[11px]">
-              <FileText size={11} className="text-brand-textMuted/70 flex-shrink-0" />
-              <span className="text-brand-textMuted font-medium">M→</span>
-              <span className="text-brand-textMain font-medium font-mono">{ef.name}</span>
-              {ef.added > 0 && (
-                <span className="text-[color:var(--neon-constructive)] font-semibold">+{ef.added}</span>
-              )}
-              {ef.removed > 0 && (
-                <span className="text-[color:var(--neon-destructive)] font-semibold ml-0.5">-{ef.removed}</span>
-              )}
-            </div>
-          ))}
-
+        <div className="ml-2 pl-3 border-l border-brand-border/40 flex flex-col gap-0.5 animate-fade-in mt-1 w-full text-left">
           {children}
         </div>
       )}
@@ -311,126 +277,197 @@ const StreamingCursor: React.FC = () => (
 );
 
 // ─── Expandable Tool Call Card ────────────────────────────────────────────────
+// ─── Modern Antigravity-Style Tool Call Card ──────────────────────────────────
 interface ToolCallCardProps {
   step: TrajectoryStep;
-  isLast: boolean;
+  isStreaming?: boolean;
+  initialExpanded?: boolean;
+  onViewDiff?: (file: string, original: string, modified: string) => void;
+  onActionClick?: (action: string, data: any) => void;
 }
 
-const ToolCallCard: React.FC<ToolCallCardProps> = ({ step, isLast }) => {
-  const [expanded, setExpanded] = useState(false);
+const ToolCallCard: React.FC<ToolCallCardProps> = ({
+  step,
+  isStreaming = false,
+  initialExpanded = false,
+  onViewDiff,
+  onActionClick,
+}) => {
+  const [expanded, setExpanded] = useState(initialExpanded);
+  const details = TrajectoryService.parseToolDetails(step);
+
   const isSuccess = step.status === 'success';
   const isError = step.status === 'error';
-  const isRunning = !isSuccess && !isError;
+  // Loading circle fix: only active while streaming and status is running and content not yet received
+  const isRunning = isStreaming && (step.status === 'running' || (!step.status && !step.content));
 
-  const statusColor = isSuccess
-    ? 'text-[color:var(--neon-constructive)]'
-    : isError
-    ? 'text-[color:var(--neon-destructive)]'
-    : 'text-[color:var(--neon-live)]';
+  // Auto-expand currently active live tool call
+  useEffect(() => {
+    if (isRunning) {
+      setExpanded(true);
+    }
+  }, [isRunning]);
 
-  const statusBg = isSuccess
-    ? 'bg-[color:var(--neon-constructive)]/10 border-[color:var(--neon-constructive)]/20'
-    : isError
-    ? 'bg-[color:var(--neon-destructive)]/10 border-[color:var(--neon-destructive)]/20'
-    : 'bg-[color:var(--neon-live)]/10 border-[color:var(--neon-live)]/20';
+  const handleOpenDiff = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onViewDiff) return;
+    const input = step.metadata?.toolInput || {};
+    const meta = step.metadata || {};
+    const filename = meta.filename || input.TargetFile || input.AbsolutePath || input.path || details.targetName;
+    const original = meta.originalCode || input.TargetContent || '';
+    const modified = meta.modifiedCode || input.ReplacementContent || step.content || '';
+    onViewDiff(filename, original, modified);
+  };
 
   return (
-    <div className="relative flex gap-3 animate-fade-in mb-1">
-      {/* Timeline connector line */}
-      <div className="relative flex flex-col items-center flex-shrink-0">
-        {/* Status dot */}
-        <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
-          isSuccess ? 'bg-[color:var(--neon-constructive)]' :
-          isError ? 'bg-[color:var(--neon-destructive)]' :
-          'bg-[color:var(--neon-live)] animate-pulse'
-        }`} />
-        {/* Vertical line */}
-        {!isLast && (
-          <div className="w-px flex-1 bg-brand-border/40 my-1" />
-        )}
-      </div>
-
-      {/* Card content */}
-      <button
-        type="button"
+    <div className="flex flex-col gap-1 w-full text-left font-sans select-none animate-fade-in my-0.5">
+      {/* ── Row Item ──── */}
+      <div
         onClick={() => setExpanded(!expanded)}
-        className={`flex-1 text-left border rounded-lg transition-all cursor-pointer ${
-          expanded ? statusBg : 'bg-brand-card/20 border-brand-border/30 hover:bg-brand-card/30'
-        }`}
+        className="flex items-center justify-between gap-2 px-1.5 py-1 rounded-lg hover:bg-brand-card/50 transition-colors cursor-pointer group w-full"
       >
-        {/* Header row */}
-        <div className="flex items-center justify-between gap-2 px-3 py-2">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            {isRunning ? (
-              <Loader2 size={12} className={`${statusColor} animate-spin flex-shrink-0`} />
-            ) : (
-              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                isSuccess ? 'bg-[color:var(--neon-constructive)]' : 'bg-[color:var(--neon-destructive)]'
-              }`} />
-            )}
-            <span className="font-mono text-[11px] font-semibold text-brand-textMain truncate">
-              {step.toolName || 'tool'}
+        <div className="flex items-center gap-2 min-w-0 flex-1 text-[13px] text-brand-textMain leading-snug">
+          {/* Action toggle arrow or live spinner */}
+          {isRunning ? (
+            <Loader2 size={13} className="text-[color:var(--neon-live)] animate-spin shrink-0" />
+          ) : expanded ? (
+            <ChevronDown size={13} className="text-brand-textMuted group-hover:text-brand-textMain shrink-0 transition-colors" />
+          ) : (
+            <ChevronRight size={13} className="text-brand-textMuted/70 group-hover:text-brand-textMain shrink-0 transition-colors" />
+          )}
+
+          {/* Action label (Analyzed / Edited / Ran / Searched / Thought) */}
+          <span className="text-brand-textMuted font-medium shrink-0">
+            {details.actionLabel}
+          </span>
+
+          {/* Language / Tool icon badge */}
+          {details.icon && (
+            <span className="text-[13px] shrink-0">{details.icon}</span>
+          )}
+
+          {/* Target filename / command / query */}
+          {details.targetName && (
+            <span className="font-mono text-brand-textMain font-medium truncate max-w-[300px] sm:max-w-[480px]">
+              {details.targetName}
             </span>
-            <span className="text-brand-textMuted/30 select-none hidden sm:inline">|</span>
-            <span className="text-brand-textMuted/60 text-[11px] truncate font-mono hidden sm:inline">
-              {TrajectoryService.summarizeToolContent(step)}
+          )}
+          {step.toolName && (
+            <span className="hidden text-[0px]" aria-hidden="true">{step.toolName}</span>
+          )}
+
+          {/* Line range highlight (e.g. #L50-180) */}
+          {details.lineRange && (
+            <span className="text-brand-textMuted/70 text-[12px] font-mono shrink-0">
+              {details.lineRange}
             </span>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className={`text-[9px] font-semibold uppercase tracking-wider ${statusColor}`}>
-              {step.status || 'running'}
+          )}
+
+          {/* Diff stats (+10 -0) */}
+          {details.diffStats && (
+            <span className="flex items-center gap-1 font-mono text-[12px] font-semibold shrink-0">
+              {details.diffStats.added > 0 && (
+                <span className="text-[color:var(--neon-constructive)]">+{details.diffStats.added}</span>
+              )}
+              {details.diffStats.removed > 0 && (
+                <span className="text-[color:var(--neon-destructive)]">-{details.diffStats.removed}</span>
+              )}
             </span>
-            <ChevronRight
-              size={12}
-              className={`text-brand-textMuted/50 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
-            />
-          </div>
+          )}
         </div>
 
-        {/* Expanded body: Input/Output JSON */}
-        {expanded && (
-          <div className="border-t border-brand-border/30 px-3 py-2 space-y-2 animate-fade-in">
-            {/* Input section */}
-            {step.metadata?.toolInput && (
-              <div>
-                <div className="text-[9px] font-semibold uppercase tracking-wider text-brand-textMuted/50 mb-1">Input</div>
-                <pre className="text-[10px] font-mono text-brand-textMuted/70 bg-brand-bg/60 rounded p-2 overflow-x-auto max-h-40 overflow-y-auto whitespace-pre-wrap break-all">
-                  {typeof step.metadata.toolInput === 'string'
-                    ? step.metadata.toolInput
-                    : JSON.stringify(step.metadata.toolInput, null, 2)}
-                </pre>
-              </div>
-            )}
+        {/* Action pills (e.g. Open Diff on hover) */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {details.category === 'edit' && onViewDiff && (
+            <button
+              type="button"
+              onClick={handleOpenDiff}
+              className="px-2 py-0.5 rounded text-[10px] font-semibold bg-brand-card hover:bg-brand-hover border border-brand-border text-brand-textMain transition-all cursor-pointer select-none opacity-80 group-hover:opacity-100"
+              title="Open Diff Viewer"
+            >
+              Open Diff
+            </button>
+          )}
 
-            {/* Output section */}
-            {step.content && (
-              <div>
-                <div className="text-[9px] font-semibold uppercase tracking-wider text-brand-textMuted/50 mb-1">Output</div>
-                <pre className="text-[10px] font-mono text-brand-textMuted/70 bg-brand-bg/60 rounded p-2 overflow-x-auto max-h-40 overflow-y-auto whitespace-pre-wrap break-all">
-                  {step.content.slice(0, 2000)}
-                  {step.content.length > 2000 && (
-                    <span className="text-brand-textMuted/40">... ({step.content.length} chars)</span>
-                  )}
-                </pre>
-              </div>
-            )}
+          {isError && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-500/10 text-red-400 border border-red-500/20 uppercase tracking-wider">
+              Failed
+            </span>
+          )}
+        </div>
+      </div>
 
-            {/* Metadata (filename, lines changed) */}
-            {step.metadata?.filename && (
-              <div className="flex items-center gap-2 text-[10px] text-brand-textMuted/60">
-                <FileText size={10} />
-                <span className="font-mono">{step.metadata.filename}</span>
-                {step.metadata.addedLines !== undefined && (
-                  <span className="text-[color:var(--neon-constructive)]">+{step.metadata.addedLines}</span>
-                )}
-                {step.metadata.removedLines !== undefined && (
-                  <span className="text-[color:var(--neon-destructive)]">-{step.metadata.removedLines}</span>
+      {/* ── Expanded Content ──── */}
+      {expanded && (
+        <div className="ml-5 pl-2 border-l border-brand-border/40 my-1 w-full max-w-full animate-fade-in text-left">
+          {details.category === 'command' ? (
+            /* Terminal Box Output (matching Image 3) */
+            <div className="w-full bg-[#0d1117] rounded-lg border border-slate-800/80 p-3 select-text font-mono text-xs text-slate-200 shadow-inner">
+              <div className="text-slate-400 font-semibold mb-2 text-[11px] flex items-center justify-between">
+                <span>
+                  {details.cwd ? `...\\${details.cwd.split(/[/\\]/).pop()} > ` : '> '}
+                  <span className="text-cyan-300">{details.commandLine || details.targetName}</span>
+                </span>
+                {step.content && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigator.clipboard.writeText(step.content);
+                    }}
+                    className="text-slate-500 hover:text-slate-200 text-[10px] p-1 rounded hover:bg-slate-800 transition-colors cursor-pointer"
+                    title="Copy output"
+                  >
+                    <Copy size={11} />
+                  </button>
                 )}
               </div>
-            )}
-          </div>
-        )}
-      </button>
+              {step.content ? (
+                <pre className="whitespace-pre-wrap leading-relaxed text-slate-300 text-[11px] overflow-x-auto max-h-72 scrollbar-thin">
+                  {TrajectoryService.stripAnsi(step.content)}
+                </pre>
+              ) : isRunning ? (
+                <div className="flex items-center gap-2 text-slate-500 italic text-[11px] py-1">
+                  <Loader2 size={12} className="animate-spin text-cyan-400" />
+                  <span>Executing command...</span>
+                </div>
+              ) : (
+                <div className="text-slate-500 italic text-[11px]">Command completed with no output.</div>
+              )}
+            </div>
+          ) : details.category === 'thought' ? (
+            /* Thought Markdown Block */
+            <div className="bg-brand-card/20 border border-brand-border/30 rounded-lg p-3 text-[12px] text-brand-textMuted leading-relaxed font-sans border-l-2 border-l-brand-highlight/50 break-words select-text">
+              <MarkdownText content={step.content} />
+            </div>
+          ) : (
+            /* File / Tool Generic Output */
+            <div className="bg-brand-card/20 border border-brand-border/30 rounded-lg p-2.5 space-y-2 text-left">
+              {step.metadata?.toolInput && (
+                <div>
+                  <div className="text-[9px] font-semibold uppercase tracking-wider text-brand-textMuted/50 mb-1">Parameters</div>
+                  <pre className="text-[10px] font-mono text-brand-textMuted/80 bg-brand-bg/60 rounded p-2 overflow-x-auto max-h-36 whitespace-pre-wrap break-all select-text">
+                    {typeof step.metadata.toolInput === 'string'
+                      ? step.metadata.toolInput
+                      : JSON.stringify(step.metadata.toolInput, null, 2)}
+                  </pre>
+                </div>
+              )}
+              {step.content && (
+                <div>
+                  <div className="text-[9px] font-semibold uppercase tracking-wider text-brand-textMuted/50 mb-1">Result</div>
+                  <pre className="text-[10px] font-mono text-brand-textMuted/80 bg-brand-bg/60 rounded p-2 overflow-x-auto max-h-48 whitespace-pre-wrap break-all select-text">
+                    {TrajectoryService.stripAnsi(step.content).slice(0, 3000)}
+                    {step.content.length > 3000 && (
+                      <span className="text-brand-textMuted/40">... ({step.content.length} chars)</span>
+                    )}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -1216,7 +1253,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
       removed: s.metadata!.removedLines || 0
     }));
 
-  const hasWorkDetails = thinkingSteps.length > 0 || totalFiles > 0 || editedFiles.length > 0;
+  const hasWorkDetails = thinkingSteps.length > 0 || totalFiles > 0 || editedFiles.length > 0 || isStreaming;
 
   // Summed file-change stats for the bottom chip
   const totalAdded = toolSteps.reduce((acc, s) => acc + (s.metadata?.addedLines || 0), 0);
@@ -1235,31 +1272,40 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
           initialExpanded={initialExpanded}
           isWorking={isStreaming}
         >
-          {/* Chronological thinking/tool steps inside the collapsible, styled like a chat thread */}
-          {thinkingSteps.map((step, stepIdx) => {
-            if (step.type === 'thought' || step.type === 'assistant') {
-              return (
-                <div
-                  key={step.id}
-                  className="flex flex-col gap-0.5 items-start w-full max-w-full text-left animate-fade-in mb-1"
-                >
-                  <div className="bg-brand-card/20 border border-brand-border/30 rounded-lg px-3.5 py-2 text-[12px] text-brand-textMuted leading-relaxed font-sans border-l-2 border-l-brand-highlight/40 w-full text-left break-words">
-                    <MarkdownText content={step.content} />
-                  </div>
-                </div>
-              );
-            }
-
-            // Tool call or tool result — render as expandable card with timeline
-            return (
-              <ToolCallCard
-                key={step.id}
-                step={step}
-                isLast={stepIdx === thinkingSteps.length - 1}
-              />
-            );
-          })}
+          {/* Chronological thinking/tool steps inside the collapsible */}
+          {thinkingSteps.map((step, stepIdx) => (
+            <ToolCallCard
+              key={step.id || `step-${stepIdx}`}
+              step={step}
+              isStreaming={isStreaming}
+              onViewDiff={onViewDiff}
+              onActionClick={onActionClick}
+            />
+          ))}
         </WorkedHeader>
+      )}
+
+      {/* File changed summary chip */}
+      {changedFilesCount > 0 && (
+        <FileChangedChip
+          count={changedFilesCount}
+          added={totalAdded}
+          removed={totalRemoved}
+          onReview={
+            onViewDiff && editedFiles[0]
+              ? () => {
+                  const firstEdited = toolSteps.find(s => s.metadata?.filename === editedFiles[0].name);
+                  if (firstEdited?.metadata?.filename) {
+                    onViewDiff(
+                      firstEdited.metadata.filename,
+                      firstEdited.metadata.originalCode || '',
+                      firstEdited.metadata.modifiedCode || ''
+                    );
+                  }
+                }
+              : undefined
+          }
+        />
       )}
 
       {/* ── Assistant text responses ──── */}
