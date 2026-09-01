@@ -72,6 +72,18 @@ pub async fn handle_agent_channel(
                 .unwrap_or("")
                 .to_string();
 
+            let attachments: Vec<String> = arg
+                .get("currentAttachments")
+                .or_else(|| arg.get("attachments"))
+                .or_else(|| config_val.get("attachments"))
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+
             let raw_settings = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
 
             // If model is Orchestrator, auto, or empty, resolve first enabled from settings
@@ -222,6 +234,7 @@ pub async fn handle_agent_channel(
             let state_clone = state.clone();
             let sid = session_id.clone();
             let prompt_clone = prompt.clone();
+            let attachments_clone = attachments.clone();
 
             tokio::spawn(async move {
                 // 1. Mark session running in session_store, preserve conversation history
@@ -431,8 +444,16 @@ pub async fn handle_agent_channel(
                 let mut has_error = false;
                 let mut completion_token_count = 0usize;
 
-                // 6. Use run_loop_with_history for multi-turn context
-                let run_result = engine.run_loop_with_history(&model_config, &sys_prompt, &prompt_clone, initial_history).await;
+                // 6. Use run_loop_with_history_and_attachments for multi-turn context and multimodal attachments
+                let run_result = engine
+                    .run_loop_with_history_and_attachments(
+                        &model_config,
+                        &sys_prompt,
+                        &prompt_clone,
+                        initial_history,
+                        attachments_clone,
+                    )
+                    .await;
                 let mut did_emit_done = false;
 
                 match run_result {

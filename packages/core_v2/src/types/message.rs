@@ -78,6 +78,16 @@ impl ChatMessage {
         Self::new(Role::User, vec![ContentBlock::Text { text: text.into() }])
     }
 
+    pub fn user_blocks(blocks: Vec<ContentBlock>) -> Self {
+        Self::new(Role::User, blocks)
+    }
+
+    pub fn user_with_images(text: impl Into<String>, images: Vec<ContentBlock>) -> Self {
+        let mut blocks = vec![ContentBlock::Text { text: text.into() }];
+        blocks.extend(images);
+        Self::new(Role::User, blocks)
+    }
+
     pub fn assistant(text: impl Into<String>) -> Self {
         Self::new(Role::Assistant, vec![ContentBlock::Text { text: text.into() }])
     }

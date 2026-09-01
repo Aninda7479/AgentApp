@@ -30,6 +30,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
   const [approvalMode, setApprovalMode] = useState<'ask' | 'always' | 'never'>('ask');
   const [sandbox, setSandbox] = useState(true);
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [cursorPos, setCursorPos] = useState(0);
   const [isRecorderOpen, setIsRecorderOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -176,14 +177,71 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
     }
   };
 
+  const processFiles = async (files: FileList | File[]) => {
+    const filesArray = Array.from(files);
+    if (filesArray.length === 0) return;
+
+    const newAtts: ComposerAttachment[] = [];
+    for (const f of filesArray) {
+      const filePath = (f as unknown as { path?: string }).path;
+      if (filePath) {
+        newAtts.push({
+          filename: f.name,
+          fullPath: filePath,
+        });
+      } else {
+        const reader = new FileReader();
+        const dataUrl = await new Promise<string>((resolve) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => resolve('');
+          reader.readAsDataURL(f);
+        });
+
+        newAtts.push({
+          filename: f.name || `attachment-${Date.now()}.png`,
+          fullPath: dataUrl || f.name,
+        });
+      }
+    }
+
+    if (newAtts.length > 0) {
+      setAttachments((prev) => [...prev, ...newAtts]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDraggingOver) setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+    if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+      void processFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = e.clipboardData?.files;
+    if (files && files.length > 0) {
+      e.preventDefault();
+      void processFiles(files);
+    }
+  };
+
   const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const filesArray = Array.from(e.target.files);
-      const newAtts: ComposerAttachment[] = filesArray.map((f) => ({
-        filename: f.name,
-        fullPath: (f as unknown as { path?: string }).path || f.name,
-      }));
-      setAttachments((prev) => [...prev, ...newAtts]);
+      void processFiles(e.target.files);
+      e.target.value = '';
     }
   };
 
@@ -225,7 +283,13 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
   };
 
   return (
-    <div className="relative w-full max-w-4xl mx-auto" onContextMenu={handleRightClickPaste}>
+    <div
+      className="relative w-full max-w-4xl mx-auto"
+      onContextMenu={handleRightClickPaste}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       {/* Slash Suggestions Menu */}
       {isSlashOpen && (
         <div className="absolute bottom-full mb-2 left-4 right-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-1.5 z-50">
@@ -293,27 +357,56 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
       {/* Attachments Preview Pill Bar */}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-1.5 px-4 py-2 bg-slate-900/90 border-t border-x border-slate-800 rounded-t-2xl">
-          {attachments.map((att, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950 text-xs text-slate-300 border border-slate-800"
-            >
-              <Paperclip size={12} className="text-cyan-400" />
-              <span className="truncate max-w-[120px]">{att.filename}</span>
-              <button
-                type="button"
-                onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
-                className="hover:text-red-400 transition-colors"
+          {attachments.map((att, i) => {
+            const isImage =
+              att.filename.match(/\.(png|jpe?g|webp|gif|svg)$/i) ||
+              (att.fullPath && att.fullPath.startsWith('data:image/'));
+
+            return (
+              <div
+                key={i}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950 text-xs text-slate-300 border border-slate-800 group"
               >
-                <X size={12} />
-              </button>
-            </div>
-          ))}
+                {isImage && att.fullPath ? (
+                  <img
+                    src={att.fullPath}
+                    alt={att.filename}
+                    className="w-4 h-4 object-cover rounded"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <Paperclip size={12} className="text-cyan-400 shrink-0" />
+                )}
+                <span className="truncate max-w-[120px]">{att.filename}</span>
+                <button
+                  type="button"
+                  onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="hover:text-red-400 text-slate-500 hover:bg-slate-800 rounded p-0.5 transition-colors cursor-pointer"
+                  aria-label={`Remove ${att.filename}`}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
       {/* Main Composer Box */}
-      <div className="bg-slate-950/85 backdrop-blur-2xl border border-slate-800 rounded-3xl p-3 shadow-2xl flex flex-col gap-2">
+      <div
+        className={`backdrop-blur-2xl border rounded-3xl p-3 shadow-2xl flex flex-col gap-2 transition-all duration-200 ${
+          isDraggingOver
+            ? 'bg-cyan-950/40 border-cyan-500/80 ring-2 ring-cyan-500/30'
+            : 'bg-slate-950/85 border-slate-800'
+        }`}
+      >
+        {isDraggingOver && (
+          <div className="flex items-center justify-center py-2 text-cyan-400 text-xs font-semibold animate-pulse select-none">
+            Drop images or files here to attach
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           value={prompt}
@@ -326,6 +419,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
           onKeyUp={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart)}
           onClick={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder="Ask a question, instruct your AI workforce, or type @ to delegate to a specialist..."
           rows={1}
           disabled={disabled}

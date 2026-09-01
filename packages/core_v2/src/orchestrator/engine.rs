@@ -1,11 +1,47 @@
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
+use base64::Engine;
 
 use crate::memory::ConversationContext;
 use crate::mcp::{McpClient, McpToolWrapper};
 use crate::providers::ProviderFactory;
 use crate::tools::ToolRegistry;
 use crate::types::{AgentEvent, ChatMessage, ContentBlock, ModelConfig, Role};
+
+/// Loads an attachment from a file path or data URI into a ContentBlock::Image if it is an image.
+pub async fn load_attachment_image_block(path_or_uri: &str) -> Option<ContentBlock> {
+    let trimmed = path_or_uri.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // 1. Handle base64 data URI directly (e.g. data:image/png;base64,....)
+    if trimmed.starts_with("data:image/") {
+        if let Some(idx) = trimmed.find(";base64,") {
+            let media_type = trimmed[5..idx].to_string();
+            let data = trimmed[idx + 8..].to_string();
+            return Some(ContentBlock::Image { media_type, data });
+        }
+    }
+
+    // 2. Handle on-disk file path
+    let path = std::path::Path::new(trimmed);
+    if path.exists() && path.is_file() {
+        let mime = mime_guess::from_path(path).first_or_octet_stream();
+        let mime_str = mime.to_string();
+        if mime_str.starts_with("image/") {
+            if let Ok(bytes) = tokio::fs::read(path).await {
+                let data = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                return Some(ContentBlock::Image {
+                    media_type: mime_str,
+                    data,
+                });
+            }
+        }
+    }
+
+    None
+}
 
 /// The core multi-turn agent execution engine.
 #[derive(Clone)]
@@ -70,6 +106,17 @@ impl AgentEngine {
         system_prompt: &str,
         user_prompt: &str,
     ) -> anyhow::Result<mpsc::Receiver<AgentEvent>> {
+        self.run_loop_with_attachments(config, system_prompt, user_prompt, Vec::new()).await
+    }
+
+    /// Runs the multi-turn agent interaction loop with optional image/file attachments.
+    pub async fn run_loop_with_attachments(
+        &self,
+        config: &ModelConfig,
+        system_prompt: &str,
+        user_prompt: &str,
+        attachments: Vec<String>,
+    ) -> anyhow::Result<mpsc::Receiver<AgentEvent>> {
         let (tx, rx) = mpsc::channel::<AgentEvent>(200);
 
         let config = config.clone();
@@ -84,7 +131,14 @@ impl AgentEngine {
             if !system_prompt.is_empty() {
                 context.set_system_prompt(system_prompt);
             }
-            context.add_user_message(user_prompt);
+
+            let mut user_blocks = vec![ContentBlock::Text { text: user_prompt }];
+            for att in &attachments {
+                if let Some(img_block) = load_attachment_image_block(att).await {
+                    user_blocks.push(img_block);
+                }
+            }
+            context.add_message(ChatMessage::user_blocks(user_blocks));
 
             for _turn in 0..max_turns {
                 let schemas = tools.list_schemas();
@@ -298,6 +352,25 @@ impl AgentEngine {
         user_prompt: &str,
         initial_history: Vec<ChatMessage>,
     ) -> anyhow::Result<(mpsc::Receiver<AgentEvent>, mpsc::Receiver<Vec<ChatMessage>>)> {
+        self.run_loop_with_history_and_attachments(
+            config,
+            system_prompt,
+            user_prompt,
+            initial_history,
+            Vec::new(),
+        )
+        .await
+    }
+
+    /// Runs the multi-turn agent interaction loop with prior conversation history and image/file attachments.
+    pub async fn run_loop_with_history_and_attachments(
+        &self,
+        config: &ModelConfig,
+        system_prompt: &str,
+        user_prompt: &str,
+        initial_history: Vec<ChatMessage>,
+        attachments: Vec<String>,
+    ) -> anyhow::Result<(mpsc::Receiver<AgentEvent>, mpsc::Receiver<Vec<ChatMessage>>)> {
         let (tx, rx) = mpsc::channel::<AgentEvent>(200);
         let (history_tx, history_rx) = mpsc::channel::<Vec<ChatMessage>>(1);
 
@@ -322,8 +395,14 @@ impl AgentEngine {
             // Track new messages generated in this run
             let mut new_messages: Vec<ChatMessage> = Vec::new();
 
-            // Add the new user message
-            let user_msg = ChatMessage::user(&user_prompt);
+            // Add the new user message (with attachments if any)
+            let mut user_blocks = vec![ContentBlock::Text { text: user_prompt.clone() }];
+            for att in &attachments {
+                if let Some(img_block) = load_attachment_image_block(att).await {
+                    user_blocks.push(img_block);
+                }
+            }
+            let user_msg = ChatMessage::user_blocks(user_blocks);
             context.add_message(user_msg.clone());
             new_messages.push(user_msg);
 
@@ -617,3 +696,55 @@ fn try_recover_text_tool_call(text: &str, valid_tool_names: &[String]) -> Option
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_load_data_uri_image() {
+        let uri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        let block = load_attachment_image_block(uri).await;
+        assert!(block.is_some());
+        if let Some(ContentBlock::Image { media_type, data }) = block {
+            assert_eq!(media_type, "image/png");
+            assert!(data.starts_with("iVBORw0KGgoAAA"));
+        } else {
+            panic!("Expected ContentBlock::Image");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_load_disk_image_file() {
+        let temp_dir = std::env::temp_dir().join(format!("test_img_{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let file_path = temp_dir.join("sample.png");
+        let fake_bytes = b"fake_png_binary_data";
+        std::fs::write(&file_path, fake_bytes).unwrap();
+
+        let block = load_attachment_image_block(&file_path.to_string_lossy()).await;
+        assert!(block.is_some());
+        if let Some(ContentBlock::Image { media_type, data }) = block {
+            assert_eq!(media_type, "image/png");
+            assert_eq!(data, base64::engine::general_purpose::STANDARD.encode(fake_bytes));
+        } else {
+            panic!("Expected ContentBlock::Image");
+        }
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_load_non_image_file_ignored() {
+        let temp_dir = std::env::temp_dir().join(format!("test_txt_{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let file_path = temp_dir.join("sample.txt");
+        std::fs::write(&file_path, b"hello world").unwrap();
+
+        let block = load_attachment_image_block(&file_path.to_string_lossy()).await;
+        assert!(block.is_none());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+}
+

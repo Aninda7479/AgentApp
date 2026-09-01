@@ -193,6 +193,7 @@ export const Composer: React.FC<ComposerProps> = ({
   const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [approvalMode, setApprovalMode] = useState<'always' | 'never' | 'ask'>('ask');
   const [showApprovalDropdown, setShowApprovalDropdown] = useState(false);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
 
   // Voice dictation
@@ -384,6 +385,29 @@ export const Composer: React.FC<ComposerProps> = ({
         t.setSelectionRange(newCaret, newCaret);
       }
     });
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDraggingOver) setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+    if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+      if (onAttachPastedFiles) {
+        onAttachPastedFiles(e.dataTransfer.files);
+      }
+    }
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -744,10 +768,21 @@ export const Composer: React.FC<ComposerProps> = ({
     <div
       data-testid="composer-container"
       onContextMenu={handleRightClickPaste}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       className="px-4 pt-2 pb-4 max-w-235 w-full mx-auto flex flex-col gap-2 box-border relative z-10 shrink-0"
     >
       {/* The main input composer card */}
-      <div className="glass-panel rounded-xl p-3 flex flex-col shadow-sm relative transition-all duration-300 focus-within:border-brand-border-strong focus-within:ring-2 focus-within:ring-brand-hover-strong">
+      <div className={`glass-panel rounded-xl p-3 flex flex-col shadow-sm relative transition-all duration-300 focus-within:border-brand-border-strong focus-within:ring-2 focus-within:ring-brand-hover-strong ${
+        isDraggingOver ? 'ring-2 ring-brand-primary/60 border-brand-primary/80 bg-brand-primary/5' : ''
+      }`}>
+        {isDraggingOver && (
+          <div className="flex items-center justify-center py-2 text-brand-primary text-xs font-semibold animate-pulse select-none">
+            Drop images or files here to attach
+          </div>
+        )}
+
         {/* Selected Skills/Tools Chips */}
         {selectedTools.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2 pb-2 border-b border-brand-border/40 select-none animate-fade-in">
@@ -784,19 +819,37 @@ export const Composer: React.FC<ComposerProps> = ({
         {/* Composer Attachments Queue Row */}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-3 pb-3 border-b border-brand-border/40 select-none">
-            {attachments.map((file, idx) => (
-              <div key={idx} className="flex items-center gap-1.5 bg-brand-card hover:bg-brand-card/85 border border-brand-border px-2.5 py-1 rounded-lg text-xs text-brand-textMain animate-fade-in group transition-colors">
-                <span className="text-brand-textMuted text-[10px]">📎</span>
-                <span className="truncate max-w-35 font-medium font-sans">{file.filename}</span>
-                <button
-                  type="button"
-                  onClick={() => onRemoveAttachment && onRemoveAttachment(idx)}
-                  className="text-brand-textMuted hover:text-brand-textMain font-bold ml-1 rounded hover:bg-[var(--brand-hover)] w-4 h-4 flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  &times;
-                </button>
-              </div>
-            ))}
+            {attachments.map((file, idx) => {
+              const isImage =
+                file.filename.match(/\.(png|jpe?g|webp|gif|svg)$/i) ||
+                (file.sourcePath && file.sourcePath.startsWith('data:image/'));
+
+              return (
+                <div key={idx} className="flex items-center gap-1.5 bg-brand-card hover:bg-brand-card/85 border border-brand-border px-2.5 py-1 rounded-lg text-xs text-brand-textMain animate-fade-in group transition-colors">
+                  {isImage && file.sourcePath ? (
+                    <img
+                      src={file.sourcePath}
+                      alt={file.filename}
+                      className="w-4 h-4 object-cover rounded"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <span className="text-brand-textMuted text-[10px]">📎</span>
+                  )}
+                  <span className="truncate max-w-35 font-medium font-sans">{file.filename}</span>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveAttachment && onRemoveAttachment(idx)}
+                    className="text-brand-textMuted hover:text-brand-textMain font-bold ml-1 rounded hover:bg-[var(--brand-hover)] w-4 h-4 flex items-center justify-center transition-colors cursor-pointer"
+                    aria-label={`Remove ${file.filename}`}
+                  >
+                    &times;
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
 
