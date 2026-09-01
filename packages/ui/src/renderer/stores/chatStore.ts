@@ -53,11 +53,25 @@ class ChatStoreManager {
   }
 
   public setProjects(projects: StoredProject[]): void {
-    this.setState(() => ({ projects }));
+    const uniqueProjects = (projects || []).reduce<StoredProject[]>((acc, p) => {
+      const name = (p.name || '').trim();
+      if (name && !acc.some((existing) => (existing.name || '').trim().toLowerCase() === name.toLowerCase())) {
+        acc.push(p);
+      }
+      return acc;
+    }, []);
+    this.setState(() => ({ projects: uniqueProjects }));
   }
 
   public setChats(chats: StoredChat[]): void {
-    this.setState(() => ({ chats }));
+    const uniqueChats = (chats || []).reduce<StoredChat[]>((acc, c) => {
+      const id = (c.id || '').trim();
+      if (id && !acc.some((existing) => (existing.id || '').trim() === id)) {
+        acc.push(c);
+      }
+      return acc;
+    }, []);
+    this.setState(() => ({ chats: uniqueChats }));
   }
 
   public setActiveChatId(activeChatId: string | null): void {

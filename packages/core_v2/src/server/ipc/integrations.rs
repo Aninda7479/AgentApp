@@ -26,8 +26,8 @@ pub async fn handle_integrations_channel(
             let settings_val = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
             let providers = settings_val.get("providers").cloned().unwrap_or_else(|| serde_json::json!([]));
             let models = settings_val.get("models").cloned().unwrap_or_else(|| serde_json::json!([]));
-            let chats = crate::storage::load_all_stored_chats();
-            let projects = crate::storage::load_all_stored_projects();
+            let chats = state.chat_storage.load_all_stored_chats();
+            let projects = state.chat_storage.load_all_stored_projects();
             Some(Ok(Json(serde_json::json!({
                 "data": {
                     "connectedProviders": providers,
@@ -65,14 +65,14 @@ pub async fn handle_integrations_channel(
                     // Save chats to disk
                     if let Some(chats_arr) = obj.get("chats").and_then(|v| v.as_array()) {
                         for chat_val in chats_arr {
-                            let _ = crate::storage::save_stored_chat_from_json(chat_val);
+                            let _ = state.chat_storage.save_stored_chat_from_json(chat_val);
                         }
                     }
 
                     // Save projects to disk
                     if let Some(proj_arr) = obj.get("projects").and_then(|v| v.as_array()) {
                         for proj_val in proj_arr {
-                            let _ = crate::storage::save_stored_project_from_json(proj_val);
+                            let _ = state.chat_storage.save_stored_project_from_json(proj_val);
                         }
                     }
                 }
@@ -87,15 +87,15 @@ pub async fn handle_integrations_channel(
                     v.get("chatId").and_then(|c| c.as_str())
                 }
             }).unwrap_or("");
-            let steps = crate::storage::load_chat_steps(chat_id);
+            let steps = state.chat_storage.load_chat_steps(chat_id);
             Some(Ok(Json(serde_json::json!({ "data": steps }))))
         }
         "projects-read" => {
-            let projects = crate::storage::load_all_stored_projects();
+            let projects = state.chat_storage.load_all_stored_projects();
             Some(Ok(Json(serde_json::json!({ "data": projects }))))
         }
         "chats-read" => {
-            let chats = crate::storage::load_all_stored_chats();
+            let chats = state.chat_storage.load_all_stored_chats();
             Some(Ok(Json(serde_json::json!({ "data": chats }))))
         }
         "settings-read" => {

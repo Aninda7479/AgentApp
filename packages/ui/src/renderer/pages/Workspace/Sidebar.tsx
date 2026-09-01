@@ -181,9 +181,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return parseChatTime(b) - parseChatTime(a);
   };
 
+  // Deduplicate projects by case-insensitive name
+  const uniqueProjects = React.useMemo(() => {
+    return (projects || []).reduce<StoredProject[]>((acc, proj) => {
+      const cleanName = (proj.name || '').trim();
+      if (cleanName && !acc.some((p) => (p.name || '').trim().toLowerCase() === cleanName.toLowerCase())) {
+        acc.push(proj);
+      }
+      return acc;
+    }, []);
+  }, [projects]);
+
+  // Deduplicate chats by ID
+  const uniqueChats = React.useMemo(() => {
+    return (chats || []).reduce<StoredChat[]>((acc, chat) => {
+      const cleanId = (chat.id || '').trim();
+      if (cleanId && !acc.some((c) => (c.id || '').trim() === cleanId)) {
+        acc.push(chat);
+      }
+      return acc;
+    }, []);
+  }, [chats]);
+
   // Standalone chats = chats not linked to any known project, sorted chronologically
-  const standaloneChats = chats
-    .filter((chat) => !chat.project || !projects.some((p) => p.name === chat.project))
+  const standaloneChats = uniqueChats
+    .filter((chat) => !chat.project || !uniqueProjects.some((p) => (p.name || '').trim().toLowerCase() === (chat.project || '').trim().toLowerCase()))
     .sort(sortChatsChronologically);
 
   const toggleProjectCollapse = (name: string) => {
@@ -197,14 +219,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (standaloneIndex >= MAX_INITIAL_CHATS) {
       setShowAllStandaloneChats(true);
     }
-    projects.forEach((proj) => {
-      const projChats = chats.filter((c) => c.project === proj.name).sort(sortChatsChronologically);
+    uniqueProjects.forEach((proj) => {
+      const projChats = uniqueChats.filter((c) => (c.project || '').trim().toLowerCase() === (proj.name || '').trim().toLowerCase()).sort(sortChatsChronologically);
       const projIndex = projChats.findIndex((c) => c.id === activeChatId);
       if (projIndex >= MAX_INITIAL_CHATS) {
         setExpandedProjectChats((prev) => ({ ...prev, [proj.name]: true }));
       }
     });
-  }, [activeChatId, chats, projects]);
+  }, [activeChatId, uniqueChats, uniqueProjects]);
 
   // Close dot-menu when clicking outside
   useEffect(() => {
@@ -320,10 +342,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {/* Project list */}
             <div className="flex flex-col gap-0.5">
-              {projects.map((proj, projIdx) => {
+              {uniqueProjects.map((proj, projIdx) => {
                 const isExpanded = !collapsedProjects[proj.name];
-                const isProjectActive = activeProject === proj.name && activeTab === 'trajectory';
-                const projectChats = chats.filter((c) => c.project === proj.name).sort(sortChatsChronologically);
+                const isProjectActive = (activeProject || '').trim().toLowerCase() === (proj.name || '').trim().toLowerCase() && activeTab === 'trajectory';
+                const projectChats = uniqueChats.filter((c) => (c.project || '').trim().toLowerCase() === (proj.name || '').trim().toLowerCase()).sort(sortChatsChronologically);
                 const isMenuOpen = openMenuProject === proj.name;
 
                 return (
@@ -540,7 +562,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 );
               })}
 
-              {projects.length === 0 && (
+              {uniqueProjects.length === 0 && (
                 <button
                   onClick={onCreateProjectClick}
                   className="flex items-center gap-2 px-3 py-2 text-xs text-brand-textMuted/60 hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] rounded-lg transition-all cursor-pointer w-full border border-dashed border-brand-border/30 hover:border-brand-border-strong mt-1"

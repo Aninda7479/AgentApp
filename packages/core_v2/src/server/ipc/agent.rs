@@ -11,7 +11,6 @@ use crate::orchestrator::{AgentEngine, SubagentRunner};
 use crate::server::ipc::usage::record_usage;
 use crate::server::routes::chat::resolve_active_workspace_model;
 use crate::server::state::{AppState, SessionStateEntry};
-use crate::storage::settings::get_superagent_dir;
 use crate::tools::builtin::{
     CreateArtifactTool, EditFileTool, GetAvailableToolsTool, GrepSearchTool, ListArtifactsTool,
     ListDirTool, ReadArtifactTool, ReadFileTool, RunCommandTool, RunSubagentTool, WriteFileTool,
@@ -215,12 +214,12 @@ pub async fn handle_agent_channel(
                 if p.exists() && p.is_dir() {
                     p
                 } else {
-                    let conv_dir = get_superagent_dir().join("conversation").join("chats").join(&clean_chat_id);
+                    let conv_dir = state.chat_storage.storage_dir().join("chats").join(&clean_chat_id);
                     let _ = std::fs::create_dir_all(&conv_dir);
                     conv_dir
                 }
             } else {
-                let conv_dir = get_superagent_dir().join("conversation").join("chats").join(&clean_chat_id);
+                let conv_dir = state.chat_storage.storage_dir().join("chats").join(&clean_chat_id);
                 let _ = std::fs::create_dir_all(&conv_dir);
                 conv_dir
             };

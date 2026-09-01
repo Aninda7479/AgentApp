@@ -74,8 +74,27 @@ export class StoreService {
 
     const connectedProviders = stored?.connectedProviders ?? [];
     const modelsCatalog = stored?.modelsCatalog ?? [];
-    const projects = stored?.projects ?? [];
-    const chats = (stored?.chats ?? []).map((c: StoredChat) => ({ ...c, isRunning: false }));
+    
+    // Deduplicate projects by name (case-insensitive)
+    const rawProjects = stored?.projects ?? [];
+    const projects = rawProjects.reduce<StoredProject[]>((acc, p) => {
+      const name = (p.name || '').trim();
+      if (name && !acc.some((existing) => (existing.name || '').trim().toLowerCase() === name.toLowerCase())) {
+        acc.push(p);
+      }
+      return acc;
+    }, []);
+
+    // Deduplicate chats by ID
+    const rawChats = stored?.chats ?? [];
+    const chats = rawChats.reduce<StoredChat[]>((acc, c) => {
+      const id = (c.id || '').trim();
+      if (id && !acc.some((existing) => (existing.id || '').trim() === id)) {
+        acc.push({ ...c, isRunning: false });
+      }
+      return acc;
+    }, []);
+
     return { connectedProviders, modelsCatalog, projects, chats };
   }
 
