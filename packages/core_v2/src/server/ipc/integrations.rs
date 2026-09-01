@@ -745,13 +745,22 @@ pub async fn handle_integrations_channel(
         "copy-file-to-chat" => Some(Ok(Json(serde_json::json!({ "data": { "success": true } })))),
         "read-file-base64" => {
             if let Some(path_str) = args.first().and_then(|v| v.as_str()) {
-                let file_path = PathBuf::from(path_str);
-                if file_path.exists() {
-                    if let Ok(bytes) = tokio::fs::read(&file_path).await {
-                        let b64_str = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                        let mime = mime_guess::from_path(&file_path).first_or_octet_stream();
-                        let data_uri = format!("data:{};base64,{}", mime, b64_str);
-                        return Some(Ok(Json(serde_json::json!({ "data": data_uri }))));
+                if path_str.starts_with("data:") {
+                    return Some(Ok(Json(serde_json::json!({ "data": path_str }))));
+                }
+                let candidate_paths = vec![
+                    PathBuf::from(path_str),
+                    state.workspace_root.join(path_str),
+                    get_superagent_dir().join(path_str),
+                ];
+                for file_path in candidate_paths {
+                    if file_path.exists() && file_path.is_file() {
+                        if let Ok(bytes) = tokio::fs::read(&file_path).await {
+                            let b64_str = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                            let mime = mime_guess::from_path(&file_path).first_or_octet_stream();
+                            let data_uri = format!("data:{};base64,{}", mime, b64_str);
+                            return Some(Ok(Json(serde_json::json!({ "data": data_uri }))));
+                        }
                     }
                 }
             }

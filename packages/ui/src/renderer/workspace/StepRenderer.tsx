@@ -141,7 +141,16 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
                       key={idx}
                       className="flex items-center gap-1 px-2 py-0.5 bg-[color:var(--brand-inner-bg)] border border-[color:var(--brand-border)] rounded-md text-xs text-[color:var(--brand-text-main)]"
                     >
-                      {renderAttachmentIcon(att.mediaType)}
+                      {att.mediaType === 'image' && att.path && (att.path.startsWith('data:image/') || att.path.startsWith('blob:')) ? (
+                        <img
+                          src={att.path}
+                          alt={att.name}
+                          className="w-3.5 h-3.5 object-cover rounded shrink-0"
+                          onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                        />
+                      ) : (
+                        renderAttachmentIcon(att.mediaType)
+                      )}
                       <span className="font-mono truncate max-w-[180px]">{att.name}</span>
                     </div>
                   ))}

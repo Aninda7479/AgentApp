@@ -27,28 +27,81 @@ export interface TrajectoryStep {
 
 // ─── Local Image Preview ──────────────────────────────────────────────────────
 const LocalImagePreview: React.FC<{ filePath: string }> = ({ filePath }) => {
-  const [src, setSrc] = useState<string | null>(null);
+  const isDirectUrl =
+    filePath.startsWith('data:') ||
+    filePath.startsWith('blob:') ||
+    filePath.startsWith('http://') ||
+    filePath.startsWith('https://');
+
+  const [src, setSrc] = useState<string | null>(isDirectUrl ? filePath : null);
+  const [failed, setFailed] = useState(false);
+  const [loading, setLoading] = useState(!isDirectUrl);
 
   useEffect(() => {
-    TrajectoryService.readLocalImageBase64(filePath).then((base64: string | null) => {
-      if (base64) setSrc(base64);
-    });
-  }, [filePath]);
+    if (isDirectUrl) {
+      setSrc(filePath);
+      setLoading(false);
+      return;
+    }
 
-  if (!src) {
+    let active = true;
+    setLoading(true);
+    setFailed(false);
+
+    TrajectoryService.readLocalImageBase64(filePath)
+      .then((base64: string | null) => {
+        if (!active) return;
+        if (base64) {
+          setSrc(base64);
+          setFailed(false);
+        } else {
+          setFailed(true);
+        }
+        setLoading(false);
+      })
+      .catch(() => {
+        if (active) {
+          setFailed(true);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [filePath, isDirectUrl]);
+
+  if (src && !failed) {
     return (
-      <div className="mt-2 w-32 h-20 bg-brand-card animate-pulse rounded-lg border border-brand-border flex items-center justify-center text-[10px] text-brand-textMuted select-none">
-        Loading...
+      <div className="mt-2 relative group max-w-full overflow-hidden rounded-lg">
+        <img
+          src={src}
+          alt="Attached preview"
+          onError={() => setFailed(true)}
+          className="rounded-lg max-w-full max-h-[220px] object-contain border border-brand-border/60 shadow-sm bg-black/20"
+        />
       </div>
     );
   }
 
+  if (loading) {
+    return (
+      <div className="mt-2 w-32 h-16 bg-brand-card/60 animate-pulse rounded-lg border border-brand-border/40 flex items-center justify-center gap-1.5 text-[10px] text-brand-textMuted select-none">
+        <Loader2 size={12} className="animate-spin text-brand-textMuted" />
+        <span>Loading image...</span>
+      </div>
+    );
+  }
+
+  // Graceful fallback when image file cannot be read directly via IPC
+  const filename = filePath.split(/[/\\]/).pop() || filePath;
   return (
-    <img
-      src={src}
-      alt="Attached preview"
-      className="mt-2 rounded-lg max-w-full max-h-[220px] object-contain border border-brand-border/60 shadow-sm"
-    />
+    <div className="mt-2 p-2 rounded-lg bg-brand-card/40 border border-brand-border/40 flex items-center gap-2 max-w-full text-left">
+      <span className="text-sm select-none">🖼️</span>
+      <span className="text-[11px] font-mono text-brand-textMuted truncate max-w-[200px]" title={filePath}>
+        {filename}
+      </span>
+    </div>
   );
 };
 
@@ -644,7 +697,7 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
   const renderParagraphs = (text: string, keyPrefix: string) => {
     const lines = text.split('\n');
     return (
-      <div key={`p-${keyPrefix}`} className="text-brand-textMain font-sans text-[14px] leading-[1.7] tracking-[0.01em] break-words">
+      <div key={`p-${keyPrefix}`} className="text-brand-textMain font-sans text-[14px] leading-[1.7] tracking-[0.01em] break-words whitespace-pre-wrap w-full text-left">
         {lines.map((line, i) => renderLine(line, i))}
       </div>
     );
@@ -654,37 +707,37 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
     // Heading
     if (line.startsWith('### ')) {
       return (
-        <h3 key={idx} className="font-bold text-brand-textMain text-[14px] mt-3 mb-1">
+        <h3 key={idx} className="font-bold text-brand-textMain text-[14px] mt-3 mb-1 w-full text-left break-words">
           {line.slice(4)}
         </h3>
       );
     }
     if (line.startsWith('## ')) {
       return (
-        <h2 key={idx} className="font-bold text-brand-textMain text-[15px] mt-3 mb-1">
+        <h2 key={idx} className="font-bold text-brand-textMain text-[15px] mt-3 mb-1 w-full text-left break-words">
           {line.slice(3)}
         </h2>
       );
     }
     if (line.startsWith('# ')) {
       return (
-        <h1 key={idx} className="font-bold text-brand-textMain text-[16px] mt-4 mb-1">
+        <h1 key={idx} className="font-bold text-brand-textMain text-[16px] mt-4 mb-1 w-full text-left break-words">
           {line.slice(2)}
         </h1>
       );
     }
     // Horizontal rule
     if (line.trim() === '---') {
-      return <hr key={idx} className="border-brand-border/40 my-3" />;
+      return <hr key={idx} className="border-brand-border/40 my-3 w-full" />;
     }
     // Numbered list
     if (/^\d+\.\s/.test(line)) {
       const match = line.match(/^(\d+)\.\s(.*)/);
       if (match) {
         return (
-          <div key={idx} className="flex gap-2 my-0.5">
-            <span className="text-brand-textMuted text-[13px] min-w-[1.5rem] text-right select-none">{match[1]}.</span>
-            <span className="text-[13px] leading-relaxed">{renderInline(match[2])}</span>
+          <div key={idx} className="flex gap-2 my-0.5 w-full text-left items-start">
+            <span className="text-brand-textMuted text-[13px] min-w-[1.5rem] shrink-0 text-left select-none">{match[1]}.</span>
+            <span className="text-[13px] leading-relaxed break-words flex-1 text-left">{renderInline(match[2])}</span>
           </div>
         );
       }
@@ -692,9 +745,9 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
     // Bullet list
     if (line.startsWith('- ') || line.startsWith('* ')) {
       return (
-        <div key={idx} className="flex gap-2 my-0.5 pl-1">
-          <span className="text-brand-textMuted text-[13px] mt-1 select-none">•</span>
-          <span className="text-[13px] leading-relaxed">{renderInline(line.slice(2))}</span>
+        <div key={idx} className="flex gap-2 my-0.5 pl-1 w-full text-left items-start">
+          <span className="text-brand-textMuted text-[13px] mt-1 shrink-0 select-none">•</span>
+          <span className="text-[13px] leading-relaxed break-words flex-1 text-left">{renderInline(line.slice(2))}</span>
         </div>
       );
     }
@@ -704,7 +757,7 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
     }
     // Normal paragraph
     return (
-      <p key={idx} className="text-[13px] leading-relaxed">
+      <p key={idx} className="text-[13px] leading-relaxed break-words w-full text-left">
         {renderInline(line)}
       </p>
     );
@@ -720,7 +773,7 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
       if (codeMatch) {
         if (codeMatch[1]) parts.push(<span key={keyIdx++}>{renderBoldItalic(codeMatch[1])}</span>);
         parts.push(
-          <code key={keyIdx++} className="font-mono text-[12px] bg-brand-card border border-brand-border/60 px-1.5 py-0.5 rounded text-brand-textMain">
+          <code key={keyIdx++} className="font-mono text-[12px] bg-brand-card border border-brand-border/60 px-1.5 py-0.5 rounded text-brand-textMain break-all">
             {codeMatch[2]}
           </code>
         );
@@ -744,7 +797,7 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
   };
 
   return (
-    <div className="flex flex-col gap-1 w-full">
+    <div className="flex flex-col gap-1 w-full text-left overflow-hidden break-words">
       {renderBlocks()}
       {streaming && <StreamingCursor />}
     </div>
@@ -824,16 +877,16 @@ const TurnBlock: React.FC<TurnBlockProps> = ({
   const current = responses[selected] || [];
 
   return (
-    <div className="flex flex-col gap-0 items-end group/user">
+    <div className="flex flex-col gap-0 w-full group/user">
       {/* ── User Prompt Bubble (right-aligned, distinct card) ─────── */}
       <div className="flex justify-end w-full mt-1">
         <div
           data-testid={`step-user-${turn.userSteps[0]?.id || turnIdx}`}
-          className="relative bg-brand-card/70 backdrop-blur-sm border border-brand-border/60 rounded-xl px-3.5 py-2 max-w-[78%] text-right text-brand-textMain text-[13px] leading-relaxed shadow-sm hover:border-brand-border-strong transition-all font-sans"
+          className="relative bg-brand-card/70 backdrop-blur-sm border border-brand-border/60 rounded-xl px-3.5 py-2 max-w-[85%] text-left text-brand-textMain text-[13px] leading-relaxed shadow-sm hover:border-brand-border-strong transition-all font-sans break-words"
         >
           {turn.userSteps.map((step, idx) => (
             <div key={step.id} className={idx > 0 ? 'mt-2.5' : ''}>
-              {step.content && <div>{step.content}</div>}
+              {step.content && <div className="break-words">{step.content}</div>}
 
               {step.metadata?.mediaPath && step.metadata?.mediaType === 'image' && (
                 <LocalImagePreview filePath={step.metadata.mediaPath} />
@@ -894,18 +947,20 @@ const TurnBlock: React.FC<TurnBlockProps> = ({
 
       {/* ── Agent Response Block (selected regeneration) ──────── */}
       {(current.length > 0 || (isLastTurn && (lastError || !isStreaming))) && (
-        <AgentResponseBlock
-          steps={current}
-          isLastTurn={isLastTurn}
-          streamingStepId={streamingStepId}
-          isStreaming={isStreaming && selected === total - 1}
-          onViewDiff={onViewDiff}
-          onActionClick={onActionClick}
-          lastError={lastError}
-          onRetryLast={onRetryLast}
-          onRegenerate={onRegenerate ? () => onRegenerate(turn.userSteps[0].id, userContent) : undefined}
-          initialExpanded={initialExpanded}
-        />
+        <div className="w-full text-left mt-2">
+          <AgentResponseBlock
+            steps={current}
+            isLastTurn={isLastTurn}
+            streamingStepId={streamingStepId}
+            isStreaming={isStreaming && selected === total - 1}
+            onViewDiff={onViewDiff}
+            onActionClick={onActionClick}
+            lastError={lastError}
+            onRetryLast={onRetryLast}
+            onRegenerate={onRegenerate ? () => onRegenerate(turn.userSteps[0].id, userContent) : undefined}
+            initialExpanded={initialExpanded}
+          />
+        </div>
       )}
 
       {/* ── Regeneration history nav (arrows + x/n) ────────────── */}
@@ -1169,7 +1224,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
   const changedFilesCount = editedFiles.length;
 
   return (
-    <div className="mb-6 flex flex-col gap-2 group">
+    <div className="mb-6 flex flex-col gap-2 group w-full text-left items-start">
       {/* Worked-for collapsible header */}
       {hasWorkDetails && (
         <WorkedHeader
@@ -1186,9 +1241,9 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
               return (
                 <div
                   key={step.id}
-                  className="flex flex-col gap-0.5 items-start max-w-[90%] animate-fade-in mb-1"
+                  className="flex flex-col gap-0.5 items-start w-full max-w-full text-left animate-fade-in mb-1"
                 >
-                  <div className="bg-brand-card/20 border border-brand-border/30 rounded-lg px-3.5 py-2 text-[12px] text-brand-textMuted leading-relaxed font-sans border-l-2 border-l-brand-highlight/40">
+                  <div className="bg-brand-card/20 border border-brand-border/30 rounded-lg px-3.5 py-2 text-[12px] text-brand-textMuted leading-relaxed font-sans border-l-2 border-l-brand-highlight/40 w-full text-left break-words">
                     <MarkdownText content={step.content} />
                   </div>
                 </div>
@@ -1216,7 +1271,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
           <div
             key={step.id}
             data-testid={`step-assistant-${step.id}`}
-            className="flex flex-col gap-1"
+            className="flex flex-col gap-1 w-full text-left"
           >
             <MarkdownText content={step.content} streaming={isStreamingThis && isStreaming} />
 
