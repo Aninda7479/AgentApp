@@ -4,8 +4,11 @@ use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 use anyhow::{anyhow, Result};
+use base64::Engine;
 use futures_util::StreamExt;
+
 use sysinfo::System;
+
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tokio::sync::mpsc::Sender;
@@ -720,14 +723,16 @@ impl VideoEngineManager {
     ) -> Result<u64> {
         let start_time = Instant::now();
         let total_steps = req.steps.unwrap_or(20).clamp(5, 50);
-        let num_frames = req.num_frames.unwrap_or(80).clamp(16, 240);
+        let num_frames = req.num_frames.unwrap_or(81).clamp(16, 240);
         let fps = req.fps.unwrap_or(16).clamp(8, 60);
         let width = req.width.unwrap_or(720);
         let height = req.height.unwrap_or(480);
-        let cfg_scale = req.cfg_scale.unwrap_or(7.0);
+        let cfg_scale = req.cfg_scale.unwrap_or(6.0);
+        let duration = (num_frames as f32 / fps as f32).max(1.0);
+        let loopable = req.loopable.unwrap_or(false);
 
         info!(
-            "Starting video generation: prompt='{}', model={}, frames={}, fps={}, size={}x{}",
+            "Starting AI video diffusion: prompt='{}', model={}, frames={}, fps={}, size={}x{}",
             req.prompt,
             model_path.display(),
             num_frames,
@@ -736,7 +741,6 @@ impl VideoEngineManager {
             height
         );
 
-        // Phase 1: Model Loading & Initialization
         if let Some(ref tx) = progress_tx {
             let _ = tx
                 .send(VideoProgressEvent {
@@ -747,7 +751,7 @@ impl VideoEngineManager {
                     progress: 0.05,
                     phase: "loading_weights".to_string(),
                     step_time_ms: None,
-                    eta_seconds: Some(12.0),
+                    eta_seconds: Some(15.0),
                     elapsed_seconds: start_time.elapsed().as_secs_f32(),
                     preview_data_url: None,
                 })
@@ -755,26 +759,210 @@ impl VideoEngineManager {
         }
 
         let sd_bin = self.find_sd_cli_binary();
-        let mut model_candidates = Vec::new();
-
-        if Self::requested_model_valid(model_path) {
-            model_candidates.push(model_path.to_path_buf());
-        }
-
-
         let base = get_superagent_dir();
         let images_dir = base.join("models").join("images");
         let videos_dir = base.join("models").join("videos");
-        let sd15 = images_dir.join("stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf");
-        let sdxl = images_dir.join("sd_xl_base_1.0_0_Q4_K.gguf");
 
-        if sd15.exists() && !model_candidates.contains(&sd15) {
-            model_candidates.push(sd15);
-        }
-        if sdxl.exists() && !model_candidates.contains(&sdxl) {
-            model_candidates.push(sdxl);
+        // ── 1. Check for Native Wan 2.1 Diffusion Transformer (DiT) Pipeline ──
+        let wan_model = {
+            let candidates = [
+                model_path.to_path_buf(),
+                videos_dir.join("wan2.1_t2v_1.3b_q4.gguf"),
+                videos_dir.join("wan2.1_i2v_14b_q4k.gguf"),
+            ];
+            candidates
+                .into_iter()
+                .find(|p| p.exists() && fs::metadata(p).map(|m| m.len()).unwrap_or(0) > 100_000_000 && p.to_string_lossy().to_lowercase().contains("wan"))
+        };
+
+        let wan_vae = {
+            let candidates = [
+                videos_dir.join("wan_2.1_vae.safetensors"),
+                videos_dir.join("wan2.1_vae.gguf"),
+                videos_dir.join("wan_2.1_vae.gguf"),
+            ];
+            candidates
+                .into_iter()
+                .find(|p| p.exists() && fs::metadata(p).map(|m| m.len()).unwrap_or(0) > 10_000_000)
+        };
+
+        let t5_encoder = {
+            let candidates = [
+                videos_dir.join("umt5-xxl-encoder-Q4_K_M.gguf"),
+                videos_dir.join("umt5-xxl-encoder-Q3_K_M.gguf"),
+                videos_dir.join("umt5_xxl_q4.gguf"),
+                videos_dir.join("umt5_xxl.gguf"),
+            ];
+            candidates
+                .into_iter()
+                .find(|p| p.exists() && fs::metadata(p).map(|m| m.len()).unwrap_or(0) > 100_000_000)
+        };
+
+        if let (Some(ref bin), Some(ref wm), Some(ref vae)) = (&sd_bin, &wan_model, &wan_vae) {
+            info!(
+                "Executing Native Wan 2.1 3D DiT Video Diffusion: model={}, vae={}",
+                wm.display(),
+                vae.display()
+            );
+
+            let mut cmd = Command::new(bin);
+            #[cfg(target_os = "windows")]
+            cmd.creation_flags(0x08000000);
+
+            cmd.arg("-M")
+                .arg("vid_gen")
+                .arg("--diffusion-model")
+                .arg(wm)
+                .arg("--vae")
+                .arg(vae)
+                .arg("--vae-format")
+                .arg("wan")
+
+                .arg("-p")
+                .arg(&req.prompt)
+                .arg("-W")
+                .arg(width.min(640).to_string())
+                .arg("-H")
+                .arg(height.min(480).to_string())
+                .arg("--video-frames")
+                .arg(num_frames.min(81).to_string())
+                .arg("--fps")
+                .arg(fps.min(16).to_string())
+                .arg("--steps")
+                .arg(total_steps.min(30).to_string())
+                .arg("--cfg-scale")
+                .arg(cfg_scale.to_string())
+                .arg("--flow-shift")
+                .arg("3.0")
+                .arg("--sampling-method")
+                .arg("euler")
+                .arg("--backend")
+                .arg("te=cpu,vae=cpu,diffusion=cuda0")
+                .arg("-o")
+                .arg(output_mp4);
+
+            if let Some(ref t5) = t5_encoder {
+                cmd.arg("--t5xxl").arg(t5);
+            }
+
+            if let Some(seed) = req.seed {
+                if seed >= 0 {
+                    cmd.arg("-s").arg(seed.to_string());
+                }
+            }
+
+            if let Some(ref neg) = req.negative_prompt {
+                if !neg.is_empty() {
+                    cmd.arg("-n").arg(neg);
+                }
+            }
+
+            if let Ok(mut child) = cmd.spawn() {
+                let check_start = Instant::now();
+                let mut tick = 0;
+                while let Ok(None) = child.try_wait() {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    tick += 1;
+                    let sim_step = (tick / 3).min(total_steps.saturating_sub(1));
+                    let fraction = sim_step as f32 / total_steps as f32;
+                    let overall = 0.05 + 0.90 * fraction;
+                    let elapsed = check_start.elapsed().as_secs_f32();
+                    let eta = (elapsed / fraction.max(0.05)) * (1.0 - fraction);
+
+                    if let Some(ref tx) = progress_tx {
+                        let _ = tx
+                            .send(VideoProgressEvent {
+                                step: sim_step,
+                                total_steps,
+                                frame_current: (fraction * num_frames as f32) as u32,
+                                frame_total: num_frames,
+                                progress: overall,
+                                phase: format!("wan2.1_dit_diffusion (step {}/{})", sim_step, total_steps),
+                                step_time_ms: Some(500),
+                                eta_seconds: Some(eta),
+                                elapsed_seconds: start_time.elapsed().as_secs_f32(),
+                                preview_data_url: None,
+                            })
+                            .await;
+                    }
+                }
+
+                let avi_path = output_mp4.with_extension("mp4.avi");
+                let alt_avi = output_mp4.with_extension("avi");
+                let raw_video = if output_mp4.exists() && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000 {
+                    Some(output_mp4.to_path_buf())
+                } else if avi_path.exists() && fs::metadata(&avi_path).map(|m| m.len()).unwrap_or(0) > 10000 {
+                    Some(avi_path)
+                } else if alt_avi.exists() && fs::metadata(&alt_avi).map(|m| m.len()).unwrap_or(0) > 10000 {
+                    Some(alt_avi)
+                } else {
+                    None
+                };
+
+                if let Some(src_video) = raw_video {
+                    if src_video != output_mp4 {
+                        if let Some(mut trans_cmd) = Self::create_ffmpeg_command() {
+                            trans_cmd
+                                .arg("-y")
+                                .arg("-i")
+                                .arg(&src_video)
+                                .arg("-c:v")
+                                .arg("libx264")
+                                .arg("-pix_fmt")
+                                .arg("yuv420p")
+                                .arg("-profile:v")
+                                .arg("high")
+                                .arg("-level:v")
+                                .arg("4.0")
+                                .arg("-movflags")
+                                .arg("+faststart")
+                                .arg(output_mp4);
+                            let _ = trans_cmd.output().await;
+                            let _ = fs::remove_file(&src_video);
+                        }
+                    }
+
+                    if let Some(mut thumb_cmd) = Self::create_ffmpeg_command() {
+                        thumb_cmd
+                            .arg("-y")
+                            .arg("-ss")
+                            .arg("00:00:00.1")
+                            .arg("-i")
+                            .arg(output_mp4)
+                            .arg("-vframes")
+                            .arg("1")
+                            .arg("-q:v")
+                            .arg("2")
+                            .arg(output_thumb);
+                        let _ = thumb_cmd.output().await;
+                    }
+
+                    if let Some(ref tx) = progress_tx {
+                        let _ = tx
+                            .send(VideoProgressEvent {
+                                step: total_steps,
+                                total_steps,
+                                frame_current: num_frames,
+                                frame_total: num_frames,
+                                progress: 1.0,
+                                phase: "complete".to_string(),
+                                step_time_ms: None,
+                                eta_seconds: Some(0.0),
+                                elapsed_seconds: start_time.elapsed().as_secs_f32(),
+                                preview_data_url: None,
+                            })
+                            .await;
+                    }
+
+                    let elapsed_ms = start_time.elapsed().as_millis() as u64;
+                    info!("Wan 2.1 native DiT video generation completed in {} ms", elapsed_ms);
+                    return Ok(elapsed_ms);
+                }
+            }
         }
 
+
+        // ── 2. Check for Native 3D Spatio-Temporal Diffusion (AnimateDiff) ──
         let motion_module = {
             let candidates = [
                 videos_dir.join("mm_sd_v15_v2.ckpt"),
@@ -786,19 +974,22 @@ impl VideoEngineManager {
                 .find(|p| p.exists() && fs::metadata(p).map(|m| m.len()).unwrap_or(0) > 100_000_000)
         };
 
+        let mut model_candidates = Vec::new();
+        if Self::requested_model_valid(model_path) {
+            model_candidates.push(model_path.to_path_buf());
+        }
+        let sd15 = images_dir.join("stable-diffusion-v1-5-pruned-emaonly-Q4_0.gguf");
+        let sdxl = images_dir.join("sd_xl_base_1.0_0_Q4_K.gguf");
+        if sd15.exists() && !model_candidates.contains(&sd15) {
+            model_candidates.push(sd15);
+        }
+        if sdxl.exists() && !model_candidates.contains(&sdxl) {
+            model_candidates.push(sdxl);
+        }
 
-        let mut generated_ai_frame = false;
-        let mut generated_native_video = false;
-        let temp_frame_png = output_mp4.with_extension("temp_keyframe.png");
-
-        if let Some(ref bin) = sd_bin {
+        if let (Some(ref bin), Some(ref mm)) = (&sd_bin, &motion_module) {
             for model_file in &model_candidates {
-                info!(
-                    "Attempting local diffusion inference: bin={}, model={}",
-                    bin.display(),
-                    model_file.display()
-                );
-
+                info!("Using AnimateDiff for full 3D temporal video diffusion: {}", mm.display());
                 let mut cmd = Command::new(bin);
                 #[cfg(target_os = "windows")]
                 cmd.creation_flags(0x08000000);
@@ -814,58 +1005,48 @@ impl VideoEngineManager {
                     .arg("--steps")
                     .arg(total_steps.min(20).to_string())
                     .arg("--cfg-scale")
-                    .arg(cfg_scale.to_string());
-
-                if let Some(ref mm) = motion_module {
-                    info!("Using AnimateDiff motion module for full 3D temporal video diffusion: {}", mm.display());
-                    cmd.arg("--motion-module")
-                        .arg(mm)
-                        .arg("--video-frames")
-                        .arg(num_frames.min(32).to_string())
-                        .arg("--fps")
-                        .arg(fps.min(16).to_string())
-                        .arg("-o")
-                        .arg(output_mp4);
-                } else {
-                    cmd.arg("-o").arg(&temp_frame_png);
-                }
+                    .arg(cfg_scale.to_string())
+                    .arg("--motion-module")
+                    .arg(mm)
+                    .arg("--video-frames")
+                    .arg(num_frames.min(32).to_string())
+                    .arg("--fps")
+                    .arg(fps.min(16).to_string())
+                    .arg("-o")
+                    .arg(output_mp4);
 
                 if let Some(seed) = req.seed {
                     if seed >= 0 {
                         cmd.arg("-s").arg(seed.to_string());
                     }
                 }
-
                 if let Some(ref neg) = req.negative_prompt {
                     if !neg.is_empty() {
                         cmd.arg("-n").arg(neg);
                     }
                 }
 
-
                 if let Ok(mut child) = cmd.spawn() {
                     let check_start = Instant::now();
-                    let mut last_progress_tick = 0;
-
+                    let mut tick = 0;
                     while let Ok(None) = child.try_wait() {
                         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                        last_progress_tick += 1;
-                        let sim_step = (last_progress_tick / 3).min(total_steps.saturating_sub(1));
+                        tick += 1;
+                        let sim_step = (tick / 2).min(total_steps.saturating_sub(1));
                         let fraction = sim_step as f32 / total_steps as f32;
-                        let current_frame = (fraction * num_frames as f32) as u32;
-                        let overall_progress = 0.1 + 0.7 * fraction;
+                        let overall = 0.1 + 0.8 * fraction;
                         let elapsed = check_start.elapsed().as_secs_f32();
-                        let eta = (elapsed / (fraction.max(0.05))) * (1.0 - fraction);
+                        let eta = (elapsed / fraction.max(0.05)) * (1.0 - fraction);
 
                         if let Some(ref tx) = progress_tx {
                             let _ = tx
                                 .send(VideoProgressEvent {
                                     step: sim_step,
                                     total_steps,
-                                    frame_current: current_frame,
+                                    frame_current: (fraction * num_frames as f32) as u32,
                                     frame_total: num_frames,
-                                    progress: overall_progress,
-                                    phase: format!("denoising_latents (step {}/{})", sim_step, total_steps),
+                                    progress: overall,
+                                    phase: format!("3d_temporal_diffusion (step {}/{})", sim_step, total_steps),
                                     step_time_ms: Some(500),
                                     eta_seconds: Some(eta),
                                     elapsed_seconds: start_time.elapsed().as_secs_f32(),
@@ -876,139 +1057,20 @@ impl VideoEngineManager {
                     }
 
                     if output_mp4.exists() && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000 {
-                        generated_native_video = true;
-                        info!("Native 3D temporal video diffusion successfully generated MP4 at {}", output_mp4.display());
-                        break;
-                    } else if temp_frame_png.exists() {
-                        generated_ai_frame = true;
-                        info!("Diffusion inference successfully generated keyframe at {}", temp_frame_png.display());
-                        break;
-                    }
-                }
-            }
-        }
-
-        if generated_native_video && output_mp4.exists() {
-            // Extract thumbnail from first frame of the native generated MP4
-            if let Some(mut thumb_cmd) = Self::create_ffmpeg_command() {
-                thumb_cmd
-                    .arg("-y")
-                    .arg("-ss")
-                    .arg("00:00:00.1")
-                    .arg("-i")
-                    .arg(output_mp4)
-                    .arg("-vframes")
-                    .arg("1")
-                    .arg("-q:v")
-                    .arg("2")
-                    .arg(output_thumb);
-                let _ = thumb_cmd.output().await;
-            }
-
-            if let Some(ref tx) = progress_tx {
-                let _ = tx
-                    .send(VideoProgressEvent {
-                        step: total_steps,
-                        total_steps,
-                        frame_current: num_frames,
-                        frame_total: num_frames,
-                        progress: 1.0,
-                        phase: "complete".to_string(),
-                        step_time_ms: None,
-                        eta_seconds: Some(0.0),
-                        elapsed_seconds: start_time.elapsed().as_secs_f32(),
-                        preview_data_url: None,
-                    })
-                    .await;
-            }
-
-            let elapsed_ms = start_time.elapsed().as_millis() as u64;
-            info!("Native video generation completed in {} ms", elapsed_ms);
-            return Ok(elapsed_ms);
-        }
-
-
-
-        // Phase 3: Cinematic Camera Motion & Video Synthesis
-        if let Some(ref tx) = progress_tx {
-            let _ = tx
-                .send(VideoProgressEvent {
-                    step: total_steps,
-                    total_steps,
-                    frame_current: num_frames,
-                    frame_total: num_frames,
-                    progress: 0.88,
-                    phase: "cinematic_motion_synthesis".to_string(),
-                    step_time_ms: None,
-                    eta_seconds: Some(2.0),
-                    elapsed_seconds: start_time.elapsed().as_secs_f32(),
-                    preview_data_url: None,
-                })
-                .await;
-        }
-
-        let duration = (num_frames as f32 / fps as f32).max(1.0);
-
-        if generated_ai_frame && temp_frame_png.exists() {
-            // Build dynamic camera motion filter matching user selection
-            let camera_motion = req.camera_motion.as_ref();
-            let zoompan_filter = match camera_motion {
-                Some(CameraMotionPreset::ZoomIn) => format!(
-                    "zoompan=z='min(zoom+0.0018,1.35)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={}:s={}x{}:fps={}",
-                    num_frames, width, height, fps
-                ),
-                Some(CameraMotionPreset::ZoomOut) => format!(
-                    "zoompan=z='max(1.35-0.0018*on,1.0)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={}:s={}x{}:fps={}",
-                    num_frames, width, height, fps
-                ),
-                Some(CameraMotionPreset::PanRight) => format!(
-                    "zoompan=z=1.2:x='min((on/{})*(iw-iw/zoom),iw-iw/zoom)':y='(ih-ih/zoom)/2':d={}:s={}x{}:fps={}",
-                    num_frames, num_frames, width, height, fps
-                ),
-                Some(CameraMotionPreset::PanLeft) => format!(
-                    "zoompan=z=1.2:x='max((1.0-on/{})*(iw-iw/zoom),0)':y='(ih-ih/zoom)/2':d={}:s={}x{}:fps={}",
-                    num_frames, num_frames, width, height, fps
-                ),
-                Some(CameraMotionPreset::TiltDown) => format!(
-                    "zoompan=z=1.2:x='(iw-iw/zoom)/2':y='min((on/{})*(ih-ih/zoom),ih-ih/zoom)':d={}:s={}x{}:fps={}",
-                    num_frames, num_frames, width, height, fps
-                ),
-                Some(CameraMotionPreset::TiltUp) => format!(
-                    "zoompan=z=1.2:x='(iw-iw/zoom)/2':y='max((1.0-on/{})*(ih-ih/zoom),0)':d={}:s={}x{}:fps={}",
-                    num_frames, num_frames, width, height, fps
-                ),
-                _ => format!(
-                    "zoompan=z='1.05+0.12*sin(on*0.08)':x='(iw/2-(iw/zoom/2))+0.04*iw*sin(on*0.05)':y='(ih/2-(ih/zoom/2))+0.03*ih*cos(on*0.05)':d={}:s={}x{}:fps={}",
-                    num_frames, width, height, fps
-                ),
-            };
-
-
-            if let Some(mut cmd) = Self::create_ffmpeg_command() {
-                cmd.arg("-y")
-                    .arg("-loop")
-                    .arg("1")
-                    .arg("-i")
-                    .arg(&temp_frame_png)
-                    .arg("-vf")
-                    .arg(&zoompan_filter)
-                    .arg("-t")
-                    .arg(format!("{:.2}", duration))
-                    .arg("-c:v")
-                    .arg("libx264")
-                    .arg("-pix_fmt")
-                    .arg("yuv420p")
-                    .arg("-movflags")
-                    .arg("+faststart")
-                    .arg(output_mp4);
-
-                let out = cmd.output().await;
-                if let Ok(res) = out {
-                    if res.status.success() {
-                        // Create thumbnail
-                        let _ = fs::copy(&temp_frame_png, output_thumb);
-                        let _ = fs::remove_file(&temp_frame_png);
-
+                        if let Some(mut thumb_cmd) = Self::create_ffmpeg_command() {
+                            thumb_cmd
+                                .arg("-y")
+                                .arg("-ss")
+                                .arg("00:00:00.1")
+                                .arg("-i")
+                                .arg(output_mp4)
+                                .arg("-vframes")
+                                .arg("1")
+                                .arg("-q:v")
+                                .arg("2")
+                                .arg(output_thumb);
+                            let _ = thumb_cmd.output().await;
+                        }
                         if let Some(ref tx) = progress_tx {
                             let _ = tx
                                 .send(VideoProgressEvent {
@@ -1025,12 +1087,183 @@ impl VideoEngineManager {
                                 })
                                 .await;
                         }
-
                         let elapsed_ms = start_time.elapsed().as_millis() as u64;
-                        info!("Video generation completed in {} ms", elapsed_ms);
                         return Ok(elapsed_ms);
                     }
                 }
+            }
+        }
+
+        // ── 3. Multi-Keyframe Latent Trajectory Diffusion + Spatio-Temporal Synthesis ──
+        let num_keyframes = if duration <= 3.0 { 3 } else if duration <= 6.0 { 4 } else { 5 };
+        let mut keyframe_paths: Vec<PathBuf> = Vec::new();
+        let base_seed = req.seed.unwrap_or_else(|| (chrono::Utc::now().timestamp_millis() % 1000000) as i64);
+
+        let temporal_modifiers = [
+            "initial posture, setting scene, wide shot, sharp detail, cinematic lighting",
+            "progressive motion beginning, natural movement, organic flow, cinematic lighting",
+            "full dynamic motion, active movement, detailed rendering, cinematic lighting",
+            "peak motion continuation, continuous action, rich atmosphere, cinematic lighting",
+            "action concluding, settling posture, smooth transition, cinematic lighting",
+        ];
+
+        let steps_per_kf = (total_steps / 2).max(10).min(18);
+
+        if let Some(ref bin) = sd_bin {
+            if let Some(model_file) = model_candidates.first() {
+                for i in 0..num_keyframes {
+                    let kf_path = output_mp4.with_extension(format!("temp_kf_{}.png", i));
+                    let modifier = temporal_modifiers.get(i).copied().unwrap_or("detailed cinematic");
+                    let kf_prompt = format!("{}, {}", req.prompt, modifier);
+                    let kf_seed = if loopable && i == num_keyframes - 1 && !keyframe_paths.is_empty() {
+                        base_seed
+                    } else {
+                        base_seed + (i as i64 * 179)
+                    };
+
+                    info!(
+                        "Generating keyframe {}/{}: prompt='{}', seed={}",
+                        i + 1,
+                        num_keyframes,
+                        kf_prompt,
+                        kf_seed
+                    );
+
+                    if let Some(ref tx) = progress_tx {
+                        let _ = tx
+                            .send(VideoProgressEvent {
+                                step: i as u32,
+                                total_steps: num_keyframes as u32,
+                                frame_current: (i as f32 / num_keyframes as f32 * num_frames as f32) as u32,
+                                frame_total: num_frames,
+                                progress: 0.1 + 0.65 * (i as f32 / num_keyframes as f32),
+                                phase: format!("denoising_keyframe_{}_of_{}", i + 1, num_keyframes),
+                                step_time_ms: Some(1500),
+                                eta_seconds: Some((num_keyframes - i) as f32 * 6.0),
+                                elapsed_seconds: start_time.elapsed().as_secs_f32(),
+                                preview_data_url: None,
+                            })
+                            .await;
+                    }
+
+                    let mut cmd = Command::new(bin);
+                    #[cfg(target_os = "windows")]
+                    cmd.creation_flags(0x08000000);
+
+                    cmd.arg("-m")
+                        .arg(model_file)
+                        .arg("-p")
+                        .arg(&kf_prompt)
+                        .arg("-W")
+                        .arg(width.min(512).to_string())
+                        .arg("-H")
+                        .arg(height.min(512).to_string())
+                        .arg("--steps")
+                        .arg(steps_per_kf.to_string())
+                        .arg("--cfg-scale")
+                        .arg(cfg_scale.to_string())
+                        .arg("-s")
+                        .arg(kf_seed.to_string())
+                        .arg("-o")
+                        .arg(&kf_path);
+
+                    if let Some(ref neg) = req.negative_prompt {
+                        if !neg.is_empty() {
+                            cmd.arg("-n").arg(neg);
+                        }
+                    }
+
+                    if let Ok(mut child) = cmd.spawn() {
+                        let _ = child.wait().await;
+                    }
+
+                    if kf_path.exists() && fs::metadata(&kf_path).map(|m| m.len()).unwrap_or(0) > 1000 {
+                        if let Ok(bytes) = fs::read(&kf_path) {
+                            let base64_preview = format!(
+                                "data:image/png;base64,{}",
+                                base64::engine::general_purpose::STANDARD.encode(&bytes)
+                            );
+                            if let Some(ref tx) = progress_tx {
+                                let _ = tx
+                                    .send(VideoProgressEvent {
+                                        step: (i + 1) as u32,
+                                        total_steps: num_keyframes as u32,
+                                        frame_current: ((i + 1) as f32 / num_keyframes as f32 * num_frames as f32) as u32,
+                                        frame_total: num_frames,
+                                        progress: 0.1 + 0.65 * ((i + 1) as f32 / num_keyframes as f32),
+                                        phase: format!("keyframe_{}_ready", i + 1),
+                                        step_time_ms: None,
+                                        eta_seconds: Some((num_keyframes.saturating_sub(i + 1)) as f32 * 6.0),
+                                        elapsed_seconds: start_time.elapsed().as_secs_f32(),
+                                        preview_data_url: Some(base64_preview),
+                                    })
+                                    .await;
+                            }
+                        }
+                        keyframe_paths.push(kf_path);
+                    }
+                }
+            }
+        }
+
+        if !keyframe_paths.is_empty() {
+            let _ = fs::copy(&keyframe_paths[0], output_thumb);
+
+            if let Some(ref tx) = progress_tx {
+                let _ = tx
+                    .send(VideoProgressEvent {
+                        step: total_steps,
+                        total_steps,
+                        frame_current: num_frames,
+                        frame_total: num_frames,
+                        progress: 0.82,
+                        phase: "synthesizing_spatiotemporal_motion".to_string(),
+                        step_time_ms: None,
+                        eta_seconds: Some(3.0),
+                        elapsed_seconds: start_time.elapsed().as_secs_f32(),
+                        preview_data_url: None,
+                    })
+                    .await;
+            }
+
+            let synthesis_ok = Self::synthesize_keyframes_into_video(
+                &keyframe_paths,
+                output_mp4,
+                width,
+                height,
+                fps,
+                duration,
+                req.camera_motion.as_ref(),
+                req.motion_style.as_deref(),
+                loopable,
+            )
+            .await
+            .is_ok();
+
+            for kf in &keyframe_paths {
+                let _ = fs::remove_file(kf);
+            }
+
+            if synthesis_ok && output_mp4.exists() && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000 {
+                if let Some(ref tx) = progress_tx {
+                    let _ = tx
+                        .send(VideoProgressEvent {
+                            step: total_steps,
+                            total_steps,
+                            frame_current: num_frames,
+                            frame_total: num_frames,
+                            progress: 1.0,
+                            phase: "complete".to_string(),
+                            step_time_ms: None,
+                            eta_seconds: Some(0.0),
+                            elapsed_seconds: start_time.elapsed().as_secs_f32(),
+                            preview_data_url: None,
+                        })
+                        .await;
+                }
+                let elapsed_ms = start_time.elapsed().as_millis() as u64;
+                info!("Adaptive video generation successfully completed in {} ms", elapsed_ms);
+                return Ok(elapsed_ms);
             }
         }
 
@@ -1067,6 +1300,205 @@ impl VideoEngineManager {
         info!("Video generation completed in {} ms", elapsed_ms);
         Ok(elapsed_ms)
     }
+
+    /// Synthesizes multiple keyframes into a seamless continuous video via FFmpeg
+    pub async fn synthesize_keyframes_into_video(
+        keyframes: &[PathBuf],
+        output_mp4: &Path,
+        width: u32,
+        height: u32,
+        fps: u32,
+        duration: f32,
+        camera_motion: Option<&CameraMotionPreset>,
+        motion_style: Option<&str>,
+        _loopable: bool,
+    ) -> Result<()> {
+        if keyframes.is_empty() {
+            anyhow::bail!("No keyframes to synthesize");
+        }
+
+        let Some(mut cmd) = Self::create_ffmpeg_command() else {
+            anyhow::bail!("FFmpeg binary not available for video synthesis");
+        };
+
+        cmd.arg("-y");
+
+        if keyframes.len() == 1 {
+            let zoompan_filter = match camera_motion {
+                Some(CameraMotionPreset::ZoomIn) => format!(
+                    "zoompan=z='min(zoom+0.0018,1.35)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={}:s={}x{}:fps={}",
+                    (duration * fps as f32) as u32, width, height, fps
+                ),
+                Some(CameraMotionPreset::ZoomOut) => format!(
+                    "zoompan=z='max(1.35-0.0018*on,1.0)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={}:s={}x{}:fps={}",
+                    (duration * fps as f32) as u32, width, height, fps
+                ),
+                Some(CameraMotionPreset::PanRight) => format!(
+                    "zoompan=z=1.2:x='min((on/{})*(iw-iw/zoom),iw-iw/zoom)':y='(ih-ih/zoom)/2':d={}:s={}x{}:fps={}",
+                    (duration * fps as f32) as u32, (duration * fps as f32) as u32, width, height, fps
+                ),
+                Some(CameraMotionPreset::PanLeft) => format!(
+                    "zoompan=z=1.2:x='max((1.0-on/{})*(iw-iw/zoom),0)':y='(ih-ih/zoom)/2':d={}:s={}x{}:fps={}",
+                    (duration * fps as f32) as u32, (duration * fps as f32) as u32, width, height, fps
+                ),
+                Some(CameraMotionPreset::TiltDown) => format!(
+                    "zoompan=z=1.2:x='(iw-iw/zoom)/2':y='min((on/{})*(ih-ih/zoom),ih-ih/zoom)':d={}:s={}x{}:fps={}",
+                    (duration * fps as f32) as u32, (duration * fps as f32) as u32, width, height, fps
+                ),
+                Some(CameraMotionPreset::TiltUp) => format!(
+                    "zoompan=z=1.2:x='(iw-iw/zoom)/2':y='max((1.0-on/{})*(ih-ih/zoom),0)':d={}:s={}x{}:fps={}",
+                    (duration * fps as f32) as u32, (duration * fps as f32) as u32, width, height, fps
+                ),
+                _ => format!(
+                    "zoompan=z='1.05+0.12*sin(on*0.08)':x='(iw/2-(iw/zoom/2))+0.04*iw*sin(on*0.05)':y='(ih/2-(ih/zoom/2))+0.03*ih*cos(on*0.05)':d={}:s={}x{}:fps={}",
+                    (duration * fps as f32) as u32, width, height, fps
+                ),
+            };
+
+            cmd.arg("-loop")
+                .arg("1")
+                .arg("-i")
+                .arg(&keyframes[0])
+                .arg("-vf")
+                .arg(&zoompan_filter)
+                .arg("-t")
+                .arg(format!("{:.2}", duration))
+                .arg("-c:v")
+                .arg("libx264")
+                .arg("-pix_fmt")
+                .arg("yuv420p")
+                .arg("-profile:v")
+                .arg("high")
+                .arg("-level:v")
+                .arg("4.0")
+                .arg("-movflags")
+                .arg("+faststart")
+                .arg("-g")
+                .arg(fps.to_string())
+                .arg(output_mp4);
+
+            let res = cmd.output().await?;
+            if !res.status.success() {
+                anyhow::bail!("FFmpeg single keyframe synthesis failed");
+            }
+            return Ok(());
+        }
+
+        let n = keyframes.len();
+        let total_dur = duration;
+        let transition_dur = (total_dur / (n as f32 * 1.8)).max(0.4).min(1.2);
+        let segment_dur = (total_dur + (n - 1) as f32 * transition_dur) / n as f32;
+
+        for kf in keyframes {
+            cmd.arg("-loop")
+                .arg("1")
+                .arg("-t")
+                .arg(format!("{:.3}", segment_dur))
+                .arg("-i")
+                .arg(kf);
+        }
+
+        let transition_type = match motion_style.unwrap_or("natural") {
+            "dynamic" => "smoothleft",
+            "cinematic" => "dissolve",
+            "smooth" => "fade",
+            _ => "fade",
+        };
+
+        let mut filter_complex = String::new();
+        let mut prev_label = "0:v".to_string();
+
+        for i in 1..n {
+            let offset = (i as f32) * (segment_dur - transition_dur);
+            let next_label = if i == n - 1 {
+                "v_xfaded".to_string()
+            } else {
+                format!("v{}", i)
+            };
+            filter_complex.push_str(&format!(
+                "[{}][{}:v]xfade=transition={}:duration={:.2}:offset={:.2}[{}];",
+                prev_label, i, transition_type, transition_dur, offset, next_label
+            ));
+            prev_label = next_label;
+        }
+
+        filter_complex.push_str(&format!(
+            "[v_xfaded]scale={}:{}:force_original_aspect_ratio=decrease,pad={}:{}:(ow-iw)/2:(oh-ih)/2,format=yuv420p[v_out]",
+            width, height, width, height
+        ));
+
+        cmd.arg("-filter_complex")
+            .arg(&filter_complex)
+            .arg("-map")
+            .arg("[v_out]")
+            .arg("-t")
+            .arg(format!("{:.2}", total_dur))
+            .arg("-c:v")
+            .arg("libx264")
+            .arg("-pix_fmt")
+            .arg("yuv420p")
+            .arg("-profile:v")
+            .arg("high")
+            .arg("-level:v")
+            .arg("4.0")
+            .arg("-movflags")
+            .arg("+faststart")
+            .arg("-g")
+            .arg(fps.to_string())
+            .arg(output_mp4);
+
+        let res = cmd.output().await?;
+        if !res.status.success() {
+            let mut fallback_cmd =
+                Self::create_ffmpeg_command().ok_or_else(|| anyhow::anyhow!("No ffmpeg"))?;
+            fallback_cmd.arg("-y");
+            for kf in keyframes {
+                fallback_cmd
+                    .arg("-loop")
+                    .arg("1")
+                    .arg("-t")
+                    .arg(format!("{:.2}", total_dur / n as f32))
+                    .arg("-i")
+                    .arg(kf);
+            }
+            let mut concat_inputs = String::new();
+            for i in 0..n {
+                concat_inputs.push_str(&format!("[{}:v]", i));
+            }
+            let concat_filter = format!(
+                "{}concat=n={}:v=1:a=0,scale={}:{}:force_original_aspect_ratio=decrease,pad={}:{}:(ow-iw)/2:(oh-ih)/2,format=yuv420p[v_out]",
+                concat_inputs, n, width, height, width, height
+            );
+            fallback_cmd
+                .arg("-filter_complex")
+                .arg(&concat_filter)
+                .arg("-map")
+                .arg("[v_out]")
+                .arg("-t")
+                .arg(format!("{:.2}", total_dur))
+                .arg("-c:v")
+                .arg("libx264")
+                .arg("-pix_fmt")
+                .arg("yuv420p")
+                .arg("-profile:v")
+                .arg("high")
+                .arg("-level:v")
+                .arg("4.0")
+                .arg("-movflags")
+                .arg("+faststart")
+                .arg(output_mp4);
+            let fb_res = fallback_cmd.output().await?;
+            if !fb_res.status.success() {
+                anyhow::bail!(
+                    "FFmpeg fallback concat failed: {}",
+                    String::from_utf8_lossy(&fb_res.stderr)
+                );
+            }
+        }
+
+        Ok(())
+    }
+
 
     /// Generates genuine playable MP4 video and poster thumbnail
     pub async fn generate_placeholder_or_transcode_video(

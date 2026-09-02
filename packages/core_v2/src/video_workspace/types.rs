@@ -164,12 +164,15 @@ pub struct GenerateVideoRequest {
     pub cfg_scale: Option<f32>,
     pub seed: Option<i64>,
     pub motion_scale: Option<f32>,
+    pub motion_style: Option<String>, // "natural" | "dynamic" | "smooth" | "cinematic"
+    pub loopable: Option<bool>,
     pub camera_motion: Option<CameraMotionPreset>,
     pub init_image: Option<String>, // Base64 data URL or path for I2V
     pub last_image: Option<String>, // Base64 data URL or path for transition
     pub interpolate_2x: Option<bool>,
     pub sampler: Option<String>,
 }
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerateVideoResponse {
