@@ -87,7 +87,12 @@ pub fn is_public_path(path: &str) -> bool {
         || path.ends_with(".jpeg")
         || path.ends_with(".webp")
         || path.ends_with(".gif")
+        || path.ends_with(".mp4")
+        || path.ends_with(".webm")
+        || (path.starts_with("/api/images/generations/") && path.ends_with("/file"))
+        || (path.starts_with("/api/videos/generations/") && (path.ends_with("/file") || path.ends_with("/thumbnail")))
 }
+
 
 /// Axum middleware guarding all protected API routes, WebSockets, and SPA pages.
 pub async fn auth_middleware(

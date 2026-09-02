@@ -408,6 +408,8 @@ export async function listVideoGenerations(): Promise<VideoGenerationRecord[]> {
   }
 }
 
+import { getStoredAuthToken } from '../lib/ipc';
+
 export async function getVideoGeneration(id: string): Promise<VideoGenerationRecord> {
   return await requestJson<VideoGenerationRecord>(`/api/videos/generations/${encodeURIComponent(id)}`, {
     method: 'GET',
@@ -416,13 +418,18 @@ export async function getVideoGeneration(id: string): Promise<VideoGenerationRec
 
 export function getVideoUrl(id: string): string {
   const baseUrl = getApiBaseUrl();
-  return `${baseUrl}/api/videos/generations/${encodeURIComponent(id)}/file`;
+  const token = getStoredAuthToken();
+  const query = token ? `?token=${encodeURIComponent(token)}` : '';
+  return `${baseUrl}/api/videos/generations/${encodeURIComponent(id)}/file${query}`;
 }
 
 export function getVideoThumbnailUrl(id: string): string {
   const baseUrl = getApiBaseUrl();
-  return `${baseUrl}/api/videos/generations/${encodeURIComponent(id)}/thumbnail`;
+  const token = getStoredAuthToken();
+  const query = token ? `?token=${encodeURIComponent(token)}` : '';
+  return `${baseUrl}/api/videos/generations/${encodeURIComponent(id)}/thumbnail${query}`;
 }
+
 
 export async function deleteVideoGeneration(id: string): Promise<{ success: boolean }> {
   return await requestJson<{ success: boolean }>(`/api/videos/generations/${encodeURIComponent(id)}`, {

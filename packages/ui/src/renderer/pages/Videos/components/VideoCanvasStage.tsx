@@ -42,6 +42,7 @@ export const VideoCanvasStage: React.FC<VideoCanvasStageProps> = ({
   const [playbackRate, setPlaybackRate] = useState(1.0);
   const [isLooping, setIsLooping] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -53,18 +54,31 @@ export const VideoCanvasStage: React.FC<VideoCanvasStageProps> = ({
   useEffect(() => {
     setIsPlaying(false);
     setCurrentTime(0);
+    setMediaError(null);
   }, [currentRecord?.id]);
 
   const togglePlay = useCallback(() => {
     if (!videoRef.current) return;
     if (videoRef.current.paused || videoRef.current.ended) {
-      videoRef.current.play();
-      setIsPlaying(true);
+      const p = videoRef.current.play();
+      if (p !== undefined) {
+        p.then(() => {
+          setIsPlaying(true);
+          setMediaError(null);
+        }).catch((err: any) => {
+          console.warn('Video play interrupted or unsupported:', err);
+          setIsPlaying(false);
+          if (err.name === 'NotSupportedError' || err.message?.includes('no supported sources')) {
+            setMediaError('Unable to play video: file format or stream is not supported by the browser.');
+          }
+        });
+      }
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
     }
   }, []);
+
 
   const handleTimeUpdate = () => {
     if (videoRef.current) {
@@ -167,27 +181,46 @@ export const VideoCanvasStage: React.FC<VideoCanvasStageProps> = ({
         ) : currentRecord ? (
           // ── Active Video Player ──
           <div className="relative max-w-full max-h-full flex items-center justify-center">
-            <video
-              ref={videoRef}
-              src={getVideoUrl(currentRecord.id)}
-              onClick={togglePlay}
-              onTimeUpdate={handleTimeUpdate}
-              onLoadedMetadata={handleLoadedMetadata}
-              className="max-h-[70vh] rounded-2xl shadow-2xl border border-neutral-800/80 cursor-pointer object-contain"
-              playsInline
-            />
+            {mediaError ? (
+              <div className="p-8 rounded-2xl bg-neutral-900/90 border border-neutral-800 text-center max-w-md">
+                <Film className="w-10 h-10 text-amber-500 mx-auto mb-3 opacity-80" />
+                <h4 className="text-sm font-semibold text-neutral-200">Video Playback Notice</h4>
+                <p className="text-xs text-neutral-400 mt-1">{mediaError}</p>
+              </div>
+            ) : (
+              <>
+                <video
+                  ref={videoRef}
+                  src={getVideoUrl(currentRecord.id)}
+                  onClick={togglePlay}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  onEnded={() => setIsPlaying(false)}
+                  onTimeUpdate={handleTimeUpdate}
+                  onLoadedMetadata={handleLoadedMetadata}
+                  onError={(e) => {
+                    console.warn('Video failed to load for record:', currentRecord.id, e);
+                    setIsPlaying(false);
+                    setMediaError('Video media source could not be decoded or loaded.');
+                  }}
+                  className="max-h-[70vh] rounded-2xl shadow-2xl border border-neutral-800/80 cursor-pointer object-contain"
+                  playsInline
+                />
 
-            {/* Floating Play Indicator when paused */}
-            {!isPlaying && (
-              <button
-                type="button"
-                onClick={togglePlay}
-                className="absolute p-4 rounded-full bg-neutral-900/80 hover:bg-neutral-900 text-white border border-neutral-700/80 shadow-2xl backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer"
-              >
-                <Play className="w-8 h-8 fill-white ml-0.5" />
-              </button>
+                {/* Floating Play Indicator when paused */}
+                {!isPlaying && (
+                  <button
+                    type="button"
+                    onClick={togglePlay}
+                    className="absolute p-4 rounded-full bg-neutral-900/80 hover:bg-neutral-900 text-white border border-neutral-700/80 shadow-2xl backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                  >
+                    <Play className="w-8 h-8 fill-white ml-0.5" />
+                  </button>
+                )}
+              </>
             )}
           </div>
+
         ) : (
           // ── Empty State ──
           <div className="flex flex-col items-center justify-center text-center p-8 max-w-sm">

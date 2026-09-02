@@ -53,10 +53,32 @@ impl VideoModelRegistry {
     /// Curated catalog of standard video generation models
     pub fn curated_catalog(&self) -> Vec<VideoModelInfo> {
         vec![
+            // ── AnimateDiff Models (SD 1.5 Temporal Motion) ────────────────
+            VideoModelInfo {
+                id: "animatediff-v2-sd15".to_string(),
+                name: "AnimateDiff v2 (Fast Local 16-Frame Neural Video)".to_string(),
+                family: VideoModelFamily::AnimateDiff,
+                modality: VideoModality::TextToVideo,
+                quantization: "FP16".to_string(),
+                download_url: "https://huggingface.co/guoyww/animatediff/resolve/main/mm_sd_v15_v2.ckpt".to_string(),
+                filename: "mm_sd_v15_v2.ckpt".to_string(),
+                size_bytes: 1_817_000_000,
+                vram_required_mb: 4096,
+                default_frames: 16,
+                default_fps: 8,
+                default_steps: 20,
+                default_cfg: 7.0,
+                is_downloaded: false,
+                local_path: None,
+                download_progress: None,
+                is_downloading: false,
+                error: None,
+            },
             // ── Wan 2.1 Models (Alibaba) ────────────────────────────────────
             VideoModelInfo {
                 id: "wan2.1-t2v-1.3b".to_string(),
                 name: "Wan 2.1 T2V 1.3B (Fast / Lightweight)".to_string(),
+
                 family: VideoModelFamily::Wan2_1,
                 modality: VideoModality::TextToVideo,
                 quantization: "Q4_0".to_string(),
@@ -248,8 +270,11 @@ impl VideoModelRegistry {
             info!("Starting download for video model {} from {}", model_id_clone, download_url);
 
             let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(3600))
+                .user_agent("SuperAgent/0.42.0")
+                .redirect(reqwest::redirect::Policy::limited(10))
+                .timeout(std::time::Duration::from_secs(7200))
                 .build();
+
 
             let client = match client {
                 Ok(c) => c,

@@ -53,10 +53,18 @@ export const VideoGalleryFilmstrip: React.FC<VideoGalleryFilmstripProps> = ({
               {isHovered ? (
                 <video
                   src={getVideoUrl(record.id)}
-                  autoPlay
                   loop
                   muted
                   playsInline
+                  onCanPlay={(e) => {
+                    const p = e.currentTarget.play();
+                    if (p !== undefined) {
+                      p.catch(() => {});
+                    }
+                  }}
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
                   className="w-full h-full object-cover"
                 />
               ) : (
@@ -70,6 +78,7 @@ export const VideoGalleryFilmstrip: React.FC<VideoGalleryFilmstripProps> = ({
                   }}
                 />
               )}
+
 
               {/* Duration Badge */}
               <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur-sm text-[9px] font-mono text-neutral-300">

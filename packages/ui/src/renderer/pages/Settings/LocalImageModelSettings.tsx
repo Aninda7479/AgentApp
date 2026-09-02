@@ -194,15 +194,21 @@ export const LocalImageModelSettings: React.FC<LocalImageModelSettingsProps> = (
   const handleUpdateEngine = async () => {
     setActionLoading('update');
     try {
-      await updateEngine();
-      notify('Updating engine to latest version...');
+      const update = await checkEngineUpdate();
+      if (update && update.latest && update.latest !== engineStatus.version) {
+        await updateEngine();
+        notify(`Downloading and applying Image Engine update to v${update.latest}...`);
+      } else {
+        notify(`Image Engine is already up to date (${engineStatus.version ? `v${engineStatus.version}` : 'latest build'}).`);
+      }
       await refreshData();
     } catch (err: any) {
-      notify(`Update failed: ${err.message}`);
+      notify(`Update check failed: ${err.message}`);
     } finally {
       setActionLoading(null);
     }
   };
+
 
   const handleRollback = async () => {
     setActionLoading('rollback');

@@ -597,6 +597,85 @@ async fn test_video_workspace_routes_and_storage() {
     let res_list = app.clone().oneshot(req_list).await.unwrap();
     assert_eq!(res_list.status(), StatusCode::OK);
 
+    // 6. Test video file endpoint is accessible publicly (without Authorization header)
+    let req_file_pub = Request::builder()
+        .uri("/api/videos/generations/vid_test_123/file")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    let res_file_pub = app.clone().oneshot(req_file_pub).await.unwrap();
+    assert_eq!(res_file_pub.status(), StatusCode::OK);
+    assert_eq!(
+        res_file_pub.headers().get("content-type").unwrap(),
+        "video/mp4"
+    );
+
+    // 7. Test HTTP 206 Range request on video file endpoint
+    let req_range = Request::builder()
+        .uri("/api/videos/generations/vid_test_123/file")
+        .method("GET")
+        .header("Range", "bytes=0-5")
+        .body(Body::empty())
+        .unwrap();
+    let res_range = app.clone().oneshot(req_range).await.unwrap();
+    assert_eq!(res_range.status(), StatusCode::PARTIAL_CONTENT);
+    assert_eq!(
+        res_range.headers().get("content-range").unwrap(),
+        "bytes 0-5/16"
+    );
+    assert_eq!(
+        res_range.headers().get("content-length").unwrap(),
+        "6"
+    );
+
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
+
+#[tokio::test]
+async fn test_video_engine_generation_produces_real_video() {
+    let temp_dir = std::env::temp_dir().join(format!("test_video_gen_{}", uuid::Uuid::new_v4()));
+    let _ = std::fs::create_dir_all(&temp_dir);
+
+    let mp4_path = temp_dir.join("test_out.mp4");
+    let thumb_path = temp_dir.join("test_out.jpg");
+
+    let res = crate::video_workspace::VideoEngineManager::generate_placeholder_or_transcode_video(
+        &mp4_path,
+        &thumb_path,
+        720,
+        480,
+        48,
+        16,
+        "A peaceful sheep grazing on a green field under blue sky",
+    )
+    .await;
+
+    assert!(res.is_ok(), "Video generation should succeed: {:?}", res);
+    assert!(mp4_path.exists(), "MP4 file must exist");
+    assert!(thumb_path.exists(), "Thumbnail JPG must exist");
+
+    let mp4_len = std::fs::metadata(&mp4_path).unwrap().len();
+    let thumb_len = std::fs::metadata(&thumb_path).unwrap().len();
+
+    // Verify it is a real video and thumbnail, not a 1KB/21-byte text stub
+    assert!(
+        mp4_len > 1000,
+        "Generated MP4 file size should be substantial (got {} bytes)",
+        mp4_len
+    );
+    assert!(
+        thumb_len > 100,
+        "Generated JPG thumbnail size should be substantial (got {} bytes)",
+        thumb_len
+    );
+
+    // Verify MP4 ftyp box signature
+    let header = std::fs::read(&mp4_path).unwrap();
+    assert!(header.len() >= 8);
+    assert_eq!(&header[4..8], b"ftyp", "Must have valid MP4 ftyp box header");
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+
 

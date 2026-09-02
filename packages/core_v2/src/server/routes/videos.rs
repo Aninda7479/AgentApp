@@ -3,13 +3,14 @@ use std::time::Duration;
 use axum::{
     body::Body,
     extract::{Path as AxumPath, State},
-    http::{header, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     response::{
         sse::{Event, KeepAlive, Sse},
         Response,
     },
     Json,
 };
+
 use futures_util::stream::Stream;
 use serde::Deserialize;
 
@@ -274,6 +275,7 @@ pub async fn get_video_generation(
 pub async fn get_video_file(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
+    headers: HeaderMap,
 ) -> Result<Response, StatusCode> {
     let record = state
         .video_workspace
@@ -291,16 +293,57 @@ pub async fn get_video_file(
     }
 
     let bytes = std::fs::read(&path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let total_len = bytes.len();
+
+    // Check for HTTP Range header for streaming & frame seeking
+    if let Some(range_val) = headers.get(header::RANGE).and_then(|v| v.to_str().ok()) {
+        if let Some(range_spec) = range_val.strip_prefix("bytes=") {
+            let parts: Vec<&str> = range_spec.split('-').collect();
+            if !parts.is_empty() {
+                let start: usize = parts[0].parse().unwrap_or(0);
+                let end: usize = if parts.len() > 1 && !parts[1].is_empty() {
+                    parts[1].parse().unwrap_or(total_len.saturating_sub(1)).min(total_len.saturating_sub(1))
+                } else {
+                    total_len.saturating_sub(1)
+                };
+
+                if start <= end && start < total_len {
+                    let slice = &bytes[start..=end];
+                    let content_range = format!("bytes {}-{}/{}", start, end, total_len);
+                    let response = Response::builder()
+                        .status(StatusCode::PARTIAL_CONTENT)
+                        .header(header::CONTENT_TYPE, "video/mp4")
+                        .header(header::ACCEPT_RANGES, "bytes")
+                        .header(header::CONTENT_RANGE, content_range)
+                        .header(header::CONTENT_LENGTH, slice.len().to_string())
+                        .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
+                        .body(Body::from(slice.to_vec()))
+                        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                    return Ok(response);
+                } else {
+                    let response = Response::builder()
+                        .status(StatusCode::RANGE_NOT_SATISFIABLE)
+                        .header(header::CONTENT_RANGE, format!("bytes */{}", total_len))
+                        .body(Body::empty())
+                        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                    return Ok(response);
+                }
+            }
+        }
+    }
 
     let response = Response::builder()
+        .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "video/mp4")
         .header(header::ACCEPT_RANGES, "bytes")
+        .header(header::CONTENT_LENGTH, total_len.to_string())
         .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
         .body(Body::from(bytes))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(response)
 }
+
 
 pub async fn get_video_thumbnail(
     State(state): State<AppState>,

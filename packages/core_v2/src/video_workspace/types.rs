@@ -83,8 +83,10 @@ pub enum VideoModelFamily {
     CogVideoX,
     HunyuanVideo,
     StableVideoDiffusion,
+    AnimateDiff,
     Custom,
 }
+
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
