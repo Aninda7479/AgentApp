@@ -799,10 +799,28 @@ impl VideoEngineManager {
         };
 
         if let (Some(ref bin), Some(ref wm), Some(ref vae)) = (&sd_bin, &wan_model, &wan_vae) {
+            let hw = Self::detect_hardware();
+            let vram_mb = hw.vram_mb.unwrap_or(4096);
+
+            let (safe_width, safe_height, safe_frames, default_backend) = if vram_mb < 6000 {
+
+                if num_frames > 21 {
+                    (width.min(512), height.min(512), num_frames.min(81), "te=cpu,vae=cpu,diffusion=cpu")
+                } else {
+                    (width.min(512), height.min(512), num_frames.min(21).max(9), "te=cpu,vae=cpu,diffusion=cuda0")
+                }
+            } else if vram_mb < 12000 {
+                (width.min(640), height.min(480), num_frames.min(49), "te=cpu,vae=cpu,diffusion=cuda0")
+            } else {
+                (width.min(832), height.min(480), num_frames.min(81), "te=cpu,vae=cpu,diffusion=cuda0")
+            };
+
             info!(
-                "Executing Native Wan 2.1 3D DiT Video Diffusion: model={}, vae={}",
+                "Executing Native Wan 2.1 3D DiT Video Diffusion: model={}, vae={}, frames={}, backend={}",
                 wm.display(),
-                vae.display()
+                vae.display(),
+                safe_frames,
+                default_backend
             );
 
             let mut cmd = Command::new(bin);
@@ -817,15 +835,15 @@ impl VideoEngineManager {
                 .arg(vae)
                 .arg("--vae-format")
                 .arg("wan")
-
+                .arg("--vae-tiling")
                 .arg("-p")
                 .arg(&req.prompt)
                 .arg("-W")
-                .arg(width.min(640).to_string())
+                .arg(safe_width.to_string())
                 .arg("-H")
-                .arg(height.min(480).to_string())
+                .arg(safe_height.to_string())
                 .arg("--video-frames")
-                .arg(num_frames.min(81).to_string())
+                .arg(safe_frames.to_string())
                 .arg("--fps")
                 .arg(fps.min(16).to_string())
                 .arg("--steps")
@@ -837,7 +855,7 @@ impl VideoEngineManager {
                 .arg("--sampling-method")
                 .arg("euler")
                 .arg("--backend")
-                .arg("te=cpu,vae=cpu,diffusion=cuda0")
+                .arg(default_backend)
                 .arg("-o")
                 .arg(output_mp4);
 
@@ -856,6 +874,7 @@ impl VideoEngineManager {
                     cmd.arg("-n").arg(neg);
                 }
             }
+
 
             if let Ok(mut child) = cmd.spawn() {
                 let check_start = Instant::now();
@@ -958,8 +977,113 @@ impl VideoEngineManager {
                     info!("Wan 2.1 native DiT video generation completed in {} ms", elapsed_ms);
                     return Ok(elapsed_ms);
                 }
+
+                // If GPU run failed (e.g. CUDA OOM), retry on CPU with 17 frames
+                if default_backend.contains("cuda") {
+                    info!("Wan 2.1 GPU run did not produce video (likely CUDA VRAM exhaustion). Retrying with CPU backend...");
+                    let mut cpu_cmd = Command::new(bin);
+
+                    #[cfg(target_os = "windows")]
+                    cpu_cmd.creation_flags(0x08000000);
+
+                    cpu_cmd.arg("-M")
+                        .arg("vid_gen")
+                        .arg("--diffusion-model")
+                        .arg(wm)
+                        .arg("--vae")
+                        .arg(vae)
+                        .arg("--vae-format")
+                        .arg("wan")
+                        .arg("--vae-tiling")
+                        .arg("-p")
+                        .arg(&req.prompt)
+                        .arg("-W")
+                        .arg("480")
+                        .arg("-H")
+                        .arg("480")
+                        .arg("--video-frames")
+                        .arg("17")
+                        .arg("--fps")
+                        .arg("16")
+                        .arg("--steps")
+                        .arg("10")
+                        .arg("--cfg-scale")
+                        .arg(cfg_scale.to_string())
+                        .arg("--flow-shift")
+                        .arg("3.0")
+                        .arg("--sampling-method")
+                        .arg("euler")
+                        .arg("--backend")
+                        .arg("te=cpu,vae=cpu,diffusion=cpu")
+                        .arg("-o")
+                        .arg(output_mp4);
+
+                    if let Some(ref t5) = t5_encoder {
+                        cpu_cmd.arg("--t5xxl").arg(t5);
+                    }
+
+                    if let Ok(mut cpu_child) = cpu_cmd.spawn() {
+                        let _ = cpu_child.wait().await;
+
+                        let avi_path = output_mp4.with_extension("mp4.avi");
+                        let alt_avi = output_mp4.with_extension("avi");
+                        let raw_video = if output_mp4.exists() && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000 {
+                            Some(output_mp4.to_path_buf())
+                        } else if avi_path.exists() && fs::metadata(&avi_path).map(|m| m.len()).unwrap_or(0) > 10000 {
+                            Some(avi_path)
+                        } else if alt_avi.exists() && fs::metadata(&alt_avi).map(|m| m.len()).unwrap_or(0) > 10000 {
+                            Some(alt_avi)
+                        } else {
+                            None
+                        };
+
+                        if let Some(src_video) = raw_video {
+                            if src_video != output_mp4 {
+                                if let Some(mut trans_cmd) = Self::create_ffmpeg_command() {
+                                    trans_cmd
+                                        .arg("-y")
+                                        .arg("-i")
+                                        .arg(&src_video)
+                                        .arg("-c:v")
+                                        .arg("libx264")
+                                        .arg("-pix_fmt")
+                                        .arg("yuv420p")
+                                        .arg("-profile:v")
+                                        .arg("high")
+                                        .arg("-level:v")
+                                        .arg("4.0")
+                                        .arg("-movflags")
+                                        .arg("+faststart")
+                                        .arg(output_mp4);
+                                    let _ = trans_cmd.output().await;
+                                    let _ = fs::remove_file(&src_video);
+                                }
+                            }
+
+                            if let Some(mut thumb_cmd) = Self::create_ffmpeg_command() {
+                                thumb_cmd
+                                    .arg("-y")
+                                    .arg("-ss")
+                                    .arg("00:00:00.1")
+                                    .arg("-i")
+                                    .arg(output_mp4)
+                                    .arg("-vframes")
+                                    .arg("1")
+                                    .arg("-q:v")
+                                    .arg("2")
+                                    .arg(output_thumb);
+                                let _ = thumb_cmd.output().await;
+                            }
+
+                            let elapsed_ms = start_time.elapsed().as_millis() as u64;
+                            info!("Wan 2.1 CPU fallback video generation completed in {} ms", elapsed_ms);
+                            return Ok(elapsed_ms);
+                        }
+                    }
+                }
             }
         }
+
 
 
         // ── 2. Check for Native 3D Spatio-Temporal Diffusion (AnimateDiff) ──
