@@ -446,3 +446,11 @@ export async function exportVideo(
     body: JSON.stringify(req),
   });
 }
+
+export async function enhanceVideoPrompt(prompt: string): Promise<{ success: boolean; enhanced_prompt: string }> {
+  return await requestJson<{ success: boolean; enhanced_prompt: string }>('/api/videos/prompt/enhance', {
+    method: 'POST',
+    body: JSON.stringify({ prompt }),
+  });
+}
+

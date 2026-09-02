@@ -1,4 +1,4 @@
-import React, { KeyboardEvent, useRef } from 'react';
+import React, { KeyboardEvent, useRef, useState } from 'react';
 import {
   Sparkles,
   SlidersHorizontal,
@@ -8,9 +8,11 @@ import {
   Square,
   RectangleHorizontal,
   RectangleVertical,
+  Wand2,
+  Loader2,
 } from 'lucide-react';
 import { AspectRatioOption } from '../types';
-import { CameraMotionPreset } from '../../../services/videoService';
+import { CameraMotionPreset, enhanceVideoPrompt } from '../../../services/videoService';
 
 export interface VideoComposerProps {
   prompt: string;
@@ -54,6 +56,22 @@ export const VideoComposer: React.FC<VideoComposerProps> = ({
   onToggleShelf,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+
+  const handleImprovePrompt = async () => {
+    if (isEnhancing || isGenerating) return;
+    setIsEnhancing(true);
+    try {
+      const res = await enhanceVideoPrompt(prompt || 'Cinematic nature scene');
+      if (res && res.enhanced_prompt) {
+        onChangePrompt(res.enhanced_prompt);
+      }
+    } catch (err) {
+      console.error('Failed to enhance video prompt:', err);
+    } finally {
+      setIsEnhancing(false);
+    }
+  };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -72,7 +90,7 @@ export const VideoComposer: React.FC<VideoComposerProps> = ({
 
   return (
     <div className="flex flex-col gap-2 p-3 bg-neutral-900/90 border border-neutral-800 rounded-2xl shadow-2xl backdrop-blur-xl transition-all">
-      {/* Textarea */}
+      {/* Textarea & Quick Enhance Pill */}
       <div className="relative">
         <textarea
           ref={textareaRef}
@@ -81,9 +99,30 @@ export const VideoComposer: React.FC<VideoComposerProps> = ({
           onKeyDown={handleKeyDown}
           placeholder="Describe the video you want to generate... (e.g. 'Cinematic drone shot soaring through mist-covered emerald mountains at golden hour, 4k ultra-detailed')"
           rows={2}
-          disabled={isGenerating}
+          disabled={isGenerating || isEnhancing}
           className="w-full bg-transparent text-sm text-neutral-100 placeholder-neutral-500 resize-none outline-none focus:ring-0 px-2 py-1 leading-relaxed custom-scrollbar disabled:opacity-50"
         />
+
+        {/* Floating Quick Improve Button */}
+        <button
+          type="button"
+          onClick={handleImprovePrompt}
+          disabled={isEnhancing || isGenerating}
+          className="absolute right-2 top-1 flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-violet-950/70 hover:bg-violet-900/80 border border-violet-700/60 text-violet-200 shadow-sm transition-all hover:scale-105 active:scale-95 disabled:opacity-50 cursor-pointer"
+          title="Improve and expand prompt into cinematic video diffusion prompt using AI"
+        >
+          {isEnhancing ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 text-violet-300 animate-spin" />
+              <span className="text-[11px]">Improving...</span>
+            </>
+          ) : (
+            <>
+              <Wand2 className="w-3.5 h-3.5 text-violet-300" />
+              <span className="text-[11px]">Improve Prompt</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* Action bar */}
@@ -179,3 +218,4 @@ export const VideoComposer: React.FC<VideoComposerProps> = ({
     </div>
   );
 };
+

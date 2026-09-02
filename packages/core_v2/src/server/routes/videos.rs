@@ -438,3 +438,80 @@ pub async fn delete_video_generation(
         .map(|_| Json(serde_json::json!({ "success": true })))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
+
+#[derive(Debug, Deserialize)]
+pub struct EnhancePromptPayload {
+    pub prompt: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct EnhancePromptResponse {
+    pub success: bool,
+    pub enhanced_prompt: String,
+}
+
+pub async fn enhance_video_prompt(
+    State(state): State<AppState>,
+    Json(payload): Json<EnhancePromptPayload>,
+) -> Json<EnhancePromptResponse> {
+    let raw = payload.prompt.trim();
+    if raw.is_empty() {
+        return Json(EnhancePromptResponse {
+            success: true,
+            enhanced_prompt: "Cinematic wide shot of a breathtaking landscape during golden hour, rich natural colors, atmospheric lighting, dynamic motion, ultra-detailed 8k resolution, 24fps".to_string(),
+        });
+    }
+
+    let settings = state.settings_store.load_raw().unwrap_or_default();
+    let (provider, model_id, api_key, base_url) =
+        crate::server::routes::chat::resolve_active_workspace_model(&settings, &state.settings_store);
+
+
+    let provider_instance = crate::providers::ProviderFactory::create(&provider);
+    let config = crate::types::ModelConfig {
+        provider,
+        model_id,
+        api_key,
+        base_url,
+        temperature: Some(0.7),
+        max_tokens: Some(300),
+    };
+
+    let prompt_input = format!(
+        "You are an expert AI video generation prompt engineer for Wan 2.1, Sora, and Veo.\nTake this short user description and expand it into a single rich, cinematic, highly detailed video diffusion prompt specifying subject action, dynamic movement, camera perspective, lighting, and textures.\nDescription: \"{}\"\nOutput ONLY the expanded prompt text, without any explanations, markdown, or quotation marks.",
+        raw
+    );
+    let messages = vec![crate::types::ChatMessage::user(&prompt_input)];
+
+    if let Ok(mut rx) = provider_instance.chat_stream(&config, &messages, &[]).await {
+        let mut result = String::new();
+        while let Some(event) = rx.recv().await {
+            if let crate::types::AgentEvent::Token { text } = event {
+                result.push_str(&text);
+            }
+        }
+        let cleaned = result.trim().trim_matches('"').trim_matches('`').trim();
+        if !cleaned.is_empty() && cleaned.len() > 15 {
+            return Json(EnhancePromptResponse {
+                success: true,
+                enhanced_prompt: cleaned.to_string(),
+            });
+        }
+    }
+
+    // High quality cinematic fallback
+    let cinematic_enhancers = [
+        "Cinematic medium shot, dynamic organic motion, lifelike details, vibrant natural lighting, volumetric atmosphere, highly detailed textures, 8k resolution, photorealistic video diffusion, 24fps",
+        "Cinematic slow-motion tracking shot, fluid subject motion, soft golden rim lighting, rich color grading, sharp focus on subject, photorealistic aesthetic, 24fps",
+        "Close-up cinematic framing with natural movement, atmospheric depth, realistic shadows and specular highlights, 8k photorealistic quality, 24fps",
+    ];
+    let enhancer = cinematic_enhancers[rand::random::<usize>() % cinematic_enhancers.len()];
+    let enhanced = format!("{}, {}", raw, enhancer);
+
+    Json(EnhancePromptResponse {
+        success: true,
+        enhanced_prompt: enhanced,
+    })
+}
+
+

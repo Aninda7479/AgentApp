@@ -132,7 +132,9 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/videos/generations/:id/file", get(get_video_file))
         .route("/api/videos/generations/:id/thumbnail", get(get_video_thumbnail))
         .route("/api/videos/generations/:id/export", post(export_video_route))
+        .route("/api/videos/prompt/enhance", post(enhance_video_prompt))
         .route("/api/artifacts", get(list_artifacts))
+
 
         .route("/api/artifacts/:id/start", post(start_artifact))
         .route("/api/artifacts/:id/stop", post(stop_artifact))
