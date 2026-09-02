@@ -24,7 +24,8 @@ import {
   RefreshCw,
   Globe,
   Send,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Film
 } from 'lucide-react';
 
 /** A single navigation entry in the settings sidebar. */
@@ -56,11 +57,13 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
     { id: 'models', label: 'Models', Icon: Bot },
     { id: 'local-model', label: 'Local Text Model', Icon: HardDrive },
     { id: 'local-image-model', label: 'Local Image Model', Icon: ImageIcon },
+    { id: 'local-video-model', label: 'Local Video Model', Icon: Film },
     { id: 'model-gov', label: 'Orchestrator', Icon: Network },
     { id: 'voice', label: 'Voice & Mic', Icon: Mic },
     { id: 'circle-search', label: 'Circle Search', Icon: Search },
     { id: 'usage', label: 'AI Usage', Icon: SquareTerminal }
   ],
+
   Integrations: [
     { id: 'telegram', label: 'Telegram', Icon: Send },
     { id: 'skills', label: 'Skills', Icon: Sparkles },

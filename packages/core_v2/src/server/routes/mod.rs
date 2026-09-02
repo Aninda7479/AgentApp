@@ -5,6 +5,7 @@ pub mod images;
 pub mod pcb;
 pub mod routines;
 pub mod system;
+pub mod videos;
 
 pub use artifacts::*;
 pub use chat::*;
@@ -13,6 +14,8 @@ pub use images::*;
 pub use pcb::*;
 pub use routines::*;
 pub use system::*;
+pub use videos::*;
+
 
 use axum::{
     extract::DefaultBodyLimit,
@@ -108,7 +111,29 @@ pub fn create_router(state: AppState) -> Router {
             get(get_generation).delete(delete_generation),
         )
         .route("/api/images/generations/:id/file", get(get_generation_file))
+        .route("/api/videos/engine/status", get(get_video_engine_status))
+        .route("/api/videos/engine/install", post(install_video_engine))
+        .route("/api/videos/engine/update", post(update_video_engine))
+        .route("/api/videos/engine/rollback", post(rollback_video_engine))
+        .route("/api/videos/engine", delete(uninstall_video_engine))
+        .route("/api/videos/engine/check-update", get(check_video_engine_update))
+        .route("/api/videos/hardware", get(get_video_hardware_profile))
+        .route("/api/videos/models", get(list_video_models))
+        .route("/api/videos/models/pull", post(pull_video_model))
+        .route("/api/videos/models/open-dir", post(open_video_models_dir))
+        .route("/api/videos/models/:id", delete(delete_video_model))
+        .route("/api/videos/generate", post(generate_video))
+        .route("/api/videos/generate/stream", post(generate_video_stream))
+        .route("/api/videos/generations", get(list_video_generations))
+        .route(
+            "/api/videos/generations/:id",
+            get(get_video_generation).delete(delete_video_generation),
+        )
+        .route("/api/videos/generations/:id/file", get(get_video_file))
+        .route("/api/videos/generations/:id/thumbnail", get(get_video_thumbnail))
+        .route("/api/videos/generations/:id/export", post(export_video_route))
         .route("/api/artifacts", get(list_artifacts))
+
         .route("/api/artifacts/:id/start", post(start_artifact))
         .route("/api/artifacts/:id/stop", post(stop_artifact))
         .route("/api/artifacts/sdk.js", get(get_artifact_sdk))

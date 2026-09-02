@@ -36,6 +36,7 @@ import { PartnerPage } from './pages/Partner/PartnerPage';
 import { ArtifactsPage } from './pages/Artifacts/ArtifactsPage';
 import { PCBWorkspacePage } from './pages/PCB/PCBWorkspacePage';
 import { ImageWorkspacePage } from './pages/Images/ImageWorkspacePage';
+import { VideoWorkspacePage } from './pages/Videos/VideoWorkspacePage';
 import { StoredChat, StoredProject } from './types';
 import { resolveScopeSettings } from './logic/scopeSettings';
 import { SessionLoopManager, LoopTask } from './logic/loop';
@@ -94,7 +95,9 @@ const PAGE_LABELS: Record<string, string> = {
   artifacts: 'Artifacts',
   pcb: 'PCB Workspace',
   image: 'Image Workspace',
+  video: 'Video Workspace',
   'project-settings': 'Project Settings',
+
   'standalone-chat': 'Standalone Chat',
   studio: '3D Workspace',
   settings: 'Settings',
@@ -1559,6 +1562,7 @@ export const App: React.FC = () => {
         onOpenArtifacts={() => setActiveTab('artifacts')}
         onOpenPCBWorkspace={() => setActiveTab('pcb')}
         onOpenImageWorkspace={() => setActiveTab('image')}
+        onOpenVideoWorkspace={() => setActiveTab('video')}
         onOpen3DWorkspace={() => setActiveTab('studio')}
         onOpenPartner={() => setActiveTab('partner')}
         onScheduleTask={() => setActiveTab('scheduled')}
@@ -1590,7 +1594,7 @@ export const App: React.FC = () => {
       {/* Main Body container */}
       <div className="flex-1 flex overflow-hidden overflow-x-hidden relative min-w-0">
         {/* Mobile drawer backdrop */}
-        {mobileNavOpen && activeTab !== 'settings' && activeTab !== 'studio' && activeTab !== 'project-settings' && activeTab !== 'standalone-chat' && activeTab !== 'pcb' && activeTab !== 'image' && (
+        {mobileNavOpen && activeTab !== 'settings' && activeTab !== 'studio' && activeTab !== 'project-settings' && activeTab !== 'standalone-chat' && activeTab !== 'pcb' && activeTab !== 'image' && activeTab !== 'video' && (
           <div
             className="lg:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
             onClick={() => setMobileNavOpen(false)}
@@ -1598,8 +1602,9 @@ export const App: React.FC = () => {
           />
         )}
         {/* Hide main sidebar when viewing full-page views (Settings, Studio, PCB Workspace, etc.) */}
-        {activeTab !== 'settings' && activeTab !== 'studio' && activeTab !== 'project-settings' && activeTab !== 'standalone-chat' && activeTab !== 'pcb' && activeTab !== 'image' && (
+        {activeTab !== 'settings' && activeTab !== 'studio' && activeTab !== 'project-settings' && activeTab !== 'standalone-chat' && activeTab !== 'pcb' && activeTab !== 'image' && activeTab !== 'video' && (
           <Sidebar
+
             activeTab={activeTab}
             showStudio={showStudio}
             onSelectTab={(tab) => {
@@ -1652,7 +1657,8 @@ export const App: React.FC = () => {
           />
         )}
 
-        <main id="main-content" tabIndex={-1} className={`flex-1 flex flex-col min-h-0 relative isolate overflow-hidden workspace-canvas ${activeTab === 'pcb' || activeTab === 'image' ? 'm-0 rounded-none p-0' : 'm-1 rounded-xl pb-18 md:pb-0'} focus:outline-none`}>
+        <main id="main-content" tabIndex={-1} className={`flex-1 flex flex-col min-h-0 relative isolate overflow-hidden workspace-canvas ${activeTab === 'pcb' || activeTab === 'image' || activeTab === 'video' ? 'm-0 rounded-none p-0' : 'm-1 rounded-xl pb-18 md:pb-0'} focus:outline-none`}>
+
           {/* Ambient "layered atmosphere" backdrop — a soft accent glow and three
               calm depth bands, painted behind all content (Atmosphere mode, low
               opacity). Decorative only; never sits behind text contrast. */}
@@ -1798,6 +1804,17 @@ export const App: React.FC = () => {
             />
           )}
 
+          {activeTab === 'video' && (
+            <VideoWorkspacePage
+              triggerToast={triggerToast}
+              onBack={() => setActiveTab('trajectory')}
+              onOpenSettings={() => {
+                setSettingsCategory('local-video-model');
+                setActiveTab('settings');
+              }}
+            />
+          )}
+
           {activeTab === 'settings' && (
             <SettingsView
               activeCategory={settingsCategory}
@@ -1863,7 +1880,7 @@ export const App: React.FC = () => {
           )}
 
           {/* Fallback to Workspace stage if no other tab matches, ensuring the body is never empty */}
-          {!['trajectory', 'scheduled', 'tasks', 'artifacts', 'pcb', 'image', 'project-settings', 'standalone-chat', 'studio', 'settings', 'diff', 'partner', 'companion'].includes(activeTab) && (
+          {!['trajectory', 'scheduled', 'tasks', 'artifacts', 'pcb', 'image', 'video', 'project-settings', 'standalone-chat', 'studio', 'settings', 'diff', 'partner', 'companion'].includes(activeTab) && (
             <WorkspaceStage
               activeProject={activeProject}
               onViewDiff={handleViewDiff}
@@ -1876,6 +1893,7 @@ export const App: React.FC = () => {
               onEditStep={handleEditStep}
             />
           )}
+
           </ErrorBoundary>
         </main>
       </div>

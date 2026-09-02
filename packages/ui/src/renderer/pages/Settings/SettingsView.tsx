@@ -9,6 +9,7 @@ import { ProvidersSettings } from './ProvidersSettings';
 import { ModelsSettings } from './ModelsSettings';
 import { LocalModelSettings } from './LocalModelSettings';
 import { LocalImageModelSettings } from './LocalImageModelSettings';
+import { LocalVideoModelSettings } from './LocalVideoModelSettings';
 import { PlaceholderSettings } from './PlaceholderSettings';
 import { CompanionSettings } from './companion/CompanionSettings';
 import { UsageTrackerSettings } from './UsageTrackerSettings';
@@ -37,11 +38,13 @@ const CATEGORY_LABELS: Record<string, string> = {
   models: 'Models',
   'local-model': 'Local Text Model',
   'local-image-model': 'Local Image Model',
+  'local-video-model': 'Local Video Model',
   'model-gov': 'Orchestrator',
   voice: 'Voice & Mic',
   'circle-search': 'Circle Search',
   usage: 'AI Usage',
   telegram: 'Telegram',
+
   skills: 'Skills',
   connectors: 'Connectors',
   plugins: 'Plugins',
@@ -424,7 +427,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {activeCategory === 'local-image-model' && (
           <LocalImageModelSettings onToast={onToast} />
         )}
+        {activeCategory === 'local-video-model' && (
+          <LocalVideoModelSettings onToast={onToast} />
+        )}
         {activeCategory === 'model-gov' && (
+
           <OrchestratorSettings
             connectedProviders={connectedProviders}
             modelsCatalog={modelsCatalog}

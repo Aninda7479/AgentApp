@@ -30,8 +30,8 @@ import {
   Square,
   X,
   Lock,
-  Sparkles,
   Image as ImageIcon,
+  Film,
 } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { ThemeMode } from '../types';
@@ -59,7 +59,9 @@ interface TitleBarProps {
   onOpenArtifacts?: () => void;
   onOpenPCBWorkspace?: () => void;
   onOpenImageWorkspace?: () => void;
+  onOpenVideoWorkspace?: () => void;
   onOpen3DWorkspace?: () => void;
+
   onOpenPartner?: () => void;
   onScheduleTask?: () => void;
   onOpenSettings?: () => void;
@@ -119,8 +121,10 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onOpenArtifacts,
   onOpenPCBWorkspace,
   onOpenImageWorkspace,
+  onOpenVideoWorkspace,
   onOpen3DWorkspace,
   onOpenPartner,
+
   onScheduleTask,
   onOpenSettings,
   onQuit,
@@ -180,7 +184,9 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         { label: 'Artifacts', icon: Package, onClick: () => onOpenArtifacts?.() },
         { label: 'PCB Workspace', icon: Cpu, onClick: () => onOpenPCBWorkspace?.() },
         { label: 'Image Workspace', icon: ImageIcon, onClick: () => onOpenImageWorkspace?.() },
+        { label: 'Video Workspace', icon: Film, onClick: () => onOpenVideoWorkspace?.() },
         { label: 'Open 3D Workspace', icon: Box, onClick: () => onOpen3DWorkspace?.() },
+
         { label: 'Partner', icon: PersonStanding, onClick: () => onOpenPartner?.() },
         { label: 'Schedule Task', icon: Clock, onClick: () => onScheduleTask?.() },
         'sep',

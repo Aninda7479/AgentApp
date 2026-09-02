@@ -64,7 +64,9 @@ pub struct AppState {
     pub active_cancellations: Arc<Mutex<HashMap<String, tokio::sync::broadcast::Sender<()>>>>,
     pub pending_client_tools: Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<serde_json::Value>>>>,
     pub image_workspace: Arc<crate::image_workspace::ImageWorkspaceManager>,
+    pub video_workspace: Arc<crate::video_workspace::VideoWorkspaceManager>,
 }
+
 
 #[derive(Debug, Deserialize)]
 pub struct ChatStreamRequest {

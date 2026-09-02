@@ -96,6 +96,7 @@ pub async fn start_server(
     )));
 
     let image_workspace = Arc::new(crate::image_workspace::ImageWorkspaceManager::new());
+    let video_workspace = Arc::new(crate::video_workspace::VideoWorkspaceManager::new());
 
     let state = AppState {
         workspace_root,
@@ -118,7 +119,9 @@ pub async fn start_server(
         active_cancellations: Arc::new(Mutex::new(HashMap::new())),
         pending_client_tools: Arc::new(Mutex::new(HashMap::new())),
         image_workspace,
+        video_workspace,
     };
+
 
     let app = create_router(state);
 

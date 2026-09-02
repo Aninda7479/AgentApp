@@ -63,8 +63,14 @@ fn build_test_state(temp_dir: PathBuf) -> AppState {
             temp_dir.join("models"),
             temp_dir.join("images"),
         )),
+        video_workspace: Arc::new(crate::video_workspace::VideoWorkspaceManager::with_dirs(
+            temp_dir.join("video_engines"),
+            temp_dir.join("video_models"),
+            temp_dir.join("video_generations"),
+        )),
     }
 }
+
 
 #[tokio::test]
 async fn test_unauthenticated_requests_gate() {
@@ -500,3 +506,97 @@ async fn test_circle_search_analyze_modes() {
 
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
+
+#[tokio::test]
+async fn test_video_workspace_routes_and_storage() {
+    let temp_dir = std::env::temp_dir().join(format!("test_video_ws_{}", uuid::Uuid::new_v4()));
+    let _ = std::fs::create_dir_all(&temp_dir);
+
+    let state = build_test_state(temp_dir.clone());
+    let token = state.auth_store.create_session_token("admin");
+    let app = create_router(state.clone());
+
+
+    // 1. Get video engine status
+    let req_status = Request::builder()
+        .uri("/api/videos/engine/status")
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+    let res_status = app.clone().oneshot(req_status).await.unwrap();
+    assert_eq!(res_status.status(), StatusCode::OK);
+
+    // 2. Get video hardware profile
+    let req_hw = Request::builder()
+        .uri("/api/videos/hardware")
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+    let res_hw = app.clone().oneshot(req_hw).await.unwrap();
+    assert_eq!(res_hw.status(), StatusCode::OK);
+
+    // 3. List video models (catalog should return curated models like wan2.1, ltx-video, cogvideox)
+    let req_models = Request::builder()
+        .uri("/api/videos/models")
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+    let res_models = app.clone().oneshot(req_models).await.unwrap();
+    assert_eq!(res_models.status(), StatusCode::OK);
+
+    // 4. Install video engine
+    let req_install = Request::builder()
+        .uri("/api/videos/engine/install")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::from(serde_json::json!({ "backend": "cpu" }).to_string()))
+        .unwrap();
+    let res_install = app.clone().oneshot(req_install).await.unwrap();
+    assert_eq!(res_install.status(), StatusCode::OK);
+
+    // 5. Test video storage save & list
+    let record = crate::storage::video_storage::VideoGenerationRecord {
+        id: "vid_test_123".to_string(),
+        created_at: chrono::Utc::now().timestamp_millis(),
+        prompt: "A soaring eagle over snow mountains".to_string(),
+        negative_prompt: None,
+        model_id: "wan2.1-t2v-1.3b".to_string(),
+        source: "local".to_string(),
+        width: 720,
+        height: 480,
+        num_frames: 49,
+        fps: 16,
+        duration_seconds: 3.0,
+        steps: 30,
+        cfg_scale: 6.0,
+        seed: 42,
+        motion_scale: Some(0.8),
+        camera_motion: Some("PanRight".to_string()),
+        sampler: None,
+        generation_time_ms: 1200,
+        video_filename: "vid_test_123.mp4".to_string(),
+        thumbnail_filename: "vid_test_123.jpg".to_string(),
+    };
+
+    state
+        .video_workspace
+        .storage
+        .save_generation(&record, b"FAKE_MP4_CONTENT", Some(b"FAKE_THUMB_CONTENT"))
+        .unwrap();
+
+    let req_list = Request::builder()
+        .uri("/api/videos/generations")
+        .method("GET")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+    let res_list = app.clone().oneshot(req_list).await.unwrap();
+    assert_eq!(res_list.status(), StatusCode::OK);
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
