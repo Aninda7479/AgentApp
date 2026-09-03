@@ -905,7 +905,7 @@ export const LocalVideoModelSettings: React.FC<LocalVideoModelSettingsProps> = (
                       <div className="flex items-center justify-between pt-2.5 border-t border-brand-border/60">
                         <div className="flex items-center gap-1 text-[11px] text-[color:var(--neon-constructive)] font-medium">
                           <CheckCircle2 size={13} />
-                          <span>Downloaded</span>
+                          <span>{model.companion_model_ids && model.companion_model_ids.length > 0 ? (model.is_bundle_ready ? 'Bundle Ready' : 'Ready') : 'Downloaded'}</span>
                         </div>
                         <button
                           onClick={() => setDeleteConfirmModal(model.id)}

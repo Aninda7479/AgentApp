@@ -148,6 +148,10 @@ pub struct VideoModelInfo {
     pub download_progress: Option<f32>,
     pub is_downloading: bool,
     pub error: Option<String>,
+    #[serde(default)]
+    pub companion_model_ids: Vec<String>,
+    #[serde(default)]
+    pub is_bundle_ready: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -64,6 +64,10 @@ impl VideoWorkspaceManager {
             )
         })?;
 
+        // Universally ensure model and all companion dependencies are ready
+        self.models.ensure_model_and_dependencies(&model_id).await?;
+        let _ = VideoEngineManager::ensure_ffmpeg_binary().await;
+
         // Pre-flight memory verification
         let catalog = self.models.curated_catalog();
         let model_info = catalog.iter().find(|m| m.id == model_id);
@@ -197,6 +201,25 @@ impl VideoWorkspaceManager {
                 model_id
             )
         })?;
+
+        // Universally ensure model and all companion dependencies are ready
+        let _ = progress_tx
+            .send(VideoProgressEvent {
+                step: 0,
+                total_steps: req.steps.unwrap_or(30),
+                frame_current: 0,
+                frame_total: req.num_frames.unwrap_or(81),
+                progress: 0.02,
+                phase: "verifying_model_bundle".to_string(),
+                step_time_ms: None,
+                eta_seconds: None,
+                elapsed_seconds: 0.0,
+                preview_data_url: None,
+            })
+            .await;
+
+        self.models.ensure_model_and_dependencies(&model_id).await?;
+        let _ = VideoEngineManager::ensure_ffmpeg_binary().await;
 
         // Pre-flight memory verification
         let catalog = self.models.curated_catalog();

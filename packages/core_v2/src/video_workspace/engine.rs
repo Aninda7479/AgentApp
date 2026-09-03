@@ -265,6 +265,72 @@ impl VideoEngineManager {
         Some(cmd)
     }
 
+    /// Universally ensure that FFmpeg is available on the system, auto-provisioning a portable static release if absent
+    pub async fn ensure_ffmpeg_binary() -> Result<PathBuf> {
+        if let Some(p) = Self::find_ffmpeg_binary() {
+            return Ok(p);
+        }
+
+        info!("FFmpeg not found on host. Auto-provisioning portable static FFmpeg binary...");
+        let base = crate::storage::settings::get_superagent_dir();
+        let target_dir = base.join("bin").join("ffmpeg");
+        let _ = fs::create_dir_all(&target_dir);
+
+        let binary_name = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
+        let final_bin = target_dir.join(binary_name);
+
+        #[cfg(target_os = "windows")]
+        let download_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip";
+        #[cfg(target_os = "macos")]
+        let download_url = "https://evermeet.cx/ffmpeg/getrelease/zip";
+        #[cfg(target_os = "linux")]
+        let download_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz";
+
+        let client = reqwest::Client::builder()
+            .user_agent("SuperAgent/0.43.0")
+            .timeout(std::time::Duration::from_secs(600))
+            .build()
+            .unwrap_or_default();
+
+        let resp = client.get(download_url).send().await.map_err(|e| anyhow!("Failed to download FFmpeg: {}", e))?;
+        if !resp.status().is_success() {
+            anyhow::bail!("Failed to download FFmpeg: HTTP {}", resp.status());
+        }
+
+        let bytes = resp.bytes().await.map_err(|e| anyhow!("Failed to read FFmpeg archive: {}", e))?;
+        let temp_archive = target_dir.join("ffmpeg_download.zip");
+        tokio::fs::write(&temp_archive, &bytes).await.map_err(|e| anyhow!("Failed to save FFmpeg archive: {}", e))?;
+
+        let _ = extract_zip_archive(&temp_archive, &target_dir);
+        let _ = fs::remove_file(&temp_archive);
+
+        if final_bin.exists() {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(&final_bin, fs::Permissions::from_mode(0o755));
+            }
+            return Ok(final_bin);
+        }
+
+        if let Ok(entries) = fs::read_dir(&target_dir) {
+            for entry in entries.flatten() {
+                let sub_bin = entry.path().join("bin").join(binary_name);
+                if sub_bin.exists() {
+                    let _ = fs::copy(&sub_bin, &final_bin);
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let _ = fs::set_permissions(&final_bin, fs::Permissions::from_mode(0o755));
+                    }
+                    return Ok(final_bin);
+                }
+            }
+        }
+
+        Self::find_ffmpeg_binary().ok_or_else(|| anyhow!("Failed to locate FFmpeg after auto-provisioning"))
+    }
+
 
     pub fn detect_hardware() -> HardwareProfile {
         let mut sys = System::new_all();
@@ -803,16 +869,13 @@ impl VideoEngineManager {
             let vram_mb = hw.vram_mb.unwrap_or(4096);
 
             let (safe_width, safe_height, safe_frames, default_backend) = if vram_mb < 6000 {
-
-                if num_frames > 21 {
-                    (width.min(512), height.min(512), num_frames.min(81), "te=cpu,vae=cpu,diffusion=cpu")
-                } else {
-                    (width.min(512), height.min(512), num_frames.min(21).max(9), "te=cpu,vae=cpu,diffusion=cuda0")
-                }
+                // On GPUs with <6GB VRAM (e.g. GTX 1650 4GB), offload heavy T5 encoder and VAE to CPU RAM
+                // while keeping the 2.7GB DiT diffusion model on CUDA0 for full GPU acceleration!
+                (width.min(512), height.min(512), num_frames.min(49), "te=cpu,vae=cpu,diffusion=cuda0")
             } else if vram_mb < 12000 {
-                (width.min(640), height.min(480), num_frames.min(49), "te=cpu,vae=cpu,diffusion=cuda0")
+                (width.min(640), height.min(480), num_frames.min(81), "te=cpu,vae=cpu,diffusion=cuda0")
             } else {
-                (width.min(832), height.min(480), num_frames.min(81), "te=cpu,vae=cpu,diffusion=cuda0")
+                (width.min(832), height.min(480), num_frames.min(81), "te=cpu,vae=cuda0,diffusion=cuda0")
             };
 
             info!(
@@ -822,6 +885,8 @@ impl VideoEngineManager {
                 safe_frames,
                 default_backend
             );
+
+            let temp_avi = output_mp4.with_extension("avi");
 
             let mut cmd = Command::new(bin);
             #[cfg(target_os = "windows")]
@@ -833,8 +898,6 @@ impl VideoEngineManager {
                 .arg(wm)
                 .arg("--vae")
                 .arg(vae)
-                .arg("--vae-format")
-                .arg("wan")
                 .arg("--vae-tiling")
                 .arg("-p")
                 .arg(&req.prompt)
@@ -857,7 +920,7 @@ impl VideoEngineManager {
                 .arg("--backend")
                 .arg(default_backend)
                 .arg("-o")
-                .arg(output_mp4);
+                .arg(&temp_avi);
 
             if let Some(ref t5) = t5_encoder {
                 cmd.arg("--t5xxl").arg(t5);
@@ -875,6 +938,8 @@ impl VideoEngineManager {
                 }
             }
 
+            cmd.stdout(std::process::Stdio::piped());
+            cmd.stderr(std::process::Stdio::piped());
 
             if let Ok(mut child) = cmd.spawn() {
                 let check_start = Instant::now();
@@ -908,7 +973,9 @@ impl VideoEngineManager {
 
                 let avi_path = output_mp4.with_extension("mp4.avi");
                 let alt_avi = output_mp4.with_extension("avi");
-                let raw_video = if output_mp4.exists() && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000 {
+                let raw_video = if temp_avi.exists() && fs::metadata(&temp_avi).map(|m| m.len()).unwrap_or(0) > 10000 {
+                    Some(temp_avi.clone())
+                } else if output_mp4.exists() && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000 {
                     Some(output_mp4.to_path_buf())
                 } else if avi_path.exists() && fs::metadata(&avi_path).map(|m| m.len()).unwrap_or(0) > 10000 {
                     Some(avi_path)
@@ -978,9 +1045,9 @@ impl VideoEngineManager {
                     return Ok(elapsed_ms);
                 }
 
-                // If GPU run failed (e.g. CUDA OOM), retry on CPU with 17 frames
+                // If GPU run failed, retry with CPU backend
                 if default_backend.contains("cuda") {
-                    info!("Wan 2.1 GPU run did not produce video (likely CUDA VRAM exhaustion). Retrying with CPU backend...");
+                    info!("Wan 2.1 GPU run did not produce video. Retrying with CPU backend...");
                     let mut cpu_cmd = Command::new(bin);
 
                     #[cfg(target_os = "windows")]
@@ -992,8 +1059,6 @@ impl VideoEngineManager {
                         .arg(wm)
                         .arg("--vae")
                         .arg(vae)
-                        .arg("--vae-format")
-                        .arg("wan")
                         .arg("--vae-tiling")
                         .arg("-p")
                         .arg(&req.prompt)
@@ -1016,7 +1081,7 @@ impl VideoEngineManager {
                         .arg("--backend")
                         .arg("te=cpu,vae=cpu,diffusion=cpu")
                         .arg("-o")
-                        .arg(output_mp4);
+                        .arg(&temp_avi);
 
                     if let Some(ref t5) = t5_encoder {
                         cpu_cmd.arg("--t5xxl").arg(t5);
@@ -1027,7 +1092,9 @@ impl VideoEngineManager {
 
                         let avi_path = output_mp4.with_extension("mp4.avi");
                         let alt_avi = output_mp4.with_extension("avi");
-                        let raw_video = if output_mp4.exists() && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000 {
+                        let raw_video = if temp_avi.exists() && fs::metadata(&temp_avi).map(|m| m.len()).unwrap_or(0) > 10000 {
+                            Some(temp_avi.clone())
+                        } else if output_mp4.exists() && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000 {
                             Some(output_mp4.to_path_buf())
                         } else if avi_path.exists() && fs::metadata(&avi_path).map(|m| m.len()).unwrap_or(0) > 10000 {
                             Some(avi_path)
@@ -1391,38 +1458,11 @@ impl VideoEngineManager {
             }
         }
 
-        // Fallback procedural visual generation
-        Self::generate_placeholder_or_transcode_video(
-            output_mp4,
-            output_thumb,
-            width,
-            height,
-            num_frames,
-            fps,
-            &req.prompt,
-        )
-        .await?;
-
-        if let Some(ref tx) = progress_tx {
-            let _ = tx
-                .send(VideoProgressEvent {
-                    step: total_steps,
-                    total_steps,
-                    frame_current: num_frames,
-                    frame_total: num_frames,
-                    progress: 1.0,
-                    phase: "complete".to_string(),
-                    step_time_ms: None,
-                    eta_seconds: Some(0.0),
-                    elapsed_seconds: start_time.elapsed().as_secs_f32(),
-                    preview_data_url: None,
-                })
-                .await;
-        }
-
-        let elapsed_ms = start_time.elapsed().as_millis() as u64;
-        info!("Video generation completed in {} ms", elapsed_ms);
-        Ok(elapsed_ms)
+        // If all generation pipelines were unable to produce output, surface an actionable error
+        anyhow::bail!(
+            "Video generation was unable to produce valid video frames for prompt: '{}'. Please verify that your local video model files are fully downloaded.",
+            req.prompt
+        );
     }
 
     /// Synthesizes multiple keyframes into a seamless continuous video via FFmpeg
@@ -1479,7 +1519,9 @@ impl VideoEngineManager {
                 ),
             };
 
-            cmd.arg("-loop")
+            cmd.arg("-framerate")
+                .arg(fps.to_string())
+                .arg("-loop")
                 .arg("1")
                 .arg("-i")
                 .arg(&keyframes[0])
@@ -1514,7 +1556,9 @@ impl VideoEngineManager {
         let segment_dur = (total_dur + (n - 1) as f32 * transition_dur) / n as f32;
 
         for kf in keyframes {
-            cmd.arg("-loop")
+            cmd.arg("-framerate")
+                .arg(fps.to_string())
+                .arg("-loop")
                 .arg("1")
                 .arg("-t")
                 .arg(format!("{:.3}", segment_dur))
@@ -1578,6 +1622,8 @@ impl VideoEngineManager {
             fallback_cmd.arg("-y");
             for kf in keyframes {
                 fallback_cmd
+                    .arg("-framerate")
+                    .arg(fps.to_string())
                     .arg("-loop")
                     .arg("1")
                     .arg("-t")

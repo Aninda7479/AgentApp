@@ -73,6 +73,8 @@ impl VideoModelRegistry {
                 download_progress: None,
                 is_downloading: false,
                 error: None,
+                companion_model_ids: vec![],
+                is_bundle_ready: false,
             },
             // ── Wan 2.1 Models (Alibaba) ────────────────────────────────────
             VideoModelInfo {
@@ -94,6 +96,8 @@ impl VideoModelRegistry {
                 download_progress: None,
                 is_downloading: false,
                 error: None,
+                companion_model_ids: vec!["wan2.1-vae".to_string(), "umt5-xxl-encoder".to_string()],
+                is_bundle_ready: false,
             },
             VideoModelInfo {
                 id: "wan2.1-vae".to_string(),
@@ -114,6 +118,8 @@ impl VideoModelRegistry {
                 download_progress: None,
                 is_downloading: false,
                 error: None,
+                companion_model_ids: vec![],
+                is_bundle_ready: false,
             },
             VideoModelInfo {
                 id: "umt5-xxl-encoder".to_string(),
@@ -134,6 +140,8 @@ impl VideoModelRegistry {
                 download_progress: None,
                 is_downloading: false,
                 error: None,
+                companion_model_ids: vec![],
+                is_bundle_ready: false,
             },
             VideoModelInfo {
                 id: "wan2.1-i2v-14b".to_string(),
@@ -154,6 +162,8 @@ impl VideoModelRegistry {
                 download_progress: None,
                 is_downloading: false,
                 error: None,
+                companion_model_ids: vec!["wan2.1-vae".to_string()],
+                is_bundle_ready: false,
             },
 
             // ── LTX-Video (Lightricks) ──────────────────────────────────────
@@ -176,6 +186,8 @@ impl VideoModelRegistry {
                 download_progress: None,
                 is_downloading: false,
                 error: None,
+                companion_model_ids: vec![],
+                is_bundle_ready: false,
             },
             // ── CogVideoX Models (THUDM) ────────────────────────────────────
             VideoModelInfo {
@@ -197,6 +209,8 @@ impl VideoModelRegistry {
                 download_progress: None,
                 is_downloading: false,
                 error: None,
+                companion_model_ids: vec![],
+                is_bundle_ready: false,
             },
             // ── Stable Video Diffusion ─────────────────────────────────────
             VideoModelInfo {
@@ -218,6 +232,8 @@ impl VideoModelRegistry {
                 download_progress: None,
                 is_downloading: false,
                 error: None,
+                companion_model_ids: vec![],
+                is_bundle_ready: false,
             },
             // ── HunyuanVideo (Tencent) ──────────────────────────────────────
             VideoModelInfo {
@@ -239,6 +255,8 @@ impl VideoModelRegistry {
                 download_progress: None,
                 is_downloading: false,
                 error: None,
+                companion_model_ids: vec![],
+                is_bundle_ready: false,
             },
         ]
     }
@@ -246,6 +264,10 @@ impl VideoModelRegistry {
     pub fn list_models(&self) -> Vec<VideoModelInfo> {
         let mut catalog = self.curated_catalog();
         let states = self.download_states.read().unwrap();
+        let file_exists_map: std::collections::HashMap<String, bool> = catalog
+            .iter()
+            .map(|m| (m.id.clone(), self.models_dir.join(&m.filename).exists()))
+            .collect();
 
         for model in &mut catalog {
             let path = self.models_dir.join(&model.filename);
@@ -253,6 +275,12 @@ impl VideoModelRegistry {
             if model.is_downloaded {
                 model.local_path = Some(path.to_string_lossy().to_string());
             }
+
+            model.is_bundle_ready = model.is_downloaded
+                && model
+                    .companion_model_ids
+                    .iter()
+                    .all(|cid| file_exists_map.get(cid).copied().unwrap_or(false));
 
             if let Some(state) = states.get(&model.id) {
                 model.is_downloading = state.is_downloading;
@@ -275,7 +303,57 @@ impl VideoModelRegistry {
         None
     }
 
+    /// Universally verify that a model and all its companion dependencies exist, automatically pulling any missing components
+    pub async fn ensure_model_and_dependencies(&self, model_id: &str) -> Result<()> {
+        let catalog = self.curated_catalog();
+        let model = catalog
+            .iter()
+            .find(|m| m.id == model_id)
+            .ok_or_else(|| anyhow!("Model '{}' not found in catalog", model_id))?
+            .clone();
+
+        let model_path = self.models_dir.join(&model.filename);
+        if !model_path.exists() {
+            info!("Ensuring primary video model {} is downloaded...", model_id);
+            self.start_pull_model_internal(model_id)?;
+        }
+
+        for companion_id in &model.companion_model_ids {
+            if let Some(companion) = catalog.iter().find(|m| &m.id == companion_id) {
+                let companion_path = self.models_dir.join(&companion.filename);
+                if !companion_path.exists() {
+                    info!("Ensuring companion dependency {} for {}...", companion_id, model_id);
+                    self.start_pull_model_internal(companion_id)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn pull_model(&self, model_id: &str) -> Result<()> {
+        let catalog = self.curated_catalog();
+        let model = catalog
+            .iter()
+            .find(|m| m.id == model_id)
+            .ok_or_else(|| anyhow!("Model '{}' not found in catalog", model_id))?
+            .clone();
+
+        // Auto-pull any missing companion models (e.g. VAE or text encoder) as part of the unified model bundle
+        for companion_id in &model.companion_model_ids {
+            if let Some(companion) = catalog.iter().find(|m| &m.id == companion_id) {
+                let companion_path = self.models_dir.join(&companion.filename);
+                if !companion_path.exists() {
+                    info!("Auto-queuing companion model {} for {}", companion_id, model.id);
+                    let _ = self.start_pull_model_internal(companion_id);
+                }
+            }
+        }
+
+        self.start_pull_model_internal(model_id)
+    }
+
+    pub fn start_pull_model_internal(&self, model_id: &str) -> Result<()> {
         let catalog = self.curated_catalog();
         let model = catalog
             .iter()

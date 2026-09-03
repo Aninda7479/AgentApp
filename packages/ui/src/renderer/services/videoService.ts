@@ -67,6 +67,8 @@ export interface VideoModelInfo {
   download_progress?: number;
   is_downloading: boolean;
   error?: string;
+  companion_model_ids?: string[];
+  is_bundle_ready?: boolean;
 }
 
 export type CameraMotionPreset =
