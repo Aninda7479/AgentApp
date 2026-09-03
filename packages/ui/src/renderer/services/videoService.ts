@@ -16,6 +16,8 @@ export interface HardwareProfile {
   npu_label?: string;
   ffmpeg_installed: boolean;
   ffmpeg_version?: string;
+  ffmpeg_path?: string;
+  hardware_accelerators?: string[];
 }
 
 export interface VideoEngineStatus {
@@ -29,6 +31,22 @@ export interface VideoEngineStatus {
   download_progress?: number;
   error?: string;
   ffmpeg_ready: boolean;
+  ffmpeg_path?: string;
+  ffmpeg_version?: string;
+  ffmpeg_is_downloading?: boolean;
+  ffmpeg_download_progress?: number;
+  ffmpeg_error?: string;
+  hardware_accelerators?: string[];
+}
+
+export interface FfmpegStatus {
+  ready: boolean;
+  path?: string;
+  version?: string;
+  is_downloading: boolean;
+  download_progress?: number;
+  error?: string;
+  hardware_accelerators: string[];
 }
 
 export interface VideoUpdateInfo {
@@ -264,6 +282,16 @@ export async function checkVideoEngineUpdate(): Promise<VideoUpdateInfo | null> 
   } catch {
     return null;
   }
+}
+
+export async function getFfmpegStatus(): Promise<FfmpegStatus> {
+  return await requestJson<FfmpegStatus>('/api/videos/engine/ffmpeg/status', { method: 'GET' });
+}
+
+export async function provisionFfmpeg(): Promise<{ success: boolean; message: string }> {
+  return await requestJson<{ success: boolean; message: string }>('/api/videos/engine/ffmpeg/provision', {
+    method: 'POST',
+  });
 }
 
 // ─── Hardware API ───────────────────────────────────────────────────────────

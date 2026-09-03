@@ -176,9 +176,13 @@ export const VideoModelSelect: React.FC<VideoModelSelectProps> = ({
                   </div>
 
                   <div className="flex items-center self-center pl-1">
-                    {model.is_downloaded ? (
-                      <span className="p-1 rounded-full bg-emerald-950/60 text-emerald-400" title="Downloaded and ready">
+                    {model.is_downloaded && (model.is_bundle_ready ?? true) ? (
+                      <span className="p-1 rounded-full bg-emerald-950/60 text-emerald-400" title="Complete bundle ready">
                         <Check className="w-3.5 h-3.5" />
+                      </span>
+                    ) : model.is_downloaded && model.is_bundle_ready === false ? (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-950/60 text-amber-400 text-[9px] font-medium" title="Companion models syncing">
+                        Syncing Bundle
                       </span>
                     ) : isDownloading ? (
                       <span className="text-[10px] text-violet-400 font-mono">
@@ -189,7 +193,7 @@ export const VideoModelSelect: React.FC<VideoModelSelectProps> = ({
                         type="button"
                         onClick={(e) => handlePullModel(e, model.id)}
                         className="flex items-center gap-1 px-2 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 rounded-lg text-[10px] font-medium transition-all"
-                        title="Download model weights"
+                        title="Download model weights and companion bundle"
                       >
                         <Download className="w-3 h-3" />
                         <span>Get</span>

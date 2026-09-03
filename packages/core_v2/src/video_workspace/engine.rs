@@ -16,7 +16,7 @@ use tracing::{error, info};
 
 use crate::storage::settings::get_superagent_dir;
 use crate::video_workspace::types::{
-    CameraMotionPreset, GpuBackend, HardwareProfile, VideoEngineManifest, VideoEngineStatus,
+    CameraMotionPreset, FfmpegStatus, GpuBackend, HardwareProfile, VideoEngineManifest, VideoEngineStatus,
     VideoExportRequest, VideoProgressEvent, VideoUpdateInfo,
 };
 
@@ -57,10 +57,18 @@ fn extract_zip_archive(archive_path: &Path, target_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct FfmpegProvisionState {
+    pub is_downloading: bool,
+    pub progress: f32,
+    pub error: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct VideoEngineManager {
     engine_dir: PathBuf,
     status: Arc<RwLock<VideoEngineStatus>>,
+    ffmpeg_state: Arc<RwLock<FfmpegProvisionState>>,
 }
 
 impl VideoEngineManager {
@@ -84,7 +92,14 @@ impl VideoEngineManager {
                 download_progress: None,
                 error: None,
                 ffmpeg_ready: false,
+                ffmpeg_path: None,
+                ffmpeg_version: None,
+                ffmpeg_is_downloading: false,
+                ffmpeg_download_progress: None,
+                ffmpeg_error: None,
+                hardware_accelerators: Vec::new(),
             })),
+            ffmpeg_state: Arc::new(RwLock::new(FfmpegProvisionState::default())),
         };
 
         mgr.refresh_status();
@@ -109,7 +124,14 @@ impl VideoEngineManager {
                 download_progress: None,
                 error: None,
                 ffmpeg_ready: false,
+                ffmpeg_path: None,
+                ffmpeg_version: None,
+                ffmpeg_is_downloading: false,
+                ffmpeg_download_progress: None,
+                ffmpeg_error: None,
+                hardware_accelerators: Vec::new(),
             })),
+            ffmpeg_state: Arc::new(RwLock::new(FfmpegProvisionState::default())),
         };
 
         mgr.refresh_status();
@@ -133,8 +155,17 @@ impl VideoEngineManager {
         let manifest_path = self.engine_dir.join("manifest.json");
         let mut status = self.status.write().unwrap();
 
-        let ffmpeg_ready = Self::check_ffmpeg_installed();
-        status.ffmpeg_ready = ffmpeg_ready;
+        let ffmpeg_bin = Self::find_ffmpeg_binary();
+        let hw = Self::detect_hardware();
+        let ff_state = self.ffmpeg_state.read().unwrap().clone();
+
+        status.ffmpeg_ready = ffmpeg_bin.is_some();
+        status.ffmpeg_path = ffmpeg_bin.map(|p| p.to_string_lossy().to_string());
+        status.ffmpeg_version = hw.ffmpeg_version;
+        status.ffmpeg_is_downloading = ff_state.is_downloading;
+        status.ffmpeg_download_progress = if ff_state.is_downloading { Some(ff_state.progress) } else { None };
+        status.ffmpeg_error = ff_state.error;
+        status.hardware_accelerators = hw.hardware_accelerators;
 
         if manifest_path.exists() {
             if let Ok(content) = fs::read_to_string(&manifest_path) {
@@ -236,6 +267,34 @@ impl VideoEngineManager {
             }
         }
 
+        #[cfg(target_os = "macos")]
+        {
+            for mac_candidate in &[
+                "/opt/homebrew/bin/ffmpeg",
+                "/usr/local/bin/ffmpeg",
+                "/opt/local/bin/ffmpeg",
+            ] {
+                let p = PathBuf::from(mac_candidate);
+                if p.exists() {
+                    return Some(p);
+                }
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            for linux_candidate in &[
+                "/usr/bin/ffmpeg",
+                "/usr/local/bin/ffmpeg",
+                "/snap/bin/ffmpeg",
+            ] {
+                let p = PathBuf::from(linux_candidate);
+                if p.exists() {
+                    return Some(p);
+                }
+            }
+        }
+
         // 3. Check system PATH via `ffmpeg` command
         let mut cmd = std::process::Command::new("ffmpeg");
         cmd.arg("-version");
@@ -266,7 +325,9 @@ impl VideoEngineManager {
     }
 
     /// Universally ensure that FFmpeg is available on the system, auto-provisioning a portable static release if absent
-    pub async fn ensure_ffmpeg_binary() -> Result<PathBuf> {
+    pub async fn ensure_ffmpeg_binary_internal(
+        state_opt: Option<Arc<RwLock<FfmpegProvisionState>>>,
+    ) -> Result<PathBuf> {
         if let Some(p) = Self::find_ffmpeg_binary() {
             return Ok(p);
         }
@@ -292,16 +353,51 @@ impl VideoEngineManager {
             .build()
             .unwrap_or_default();
 
-        let resp = client.get(download_url).send().await.map_err(|e| anyhow!("Failed to download FFmpeg: {}", e))?;
+        let resp = client
+            .get(download_url)
+            .send()
+            .await
+            .map_err(|e| anyhow!("Failed to download FFmpeg: {}", e))?;
         if !resp.status().is_success() {
             anyhow::bail!("Failed to download FFmpeg: HTTP {}", resp.status());
         }
 
-        let bytes = resp.bytes().await.map_err(|e| anyhow!("Failed to read FFmpeg archive: {}", e))?;
-        let temp_archive = target_dir.join("ffmpeg_download.zip");
-        tokio::fs::write(&temp_archive, &bytes).await.map_err(|e| anyhow!("Failed to save FFmpeg archive: {}", e))?;
+        let total_size = resp.content_length().unwrap_or(80_000_000);
+        let mut stream = resp.bytes_stream();
+        let mut downloaded: u64 = 0;
+        let is_tar = download_url.ends_with(".tar.xz");
+        let temp_archive = target_dir.join(if is_tar { "ffmpeg_download.tar.xz" } else { "ffmpeg_download.zip" });
+        let mut file = tokio::fs::File::create(&temp_archive)
+            .await
+            .map_err(|e| anyhow!("Failed to create download file: {}", e))?;
 
-        let _ = extract_zip_archive(&temp_archive, &target_dir);
+        use futures_util::StreamExt;
+        use tokio::io::AsyncWriteExt;
+        while let Some(chunk_res) = stream.next().await {
+            let chunk = chunk_res.map_err(|e| anyhow!("Download stream error: {}", e))?;
+            file.write_all(&chunk)
+                .await
+                .map_err(|e| anyhow!("Write error: {}", e))?;
+            downloaded += chunk.len() as u64;
+            let progress = (downloaded as f32 / total_size as f32).min(0.99);
+            if let Some(ref st) = state_opt {
+                let mut guard = st.write().unwrap();
+                guard.progress = progress;
+            }
+        }
+        file.flush().await?;
+        drop(file);
+
+        if is_tar {
+            #[cfg(target_os = "linux")]
+            {
+                let mut tar_cmd = std::process::Command::new("tar");
+                tar_cmd.args(["-xf", temp_archive.to_str().unwrap(), "-C", target_dir.to_str().unwrap()]);
+                let _ = tar_cmd.status();
+            }
+        } else {
+            let _ = extract_zip_archive(&temp_archive, &target_dir);
+        }
         let _ = fs::remove_file(&temp_archive);
 
         if final_bin.exists() {
@@ -325,12 +421,74 @@ impl VideoEngineManager {
                     }
                     return Ok(final_bin);
                 }
+                let direct_sub = entry.path().join(binary_name);
+                if direct_sub.exists() {
+                    let _ = fs::copy(&direct_sub, &final_bin);
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let _ = fs::set_permissions(&final_bin, fs::Permissions::from_mode(0o755));
+                    }
+                    return Ok(final_bin);
+                }
             }
         }
 
         Self::find_ffmpeg_binary().ok_or_else(|| anyhow!("Failed to locate FFmpeg after auto-provisioning"))
     }
 
+    pub async fn ensure_ffmpeg_binary() -> Result<PathBuf> {
+        Self::ensure_ffmpeg_binary_internal(None).await
+    }
+
+    pub fn get_ffmpeg_status(&self) -> FfmpegStatus {
+        let bin = Self::find_ffmpeg_binary();
+        let hw = Self::detect_hardware();
+        let state = self.ffmpeg_state.read().unwrap().clone();
+        FfmpegStatus {
+            ready: bin.is_some(),
+            path: bin.map(|p| p.to_string_lossy().to_string()),
+            version: hw.ffmpeg_version,
+            is_downloading: state.is_downloading,
+            download_progress: if state.is_downloading { Some(state.progress) } else { None },
+            error: state.error,
+            hardware_accelerators: hw.hardware_accelerators,
+        }
+    }
+
+    pub fn trigger_provision_ffmpeg(&self) -> Result<()> {
+        let bin = Self::find_ffmpeg_binary();
+        if bin.is_some() {
+            return Ok(());
+        }
+        let state_arc = self.ffmpeg_state.clone();
+        {
+            let mut st = state_arc.write().unwrap();
+            if st.is_downloading {
+                return Ok(());
+            }
+            st.is_downloading = true;
+            st.progress = 0.0;
+            st.error = None;
+        }
+
+        tokio::spawn(async move {
+            match Self::ensure_ffmpeg_binary_internal(Some(state_arc.clone())).await {
+                Ok(_) => {
+                    let mut st = state_arc.write().unwrap();
+                    st.is_downloading = false;
+                    st.progress = 1.0;
+                    st.error = None;
+                }
+                Err(e) => {
+                    let mut st = state_arc.write().unwrap();
+                    st.is_downloading = false;
+                    st.error = Some(e.to_string());
+                }
+            }
+        });
+        Ok(())
+    }
 
     pub fn detect_hardware() -> HardwareProfile {
         let mut sys = System::new_all();
@@ -407,26 +565,56 @@ impl VideoEngineManager {
             _ => "wan2.1-t2v-1.3b".to_string(),
         };
 
-        let ffmpeg_installed = Self::check_ffmpeg_installed();
-        let ffmpeg_version = if ffmpeg_installed {
-            let mut cmd = std::process::Command::new("ffmpeg");
+        let ffmpeg_bin = Self::find_ffmpeg_binary();
+        let ffmpeg_installed = ffmpeg_bin.is_some();
+        let mut ffmpeg_version: Option<String> = None;
+        let mut hardware_accelerators: Vec<String> = Vec::new();
+
+        if let Some(ref bin) = ffmpeg_bin {
+            let mut cmd = std::process::Command::new(bin);
             cmd.arg("-version");
             #[cfg(target_os = "windows")]
             {
                 use std::os::windows::process::CommandExt;
                 cmd.creation_flags(0x08000000);
             }
-            cmd.output()
-                .ok()
-                .and_then(|out| {
-                    String::from_utf8_lossy(&out.stdout)
-                        .lines()
-                        .next()
-                        .map(|s| s.to_string())
-                })
-        } else {
-            None
-        };
+            if let Ok(out) = cmd.output() {
+                ffmpeg_version = String::from_utf8_lossy(&out.stdout)
+                    .lines()
+                    .next()
+                    .map(|s| s.to_string());
+            }
+
+            let mut enc_cmd = std::process::Command::new(bin);
+            enc_cmd.args(["-encoders"]);
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+                enc_cmd.creation_flags(0x08000000);
+            }
+            if let Ok(out) = enc_cmd.output() {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                if stdout.contains("h264_nvenc") {
+                    hardware_accelerators.push("NVIDIA NVENC (GPU)".to_string());
+                }
+                if stdout.contains("h264_videotoolbox") {
+                    hardware_accelerators.push("Apple VideoToolbox (Metal)".to_string());
+                }
+                if stdout.contains("h264_amf") {
+                    hardware_accelerators.push("AMD AMF (GPU)".to_string());
+                }
+                if stdout.contains("h264_qsv") {
+                    hardware_accelerators.push("Intel QuickSync".to_string());
+                }
+                if stdout.contains("h264_vaapi") {
+                    hardware_accelerators.push("Linux VAAPI".to_string());
+                }
+            }
+        }
+
+        if hardware_accelerators.is_empty() {
+            hardware_accelerators.push("CPU Software (libx264)".to_string());
+        }
 
         HardwareProfile {
             os,
@@ -444,6 +632,8 @@ impl VideoEngineManager {
             npu_label: None,
             ffmpeg_installed,
             ffmpeg_version,
+            ffmpeg_path: ffmpeg_bin.map(|p| p.to_string_lossy().to_string()),
+            hardware_accelerators,
         }
     }
 

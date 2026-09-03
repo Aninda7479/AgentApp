@@ -117,6 +117,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/videos/engine/rollback", post(rollback_video_engine))
         .route("/api/videos/engine", delete(uninstall_video_engine))
         .route("/api/videos/engine/check-update", get(check_video_engine_update))
+        .route("/api/videos/engine/ffmpeg/provision", post(provision_ffmpeg))
+        .route("/api/videos/engine/ffmpeg/status", get(get_ffmpeg_status))
         .route("/api/videos/hardware", get(get_video_hardware_profile))
         .route("/api/videos/models", get(list_video_models))
         .route("/api/videos/models/pull", post(pull_video_model))

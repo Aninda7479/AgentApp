@@ -42,6 +42,7 @@ import {
   pullVideoModel,
   deleteVideoModel,
   openVideoModelsDir,
+  provisionFfmpeg,
   VideoEngineStatus,
   HardwareProfile,
   VideoModelInfo,
@@ -167,8 +168,8 @@ export const LocalVideoModelSettings: React.FC<LocalVideoModelSettingsProps> = (
     refreshData(true);
   }, [refreshData]);
 
-  // Only poll when actively downloading engine or models
-  const isDownloadingAny = engineStatus.is_downloading || models.some((m) => m.is_downloading);
+  // Only poll when actively downloading engine, ffmpeg, or models
+  const isDownloadingAny = engineStatus.is_downloading || engineStatus.ffmpeg_is_downloading || models.some((m) => m.is_downloading);
   useEffect(() => {
     if (!isDownloadingAny) return;
 
@@ -233,6 +234,19 @@ export const LocalVideoModelSettings: React.FC<LocalVideoModelSettingsProps> = (
       await refreshData();
     } catch (err: any) {
       notify(`Uninstall failed: ${err.message}`);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleProvisionFfmpeg = async () => {
+    setActionLoading('ffmpeg_provision');
+    try {
+      await provisionFfmpeg();
+      notify('Started downloading standalone FFmpeg media codecs...');
+      await refreshData();
+    } catch (err: any) {
+      notify(`Failed to provision FFmpeg: ${err.message}`);
     } finally {
       setActionLoading(null);
     }
@@ -710,28 +724,68 @@ export const LocalVideoModelSettings: React.FC<LocalVideoModelSettingsProps> = (
               />
             </div>
 
-            {/* FFmpeg Status & AI Accelerator */}
-            <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-brand-border text-xs text-brand-textMuted">
-              <div className="flex items-center gap-2">
-                <Video size={14} className="text-[var(--brand-accent)]" />
-                <span>
-                  FFmpeg Status:{' '}
-                  <strong className={hardware?.ffmpeg_installed ? 'text-[color:var(--neon-constructive)]' : 'text-amber-400'}>
-                    {hardware?.ffmpeg_installed ? `Installed (${hardware.ffmpeg_version?.split(' ')[2] || 'System'})` : 'Not Found'}
-                  </strong>
-                </span>
-              </div>
-              {(hardware?.npu_detected || systemInfo?.npuTpu?.detected) && (
-                <div className="flex items-center gap-1.5">
-                  <MonitorSmartphone size={14} className="text-[var(--brand-accent)]" />
-                  <span>
-                    NPU:{' '}
-                    <strong className="text-brand-textMain">
-                      {hardware?.npu_label || systemInfo?.npuTpu?.label || 'AI Boost'}
-                    </strong>
-                  </span>
+            {/* FFmpeg Status, Codecs & AI Accelerator */}
+            <div className="mt-3.5 pt-3 border-t border-brand-border space-y-2.5 text-xs text-brand-textMuted">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Video size={15} className="text-[var(--brand-accent)]" />
+                  <span className="font-semibold text-brand-textMain">FFmpeg Media Subsystem:</span>
+                  {hardware?.ffmpeg_installed || engineStatus.ffmpeg_ready ? (
+                    <span className="ui-badge bg-[color:var(--neon-constructive)]/15 text-[color:var(--neon-constructive)] font-medium inline-flex items-center gap-1">
+                      <CheckCircle2 size={12} />
+                      Active & Ready {hardware?.ffmpeg_version ? `(${hardware.ffmpeg_version.split(' ')[2] || 'Static'})` : ''}
+                    </span>
+                  ) : engineStatus.ffmpeg_is_downloading ? (
+                    <span className="ui-badge bg-violet-950/80 text-violet-300 border border-violet-800/60 inline-flex items-center gap-1 animate-pulse">
+                      <Download size={12} />
+                      Downloading Standalone Codecs ({Math.round((engineStatus.ffmpeg_download_progress || 0) * 100)}%)...
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="ui-badge bg-amber-950/80 text-amber-300 border border-amber-800/60 inline-flex items-center gap-1">
+                        <CircleAlert size={12} />
+                        Auto-Setup Available
+                      </span>
+                      <button
+                        onClick={handleProvisionFfmpeg}
+                        disabled={actionLoading === 'ffmpeg_provision'}
+                        className="ui-btn-primary text-[11px] px-2.5 py-1 inline-flex items-center gap-1 shadow-sm"
+                      >
+                        <Download size={12} />
+                        <span>Auto-Provision FFmpeg (1-Click)</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
+
+                {(hardware?.npu_detected || systemInfo?.npuTpu?.detected) && (
+                  <div className="flex items-center gap-1.5">
+                    <MonitorSmartphone size={14} className="text-[var(--brand-accent)]" />
+                    <span>
+                      NPU:{' '}
+                      <strong className="text-brand-textMain">
+                        {hardware?.npu_label || systemInfo?.npuTpu?.label || 'AI Boost'}
+                      </strong>
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Hardware Acceleration & Codecs Row */}
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="text-brand-textMuted">Available Transcoders:</span>
+                {(hardware?.hardware_accelerators && hardware.hardware_accelerators.length > 0
+                  ? hardware.hardware_accelerators
+                  : ['CPU Software (libx264)']
+                ).map((acc) => (
+                  <span
+                    key={acc}
+                    className="ui-chip px-2 py-0.5 bg-brand-popover text-brand-textMain border border-brand-border text-[10px]"
+                  >
+                    {acc}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
 

@@ -17,7 +17,7 @@ use serde::Deserialize;
 use crate::server::state::AppState;
 use crate::storage::video_storage::VideoGenerationRecord;
 use crate::video_workspace::{
-    GpuBackend, HardwareProfile, VideoEngineManager, VideoEngineStatus, VideoExportRequest,
+    FfmpegStatus, GpuBackend, HardwareProfile, VideoEngineManager, VideoEngineStatus, VideoExportRequest,
     VideoExportResponse, VideoModelInfo, VideoUpdateInfo,
 };
 use crate::video_workspace::types::{GenerateVideoRequest, GenerateVideoResponse};
@@ -96,6 +96,23 @@ pub async fn check_video_engine_update(
         .await
         .map(Json)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+}
+
+pub async fn provision_ffmpeg(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    state
+        .video_workspace
+        .engine
+        .trigger_provision_ffmpeg()
+        .map(|_| Json(serde_json::json!({ "success": true, "message": "FFmpeg auto-provisioning initiated" })))
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))))
+}
+
+pub async fn get_ffmpeg_status(
+    State(state): State<AppState>,
+) -> Json<FfmpegStatus> {
+    Json(state.video_workspace.engine.get_ffmpeg_status())
 }
 
 // ─── Hardware Routes ────────────────────────────────────────────────────────

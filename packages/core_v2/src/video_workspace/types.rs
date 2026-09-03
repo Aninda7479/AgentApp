@@ -41,6 +41,10 @@ pub struct HardwareProfile {
     pub npu_label: Option<String>,
     pub ffmpeg_installed: bool,
     pub ffmpeg_version: Option<String>,
+    #[serde(default)]
+    pub ffmpeg_path: Option<String>,
+    #[serde(default)]
+    pub hardware_accelerators: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,6 +69,29 @@ pub struct VideoEngineStatus {
     pub download_progress: Option<f32>,
     pub error: Option<String>,
     pub ffmpeg_ready: bool,
+    #[serde(default)]
+    pub ffmpeg_path: Option<String>,
+    #[serde(default)]
+    pub ffmpeg_version: Option<String>,
+    #[serde(default)]
+    pub ffmpeg_is_downloading: bool,
+    #[serde(default)]
+    pub ffmpeg_download_progress: Option<f32>,
+    #[serde(default)]
+    pub ffmpeg_error: Option<String>,
+    #[serde(default)]
+    pub hardware_accelerators: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FfmpegStatus {
+    pub ready: bool,
+    pub path: Option<String>,
+    pub version: Option<String>,
+    pub is_downloading: bool,
+    pub download_progress: Option<f32>,
+    pub error: Option<String>,
+    pub hardware_accelerators: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
