@@ -1,8 +1,9 @@
-﻿import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   installEngine,
   getEngineStatus,
   getApiBaseUrl,
+  getImageUrl,
 } from './imageService';
 
 describe('imageService', () => {
@@ -75,5 +76,11 @@ describe('imageService', () => {
       is_running: false,
       is_downloading: false,
     });
+  });
+
+  it('constructs fully-qualified image URL using API base URL', () => {
+    const id = 'img_592a680c-0340-4f10-b589-2f0c11f116ba';
+    const url = getImageUrl(id);
+    expect(url).toBe('http://localhost:1469/api/images/generations/img_592a680c-0340-4f10-b589-2f0c11f116ba/file');
   });
 });

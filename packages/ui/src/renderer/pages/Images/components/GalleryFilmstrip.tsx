@@ -1,6 +1,6 @@
 import React from 'react';
 import { Trash2, Sparkles, Image as ImageIcon } from 'lucide-react';
-import { GenerationRecord } from '../../../services/imageService';
+import { GenerationRecord, getImageUrl } from '../../../services/imageService';
 
 interface GalleryFilmstripProps {
   history: GenerationRecord[];
@@ -49,7 +49,7 @@ export const GalleryFilmstrip: React.FC<GalleryFilmstripProps> = ({
                 title={record.prompt}
               >
                 <img
-                  src={`/api/images/generations/${record.id}/file`}
+                  src={getImageUrl(record.id)}
                   alt={record.prompt}
                   className="w-full h-full object-cover"
                 />

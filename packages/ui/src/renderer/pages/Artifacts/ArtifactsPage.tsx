@@ -24,7 +24,7 @@ import {
   Info,
   Maximize2
 } from 'lucide-react';
-import { getIpc } from '../../lib/ipc';
+import { getIpc, getCoreApiBaseUrl } from '../../lib/ipc';
 
 export interface ArtifactManifest {
   id: string;
@@ -796,7 +796,7 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
                   src={
                     previewArtifact.url
                       ? String(previewArtifact.url)
-                      : `/api/artifacts/${previewArtifact.id}/view/`
+                      : `${getCoreApiBaseUrl()}/api/artifacts/${previewArtifact.id}/view/`
                   }
                   sandbox="allow-scripts allow-forms allow-modals allow-same-origin"
                   className="w-full h-full border-none bg-slate-950"

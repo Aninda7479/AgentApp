@@ -19,7 +19,7 @@ import {
   Zap,
   Loader2,
 } from 'lucide-react';
-import { GenerationRecord } from '../../../services/imageService';
+import { GenerationRecord, getImageUrl } from '../../../services/imageService';
 import {
   AttachedReferenceImage,
   BrandLogoConfig,
@@ -73,7 +73,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
   // Client-side canvas logo compositor for lossless download
   const handleExportComposited = async () => {
     if (!selectedRecord) return;
-    const imgUrl = `/api/images/generations/${selectedRecord.id}/file`;
+    const imgUrl = getImageUrl(selectedRecord.id);
 
     try {
       const baseImg = new Image();
@@ -342,7 +342,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
                     style={{ clipPath: `inset(0 ${100 - splitPos}% 0 0)` }}
                   >
                     <img
-                      src={`/api/images/generations/${selectedRecord.id}/file`}
+                      src={getImageUrl(selectedRecord.id)}
                       alt="Generated"
                       className="max-h-[70vh] max-w-full object-contain pointer-events-none"
                     />
@@ -371,7 +371,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
                 /* Standard Artwork View */
                 <div className="relative">
                   <img
-                    src={`/api/images/generations/${selectedRecord.id}/file`}
+                    src={getImageUrl(selectedRecord.id)}
                     alt={selectedRecord.prompt}
                     className="max-h-[70vh] max-w-full object-contain"
                   />
@@ -433,7 +433,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
 
                 <button
                   onClick={() =>
-                    onCopyImage(`/api/images/generations/${selectedRecord.id}/file`)
+                    onCopyImage(getImageUrl(selectedRecord.id))
                   }
                   className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
                   title="Copy to Clipboard"
