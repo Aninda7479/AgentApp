@@ -226,7 +226,7 @@ pub async fn handle_agent_channel(
 
             let (cancel_tx, mut cancel_rx) = tokio::sync::broadcast::channel::<()>(2);
             {
-                let mut cancellations = state.active_cancellations.lock().unwrap();
+                let mut cancellations = state.active_cancellations.lock();
                 cancellations.insert(session_id.clone(), cancel_tx);
             }
 
@@ -238,7 +238,7 @@ pub async fn handle_agent_channel(
             tokio::spawn(async move {
                 // 1. Mark session running in session_store, preserve conversation history
                 let prior_history = {
-                    let mut store = state_clone.session_store.lock().unwrap();
+                    let mut store = state_clone.session_store.lock();
                     if let Some(entry) = store.get_mut(&sid) {
                         entry.is_running = true;
                         entry.events.clear();
@@ -511,7 +511,7 @@ pub async fn handle_agent_channel(
 
                                             // Record text in session store
                                             {
-                                                let mut store = state_clone.session_store.lock().unwrap();
+                                                let mut store = state_clone.session_store.lock();
                                                 if let Some(entry) = store.get_mut(&sid) {
                                                     if let Some(c) = data_obj.get("content").and_then(|v| v.as_str()) {
                                                         entry.full_assistant_text.push_str(c);
@@ -536,7 +536,7 @@ pub async fn handle_agent_channel(
 
                         // 7. Persist new messages into conversation_history
                         if let Ok(new_messages) = history_rx.try_recv() {
-                            let mut store = state_clone.session_store.lock().unwrap();
+                            let mut store = state_clone.session_store.lock();
                             if let Some(entry) = store.get_mut(&sid) {
                                 entry.conversation_history.extend(new_messages);
                             }
@@ -571,7 +571,7 @@ pub async fn handle_agent_channel(
                 let duration_ms = start_time.elapsed().as_millis() as u64;
                 let prompt_token_count = std::cmp::max(1, (prompt_clone.len() + 3) / 4);
                 let full_text_len = {
-                    let store = state_clone.session_store.lock().unwrap();
+                    let store = state_clone.session_store.lock();
                     store.peek(&sid).map(|e| e.full_assistant_text.len()).unwrap_or(0)
                 };
                 let final_completion_tokens = std::cmp::max(completion_token_count, (full_text_len + 3) / 4);
@@ -586,12 +586,12 @@ pub async fn handle_agent_channel(
 
                 // Mark session idle & clean cancellation token
                 {
-                    let mut store = state_clone.session_store.lock().unwrap();
+                    let mut store = state_clone.session_store.lock();
                     if let Some(entry) = store.get_mut(&sid) {
                         entry.is_running = false;
                         entry.last_updated = chrono::Utc::now().timestamp_millis();
                     }
-                    let mut cancellations = state_clone.active_cancellations.lock().unwrap();
+                    let mut cancellations = state_clone.active_cancellations.lock();
                     cancellations.remove(&sid);
                 }
             });
@@ -613,14 +613,14 @@ pub async fn handle_agent_channel(
             }).unwrap_or_default();
 
             {
-                let cancellations = state.active_cancellations.lock().unwrap();
+                let cancellations = state.active_cancellations.lock();
                 if let Some(tx) = cancellations.get(&session_id) {
                     let _ = tx.send(());
                 }
             }
 
             {
-                let mut store = state.session_store.lock().unwrap();
+                let mut store = state.session_store.lock();
                 if let Some(entry) = store.get_mut(&session_id) {
                     entry.is_running = false;
                 }
@@ -638,7 +638,7 @@ pub async fn handle_agent_channel(
             Some(Ok(Json(serde_json::json!({ "data": { "stopped": true } }))))
         }
         "agent-list" => {
-            let store = state.session_store.lock().unwrap();
+            let store = state.session_store.lock();
             let sessions: Vec<String> = store.iter().filter(|(_, v)| v.is_running).map(|(k, _)| k.clone()).collect();
             Some(Ok(Json(serde_json::json!({ "data": { "sessions": sessions } }))))
         }

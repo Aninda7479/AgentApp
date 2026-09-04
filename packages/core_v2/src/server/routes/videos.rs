@@ -309,32 +309,44 @@ pub async fn get_video_file(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let bytes = std::fs::read(&path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let total_len = bytes.len();
+    let metadata = tokio::fs::metadata(&path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let total_len = metadata.len();
 
     // Check for HTTP Range header for streaming & frame seeking
     if let Some(range_val) = headers.get(header::RANGE).and_then(|v| v.to_str().ok()) {
         if let Some(range_spec) = range_val.strip_prefix("bytes=") {
             let parts: Vec<&str> = range_spec.split('-').collect();
             if !parts.is_empty() {
-                let start: usize = parts[0].parse().unwrap_or(0);
-                let end: usize = if parts.len() > 1 && !parts[1].is_empty() {
+                let start: u64 = parts[0].parse().unwrap_or(0);
+                let end: u64 = if parts.len() > 1 && !parts[1].is_empty() {
                     parts[1].parse().unwrap_or(total_len.saturating_sub(1)).min(total_len.saturating_sub(1))
                 } else {
                     total_len.saturating_sub(1)
                 };
 
                 if start <= end && start < total_len {
-                    let slice = &bytes[start..=end];
+                    use tokio::io::{AsyncReadExt, AsyncSeekExt};
+                    let mut file = tokio::fs::File::open(&path)
+                        .await
+                        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                    file.seek(std::io::SeekFrom::Start(start))
+                        .await
+                        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                    let range_len = end - start + 1;
+                    let limited = file.take(range_len);
+                    let stream = tokio_util::io::ReaderStream::new(limited);
+
                     let content_range = format!("bytes {}-{}/{}", start, end, total_len);
                     let response = Response::builder()
                         .status(StatusCode::PARTIAL_CONTENT)
                         .header(header::CONTENT_TYPE, "video/mp4")
                         .header(header::ACCEPT_RANGES, "bytes")
                         .header(header::CONTENT_RANGE, content_range)
-                        .header(header::CONTENT_LENGTH, slice.len().to_string())
+                        .header(header::CONTENT_LENGTH, range_len.to_string())
                         .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
-                        .body(Body::from(slice.to_vec()))
+                        .body(Body::from_stream(stream))
                         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
                     return Ok(response);
                 } else {
@@ -349,13 +361,18 @@ pub async fn get_video_file(
         }
     }
 
+    let file = tokio::fs::File::open(&path)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let stream = tokio_util::io::ReaderStream::new(file);
+
     let response = Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "video/mp4")
         .header(header::ACCEPT_RANGES, "bytes")
         .header(header::CONTENT_LENGTH, total_len.to_string())
         .header(header::CACHE_CONTROL, "public, max-age=31536000, immutable")
-        .body(Body::from(bytes))
+        .body(Body::from_stream(stream))
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(response)

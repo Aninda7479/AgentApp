@@ -103,11 +103,7 @@ fn draw_messages(f: &mut Frame, app: &AppState, area: Rect) {
                     ]));
 
                     if let Some(ref out) = tc.output {
-                        let preview = if out.len() > 120 {
-                            format!("{}...", &out[..117])
-                        } else {
-                            out.clone()
-                        };
+                        let preview = truncate_utf8(out, 120);
                         lines.push(Line::from(vec![
                             Span::styled("     ↳ ", Style::default().fg(Color::DarkGray)),
                             Span::styled(preview, Style::default().fg(Color::DarkGray)),
@@ -422,4 +418,73 @@ fn centered_rect(width: u16, height: u16, r: Rect) -> Rect {
             Constraint::Length((r.width.saturating_sub(width)) / 2),
         ])
         .split(popup_layout[1])[1]
+}
+
+/// Safely truncates a string to at most `max_chars` UTF-8 characters without splitting multibyte codepoints.
+/// If truncated, appends `...` such that the result contains at most `max_chars` characters.
+pub fn truncate_utf8(text: &str, max_chars: usize) -> String {
+    let char_count = text.chars().count();
+    if char_count > max_chars {
+        let prefix_len = max_chars.saturating_sub(3);
+        let truncated: String = text.chars().take(prefix_len).collect();
+        format!("{}...", truncated)
+    } else {
+        text.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_truncate_utf8_shorter_or_equal() {
+        assert_eq!(truncate_utf8("hello", 10), "hello");
+        assert_eq!(truncate_utf8("hello", 5), "hello");
+        assert_eq!(truncate_utf8("", 5), "");
+    }
+
+    #[test]
+    fn test_truncate_utf8_longer_ascii() {
+        assert_eq!(truncate_utf8("hello world", 8), "hello...");
+        assert_eq!(truncate_utf8("1234567890", 6), "123...");
+    }
+
+    #[test]
+    fn test_truncate_utf8_multibyte_characters() {
+        // Emojis (4-byte UTF-8 each)
+        let emojis = "🚀🦀🔥✨🎉🌟💡📦";
+        // 8 chars total. Truncating to 6 chars takes 3 chars + "..." (6 chars total)
+        let truncated = truncate_utf8(emojis, 6);
+        assert_eq!(truncated, "🚀🦀🔥...");
+        assert_eq!(truncated.chars().count(), 6);
+
+        // CJK characters (3-byte UTF-8 each)
+        let cjk = "こんにちは世界！Antigravity";
+        let cjk_trunc = truncate_utf8(cjk, 8);
+        assert_eq!(cjk_trunc, "こんにちは...");
+        assert_eq!(cjk_trunc.chars().count(), 8);
+
+        // Mixed content
+        let mixed = "SuperAgent 🤖: 快速且强大! Let's build AI agents together.";
+        let mixed_trunc = truncate_utf8(mixed, 25);
+        assert_eq!(mixed_trunc.chars().count(), 25);
+        assert!(mixed_trunc.ends_with("..."));
+    }
+
+    #[test]
+    fn test_truncate_utf8_boundary_no_panics() {
+        // Validates that taking character boundaries never panics even on complex multibyte boundaries
+        let text = "a€🦀b€🦀c";
+        for max in 0..=text.chars().count() + 2 {
+            let res = truncate_utf8(text, max);
+            assert!(res.chars().count() <= max.max(3));
+        }
+    }
+
+    #[test]
+    fn test_truncate_utf8_small_limits() {
+        assert_eq!(truncate_utf8("abcdef", 2), "...");
+        assert_eq!(truncate_utf8("abcdef", 0), "...");
+    }
 }

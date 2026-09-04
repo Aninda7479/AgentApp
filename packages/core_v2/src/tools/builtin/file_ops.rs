@@ -5,6 +5,16 @@ use serde_json::{json, Value};
 
 use crate::tools::r#trait::Tool;
 
+/// Strips extended-length Windows UNC prefix (`\\?\`) if present.
+fn strip_unc_prefix(path: &Path) -> PathBuf {
+    let s = path.to_string_lossy();
+    if let Some(stripped) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(stripped)
+    } else {
+        path.to_path_buf()
+    }
+}
+
 /// Helper function to validate that a target path is safely within the workspace root.
 pub fn validate_path_in_workspace(path_str: &str, workspace_root: &Path) -> Result<PathBuf> {
     let target = Path::new(path_str);
@@ -48,7 +58,10 @@ pub fn validate_path_in_workspace(path_str: &str, workspace_root: &Path) -> Resu
         }
     };
 
-    if !canonical_target.starts_with(&canonical_root) {
+    let clean_root = strip_unc_prefix(&canonical_root);
+    let clean_target = strip_unc_prefix(&canonical_target);
+
+    if !clean_target.starts_with(&clean_root) {
         anyhow::bail!(
             "Security Error: Access to path '{}' outside workspace root '{}' is forbidden",
             path_str,
@@ -56,7 +69,7 @@ pub fn validate_path_in_workspace(path_str: &str, workspace_root: &Path) -> Resu
         );
     }
 
-    Ok(canonical_target)
+    Ok(clean_target)
 }
 
 /// Tool for reading file contents safely within the workspace.
@@ -206,3 +219,96 @@ impl Tool for WriteFileTool {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn test_strip_unc_prefix() {
+        let p = PathBuf::from(r"\\?\C:\Users\test\workspace");
+        let stripped = strip_unc_prefix(&p);
+        assert_eq!(stripped, PathBuf::from(r"C:\Users\test\workspace"));
+
+        let normal = PathBuf::from(r"C:\Users\test\workspace");
+        assert_eq!(strip_unc_prefix(&normal), normal);
+    }
+
+    #[test]
+    fn test_validate_path_inside_workspace() {
+        let temp_dir = std::env::temp_dir().join(format!("sa_test_ws_{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let canonical_ws = strip_unc_prefix(&temp_dir.canonicalize().unwrap());
+
+        // Safe relative path to non-existing file
+        let res = validate_path_in_workspace("hello.txt", &canonical_ws);
+        assert!(res.is_ok(), "Expected safe relative path to succeed: {:?}", res);
+        let p = res.unwrap();
+        assert!(p.starts_with(&canonical_ws));
+        assert_eq!(p.file_name().unwrap(), "hello.txt");
+
+        // Safe relative path in subdirectory
+        let sub = canonical_ws.join("subdir");
+        fs::create_dir_all(&sub).unwrap();
+        let res = validate_path_in_workspace("subdir/nested.txt", &canonical_ws);
+        assert!(res.is_ok(), "Expected nested relative path to succeed: {:?}", res);
+        assert!(res.unwrap().starts_with(&canonical_ws));
+
+        // Safe existing file
+        let existing = canonical_ws.join("existing.txt");
+        fs::write(&existing, "hello").unwrap();
+        let res = validate_path_in_workspace("existing.txt", &canonical_ws);
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), strip_unc_prefix(&existing.canonicalize().unwrap()));
+
+        // Safe with current dir dot
+        let res = validate_path_in_workspace("./subdir/nested.txt", &canonical_ws);
+        assert!(res.is_ok());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_validate_path_traversal_prevention() {
+        let temp_dir = std::env::temp_dir().join(format!("sa_test_ws_{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&temp_dir).unwrap();
+        let canonical_ws = temp_dir.canonicalize().unwrap();
+
+        // Traversal escaping root: ../outside.txt
+        let res = validate_path_in_workspace("../outside.txt", &canonical_ws);
+        assert!(res.is_err(), "Expected ../outside.txt to be rejected");
+        let err = res.unwrap_err().to_string();
+        assert!(err.contains("Security Error") || err.contains("outside workspace root"));
+
+        // Deep traversal escaping root: ../../etc/passwd
+        let res = validate_path_in_workspace("../../etc/passwd", &canonical_ws);
+        assert!(res.is_err(), "Expected ../../etc/passwd to be rejected");
+
+        // Subdir traversal escaping root: subdir/../../secret
+        let res = validate_path_in_workspace("subdir/../../secret.txt", &canonical_ws);
+        assert!(res.is_err(), "Expected subdir/../../secret.txt to be rejected");
+
+        // Absolute path outside workspace
+        let other_temp = std::env::temp_dir();
+        if other_temp != canonical_ws {
+            let outside_abs = other_temp.join("evil.txt");
+            let res = validate_path_in_workspace(outside_abs.to_str().unwrap(), &canonical_ws);
+            assert!(res.is_err(), "Expected outside absolute path to be rejected");
+        }
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_reject_traversal_outside_workspace() {
+        let temp_dir = std::env::temp_dir().join("superagent_test_ws_trav");
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let invalid = validate_path_in_workspace("../../etc/shadow", &temp_dir);
+        assert!(invalid.is_err());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+}
+

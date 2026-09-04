@@ -210,6 +210,22 @@ export const ThreeDViewport: React.FC<ThreeDViewportProps> = ({
     };
     window.addEventListener('resize', handleResize);
 
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      controls.dispose();
+      renderer.dispose();
+      if (renderer.domElement) {
+        renderer.domElement.remove();
+      }
+      rendererRef.current = null;
+      sceneRef.current = null;
+      cameraRef.current = null;
+      controlsRef.current = null;
+    };
+  }, []);
+
+  // Animation updates (render loop)
+  useEffect(() => {
     let animationFrameId: number;
     let clock = new THREE.Clock();
 
@@ -221,7 +237,9 @@ export const ThreeDViewport: React.FC<ThreeDViewportProps> = ({
         if (skeletonGroupRef.current) skeletonGroupRef.current.rotation.y += 0.005;
       }
 
-      controls.update();
+      if (controlsRef.current) {
+        controlsRef.current.update();
+      }
 
       if (activeStage === 8 && isAnimating) {
         const timeFactor = elapsed * 3.5 * animationSpeed;
@@ -270,11 +288,7 @@ export const ThreeDViewport: React.FC<ThreeDViewportProps> = ({
     render();
 
     return () => {
-      window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationFrameId);
-      if (rendererRef.current && rendererRef.current.domElement) {
-        rendererRef.current.domElement.remove();
-      }
     };
   }, [activeStage, animationPreset, animationSpeed, isAnimating, autoRotate]);
 

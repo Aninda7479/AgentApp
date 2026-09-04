@@ -18,6 +18,7 @@ use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScree
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
+use superagent_core_v2::orchestrator::CancellationToken;
 use crate::attachments::prepare_attachments;
 use crate::commands::{CommandAction, CommandContext};
 use crate::shortcuts::clipboard::ClipboardManager;
@@ -63,12 +64,15 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                             app.add_user_message(next_prompt.clone());
                             app.start_assistant_turn();
 
+                            let cancel_token = CancellationToken::new();
+                            app.active_cancel_token = Some(cancel_token.clone());
+
                             let engine = Arc::clone(&app.engine);
                             let model_config = app.build_model_config();
                             let tx = events.tx.clone();
 
                             tokio::spawn(async move {
-                                match engine.run_loop(&model_config, "", &next_prompt).await {
+                                match engine.run_loop_with_cancellation(&model_config, "", &next_prompt, cancel_token).await {
                                     Ok(mut rx) => {
                                         while let Some(evt) = rx.recv().await {
                                             let _ = tx.send(AppEvent::Agent(evt)).await;
@@ -102,6 +106,9 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                     // Global shortcut: Ctrl+C
                     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
                         if app.is_busy {
+                            if let Some(token) = app.active_cancel_token.take() {
+                                token.cancel();
+                            }
                             app.finish_assistant_turn();
                             app.add_system_message("Turn canceled by user (Ctrl+C).".to_string());
                         } else {
@@ -371,12 +378,15 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                                                         app.add_user_message(prompt.clone());
                                                         app.start_assistant_turn();
 
+                                                        let cancel_token = CancellationToken::new();
+                                                        app.active_cancel_token = Some(cancel_token.clone());
+
                                                         let engine = Arc::clone(&app.engine);
                                                         let model_config = app.build_model_config();
                                                         let tx = events.tx.clone();
 
                                                         tokio::spawn(async move {
-                                                            match engine.run_loop(&model_config, "", &prompt).await {
+                                                            match engine.run_loop_with_cancellation(&model_config, "", &prompt, cancel_token).await {
                                                                 Ok(mut rx) => {
                                                                     while let Some(evt) = rx.recv().await {
                                                                         let _ = tx.send(AppEvent::Agent(evt)).await;
@@ -413,12 +423,15 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                                     app.add_user_message(clean_text.clone());
                                     app.start_assistant_turn();
 
+                                    let cancel_token = CancellationToken::new();
+                                    app.active_cancel_token = Some(cancel_token.clone());
+
                                     let engine = Arc::clone(&app.engine);
                                     let model_config = app.build_model_config();
                                     let tx = events.tx.clone();
 
                                     tokio::spawn(async move {
-                                        match engine.run_loop(&model_config, "", &clean_text).await {
+                                        match engine.run_loop_with_cancellation(&model_config, "", &clean_text, cancel_token).await {
                                             Ok(mut rx) => {
                                                 while let Some(evt) = rx.recv().await {
                                                     let _ = tx.send(AppEvent::Agent(evt)).await;

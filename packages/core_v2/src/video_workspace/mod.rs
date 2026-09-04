@@ -104,15 +104,6 @@ impl VideoWorkspaceManager {
             .execute_generation_streaming(&effective_req, &model_path, &temp_mp4, &temp_thumb, None)
             .await?;
 
-        let video_bytes = std::fs::read(&temp_mp4)
-            .map_err(|e| anyhow!("Failed to read generated video: {}", e))?;
-        let _ = std::fs::remove_file(&temp_mp4);
-
-        let thumb_bytes = std::fs::read(&temp_thumb).ok();
-        if temp_thumb.exists() {
-            let _ = std::fs::remove_file(&temp_thumb);
-        }
-
         let num_frames = req.num_frames.unwrap_or(81);
         let fps = req.fps.unwrap_or(16);
         let duration_seconds = (num_frames as f32) / (fps as f32);
@@ -146,8 +137,16 @@ impl VideoWorkspaceManager {
             thumbnail_filename: thumb_filename.clone(),
         };
 
-        self.storage
-            .save_generation(&record, &video_bytes, thumb_bytes.as_deref())?;
+        let dest_video = self.storage.video_path(&video_filename);
+        move_file_async(&temp_mp4, &dest_video).await
+            .map_err(|e| anyhow!("Failed to move generated video: {}", e))?;
+
+        if temp_thumb.exists() {
+            let dest_thumb = self.storage.thumbnail_path(&thumb_filename);
+            let _ = move_file_async(&temp_thumb, &dest_thumb).await;
+        }
+
+        self.storage.save_record(&record)?;
 
         Ok(GenerateVideoResponse {
             success: true,
@@ -262,15 +261,6 @@ impl VideoWorkspaceManager {
             .execute_generation_streaming(&effective_req, &model_path, &temp_mp4, &temp_thumb, Some(progress_tx))
             .await?;
 
-        let video_bytes = std::fs::read(&temp_mp4)
-            .map_err(|e| anyhow!("Failed to read generated video: {}", e))?;
-        let _ = std::fs::remove_file(&temp_mp4);
-
-        let thumb_bytes = std::fs::read(&temp_thumb).ok();
-        if temp_thumb.exists() {
-            let _ = std::fs::remove_file(&temp_thumb);
-        }
-
         let num_frames = req.num_frames.unwrap_or(81);
         let fps = req.fps.unwrap_or(16);
         let duration_seconds = (num_frames as f32) / (fps as f32);
@@ -304,8 +294,16 @@ impl VideoWorkspaceManager {
             thumbnail_filename: thumb_filename.clone(),
         };
 
-        self.storage
-            .save_generation(&record, &video_bytes, thumb_bytes.as_deref())?;
+        let dest_video = self.storage.video_path(&video_filename);
+        move_file_async(&temp_mp4, &dest_video).await
+            .map_err(|e| anyhow!("Failed to move generated video: {}", e))?;
+
+        if temp_thumb.exists() {
+            let dest_thumb = self.storage.thumbnail_path(&thumb_filename);
+            let _ = move_file_async(&temp_thumb, &dest_thumb).await;
+        }
+
+        self.storage.save_record(&record)?;
 
         Ok(GenerateVideoResponse {
             success: true,
@@ -328,4 +326,15 @@ impl VideoWorkspaceManager {
             created_at,
         })
     }
+}
+
+async fn move_file_async(src: &PathBuf, dst: &PathBuf) -> Result<()> {
+    if let Some(parent) = dst.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    if tokio::fs::rename(src, dst).await.is_err() {
+        tokio::fs::copy(src, dst).await?;
+        let _ = tokio::fs::remove_file(src).await;
+    }
+    Ok(())
 }

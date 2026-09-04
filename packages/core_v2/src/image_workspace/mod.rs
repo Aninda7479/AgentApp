@@ -132,10 +132,6 @@ impl ImageWorkspaceManager {
 
         let elapsed_ms = gen_result?;
 
-        let bytes = std::fs::read(&temp_output)
-            .map_err(|e| anyhow!("Failed to read generated image: {}", e))?;
-        let _ = std::fs::remove_file(&temp_output);
-
         let seed = req.seed.unwrap_or_else(|| rand::random::<i32>().abs() as i64);
         let created_at = chrono::Utc::now().timestamp_millis();
         let width = req.width.unwrap_or(1024);
@@ -160,7 +156,11 @@ impl ImageWorkspaceManager {
             image_filename: filename.clone(),
         };
 
-        self.storage.save_generation(&record, &bytes)?;
+        let dest_img = self.storage.image_path(&filename);
+        move_file_async(&temp_output, &dest_img).await
+            .map_err(|e| anyhow!("Failed to move generated image: {}", e))?;
+
+        self.storage.save_record(&record)?;
 
         Ok(GenerateImageResponse {
             success: true,
@@ -278,10 +278,6 @@ impl ImageWorkspaceManager {
 
         let elapsed_ms = gen_result?;
 
-        let bytes = std::fs::read(&temp_output)
-            .map_err(|e| anyhow!("Failed to read generated image: {}", e))?;
-        let _ = std::fs::remove_file(&temp_output);
-
         let seed = req.seed.unwrap_or_else(|| rand::random::<i32>().abs() as i64);
         let created_at = chrono::Utc::now().timestamp_millis();
         let width = req.width.unwrap_or(1024);
@@ -306,7 +302,11 @@ impl ImageWorkspaceManager {
             image_filename: filename.clone(),
         };
 
-        self.storage.save_generation(&record, &bytes)?;
+        let dest_img = self.storage.image_path(&filename);
+        move_file_async(&temp_output, &dest_img).await
+            .map_err(|e| anyhow!("Failed to move generated image: {}", e))?;
+
+        self.storage.save_record(&record)?;
 
         Ok(GenerateImageResponse {
             success: true,
@@ -325,4 +325,15 @@ impl ImageWorkspaceManager {
             created_at,
         })
     }
+}
+
+async fn move_file_async(src: &PathBuf, dst: &PathBuf) -> Result<()> {
+    if let Some(parent) = dst.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    if tokio::fs::rename(src, dst).await.is_err() {
+        tokio::fs::copy(src, dst).await?;
+        let _ = tokio::fs::remove_file(src).await;
+    }
+    Ok(())
 }

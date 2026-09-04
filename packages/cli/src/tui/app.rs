@@ -3,7 +3,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use superagent_core_v2::orchestrator::AgentEngine;
+use superagent_core_v2::orchestrator::{AgentEngine, CancellationToken};
 use superagent_core_v2::tools::builtin::{
     EditFileTool, GrepSearchTool, ListDirTool, ReadFileTool, RunCommandTool, WriteFileTool,
 };
@@ -96,6 +96,7 @@ pub struct AppState {
     pub should_exit: bool,
     pub skills: Vec<RunnableSkill>,
     pub start_time: Option<std::time::Instant>,
+    pub active_cancel_token: Option<CancellationToken>,
 }
 
 use superagent_core_v2::storage::SettingsStore;
@@ -260,6 +261,7 @@ impl AppState {
             should_exit: false,
             skills,
             start_time: None,
+            active_cancel_token: None,
         }
     }
 
@@ -313,6 +315,9 @@ impl AppState {
     }
 
     pub fn finish_assistant_turn(&mut self) {
+        if let Some(token) = self.active_cancel_token.take() {
+            token.cancel();
+        }
         if let Some(last) = self.messages.last_mut() {
             if last.role == MessageRole::Assistant {
                 last.is_streaming = false;
@@ -387,8 +392,10 @@ impl AppState {
             .iter()
             .find(|m| m.role == MessageRole::User)
             .map(|m| {
-                if m.content.len() > 50 {
-                    format!("{}...", &m.content[..47])
+                let char_count = m.content.chars().count();
+                if char_count > 50 {
+                    let truncated: String = m.content.chars().take(47).collect();
+                    format!("{}...", truncated)
                 } else {
                     m.content.clone()
                 }

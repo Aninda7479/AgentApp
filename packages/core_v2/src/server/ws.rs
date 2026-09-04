@@ -26,9 +26,20 @@ pub async fn handle_ws_socket(socket: WebSocket, state: AppState) {
     info!("New WebSocket client connected to Core v2 Hub");
 
     let mut send_task = tokio::spawn(async move {
-        while let Ok(msg_str) = broadcast_rx.recv().await {
-            if ws_sender.send(Message::Text(msg_str)).await.is_err() {
-                break;
+        loop {
+            match broadcast_rx.recv().await {
+                Ok(msg_str) => {
+                    if ws_sender.send(Message::Text(msg_str)).await.is_err() {
+                        break;
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                    tracing::warn!("WebSocket client lagged behind, skipped {} messages", skipped);
+                    continue;
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                    break;
+                }
             }
         }
     });
@@ -46,7 +57,7 @@ pub async fn handle_ws_socket(socket: WebSocket, state: AppState) {
                         }
                         "SYNC_SESSION" => {
                             if let Some(sess_id) = val.get("sessionId").and_then(|v| v.as_str()) {
-                                let mut store = state_clone.session_store.lock().unwrap();
+                                let mut store = state_clone.session_store.lock();
                                 let entry = store.get(sess_id).cloned().unwrap_or_default();
                                 let sync_payload = serde_json::json!({
                                     "channel": "session-sync",
@@ -64,7 +75,7 @@ pub async fn handle_ws_socket(socket: WebSocket, state: AppState) {
                         }
                         "CLIENT_TOOL_RESULT" => {
                             if let Some(tool_id) = val.get("id").and_then(|v| v.as_str()) {
-                                let mut pending = state_clone.pending_client_tools.lock().unwrap();
+                                let mut pending = state_clone.pending_client_tools.lock();
                                 if let Some(sender) = pending.remove(tool_id) {
                                     let res = val.get("result").cloned().unwrap_or(serde_json::Value::Null);
                                     let _ = sender.send(res);

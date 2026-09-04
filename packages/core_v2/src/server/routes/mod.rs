@@ -19,7 +19,7 @@ pub use videos::*;
 
 use axum::{
     extract::DefaultBodyLimit,
-    http::{header, Method},
+    http::{header, HeaderValue, Method},
     middleware,
     routing::{delete, get, post},
     Router,
@@ -38,8 +38,27 @@ use crate::server::ws::handle_agent_ws;
 
 /// Creates the complete router for the Core v2 API and static UI daemon.
 pub fn create_router(state: AppState) -> Router {
+    let mut trusted_origins: Vec<HeaderValue> = vec![
+        "http://localhost:1469".parse().unwrap(),
+        "http://127.0.0.1:1469".parse().unwrap(),
+        "http://localhost:5173".parse().unwrap(),
+        "http://127.0.0.1:5173".parse().unwrap(),
+        "tauri://localhost".parse().unwrap(),
+        "http://tauri.localhost".parse().unwrap(),
+        "https://tauri.localhost".parse().unwrap(),
+    ];
+
+    if let Ok(extra) = std::env::var("SUPERAGENT_ALLOWED_ORIGINS") {
+        for origin in extra.split(',') {
+            let trimmed = origin.trim();
+            if let Ok(val) = trimmed.parse::<HeaderValue>() {
+                trusted_origins.push(val);
+            }
+        }
+    }
+
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::mirror_request())
+        .allow_origin(AllowOrigin::list(trusted_origins))
         .allow_credentials(true)
         .allow_methods([
             Method::GET,

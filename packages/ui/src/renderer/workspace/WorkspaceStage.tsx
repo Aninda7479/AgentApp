@@ -5,6 +5,7 @@ import { MessageCanvas } from './MessageCanvas';
 import { ComposerBar } from './ComposerBar';
 import { WorkspaceRightSidebar } from './WorkspaceRightSidebar';
 import { AgentOrchestrator } from '../services/AgentOrchestrator';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import type { ComposerOptions, ComposerAttachment, StoredChat } from '../core/types';
 
 interface WorkspaceStageProps {
@@ -62,12 +63,14 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
         {activeChatId ? (
           <div className="flex-1 flex flex-col min-h-0 h-full relative">
             <div className="flex-1 min-h-0 overflow-hidden">
-              <MessageCanvas
-                chatId={activeChatId}
-                onUndoStep={onUndoStep}
-                onEditStep={onEditStep}
-                onViewDiff={onViewDiff}
-              />
+              <ErrorBoundary name="Message Canvas" resetKeys={[activeChatId]}>
+                <MessageCanvas
+                  chatId={activeChatId}
+                  onUndoStep={onUndoStep}
+                  onEditStep={onEditStep}
+                  onViewDiff={onViewDiff}
+                />
+              </ErrorBoundary>
             </div>
             {/* Global composer bar at the bottom */}
             <div className="shrink-0 px-4 pb-4 pt-1">
@@ -84,14 +87,16 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
       </div>
 
       {/* Tabbed Workspace Right Sidebar */}
-      <WorkspaceRightSidebar
-        steps={steps}
-        isGenerating={isGenerating}
-        activeChatId={activeChatId}
-        onViewDiff={onViewDiff}
-        onAddAgentSession={handleAddAgentSession}
-        onSelectChat={(id) => chatStore.setActiveChatId(id)}
-      />
+      <ErrorBoundary name="Workspace Sidebar" resetKeys={[activeChatId]}>
+        <WorkspaceRightSidebar
+          steps={steps}
+          isGenerating={isGenerating}
+          activeChatId={activeChatId}
+          onViewDiff={onViewDiff}
+          onAddAgentSession={handleAddAgentSession}
+          onSelectChat={(id) => chatStore.setActiveChatId(id)}
+        />
+      </ErrorBoundary>
     </div>
   );
 };

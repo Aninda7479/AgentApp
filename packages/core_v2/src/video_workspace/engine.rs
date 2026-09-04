@@ -1128,8 +1128,8 @@ impl VideoEngineManager {
                 }
             }
 
-            cmd.stdout(std::process::Stdio::piped());
-            cmd.stderr(std::process::Stdio::piped());
+            cmd.stdout(std::process::Stdio::null());
+            cmd.stderr(std::process::Stdio::null());
 
             if let Ok(mut child) = cmd.spawn() {
                 let check_start = Instant::now();

@@ -1,0 +1,83 @@
+name: CI Cross-Platform Matrix
+
+on:
+  push:
+    branches: [ main, master, release, develop ]
+  pull_request:
+    branches: [ main, master, release, develop ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust-matrix:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev \
+            libdbus-1-dev \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Cargo Check Workspace
+        run: cargo check --workspace
+
+      - name: Cargo Test Core & CLI
+        run: |
+          cargo test -p superagent-core-v2
+          cargo test -p superagent-cli
+
+  frontend-matrix:
+    name: Frontend & UI Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build UI Bundle
+        run: npm run build:ui
+
+      - name: Run UI Unit Tests
+        run: npm run test:ui
+
+      - name: Run Extension Tests
+        run: npm run test:ext
+
+      - name: Run Desktop Component Tests
+        run: npm run test:desktop

@@ -80,6 +80,7 @@ import {
   PcbProject,
   PcbChatMessage,
 } from '../../services/pcbService';
+import { isMacOS, isUndoShortcut, isRedoShortcut } from '../../lib/platform';
 
 interface PCBWorkspacePageProps {
   ipc?: any;
@@ -538,14 +539,12 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
       } else if (e.key === '-' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         setZoom((z) => Math.max(0.05, z * 0.8));
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-        if (e.shiftKey) {
-          handleRedo();
-        } else {
-          handleUndo();
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+      } else if (isRedoShortcut(e)) {
+        e.preventDefault();
         handleRedo();
+      } else if (isUndoShortcut(e)) {
+        e.preventDefault();
+        handleUndo();
       } else if (e.key === 'Escape') {
         setFocusedBoard(null);
         setShowShortcutsModal(false);
@@ -963,7 +962,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
                 <span className="text-[11px] text-brand-textMuted font-mono ml-1">{graph.components.length} components</span>
               </div>
               <button
-                onClick={() => { const csv = exportToBOM(graph); const b = new Blob([csv], {type:'text/csv'}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${graph.metadata.name}_BOM.csv`; a.click(); }}
+                onClick={() => { const csv = exportToBOM(graph); const b = new Blob([csv], {type:'text/csv'}); const a = document.createElement('a'); const u = URL.createObjectURL(b); a.href = u; a.download = `${graph.metadata.name}_BOM.csv`; a.click(); URL.revokeObjectURL(u); }}
                 className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold cursor-pointer transition-colors"
               >
                 <Download className="w-3 h-3" />
@@ -1280,7 +1279,7 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
               <div className="flex items-center justify-between p-2 rounded-lg bg-black/40">
                 <span className="text-brand-textMuted">Undo / Redo</span>
                 <span className="font-mono px-2 py-0.5 rounded bg-white/10 text-emerald-300">
-                  Ctrl + Z / Ctrl + Y
+                  {isMacOS() ? '⌘ + Z / ⌘ + ⇧ + Z' : 'Ctrl + Z / Ctrl + Y'}
                 </span>
               </div>
             </div>

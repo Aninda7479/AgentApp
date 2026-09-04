@@ -175,12 +175,18 @@ export const CompanionSettings: React.FC = () => {
               if (!activeId || !partners.importModel) return;
               const filePath = await windowPickModelFile();
               if (!filePath) return;
-              const model = await partners.importModel(activeId, filePath);
-              if (model) {
-                const name = pets.find((p) => p.id === activeId)?.name ?? 'Partner';
-                flash(`Model attached to ${name}.`);
-              } else {
-                flash('Could not attach model (see console).');
+              try {
+                const model = await partners.importModel(activeId, filePath);
+                if (model) {
+                  const name = pets.find((p) => p.id === activeId)?.name ?? 'Partner';
+                  flash(`Model attached to ${name}.`);
+                } else {
+                  flash('Could not attach model (see console).');
+                }
+              } finally {
+                if (filePath.startsWith('blob:')) {
+                  URL.revokeObjectURL(filePath);
+                }
               }
             }}
           >
@@ -195,12 +201,18 @@ export const CompanionSettings: React.FC = () => {
               if (!activeId || !partners.importModelFolder) return;
               const folderPath = await windowPickModelFolder();
               if (!folderPath) return;
-              const modelFolder = await partners.importModelFolder(activeId, folderPath);
-              if (modelFolder) {
-                const name = pets.find((p) => p.id === activeId)?.name ?? 'Partner';
-                flash(`Model folder attached to ${name}.`);
-              } else {
-                flash('Could not attach model folder (see console).');
+              try {
+                const modelFolder = await partners.importModelFolder(activeId, folderPath);
+                if (modelFolder) {
+                  const name = pets.find((p) => p.id === activeId)?.name ?? 'Partner';
+                  flash(`Model folder attached to ${name}.`);
+                } else {
+                  flash('Could not attach model folder (see console).');
+                }
+              } finally {
+                if (folderPath.startsWith('blob:')) {
+                  URL.revokeObjectURL(folderPath);
+                }
               }
             }}
           >

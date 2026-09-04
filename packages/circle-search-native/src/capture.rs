@@ -10,15 +10,51 @@ pub struct CapturedScreen {
     pub scale_factor: f64,
 }
 
+/// Returns whether the host is running under a Wayland display server session.
+pub fn is_wayland() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        std::env::var("XDG_SESSION_TYPE")
+            .map(|v| v.eq_ignore_ascii_case("wayland"))
+            .unwrap_or(false)
+            || std::env::var("WAYLAND_DISPLAY").is_ok()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
 pub fn capture_active_screen() -> Result<CapturedScreen, String> {
-    let screens = screenshots::Screen::all().map_err(|e| format!("Failed to list screens: {}", e))?;
-    let screen = screens.into_iter().next().ok_or_else(|| "No screens detected".to_string())?;
+    let wayland = is_wayland();
+
+    let screens = screenshots::Screen::all().map_err(|e| {
+        if wayland {
+            format!("Wayland display session detected: Native screen capture is restricted under Wayland protocols. Please run under X11, XWayland, or enable desktop portal capture: {}", e)
+        } else {
+            format!("Failed to list screens: {}", e)
+        }
+    })?;
+
+    let screen = screens.into_iter().next().ok_or_else(|| {
+        if wayland {
+            "Wayland display session detected: No accessible screens found. Direct screen capture is restricted by Wayland security policy.".to_string()
+        } else {
+            "No screens detected".to_string()
+        }
+    })?;
 
     let width = screen.display_info.width;
     let height = screen.display_info.height;
     let scale_factor = screen.display_info.scale_factor as f64;
 
-    let screenshot = screen.capture().map_err(|e| format!("Failed to capture screen: {}", e))?;
+    let screenshot = screen.capture().map_err(|e| {
+        if wayland {
+            format!("Wayland display session capture failed (direct frame reading blocked by compositor): {}", e)
+        } else {
+            format!("Failed to capture screen: {}", e)
+        }
+    })?;
     let img_width = screenshot.width();
     let img_height = screenshot.height();
 

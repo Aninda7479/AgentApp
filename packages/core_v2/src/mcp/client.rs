@@ -49,6 +49,7 @@ impl McpClient {
         let mut cmd = Command::new(command);
         #[cfg(target_os = "windows")]
         cmd.creation_flags(0x08000000);
+        cmd.kill_on_drop(true);
         cmd.args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

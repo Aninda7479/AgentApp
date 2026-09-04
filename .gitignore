@@ -37,7 +37,7 @@ out/
 coverage/
 .nyc_output/
 .cypress/
-
+packages/desktop/src-tauri/binaries
 # Environment and sensitive data (NEVER commit tokens or secrets)
 .env
 *.env

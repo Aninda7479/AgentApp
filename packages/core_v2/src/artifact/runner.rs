@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::PathBuf;
 
@@ -14,7 +14,7 @@ pub struct ArtifactRunner {
     storage_dir: PathBuf,
     active_ports: Arc<Mutex<HashMap<String, u16>>>,
     child_processes: Arc<Mutex<HashMap<String, tokio::process::Child>>>,
-    log_buffers: Arc<Mutex<HashMap<String, Vec<String>>>>,
+    log_buffers: Arc<Mutex<HashMap<String, VecDeque<String>>>>,
 }
 
 impl ArtifactRunner {
@@ -85,6 +85,8 @@ impl ArtifactRunner {
             
             let cmd = if a_type == "python" { "python" } else { "node" };
             let mut child = tokio::process::Command::new(cmd)
+                .kill_on_drop(true)
+                .stdin(std::process::Stdio::null())
                 .arg(&artifact.manifest.entry)
                 .current_dir(self.storage_dir.join(id))
                 .env("PORT", port.to_string())
@@ -101,7 +103,11 @@ impl ArtifactRunner {
                     let mut lines = reader.lines();
                     while let Ok(Some(line)) = lines.next_line().await {
                         let mut lock = logs.lock().await;
-                        lock.entry(id_clone.clone()).or_default().push(line);
+                        let buf = lock.entry(id_clone.clone()).or_default();
+                        if buf.len() >= 1000 {
+                            buf.pop_front();
+                        }
+                        buf.push_back(line);
                     }
                 });
             }
@@ -114,7 +120,11 @@ impl ArtifactRunner {
                     let mut lines = reader.lines();
                     while let Ok(Some(line)) = lines.next_line().await {
                         let mut lock = logs.lock().await;
-                        lock.entry(id_clone.clone()).or_default().push(format!("STDERR: {}", line));
+                        let buf = lock.entry(id_clone.clone()).or_default();
+                        if buf.len() >= 1000 {
+                            buf.pop_front();
+                        }
+                        buf.push_back(format!("STDERR: {}", line));
                     }
                 });
             }
@@ -249,7 +259,7 @@ impl ArtifactRunner {
         if let Ok(lock) = self.log_buffers.try_lock() {
             if let Some(logs) = lock.get(id) {
                 let start = logs.len().saturating_sub(limit);
-                let msgs = logs[start..].to_vec();
+                let msgs: Vec<String> = logs.iter().skip(start).cloned().collect();
                 if !msgs.is_empty() {
                     return msgs;
                 }

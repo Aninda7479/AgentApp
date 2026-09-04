@@ -15,6 +15,10 @@ interface Props {
    * error state instead of keeping the broken page on screen.
    */
   resetKeys?: ReadonlyArray<unknown>;
+  /**
+   * Optional compact mode for inline cards, viewers, and sub-components.
+   */
+  compact?: boolean;
 }
 
 interface State {
@@ -97,6 +101,24 @@ export class ErrorBoundary extends React.Component<Props, State> {
       const pageName = this.props.name;
       const { error, showDetails, copied } = this.state;
       const errorMsg = error?.message || 'An unexpected error occurred.';
+
+      if (this.props.compact) {
+        return (
+          <div className="p-3 my-1 rounded-lg border border-red-500/30 bg-red-500/10 text-xs text-red-300 flex items-center justify-between gap-2 select-none">
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertTriangle size={14} className="text-red-400 shrink-0" />
+              <span className="font-medium truncate">{pageName || 'Component'} failed to render</span>
+            </div>
+            <button
+              type="button"
+              onClick={this.handleReset}
+              className="shrink-0 px-2 py-1 rounded bg-red-500/20 hover:bg-red-500/30 text-red-200 text-[11px] font-medium transition-colors cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        );
+      }
 
       return (
         <div

@@ -523,7 +523,7 @@ impl EngineManager {
                 }
 
                 let matches_os = if os_filter == "darwin" {
-                    name.contains("darwin") || name.contains("macos") || name.contains("arm64")
+                    name.contains("darwin") || name.contains("macos") || name.contains("apple")
                 } else {
                     name.contains(os_filter)
                 };
@@ -531,9 +531,28 @@ impl EngineManager {
                     continue;
                 }
 
+                // Architecture match: prevent downloading ARM64 on x86_64, or x86_64 on ARM64
+                let is_arm64 = cfg!(target_arch = "aarch64");
+                let is_x86_64 = cfg!(target_arch = "x86_64");
+
+                if is_x86_64 && (name.contains("arm64") || name.contains("aarch64")) {
+                    continue;
+                }
+                if is_arm64 && (name.contains("x86_64") || name.contains("x64") || name.contains("intel") || name.contains("amd64")) {
+                    continue;
+                }
+
                 let mut score = 0;
                 // Prioritize main binary package
                 if name.starts_with("sd-") {
+                    score += 20;
+                }
+
+                // Architecture alignment bonus
+                if is_arm64 && (name.contains("arm64") || name.contains("aarch64")) {
+                    score += 20;
+                }
+                if is_x86_64 && (name.contains("x86_64") || name.contains("x64") || name.contains("intel") || name.contains("amd64")) {
                     score += 20;
                 }
 
@@ -549,8 +568,10 @@ impl EngineManager {
                         }
                     }
                     GpuBackend::Metal => {
-                        if name.contains("arm64") || name.contains("macos") || name.contains("metal") {
+                        if name.contains("metal") {
                             score += 50;
+                        } else if name.contains("macos") || name.contains("darwin") {
+                            score += 40;
                         }
                     }
                     GpuBackend::Rocm => {

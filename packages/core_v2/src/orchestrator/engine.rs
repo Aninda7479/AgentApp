@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
+use tokio_util::sync::CancellationToken;
 use base64::Engine;
 
 use crate::memory::ConversationContext;
@@ -106,16 +107,35 @@ impl AgentEngine {
         system_prompt: &str,
         user_prompt: &str,
     ) -> anyhow::Result<mpsc::Receiver<AgentEvent>> {
-        self.run_loop_with_attachments(config, system_prompt, user_prompt, Vec::new()).await
+        self.run_loop_with_attachments(config, system_prompt, user_prompt, Vec::new(), None).await
     }
 
-    /// Runs the multi-turn agent interaction loop with optional image/file attachments.
+    /// Runs the multi-turn agent interaction loop with a cancellation token.
+    pub async fn run_loop_with_cancellation(
+        &self,
+        config: &ModelConfig,
+        system_prompt: &str,
+        user_prompt: &str,
+        cancellation_token: CancellationToken,
+    ) -> anyhow::Result<mpsc::Receiver<AgentEvent>> {
+        self.run_loop_with_attachments(
+            config,
+            system_prompt,
+            user_prompt,
+            Vec::new(),
+            Some(cancellation_token),
+        )
+        .await
+    }
+
+    /// Runs the multi-turn agent interaction loop with optional image/file attachments and optional cancellation token.
     pub async fn run_loop_with_attachments(
         &self,
         config: &ModelConfig,
         system_prompt: &str,
         user_prompt: &str,
         attachments: Vec<String>,
+        cancellation_token: Option<CancellationToken>,
     ) -> anyhow::Result<mpsc::Receiver<AgentEvent>> {
         let (tx, rx) = mpsc::channel::<AgentEvent>(200);
 
@@ -141,6 +161,17 @@ impl AgentEngine {
             context.add_message(ChatMessage::user_blocks(user_blocks));
 
             for _turn in 0..max_turns {
+                if let Some(ref token) = cancellation_token {
+                    if token.is_cancelled() {
+                        let _ = tx
+                            .send(AgentEvent::Finished {
+                                stop_reason: "cancelled".to_string(),
+                            })
+                            .await;
+                        return;
+                    }
+                }
+
                 let schemas = tools.list_schemas();
                 let mut turn_text = String::new();
                 let mut turn_tool_calls = Vec::new();
@@ -151,9 +182,22 @@ impl AgentEngine {
                 const RETRY_DELAY_SECS: u64 = 3;
 
                 for attempt in 1..=MAX_RETRIES {
-                    let stream_res = provider
-                        .chat_stream(&config, &context.all_messages(), &schemas)
-                        .await;
+                    let messages = context.all_messages();
+                    let stream_res = if let Some(ref token) = cancellation_token {
+                        tokio::select! {
+                            _ = token.cancelled() => {
+                                let _ = tx.send(AgentEvent::Finished {
+                                    stop_reason: "cancelled".to_string(),
+                                }).await;
+                                return;
+                            }
+                            res = provider.chat_stream(&config, &messages, &schemas) => res,
+                        }
+                    } else {
+                        provider
+                            .chat_stream(&config, &messages, &schemas)
+                            .await
+                    };
 
                     let mut stream_rx = match stream_res {
                         Ok(rx) => rx,
@@ -167,7 +211,19 @@ impl AgentEngine {
                                     last_error_msg,
                                     RETRY_DELAY_SECS
                                 );
-                                tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                                if let Some(ref token) = cancellation_token {
+                                    tokio::select! {
+                                        _ = token.cancelled() => {
+                                            let _ = tx.send(AgentEvent::Finished {
+                                                stop_reason: "cancelled".to_string(),
+                                            }).await;
+                                            return;
+                                        }
+                                        _ = tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)) => {}
+                                    }
+                                } else {
+                                    tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                                }
                                 continue;
                             } else {
                                 let _ = tx
@@ -184,7 +240,26 @@ impl AgentEngine {
                     turn_tool_calls.clear();
                     let mut stream_error = None;
 
-                    while let Some(event) = stream_rx.recv().await {
+                    loop {
+                        let maybe_event = if let Some(ref token) = cancellation_token {
+                            tokio::select! {
+                                _ = token.cancelled() => {
+                                    let _ = tx.send(AgentEvent::Finished {
+                                        stop_reason: "cancelled".to_string(),
+                                    }).await;
+                                    return;
+                                }
+                                evt = stream_rx.recv() => evt,
+                            }
+                        } else {
+                            stream_rx.recv().await
+                        };
+
+                        let event = match maybe_event {
+                            Some(e) => e,
+                            None => break,
+                        };
+
                         match &event {
                             AgentEvent::Token { text } => {
                                 turn_text.push_str(text);
@@ -222,7 +297,19 @@ impl AgentEngine {
                                 last_error_msg,
                                 RETRY_DELAY_SECS
                             );
-                            tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                            if let Some(ref token) = cancellation_token {
+                                tokio::select! {
+                                    _ = token.cancelled() => {
+                                        let _ = tx.send(AgentEvent::Finished {
+                                            stop_reason: "cancelled".to_string(),
+                                        }).await;
+                                        return;
+                                    }
+                                    _ = tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)) => {}
+                                }
+                            } else {
+                                tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                            }
                             continue;
                         } else {
                             let _ = tx
@@ -243,7 +330,19 @@ impl AgentEngine {
                                 MAX_RETRIES,
                                 RETRY_DELAY_SECS
                             );
-                            tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                            if let Some(ref token) = cancellation_token {
+                                tokio::select! {
+                                    _ = token.cancelled() => {
+                                        let _ = tx.send(AgentEvent::Finished {
+                                            stop_reason: "cancelled".to_string(),
+                                        }).await;
+                                        return;
+                                    }
+                                    _ = tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)) => {}
+                                }
+                            } else {
+                                tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                            }
                             continue;
                         }
                     }
@@ -302,7 +401,30 @@ impl AgentEngine {
                     context.add_message(ChatMessage::new(Role::Assistant, content_blocks));
 
                     for (id, name, input) in turn_tool_calls {
-                        let (output, is_error) = match tools.execute_tool(&name, input).await {
+                        if let Some(ref token) = cancellation_token {
+                            if token.is_cancelled() {
+                                let _ = tx.send(AgentEvent::Finished {
+                                    stop_reason: "cancelled".to_string(),
+                                }).await;
+                                return;
+                            }
+                        }
+
+                        let exec_res = if let Some(ref token) = cancellation_token {
+                            tokio::select! {
+                                _ = token.cancelled() => {
+                                    let _ = tx.send(AgentEvent::Finished {
+                                        stop_reason: "cancelled".to_string(),
+                                    }).await;
+                                    return;
+                                }
+                                res = tools.execute_tool(&name, input) => res,
+                            }
+                        } else {
+                            tools.execute_tool(&name, input).await
+                        };
+
+                        let (output, is_error) = match exec_res {
                             Ok(out) => (out, false),
                             Err(err) => (err.to_string(), true),
                         };
@@ -745,6 +867,27 @@ mod tests {
         assert!(block.is_none());
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_run_loop_with_cancellation_pre_cancelled() {
+        let registry = Arc::new(ToolRegistry::new());
+        let engine = AgentEngine::new(registry);
+        let config = ModelConfig::new(crate::types::ProviderType::OpenAI, "gpt-4");
+        let cancel_token = CancellationToken::new();
+        cancel_token.cancel();
+        let mut rx = engine
+            .run_loop_with_attachments(&config, "", "hello", Vec::new(), Some(cancel_token))
+            .await
+            .unwrap();
+
+        let event = rx.recv().await;
+        assert_eq!(
+            event,
+            Some(AgentEvent::Finished {
+                stop_reason: "cancelled".to_string(),
+            })
+        );
     }
 }
 

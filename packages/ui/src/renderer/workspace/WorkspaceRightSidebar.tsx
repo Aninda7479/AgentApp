@@ -29,6 +29,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { usePartners } from '../pages/Settings/companion/library';
 import { PetSprite } from '../partner-popup/PetSprite';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import type { TrajectoryStep } from '../pages/Workspace/TrajectoryCanvas';
 import type { PartnerMood, PartnerManifest } from '../partner-popup/types';
 import { moodReaction } from '../partner-popup/types';
@@ -515,40 +516,42 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
 
                       {/* 3D Pet viewport */}
                       <div className="my-auto transform transition-transform duration-300">
-                        <PetSprite
-                          manifest={activePartner}
-                          mood={mood}
-                          size={150}
-                          cameraAngle={cameraAngle}
-                          lipSync={lipSync}
-                          darkCircles={darkCircles}
-                          onPoke={(part) => {
-                            let response = "Hmm? Did you touch something?";
-                            if (part === 'head') {
-                              const lines = [
-                                "Hehe, that tickles! Don't mess up my hair bow.",
-                                "You poked my head! Focus on the editor instead!",
-                                "Ah! *giggles* Let's write some code!"
-                              ];
-                              response = lines[Math.floor(Math.random() * lines.length)];
-                              setAffection(prev => Math.min(prev + 2, 100));
-                            } else if (part === 'body' || part === 'dress') {
-                              response = "I'm right here keeping you company.";
-                              setAffection(prev => Math.min(prev + 1, 100));
-                            } else if (part.includes('hand') || part.includes('arm')) {
-                              response = "High five! Let's build something awesome!";
-                              setAffection(prev => Math.min(prev + 3, 100));
-                            } else if (part === 'laptop') {
-                              response = "My laptop shows the active processes... looks green!";
-                            }
-                            
-                            // Trigger LipSync response
-                            setDialogueText(response);
-                            setLipSync(true);
-                            const duration = Math.min(Math.max(response.length * 80, 1500), 4000);
-                            setTimeout(() => setLipSync(false), duration);
-                          }}
-                        />
+                        <ErrorBoundary name="Pet Sprite" compact>
+                          <PetSprite
+                            manifest={activePartner}
+                            mood={mood}
+                            size={150}
+                            cameraAngle={cameraAngle}
+                            lipSync={lipSync}
+                            darkCircles={darkCircles}
+                            onPoke={(part) => {
+                              let response = "Hmm? Did you touch something?";
+                              if (part === 'head') {
+                                const lines = [
+                                  "Hehe, that tickles! Don't mess up my hair bow.",
+                                  "You poked my head! Focus on the editor instead!",
+                                  "Ah! *giggles* Let's write some code!"
+                                ];
+                                response = lines[Math.floor(Math.random() * lines.length)];
+                                setAffection(prev => Math.min(prev + 2, 100));
+                              } else if (part === 'body' || part === 'dress') {
+                                response = "I'm right here keeping you company.";
+                                setAffection(prev => Math.min(prev + 1, 100));
+                              } else if (part.includes('hand') || part.includes('arm')) {
+                                response = "High five! Let's build something awesome!";
+                                setAffection(prev => Math.min(prev + 3, 100));
+                              } else if (part === 'laptop') {
+                                response = "My laptop shows the active processes... looks green!";
+                              }
+
+                              // Trigger LipSync response
+                              setDialogueText(response);
+                              setLipSync(true);
+                              const duration = Math.min(Math.max(response.length * 80, 1500), 4000);
+                              setTimeout(() => setLipSync(false), duration);
+                            }}
+                          />
+                        </ErrorBoundary>
                       </div>
 
                       {/* Custom Dialogue bubble inside Stage */}

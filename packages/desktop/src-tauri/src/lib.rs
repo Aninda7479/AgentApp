@@ -60,11 +60,21 @@ pub fn run() {
                             .and_then(|s| s.as_str())
                             .unwrap_or("CommandOrControl+Alt+V");
 
+                        let circle_shortcut = saved_settings
+                            .get("circleSearch")
+                            .and_then(|cs| cs.get("shortcut"))
+                            .and_then(|s| s.as_str())
+                            .unwrap_or("CommandOrControl+Shift+S");
+
                         if sc_str.eq_ignore_ascii_case(voice_shortcut)
-                            || (voice_shortcut.contains("Alt") && sc_str.contains("Alt") && sc_str.contains("KeyV"))
-                            || (voice_shortcut.contains("Super") && sc_str.contains("Super"))
+                            || (voice_shortcut.contains("Alt") && sc_str.contains("Alt") && (sc_str.contains("KeyV") || sc_str.ends_with("+V") || sc_str.ends_with("+v")))
+                            || sc_str.contains("KeyV")
                         {
                             let _ = voice_dictation_toggle(app.clone());
+                        } else if sc_str.eq_ignore_ascii_case(circle_shortcut)
+                            || sc_str.contains("KeyS")
+                        {
+                            let _ = circle_search_toggle(app.clone());
                         } else {
                             let _ = circle_search_toggle(app.clone());
                         }
@@ -119,55 +129,54 @@ pub fn run() {
                 .items(&[&artifacts_item, &show_item, &quit_item])
                 .build()?;
 
-            let icon = app
-                .default_window_icon()
-                .cloned()
-                .expect("SuperAgent window icon missing for system tray");
-
-            let _tray = TrayIconBuilder::new()
-                .icon(icon)
-                .tooltip("SuperAgent Artifacts & System Tray")
-                .menu(&menu)
-                .on_menu_event(|app, event| match event.id().as_ref() {
-                    "show" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
+            if let Some(icon) = app.default_window_icon().cloned() {
+                let _ = TrayIconBuilder::new()
+                    .icon(icon)
+                    .tooltip("SuperAgent Artifacts & System Tray")
+                    .menu(&menu)
+                    .on_menu_event(|app, event| match event.id().as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
                         }
-                    }
-                    "artifacts" => {
-                        if let Some(window) = app.get_webview_window("artifacts") {
-                            position_artifacts_window(&window);
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-                    }
-                    "quit" => {
-                        IS_EXPLICIT_QUIT.store(true, Ordering::SeqCst);
-                        app.exit(0);
-                    }
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("artifacts") {
-                            if window.is_visible().unwrap_or(false) {
-                                let _ = window.hide();
-                            } else {
+                        "artifacts" => {
+                            if let Some(window) = app.get_webview_window("artifacts") {
                                 position_artifacts_window(&window);
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             }
                         }
-                    }
-                })
-                .build(app)?;
+                        "quit" => {
+                            IS_EXPLICIT_QUIT.store(true, Ordering::SeqCst);
+                            app.exit(0);
+                        }
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            let app = tray.app_handle();
+                            if let Some(window) = app.get_webview_window("artifacts") {
+                                if window.is_visible().unwrap_or(false) {
+                                    let _ = window.hide();
+                                } else {
+                                    position_artifacts_window(&window);
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
+                    })
+                    .build(app);
+            } else {
+                eprintln!("[warn] SuperAgent default window icon missing; skipping system tray setup");
+            }
 
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
             let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
@@ -287,6 +296,7 @@ pub fn run() {
                     }
                 }
                 tauri::RunEvent::ExitRequested { api, .. } => {
+                    #[cfg(not(target_os = "macos"))]
                     if !IS_EXPLICIT_QUIT.load(Ordering::SeqCst) {
                         let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
                         let close_to_tray = saved_settings

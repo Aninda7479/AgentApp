@@ -139,10 +139,15 @@ impl VideoStorage {
             let _ = fs::write(&thumb_path, thumb);
         }
 
+        self.save_record(record)?;
+        Ok(())
+    }
+
+    pub fn save_record(&self, record: &VideoGenerationRecord) -> Result<()> {
+        self.ensure_storage_dir()?;
         let meta_path = self.record_path(&record.id);
         let content = serde_json::to_string_pretty(record)?;
         fs::write(&meta_path, content)?;
-
         Ok(())
     }
 

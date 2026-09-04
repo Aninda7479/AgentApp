@@ -32,6 +32,17 @@ export const isMacOS = (): boolean => getPlatform() === 'macos';
 export const isWindows = (): boolean => getPlatform() === 'windows';
 export const isLinux = (): boolean => getPlatform() === 'linux';
 
+/** Detect whether the app is running in the native desktop app shell (Tauri). */
+export function isDesktop(): boolean {
+  if (typeof window === 'undefined') return false;
+  return Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
+}
+
+/** Detect whether the app is running in standard web browser mode. */
+export function isWeb(): boolean {
+  return !isDesktop();
+}
+
 export interface KeySymbols {
   meta: string;
   metaName: string;
@@ -163,4 +174,39 @@ export function toAccelerator(input: string): string {
 export function toDisplayShortcut(shortcut: string): string {
   return formatShortcut(shortcut);
 }
+
+/**
+ * Checks whether the platform primary modifier key is active (Cmd on macOS, Ctrl on Windows/Linux).
+ */
+export function hasPrimaryModifier(e: { ctrlKey: boolean; metaKey: boolean }): boolean {
+  return isMacOS() ? e.metaKey : e.ctrlKey;
+}
+
+/**
+ * Checks whether a keyboard event corresponds to an Undo action (Cmd+Z on macOS, Ctrl+Z on Windows/Linux).
+ */
+export function isUndoShortcut(e: { ctrlKey: boolean; metaKey: boolean; shiftKey?: boolean; key?: string }): boolean {
+  const key = e.key?.toLowerCase();
+  const hasMod = isMacOS() ? e.metaKey : (e.ctrlKey || e.metaKey);
+  return hasMod && key === 'z' && !e.shiftKey;
+}
+
+/**
+ * Checks whether a keyboard event corresponds to a Redo action:
+ * - macOS: Cmd+Shift+Z
+ * - Windows/Linux: Ctrl+Y or Ctrl+Shift+Z
+ */
+export function isRedoShortcut(e: { ctrlKey: boolean; metaKey: boolean; shiftKey?: boolean; key?: string }): boolean {
+  const key = e.key?.toLowerCase();
+  const hasMod = isMacOS() ? e.metaKey : (e.ctrlKey || e.metaKey);
+
+  if (hasMod && key === 'z' && e.shiftKey) {
+    return true;
+  }
+  if (!isMacOS() && hasMod && key === 'y') {
+    return true;
+  }
+  return false;
+}
+
 

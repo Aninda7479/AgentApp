@@ -37,7 +37,7 @@ import { BrandLogo } from '../BrandLogo';
 import { ThemeMode } from '../types';
 import { LucideIcon } from 'lucide-react';
 import { WindowService } from '../logic/window';
-import { formatShortcut } from '../lib/platform';
+import { formatShortcut, isMacOS } from '../lib/platform';
 import { getIpc } from '../lib/ipc';
 
 
@@ -90,8 +90,7 @@ interface TitleBarProps {
   onOpenUpdates?: () => void;
 }
 
-const isDesktop = WindowService.isDesktop();
-const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent || navigator.platform || '');
+const isMac = isMacOS();
 
 interface MenuItem {
   label: string;
@@ -260,7 +259,9 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     </div>
   );
 
-  const isDesktop = isWebMode === false || (!isWebMode && (WindowService.isDesktop() || (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window))));
+  const isDesktop = isWebMode !== undefined
+    ? !isWebMode
+    : (WindowService.isDesktop() || (typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__)));
 
   return (
     <div

@@ -153,9 +153,14 @@ export function getAuthHeaders(extra?: Record<string, string>): Record<string, s
 }
 
 export function getCoreApiBaseUrl(): string {
-  if (typeof window !== 'undefined') {
-    if (window.location && window.location.port && window.location.port !== '5173') {
-      return window.location.origin;
+  if (typeof window !== 'undefined' && window.location) {
+    const { protocol, port, origin } = window.location;
+    if (protocol === 'http:' || protocol === 'https:') {
+      // In production web (port 80, 443, empty port string, or custom web port except dev 5173),
+      // resolve to the current origin.
+      if (port !== '5173') {
+        return origin;
+      }
     }
   }
   return 'http://localhost:1469';
@@ -164,10 +169,13 @@ export function getCoreApiBaseUrl(): string {
 function getCoreWsUrl(): string {
   const token = getStoredAuthToken();
   const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
-  if (typeof window !== 'undefined') {
-    if (window.location && window.location.port && window.location.port !== '5173') {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      return `${protocol}//${window.location.host}/api/ws${tokenQuery}`;
+  if (typeof window !== 'undefined' && window.location) {
+    const { protocol, host, port } = window.location;
+    if (protocol === 'http:' || protocol === 'https:') {
+      if (port !== '5173') {
+        const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
+        return `${wsProtocol}//${host}/api/ws${tokenQuery}`;
+      }
     }
   }
   return `ws://localhost:1469/api/ws${tokenQuery}`;
@@ -178,7 +186,38 @@ const webListeners = new Map<string, Set<Function>>();
 let webSocket: WebSocket | null = null;
 let webSocketConnecting = false;
 
+// Active running sessions tracked so disconnect cleans up zombie runs
+const activeSessions = new Set<string>();
+
+function registerActiveSessionFromArgs(channel: string, args: any[]) {
+  if (channel === 'agent-run' || channel === 'agent_run') {
+    const sessId = args[0]?.sessionId || (typeof args[0] === 'string' ? args[0] : undefined);
+    if (sessId) activeSessions.add(sessId);
+  } else if (channel === 'agent-stop' || channel === 'agent_stop') {
+    const sessId = typeof args[0] === 'string' ? args[0] : args[0]?.sessionId;
+    if (sessId) activeSessions.delete(sessId);
+  }
+}
+
 export function disconnectWebSocket(): void {
+  if (activeSessions.size > 0) {
+    const agentListeners = webListeners.get('agent-event');
+    if (agentListeners) {
+      for (const sessionId of Array.from(activeSessions)) {
+        const disconnectEvent = {
+          type: 'error',
+          sessionId,
+          error: 'Disconnected from backend server.',
+        };
+        agentListeners.forEach((callback) => {
+          try {
+            callback({}, disconnectEvent);
+          } catch {}
+        });
+      }
+    }
+    activeSessions.clear();
+  }
   if (webSocket) {
     try {
       webSocket.onclose = null;
@@ -218,6 +257,17 @@ function ensureWebSocketConnected() {
         const channel = payload.channel || payload.action;
         const data = payload.data !== undefined ? payload.data : payload;
         if (channel) {
+          if (channel === 'agent-event') {
+            const sessId = data?.sessionId;
+            const eventType = data?.type;
+            if (sessId) {
+              if (eventType === 'start_turn' || eventType === 'token' || eventType === 'tool_call') {
+                activeSessions.add(sessId);
+              } else if (eventType === 'done' || eventType === 'error' || eventType === 'abort') {
+                activeSessions.delete(sessId);
+              }
+            }
+          }
           const channelListeners = webListeners.get(channel);
           if (channelListeners) {
             channelListeners.forEach((callback) => {
@@ -237,6 +287,29 @@ function ensureWebSocketConnected() {
     ws.onclose = () => {
       webSocketConnecting = false;
       webSocket = null;
+
+      // Clean up zombie sessions on backend disconnect
+      if (activeSessions.size > 0) {
+        const agentListeners = webListeners.get('agent-event');
+        if (agentListeners) {
+          for (const sessionId of Array.from(activeSessions)) {
+            const disconnectEvent = {
+              type: 'error',
+              sessionId,
+              error: 'Connection to backend server was lost. Please check if the backend core server or daemon process is running.',
+            };
+            agentListeners.forEach((callback) => {
+              try {
+                callback({}, disconnectEvent);
+              } catch (err) {
+                console.error(`[IPC-Bridge] Error dispatching disconnect error for session "${sessionId}":`, err);
+              }
+            });
+          }
+        }
+        activeSessions.clear();
+      }
+
       setTimeout(ensureWebSocketConnected, 2000);
     };
 
@@ -263,6 +336,7 @@ export function getIpc(): any {
   if (tauri) {
     const tauriSurface = {
       invoke: async (channel: string, ...args: any[]) => {
+        registerActiveSessionFromArgs(channel, args);
         const isCoreApiChannel =
           channel === 'agent-run' ||
           channel === 'agent-stop' ||
@@ -332,6 +406,7 @@ export function getIpc(): any {
         return null;
       },
       send: (channel: string, ...args: any[]) => {
+        registerActiveSessionFromArgs(channel, args);
         ensureWebSocketConnected();
         const rustCmd = TAURI_COMMAND_MAP[channel] || channel.replace(/[:\-]/g, '_');
         const payload =
@@ -387,6 +462,7 @@ export function getIpc(): any {
   // 3. Web HTTP IPC path — communicates with SuperAgent Core v2 over HTTP / REST and WebSocket
   const webHttpSurface = {
     invoke: async (channel: string, ...args: any[]) => {
+      registerActiveSessionFromArgs(channel, args);
       try {
         const httpRes = await fetch(`${getCoreApiBaseUrl()}/api/ipc/${encodeURIComponent(channel)}`, {
           method: 'POST',
@@ -424,6 +500,7 @@ export function getIpc(): any {
       return null;
     },
     send: (channel: string, ...args: any[]) => {
+      registerActiveSessionFromArgs(channel, args);
       ensureWebSocketConnected();
       const payload = JSON.stringify({ channel, args });
       if (webSocket && webSocket.readyState === WebSocket.OPEN) {

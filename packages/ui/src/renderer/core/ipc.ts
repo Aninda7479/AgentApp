@@ -40,8 +40,17 @@ export class IpcBridge {
     projects?: StoredProject[];
     chats?: StoredChat[];
   }> {
-    if (!IpcBridge.isDesktop()) return {};
-    return IpcBridge.invoke('store-read');
+    try {
+      const data = await IpcBridge.invoke<{
+        connectedProviders?: ProviderConnection[];
+        modelsCatalog?: ModelConfig[];
+        projects?: StoredProject[];
+        chats?: StoredChat[];
+      }>('store-read');
+      return data || {};
+    } catch {
+      return {};
+    }
   }
 
   static async writeStore(data: {
@@ -50,12 +59,12 @@ export class IpcBridge {
     projects: StoredProject[];
     chats: StoredChat[];
   }): Promise<void> {
-    if (!IpcBridge.isDesktop()) return;
-    return IpcBridge.invoke('store-write', data);
+    try {
+      await IpcBridge.invoke('store-write', data);
+    } catch {}
   }
 
   static async readChatSteps(chatId: string): Promise<TrajectoryStep[]> {
-    if (!IpcBridge.isDesktop()) return [];
     try {
       const steps = await IpcBridge.invoke<TrajectoryStep[]>('chat-steps-read', chatId);
       return Array.isArray(steps) ? steps : [];

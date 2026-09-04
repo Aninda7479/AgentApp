@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Read, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -133,8 +133,10 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    // 8. One-shot script execution mode (exec subcommand or non-interactive prompt)
-    let prompt_opt = match &cli.command {
+    // 8. One-shot script execution mode (exec subcommand, non-interactive prompt, or piped input)
+    let is_interactive = io::stdin().is_terminal() && io::stdout().is_terminal();
+
+    let mut prompt_opt = match &cli.command {
         Some(Commands::Chat(args)) => args.prompt.clone().or_else(|| args.chat.clone()),
         Some(Commands::Exec { prompt, file }) => {
             if let Some(f) = file {
@@ -145,6 +147,17 @@ async fn main() -> Result<()> {
         }
         _ => cli.chat.prompt.clone().or_else(|| cli.chat.chat.clone()),
     };
+
+    // If no explicit prompt was provided and stdin is not a terminal (e.g. piped stdin), read from stdin
+    if prompt_opt.is_none() && !io::stdin().is_terminal() {
+        let mut buffer = String::new();
+        if io::stdin().read_to_string(&mut buffer).is_ok() {
+            let trimmed = buffer.trim();
+            if !trimmed.is_empty() {
+                prompt_opt = Some(trimmed.to_string());
+            }
+        }
+    }
 
     if let Some(user_prompt) = prompt_opt {
         if !user_prompt.trim().is_empty() {
@@ -160,6 +173,10 @@ async fn main() -> Result<()> {
             .await?;
             return Ok(());
         }
+    }
+
+    if !is_interactive {
+        anyhow::bail!("Cannot launch interactive TUI: stdin and stdout must both be attached to a terminal (TTY). Provide a prompt or pipe input to run in non-interactive mode.");
     }
 
     // 9. Interactive TUI mode (Default)
@@ -772,32 +789,40 @@ async fn run_one_shot(
         .await?;
 
     let stdout = io::stdout();
-    let mut handle = stdout.lock();
+    let mut out_handle = stdout.lock();
+    let stderr = io::stderr();
+    let mut err_handle = stderr.lock();
+    let mut has_error = false;
 
     while let Some(event) = rx.recv().await {
         match event {
             superagent_core_v2::types::AgentEvent::Token { text } => {
-                let _ = write!(handle, "{}", text);
-                let _ = handle.flush();
+                let _ = write!(out_handle, "{}", text);
+                let _ = out_handle.flush();
             }
             superagent_core_v2::types::AgentEvent::ToolCall { name, input, .. } => {
-                let _ = writeln!(handle, "\n[Tool Call] {}: {}", name, input);
-                let _ = handle.flush();
+                let _ = writeln!(err_handle, "\n[Tool Call] {}: {}", name, input);
+                let _ = err_handle.flush();
             }
             superagent_core_v2::types::AgentEvent::ToolOutput { output, is_error, .. } => {
-                let _ = writeln!(handle, "[Tool Output{}] {}", if is_error { " (Error)" } else { "" }, output);
-                let _ = handle.flush();
+                let _ = writeln!(err_handle, "[Tool Output{}] {}", if is_error { " (Error)" } else { "" }, output);
+                let _ = err_handle.flush();
             }
             superagent_core_v2::types::AgentEvent::Error { message } => {
-                let _ = writeln!(handle, "\n[Error] {}", message);
-                let _ = handle.flush();
+                has_error = true;
+                let _ = writeln!(err_handle, "\n[Error] {}", message);
+                let _ = err_handle.flush();
             }
             superagent_core_v2::types::AgentEvent::Finished { .. } => {
-                let _ = writeln!(handle);
-                let _ = handle.flush();
+                let _ = writeln!(out_handle);
+                let _ = out_handle.flush();
             }
             _ => {}
         }
+    }
+
+    if has_error {
+        std::process::exit(1);
     }
 
     Ok(())

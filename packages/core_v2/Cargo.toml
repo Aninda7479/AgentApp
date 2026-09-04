@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 tokio = { workspace = true }
+tokio-util = { version = "0.7", features = ["io"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
@@ -46,6 +47,7 @@ scrypt = "0.11"
 base64 = "0.22"
 rust-embed = "8.5"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+parking_lot = "0.12"
 
 
 

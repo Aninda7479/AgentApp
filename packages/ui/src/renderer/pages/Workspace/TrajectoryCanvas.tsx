@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChevronRight, ChevronDown, ChevronLeft, Copy, FileText, FolderOpen, Check, Eye, RotateCcw, Edit, RefreshCw, Trash2, Loader2, Code2, Play, ExternalLink, Sparkles, Download } from 'lucide-react';
 import { TrajectoryService } from '../../logic/trajectory';
 import { getIpc } from '../../lib/ipc';
+import { ErrorBoundary } from '../../components/ErrorBoundary';
 
 /** A single step in the agent execution trajectory. */
 export interface TrajectoryStep {
@@ -531,6 +532,7 @@ const InteractiveArtifactCard: React.FC<InteractiveArtifactCardProps> = ({
       const blob = new Blob([content], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
       console.error('[ArtifactCard] Failed to open in new tab:', err);
     }
@@ -666,13 +668,15 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
       const title = match[2] || 'Interactive App';
       const innerContent = match[3].trim();
       blocks.push(
-        <InteractiveArtifactCard
-          key={`art-${blockIdx++}`}
-          content={innerContent}
-          language="html"
-          artifactId={artifactId}
-          title={title}
-        />
+        <ErrorBoundary name="Interactive Artifact" compact key={`art-eb-${blockIdx}`}>
+          <InteractiveArtifactCard
+            key={`art-${blockIdx++}`}
+            content={innerContent}
+            language="html"
+            artifactId={artifactId}
+            title={title}
+          />
+        </ErrorBoundary>
       );
       lastIndex = match.index + match[0].length;
     }
@@ -706,13 +710,15 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
       const lang = m[1] || 'text';
       const code = m[2];
       elements.push(
-        <InteractiveArtifactCard
-          key={`code-${baseIdx}-${subIdx++}`}
-          content={code}
-          language={lang}
-          artifactId="app"
-          title={lang.toLowerCase() === 'html' ? 'Interactive App' : `${lang.toUpperCase()} Code`}
-        />
+        <ErrorBoundary name="Code Artifact" compact key={`code-eb-${baseIdx}-${subIdx}`}>
+          <InteractiveArtifactCard
+            key={`code-${baseIdx}-${subIdx++}`}
+            content={code}
+            language={lang}
+            artifactId="app"
+            title={lang.toLowerCase() === 'html' ? 'Interactive App' : `${lang.toUpperCase()} Code`}
+          />
+        </ErrorBoundary>
       );
       lastIdx = m.index + m[0].length;
     }
@@ -926,23 +932,27 @@ const TurnBlock: React.FC<TurnBlockProps> = ({
               {step.content && <div className="break-words">{step.content}</div>}
 
               {step.metadata?.mediaPath && step.metadata?.mediaType === 'image' && (
-                <LocalImagePreview filePath={step.metadata.mediaPath} />
+                <ErrorBoundary name="Image Preview" compact>
+                  <LocalImagePreview filePath={step.metadata.mediaPath} />
+                </ErrorBoundary>
               )}
               {step.metadata?.mediaPath && step.metadata?.mediaType !== 'image' && (
-                <div className="mt-2.5 p-3 bg-brand-popover/80 border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none text-left">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">📄</span>
-                    <span className="text-xs text-brand-textMain font-medium font-sans">
-                      {step.metadata.mediaType!.toUpperCase()} Document
-                    </span>
+                <ErrorBoundary name="Media Document" compact>
+                  <div className="mt-2.5 p-3 bg-brand-popover/80 border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none text-left">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">📄</span>
+                      <span className="text-xs text-brand-textMain font-medium font-sans">
+                        {step.metadata.mediaType!.toUpperCase()} Document
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
+                      className="bg-[var(--brand-hover)] border border-brand-border hover:bg-[var(--brand-hover-strong)] text-brand-textMain px-3 py-1 rounded-lg cursor-pointer text-xs font-semibold transition-all"
+                    >
+                      Open
+                    </button>
                   </div>
-                  <button
-                    onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
-                    className="bg-[var(--brand-hover)] border border-brand-border hover:bg-[var(--brand-hover-strong)] text-brand-textMain px-3 py-1 rounded-lg cursor-pointer text-xs font-semibold transition-all"
-                  >
-                    Open
-                  </button>
-                </div>
+                </ErrorBoundary>
               )}
             </div>
           ))}
@@ -1274,13 +1284,14 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
         >
           {/* Chronological thinking/tool steps inside the collapsible */}
           {thinkingSteps.map((step, stepIdx) => (
-            <ToolCallCard
-              key={step.id || `step-${stepIdx}`}
-              step={step}
-              isStreaming={isStreaming}
-              onViewDiff={onViewDiff}
-              onActionClick={onActionClick}
-            />
+            <ErrorBoundary name={step.toolName ? `Tool: ${step.toolName}` : 'Tool Card'} compact key={step.id || `step-${stepIdx}`}>
+              <ToolCallCard
+                step={step}
+                isStreaming={isStreaming}
+                onViewDiff={onViewDiff}
+                onActionClick={onActionClick}
+              />
+            </ErrorBoundary>
           ))}
         </WorkedHeader>
       )}
@@ -1330,17 +1341,19 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
 
             {/* Attached media */}
             {step.metadata?.mediaType && (
-              <div className="mt-3 p-3.5 bg-brand-popover border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none">
-                <span className="text-xs text-brand-textMain font-medium">
-                  🎨 Generated Asset ({step.metadata.mediaType.toUpperCase()})
-                </span>
-                <button
-                  onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
-                  className="bg-brand-highlight hover:bg-brand-highlight-hover text-brand-highlight-text px-3 py-1.5 rounded-lg cursor-pointer text-xs font-semibold transition-all active:scale-[0.97]"
-                >
-                  Open
-                </button>
-              </div>
+              <ErrorBoundary name="Generated Asset" compact>
+                <div className="mt-3 p-3.5 bg-brand-popover border border-brand-border rounded-xl flex items-center justify-between gap-3 select-none">
+                  <span className="text-xs text-brand-textMain font-medium">
+                    🎨 Generated Asset ({step.metadata.mediaType.toUpperCase()})
+                  </span>
+                  <button
+                    onClick={() => onActionClick && onActionClick('openMedia', step.metadata)}
+                    className="bg-brand-highlight hover:bg-brand-highlight-hover text-brand-highlight-text px-3 py-1.5 rounded-lg cursor-pointer text-xs font-semibold transition-all active:scale-[0.97]"
+                  >
+                    Open
+                  </button>
+                </div>
+              </ErrorBoundary>
             )}
 
             {/* File diff viewer button */}
@@ -1367,15 +1380,13 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
         );
       })}
 
-      {/* If the run ended (or errored) with no assistant reply, show a single
-          line explaining why this prompt got no response. Surfaces on error OR
-          when the run completed without output, so a terminated/failed agent
-          never leaves the user staring at a blank turn. */}
-      {assistantSteps.length === 0 && (lastError || !isStreaming) && (
+      {/* Surface error when a run fails (whether mid-stream with partial steps or before producing any output),
+          or surface an explanatory note if the run completed with no assistant output. */}
+      {(lastError || (assistantSteps.length === 0 && !isStreaming)) && (
         <div className="text-[color:var(--neon-destructive)] bg-[color:var(--neon-destructive)]/10 border border-[color:var(--neon-destructive)]/25 px-4 py-3 rounded-xl text-xs select-none max-w-fit flex flex-col gap-2 mt-1 animate-fade-in font-sans">
           <div className="flex items-center gap-2 font-semibold">
             <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-destructive)] animate-pulse" />
-            <span>No response for this prompt</span>
+            <span>{lastError ? (assistantSteps.length === 0 ? 'No response for this prompt' : 'Run interrupted by error') : 'No response for this prompt'}</span>
           </div>
           {lastError ? (
             <div className="text-[color:var(--neon-destructive)]/90 leading-relaxed">{lastError}</div>

@@ -114,7 +114,12 @@ impl ImageStorage {
         self.ensure_storage_dir()?;
         let img_path = self.image_path(&record.image_filename);
         fs::write(img_path, image_bytes)?;
+        self.save_record(record)?;
+        Ok(())
+    }
 
+    pub fn save_record(&self, record: &GenerationRecord) -> Result<()> {
+        self.ensure_storage_dir()?;
         let meta_path = self.record_path(&record.id);
         let json_str = serde_json::to_string_pretty(record)?;
         fs::write(meta_path, json_str)?;

@@ -13,9 +13,12 @@ pub struct GeminiProvider {
 
 impl GeminiProvider {
     pub fn new() -> Self {
-        Self {
-            client: Client::new(),
-        }
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(300))
+            .connect_timeout(std::time::Duration::from_secs(15))
+            .build()
+            .unwrap_or_else(|_| Client::new());
+        Self { client }
     }
 }
 
@@ -44,10 +47,9 @@ impl LlmProvider for GeminiProvider {
         let clean_model_id = config.model_id.strip_prefix("models/").unwrap_or(&config.model_id);
         let clean_model_id = clean_model_id.strip_prefix("google-").unwrap_or(clean_model_id);
         let url = format!(
-            "{}/models/{}:streamGenerateContent?alt=sse&key={}",
+            "{}/models/{}:streamGenerateContent?alt=sse",
             effective_base,
-            clean_model_id,
-            api_key
+            clean_model_id
         );
 
         let mut system_instruction_parts = Vec::new();
@@ -161,17 +163,23 @@ impl LlmProvider for GeminiProvider {
             }]);
         }
 
-        let res = self
+        let mut req = self
             .client
             .post(&url)
             .header("content-type", "application/json")
-            .json(&payload)
-            .send()
-            .await?;
+            .json(&payload);
+
+        if !api_key.is_empty() {
+            req = req.header("x-goog-api-key", &api_key);
+        }
+
+        let res = req.send().await?;
 
         if !res.status().is_success() {
+            let status = res.status();
             let err_text = res.text().await.unwrap_or_default();
-            anyhow::bail!("Gemini API error ({url}): {}", err_text);
+            tracing::debug!(endpoint = %url, "Gemini API error response body");
+            anyhow::bail!("Gemini API error (status {}): {}", status, err_text);
         }
 
         let (tx, rx) = channel(100);

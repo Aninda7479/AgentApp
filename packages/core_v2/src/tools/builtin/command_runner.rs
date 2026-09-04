@@ -109,7 +109,7 @@ impl Tool for RunCommandTool {
             let mut c = Command::new("powershell");
             #[cfg(target_os = "windows")]
             c.creation_flags(0x08000000);
-            c.args(["-NoProfile", "-Command", command_str]);
+            c.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command_str]);
             c
         } else {
             let mut c = Command::new("sh");
@@ -118,6 +118,8 @@ impl Tool for RunCommandTool {
         };
 
         cmd.current_dir(&working_dir)
+            .kill_on_drop(true)
+            .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
@@ -137,15 +139,23 @@ impl Tool for RunCommandTool {
                 let mut result = format!("Exit Code: {}\n", exit_code);
                 if !stdout.is_empty() {
                     result.push_str("--- STDOUT ---\n");
-                    result.push_str(&stdout);
-                    if !stdout.ends_with('\n') {
+                    let (truncated, is_cut) = truncate_output(&stdout, MAX_OUTPUT_BYTES);
+                    result.push_str(truncated);
+                    if is_cut {
+                        result.push_str("\n... [stdout truncated at 100KB]");
+                    }
+                    if !result.ends_with('\n') {
                         result.push('\n');
                     }
                 }
                 if !stderr.is_empty() {
                     result.push_str("--- STDERR ---\n");
-                    result.push_str(&stderr);
-                    if !stderr.ends_with('\n') {
+                    let (truncated, is_cut) = truncate_output(&stderr, MAX_OUTPUT_BYTES);
+                    result.push_str(truncated);
+                    if is_cut {
+                        result.push_str("\n... [stderr truncated at 100KB]");
+                    }
+                    if !result.ends_with('\n') {
                         result.push('\n');
                     }
                 }
@@ -158,5 +168,19 @@ impl Tool for RunCommandTool {
                 timeout_secs
             )),
         }
+    }
+}
+
+const MAX_OUTPUT_BYTES: usize = 100 * 1024;
+
+fn truncate_output(s: &str, max_bytes: usize) -> (&str, bool) {
+    if s.len() <= max_bytes {
+        (s, false)
+    } else {
+        let mut end = max_bytes;
+        while end > 0 && !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        (&s[..end], true)
     }
 }

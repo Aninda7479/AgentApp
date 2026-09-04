@@ -18,7 +18,8 @@ pub use ws::*;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -133,6 +134,9 @@ pub async fn start_server(
         }
     });
     let addr = SocketAddr::from((bind_ip, port));
+
+    // Bind TCP listener before writing lockfile so failures do not leave orphan lockfiles
+    let listener = tokio::net::TcpListener::bind(addr).await?;
     info!("🚀 SuperAgent Core v2 Daemon listening on http://{}", addr);
 
     // Single-Instance Lock initialization & periodic heartbeat
@@ -157,8 +161,9 @@ pub async fn start_server(
         }
     });
 
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    let serve_res = axum::serve(listener, app).await;
+    let serve_res = axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await;
 
     // Graceful cleanup
     heartbeat_handle.abort();
@@ -166,4 +171,29 @@ pub async fn start_server(
     serve_res?;
 
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        if let Ok(mut sig) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            sig.recv().await;
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {
+            info!("Shutdown signal received (Ctrl+C / SIGINT), initiating graceful shutdown");
+        },
+        _ = terminate => {
+            info!("Shutdown signal received (SIGTERM), initiating graceful shutdown");
+        },
+    }
 }

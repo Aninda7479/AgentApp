@@ -823,7 +823,7 @@ export const App: React.FC = () => {
 
   // ── Attachments ────────────────────────────────────────────────────────────
   const handleAttachFiles = async () => {
-    if (ipc) {
+    if (isDesktopApp && ipc) {
       const filePaths: string[] = (await ipc.invoke('select-files')) as string[];
       AttachmentService.fromFiles(ctx, filePaths);
       return;

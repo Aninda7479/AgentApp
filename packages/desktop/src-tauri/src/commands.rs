@@ -166,15 +166,10 @@ pub fn artifact_open(id: String) -> Result<(), String> {
             .args(["/C", "start", "", &live_url])
             .spawn();
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(not(target_os = "windows"))]
     {
-        let _ = std::process::Command::new("open").arg(&live_url).spawn();
+        let _ = open::that(&live_url);
     }
-    #[cfg(target_os = "linux")]
-    {
-        let _ = std::process::Command::new("xdg-open").arg(&live_url).spawn();
-    }
-    let _ = open::that(&live_url);
     Ok(())
 }
 
@@ -191,23 +186,18 @@ pub fn artifact_delete(id: String) -> Result<(), String> {
 pub fn artifact_open_folder() -> Result<(), String> {
     let dir = get_artifacts_dir();
     let _ = fs::create_dir_all(&dir);
-    let path_str = dir.to_string_lossy().to_string().replace('/', "\\");
 
     #[cfg(target_os = "windows")]
     {
+        let path_str = dir.to_string_lossy().to_string().replace('/', "\\");
         let _ = silent_command("explorer")
             .arg(&path_str)
             .spawn();
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(not(target_os = "windows"))]
     {
-        let _ = std::process::Command::new("open").arg(&path_str).spawn();
+        let _ = open::that(&dir);
     }
-    #[cfg(target_os = "linux")]
-    {
-        let _ = std::process::Command::new("xdg-open").arg(&path_str).spawn();
-    }
-    let _ = open::that(&dir);
     Ok(())
 }
 
@@ -1201,19 +1191,23 @@ pub fn autostart_enable() -> Result<String, String> {
     }
     #[cfg(target_os = "linux")]
     {
-        if let Ok(home) = std::env::var("HOME") {
-            let autostart_dir = std::path::PathBuf::from(&home).join(".config/autostart");
-            let _ = fs::create_dir_all(&autostart_dir);
-            let desktop_file = autostart_dir.join("superagent.desktop");
-            if let Ok(current_exe) = std::env::current_exe() {
-                let exe_str = current_exe.to_string_lossy().to_string();
-                let content = format!(
-                    "[Desktop Entry]\nType=Application\nExec=\"{}\" --autostart\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nName=SuperAgent\nComment=SuperAgent AI Assistant\n",
-                    exe_str
-                );
-                fs::write(desktop_file, content).map_err(|e| e.to_string())?;
-                return Ok("Autostart enabled for Linux".to_string());
-            }
+        let autostart_dir = if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+            std::path::PathBuf::from(xdg).join("autostart")
+        } else if let Ok(home) = std::env::var("HOME") {
+            std::path::PathBuf::from(&home).join(".config/autostart")
+        } else {
+            std::path::PathBuf::from(".config/autostart")
+        };
+        let _ = fs::create_dir_all(&autostart_dir);
+        let desktop_file = autostart_dir.join("superagent.desktop");
+        if let Ok(current_exe) = std::env::current_exe() {
+            let exe_str = current_exe.to_string_lossy().to_string();
+            let content = format!(
+                "[Desktop Entry]\nType=Application\nExec=\"{}\" --autostart\nHidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\nName=SuperAgent\nComment=SuperAgent AI Assistant\n",
+                exe_str
+            );
+            fs::write(desktop_file, content).map_err(|e| e.to_string())?;
+            return Ok("Autostart enabled for Linux".to_string());
         }
     }
     Ok("Autostart enabled".to_string())
@@ -1240,11 +1234,15 @@ pub fn autostart_disable() -> Result<String, String> {
     }
     #[cfg(target_os = "linux")]
     {
-        if let Ok(home) = std::env::var("HOME") {
-            let desktop_file = std::path::PathBuf::from(&home).join(".config/autostart/superagent.desktop");
-            if desktop_file.exists() {
-                let _ = fs::remove_file(desktop_file);
-            }
+        let desktop_file = if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+            std::path::PathBuf::from(xdg).join("autostart/superagent.desktop")
+        } else if let Ok(home) = std::env::var("HOME") {
+            std::path::PathBuf::from(&home).join(".config/autostart/superagent.desktop")
+        } else {
+            std::path::PathBuf::from(".config/autostart/superagent.desktop")
+        };
+        if desktop_file.exists() {
+            let _ = fs::remove_file(desktop_file);
         }
         return Ok("Autostart disabled for Linux".to_string());
     }
@@ -1275,11 +1273,14 @@ pub fn autostart_is_enabled() -> bool {
     }
     #[cfg(target_os = "linux")]
     {
-        if let Ok(home) = std::env::var("HOME") {
-            let desktop_file = std::path::PathBuf::from(&home).join(".config/autostart/superagent.desktop");
-            return desktop_file.exists();
-        }
-        return false;
+        let desktop_file = if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+            std::path::PathBuf::from(xdg).join("autostart/superagent.desktop")
+        } else if let Ok(home) = std::env::var("HOME") {
+            std::path::PathBuf::from(&home).join(".config/autostart/superagent.desktop")
+        } else {
+            std::path::PathBuf::from(".config/autostart/superagent.desktop")
+        };
+        return desktop_file.exists();
     }
     #[allow(unreachable_code)]
     false
@@ -1383,6 +1384,11 @@ pub fn circle_search_capture_area(
     } else {
         full_image
     };
+
+    // Free the cached screenshot immediately after cropping to reclaim memory
+    if let Ok(mut lock) = CACHED_SCREENSHOT.lock() {
+        *lock = None;
+    }
 
     let mut bytes: Vec<u8> = Vec::new();
     cropped
@@ -1493,6 +1499,9 @@ pub fn circle_search_show(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn circle_search_hide(app: AppHandle) -> Result<(), String> {
+    if let Ok(mut lock) = CACHED_SCREENSHOT.lock() {
+        *lock = None;
+    }
     if let Some(window) = app.get_webview_window("circle_search") {
         let _ = window.hide();
     }
@@ -1538,12 +1547,18 @@ pub fn spawn_native_voice_dictation() -> Result<(), String> {
     // 1. Try sidecar bundled path
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
-            let candidate = parent.join("superagent-dictation-native.exe");
-            if candidate.exists() {
-                let _ = silent_command(&candidate)
-                    .spawn()
-                    .map_err(|e| format!("Failed to spawn native dictation: {}", e))?;
-                return Ok(());
+            let candidate_names = [
+                "superagent-dictation-native.exe",
+                "superagent-dictation-native",
+            ];
+            for name in &candidate_names {
+                let candidate = parent.join(name);
+                if candidate.exists() {
+                    let _ = silent_command(&candidate)
+                        .spawn()
+                        .map_err(|e| format!("Failed to spawn native dictation: {}", e))?;
+                    return Ok(());
+                }
             }
         }
     }
@@ -1555,7 +1570,9 @@ pub fn spawn_native_voice_dictation() -> Result<(), String> {
         "target/release/superagent-dictation-native.exe",
         "target/release/superagent-dictation-native",
         "../target/debug/superagent-dictation-native.exe",
+        "../target/debug/superagent-dictation-native",
         "../../target/debug/superagent-dictation-native.exe",
+        "../../target/debug/superagent-dictation-native",
     ];
     for rel in &dev_candidates {
         let p = std::path::PathBuf::from(rel);

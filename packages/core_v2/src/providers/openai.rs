@@ -14,9 +14,12 @@ pub struct OpenAiProvider {
 
 impl OpenAiProvider {
     pub fn new() -> Self {
-        Self {
-            client: Client::new(),
-        }
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(300))
+            .connect_timeout(std::time::Duration::from_secs(15))
+            .build()
+            .unwrap_or_else(|_| Client::new());
+        Self { client }
     }
 
     fn format_messages(messages: &[ChatMessage]) -> Vec<serde_json::Value> {

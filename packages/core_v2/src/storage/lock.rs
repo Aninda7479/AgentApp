@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use super::settings::get_superagent_dir;
+use super::settings::get_runtime_dir;
 
 /// Staleness threshold in milliseconds: 90 seconds.
 pub const STALE_MS: u64 = 90 * 1000;
@@ -41,9 +41,9 @@ impl WebServerLock {
     }
 }
 
-/// Absolute path to the shared lock file: `~/.superagent/web-server.lock`.
+/// Absolute path to the shared lock file: `<runtime_dir>/web-server.lock`.
 pub fn get_web_server_lock_path() -> PathBuf {
-    get_superagent_dir().join("web-server.lock")
+    get_runtime_dir().join("web-server.lock")
 }
 
 /// Reads and parses the lock file, or returns None if absent/unreadable.

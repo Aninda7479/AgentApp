@@ -44,10 +44,101 @@ impl Default for UserSettings {
 }
 
 pub fn get_home_dir() -> PathBuf {
-    std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
+    #[cfg(windows)]
+    {
+        std::env::var("USERPROFILE")
+            .or_else(|_| std::env::var("HOME"))
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("."))
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::var("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("."))
+    }
+}
+
+/// Returns the platform-appropriate configuration directory for SuperAgent.
+/// - macOS: ~/Library/Application Support/SuperAgent
+/// - Windows: %APPDATA%/SuperAgent
+/// - Linux / other: $XDG_CONFIG_HOME/superagent (fallback ~/.config/superagent)
+pub fn get_config_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("SUPERAGENT_CONFIG_DIR") {
+        return PathBuf::from(dir);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        get_home_dir().join("Library").join("Application Support").join("SuperAgent")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            PathBuf::from(appdata).join("SuperAgent")
+        } else {
+            get_superagent_dir().join("config")
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+            PathBuf::from(xdg).join("superagent")
+        } else {
+            get_home_dir().join(".config").join("superagent")
+        }
+    }
+}
+
+/// Returns the platform-appropriate cache directory for SuperAgent.
+/// - macOS: ~/Library/Caches/SuperAgent
+/// - Windows: %LOCALAPPDATA%/SuperAgent/cache
+/// - Linux / other: $XDG_CACHE_HOME/superagent (fallback ~/.cache/superagent)
+pub fn get_cache_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("SUPERAGENT_CACHE_DIR") {
+        return PathBuf::from(dir);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        get_home_dir().join("Library").join("Caches").join("SuperAgent")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+            PathBuf::from(localappdata).join("SuperAgent").join("cache")
+        } else {
+            get_superagent_dir().join("cache")
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        if let Ok(xdg) = std::env::var("XDG_CACHE_HOME") {
+            PathBuf::from(xdg).join("superagent")
+        } else {
+            get_home_dir().join(".cache").join("superagent")
+        }
+    }
+}
+
+/// Returns the platform-appropriate runtime directory for SuperAgent sockets, lockfiles, and ephemeral data.
+/// - Linux: $XDG_RUNTIME_DIR/superagent (fallback ~/.superagent)
+/// - macOS / Windows: ~/.superagent
+pub fn get_runtime_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("SUPERAGENT_RUNTIME_DIR") {
+        return PathBuf::from(dir);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
+            return PathBuf::from(runtime_dir).join("superagent");
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(tmp) = std::env::var("TMPDIR") {
+            return PathBuf::from(tmp).join("superagent");
+        }
+    }
+    get_superagent_dir()
 }
 
 /// Returns the primary SuperAgent user data directory (~/.superagent).
