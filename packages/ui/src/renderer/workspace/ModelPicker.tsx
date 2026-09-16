@@ -123,19 +123,15 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
           updateCoords();
           setIsOpen(!isOpen);
         }}
-        className={`group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-150 select-none cursor-pointer ${
+        className={`group inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold transition-colors select-none cursor-pointer ${
           isOpen
-            ? 'bg-white/10 text-brand-textMain shadow-xs'
-            : 'text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 dark:hover:bg-white/10'
+            ? 'bg-white/10 text-white'
+            : 'text-white hover:bg-white/10'
         }`}
         title={`Model: ${displayLabel}`}
         aria-label={`Select model, currently ${displayLabel}`}
       >
-        <span className="truncate max-w-[140px] sm:max-w-[190px]">{displayLabel}</span>
-        <ChevronDown
-          size={12}
-          className={`opacity-50 group-hover:opacity-100 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
-        />
+        <span className="truncate max-w-[140px] sm:max-w-[200px]">{displayLabel}</span>
       </button>
 
       {isOpen && typeof document !== 'undefined' && createPortal(

@@ -1667,11 +1667,6 @@ export const App: React.FC = () => {
               className="absolute inset-0"
               style={{ background: 'radial-gradient(120% 85% at 86% -8%, var(--brand-atmo-glow), transparent 52%)' }}
             />
-            <svg className="absolute inset-x-0 bottom-0 h-[38%] w-full" viewBox="0 0 1440 320" preserveAspectRatio="none" fill="none">
-              <path d="M0 206 C240 168 480 232 720 198 C960 164 1200 222 1440 188 L1440 320 L0 320 Z" fill="var(--brand-atmo-1)" />
-              <path d="M0 244 C220 210 440 272 720 238 C1000 206 1240 262 1440 234 L1440 320 L0 320 Z" fill="var(--brand-atmo-2)" />
-              <path d="M0 280 C260 254 520 300 760 280 C1020 258 1240 298 1440 278 L1440 320 L0 320 Z" fill="var(--brand-atmo-3)" />
-            </svg>
           </div>
           {/* Per-page error boundary: a crash in any page shows an inline error
               in this content area only — the title bar and sidebar stay alive.

@@ -15,7 +15,13 @@ describe('ComposerBar Component', () => {
 
     // Central textarea input
     expect(html).toContain('composer-input');
-    expect(html).toContain('Ask anything');
+    expect(html).toContain('Write a message...');
+
+    // Supports custom placeholder
+    const customHtml = renderToStaticMarkup(
+      <ComposerBar onSend={vi.fn()} placeholder="Ask anything" />
+    );
+    expect(customHtml).toContain('Ask anything');
 
     // Right mic button
     expect(html).toContain('composer-mic-btn');
@@ -43,6 +49,6 @@ describe('ModelPicker Component', () => {
 
     expect(html).toContain('model-select-btn');
     expect(html).toContain('Claude 3.7 Sonnet');
-    expect(html).toContain('rounded-lg');
+    expect(html).toContain('rounded-md');
   });
 });

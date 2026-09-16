@@ -30,6 +30,7 @@ import { useLastUsedModel, providerStore } from '../stores/providerStore';
 interface ComposerBarProps {
   onSend: (prompt: string, options: ComposerOptions, attachments: ComposerAttachment[]) => void;
   disabled?: boolean;
+  placeholder?: string;
 }
 
 // Web Speech API types are not in the standard lib; treat as any.
@@ -38,7 +39,7 @@ const SpeechRecognitionCtor: any =
     ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     : undefined;
 
-export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) => {
+export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, placeholder = 'Write a message...' }) => {
   const [prompt, setPrompt] = useState('');
   const lastUsedModel = useLastUsedModel();
   const [approvalMode, setApprovalMode] = useState<'ask' | 'always' | 'never'>('ask');
@@ -449,21 +450,21 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
       )}
 
       {/* Main Composer Box */}
-      <div
-        className={`backdrop-blur-2xl border rounded-2xl sm:rounded-3xl p-2.5 sm:p-3 shadow-2xl flex flex-col gap-2 transition-all duration-200 ${
-          isDraggingOver
-            ? 'bg-cyan-950/40 border-cyan-500/80 ring-2 ring-cyan-500/30'
-            : 'bg-slate-950/90 border-slate-800'
-        }`}
-      >
-        {isDraggingOver && (
-          <div className="flex items-center justify-center py-2 text-cyan-400 text-xs font-semibold animate-pulse select-none">
-            Drop images or files here to attach
-          </div>
-        )}
+      <div className="flex flex-col gap-1.5 w-full">
+        {/* Capsule Text Bar */}
+        <div
+          className={`relative w-full flex items-end gap-2 px-3 py-2 sm:py-2.5 rounded-2xl sm:rounded-[22px] border transition-all duration-200 shadow-lg ${
+            isDraggingOver
+              ? 'bg-cyan-950/40 border-cyan-500/80 ring-2 ring-cyan-500/30'
+              : 'bg-[#1e1f23]/95 dark:bg-[#1f2024]/95 border-white/10 dark:border-white/10 focus-within:border-white/25 focus-within:ring-1 focus-within:ring-white/10'
+          }`}
+        >
+          {isDraggingOver && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#1e1f23]/95 rounded-[22px] text-cyan-400 text-xs font-semibold animate-pulse select-none">
+              Drop images or files here to attach
+            </div>
+          )}
 
-        {/* Text Bar: Plus on most left, auto-growing textarea in center, Mic & Rounded Arrow on most right */}
-        <div className="flex items-end gap-1.5 sm:gap-2 relative">
           {/* Most Left: Plus Button for file attach */}
           <input
             ref={fileInputRef}
@@ -478,9 +479,9 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
             onClick={() => fileInputRef.current?.click()}
             title="Attach files or media"
             aria-label="Attach files or media"
-            className="shrink-0 p-2 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-all duration-150 cursor-pointer flex items-center justify-center mb-0.5"
+            className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer mb-0.5"
           >
-            <Plus size={18} />
+            <Plus size={18} strokeWidth={2} />
           </button>
 
           {/* Auto-growing Textarea */}
@@ -497,28 +498,28 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
             onClick={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder="Ask anything, type @ to delegate, or / for commands..."
+            placeholder={placeholder}
             rows={1}
             disabled={disabled}
-            className="flex-1 bg-transparent resize-none text-slate-100 placeholder:text-slate-500 text-xs sm:text-sm py-2 px-1 focus:outline-none min-h-[38px] max-h-[200px] leading-relaxed scrollbar-thin scrollbar-thumb-slate-800"
+            className="flex-1 bg-transparent resize-none text-white text-sm sm:text-base py-1 px-1 focus:outline-none min-h-[36px] max-h-[220px] leading-relaxed placeholder:text-neutral-500 scrollbar-thin scrollbar-thumb-neutral-700 font-sans"
           />
 
           {/* Most Right: Voice Dictation (Mic) & Send (Rounded Arrow Button) */}
-          <div className="flex items-center gap-1.5 shrink-0 mb-0.5">
+          <div className="flex items-center gap-1 shrink-0 mb-0.5">
             {workspaceVoiceEnabled && (
               <button
                 type="button"
                 data-testid="composer-mic-btn"
                 onClick={toggleListening}
-                className={`p-2 rounded-xl transition-all duration-150 cursor-pointer ${
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer ${
                   listening
                     ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse'
-                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+                    : 'text-neutral-400 hover:text-white hover:bg-white/10'
                 }`}
                 title={listening ? 'Stop voice input' : 'Voice input'}
                 aria-label={listening ? 'Stop voice input' : 'Voice input'}
               >
-                {listening ? <MicOff size={16} /> : <Mic size={16} />}
+                {listening ? <MicOff size={18} /> : <Mic size={18} />}
               </button>
             )}
 
@@ -531,115 +532,18 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
               title="Send (Enter)"
               className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150 active:scale-95 ${
                 !prompt.trim() && attachments.length === 0
-                  ? 'bg-slate-800/50 text-slate-600 cursor-not-allowed border border-slate-800'
-                  : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-md shadow-cyan-500/25 cursor-pointer'
+                  ? 'bg-white/5 text-neutral-500 cursor-not-allowed border border-white/5'
+                  : 'bg-white text-black hover:bg-neutral-200 shadow-md cursor-pointer'
               }`}
             >
-              <ArrowUp size={15} strokeWidth={2.5} />
+              <ArrowUp size={16} strokeWidth={2.5} />
             </button>
           </div>
         </div>
 
-        {/* Under the text box: Permission mode Level and Model Select */}
-        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-900 text-xs">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {/* Permission Mode Level Button */}
-            <div className="relative inline-block" ref={permissionRef}>
-              <button
-                type="button"
-                data-testid="approval-dropdown-btn"
-                onClick={() => setIsPermissionOpen(!isPermissionOpen)}
-                className={`group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-150 select-none cursor-pointer ${
-                  isPermissionOpen
-                    ? 'bg-white/10 text-slate-100 shadow-xs'
-                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
-                }`}
-                title={`Permission Mode: ${getApprovalLabel()}`}
-                aria-label={`Permission Mode: ${getApprovalLabel()}`}
-              >
-                <span>{getApprovalLabel()}</span>
-                <ChevronDown
-                  size={12}
-                  className={`opacity-50 group-hover:opacity-100 transition-transform duration-150 ${isPermissionOpen ? 'rotate-180' : ''}`}
-                />
-              </button>
-
-              {isPermissionOpen && (
-                <div
-                  data-testid="approval-dropdown-menu"
-                  className="absolute bottom-full left-0 mb-2 w-72 bg-slate-950/95 backdrop-blur-2xl border border-slate-800 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100"
-                >
-                  <div className="px-2.5 py-1.5 text-[10px] font-mono text-slate-500 uppercase tracking-wider">
-                    Permission Level
-                  </div>
-                  
-                  <button
-                    type="button"
-                    data-testid="approval-option-ask"
-                    onClick={() => {
-                      setApprovalMode('ask');
-                      setIsPermissionOpen(false);
-                    }}
-                    className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
-                      approvalMode === 'ask' ? 'bg-slate-800/80 text-slate-100 font-medium' : 'hover:bg-slate-800/50 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <UserCheck size={16} className="text-cyan-400 shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <div className="text-xs font-medium text-slate-100">Ask for approval</div>
-                      <div className="text-[11px] text-slate-400 leading-tight mt-0.5">
-                        Confirm commands and file edits before execution.
-                      </div>
-                    </div>
-                    {approvalMode === 'ask' && <Check size={14} className="text-cyan-400 shrink-0 mt-0.5 ml-1" />}
-                  </button>
-
-                  <button
-                    type="button"
-                    data-testid="approval-option-always"
-                    onClick={() => {
-                      setApprovalMode('always');
-                      setIsPermissionOpen(false);
-                    }}
-                    className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
-                      approvalMode === 'always' ? 'bg-slate-800/80 text-slate-100 font-medium' : 'hover:bg-slate-800/50 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <Zap size={16} className="text-amber-400 shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <div className="text-xs font-medium text-slate-100">Always approve</div>
-                      <div className="text-[11px] text-slate-400 leading-tight mt-0.5">
-                        Execute actions autonomously without interruption.
-                      </div>
-                    </div>
-                    {approvalMode === 'always' && <Check size={14} className="text-cyan-400 shrink-0 mt-0.5 ml-1" />}
-                  </button>
-
-                  <button
-                    type="button"
-                    data-testid="approval-option-never"
-                    onClick={() => {
-                      setApprovalMode('never');
-                      setIsPermissionOpen(false);
-                    }}
-                    className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
-                      approvalMode === 'never' ? 'bg-slate-800/80 text-slate-100 font-medium' : 'hover:bg-slate-800/50 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <ShieldAlert size={16} className="text-rose-400 shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <div className="text-xs font-medium text-slate-100">Never approve</div>
-                      <div className="text-[11px] text-slate-400 leading-tight mt-0.5">
-                        Read-only safety mode; block all execution requests.
-                      </div>
-                    </div>
-                    {approvalMode === 'never' && <Check size={14} className="text-cyan-400 shrink-0 mt-0.5 ml-1" />}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Model Select Button */}
+        {/* Under the text box: Model Select and Permission Mode Level */}
+        <div className="flex items-center justify-end gap-2 sm:gap-3 px-2 pt-0.5 text-xs select-none">
+          {/* Model Select */}
             <ModelPicker
               selectedModel={lastUsedModel}
               onSelectModel={(model) => {
@@ -654,20 +558,100 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled }) =>
               }}
               orchestratorEnabled={orchestratorEnabled}
             />
-          </div>
 
-          {/* Right side: Teach Task button */}
-          <button
-            type="button"
-            onClick={() => setIsRecorderOpen(true)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-amber-300/80 hover:text-amber-300 hover:bg-amber-500/10 transition-colors cursor-pointer"
-            title="Teach a Task (Demonstration Workflow Recorder)"
-          >
-            <Video size={13} />
-            <span className="hidden sm:inline">Teach Task</span>
-          </button>
+            {/* Permission Mode Level Button */}
+            <div className="relative inline-block" ref={permissionRef}>
+              <button
+                type="button"
+                data-testid="approval-dropdown-btn"
+                onClick={() => setIsPermissionOpen(!isPermissionOpen)}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors select-none cursor-pointer ${
+                  isPermissionOpen
+                    ? 'bg-white/10 text-white'
+                    : 'text-neutral-400 hover:text-white hover:bg-white/10'
+                }`}
+                title={`Permission Mode: ${getApprovalLabel()}`}
+                aria-label={`Permission Mode: ${getApprovalLabel()}`}
+              >
+                <span>{getApprovalLabel()}</span>
+              </button>
+
+              {isPermissionOpen && (
+                <div
+                  data-testid="approval-dropdown-menu"
+                  className="absolute bottom-full right-0 mb-2 w-72 bg-[#1f2024]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100"
+                >
+                  <div className="px-2.5 py-1.5 text-[10px] font-mono text-neutral-500 uppercase tracking-wider">
+                    Permission Level
+                  </div>
+                  
+                  <button
+                    type="button"
+                    data-testid="approval-option-ask"
+                    onClick={() => {
+                      setApprovalMode('ask');
+                      setIsPermissionOpen(false);
+                    }}
+                    className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
+                      approvalMode === 'ask' ? 'bg-white/10 text-white font-medium' : 'hover:bg-white/5 text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    <UserCheck size={16} className="text-cyan-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="text-xs font-medium text-white">Ask for approval</div>
+                      <div className="text-[11px] text-neutral-400 leading-tight mt-0.5">
+                        Confirm commands and file edits before execution.
+                      </div>
+                    </div>
+                    {approvalMode === 'ask' && <Check size={14} className="text-cyan-400 shrink-0 mt-0.5 ml-1" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    data-testid="approval-option-always"
+                    onClick={() => {
+                      setApprovalMode('always');
+                      setIsPermissionOpen(false);
+                    }}
+                    className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
+                      approvalMode === 'always' ? 'bg-white/10 text-white font-medium' : 'hover:bg-white/5 text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    <Zap size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="text-xs font-medium text-white">Always approve</div>
+                      <div className="text-[11px] text-neutral-400 leading-tight mt-0.5">
+                        Execute actions autonomously without interruption.
+                      </div>
+                    </div>
+                    {approvalMode === 'always' && <Check size={14} className="text-cyan-400 shrink-0 mt-0.5 ml-1" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    data-testid="approval-option-never"
+                    onClick={() => {
+                      setApprovalMode('never');
+                      setIsPermissionOpen(false);
+                    }}
+                    className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
+                      approvalMode === 'never' ? 'bg-white/10 text-white font-medium' : 'hover:bg-white/5 text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    <ShieldAlert size={16} className="text-rose-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="text-xs font-medium text-white">Never approve</div>
+                      <div className="text-[11px] text-neutral-400 leading-tight mt-0.5">
+                        Read-only safety mode; block all execution requests.
+                      </div>
+                    </div>
+                    {approvalMode === 'never' && <Check size={14} className="text-cyan-400 shrink-0 mt-0.5 ml-1" />}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
 
       {/* Teach a Task Modal */}
       <TaskRecorderModal
