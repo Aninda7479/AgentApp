@@ -18,6 +18,8 @@ import {
   Sparkles,
   Wrench,
   Terminal,
+  Search,
+  Zap,
 } from 'lucide-react';
 import {
   SlashSuggestion,
@@ -193,7 +195,41 @@ export const Composer: React.FC<ComposerProps> = ({
   const [selectedModel, setSelectedModel] = useState(defaultModel);
   const [approvalMode, setApprovalMode] = useState<'always' | 'never' | 'ask'>('ask');
   const [showApprovalDropdown, setShowApprovalDropdown] = useState(false);
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [modelSearchQuery, setModelSearchQuery] = useState('');
+  const approvalDropdownRef = useRef<HTMLDivElement>(null);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
+  const modelSearchInputRef = useRef<HTMLInputElement>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = (evt: MouseEvent) => {
+      const target = evt.target as Node;
+      if (approvalDropdownRef.current && !approvalDropdownRef.current.contains(target)) {
+        setShowApprovalDropdown(false);
+      }
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(target)) {
+        setShowModelDropdown(false);
+        setModelSearchQuery('');
+      }
+    };
+    if (showApprovalDropdown || showModelDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showApprovalDropdown, showModelDropdown]);
+
+  useEffect(() => {
+    if (showModelDropdown) {
+      requestAnimationFrame(() => {
+        modelSearchInputRef.current?.focus();
+      });
+    } else {
+      setModelSearchQuery('');
+    }
+  }, [showModelDropdown]);
 
 
   // Voice dictation
@@ -853,135 +889,46 @@ export const Composer: React.FC<ComposerProps> = ({
           </div>
         )}
 
-        <textarea
-          ref={textareaRef}
-          data-testid="composer-input"
-          aria-label="Message"
-          value={prompt}
-          onChange={(e) => {
-            setPrompt(e.target.value);
-            updateSlashFromCaret(e.target.value, e.target.selectionStart ?? e.target.value.length);
-          }}
-          onKeyDown={handleKeyDown}
-          onClick={syncSlash}
-          onSelect={syncSlash}
-          onPaste={handlePaste}
-          placeholder={hasModels ? "Ask anything — or type / for skills, commands & tools" : (emptyStateMessage || "No models are connected yet. Please go to Settings to connect a provider.")}
-          disabled={disabled}
-          rows={1}
-          className="bg-transparent border-none outline-none text-brand-textMain text-sm resize-none w-full min-h-11 leading-relaxed placeholder-brand-textMuted/55 font-sans disabled:opacity-50"
-        />
-
-        {selectedIsRouter && (
-          <div
-            data-testid="composer-router-hint"
-            className="mb-3 flex items-center gap-1.5 text-[10px] font-mono text-brand-textMuted/65 leading-none"
+        {/* Row 1: Text Bar (Most Left: Plus icon button, Center: Auto-growing Textarea, Most Right: Mic & Rounded Arrow Send) */}
+        <div className="flex items-end gap-1.5 sm:gap-2 relative">
+          {/* On the most left: Plus / attach button */}
+          <button
+            type="button"
+            data-testid="composer-attach-btn"
+            onClick={() => onAttachClick?.()}
+            aria-label="Attach file"
+            title="Attach file"
+            className="shrink-0 p-2 rounded-xl text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 dark:hover:bg-white/10 transition-all duration-150 cursor-pointer flex items-center justify-center mb-0.5"
           >
-            <Info className="w-3 h-3 shrink-0 text-brand-textMuted/50" />
-            <span>
-              auto-routing: active across available models
-            </span>
-          </div>
-        )}
+            <Plus className="w-4 h-4" />
+          </button>
 
-        {/* Enter/Shift+Enter hint */}
-        {!prompt && hasModels && (
-          <div className="text-[10px] text-brand-textMuted/40 font-mono select-none mb-1">
-            Enter to send · Shift+Enter for new line
-          </div>
-        )}
+          {/* Auto-growing Textarea */}
+          <textarea
+            ref={textareaRef}
+            data-testid="composer-input"
+            aria-label="Message"
+            value={prompt}
+            onChange={(e) => {
+              setPrompt(e.target.value);
+              updateSlashFromCaret(e.target.value, e.target.selectionStart ?? e.target.value.length);
+            }}
+            onKeyDown={handleKeyDown}
+            onClick={syncSlash}
+            onSelect={syncSlash}
+            onPaste={handlePaste}
+            placeholder={hasModels ? "Ask anything — or type / for skills, commands & tools" : (emptyStateMessage || "No models are connected yet. Please go to Settings to connect a provider.")}
+            disabled={disabled}
+            rows={1}
+            className="flex-1 bg-transparent border-none outline-none text-brand-textMain text-sm resize-none w-full min-h-[38px] max-h-[180px] leading-relaxed placeholder-brand-textMuted/55 font-sans disabled:opacity-50 py-1.5 px-1 scrollbar-thin scrollbar-thumb-brand-border"
+          />
 
-        {/* Toolbar row inside box */}
-        <div className="flex items-center justify-between gap-2 flex-wrap border-t border-brand-border/60 pt-4 mt-4">
-          {/* Left toolbar elements */}
-          <div className="flex items-center gap-2 relative">
-            {/* Plus / attach button */}
-            <button
-              data-testid="composer-attach-btn"
-              onClick={() => onAttachClick?.()}
-              aria-label="Attach file"
-              title="Attach file"
-              className="text-brand-textMuted hover:text-brand-textMain p-2 rounded-lg bg-brand-popover/60 hover:bg-brand-popover border border-brand-border transition-colors cursor-pointer"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
-
-            {/* Ask for Approval Dropdown Pill */}
-            <div className="relative">
-              <button
-                data-testid="approval-dropdown-btn"
-                onClick={() => setShowApprovalDropdown(!showApprovalDropdown)}
-                className="bg-brand-popover border border-brand-border hover:border-brand-border-strong hover:bg-brand-card text-brand-textMain px-3 sm:px-4 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all duration-150 cursor-pointer select-none active:scale-[0.98] shadow-sm"
-              >
-                <UserCheck className="w-3.5 h-3.5 text-brand-textMuted" />
-                <span className="hidden sm:inline">{getApprovalLabel()}</span>
-                <ChevronDown className="w-3 h-3 text-brand-textMuted" />
-              </button>
-
-              {showApprovalDropdown && (
-                <div
-                  data-testid="approval-dropdown-menu"
-                  className="absolute bottom-full left-0 mb-2 glass-panel rounded-lg shadow-lg z-50 w-47.5 overflow-hidden"
-                >
-                  <div
-                    data-testid="approval-option-ask"
-                    onClick={() => {
-                      setApprovalMode('ask');
-                      setShowApprovalDropdown(false);
-                    }}
-                    className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-brand-hover cursor-pointer transition-colors"
-                  >
-                    Ask for approval
-                  </div>
-                  <div
-                    data-testid="approval-option-always"
-                    onClick={() => {
-                      setApprovalMode('always');
-                      setShowApprovalDropdown(false);
-                    }}
-                    className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-brand-hover cursor-pointer transition-colors"
-                  >
-                    Always approve
-                  </div>
-                  <div
-                    data-testid="approval-option-never"
-                    onClick={() => {
-                      setApprovalMode('never');
-                      setShowApprovalDropdown(false);
-                    }}
-                    className="px-3.5 py-2.5 text-xs text-brand-textMain hover:bg-brand-hover cursor-pointer transition-colors"
-                  >
-                    Never approve
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right toolbar elements */}
-          <div className="flex items-center gap-2.5">
-            {/* Model Badge */}
-            <div className="relative">
-              <Select
-                options={availableModels.map((model) =>
-                  model === AUTO_ROUTE_MODEL
-                    ? { value: model, label: AUTO_ROUTE_LABEL, icon: <Workflow className="w-3.5 h-3.5" />, description: 'Auto-routes each request to the best model for the job — or pick a specific model to send directly.' }
-                    : { value: model, label: model, icon: <Cpu className="w-3.5 h-3.5" /> }
-                )}
-                value={selectedModel}
-                onChange={(model) => {
-                  setSelectedModel(model);
-                  onModelChange?.(model);
-                }}
-                placeholder={hasModels ? 'Select model...' : (emptyStateMessage || 'No models connected')}
-                direction="up"
-                className="w-45 sm:w-55"
-              />
-            </div>
-
+          {/* On the most right: Mic and Enter (Rounded arrow) button */}
+          <div className="flex items-center gap-1.5 shrink-0 mb-0.5">
             {/* Mic / voice dictation */}
             {workspaceVoiceEnabled && (
               <button
+                type="button"
                 data-testid="composer-mic-btn"
                 data-testid-mic-state={transcribing ? 'transcribing' : listening ? 'listening' : 'idle'}
                 onClick={toggleDictation}
@@ -1001,21 +948,22 @@ export const Composer: React.FC<ComposerProps> = ({
                     ? 'Stop dictation'
                     : 'Dictate with your voice'
                 }
-                className={`p-2 rounded-lg border transition-colors cursor-pointer ${
+                className={`p-2 rounded-xl transition-all duration-150 cursor-pointer ${
                   listening
-                    ? 'bg-[color:var(--neon-destructive)]/15 border-[color:var(--neon-destructive)]/40 text-[color:var(--neon-destructive)]'
+                    ? 'bg-[color:var(--neon-destructive)]/15 text-[color:var(--neon-destructive)] border border-[color:var(--neon-destructive)]/40 animate-pulse'
                     : transcribing
-                    ? 'bg-[color:var(--neon-live)]/15 border-[color:var(--neon-live)]/40 text-[color:var(--neon-live)]'
-                    : 'bg-brand-popover/60 hover:bg-brand-popover border-brand-border text-brand-textMuted hover:text-brand-textMain'
+                    ? 'bg-[color:var(--neon-live)]/15 text-[color:var(--neon-live)] border border-[color:var(--neon-live)]/40 animate-pulse'
+                    : 'text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 dark:hover:bg-white/10'
                 }`}
               >
-                <Mic className={`w-4 h-4 ${listening ? 'animate-pulse' : transcribing ? 'animate-pulse' : ''}`} />
+                <Mic className="w-4 h-4" />
               </button>
             )}
 
-            {/* Submit / Stop */}
+            {/* Submit / Stop (Rounded arrow button) */}
             {isGenerating ? (
               <button
+                type="button"
                 data-testid="btn-stop"
                 onClick={onStop}
                 aria-label="Stop generating"
@@ -1025,19 +973,248 @@ export const Composer: React.FC<ComposerProps> = ({
               </button>
             ) : (
               <button
+                type="button"
                 data-testid="btn-send"
                 onClick={handleSend}
                 aria-label="Send message"
+                title="Send (Enter)"
                 disabled={disabled || !prompt.trim() || !hasModels}
-                className={`rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150 ${
+                className={`rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150 active:scale-[0.92] ${
                   !prompt.trim() || disabled || !hasModels
                     ? 'bg-brand-popover text-brand-textMuted/40 cursor-not-allowed border border-brand-border'
-                    : 'bg-brand-highlight hover:bg-brand-highlight-hover text-brand-highlight-text cursor-pointer active:scale-[0.92] border border-brand-highlight-border-subtle'
+                    : 'bg-brand-highlight hover:bg-brand-highlight-hover text-brand-highlight-text cursor-pointer shadow-md'
                 }`}
               >
-                <ArrowUp className="w-4 h-4" />
+                <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
               </button>
             )}
+          </div>
+        </div>
+
+        {selectedIsRouter && (
+          <div
+            data-testid="composer-router-hint"
+            className="my-1 flex items-center gap-1.5 text-[10px] font-mono text-brand-textMuted/65 leading-none"
+          >
+            <Info className="w-3 h-3 shrink-0 text-brand-textMuted/50" />
+            <span>
+              auto-routing: active across available models
+            </span>
+          </div>
+        )}
+
+        {/* Enter/Shift+Enter hint */}
+        {!prompt && hasModels && (
+          <div className="text-[10px] text-brand-textMuted/40 font-mono select-none my-0.5">
+            Enter to send · Shift+Enter for new line
+          </div>
+        )}
+
+        {/* Row 2: Under the text box - Permission mode Level and Model Select */}
+        <div className="flex items-center justify-between gap-2 flex-wrap border-t border-brand-border/40 pt-2 mt-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Permission mode Level Button */}
+            <div className="relative inline-block" ref={approvalDropdownRef}>
+              <button
+                type="button"
+                data-testid="approval-dropdown-btn"
+                onClick={() => setShowApprovalDropdown(!showApprovalDropdown)}
+                className={`group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-150 select-none cursor-pointer ${
+                  showApprovalDropdown
+                    ? 'bg-white/10 text-brand-textMain shadow-xs'
+                    : 'text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 dark:hover:bg-white/10'
+                }`}
+                title={`Permission Mode: ${getApprovalLabel()}`}
+                aria-label={`Permission Mode: ${getApprovalLabel()}`}
+              >
+                <span>{getApprovalLabel()}</span>
+                <ChevronDown
+                  className={`w-3 h-3 opacity-50 group-hover:opacity-100 transition-transform duration-150 ${showApprovalDropdown ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {showApprovalDropdown && (
+                <div
+                  data-testid="approval-dropdown-menu"
+                  className="absolute bottom-full left-0 mb-2 w-72 bg-brand-popover/95 backdrop-blur-2xl border border-brand-border rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100"
+                >
+                  <div className="px-2.5 py-1.5 text-[10px] font-mono text-brand-textMuted uppercase tracking-wider">
+                    Permission Level
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="approval-option-ask"
+                    onClick={() => {
+                      setApprovalMode('ask');
+                      setShowApprovalDropdown(false);
+                    }}
+                    className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
+                      approvalMode === 'ask' ? 'bg-brand-hover-strong text-brand-textMain font-medium' : 'hover:bg-brand-hover text-brand-textMuted hover:text-brand-textMain'
+                    }`}
+                  >
+                    <UserCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="text-xs font-medium text-brand-textMain">Ask for approval</div>
+                      <div className="text-[11px] text-brand-textMuted leading-tight mt-0.5">
+                        Confirm commands and file edits before execution.
+                      </div>
+                    </div>
+                    {approvalMode === 'ask' && <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5 ml-1" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    data-testid="approval-option-always"
+                    onClick={() => {
+                      setApprovalMode('always');
+                      setShowApprovalDropdown(false);
+                    }}
+                    className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
+                      approvalMode === 'always' ? 'bg-brand-hover-strong text-brand-textMain font-medium' : 'hover:bg-brand-hover text-brand-textMuted hover:text-brand-textMain'
+                    }`}
+                  >
+                    <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="text-xs font-medium text-brand-textMain">Always approve</div>
+                      <div className="text-[11px] text-brand-textMuted leading-tight mt-0.5">
+                        Execute actions autonomously without interruption.
+                      </div>
+                    </div>
+                    {approvalMode === 'always' && <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5 ml-1" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    data-testid="approval-option-never"
+                    onClick={() => {
+                      setApprovalMode('never');
+                      setShowApprovalDropdown(false);
+                    }}
+                    className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
+                      approvalMode === 'never' ? 'bg-brand-hover-strong text-brand-textMain font-medium' : 'hover:bg-brand-hover text-brand-textMuted hover:text-brand-textMain'
+                    }`}
+                  >
+                    <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="text-xs font-medium text-brand-textMain">Never approve</div>
+                      <div className="text-[11px] text-brand-textMuted leading-tight mt-0.5">
+                        Read-only safety mode; block all execution requests.
+                      </div>
+                    </div>
+                    {approvalMode === 'never' && <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5 ml-1" />}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Model Select Button */}
+            <div className="relative inline-block" ref={modelDropdownRef}>
+              <button
+                type="button"
+                data-testid="model-select-btn"
+                onClick={() => setShowModelDropdown(!showModelDropdown)}
+                className={`group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-150 select-none cursor-pointer ${
+                  showModelDropdown
+                    ? 'bg-white/10 text-brand-textMain shadow-xs'
+                    : 'text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 dark:hover:bg-white/10'
+                }`}
+                title={`Model: ${selectedModel === AUTO_ROUTE_MODEL ? AUTO_ROUTE_LABEL : (selectedModel || (hasModels ? 'Select model...' : (emptyStateMessage || 'No models connected')))}`}
+                aria-label={`Select model, currently ${selectedModel || 'none'}`}
+              >
+                <span className="truncate max-w-[140px] sm:max-w-[190px]">
+                  {selectedModel === AUTO_ROUTE_MODEL
+                    ? AUTO_ROUTE_LABEL
+                    : (selectedModel || (hasModels ? 'Select model...' : (emptyStateMessage || 'No models connected')))}
+                </span>
+                <ChevronDown
+                  className={`w-3 h-3 opacity-50 group-hover:opacity-100 transition-transform duration-150 ${showModelDropdown ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {showModelDropdown && (
+                <div
+                  className="absolute bottom-full left-0 mb-2 w-72 max-h-80 flex flex-col bg-brand-popover/95 backdrop-blur-2xl border border-brand-border rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100"
+                >
+                  {/* Search Input Box */}
+                  <div className="p-2 border-b border-brand-border/60 shrink-0 bg-brand-popover/50">
+                    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-brand-card/80 border border-brand-border focus-within:border-brand-border-strong text-xs">
+                      <Search className="w-3.5 h-3.5 text-brand-textMuted shrink-0" />
+                      <input
+                        ref={modelSearchInputRef}
+                        type="text"
+                        value={modelSearchQuery}
+                        onChange={(e) => setModelSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') {
+                            setShowModelDropdown(false);
+                            setModelSearchQuery('');
+                          }
+                        }}
+                        placeholder="Search models..."
+                        className="w-full bg-transparent text-xs text-brand-textMain placeholder:text-brand-textMuted/60 focus:outline-none"
+                      />
+                      {modelSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setModelSearchQuery('')}
+                          className="text-brand-textMuted hover:text-brand-textMain p-0.5 rounded cursor-pointer"
+                          aria-label="Clear search"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Model List */}
+                  <div className="overflow-y-auto p-1.5 scrollbar-thin scrollbar-thumb-brand-border flex-1">
+                    {filteredAvailableModels.length === 0 ? (
+                      <div className="p-3 text-center text-xs text-brand-textMuted">
+                        {modelSearchQuery ? `No models found matching "${modelSearchQuery}"` : (emptyStateMessage || 'No models connected')}
+                      </div>
+                    ) : (
+                      filteredAvailableModels.map((model) => {
+                        const isSelected = selectedModel === model;
+                        const isAuto = model === AUTO_ROUTE_MODEL;
+                        return (
+                          <div
+                            key={model}
+                            onClick={() => {
+                              setSelectedModel(model);
+                              onModelChange?.(model);
+                              setShowModelDropdown(false);
+                              setModelSearchQuery('');
+                            }}
+                            className={`flex items-center justify-between p-2 rounded-xl hover:bg-brand-hover cursor-pointer text-xs transition-colors ${
+                              isSelected ? 'text-brand-textMain font-semibold bg-brand-hover-strong' : 'text-brand-textMuted'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              {isAuto ? (
+                                <Workflow className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                              ) : (
+                                <Cpu className="w-3.5 h-3.5 text-brand-textMuted shrink-0" />
+                              )}
+                              <div className="truncate">
+                                <div className="truncate text-xs font-medium text-brand-textMain">
+                                  {isAuto ? AUTO_ROUTE_LABEL : model}
+                                </div>
+                                {isAuto && (
+                                  <div className="text-[10px] text-brand-textMuted truncate">
+                                    Auto-routes to best model
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0 ml-2" />}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
