@@ -103,4 +103,20 @@ export class IpcBridge {
     if (!IpcBridge.isDesktop()) return [];
     return IpcBridge.invoke('auto-detect-providers');
   }
+
+  static async generateChatTitle(payload: {
+    prompt: string;
+    response?: string;
+    model?: string;
+    provider?: string;
+    apiKey?: string;
+    baseUrl?: string;
+  }): Promise<{ title?: string } | null> {
+    try {
+      const res = await IpcBridge.invoke<{ title?: string }>('chat-generate-title', payload);
+      return res || null;
+    } catch {
+      return null;
+    }
+  }
 }

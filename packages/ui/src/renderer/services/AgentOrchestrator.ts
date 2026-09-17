@@ -70,9 +70,10 @@ export class AgentOrchestrator {
       chatStore.setSteps(uniqueChatId, []);
       targetChatId = uniqueChatId;
     } else {
-      // If the active chat has a placeholder title, immediately update it from prompt
+      // If the active chat has a placeholder title, update it from prompt ONLY IF it has no prior user steps (not mid-chat)
       const existing = chatStore.getState().chats.find((c) => c.id === targetChatId);
-      if (existing && ChatTitleService.isPlaceholderTitle(existing.title)) {
+      const existingUserSteps = chatStore.getSteps(targetChatId).filter((s) => s.type === 'user');
+      if (existing && existingUserSteps.length === 0 && ChatTitleService.isPlaceholderTitle(existing.title)) {
         const initialTitle = ChatTitleService.generateTitle(trimmedPrompt);
         chatStore.setChats(
           chatStore.getState().chats.map((c) =>
@@ -426,10 +427,16 @@ export class AgentOrchestrator {
 
         case 'chat-name':
           if (event.chatName) {
-            chatStore.setChats(
-              chatStore.getState().chats.map((c) => (c.id === chatId ? { ...c, title: event.chatName! } : c))
-            );
-            ChatRepository.persistAll().catch(console.error);
+            const steps = chatStore.getSteps(chatId);
+            const userSteps = steps.filter((s) => s.type === 'user');
+            // Title should generate ONLY when First message and new chat starts. NOT in mid chat.
+            if (userSteps.length <= 1) {
+              const cleaned = ChatTitleService.cleanModelTitle(event.chatName);
+              chatStore.setChats(
+                chatStore.getState().chats.map((c) => (c.id === chatId ? { ...c, title: cleaned || event.chatName! } : c))
+              );
+              ChatRepository.persistAll().catch(console.error);
+            }
           }
           break;
 
@@ -506,22 +513,50 @@ export class AgentOrchestrator {
       buffer.clear();
     }
 
-    // Generate or refine chat title along with first chat response
+    // Generate or refine chat title along with first chat response using the selected model
+    // ONLY when First message and new chat starts. NOT in mid chat.
     const currentChat = chatStore.getState().chats.find((c) => c.id === chatId);
-    let resolvedTitle = currentChat?.title;
     const steps = chatStore.getSteps(chatId);
     const userSteps = steps.filter((s) => s.type === 'user');
-    if (userSteps.length <= 1 && currentChat) {
+    let resolvedTitle = currentChat?.title;
+
+    if (userSteps.length === 1 && currentChat) {
       const firstUserStep = userSteps[0];
       const firstAssistantStep = steps.find((s) => s.type === 'assistant');
       if (firstUserStep?.content) {
+        // Immediate synchronous heuristic title fallback
         resolvedTitle = ChatTitleService.generateTitle(firstUserStep.content, firstAssistantStep?.content);
-      }
-    } else if (currentChat && ChatTitleService.isPlaceholderTitle(currentChat.title)) {
-      const firstUserStep = userSteps[0];
-      const firstAssistantStep = steps.find((s) => s.type === 'assistant');
-      if (firstUserStep?.content) {
-        resolvedTitle = ChatTitleService.generateTitle(firstUserStep.content, firstAssistantStep?.content);
+
+        // Asynchronously call the selected model to generate the definitive chat title
+        const selectedModelName = currentChat.model || providerStore.getState().lastUsedModel || '';
+        const activeProvider = ProviderRegistry.resolveActiveProvider(selectedModelName);
+        const engineProviderId = activeProvider ? ProviderRegistry.resolveEngineProviderId(activeProvider) : undefined;
+        const engineModelSlug = ProviderRegistry.resolveModelId(activeProvider, selectedModelName);
+
+        void ChatTitleService.generateTitleWithModel(
+          firstUserStep.content,
+          firstAssistantStep?.content,
+          {
+            model: engineModelSlug,
+            provider: engineProviderId,
+            apiKey: activeProvider?.apiKey,
+            baseUrl: activeProvider?.baseUrl,
+          }
+        ).then((modelTitle) => {
+          if (modelTitle) {
+            // Guard: ensure chat has not transitioned to mid-chat while model was generating
+            const latestSteps = chatStore.getSteps(chatId);
+            const latestUserSteps = latestSteps.filter((s) => s.type === 'user');
+            if (latestUserSteps.length <= 1) {
+              chatStore.setChats(
+                chatStore.getState().chats.map((c) =>
+                  c.id === chatId ? { ...c, title: modelTitle } : c
+                )
+              );
+              ChatRepository.persistAll(true).catch(console.error);
+            }
+          }
+        }).catch(() => {});
       }
     }
 

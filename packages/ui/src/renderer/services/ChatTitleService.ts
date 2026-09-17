@@ -3,6 +3,8 @@
  * from user prompts and first assistant responses.
  */
 
+import { IpcBridge } from '../core/ipc';
+
 export class ChatTitleService {
   /**
    * Determines if a chat title is a generic default placeholder
@@ -124,5 +126,133 @@ export class ChatTitleService {
     }
 
     return title.length > 32 ? title.slice(0, 32).trim() + '...' : title;
+  }
+
+  /**
+   * Cleans, formats, and validates a title string returned by an LLM model.
+   * Strips reasoning blocks, prefixes like "Title:", enclosing quotes/markdown,
+   * converts to Title Case, and caps cleanly at 32 characters.
+   */
+  static cleanModelTitle(rawTitle: string): string {
+    if (!rawTitle || !rawTitle.trim()) return '';
+
+    let text = rawTitle.trim();
+
+    // Strip reasoning blocks if model returned <think>...</think>
+    if (text.includes('</think>')) {
+      text = text.slice(text.lastIndexOf('</think>') + '</think>'.length).trim();
+    }
+
+    // Strip common model prefixes
+    const prefixes = [
+      /^title\s*:\s*/i,
+      /^chat\s*title\s*:\s*/i,
+      /^suggested\s*title\s*:\s*/i,
+      /^topic\s*:\s*/i,
+      /^here\s+is\s+a\s+title\s*:\s*/i,
+    ];
+    for (const prefix of prefixes) {
+      if (prefix.test(text)) {
+        text = text.replace(prefix, '').trim();
+      }
+    }
+
+    // Strip markdown formatting, surrounding quotes, and backticks
+    text = text
+      .replace(/^[`"'\u201C\u201D\u2018\u2019*#]+/, '')
+      .replace(/[`"'\u201C\u201D\u2018\u2019*#]+$/, '')
+      .replace(/[:;,?.!]+$/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!text || text.length < 2) return '';
+
+    // Split into words and cap to max 32 chars without breaking mid-word
+    const words = text.split(/\s+/).filter(Boolean);
+    const selectedWords: string[] = [];
+    let totalLen = 0;
+
+    for (const word of words) {
+      if (selectedWords.length >= 6 || (totalLen + word.length > 30 && selectedWords.length >= 2)) {
+        break;
+      }
+      selectedWords.push(word);
+      totalLen += word.length + 1;
+    }
+
+    // Strip trailing prepositions/conjunctions
+    while (
+      selectedWords.length > 1 &&
+      /^(a|an|and|as|at|but|by|for|in|nor|of|on|or|per|the|to|via|with)$/i.test(
+        selectedWords[selectedWords.length - 1]
+      )
+    ) {
+      selectedWords.pop();
+    }
+
+    let title = selectedWords.join(' ');
+    title = title.replace(/[:;,?.!]+$/, '').trim();
+
+    // Convert to Title Case
+    title = title
+      .split(' ')
+      .map((w, idx) => {
+        if (
+          idx > 0 &&
+          /^(a|an|and|as|at|but|by|for|in|nor|of|on|or|per|the|to|via|with)$/i.test(w)
+        ) {
+          return w.toLowerCase();
+        }
+        return w.charAt(0).toUpperCase() + w.slice(1);
+      })
+      .join(' ');
+
+    if (title.length > 32) {
+      title = title.slice(0, 32).trim();
+    }
+
+    return title;
+  }
+
+  /**
+   * Calls the selected model to generate a concise chat title.
+   * If the model call fails, times out, or returns an empty title,
+   * falls back gracefully to `generateTitle(prompt, response)`.
+   */
+  static async generateTitleWithModel(
+    prompt: string,
+    response?: string,
+    options?: {
+      model?: string;
+      provider?: string;
+      apiKey?: string;
+      baseUrl?: string;
+    }
+  ): Promise<string> {
+    const cleanPrompt = (prompt || '').trim();
+    if (!cleanPrompt) return 'New Chat';
+
+    try {
+      const res = await IpcBridge.generateChatTitle({
+        prompt: cleanPrompt,
+        response,
+        model: options?.model,
+        provider: options?.provider,
+        apiKey: options?.apiKey,
+        baseUrl: options?.baseUrl,
+      });
+
+      if (res && res.title) {
+        const cleaned = ChatTitleService.cleanModelTitle(res.title);
+        if (cleaned && cleaned.length >= 2) {
+          return cleaned;
+        }
+      }
+    } catch {
+      // Ignore IPC / model error and fall back gracefully
+    }
+
+    // Fallback to rule-based generation
+    return ChatTitleService.generateTitle(cleanPrompt, response);
   }
 }

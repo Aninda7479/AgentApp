@@ -189,8 +189,8 @@ pub async fn handle_agent_channel(
                 .as_deref()
                 .map(|u| u.contains("opencode.ai"))
                 .unwrap_or(false);
-            let is_opencode_model =
-                crate::providers::opencode::OPENCODE_FREE_MODELS.contains(&model_str.as_str())
+            let is_opencode_model = crate::providers::opencode::OPENCODE_FREE_MODELS
+                .contains(&model_str.as_str())
                 || model_str == "big-pickle";
             if is_opencode_url || is_opencode_model {
                 provider_type = ProviderType::OpenCode;
@@ -566,6 +566,8 @@ pub async fn handle_agent_channel(
                 let mut has_error = false;
                 let mut completion_token_count = 0usize;
 
+                let is_first_turn = initial_history.is_empty();
+
                 // 6. Use run_loop_with_history_and_attachments for multi-turn context and multimodal attachments
                 let run_result = engine
                     .run_loop_with_history_and_attachments(
@@ -691,6 +693,70 @@ pub async fn handle_agent_channel(
                     let _ = state_clone.ws_broadcast_tx.send(done_msg.to_string());
                 }
 
+                // If first turn of a new chat, generate title with selected model and emit chat-name
+                if is_first_turn && !has_error {
+                    let state_for_title = state_clone.clone();
+                    let sid_for_title = sid.clone();
+                    let prompt_for_title = prompt_clone.clone();
+                    let resp_for_title = {
+                        let store = state_clone.session_store.lock();
+                        store
+                            .peek(&sid)
+                            .map(|e| e.full_assistant_text.clone())
+                            .unwrap_or_default()
+                    };
+                    let cfg_for_title = model_config.clone();
+
+                    tokio::spawn(async move {
+                        let trunc_prompt: String = prompt_for_title.chars().take(250).collect();
+                        let trunc_resp: String = resp_for_title.chars().take(250).collect();
+                        let title_instruction = format!(
+                            "Generate a concise 2 to 5 word title in Title Case (maximum 30 characters, no quotes, no trailing punctuation) that summarizes this conversation. Output ONLY the title text:\n\nUser: {}\nAssistant: {}\n\nTitle:",
+                            trunc_prompt, trunc_resp
+                        );
+                        let mut title_cfg = cfg_for_title;
+                        title_cfg.max_tokens = Some(30);
+                        title_cfg.temperature = Some(0.3);
+                        let provider =
+                            crate::providers::ProviderFactory::create(&title_cfg.provider);
+                        let messages = vec![crate::types::ChatMessage::user(title_instruction)];
+
+                        let title_fut = async {
+                            if let Ok(mut rx) =
+                                provider.chat_stream(&title_cfg, &messages, &[]).await
+                            {
+                                let mut raw = String::new();
+                                while let Some(event) = rx.recv().await {
+                                    if let crate::types::AgentEvent::Token { text } = event {
+                                        raw.push_str(&text);
+                                    }
+                                }
+                                let cleaned = clean_title_output(&raw);
+                                if !cleaned.is_empty() {
+                                    return Some(cleaned);
+                                }
+                            }
+                            None
+                        };
+
+                        if let Ok(Some(title)) =
+                            tokio::time::timeout(std::time::Duration::from_secs(8), title_fut).await
+                        {
+                            let chat_name_msg = serde_json::json!({
+                                "channel": "agent-event",
+                                "data": {
+                                    "type": "chat-name",
+                                    "sessionId": sid_for_title,
+                                    "chatName": title
+                                }
+                            });
+                            let _ = state_for_title
+                                .ws_broadcast_tx
+                                .send(chat_name_msg.to_string());
+                        }
+                    });
+                }
+
                 let duration_ms = start_time.elapsed().as_millis() as u64;
                 let prompt_token_count = std::cmp::max(1, (prompt_clone.len() + 3) / 4);
                 let full_text_len = {
@@ -786,6 +852,228 @@ pub async fn handle_agent_channel(
         "agent-compact" => Some(Ok(Json(
             serde_json::json!({ "data": { "compacted": false, "tokensBefore": 0, "tokensAfter": 0 } }),
         ))),
+        "chat-generate-title" => {
+            let arg = args
+                .first()
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            let prompt = arg
+                .get("prompt")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            if prompt.trim().is_empty() {
+                return Some(Ok(Json(
+                    serde_json::json!({ "data": { "title": "New Chat" } }),
+                )));
+            }
+            let response = arg
+                .get("response")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let model_str = arg
+                .get("model")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let provider_str = arg
+                .get("provider")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let api_key = arg
+                .get("apiKey")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            let base_url = arg
+                .get("baseUrl")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+
+            let raw_settings = state.settings_store.load_raw().unwrap_or_default();
+            let (default_prov, default_model, default_key, default_url) =
+                resolve_active_workspace_model(&raw_settings, &state.settings_store);
+
+            let prov_type = if !provider_str.is_empty() {
+                match provider_str.to_lowercase().as_str() {
+                    "gemini" | "google" => ProviderType::Gemini,
+                    "openai" => ProviderType::OpenAI,
+                    "anthropic" | "claude" => ProviderType::Anthropic,
+                    "ollama" => ProviderType::Ollama,
+                    "openrouter" => ProviderType::OpenRouter,
+                    "deepseek" => ProviderType::DeepSeek,
+                    "groq" => ProviderType::Groq,
+                    "opencode" => ProviderType::OpenCode,
+                    _ => default_prov,
+                }
+            } else {
+                default_prov
+            };
+
+            let resolved_model = if !model_str.is_empty() {
+                model_str
+            } else {
+                default_model
+            };
+
+            let mut model_config = ModelConfig::new(prov_type, resolved_model);
+            model_config.api_key = api_key.or(default_key);
+            model_config.base_url = base_url.or(default_url);
+            model_config.max_tokens = Some(30);
+            model_config.temperature = Some(0.3);
+
+            if crate::providers::opencode::OPENCODE_FREE_MODELS
+                .contains(&model_config.model_id.as_str())
+            {
+                model_config.provider = ProviderType::OpenCode;
+            }
+
+            let trunc_prompt: String = prompt.chars().take(250).collect();
+            let trunc_resp: String = response
+                .as_deref()
+                .unwrap_or("")
+                .chars()
+                .take(250)
+                .collect();
+
+            let title_instruction = if trunc_resp.is_empty() {
+                format!(
+                    "Generate a concise 2 to 5 word title in Title Case (maximum 30 characters, no quotes, no trailing punctuation) that summarizes this chat prompt. Output ONLY the title text:\n\nUser: {}\n\nTitle:",
+                    trunc_prompt
+                )
+            } else {
+                format!(
+                    "Generate a concise 2 to 5 word title in Title Case (maximum 30 characters, no quotes, no trailing punctuation) that summarizes this conversation. Output ONLY the title text:\n\nUser: {}\nAssistant: {}\n\nTitle:",
+                    trunc_prompt, trunc_resp
+                )
+            };
+
+            let provider = crate::providers::ProviderFactory::create(&model_config.provider);
+            let messages = vec![crate::types::ChatMessage::user(title_instruction)];
+
+            let title_fut = async {
+                match provider.chat_stream(&model_config, &messages, &[]).await {
+                    Ok(mut rx) => {
+                        let mut raw = String::new();
+                        while let Some(event) = rx.recv().await {
+                            if let crate::types::AgentEvent::Token { text } = event {
+                                raw.push_str(&text);
+                            }
+                        }
+                        let cleaned = clean_title_output(&raw);
+                        if !cleaned.is_empty() {
+                            Some(cleaned)
+                        } else {
+                            None
+                        }
+                    }
+                    Err(_) => None,
+                }
+            };
+
+            let generated = tokio::time::timeout(std::time::Duration::from_secs(8), title_fut)
+                .await
+                .ok()
+                .flatten();
+
+            Some(Ok(Json(serde_json::json!({
+                "data": {
+                    "title": generated
+                }
+            }))))
+        }
         _ => None,
     }
+}
+
+/// Cleans, formats, and caps title output received from an LLM.
+pub fn clean_title_output(raw: &str) -> String {
+    let mut text = raw.trim();
+    if let Some(end_idx) = text.rfind("</think>") {
+        text = text[end_idx + "</think>".len()..].trim();
+    }
+    let prefixes = [
+        "title:",
+        "title :",
+        "chat title:",
+        "suggested title:",
+        "topic:",
+    ];
+    let lower = text.to_lowercase();
+    for p in prefixes {
+        if lower.starts_with(p) {
+            text = text[p.len()..].trim();
+            break;
+        }
+    }
+    let text = text
+        .trim_matches(|c: char| {
+            c == '"'
+                || c == '\''
+                || c == '`'
+                || c == '*'
+                || c == '#'
+                || c == '\u{201C}'
+                || c == '\u{201D}'
+                || c == '\u{2018}'
+                || c == '\u{2019}'
+        })
+        .trim();
+    let text =
+        text.trim_end_matches(|c: char| c == '.' || c == ':' || c == '!' || c == '?' || c == ';');
+
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let mut selected_words = Vec::new();
+    let mut total_len = 0;
+    for w in words {
+        if selected_words.len() >= 6 || (total_len + w.len() > 30 && selected_words.len() >= 2) {
+            break;
+        }
+        selected_words.push(w);
+        total_len += w.len() + 1;
+    }
+    let combined = selected_words.join(" ");
+    let mut title = String::new();
+    for (i, word) in combined.split_whitespace().enumerate() {
+        if i > 0 {
+            title.push(' ');
+        }
+        let lower = word.to_lowercase();
+        if i > 0
+            && matches!(
+                lower.as_str(),
+                "a" | "an"
+                    | "and"
+                    | "as"
+                    | "at"
+                    | "but"
+                    | "by"
+                    | "for"
+                    | "in"
+                    | "nor"
+                    | "of"
+                    | "on"
+                    | "or"
+                    | "per"
+                    | "the"
+                    | "to"
+                    | "via"
+                    | "with"
+            )
+        {
+            title.push_str(&lower);
+        } else {
+            let mut chars = word.chars();
+            if let Some(first) = chars.next() {
+                title.extend(first.to_uppercase());
+                title.extend(chars);
+            }
+        }
+    }
+    if title.len() > 32 {
+        title = title[..32].trim_end().to_string();
+    }
+    title
 }
