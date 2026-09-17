@@ -516,7 +516,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({
             placeholder={placeholder}
             rows={1}
             disabled={disabled}
-            className="flex-1 bg-transparent resize-none text-brand-textMain text-sm sm:text-base py-1 px-1 focus:outline-none min-h-[36px] max-h-[220px] leading-relaxed placeholder:text-brand-textMuted/60 scrollbar-thin scrollbar-thumb-neutral-700 font-sans"
+            className="flex-1 bg-transparent resize-none text-brand-textMain text-sm sm:text-base py-1 px-1 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:shadow-none min-h-[36px] max-h-[220px] leading-relaxed placeholder:text-brand-textMuted/60 scrollbar-thin scrollbar-thumb-neutral-700 font-sans"
           />
 
           {/* Most Right: Voice Dictation (Mic) & Send (Rounded Arrow Button) */}

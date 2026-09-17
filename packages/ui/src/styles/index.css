@@ -115,6 +115,15 @@
   box-shadow: var(--focus-ring);
 }
 
+/* Suppress inner focus outline on textareas/inputs embedded inside custom styled containers (e.g. composer capsule) */
+textarea[data-testid="composer-input"],
+textarea[data-testid="composer-input"]:focus,
+textarea[data-testid="composer-input"]:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+}
+
 :root[data-theme='light'] {
   color-scheme: light;
 
