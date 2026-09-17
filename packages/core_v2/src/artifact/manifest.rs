@@ -25,6 +25,8 @@ pub struct ArtifactManifest {
     pub entry: String,
     #[serde(default)]
     pub port: Option<u16>,
+    #[serde(default)]
+    pub autostart: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -35,4 +37,6 @@ pub struct ArtifactRuntimeState {
     pub port: Option<u16>,
     pub url: Option<String>,
     pub path: String,
+    #[serde(default)]
+    pub autostart: bool,
 }

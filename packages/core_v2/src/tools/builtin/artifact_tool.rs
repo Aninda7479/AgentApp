@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use crate::artifact::{ArtifactManifest, ArtifactRuntimeState};
 use crate::storage::settings::get_superagent_dir;
@@ -20,11 +20,24 @@ fn get_artifacts_storage_dir() -> PathBuf {
 fn sanitize_artifact_id(raw: &str) -> String {
     let sanitized: String = raw
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c.to_ascii_lowercase() } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
         .collect();
     let trimmed = sanitized.trim_matches('-');
     if trimmed.is_empty() {
-        format!("artifact-{}", uuid::Uuid::new_v4().to_string().chars().take(8).collect::<String>())
+        format!(
+            "artifact-{}",
+            uuid::Uuid::new_v4()
+                .to_string()
+                .chars()
+                .take(8)
+                .collect::<String>()
+        )
     } else {
         trimmed.to_string()
     }
@@ -122,9 +135,7 @@ impl Tool for CreateArtifactTool {
             .as_str()
             .ok_or_else(|| anyhow!("Missing required parameter 'name'"))?;
 
-        let raw_id = input["id"]
-            .as_str()
-            .unwrap_or(name);
+        let raw_id = input["id"].as_str().unwrap_or(name);
         let id = sanitize_artifact_id(raw_id);
 
         let description = input["description"]
@@ -132,10 +143,7 @@ impl Tool for CreateArtifactTool {
             .unwrap_or("SuperAgent interactive micro-app artifact")
             .to_string();
 
-        let artifact_type = input["type"]
-            .as_str()
-            .unwrap_or("web")
-            .to_string();
+        let artifact_type = input["type"].as_str().unwrap_or("web").to_string();
 
         let default_entry = match artifact_type.as_str() {
             "python" => "main.py",
@@ -143,20 +151,21 @@ impl Tool for CreateArtifactTool {
             _ => "index.html",
         };
 
-        let entry = input["entry"]
-            .as_str()
-            .unwrap_or(default_entry)
-            .to_string();
+        let entry = input["entry"].as_str().unwrap_or(default_entry).to_string();
 
-        let icon = input["icon"]
-            .as_str()
-            .map(|s| s.to_string());
+        let icon = input["icon"].as_str().map(|s| s.to_string());
 
         let storage_root = get_artifacts_storage_dir();
         let artifact_dir = storage_root.join(&id);
         tokio::fs::create_dir_all(&artifact_dir)
             .await
-            .map_err(|e| anyhow!("Failed to create artifact directory '{}': {}", artifact_dir.display(), e))?;
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to create artifact directory '{}': {}",
+                    artifact_dir.display(),
+                    e
+                )
+            })?;
 
         // 1. Prepare files map
         let mut files_to_write: HashMap<String, String> = HashMap::new();
@@ -226,7 +235,13 @@ impl Tool for CreateArtifactTool {
             }
             tokio::fs::write(&safe_file_path, content)
                 .await
-                .map_err(|e| anyhow!("Failed to write artifact file '{}': {}", safe_file_path.display(), e))?;
+                .map_err(|e| {
+                    anyhow!(
+                        "Failed to write artifact file '{}': {}",
+                        safe_file_path.display(),
+                        e
+                    )
+                })?;
         }
 
         // 3. Write manifest.json
@@ -239,6 +254,7 @@ impl Tool for CreateArtifactTool {
             logo: None,
             entry: entry.clone(),
             port: Some(3080),
+            autostart: false,
         };
 
         let manifest_file = artifact_dir.join("manifest.json");
@@ -311,13 +327,18 @@ impl Tool for ListArtifactsTool {
                                 .unwrap_or_default();
 
                             let port = manifest.port.unwrap_or(3080);
+                            let autostart = manifest.autostart;
                             artifacts.push(ArtifactRuntimeState {
                                 id,
                                 manifest,
                                 status: "ready".to_string(),
                                 port: Some(port),
-                                url: Some(format!("http://localhost:1469/api/artifacts/{}/view/", path.file_name().unwrap_or_default().to_string_lossy())),
+                                url: Some(format!(
+                                    "http://localhost:1469/api/artifacts/{}/view/",
+                                    path.file_name().unwrap_or_default().to_string_lossy()
+                                )),
                                 path: path.to_string_lossy().to_string(),
+                                autostart,
                             });
                         }
                     }
@@ -386,12 +407,14 @@ impl Tool for ReadArtifactTool {
         let artifact_dir = storage_root.join(&id);
 
         if !artifact_dir.exists() {
-            anyhow::bail!("Artifact with id '{}' was not found in '{}'", id, storage_root.display());
+            anyhow::bail!(
+                "Artifact with id '{}' was not found in '{}'",
+                id,
+                storage_root.display()
+            );
         }
 
-        let file_rel = input["file"]
-            .as_str()
-            .unwrap_or("manifest.json");
+        let file_rel = input["file"].as_str().unwrap_or("manifest.json");
 
         let target_file = validate_path_in_artifact(file_rel, &artifact_dir)?;
         if !target_file.exists() {
@@ -429,7 +452,10 @@ mod tests {
         assert!(res.contains("unit-test-timer"));
 
         let read_tool = ReadArtifactTool::new();
-        let read_res = read_tool.execute(json!({ "id": "unit-test-timer", "file": "index.html" })).await.unwrap();
+        let read_res = read_tool
+            .execute(json!({ "id": "unit-test-timer", "file": "index.html" }))
+            .await
+            .unwrap();
         assert!(read_res.contains("Timer"));
 
         let list_tool = ListArtifactsTool::new();

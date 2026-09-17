@@ -55,6 +55,7 @@ pub fn artifact_list() -> Vec<ArtifactRuntimeState> {
                             .unwrap_or_default();
 
                         let port = manifest.port.unwrap_or(3080);
+                        let autostart = manifest.autostart;
                         items.push(ArtifactRuntimeState {
                             id,
                             manifest,
@@ -62,6 +63,7 @@ pub fn artifact_list() -> Vec<ArtifactRuntimeState> {
                             port: Some(port),
                             url: Some(format!("http://127.0.0.1:{}", port)),
                             path: path.to_string_lossy().to_string(),
+                            autostart,
                         });
                     }
                 }
@@ -136,7 +138,11 @@ pub fn artifact_open(id: String) -> Result<(), String> {
                 port = p;
             }
             let entry = if manifest.entry.is_empty() {
-                if manifest.artifact_type == "node" { "index.js".to_string() } else { "index.html".to_string() }
+                if manifest.artifact_type == "node" {
+                    "index.js".to_string()
+                } else {
+                    "index.html".to_string()
+                }
             } else {
                 manifest.entry
             };
@@ -190,15 +196,29 @@ pub fn artifact_open_folder() -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         let path_str = dir.to_string_lossy().to_string().replace('/', "\\");
-        let _ = silent_command("explorer")
-            .arg(&path_str)
-            .spawn();
+        let _ = silent_command("explorer").arg(&path_str).spawn();
     }
     #[cfg(not(target_os = "windows"))]
     {
         let _ = open::that(&dir);
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn artifact_toggle_autostart(id: String, autostart: bool) -> Result<(), String> {
+    let manifest_path = get_artifacts_dir().join(&id).join("manifest.json");
+    if manifest_path.exists() {
+        let content = fs::read_to_string(&manifest_path).map_err(|e| e.to_string())?;
+        let mut manifest: ArtifactManifest =
+            serde_json::from_str(&content).map_err(|e| e.to_string())?;
+        manifest.autostart = autostart;
+        let json = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
+        fs::write(manifest_path, json).map_err(|e| e.to_string())?;
+        Ok(())
+    } else {
+        Err(format!("Artifact {} not found", id))
+    }
 }
 
 #[tauri::command]
@@ -269,24 +289,35 @@ pub fn start_ollama_service() -> serde_json::Value {
 
 #[tauri::command]
 pub fn ollama_settings_get() -> serde_json::Value {
-    let settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_else(|_| serde_json::json!({}));
-    settings.get("ollama").cloned().unwrap_or_else(|| serde_json::json!({
-        "baseUrl": "http://localhost:11434",
-        "defaultContextLimit": "8k",
-        "defaultTemperature": 0.7,
-        "keepAlive": "5m",
-        "autoStart": true
-    }))
+    let settings = superagent_core_v2::storage::SettingsStore::new()
+        .load_raw()
+        .unwrap_or_else(|_| serde_json::json!({}));
+    settings.get("ollama").cloned().unwrap_or_else(|| {
+        serde_json::json!({
+            "baseUrl": "http://localhost:11434",
+            "defaultContextLimit": "8k",
+            "defaultTemperature": 0.7,
+            "keepAlive": "5m",
+            "autoStart": true
+        })
+    })
 }
 
 #[tauri::command]
-pub fn ollama_settings_save(payload: Option<serde_json::Value>, data: Option<serde_json::Value>) -> Result<(), String> {
+pub fn ollama_settings_save(
+    payload: Option<serde_json::Value>,
+    data: Option<serde_json::Value>,
+) -> Result<(), String> {
     let arg = payload.or(data);
     if let Some(val) = arg {
-        let mut current = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_else(|_| serde_json::json!({}));
+        let mut current = superagent_core_v2::storage::SettingsStore::new()
+            .load_raw()
+            .unwrap_or_else(|_| serde_json::json!({}));
         if let Some(c_obj) = current.as_object_mut() {
             c_obj.insert("ollama".to_string(), val);
-            superagent_core_v2::storage::SettingsStore::new().save_raw(&current).map_err(|e| e.to_string())?;
+            superagent_core_v2::storage::SettingsStore::new()
+                .save_raw(&current)
+                .map_err(|e| e.to_string())?;
         }
     }
     Ok(())
@@ -314,19 +345,25 @@ pub fn write_global_memory(content: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn read_settings_file() -> String {
-    let settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_else(|_| serde_json::json!({}));
+    let settings = superagent_core_v2::storage::SettingsStore::new()
+        .load_raw()
+        .unwrap_or_else(|_| serde_json::json!({}));
     serde_json::to_string_pretty(&settings).unwrap_or_else(|_| "{}".to_string())
 }
 
 #[tauri::command]
 pub fn write_settings_file(content: String) -> Result<(), String> {
     let val: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
-    superagent_core_v2::storage::SettingsStore::new().save_raw(&val).map_err(|e| e.to_string())
+    superagent_core_v2::storage::SettingsStore::new()
+        .save_raw(&val)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn settings_read() -> serde_json::Value {
-    superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_else(|_| serde_json::json!({}))
+    superagent_core_v2::storage::SettingsStore::new()
+        .load_raw()
+        .unwrap_or_else(|_| serde_json::json!({}))
 }
 
 #[tauri::command]
@@ -363,37 +400,79 @@ pub fn settings_write(
         }
     }
 
-    if let Some(v) = theme { patch_map.insert("theme".to_string(), v); }
-    if let Some(v) = general { patch_map.insert("general".to_string(), v); }
-    if let Some(v) = providers { patch_map.insert("providers".to_string(), v); }
-    if let Some(v) = models { patch_map.insert("models".to_string(), v); }
-    if let Some(v) = last_used_model { patch_map.insert("lastUsedModel".to_string(), v); }
-    if let Some(v) = skills { patch_map.insert("skills".to_string(), v); }
-    if let Some(v) = plugins { patch_map.insert("plugins".to_string(), v); }
-    if let Some(v) = mcp { patch_map.insert("mcp".to_string(), v); }
-    if let Some(v) = telegram { patch_map.insert("telegram".to_string(), v); }
-    if let Some(v) = internet_access { patch_map.insert("internetAccess".to_string(), v); }
-    if let Some(v) = web_app { patch_map.insert("webApp".to_string(), v); }
-    if let Some(v) = circle_search.or(circleSearch) { patch_map.insert("circleSearch".to_string(), v); }
-    if let Some(v) = voice { patch_map.insert("voice".to_string(), v); }
-    if let Some(v) = chat_title.or(chatTitle) { patch_map.insert("chatTitle".to_string(), v); }
+    if let Some(v) = theme {
+        patch_map.insert("theme".to_string(), v);
+    }
+    if let Some(v) = general {
+        patch_map.insert("general".to_string(), v);
+    }
+    if let Some(v) = providers {
+        patch_map.insert("providers".to_string(), v);
+    }
+    if let Some(v) = models {
+        patch_map.insert("models".to_string(), v);
+    }
+    if let Some(v) = last_used_model {
+        patch_map.insert("lastUsedModel".to_string(), v);
+    }
+    if let Some(v) = skills {
+        patch_map.insert("skills".to_string(), v);
+    }
+    if let Some(v) = plugins {
+        patch_map.insert("plugins".to_string(), v);
+    }
+    if let Some(v) = mcp {
+        patch_map.insert("mcp".to_string(), v);
+    }
+    if let Some(v) = telegram {
+        patch_map.insert("telegram".to_string(), v);
+    }
+    if let Some(v) = internet_access {
+        patch_map.insert("internetAccess".to_string(), v);
+    }
+    if let Some(v) = web_app {
+        patch_map.insert("webApp".to_string(), v);
+    }
+    if let Some(v) = circle_search.or(circleSearch) {
+        patch_map.insert("circleSearch".to_string(), v);
+    }
+    if let Some(v) = voice {
+        patch_map.insert("voice".to_string(), v);
+    }
+    if let Some(v) = chat_title.or(chatTitle) {
+        patch_map.insert("chatTitle".to_string(), v);
+    }
 
     if patch_map.contains_key("circleSearch") || patch_map.contains_key("voice") {
         use tauri_plugin_global_shortcut::GlobalShortcutExt;
-        let full_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+        let full_settings = superagent_core_v2::storage::SettingsStore::new()
+            .load_raw()
+            .unwrap_or_default();
         let _ = app.global_shortcut().unregister_all();
 
         // 1. Circle to Search shortcut
-        let cs_enabled = patch_map.get("circleSearch")
+        let cs_enabled = patch_map
+            .get("circleSearch")
             .and_then(|cs| cs.get("enabled"))
             .and_then(|v| v.as_bool())
-            .or_else(|| full_settings.get("circleSearch").and_then(|cs| cs.get("enabled")).and_then(|v| v.as_bool()))
+            .or_else(|| {
+                full_settings
+                    .get("circleSearch")
+                    .and_then(|cs| cs.get("enabled"))
+                    .and_then(|v| v.as_bool())
+            })
             .unwrap_or(true);
 
-        let cs_shortcut = patch_map.get("circleSearch")
+        let cs_shortcut = patch_map
+            .get("circleSearch")
             .and_then(|cs| cs.get("shortcut"))
             .and_then(|v| v.as_str())
-            .or_else(|| full_settings.get("circleSearch").and_then(|cs| cs.get("shortcut")).and_then(|v| v.as_str()))
+            .or_else(|| {
+                full_settings
+                    .get("circleSearch")
+                    .and_then(|cs| cs.get("shortcut"))
+                    .and_then(|v| v.as_str())
+            })
             .unwrap_or("CommandOrControl+Shift+S");
 
         if cs_enabled {
@@ -401,16 +480,36 @@ pub fn settings_write(
         }
 
         // 2. Global Voice Dictation shortcut
-        let voice_enabled = patch_map.get("voice")
-            .and_then(|v| v.get("globalVoiceEnabled").or_else(|| v.get("typingEnabled")).or_else(|| v.get("enabled")))
+        let voice_enabled = patch_map
+            .get("voice")
+            .and_then(|v| {
+                v.get("globalVoiceEnabled")
+                    .or_else(|| v.get("typingEnabled"))
+                    .or_else(|| v.get("enabled"))
+            })
             .and_then(|b| b.as_bool())
-            .or_else(|| full_settings.get("voice").and_then(|v| v.get("globalVoiceEnabled").or_else(|| v.get("typingEnabled")).or_else(|| v.get("enabled"))).and_then(|b| b.as_bool()))
+            .or_else(|| {
+                full_settings
+                    .get("voice")
+                    .and_then(|v| {
+                        v.get("globalVoiceEnabled")
+                            .or_else(|| v.get("typingEnabled"))
+                            .or_else(|| v.get("enabled"))
+                    })
+                    .and_then(|b| b.as_bool())
+            })
             .unwrap_or(false);
 
-        let voice_shortcut = patch_map.get("voice")
+        let voice_shortcut = patch_map
+            .get("voice")
             .and_then(|v| v.get("typingShortcut").or_else(|| v.get("shortcut")))
             .and_then(|s| s.as_str())
-            .or_else(|| full_settings.get("voice").and_then(|v| v.get("typingShortcut").or_else(|| v.get("shortcut"))).and_then(|s| s.as_str()))
+            .or_else(|| {
+                full_settings
+                    .get("voice")
+                    .and_then(|v| v.get("typingShortcut").or_else(|| v.get("shortcut")))
+                    .and_then(|s| s.as_str())
+            })
             .unwrap_or("CommandOrControl+Alt+V");
 
         if voice_enabled {
@@ -426,12 +525,17 @@ pub fn settings_write(
     Ok(())
 }
 
-
 #[tauri::command]
 pub fn store_read() -> serde_json::Value {
     let settings_val = settings_read();
-    let providers = settings_val.get("providers").cloned().unwrap_or_else(|| serde_json::json!([]));
-    let models = settings_val.get("models").cloned().unwrap_or_else(|| serde_json::json!([]));
+    let providers = settings_val
+        .get("providers")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!([]));
+    let models = settings_val
+        .get("models")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!([]));
 
     let storage = superagent_core_v2::storage::ChatStorage::new();
     let chats = storage.load_all_stored_chats();
@@ -459,12 +563,20 @@ pub fn store_write(
 
     let full_obj = data.or(content).or(payload);
     if let Some(obj) = full_obj.as_ref().and_then(|v| v.as_object()) {
-        if let Some(p) = obj.get("connectedProviders").or_else(|| obj.get("connected_providers")).or_else(|| obj.get("providers")) {
+        if let Some(p) = obj
+            .get("connectedProviders")
+            .or_else(|| obj.get("connected_providers"))
+            .or_else(|| obj.get("providers"))
+        {
             if p.is_array() {
                 patch.insert("providers".to_string(), p.clone());
             }
         }
-        if let Some(m) = obj.get("modelsCatalog").or_else(|| obj.get("models_catalog")).or_else(|| obj.get("models")) {
+        if let Some(m) = obj
+            .get("modelsCatalog")
+            .or_else(|| obj.get("models_catalog"))
+            .or_else(|| obj.get("models"))
+        {
             if m.is_array() {
                 patch.insert("models".to_string(), m.clone());
             }
@@ -511,13 +623,19 @@ pub fn store_write(
 }
 
 #[tauri::command]
-pub fn chat_steps_read(chat_id: Option<String>, id: Option<String>, payload: Option<serde_json::Value>) -> Vec<serde_json::Value> {
+pub fn chat_steps_read(
+    chat_id: Option<String>,
+    id: Option<String>,
+    payload: Option<serde_json::Value>,
+) -> Vec<serde_json::Value> {
     let target_id = chat_id.or(id).or_else(|| {
         payload.and_then(|p| {
             if let Some(s) = p.as_str() {
                 Some(s.to_string())
             } else {
-                p.get("chatId").and_then(|v| v.as_str()).map(|s| s.to_string())
+                p.get("chatId")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
             }
         })
     });
@@ -575,13 +693,11 @@ pub fn auto_detect_providers() -> Vec<DetectedProvider> {
             provider_type: "custom".to_string(),
             api_key: "".to_string(),
             base_url: "http://localhost:11434".to_string(),
-            models: vec![
-                DetectedModel {
-                    id: "llama3.2".to_string(),
-                    name: "Llama 3.2 (Local)".to_string(),
-                    context_limit: Some("128k".to_string()),
-                }
-            ],
+            models: vec![DetectedModel {
+                id: "llama3.2".to_string(),
+                name: "Llama 3.2 (Local)".to_string(),
+                context_limit: Some("128k".to_string()),
+            }],
         });
     }
 
@@ -681,12 +797,18 @@ pub fn skills_list(_payload: Option<serde_json::Value>) -> Vec<serde_json::Value
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .unwrap_or_else(|_| ".".to_string());
-    let skills_dir = std::path::PathBuf::from(home).join(".superagent").join("skills");
+    let skills_dir = std::path::PathBuf::from(home)
+        .join(".superagent")
+        .join("skills");
     if let Ok(entries) = fs::read_dir(&skills_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let name = path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
                 let desc_file = path.join("SKILL.md");
                 let instructions = fs::read_to_string(&desc_file).unwrap_or_default();
                 skills.push(serde_json::json!({
@@ -703,11 +825,18 @@ pub fn skills_list(_payload: Option<serde_json::Value>) -> Vec<serde_json::Value
 }
 
 #[tauri::command]
-pub fn skills_save(name: String, description: Option<String>, instructions: Option<String>) -> serde_json::Value {
+pub fn skills_save(
+    name: String,
+    description: Option<String>,
+    instructions: Option<String>,
+) -> serde_json::Value {
     let home = std::env::var("USERPROFILE")
         .or_else(|_| std::env::var("HOME"))
         .unwrap_or_else(|_| ".".to_string());
-    let skill_dir = std::path::PathBuf::from(home).join(".superagent").join("skills").join(&name);
+    let skill_dir = std::path::PathBuf::from(home)
+        .join(".superagent")
+        .join("skills")
+        .join(&name);
     let _ = fs::create_dir_all(&skill_dir);
     let content = instructions.unwrap_or_else(|| description.unwrap_or_default());
     let _ = fs::write(skill_dir.join("SKILL.md"), content);
@@ -739,7 +868,11 @@ pub fn check_ollama_port() -> bool {
     use std::net::ToSocketAddrs;
     if let Ok(mut addrs) = "127.0.0.1:11434".to_socket_addrs() {
         if let Some(addr) = addrs.next() {
-            return std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(300)).is_ok();
+            return std::net::TcpStream::connect_timeout(
+                &addr,
+                std::time::Duration::from_millis(300),
+            )
+            .is_ok();
         }
     }
     false
@@ -759,7 +892,11 @@ pub fn search_workspace_files(root: String, query: String) -> Vec<String> {
             for entry in entries.flatten() {
                 let p = entry.path();
                 let name = p.file_name().unwrap_or_default().to_string_lossy();
-                if name.starts_with('.') || name == "node_modules" || name == "target" || name == "dist" {
+                if name.starts_with('.')
+                    || name == "node_modules"
+                    || name == "target"
+                    || name == "dist"
+                {
                     continue;
                 }
                 if p.is_dir() {
@@ -813,7 +950,9 @@ pub fn minimize_window(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn close_window(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {
-        let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+        let saved_settings = superagent_core_v2::storage::SettingsStore::new()
+            .load_raw()
+            .unwrap_or_default();
         let close_to_tray = saved_settings
             .get("general")
             .and_then(|g| g.get("closeToTray"))
@@ -881,7 +1020,10 @@ fn get_partners_dir() -> PathBuf {
 }
 
 fn get_default_lily() -> PartnerManifest {
-    let lily_folder = get_user_data_dir().join("lily").to_string_lossy().to_string();
+    let lily_folder = get_user_data_dir()
+        .join("lily")
+        .to_string_lossy()
+        .to_string();
     let mut reactions = HashMap::new();
     reactions.insert(
         "idle".to_string(),
@@ -959,10 +1101,17 @@ fn is_valid_manifest(manifest: &PartnerManifest) -> bool {
     if manifest.schema != "superagent-partner" {
         return false;
     }
-    if manifest.id.is_empty() || manifest.name.is_empty() || manifest.kind.is_empty() || manifest.description.is_empty() {
+    if manifest.id.is_empty()
+        || manifest.name.is_empty()
+        || manifest.kind.is_empty()
+        || manifest.description.is_empty()
+    {
         return false;
     }
-    manifest.id.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+    manifest
+        .id
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
 }
 
 #[tauri::command]
@@ -983,9 +1132,11 @@ pub fn partner_list() -> Vec<PartnerManifest> {
                     let manifest_path = folder_path.join("partner.json");
                     if manifest_path.exists() {
                         if let Ok(raw) = fs::read_to_string(&manifest_path) {
-                            if let Ok(mut manifest) = serde_json::from_str::<PartnerManifest>(&raw) {
+                            if let Ok(mut manifest) = serde_json::from_str::<PartnerManifest>(&raw)
+                            {
                                 if is_valid_manifest(&manifest) {
-                                    manifest.folder = Some(folder_path.to_string_lossy().to_string());
+                                    manifest.folder =
+                                        Some(folder_path.to_string_lossy().to_string());
                                     out.push(manifest);
                                 }
                             }
@@ -1043,7 +1194,8 @@ pub fn partner_get_active() -> Option<String> {
 
 #[tauri::command]
 pub fn partner_import_json(json: String) -> Result<PartnerManifest, String> {
-    let manifest: PartnerManifest = serde_json::from_str(&json).map_err(|e| format!("Invalid JSON: {}", e))?;
+    let manifest: PartnerManifest =
+        serde_json::from_str(&json).map_err(|e| format!("Invalid JSON: {}", e))?;
     if !is_valid_manifest(&manifest) {
         return Err("Not a valid Partner manifest (needs schema: \"superagent-partner\", valid id, name, kind, description).".to_string());
     }
@@ -1091,12 +1243,10 @@ pub async fn partner_pick_model_folder(app: AppHandle) -> Result<Option<String>,
     use tauri_plugin_dialog::DialogExt;
 
     let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog()
-        .file()
-        .pick_folder(move |folder_path| {
-            let path_str = folder_path.map(|p| p.to_string());
-            let _ = tx.send(path_str);
-        });
+    app.dialog().file().pick_folder(move |folder_path| {
+        let path_str = folder_path.map(|p| p.to_string());
+        let _ = tx.send(path_str);
+    });
 
     rx.await.map_err(|e| e.to_string())
 }
@@ -1109,7 +1259,17 @@ pub fn autostart_enable() -> Result<String, String> {
             let exe_str = current_exe.to_string_lossy().to_string();
             let val = format!("\"{}\" --autostart", exe_str);
             let status = silent_command("reg")
-                .args(["add", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "SuperAgentDesktop", "/t", "REG_SZ", "/d", &val, "/f"])
+                .args([
+                    "add",
+                    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                    "/v",
+                    "SuperAgentDesktop",
+                    "/t",
+                    "REG_SZ",
+                    "/d",
+                    &val,
+                    "/f",
+                ])
                 .status()
                 .map_err(|e| e.to_string())?;
             if status.success() {
@@ -1179,14 +1339,21 @@ pub fn autostart_disable() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
         let _ = silent_command("reg")
-            .args(["delete", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "SuperAgentDesktop", "/f"])
+            .args([
+                "delete",
+                "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                "/v",
+                "SuperAgentDesktop",
+                "/f",
+            ])
             .status();
         return Ok("Autostart disabled for Windows".to_string());
     }
     #[cfg(target_os = "macos")]
     {
         if let Ok(home) = std::env::var("HOME") {
-            let plist_file = std::path::PathBuf::from(&home).join("Library/LaunchAgents/com.opensource.agentapp.desktop.plist");
+            let plist_file = std::path::PathBuf::from(&home)
+                .join("Library/LaunchAgents/com.opensource.agentapp.desktop.plist");
             if plist_file.exists() {
                 let _ = fs::remove_file(plist_file);
             }
@@ -1216,7 +1383,12 @@ pub fn autostart_is_enabled() -> bool {
     #[cfg(target_os = "windows")]
     {
         if let Ok(output) = silent_command("reg")
-            .args(["query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "/v", "SuperAgentDesktop"])
+            .args([
+                "query",
+                "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                "/v",
+                "SuperAgentDesktop",
+            ])
             .output()
         {
             let out_str = String::from_utf8_lossy(&output.stdout);
@@ -1227,7 +1399,8 @@ pub fn autostart_is_enabled() -> bool {
     #[cfg(target_os = "macos")]
     {
         if let Ok(home) = std::env::var("HOME") {
-            let plist_file = std::path::PathBuf::from(&home).join("Library/LaunchAgents/com.opensource.agentapp.desktop.plist");
+            let plist_file = std::path::PathBuf::from(&home)
+                .join("Library/LaunchAgents/com.opensource.agentapp.desktop.plist");
             return plist_file.exists();
         }
         return false;
@@ -1250,11 +1423,17 @@ pub fn autostart_is_enabled() -> bool {
 #[tauri::command]
 pub fn circle_search_get_screen_image() -> Result<String, String> {
     let screens = screenshots::Screen::all().map_err(|e| e.to_string())?;
-    let screen = screens.into_iter().next().ok_or_else(|| "No screens detected".to_string())?;
+    let screen = screens
+        .into_iter()
+        .next()
+        .ok_or_else(|| "No screens detected".to_string())?;
     let image = screen.capture().map_err(|e| e.to_string())?;
     let mut bytes: Vec<u8> = Vec::new();
     image
-        .write_to(&mut Cursor::new(&mut bytes), screenshots::image::ImageOutputFormat::Jpeg(85))
+        .write_to(
+            &mut Cursor::new(&mut bytes),
+            screenshots::image::ImageOutputFormat::Jpeg(85),
+        )
         .map_err(|e| e.to_string())?;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
     Ok(format!("data:image/jpeg;base64,{}", b64))
@@ -1284,7 +1463,10 @@ pub fn circle_search_capture_area(
         None => {
             // Fallback: hide window and capture freshly
             let window = app.get_webview_window("circle_search");
-            let was_visible = window.as_ref().and_then(|w| w.is_visible().ok()).unwrap_or(false);
+            let was_visible = window
+                .as_ref()
+                .and_then(|w| w.is_visible().ok())
+                .unwrap_or(false);
             if was_visible {
                 if let Some(ref w) = window {
                     let _ = w.hide();
@@ -1293,7 +1475,10 @@ pub fn circle_search_capture_area(
             }
 
             let screens = screenshots::Screen::all().map_err(|e| e.to_string())?;
-            let screen = screens.into_iter().next().ok_or_else(|| "No screens detected".to_string())?;
+            let screen = screens
+                .into_iter()
+                .next()
+                .ok_or_else(|| "No screens detected".to_string())?;
             let shot = screen.capture().map_err(|e| e.to_string())?;
 
             if was_visible {
@@ -1310,13 +1495,21 @@ pub fn circle_search_capture_area(
 
     // Map logical client coordinates to exact physical pixel bounds
     let scale_x = if let Some(sw) = screen_width {
-        if sw > 0.0 { img_w as f64 / sw } else { 1.0 }
+        if sw > 0.0 {
+            img_w as f64 / sw
+        } else {
+            1.0
+        }
     } else {
         1.0
     };
 
     let scale_y = if let Some(sh) = screen_height {
-        if sh > 0.0 { img_h as f64 / sh } else { 1.0 }
+        if sh > 0.0 {
+            img_h as f64 / sh
+        } else {
+            1.0
+        }
     } else {
         1.0
     };
@@ -1333,7 +1526,8 @@ pub fn circle_search_capture_area(
             let crop_w = phys_w.min(img_w.saturating_sub(crop_x)).max(1);
             let crop_h = phys_h.min(img_h.saturating_sub(crop_y)).max(1);
 
-            if crop_w > 0 && crop_h > 0 && (crop_x + crop_w <= img_w) && (crop_y + crop_h <= img_h) {
+            if crop_w > 0 && crop_h > 0 && (crop_x + crop_w <= img_w) && (crop_y + crop_h <= img_h)
+            {
                 use screenshots::image::GenericImageView;
                 full_image.view(crop_x, crop_y, crop_w, crop_h).to_image()
             } else {
@@ -1353,22 +1547,20 @@ pub fn circle_search_capture_area(
 
     let mut bytes: Vec<u8> = Vec::new();
     cropped
-        .write_to(&mut Cursor::new(&mut bytes), screenshots::image::ImageOutputFormat::Png)
+        .write_to(
+            &mut Cursor::new(&mut bytes),
+            screenshots::image::ImageOutputFormat::Png,
+        )
         .map_err(|e| e.to_string())?;
     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
     Ok(format!("data:image/png;base64,{}", b64))
 }
 
-
-
 fn spawn_native_circle_search() -> Result<(), String> {
     // 1. Check directory of current executable
     if let Ok(current_exe) = std::env::current_exe() {
         if let Some(parent) = current_exe.parent() {
-            let candidate_names = [
-                "superagent-circle-native.exe",
-                "superagent-circle-native",
-            ];
+            let candidate_names = ["superagent-circle-native.exe", "superagent-circle-native"];
             for name in &candidate_names {
                 let candidate = parent.join(name);
                 if candidate.exists() {
@@ -1409,7 +1601,9 @@ fn spawn_native_circle_search() -> Result<(), String> {
 
 #[tauri::command]
 pub fn circle_search_show(app: AppHandle) -> Result<(), String> {
-    let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+    let saved_settings = superagent_core_v2::storage::SettingsStore::new()
+        .load_raw()
+        .unwrap_or_default();
     let is_enabled = saved_settings
         .get("circleSearch")
         .and_then(|cs| cs.get("enabled"))
@@ -1471,7 +1665,9 @@ pub fn circle_search_hide(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn circle_search_toggle(app: AppHandle) -> Result<(), String> {
-    let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+    let saved_settings = superagent_core_v2::storage::SettingsStore::new()
+        .load_raw()
+        .unwrap_or_default();
     let is_enabled = saved_settings
         .get("circleSearch")
         .and_then(|cs| cs.get("enabled"))
@@ -1554,10 +1750,16 @@ pub fn spawn_native_voice_dictation() -> Result<(), String> {
 
 #[tauri::command]
 pub fn voice_dictation_toggle(_app: AppHandle) -> Result<(), String> {
-    let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+    let saved_settings = superagent_core_v2::storage::SettingsStore::new()
+        .load_raw()
+        .unwrap_or_default();
     let is_enabled = saved_settings
         .get("voice")
-        .and_then(|v| v.get("globalVoiceEnabled").or_else(|| v.get("typingEnabled")).or_else(|| v.get("enabled")))
+        .and_then(|v| {
+            v.get("globalVoiceEnabled")
+                .or_else(|| v.get("typingEnabled"))
+                .or_else(|| v.get("enabled"))
+        })
         .and_then(|e| e.as_bool())
         .unwrap_or(false);
 
@@ -1568,3 +1770,70 @@ pub fn voice_dictation_toggle(_app: AppHandle) -> Result<(), String> {
     spawn_native_voice_dictation()
 }
 
+pub fn spawn_native_artifacts() -> Result<(), String> {
+    // 1. Try sidecar bundled path
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let candidate_names = [
+                "superagent-artifacts-native.exe",
+                "superagent-artifacts-native",
+                "artifacts-native.exe",
+                "artifacts-native",
+            ];
+            for name in &candidate_names {
+                let candidate = parent.join(name);
+                if candidate.exists() {
+                    let _ = silent_command(&candidate)
+                        .spawn()
+                        .map_err(|e| format!("Failed to spawn native artifacts: {}", e))?;
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    // 2. Try workspace target/debug or target/release
+    let dev_candidates = [
+        "target/debug/superagent-artifacts-native.exe",
+        "target/debug/superagent-artifacts-native",
+        "target/release/superagent-artifacts-native.exe",
+        "target/release/superagent-artifacts-native",
+        "../target/debug/superagent-artifacts-native.exe",
+        "../target/debug/superagent-artifacts-native",
+        "../../target/debug/superagent-artifacts-native.exe",
+        "../../target/debug/superagent-artifacts-native",
+    ];
+    for rel in &dev_candidates {
+        let p = std::path::PathBuf::from(rel);
+        if p.exists() {
+            let _ = silent_command(&p)
+                .spawn()
+                .map_err(|e| format!("Failed to spawn dev native artifacts: {}", e))?;
+            return Ok(());
+        }
+    }
+
+    // 3. Fallback: try PATH
+    silent_command("superagent-artifacts-native")
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Native artifacts binary not found: {}", e))
+}
+
+#[tauri::command]
+pub fn artifacts_native_toggle(app: AppHandle) -> Result<(), String> {
+    if spawn_native_artifacts().is_ok() {
+        return Ok(());
+    }
+
+    // Fallback to webview window if native app is unavailable
+    if let Some(window) = app.get_webview_window("artifacts") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+    Ok(())
+}

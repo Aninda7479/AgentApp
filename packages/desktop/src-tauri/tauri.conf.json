@@ -65,7 +65,8 @@
     "createUpdaterArtifacts": true,
     "externalBin": [
       "binaries/circle-native",
-      "binaries/dictation-native"
+      "binaries/dictation-native",
+      "binaries/artifacts-native"
     ],
     "macOS": {
       "infoPlist": "Info.plist"

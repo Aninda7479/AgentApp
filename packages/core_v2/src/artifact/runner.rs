@@ -2,9 +2,8 @@ use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::PathBuf;
 
-
-use std::sync::Arc;
 use anyhow::{anyhow, Result};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::artifact::manifest::{ArtifactManifest, ArtifactRuntimeState};
@@ -49,14 +48,31 @@ impl ArtifactRunner {
                                 .map(|s| s.to_string_lossy().to_string())
                                 .unwrap_or_default();
 
-                            let port = manifest.port.unwrap_or(3080);
+                            let is_running = self
+                                .active_ports
+                                .try_lock()
+                                .map(|m| m.contains_key(&id))
+                                .unwrap_or(false);
+                            let active_port = self
+                                .active_ports
+                                .try_lock()
+                                .ok()
+                                .and_then(|m| m.get(&id).copied());
+                            let port = active_port.or(manifest.port).unwrap_or(3080);
+                            let autostart = manifest.autostart;
+
                             results.push(ArtifactRuntimeState {
                                 id,
                                 manifest,
-                                status: "stopped".to_string(),
+                                status: if is_running {
+                                    "running".to_string()
+                                } else {
+                                    "stopped".to_string()
+                                },
                                 port: Some(port),
                                 url: Some(format!("http://127.0.0.1:{}", port)),
                                 path: path.to_string_lossy().to_string(),
+                                autostart,
                             });
                         }
                     }
@@ -67,7 +83,6 @@ impl ArtifactRunner {
         results
     }
 
-
     /// Starts an artifact runner instance.
     pub async fn start_artifact(&self, id: &str) -> Result<ArtifactRuntimeState> {
         let artifacts = self.scan_artifacts();
@@ -77,12 +92,12 @@ impl ArtifactRunner {
             .ok_or_else(|| anyhow!("Artifact with id '{}' not found", id))?;
 
         let mut port = artifact.port.unwrap_or(3080);
-        
+
         let a_type = artifact.manifest.artifact_type.as_str();
         if a_type == "python" || a_type == "node" {
             let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
             port = listener.local_addr()?.port();
-            
+
             let cmd = if a_type == "python" { "python" } else { "node" };
             let mut child = tokio::process::Command::new(cmd)
                 .kill_on_drop(true)
@@ -93,7 +108,7 @@ impl ArtifactRunner {
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
                 .spawn()?;
-            
+
             if let Some(stdout) = child.stdout.take() {
                 let id_clone = id.to_string();
                 let logs = self.log_buffers.clone();
@@ -128,7 +143,7 @@ impl ArtifactRunner {
                     }
                 });
             }
-            
+
             let mut processes = self.child_processes.lock().await;
             processes.insert(id.to_string(), child);
         }
@@ -188,6 +203,7 @@ impl ArtifactRunner {
                 logo: None,
                 entry: "index.html".to_string(),
                 port: Some(3081),
+                autostart: false,
             };
             let dir = self.create_artifact("demo-app", &demo_manifest)?;
             let index_html = r#"<!DOCTYPE html>
@@ -267,6 +283,40 @@ impl ArtifactRunner {
         }
         vec!["[artifact] Ready".to_string()]
     }
+
+    /// Scans and automatically starts all artifacts that have autostart enabled, or if global autoStartOnLaunch is set.
+    pub async fn autostart_configured(&self) {
+        let artifacts = self.scan_artifacts();
+        let settings = crate::storage::SettingsStore::new()
+            .load_raw()
+            .unwrap_or_default();
+        let global_autostart = settings
+            .get("artifact")
+            .and_then(|a| a.get("autoStartOnLaunch"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        for art in artifacts {
+            if art.manifest.autostart || global_autostart {
+                let _ = self.start_artifact(&art.id).await;
+            }
+        }
+    }
+
+    /// Toggles the autostart property of an artifact manifest.
+    pub fn toggle_autostart(&self, id: &str, autostart: bool) -> Result<()> {
+        let manifest_path = self.storage_dir.join(id).join("manifest.json");
+        if manifest_path.exists() {
+            let content = fs::read_to_string(&manifest_path)?;
+            let mut manifest: ArtifactManifest = serde_json::from_str(&content)?;
+            manifest.autostart = autostart;
+            let json = serde_json::to_string_pretty(&manifest)?;
+            fs::write(manifest_path, json)?;
+            Ok(())
+        } else {
+            Err(anyhow!("Artifact {} manifest not found", id))
+        }
+    }
 }
 
 impl Default for ArtifactRunner {
@@ -293,6 +343,7 @@ mod tests {
             logo: None,
             entry: "index.html".to_string(),
             port: Some(3085),
+            autostart: false,
         };
 
         runner.create_artifact("calc-1", &manifest).unwrap();
@@ -303,6 +354,10 @@ mod tests {
 
         let started = runner.start_artifact("calc-1").await.unwrap();
         assert_eq!(started.status, "running");
+
+        runner.toggle_autostart("calc-1", true).unwrap();
+        let list_updated = runner.scan_artifacts();
+        assert!(list_updated[0].autostart);
 
         runner.stop_artifact("calc-1").await.unwrap();
 

@@ -6,6 +6,7 @@ members = [
     "packages/cli",
     "packages/circle-search-native",
     "packages/dictation-native",
+    "packages/artifacts-native",
 ]
 
 [workspace.dependencies]

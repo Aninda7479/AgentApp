@@ -1,12 +1,12 @@
 pub mod commands;
 
 use commands::*;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Builder, Manager, PhysicalPosition, Position, WebviewWindow, WindowEvent,
 };
-use std::sync::atomic::{AtomicBool, Ordering};
 
 static IS_EXPLICIT_QUIT: AtomicBool = AtomicBool::new(false);
 
@@ -38,6 +38,20 @@ fn position_artifacts_window(window: &WebviewWindow) {
     }
 }
 
+fn open_artifacts_inspector(app: &tauri::AppHandle) {
+    if spawn_native_artifacts().is_err() {
+        if let Some(window) = app.get_webview_window("artifacts") {
+            if window.is_visible().unwrap_or(false) {
+                let _ = window.hide();
+            } else {
+                position_artifacts_window(&window);
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     Builder::default()
@@ -52,7 +66,9 @@ pub fn run() {
                     use tauri_plugin_global_shortcut::ShortcutState;
                     if event.state() == ShortcutState::Pressed {
                         let sc_str = shortcut.to_string();
-                        let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+                        let saved_settings = superagent_core_v2::storage::SettingsStore::new()
+                            .load_raw()
+                            .unwrap_or_default();
 
                         let voice_shortcut = saved_settings
                             .get("voice")
@@ -67,7 +83,11 @@ pub fn run() {
                             .unwrap_or("CommandOrControl+Shift+S");
 
                         if sc_str.eq_ignore_ascii_case(voice_shortcut)
-                            || (voice_shortcut.contains("Alt") && sc_str.contains("Alt") && (sc_str.contains("KeyV") || sc_str.ends_with("+V") || sc_str.ends_with("+v")))
+                            || (voice_shortcut.contains("Alt")
+                                && sc_str.contains("Alt")
+                                && (sc_str.contains("KeyV")
+                                    || sc_str.ends_with("+V")
+                                    || sc_str.ends_with("+v")))
                             || sc_str.contains("KeyV")
                         {
                             let _ = voice_dictation_toggle(app.clone());
@@ -82,7 +102,6 @@ pub fn run() {
                 })
                 .build(),
         )
-
         .on_window_event(|window, event| {
             if window.label() == "artifacts" {
                 if let WindowEvent::Focused(false) = event {
@@ -103,12 +122,22 @@ pub fn run() {
         .setup(|app| {
             let superagent_dir = superagent_core_v2::storage::settings::get_superagent_dir();
             tauri::async_runtime::spawn(async move {
-                let _ = superagent_core_v2::server::start_server(1469, "127.0.0.1", superagent_dir, None).await;
+                let _ = superagent_core_v2::server::start_server(
+                    1469,
+                    "127.0.0.1",
+                    superagent_dir,
+                    None,
+                )
+                .await;
             });
 
             let args: Vec<String> = std::env::args().collect();
             let is_dormant = args.iter().any(|arg| {
-                arg == "--autostart" || arg == "--hidden" || arg == "--minimized" || arg == "--background" || arg == "--dormant"
+                arg == "--autostart"
+                    || arg == "--hidden"
+                    || arg == "--minimized"
+                    || arg == "--background"
+                    || arg == "--dormant"
             });
 
             if let Some(main_window) = app.get_webview_window("main") {
@@ -122,7 +151,8 @@ pub fn run() {
             }
 
             let show_item = MenuItemBuilder::with_id("show", "Show Main App").build(app)?;
-            let artifacts_item = MenuItemBuilder::with_id("artifacts", "Artifacts Inspector").build(app)?;
+            let artifacts_item =
+                MenuItemBuilder::with_id("artifacts", "Artifacts Inspector").build(app)?;
             let quit_item = MenuItemBuilder::with_id("quit", "Quit SuperAgent").build(app)?;
 
             let menu = MenuBuilder::new(app)
@@ -142,11 +172,7 @@ pub fn run() {
                             }
                         }
                         "artifacts" => {
-                            if let Some(window) = app.get_webview_window("artifacts") {
-                                position_artifacts_window(&window);
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
+                            open_artifacts_inspector(app);
                         }
                         "quit" => {
                             IS_EXPLICIT_QUIT.store(true, Ordering::SeqCst);
@@ -162,24 +188,20 @@ pub fn run() {
                         } = event
                         {
                             let app = tray.app_handle();
-                            if let Some(window) = app.get_webview_window("artifacts") {
-                                if window.is_visible().unwrap_or(false) {
-                                    let _ = window.hide();
-                                } else {
-                                    position_artifacts_window(&window);
-                                    let _ = window.show();
-                                    let _ = window.set_focus();
-                                }
-                            }
+                            open_artifacts_inspector(app);
                         }
                     })
                     .build(app);
             } else {
-                eprintln!("[warn] SuperAgent default window icon missing; skipping system tray setup");
+                eprintln!(
+                    "[warn] SuperAgent default window icon missing; skipping system tray setup"
+                );
             }
 
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
-            let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+            let saved_settings = superagent_core_v2::storage::SettingsStore::new()
+                .load_raw()
+                .unwrap_or_default();
             let shortcut_str = saved_settings
                 .get("circleSearch")
                 .and_then(|cs| cs.get("shortcut"))
@@ -204,7 +226,11 @@ pub fn run() {
 
             let voice_enabled = saved_settings
                 .get("voice")
-                .and_then(|v| v.get("globalVoiceEnabled").or_else(|| v.get("typingEnabled")).or_else(|| v.get("enabled")))
+                .and_then(|v| {
+                    v.get("globalVoiceEnabled")
+                        .or_else(|| v.get("typingEnabled"))
+                        .or_else(|| v.get("enabled"))
+                })
                 .and_then(|e| e.as_bool())
                 .unwrap_or(false);
 
@@ -213,7 +239,6 @@ pub fn run() {
             }
 
             Ok(())
-
         })
         .invoke_handler(tauri::generate_handler![
             get_system_info,
@@ -232,6 +257,8 @@ pub fn run() {
             artifact_open,
             artifact_delete,
             artifact_open_folder,
+            artifact_toggle_autostart,
+            artifacts_native_toggle,
             read_text_file,
             write_text_file,
             file_exists,
@@ -283,39 +310,39 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building SuperAgent tauri application")
-        .run(|app_handle, event| {
-            match event {
-                #[cfg(target_os = "macos")]
-                tauri::RunEvent::Reopen { has_visible_windows, .. } => {
-                    if !has_visible_windows {
-                        if let Some(window) = app_handle.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.unminimize();
-                            let _ = window.set_focus();
-                        }
+        .run(|app_handle, event| match event {
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen {
+                has_visible_windows,
+                ..
+            } => {
+                if !has_visible_windows {
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.unminimize();
+                        let _ = window.set_focus();
                     }
                 }
-                tauri::RunEvent::ExitRequested { api, .. } => {
-                    #[cfg(not(target_os = "macos"))]
-                    if !IS_EXPLICIT_QUIT.load(Ordering::SeqCst) {
-                        let saved_settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
-                        let close_to_tray = saved_settings
-                            .get("general")
-                            .and_then(|g| g.get("closeToTray"))
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(true);
-
-                        if close_to_tray {
-                            api.prevent_exit();
-                            if let Some(window) = app_handle.get_webview_window("main") {
-                                let _ = window.hide();
-                            }
-                        }
-                    }
-                }
-                _ => {}
             }
+            tauri::RunEvent::ExitRequested { api, .. } => {
+                if !IS_EXPLICIT_QUIT.load(Ordering::SeqCst) {
+                    let saved_settings = superagent_core_v2::storage::SettingsStore::new()
+                        .load_raw()
+                        .unwrap_or_default();
+                    let close_to_tray = saved_settings
+                        .get("general")
+                        .and_then(|g| g.get("closeToTray"))
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(true);
+
+                    if close_to_tray {
+                        api.prevent_exit();
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.hide();
+                        }
+                    }
+                }
+            }
+            _ => {}
         });
 }
-
-

@@ -15,11 +15,11 @@ pub use spa::*;
 pub use state::*;
 pub use ws::*;
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use parking_lot::Mutex;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -34,7 +34,10 @@ use crate::media::{GeneratePdfTool, GeneratePresentationTool};
 use crate::orchestrator::{Coordinator, PipelineExecutor, SubagentRunner};
 use crate::roster::PersonaStore;
 use crate::storage::{
-    auth::AuthStore, chat_storage::ChatStorage, lock::*, pcb_storage::PcbStorage,
+    auth::AuthStore,
+    chat_storage::ChatStorage,
+    lock::*,
+    pcb_storage::PcbStorage,
     settings::{get_superagent_dir, SettingsStore},
 };
 use crate::tools::{builtin::*, ToolRegistry};
@@ -52,6 +55,10 @@ pub async fn start_server(
     let chat_storage = Arc::new(ChatStorage::new());
     let pcb_storage = Arc::new(PcbStorage::new());
     let artifact_runner = Arc::new(ArtifactRunner::new());
+    let art_runner_boot = artifact_runner.clone();
+    tokio::spawn(async move {
+        art_runner_boot.autostart_configured().await;
+    });
 
     let persona_store = Arc::new(PersonaStore::new(&superagent_dir));
     let coordinator = Arc::new(Coordinator::new(persona_store.clone()));
@@ -123,7 +130,6 @@ pub async fn start_server(
         video_workspace,
     };
 
-
     let app = create_router(state);
 
     let bind_ip: std::net::IpAddr = host.parse().unwrap_or_else(|_| {
@@ -180,7 +186,9 @@ async fn shutdown_signal() {
 
     #[cfg(unix)]
     let terminate = async {
-        if let Ok(mut sig) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+        if let Ok(mut sig) =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
             sig.recv().await;
         }
     };
