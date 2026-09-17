@@ -19,9 +19,11 @@ export interface AgentEvent {
   type: string;
   sessionId: string;
   content?: string;
+  toolCallId?: string;
   toolName?: string;
   toolArgs?: Record<string, unknown>;
   toolResult?: string;
+  isError?: boolean;
   error?: string;
   chatName?: string;
   /** Live context-window usage estimate, set on `type: 'context'` events. */
@@ -152,25 +154,31 @@ export class AgentStreamService {
 
       // ── tool_call: append a "running" tool step to the trajectory ──
       // Guard against duplicate tool_call events (e.g. oc/big-pickle emitting
+      // ── tool_call: append a "running" tool step to the trajectory ──
+      // Guard against duplicate tool_call events (e.g. oc/big-pickle emitting
       // the same tool call hundreds of times in one stream) by skipping if an
       // identical running step is already present in this turn's steps.
       if (agentEvent.type === 'tool_call') {
+        const incomingContent = `${agentEvent.toolName}(${JSON.stringify(agentEvent.toolArgs || {})})`;
         const toolStep: TrajectoryStep = {
-          id: `tool-call-${Date.now()}`,
+          id: agentEvent.toolCallId || `tool-call-${Date.now()}`,
           type: 'tool_call',
           toolName: agentEvent.toolName,
-          content: `${agentEvent.toolName}(${JSON.stringify(agentEvent.toolArgs || {})})`,
+          content: incomingContent,
           status: 'running',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          metadata: { regenerationSeq: bundle.responseSeqRef.current }
+          metadata: {
+            regenerationSeq: bundle.responseSeqRef.current,
+            toolCallId: agentEvent.toolCallId,
+            toolArgs: agentEvent.toolArgs,
+          }
         };
-        const incomingContent = `${agentEvent.toolName}(${JSON.stringify(agentEvent.toolArgs || {})})`;
         StoreService.updateChatSteps(ctx, sessionId, (prev) => {
           const isDuplicate = prev.some(
             (s) =>
               s.type === 'tool_call' &&
-              s.content === incomingContent &&
-              s.metadata?.regenerationSeq === bundle.responseSeqRef.current
+              ((agentEvent.toolCallId && s.metadata?.toolCallId === agentEvent.toolCallId) ||
+                (s.content === incomingContent && s.metadata?.regenerationSeq === bundle.responseSeqRef.current))
           );
           if (isDuplicate) return prev;
           return [...prev, toolStep];
@@ -181,13 +189,31 @@ export class AgentStreamService {
       //    3D-character win, kick off the Partner import ──
       if (agentEvent.type === 'tool_result') {
         StoreService.updateChatSteps(ctx, sessionId, (prev) => {
-          const lastToolCallIdx = [...prev]
-            .reverse()
-            .findIndex((s) => s.type === 'tool_call' && s.status === 'running');
-          if (lastToolCallIdx === -1) return prev;
-          const actualIdx = prev.length - 1 - lastToolCallIdx;
+          const matchIdx = agentEvent.toolCallId
+            ? prev.findIndex((s) => s.type === 'tool_call' && (s.id === agentEvent.toolCallId || s.metadata?.toolCallId === agentEvent.toolCallId))
+            : -1;
+          const targetIdx = matchIdx !== -1
+            ? matchIdx
+            : (() => {
+                const lastToolCallIdx = [...prev]
+                  .reverse()
+                  .findIndex((s) => s.type === 'tool_call' && s.status === 'running');
+                return lastToolCallIdx !== -1 ? prev.length - 1 - lastToolCallIdx : -1;
+              })();
+
+          if (targetIdx === -1) return prev;
           return prev.map((s, i) =>
-            i === actualIdx ? { ...s, status: 'success' as const, content: agentEvent.content || s.content } : s
+            i === targetIdx
+              ? {
+                  ...s,
+                  status: agentEvent.isError ? ('error' as const) : ('success' as const),
+                  content: agentEvent.content || (agentEvent.toolResult ? `${s.toolName || 'tool'}(result: ${TrajectoryService.truncatePreview(agentEvent.toolResult, 60)})` : s.content),
+                  metadata: {
+                    ...s.metadata,
+                    result: agentEvent.toolResult,
+                  }
+                }
+              : s
           );
         });
         bundle.bufferRef.current = '';

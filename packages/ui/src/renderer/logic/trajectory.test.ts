@@ -180,4 +180,106 @@ describe('TrajectoryService', () => {
       expect(result.isThinkingActive).toBe(false);
     });
   });
+
+  describe('categorizeTurnSteps', () => {
+    it('promotes assistant message before tool calls when no post-tool assistant step exists', () => {
+      const steps: TrajectoryStep[] = [
+        {
+          id: 'step-user-1',
+          type: 'user',
+          content: 'whats in memory',
+        },
+        {
+          id: 'stream-assistant-1',
+          type: 'assistant',
+          content: '<think>Checking memory...</think>\n\nHere is what is in memory:\n- file A\n- file B',
+        },
+        {
+          id: 'tool-call-1',
+          type: 'tool_call',
+          toolName: 'list_dir',
+          content: 'list_dir({})',
+          status: 'success',
+        },
+        {
+          id: 'tool-call-2',
+          type: 'tool_call',
+          toolName: 'list_artifacts',
+          content: 'list_artifacts({})',
+          status: 'success',
+        },
+      ];
+
+      const categorized = TrajectoryService.categorizeTurnSteps(steps);
+      // stream-assistant-1 should be promoted to rawAssistantSteps, NOT collapsed into baseThinkingSteps
+      expect(categorized.rawAssistantSteps).toHaveLength(1);
+      expect(categorized.rawAssistantSteps[0].id).toBe('stream-assistant-1');
+      expect(categorized.baseThinkingSteps.map(s => s.id)).toEqual(['tool-call-1', 'tool-call-2']);
+      expect(categorized.toolSteps).toHaveLength(2);
+    });
+
+    it('keeps intermediate assistant message in thinking when a post-tool assistant step exists', () => {
+      const steps: TrajectoryStep[] = [
+        {
+          id: 'step-user-1',
+          type: 'user',
+          content: 'list files',
+        },
+        {
+          id: 'interim-assistant-1',
+          type: 'assistant',
+          content: 'Let me list files for you.',
+        },
+        {
+          id: 'tool-call-1',
+          type: 'tool_call',
+          toolName: 'list_dir',
+          content: 'list_dir({})',
+          status: 'success',
+        },
+        {
+          id: 'final-assistant-2',
+          type: 'assistant',
+          content: 'Here are the files: a.txt, b.txt',
+        },
+      ];
+
+      const categorized = TrajectoryService.categorizeTurnSteps(steps);
+      expect(categorized.rawAssistantSteps).toHaveLength(1);
+      expect(categorized.rawAssistantSteps[0].id).toBe('final-assistant-2');
+      expect(categorized.baseThinkingSteps.map(s => s.id)).toEqual(['interim-assistant-1', 'tool-call-1']);
+    });
+  });
+
+  describe('parseToolDetails for directory and artifact exploration', () => {
+    it('parses list_dir tool with folder icon and action label', () => {
+      const step: TrajectoryStep = {
+        id: '1',
+        type: 'tool_call',
+        toolName: 'list_dir',
+        content: 'list_dir({})',
+        metadata: {
+          toolInput: { DirectoryPath: 'src/components' },
+        },
+      };
+
+      const details = TrajectoryService.parseToolDetails(step);
+      expect(details.actionLabel).toBe('Explored directory');
+      expect(details.icon).toBe('📁');
+      expect(details.targetName).toBe('components');
+    });
+
+    it('parses list_artifacts tool with palette icon and action label', () => {
+      const step: TrajectoryStep = {
+        id: '2',
+        type: 'tool_call',
+        toolName: 'list_artifacts',
+        content: 'list_artifacts({})',
+      };
+
+      const details = TrajectoryService.parseToolDetails(step);
+      expect(details.actionLabel).toBe('Listed artifacts');
+      expect(details.icon).toBe('🎨');
+    });
+  });
 });

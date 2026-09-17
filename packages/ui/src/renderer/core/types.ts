@@ -201,9 +201,11 @@ export interface AgentEvent {
   type: 'start_turn' | 'token' | 'replace_tokens' | 'tool_call' | 'tool_result' | 'thought' | 'done' | 'error' | 'abort' | 'chat-name' | 'context';
   sessionId: string;
   content?: string;
+  toolCallId?: string;
   toolName?: string;
   toolArgs?: Record<string, unknown>;
   toolResult?: string;
+  isError?: boolean;
   error?: string;
   chatName?: string;
   context?: AgentEventContextUsage;

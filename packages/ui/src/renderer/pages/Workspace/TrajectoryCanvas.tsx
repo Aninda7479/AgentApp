@@ -1273,25 +1273,10 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
   onRegenerate,
   initialExpanded = false
 }) => {
-  // Categorize the steps:
-  // Any assistant step that occurs BEFORE the last tool call/result is considered
-  // an intermediate thought/explanation (i.e. "Thought Message"), which will be collapsed.
-  const lastToolIdx = [...steps].reverse().findIndex(s => s.type === 'tool_call' || s.type === 'tool_result');
-  const lastToolAbsoluteIdx = lastToolIdx === -1 ? -1 : steps.length - 1 - lastToolIdx;
-
-  // Interleaved thinking steps (thoughts, tool calls, and intermediate assistant messages)
-  const baseThinkingSteps = steps.filter((s, idx) => {
-    if (s.type === 'thought') return true;
-    if (s.type === 'tool_call' || s.type === 'tool_result') return true;
-    if (s.type === 'assistant' && idx < lastToolAbsoluteIdx) return true;
-    return false;
-  });
-
-  const toolSteps = steps.filter(s => s.type === 'tool_call' || s.type === 'tool_result');
-
-  const rawAssistantSteps = steps.filter((s, idx) => {
-    return s.type === 'assistant' && idx >= lastToolAbsoluteIdx;
-  });
+  // Categorize the steps into thinking (thoughts, tools, pre-tool explanations) and assistant steps.
+  // Uses TrajectoryService.categorizeTurnSteps to ensure substantive assistant messages are never
+  // swallowed into thinking when tool calls are logged late or interleaved.
+  const { baseThinkingSteps, rawAssistantSteps, toolSteps } = TrajectoryService.categorizeTurnSteps(steps);
 
   // Extract model reasoning (<think> tags) out of assistant steps into separate thought steps
   const synthesizedThoughtSteps: TrajectoryStep[] = [];
@@ -1465,28 +1450,33 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
 
       {/* Surface error when a run fails (whether mid-stream with partial steps or before producing any output),
           or surface an explanatory note if the run completed with no assistant output. */}
-      {(lastError || (assistantSteps.length === 0 && !isStreaming)) && (
-        <div className="text-[color:var(--neon-destructive)] bg-[color:var(--neon-destructive)]/10 border border-[color:var(--neon-destructive)]/25 px-4 py-3 rounded-xl text-xs select-none max-w-fit flex flex-col gap-2 mt-1 animate-fade-in font-sans">
-          <div className="flex items-center gap-2 font-semibold">
-            <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-destructive)] animate-pulse" />
-            <span>{lastError ? (assistantSteps.length === 0 ? 'No response for this prompt' : 'Run interrupted by error') : 'No response for this prompt'}</span>
+      {(() => {
+        const hasAssistantResponse = assistantSteps.some((s) => s.content && s.content.trim().length > 0);
+        if (!lastError && (hasAssistantResponse || isStreaming)) return null;
+
+        return (
+          <div className="text-[color:var(--neon-destructive)] bg-[color:var(--neon-destructive)]/10 border border-[color:var(--neon-destructive)]/25 px-4 py-3 rounded-xl text-xs select-none max-w-fit flex flex-col gap-2 mt-1 animate-fade-in font-sans">
+            <div className="flex items-center gap-2 font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-destructive)] animate-pulse" />
+              <span>{lastError ? (hasAssistantResponse ? 'Run interrupted by error' : 'No response for this prompt') : 'No response for this prompt'}</span>
+            </div>
+            {lastError ? (
+              <div className="text-[color:var(--neon-destructive)]/90 leading-relaxed">{lastError}</div>
+            ) : (
+              <div className="text-brand-textMuted">The agent finished without producing a reply. Check the provider connection and try again.</div>
+            )}
+            {onRetryLast && (
+              <button
+                onClick={onRetryLast}
+                className="self-start flex items-center gap-1.5 mt-1 px-3 py-1.5 rounded-lg border border-[color:var(--neon-destructive)]/40 text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/15 transition-colors cursor-pointer text-xs font-semibold"
+              >
+                <RotateCcw size={12} />
+                <span>Retry</span>
+              </button>
+            )}
           </div>
-          {lastError ? (
-            <div className="text-[color:var(--neon-destructive)]/90 leading-relaxed">{lastError}</div>
-          ) : (
-            <div className="text-brand-textMuted">The agent finished without producing a reply. Check the provider connection and try again.</div>
-          )}
-          {onRetryLast && (
-            <button
-              onClick={onRetryLast}
-              className="self-start flex items-center gap-1.5 mt-1 px-3 py-1.5 rounded-lg border border-[color:var(--neon-destructive)]/40 text-[color:var(--neon-destructive)] hover:bg-[color:var(--neon-destructive)]/15 transition-colors cursor-pointer text-xs font-semibold"
-            >
-              <RotateCcw size={12} />
-              <span>Retry</span>
-            </button>
-          )}
-        </div>
-      )}
+        );
+      })()}
 
       {/* File changed summary chip (if tool edits happened) */}
       {changedFilesCount > 0 && !isStreaming && (

@@ -609,14 +609,17 @@ pub async fn handle_agent_channel(
                                                     data_obj["type"] = serde_json::json!("token");
                                                     data_obj["content"] = serde_json::json!(text);
                                                 }
-                                                crate::types::AgentEvent::ToolCall { name, input, .. } => {
+                                                crate::types::AgentEvent::ToolCall { id, name, input } => {
                                                     data_obj["type"] = serde_json::json!("tool_call");
+                                                    data_obj["toolCallId"] = serde_json::json!(id);
                                                     data_obj["toolName"] = serde_json::json!(name);
                                                     data_obj["toolArgs"] = input.clone();
                                                 }
-                                                crate::types::AgentEvent::ToolOutput { output, .. } => {
+                                                crate::types::AgentEvent::ToolOutput { tool_use_id, output, is_error } => {
                                                     data_obj["type"] = serde_json::json!("tool_result");
+                                                    data_obj["toolCallId"] = serde_json::json!(tool_use_id);
                                                     data_obj["toolResult"] = serde_json::json!(output);
+                                                    data_obj["isError"] = serde_json::json!(is_error);
                                                 }
                                                 crate::types::AgentEvent::Error { message } => {
                                                     has_error = true;

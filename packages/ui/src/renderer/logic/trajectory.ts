@@ -302,6 +302,18 @@ export class TrajectoryService {
       };
     }
 
+    // 7. Directory / artifact exploration
+    if (toolName === 'list_dir' || toolName === 'list_files' || toolName === 'list_artifacts') {
+      const dirPath = (input.DirectoryPath || input.directory || input.path || '') as string;
+      const target = dirPath ? dirPath.split(/[/\\]/).pop() || dirPath : '';
+      return {
+        category: 'search',
+        actionLabel: toolName === 'list_artifacts' ? 'Listed artifacts' : 'Explored directory',
+        icon: toolName === 'list_artifacts' ? '🎨' : '📁',
+        targetName: target,
+      };
+    }
+
     // Generic fallback
     const friendlyName = step.toolName ? step.toolName.replace(/_/g, ' ') : 'tool';
     return {
@@ -310,6 +322,51 @@ export class TrajectoryService {
       icon: '⚙️',
       targetName: TrajectoryService.summarizeToolContent(step),
     };
+  }
+
+  /**
+   * Categorizes trajectory steps into thinking steps (thoughts, tool calls, and intermediate
+   * pre-tool thoughts) and final assistant steps to be displayed in chat.
+   *
+   * If all assistant steps occur before the last tool call (e.g. due to streaming buffer
+   * updates or tool calls appended late), any assistant step with substantive non-thinking
+   * content is promoted to the assistant steps so the user's answer is never buried or lost.
+   */
+  static categorizeTurnSteps(steps: TrajectoryStep[]): {
+    baseThinkingSteps: TrajectoryStep[];
+    rawAssistantSteps: TrajectoryStep[];
+    toolSteps: TrajectoryStep[];
+  } {
+    const lastToolIdx = [...steps].reverse().findIndex((s) => s.type === 'tool_call' || s.type === 'tool_result');
+    const lastToolAbsoluteIdx = lastToolIdx === -1 ? -1 : steps.length - 1 - lastToolIdx;
+
+    let rawAssistantSteps = steps.filter((s, idx) => s.type === 'assistant' && idx >= lastToolAbsoluteIdx);
+
+    let promotedAssistantStepId: string | null = null;
+    if (rawAssistantSteps.length === 0) {
+      const candidateAssistantSteps = steps.filter((s) => s.type === 'assistant');
+      if (candidateAssistantSteps.length > 0) {
+        const substantive = [...candidateAssistantSteps].reverse().find((s) => {
+          const parsed = TrajectoryService.parseThinkingContent(s.content);
+          return parsed.mainContent.trim().length > 0;
+        });
+        const chosen = substantive || candidateAssistantSteps[candidateAssistantSteps.length - 1];
+        rawAssistantSteps = [chosen];
+        promotedAssistantStepId = chosen.id;
+      }
+    }
+
+    const baseThinkingSteps = steps.filter((s, idx) => {
+      if (s.id === promotedAssistantStepId) return false;
+      if (s.type === 'thought') return true;
+      if (s.type === 'tool_call' || s.type === 'tool_result') return true;
+      if (s.type === 'assistant' && idx < lastToolAbsoluteIdx) return true;
+      return false;
+    });
+
+    const toolSteps = steps.filter((s) => s.type === 'tool_call' || s.type === 'tool_result');
+
+    return { baseThinkingSteps, rawAssistantSteps, toolSteps };
   }
 
   /**

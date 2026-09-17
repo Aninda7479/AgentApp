@@ -372,6 +372,10 @@ export class AgentOrchestrator {
           break;
 
         case 'tool_call':
+          // Flush any pending tokens prior to tool call and reset turn
+          buffer.flush();
+          buffer.resetTurn();
+
           if (event.toolName) {
             const currentChat = chatStore.getState().chats.find((c) => c.id === chatId);
             const activeModel = buffer.modelName || currentChat?.model || '';
@@ -379,45 +383,63 @@ export class AgentOrchestrator {
               event.toolName,
               `${event.toolName}(${JSON.stringify(event.toolArgs || {})})`,
               'running',
-              undefined,
+              event.toolCallId,
               undefined,
               buffer.responseSeq,
               sandboxMode,
               event.toolArgs,
               activeModel
             );
+            if (event.toolCallId) {
+              toolStep.metadata = { ...toolStep.metadata, toolCallId: event.toolCallId };
+            }
             chatStore.updateSteps(chatId, (prev) => [...prev, toolStep]);
             ChatRepository.persistAll().catch(console.error);
           }
           break;
 
-        case 'tool_result':
-          if (event.toolName && event.toolResult) {
-            const steps = chatStore.getSteps(chatId);
-            const lastToolCall = [...steps]
-              .reverse()
-              .find((s) => s.type === 'tool_call' && s.toolName === event.toolName);
-            const toolArgs = (event.toolArgs || lastToolCall?.metadata?.toolArgs) as Record<string, unknown> | undefined;
-            const currentChat = chatStore.getState().chats.find((c) => c.id === chatId);
-            const activeModel = buffer.modelName || currentChat?.model || '';
+        case 'tool_result': {
+          const toolResult = event.toolResult || '';
+          const isError = Boolean(event.isError);
 
-            const resultStep = StepFactory.toolResultStep(
-              event.toolName,
-              event.toolResult,
-              undefined,
-              undefined,
-              sandboxMode,
-              toolArgs,
-              activeModel
-            );
-            chatStore.updateSteps(chatId, (prev) => [...prev, resultStep]);
-            ChatRepository.persistAll().catch(console.error);
+          // Update matching tool_call status from running to success / error
+          chatStore.updateSteps(chatId, (prev) => {
+            const matchIdx = event.toolCallId
+              ? prev.findIndex((s) => s.type === 'tool_call' && (s.id === event.toolCallId || s.metadata?.toolCallId === event.toolCallId))
+              : -1;
+            const targetIdx = matchIdx !== -1
+              ? matchIdx
+              : (() => {
+                  const lastRunningIdx = [...prev].reverse().findIndex(
+                    (s) => s.type === 'tool_call' && (s.status === 'running' || !s.status)
+                  );
+                  return lastRunningIdx !== -1 ? prev.length - 1 - lastRunningIdx : -1;
+                })();
 
-            if (event.toolName === 'make_3d_character' && event.toolResult) {
-              AgentOrchestrator.import3DCharacter(event.toolResult);
-            }
+            if (targetIdx === -1) return prev;
+
+            const updated = [...prev];
+            const target = updated[targetIdx];
+            updated[targetIdx] = {
+              ...target,
+              status: isError ? 'error' : 'success',
+              metadata: {
+                ...target.metadata,
+                result: toolResult,
+              },
+            };
+            return updated;
+          });
+
+          // Reset turn so post-tool assistant tokens form a clean final response step
+          buffer.resetTurn();
+          ChatRepository.persistAll().catch(console.error);
+
+          if ((event.toolName === 'make_3d_character' || event.toolResult?.includes('make_3d_character')) && event.toolResult) {
+            AgentOrchestrator.import3DCharacter(event.toolResult);
           }
           break;
+        }
 
         case 'context':
           if (event.context) {
