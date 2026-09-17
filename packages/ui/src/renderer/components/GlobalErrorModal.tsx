@@ -100,26 +100,20 @@ ${error.stack || 'No stack trace captured.'}
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in select-text">
-      {/* Outer Card with Glassmorphic gradient backing */}
-      <div className="relative w-full max-w-2xl bg-gradient-to-b from-[#181822]/95 to-[#0b0c11]/98 border border-rose-500/20 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] transition-all duration-300">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 dark:bg-black/70 backdrop-blur-sm animate-fade-in select-text">
+      {/* Outer Card with Soft Elevation backing */}
+      <div className="relative w-full max-w-2xl bg-brand-popover border border-brand-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] transition-all duration-300">
         
-        {/* Top atmospheric visual ring */}
-        <div 
-          className="pointer-events-none absolute -top-32 -left-32 w-96 h-96 rounded-full blur-3xl opacity-20"
-          style={{ background: 'radial-gradient(circle, var(--brand-accent-glow), transparent 75%)' }}
-        />
-
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-8 py-5 border-b border-zinc-800/80 bg-slate-950/40">
+        <div className="flex items-center justify-between px-6 sm:px-8 py-5 border-b border-brand-border bg-brand-card/40">
           <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center shrink-0 shadow-inner">
+            <div className="w-10 h-10 rounded-xl bg-[color:var(--neon-destructive)]/10 border border-[color:var(--neon-destructive)]/20 text-[color:var(--neon-destructive)] flex items-center justify-center shrink-0">
               <AlertOctagon size={20} className="animate-pulse" />
             </div>
             <div>
               <h3 className="font-outfit text-base font-semibold tracking-tight text-brand-textMain flex items-center gap-2">
                 Resilience Guard Notice
-                <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/20 font-normal">
+                <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-[color:var(--neon-destructive)]/10 text-[color:var(--neon-destructive)] border border-[color:var(--neon-destructive)]/20 font-medium">
                   {error.context}
                 </span>
               </h3>
@@ -136,22 +130,22 @@ ${error.stack || 'No stack trace captured.'}
         </div>
 
         {/* Modal Body */}
-        <div className="px-8 py-6 overflow-y-auto space-y-5 flex-1 scrollbar-thin">
+        <div className="px-6 sm:px-8 py-6 overflow-y-auto space-y-5 flex-1 scrollbar-thin">
           
           {/* Diagnostic Raw Message block */}
           <div className="space-y-1.5">
             <span className="text-[10px] font-bold uppercase tracking-wider text-brand-textMuted block">
               Raw Message
             </span>
-            <div className="p-4 rounded-xl border border-rose-900/30 bg-rose-500/[0.02] text-rose-300 font-mono text-xs break-all leading-relaxed shadow-sm">
+            <div className="p-4 rounded-xl border border-[color:var(--neon-destructive)]/25 bg-[color:var(--neon-destructive)]/5 text-[color:var(--neon-destructive)] font-mono text-xs break-all leading-relaxed shadow-sm">
               {error.message}
             </div>
           </div>
 
           {/* Diagnosis & Advice (Troubleshooting Guidance) */}
-          <div className="p-4 rounded-xl border border-brand-border bg-brand-bg/40 space-y-2.5">
+          <div className="p-4 rounded-xl border border-brand-border bg-brand-innerBg space-y-2">
             <div className="flex items-center gap-2 text-xs font-semibold text-brand-textMain">
-              <HelpCircle size={15} className="text-[color:var(--brand-accent)] shrink-0" />
+              <HelpCircle size={15} className="text-brand-accent shrink-0" />
               <span>Diagnosis: {advice.title}</span>
             </div>
             <p className="text-xs text-brand-textMuted leading-relaxed">
@@ -160,17 +154,17 @@ ${error.stack || 'No stack trace captured.'}
           </div>
 
           {/* Copy Report Action block */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-xl border border-brand-border bg-brand-bg/20 gap-3.5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-xl border border-brand-border bg-brand-innerBg gap-3.5">
             <div className="flex items-center gap-2.5 text-xs text-brand-textMuted">
               <Terminal size={14} className="text-brand-textMuted shrink-0" />
               <span>Full diagnostic logs compiled (System details + stack trace).</span>
             </div>
             <button
               onClick={handleCopy}
-              className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all duration-200 cursor-pointer shadow-md ${
+              className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all duration-200 cursor-pointer shadow-sm ${
                 copied
                   ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                  : 'bg-[color:var(--brand-highlight)] hover:bg-[color:var(--brand-highlight-hover)] text-[color:var(--brand-highlight-text)]'
+                  : 'bg-brand-highlight hover:bg-brand-highlightHover text-brand-highlightText'
               }`}
             >
               {copied ? <Check size={14} /> : <Copy size={14} />}
@@ -191,7 +185,7 @@ ${error.stack || 'No stack trace captured.'}
               </button>
 
               {showStack && (
-                <div className="p-4 rounded-xl border border-brand-border bg-brand-inner-bg/60 font-mono text-[10px] text-brand-textMuted overflow-x-auto max-h-48 whitespace-pre-wrap break-all leading-relaxed shadow-inner">
+                <div className="p-4 rounded-xl border border-brand-border bg-brand-innerBg font-mono text-[10px] text-brand-textMuted overflow-x-auto max-h-48 whitespace-pre-wrap break-all leading-relaxed shadow-inner">
                   {error.stack}
                 </div>
               )}
@@ -200,15 +194,15 @@ ${error.stack || 'No stack trace captured.'}
         </div>
 
         {/* Modal Footer */}
-        <div className="flex items-center justify-between px-8 py-4 border-t border-brand-border/60 bg-slate-950/40 text-xs">
+        <div className="flex items-center justify-between px-6 sm:px-8 py-4 border-t border-brand-border bg-brand-card/40 text-xs">
           <div className="flex items-center gap-1.5 text-brand-textMuted">
-            <ShieldAlert size={13} className="text-rose-400" />
+            <ShieldAlert size={14} className="text-[color:var(--neon-destructive)]" />
             <span className="text-[10px] tracking-wide uppercase font-semibold">Resilience Guard Active</span>
           </div>
           <div className="flex items-center gap-2.5">
             <button
               onClick={onClose}
-              className="px-5 py-2 rounded-lg bg-[color:var(--brand-hover-strong)] hover:bg-brand-hover text-brand-textMain text-xs font-semibold transition-all border border-brand-border/80 cursor-pointer"
+              className="px-5 py-2 rounded-lg bg-brand-card hover:bg-brand-hover text-brand-textMain text-xs font-semibold transition-all border border-brand-border cursor-pointer shadow-sm"
             >
               Dismiss
             </button>

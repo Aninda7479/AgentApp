@@ -104,15 +104,15 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
       if (this.props.compact) {
         return (
-          <div className="p-3 my-1 rounded-lg border border-red-500/30 bg-red-500/10 text-xs text-red-300 flex items-center justify-between gap-2 select-none">
+          <div className="p-3 my-1 rounded-xl border border-[color:var(--neon-destructive)]/30 bg-[color:var(--neon-destructive)]/10 text-xs text-[color:var(--neon-destructive)] flex items-center justify-between gap-2 select-none">
             <div className="flex items-center gap-2 min-w-0">
-              <AlertTriangle size={14} className="text-red-400 shrink-0" />
+              <AlertTriangle size={14} className="text-[color:var(--neon-destructive)] shrink-0" />
               <span className="font-medium truncate">{pageName || 'Component'} failed to render</span>
             </div>
             <button
               type="button"
               onClick={this.handleReset}
-              className="shrink-0 px-2 py-1 rounded bg-red-500/20 hover:bg-red-500/30 text-red-200 text-[11px] font-medium transition-colors cursor-pointer"
+              className="shrink-0 px-2.5 py-1 rounded-lg bg-[color:var(--neon-destructive)]/15 hover:bg-[color:var(--neon-destructive)]/25 text-[color:var(--neon-destructive)] text-[11px] font-semibold transition-colors cursor-pointer"
             >
               Retry
             </button>
@@ -121,58 +121,42 @@ export class ErrorBoundary extends React.Component<Props, State> {
       }
 
       return (
-        <div
-          className="min-h-[300px] w-full flex-1 flex flex-col items-center justify-center p-6 text-center select-text"
-          style={{ backgroundColor: '#090a0f', color: '#f4f4f5' }}
-        >
-          <div
-            className="w-full max-w-xl rounded-xl p-6 text-left shadow-2xl border"
-            style={{
-              backgroundColor: '#12131a',
-              borderColor: 'rgba(239, 68, 68, 0.4)',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)'
-            }}
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2.5 rounded-lg bg-red-500/10 text-red-400 shrink-0">
-                <AlertTriangle size={24} className="animate-pulse" />
+        <div className="min-h-[300px] w-full flex-1 flex flex-col items-center justify-center p-6 text-center select-text bg-brand-bg text-brand-textMain">
+          <div className="w-full max-w-xl rounded-2xl p-6 text-left shadow-2xl border border-brand-border bg-brand-card">
+            <div className="flex items-center gap-3.5 mb-3">
+              <div className="p-2.5 rounded-xl bg-[color:var(--neon-destructive)]/10 border border-[color:var(--neon-destructive)]/20 text-[color:var(--neon-destructive)] shrink-0">
+                <AlertTriangle size={22} className="animate-pulse" />
               </div>
               <div>
-                <h2 className="text-base font-semibold text-zinc-100">
+                <h2 className="text-base font-semibold text-brand-textMain">
                   {pageName ? `Error in "${pageName}"` : 'Something went wrong'}
                 </h2>
-                <p className="text-xs text-zinc-400">
+                <p className="text-xs text-brand-textMuted">
                   This component encountered an error and couldn't be displayed.
                 </p>
               </div>
             </div>
 
-            <div
-              className="my-3 p-3 rounded-lg border font-mono text-xs text-red-300 break-words max-h-36 overflow-auto"
-              style={{ backgroundColor: '#090a0f', borderColor: '#27272a' }}
-            >
+            <div className="my-3 p-3.5 rounded-xl border border-[color:var(--neon-destructive)]/25 bg-[color:var(--neon-destructive)]/5 font-mono text-xs text-[color:var(--neon-destructive)] break-words max-h-36 overflow-auto">
               {error?.name ? `${error.name}: ` : ''}{errorMsg}
             </div>
 
             {showDetails && error?.stack && (
               <div className="mb-4">
-                <div className="text-[11px] font-medium text-zinc-400 uppercase tracking-wider mb-1">
+                <div className="text-[11px] font-medium text-brand-textMuted uppercase tracking-wider mb-1">
                   Stack Trace
                 </div>
-                <pre
-                  className="p-3 rounded-lg border font-mono text-[11px] text-zinc-300 overflow-auto max-h-48 whitespace-pre-wrap break-all"
-                  style={{ backgroundColor: '#090a0f', borderColor: '#27272a' }}
-                >
+                <pre className="p-3 rounded-xl border border-brand-border bg-brand-innerBg font-mono text-[11px] text-brand-textMuted overflow-auto max-h-48 whitespace-pre-wrap break-all">
                   {error.stack}
                 </pre>
               </div>
             )}
 
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-800/80">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-brand-border">
               <button
                 type="button"
                 onClick={this.toggleDetails}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer"
               >
                 {showDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 {showDetails ? 'Hide Stack' : 'Show Error Details'}
@@ -182,16 +166,16 @@ export class ErrorBoundary extends React.Component<Props, State> {
                 <button
                   type="button"
                   onClick={this.handleCopyError}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-zinc-700/80 bg-zinc-800/60 text-zinc-200 text-xs font-medium hover:bg-zinc-700/60 transition-all cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-border bg-brand-card text-brand-textMain text-xs font-medium hover:bg-brand-hover transition-all cursor-pointer shadow-sm"
                 >
-                  {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                  {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                   {copied ? 'Copied' : 'Copy Details'}
                 </button>
 
                 <button
                   type="button"
                   onClick={this.handleReset}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-zinc-700/80 bg-zinc-800 text-zinc-100 text-xs font-medium hover:bg-zinc-700 transition-all cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-border bg-brand-card text-brand-textMain text-xs font-medium hover:bg-brand-hover transition-all cursor-pointer shadow-sm"
                 >
                   <RotateCcw size={14} />
                   Try Again
@@ -200,7 +184,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
                 <button
                   type="button"
                   onClick={this.handleReloadPage}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-600/80 text-white text-xs font-medium hover:bg-red-600 transition-all cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[color:var(--neon-destructive)] text-white text-xs font-medium hover:opacity-90 transition-all cursor-pointer shadow-sm"
                 >
                   <RefreshCw size={14} />
                   Reload App
