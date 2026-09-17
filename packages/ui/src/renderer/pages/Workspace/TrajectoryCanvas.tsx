@@ -118,7 +118,7 @@ interface WorkedHeaderProps {
   isThoughtOnly?: boolean;
 }
 
-const WorkedHeader: React.FC<WorkedHeaderProps> = ({
+export const WorkedHeader: React.FC<WorkedHeaderProps> = ({
   duration,
   filesExplored,
   foldersExplored,
@@ -129,10 +129,22 @@ const WorkedHeader: React.FC<WorkedHeaderProps> = ({
   isThoughtOnly = false,
 }) => {
   const [expanded, setExpanded] = useState(isWorking || initialExpanded);
+  const userInteractedRef = useRef(false);
+  const prevWorkingRef = useRef(isWorking);
 
   useEffect(() => {
+    const wasWorking = prevWorkingRef.current;
+    prevWorkingRef.current = isWorking;
+
     if (isWorking) {
-      setExpanded(true);
+      if (!userInteractedRef.current) {
+        setExpanded(true);
+      }
+    } else if (wasWorking && !isWorking) {
+      // Run completed! If user didn't manually toggle this response, auto-collapse adaptively
+      if (!userInteractedRef.current) {
+        setExpanded(false);
+      }
     }
   }, [isWorking]);
 
@@ -141,7 +153,10 @@ const WorkedHeader: React.FC<WorkedHeaderProps> = ({
       {/* "Worked for Xs ˅" or "Thought for Xs ˅" toggle */}
       <button
         type="button"
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => {
+          userInteractedRef.current = true;
+          setExpanded((prev) => !prev);
+        }}
         className="flex items-center gap-1.5 text-brand-textMuted hover:text-brand-textMain text-[13px] font-medium transition-colors w-fit group cursor-pointer"
       >
         {expanded ? (
@@ -318,7 +333,7 @@ interface ToolCallCardProps {
   onActionClick?: (action: string, data: any) => void;
 }
 
-const ToolCallCard: React.FC<ToolCallCardProps> = ({
+export const ToolCallCard: React.FC<ToolCallCardProps> = ({
   step,
   isStreaming = false,
   initialExpanded = false,
@@ -326,6 +341,8 @@ const ToolCallCard: React.FC<ToolCallCardProps> = ({
   onActionClick,
 }) => {
   const [expanded, setExpanded] = useState(initialExpanded);
+  const userInteractedRef = useRef(false);
+  const prevRunningRef = useRef(false);
   const details = TrajectoryService.parseToolDetails(step);
 
   const isSuccess = step.status === 'success';
@@ -333,12 +350,21 @@ const ToolCallCard: React.FC<ToolCallCardProps> = ({
   // Loading circle fix: only active while streaming and status is running and content not yet received
   const isRunning = isStreaming && (step.status === 'running' || (!step.status && !step.content));
 
-  // Auto-expand currently active live tool call
+  // Auto-expand currently active live tool call; auto-collapse on success if not manually toggled
   useEffect(() => {
+    const wasRunning = prevRunningRef.current;
+    prevRunningRef.current = isRunning;
+
     if (isRunning) {
-      setExpanded(true);
+      if (!userInteractedRef.current) {
+        setExpanded(true);
+      }
+    } else if (wasRunning && !isRunning) {
+      if (!userInteractedRef.current && !isError) {
+        setExpanded(false);
+      }
     }
-  }, [isRunning]);
+  }, [isRunning, isError]);
 
   const handleOpenDiff = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -355,7 +381,10 @@ const ToolCallCard: React.FC<ToolCallCardProps> = ({
     <div className="flex flex-col gap-1 w-full text-left font-sans select-none animate-fade-in my-0.5">
       {/* ── Row Item ──── */}
       <div
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => {
+          userInteractedRef.current = true;
+          setExpanded(!expanded);
+        }}
         className="flex items-center justify-between gap-2 px-1.5 py-1 rounded-lg hover:bg-brand-card/50 transition-colors cursor-pointer group w-full"
       >
         <div className="flex items-center gap-2 min-w-0 flex-1 text-[13px] text-brand-textMain leading-snug">
@@ -1045,7 +1074,7 @@ const TurnBlock: React.FC<TurnBlockProps> = ({
             steps={current}
             isLastTurn={isLastTurn}
             streamingStepId={streamingStepId}
-            isStreaming={isStreaming && selected === total - 1}
+            isStreaming={isStreaming && isLastTurn && selected === total - 1}
             onViewDiff={onViewDiff}
             onActionClick={onActionClick}
             lastError={lastError}
