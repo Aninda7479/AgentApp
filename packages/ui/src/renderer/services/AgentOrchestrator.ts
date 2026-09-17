@@ -12,6 +12,7 @@ import { SessionStreamBuffer } from './StreamBuffer';
 import { ProviderRegistry } from './ProviderRegistry';
 import { StepFactory } from './StepFactory';
 import { ChatRepository } from './ChatRepository';
+import { ChatTitleService } from './ChatTitleService';
 import { FormatUtils } from '../util/format';
 import type { ComposerOptions, ComposerAttachment, TrajectoryStep, AgentEvent, StoredChat } from '../core/types';
 
@@ -53,9 +54,11 @@ export class AgentOrchestrator {
         ? chatStore.getState().draftProject
         : (chatStore.getState().activeProject || '');
 
+      const initialTitle = ChatTitleService.generateTitle(trimmedPrompt);
+
       const newChat: StoredChat = {
         id: uniqueChatId,
-        title: proj ? `Chat in ${proj}` : 'Standalone Chat',
+        title: initialTitle,
         project: proj,
         model: defaultModel,
         timestamp: new Date().toISOString(),
@@ -66,6 +69,17 @@ export class AgentOrchestrator {
       chatStore.openPanel(uniqueChatId);
       chatStore.setSteps(uniqueChatId, []);
       targetChatId = uniqueChatId;
+    } else {
+      // If the active chat has a placeholder title, immediately update it from prompt
+      const existing = chatStore.getState().chats.find((c) => c.id === targetChatId);
+      if (existing && ChatTitleService.isPlaceholderTitle(existing.title)) {
+        const initialTitle = ChatTitleService.generateTitle(trimmedPrompt);
+        chatStore.setChats(
+          chatStore.getState().chats.map((c) =>
+            c.id === targetChatId ? { ...c, title: initialTitle } : c
+          )
+        );
+      }
     }
 
     // Check if session is already running — if so, enqueue prompt
@@ -492,6 +506,25 @@ export class AgentOrchestrator {
       buffer.clear();
     }
 
+    // Generate or refine chat title along with first chat response
+    const currentChat = chatStore.getState().chats.find((c) => c.id === chatId);
+    let resolvedTitle = currentChat?.title;
+    const steps = chatStore.getSteps(chatId);
+    const userSteps = steps.filter((s) => s.type === 'user');
+    if (userSteps.length <= 1 && currentChat) {
+      const firstUserStep = userSteps[0];
+      const firstAssistantStep = steps.find((s) => s.type === 'assistant');
+      if (firstUserStep?.content) {
+        resolvedTitle = ChatTitleService.generateTitle(firstUserStep.content, firstAssistantStep?.content);
+      }
+    } else if (currentChat && ChatTitleService.isPlaceholderTitle(currentChat.title)) {
+      const firstUserStep = userSteps[0];
+      const firstAssistantStep = steps.find((s) => s.type === 'assistant');
+      if (firstUserStep?.content) {
+        resolvedTitle = ChatTitleService.generateTitle(firstUserStep.content, firstAssistantStep?.content);
+      }
+    }
+
     sessionStore.markIdle(chatId, error);
     chatStore.setChats(
       chatStore.getState().chats.map((c) =>
@@ -499,6 +532,7 @@ export class AgentOrchestrator {
           ? {
               ...c,
               isRunning: false,
+              title: resolvedTitle || c.title,
               timestamp: new Date().toISOString(),
               lastError: error,
             }

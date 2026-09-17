@@ -46,6 +46,10 @@ async function loadSteps(ctx: AppContext, chatId: string): Promise<TrajectorySte
   if (!ctx.ipc) return [];
   try {
     const steps = (await ctx.ipc.invoke('chat-steps-read', chatId)) as TrajectoryStep[] | undefined;
+    if (steps && Array.isArray(steps) && steps.length > 0) {
+      chatStore.setSteps(chatId, steps);
+      return steps;
+    }
     return steps && Array.isArray(steps) ? steps : [];
   } catch {
     return [];

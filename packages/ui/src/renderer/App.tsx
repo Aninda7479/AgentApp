@@ -231,14 +231,7 @@ export const App: React.FC = () => {
   });
 
   // Trajectory steps (the canvas)
-  const [trajectorySteps, setTrajectorySteps] = useState<TrajectoryStep[]>([
-    {
-      id: 'step-1',
-      type: 'assistant',
-      content: 'SuperAgent initialized. Ready for autonomous software engineering and multimodal AI media generation.',
-      timestamp: 'Just now'
-    }
-  ]);
+  const [trajectorySteps, setTrajectorySteps] = useState<TrajectoryStep[]>([]);
 
   // Navigation history
   const [navigationHistory, setNavigationHistory] = useState<NavigationSnapshot[]>([]);
@@ -418,14 +411,18 @@ export const App: React.FC = () => {
     }
   }, [lastUsedModel]);
 
+  const bootstrappingRef = useRef(bootstrapping);
+  useEffect(() => { bootstrappingRef.current = bootstrapping; }, [bootstrapping]);
+
   // Sync trajectorySteps from React state to Zustand chatStore
   useEffect(() => {
+    if (bootstrapping) return;
     if (activeChatId && activeChatId !== 'draft-chat') {
       if (trajectorySteps.length > 0) {
         chatStore.setSteps(activeChatId, trajectorySteps);
       }
     }
-  }, [activeChatId, trajectorySteps]);
+  }, [activeChatId, trajectorySteps, bootstrapping]);
 
   const activeChatIdRef = useRef(activeChatId);
   useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
@@ -441,6 +438,7 @@ export const App: React.FC = () => {
   const persistDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistStore = useCallback(
     (providers: ProviderConnection[], models: ModelConfig[], currentProjects?: StoredProject[], currentChats?: StoredChat[]) => {
+      if (bootstrappingRef.current) return;
       const resolvedProviders = providers.length > 0 ? providers : (stateRef.current.connectedProviders.length > 0 ? stateRef.current.connectedProviders : providers);
       const resolvedModels = models.length > 0 ? models : (stateRef.current.modelsCatalog.length > 0 ? stateRef.current.modelsCatalog : models);
 
@@ -1375,8 +1373,9 @@ export const App: React.FC = () => {
     };
   }, [triggerToast]);
 
-  // Sync trajectory steps when activeChatId changes (e.g. via routing / back button)
+  // ── Sync steps when switching activeChatId ───────────────────────────────
   useEffect(() => {
+    if (bootstrapping) return;
     if (!activeChatId || activeChatId === 'draft-chat') {
       setTrajectorySteps([]);
       return;
@@ -1413,7 +1412,7 @@ export const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [activeChatId, chats, ipc]);
+  }, [activeChatId, chats, ipc, bootstrapping]);
 
   // ── Sandbox permission prompts (user-in-the-loop) ───────────────────────
   useEffect(() => {

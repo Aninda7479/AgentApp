@@ -509,6 +509,26 @@ impl ChatStorage {
             }
         }
 
+        // Check project folders
+        for dir_name in &["projects", "Projects"] {
+            let projects_dir = self.storage_dir.join(dir_name);
+            if let Ok(entries) = fs::read_dir(&projects_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        let p_steps = path.join("chats").join(clean_id).join("steps.json");
+                        if p_steps.exists() {
+                            if let Ok(content) = fs::read_to_string(&p_steps) {
+                                if let Ok(steps) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
+                                    return steps;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Check chat.json messages fallback
         let meta_candidates = [
             self.storage_dir.join("chats").join(clean_id).join("chat.json"),
