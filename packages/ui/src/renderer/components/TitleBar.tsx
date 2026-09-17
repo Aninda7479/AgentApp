@@ -368,6 +368,18 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           </button>
         ) : null}
 
+        {/* Desktop Sidebar Toggle */}
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className="hidden lg:flex atmo-btn w-7 h-7 items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer shrink-0"
+            title="Toggle Sidebar"
+            aria-label="Toggle Sidebar"
+          >
+            <PanelLeft className="w-4 h-4" />
+          </button>
+        )}
+
         {/* App Logo */}
         <div className="flex items-center text-brand-textMain transition-colors shrink-0">
           <BrandLogo size={20} />
@@ -470,35 +482,34 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           </button>
         )}
 
-        {/* Mobile-only Trajectory actions: Info Drawer & Quick New Chat */}
-        <div className="lg:hidden flex items-center gap-0.5">
-          {activeTab === 'trajectory' && onToggleRightSidebar && (
-            <button
-              onClick={onToggleRightSidebar}
-              className="relative atmo-btn w-7 h-7 flex items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer shrink-0"
-              title="Chat Info & Diffs"
-              aria-label="Chat Info & Diffs"
-            >
-              <Info className="w-4 h-4" />
-              {(modifiedFilesCount || 0) > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-3.5 h-3.5 px-1 rounded-full bg-brand-primary text-[8px] font-bold text-brand-bg flex items-center justify-center leading-none">
-                  {modifiedFilesCount}
-                </span>
-              )}
-            </button>
-          )}
+        {/* Trajectory Right Sidebar Info & Diffs toggle (desktop and mobile) */}
+        {activeTab === 'trajectory' && onToggleRightSidebar && (
+          <button
+            onClick={onToggleRightSidebar}
+            className="relative atmo-btn w-7 h-7 flex items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer shrink-0"
+            title="Chat Info & Diffs"
+            aria-label="Chat Info & Diffs"
+          >
+            <Info className="w-4 h-4" />
+            {(modifiedFilesCount || 0) > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-3.5 h-3.5 px-1 rounded-full bg-brand-primary text-[8px] font-bold text-brand-bg flex items-center justify-center leading-none">
+                {modifiedFilesCount}
+              </span>
+            )}
+          </button>
+        )}
 
-          {onNewChat && (
-            <button
-              onClick={onNewChat}
-              className="atmo-btn w-7 h-7 flex items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer shrink-0"
-              title="New chat"
-              aria-label="New chat"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          )}
-        </div>
+        {/* Mobile-only Quick New Chat */}
+        {onNewChat && (
+          <button
+            onClick={onNewChat}
+            className="lg:hidden atmo-btn w-7 h-7 flex items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer shrink-0"
+            title="New chat"
+            aria-label="New chat"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        )}
 
         {/* Backend Disconnected Warning — only shown when backend core / daemon / server is unreachable */}
         {isBackendDisconnected && (

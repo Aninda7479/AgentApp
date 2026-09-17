@@ -105,6 +105,12 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
     localStorage.setItem('partner_energy', energy.toString());
   }, [energy]);
 
+  // Listen for global right sidebar toggle event (e.g. from TitleBar or shortcuts)
+  useEffect(() => {
+    const handleToggle = () => setIsCollapsed((prev) => !prev);
+    window.addEventListener('toggle-right-sidebar', handleToggle);
+    return () => window.removeEventListener('toggle-right-sidebar', handleToggle);
+  }, []);
 
   // Read stores
   const chats = useChatStore((s) => s.chats);

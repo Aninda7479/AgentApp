@@ -168,11 +168,19 @@ export const App: React.FC = () => {
     const handleToggle = () => setMobileRightOpen((prev) => !prev);
     const handleClose = () => setMobileRightOpen(false);
     window.addEventListener('toggle-mobile-right-sidebar', handleToggle);
+    window.addEventListener('toggle-right-sidebar', handleToggle);
     window.addEventListener('close-mobile-right-sidebar', handleClose);
     return () => {
       window.removeEventListener('toggle-mobile-right-sidebar', handleToggle);
+      window.removeEventListener('toggle-right-sidebar', handleToggle);
       window.removeEventListener('close-mobile-right-sidebar', handleClose);
     };
+  }, []);
+
+  useEffect(() => {
+    const handleOpenCreateProject = () => setIsCreateProjectOpen(true);
+    window.addEventListener('open-create-project-modal', handleOpenCreateProject);
+    return () => window.removeEventListener('open-create-project-modal', handleOpenCreateProject);
   }, []);
 
   const [isBYOKOpen, setIsBYOKOpen] = useState<boolean>(false);
@@ -1649,6 +1657,7 @@ export const App: React.FC = () => {
         modifiedFilesCount={currentModifiedFilesCount}
         onToggleRightSidebar={() => {
           setMobileNavOpen(false);
+          window.dispatchEvent(new CustomEvent('toggle-right-sidebar'));
           window.dispatchEvent(new CustomEvent('toggle-mobile-right-sidebar'));
         }}
       />

@@ -52,3 +52,31 @@ describe('ModelPicker Component', () => {
     expect(html).toContain('rounded-md');
   });
 });
+
+describe('ProjectPicker Component', () => {
+  it('renders compact trigger button with selected project name', async () => {
+    const { ProjectPicker } = await import('./ProjectPicker');
+    const html = renderToStaticMarkup(
+      <ProjectPicker
+        selectedProject="MySuperProject"
+        onSelectProject={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('project-select-btn');
+    expect(html).toContain('MySuperProject');
+  });
+
+  it('renders pill variant trigger button with default fallback label', async () => {
+    const { ProjectPicker } = await import('./ProjectPicker');
+    const html = renderToStaticMarkup(
+      <ProjectPicker
+        variant="pill"
+        onSelectProject={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('project-select-btn');
+    expect(html).toContain('rounded-full');
+  });
+});

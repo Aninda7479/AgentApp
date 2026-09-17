@@ -63,10 +63,14 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({
         <div className="flex items-center gap-1.5 min-w-0 text-[color:var(--brand-text-muted)] text-xs">
           <div className="w-2.5 h-2.5 rounded-full bg-[color:var(--neon-live)] shadow-sm shadow-[color:var(--neon-live)]/50 shrink-0 mr-0.5" />
           <span className="hidden sm:inline hover:text-[color:var(--brand-text-main)] transition-colors">Workspace</span>
-          <ChevronRight size={12} className="hidden sm:inline shrink-0 text-[color:var(--brand-text-muted)] opacity-60" />
-          <span className="px-1.5 py-0.5 sm:px-2 bg-[color:var(--brand-inner-bg)] border border-[color:var(--brand-border)] rounded-md text-[10px] font-medium text-[color:var(--brand-text-main)] truncate max-w-[90px] sm:max-w-[150px]">
-            {displayProject}
-          </span>
+          {displayProject && displayProject !== 'No Project' && (
+            <>
+              <ChevronRight size={12} className="hidden sm:inline shrink-0 text-[color:var(--brand-text-muted)] opacity-60" />
+              <span className="hidden sm:inline text-[color:var(--brand-text-muted)] truncate max-w-[140px]">
+                {displayProject}
+              </span>
+            </>
+          )}
           <ChevronRight size={12} className="shrink-0 text-[color:var(--brand-text-muted)] opacity-60" />
           <span className="font-semibold text-xs sm:text-sm text-[color:var(--brand-text-main)] truncate">
             {chat?.title || 'Active Session'}

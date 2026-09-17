@@ -31,6 +31,7 @@ interface ComposerBarProps {
   onSend: (prompt: string, options: ComposerOptions, attachments: ComposerAttachment[]) => void;
   disabled?: boolean;
   placeholder?: string;
+  initialPrompt?: string;
 }
 
 // Web Speech API types are not in the standard lib; treat as any.
@@ -39,7 +40,12 @@ const SpeechRecognitionCtor: any =
     ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     : undefined;
 
-export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, placeholder = 'Write a message...' }) => {
+export const ComposerBar: React.FC<ComposerBarProps> = ({
+  onSend,
+  disabled,
+  placeholder = 'Write a message...',
+  initialPrompt,
+}) => {
   const [prompt, setPrompt] = useState('');
   const lastUsedModel = useLastUsedModel();
   const [approvalMode, setApprovalMode] = useState<'ask' | 'always' | 'never'>('ask');
@@ -70,6 +76,15 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, plac
     applyMention,
     handleKeyDown: handleMentionKeyDown,
   } = useAgentMentions(prompt, cursorPos);
+
+  useEffect(() => {
+    if (initialPrompt !== undefined && initialPrompt !== prompt) {
+      setPrompt(initialPrompt);
+      if (initialPrompt && textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }
+  }, [initialPrompt]);
 
   useEffect(() => {
     const ipcRenderer = getIpc();
@@ -544,7 +559,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, plac
         {/* Under the text box: Model Select and Permission Mode Level */}
         <div className="flex items-center justify-end gap-2 sm:gap-3 px-2 pt-0.5 text-xs select-none">
           {/* Model Select */}
-            <ModelPicker
+          <ModelPicker
               selectedModel={lastUsedModel}
               onSelectModel={(model) => {
                 providerStore.setLastUsedModel(model);
