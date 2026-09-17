@@ -4,6 +4,7 @@ import { RefreshCw, ChevronDown } from 'lucide-react';
 import { ProvidersService } from '../../logic/providers';
 import { browserSafeFetch } from '../../web-fetch.js';
 import { ProviderLogo } from './ProvidersSettings';
+import { fetchOpenCodeModels } from '../../logic/opencode.js';
 
 // Modality chips are capability categories, not state — keep them monochrome
 // so the only color in the app is reserved for STATE (Monolith rule).
@@ -326,6 +327,8 @@ export const ModelsSettings: React.FC<ModelsSettingsProps> = ({
         } else if (prov.id === 'kimi') {
           const res = await browserSafeFetch(`${url || 'https://api.moonshot.cn/v1'}/models`, { headers: { Authorization: `Bearer ${key}` } });
           if (res.ok) { const d = await res.json(); rawModels = (d.data ?? []).map((m: any) => ({ id: m.id, name: m.id })); }
+        } else if (prov.id === 'opencode') {
+          rawModels = await fetchOpenCodeModels(key, url);
         } else if (prov.id === 'groq') {
           const res = await browserSafeFetch(`${url || 'https://api.groq.com/openai/v1'}/models`, { headers: { Authorization: `Bearer ${key}` } });
           if (res.ok) { const d = await res.json(); rawModels = (d.data ?? []).map((m: any) => ({ id: m.id, name: m.id, contextLimit: m.context_window ? fmtTokens(m.context_window) : undefined })); }

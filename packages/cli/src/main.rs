@@ -74,7 +74,12 @@ async fn main() -> Result<()> {
     }
 
     // 7. startup subcommand
-    if let Some(Commands::Startup { action, desktop, port }) = &cli.command {
+    if let Some(Commands::Startup {
+        action,
+        desktop,
+        port,
+    }) = &cli.command
+    {
         handle_startup(action, *desktop, *port).await?;
         return Ok(());
     }
@@ -93,7 +98,12 @@ async fn main() -> Result<()> {
 
     // 10. --start-web / --serve / --server / serve subcommand daemon mode
     let is_serve_cmd = match &cli.command {
-        Some(Commands::Serve { port, host, ui_dir, no_auth }) => Some((*port, host.clone(), ui_dir.clone(), *no_auth)),
+        Some(Commands::Serve {
+            port,
+            host,
+            ui_dir,
+            no_auth,
+        }) => Some((*port, host.clone(), ui_dir.clone(), *no_auth)),
         _ => None,
     };
 
@@ -101,7 +111,12 @@ async fn main() -> Result<()> {
         let (port, host, custom_ui_dir, no_auth) = if let Some((p, h, u, na)) = is_serve_cmd {
             (p, h, u, na || cli.no_auth)
         } else {
-            (cli.web_port, cli.host.clone(), cli.ui_dir.clone(), cli.no_auth)
+            (
+                cli.web_port,
+                cli.host.clone(),
+                cli.ui_dir.clone(),
+                cli.no_auth,
+            )
         };
 
         if no_auth {
@@ -111,15 +126,25 @@ async fn main() -> Result<()> {
         println!("================================================================");
         println!(
             "🚀 SuperAgent Core v2 Daemon ignited at: http://{}:{}",
-            if host == "0.0.0.0" { "localhost" } else { &host },
+            if host == "0.0.0.0" {
+                "localhost"
+            } else {
+                &host
+            },
             port
         );
         if host == "0.0.0.0" || host == "::" {
             for addr in lan_addresses() {
-                println!("🌐 Network (LAN) URL:              http://{}:{}", addr, port);
+                println!(
+                    "🌐 Network (LAN) URL:              http://{}:{}",
+                    addr, port
+                );
             }
         } else if host != "127.0.0.1" && host != "localhost" {
-            println!("🌐 Network URL:                    http://{}:{}", host, port);
+            println!(
+                "🌐 Network URL:                    http://{}:{}",
+                host, port
+            );
         }
         println!("⚡ Engine: Native Pure Rust Axum + WebSocket Server");
         println!("📂 Workspace: {}", workspace_root.display());
@@ -242,7 +267,10 @@ fn calculate_dir_size(path: &std::path::Path) -> (u64, usize, usize) {
     let mut dir_count: usize = 0;
 
     if path.exists() {
-        for entry in walkdir::WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
+        for entry in walkdir::WalkDir::new(path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             if entry.file_type().is_file() {
                 if let Ok(metadata) = entry.metadata() {
                     total_bytes += metadata.len();
@@ -291,20 +319,39 @@ async fn print_system_status(workspace: &std::path::Path) {
     println!("======================================================");
     println!("              SUPERAGENT SYSTEM STATUS");
     println!("======================================================");
-    println!("CLI Version:         v{} (Pure Rust Engine)", env!("CARGO_PKG_VERSION"));
-    println!("OS Platform:         {} ({})", std::env::consts::OS, std::env::consts::ARCH);
-    println!("Host System:         {} ({} {}, {} CPUs, {}/{} MB RAM)", host_name, os_name, os_ver, cpus, used_mem_mb, total_mem_mb);
+    println!(
+        "CLI Version:         v{} (Pure Rust Engine)",
+        env!("CARGO_PKG_VERSION")
+    );
+    println!(
+        "OS Platform:         {} ({})",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
+    println!(
+        "Host System:         {} ({} {}, {} CPUs, {}/{} MB RAM)",
+        host_name, os_name, os_ver, cpus, used_mem_mb, total_mem_mb
+    );
     println!();
 
     // Global SuperAgent Directory
     println!("Global User Data (~/.superagent):");
     println!("  Location:          {}", sa_dir.display());
-    println!("  Total Size:        {} ({} files, {} directories)", format_bytes(total_bytes), file_count, dir_count);
+    println!(
+        "  Total Size:        {} ({} files, {} directories)",
+        format_bytes(total_bytes),
+        file_count,
+        dir_count
+    );
 
     let chats_dir = sa_dir.join("conversation").join("chats");
     let (chats_bytes, chats_files, _) = calculate_dir_size(&chats_dir);
     if chats_files > 0 {
-        println!("  Conversations:     {} chats ({})", chats_files, format_bytes(chats_bytes));
+        println!(
+            "  Conversations:     {} chats ({})",
+            chats_files,
+            format_bytes(chats_bytes)
+        );
     }
 
     let artifacts_dir = if sa_dir.join("artifacts").exists() {
@@ -326,11 +373,26 @@ async fn print_system_status(workspace: &std::path::Path) {
         if app_count == 0 && artifacts_files > 0 {
             app_count = 1;
         }
-        let app_label = if app_count == 1 { "artifact" } else { "artifacts" };
-        if artifacts_files > app_count {
-            println!("  Artifacts:         {} {} ({} across {} files)", app_count, app_label, format_bytes(artifacts_bytes), artifacts_files);
+        let app_label = if app_count == 1 {
+            "artifact"
         } else {
-            println!("  Artifacts:         {} {} ({})", app_count, app_label, format_bytes(artifacts_bytes));
+            "artifacts"
+        };
+        if artifacts_files > app_count {
+            println!(
+                "  Artifacts:         {} {} ({} across {} files)",
+                app_count,
+                app_label,
+                format_bytes(artifacts_bytes),
+                artifacts_files
+            );
+        } else {
+            println!(
+                "  Artifacts:         {} {} ({})",
+                app_count,
+                app_label,
+                format_bytes(artifacts_bytes)
+            );
         }
     }
 
@@ -387,9 +449,19 @@ async fn print_system_status(workspace: &std::path::Path) {
             true
         })
         .unwrap_or(false);
-    println!("  Permissions:       {}", if is_writable { "Writable" } else { "Read-Only" });
+    println!(
+        "  Permissions:       {}",
+        if is_writable { "Writable" } else { "Read-Only" }
+    );
     let agents_md = workspace.join("AGENTS.md").exists();
-    println!("  AGENTS.md:         {}", if agents_md { "Found" } else { "Not found (run 'superagent init' to create)" });
+    println!(
+        "  AGENTS.md:         {}",
+        if agents_md {
+            "Found"
+        } else {
+            "Not found (run 'superagent init' to create)"
+        }
+    );
     let is_git = workspace.join(".git").exists();
     if is_git {
         println!("  Git Repo:          Initialized");
@@ -401,12 +473,26 @@ async fn print_system_status(workspace: &std::path::Path) {
     let auth_store = superagent_core_v2::storage::auth::AuthStore::new(sa_dir.clone());
     let sessions = auth_store.list_sessions("admin");
     if !sessions.is_empty() {
-        println!("  Total Active:      {} device{}", sessions.len(), if sessions.len() == 1 { "" } else { "s" });
+        println!(
+            "  Total Active:      {} device{}",
+            sessions.len(),
+            if sessions.len() == 1 { "" } else { "s" }
+        );
         for (idx, s) in sessions.iter().enumerate() {
             let ua = s.user_agent.as_deref().unwrap_or("Web Client");
             let ip = s.ip.as_deref().unwrap_or("127.0.0.1");
-            let last_active = if s.last_used.is_empty() { "Active" } else { &s.last_used };
-            println!("  {}. {} ({}) — Last active: {}", idx + 1, ua, ip, last_active);
+            let last_active = if s.last_used.is_empty() {
+                "Active"
+            } else {
+                &s.last_used
+            };
+            println!(
+                "  {}. {} ({}) — Last active: {}",
+                idx + 1,
+                ua,
+                ip,
+                last_active
+            );
         }
     } else {
         println!("  Total Active:      0 devices connected");
@@ -417,8 +503,16 @@ async fn print_system_status(workspace: &std::path::Path) {
     println!("Run on Startup:");
     let autostart_enabled = superagent_core_v2::startup::AutostartManager::is_enabled(
         superagent_core_v2::startup::AutostartTarget::Cli,
-    ).await;
-    println!("  Status:            {}", if autostart_enabled { "ENABLED (Runs --serve on boot)" } else { "DISABLED" });
+    )
+    .await;
+    println!(
+        "  Status:            {}",
+        if autostart_enabled {
+            "ENABLED (Runs --serve on boot)"
+        } else {
+            "DISABLED"
+        }
+    );
     #[cfg(target_os = "windows")]
     println!("  Location:          HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\SuperAgentServe");
     #[cfg(target_os = "linux")]
@@ -434,36 +528,62 @@ async fn print_system_status(workspace: &std::path::Path) {
     let mut connected: Vec<String> = Vec::new();
     let mut default_model: Option<String> = None;
 
-    if std::env::var("OPENAI_API_KEY").map(|k| !k.trim().is_empty()).unwrap_or(false) {
+    if std::env::var("OPENAI_API_KEY")
+        .map(|k| !k.trim().is_empty())
+        .unwrap_or(false)
+    {
         connected.push("OpenAI".to_string());
     }
-    if std::env::var("ANTHROPIC_API_KEY").map(|k| !k.trim().is_empty()).unwrap_or(false) {
+    if std::env::var("ANTHROPIC_API_KEY")
+        .map(|k| !k.trim().is_empty())
+        .unwrap_or(false)
+    {
         connected.push("Anthropic".to_string());
     }
-    if std::env::var("GEMINI_API_KEY").map(|k| !k.trim().is_empty()).unwrap_or(false) {
+    if std::env::var("GEMINI_API_KEY")
+        .map(|k| !k.trim().is_empty())
+        .unwrap_or(false)
+    {
         connected.push("Gemini".to_string());
     }
-    if std::env::var("DEEPSEEK_API_KEY").map(|k| !k.trim().is_empty()).unwrap_or(false) {
+    if std::env::var("DEEPSEEK_API_KEY")
+        .map(|k| !k.trim().is_empty())
+        .unwrap_or(false)
+    {
         connected.push("DeepSeek".to_string());
     }
-    if std::env::var("GROQ_API_KEY").map(|k| !k.trim().is_empty()).unwrap_or(false) {
+    if std::env::var("GROQ_API_KEY")
+        .map(|k| !k.trim().is_empty())
+        .unwrap_or(false)
+    {
         connected.push("Groq".to_string());
     }
-    if std::env::var("OPENROUTER_API_KEY").map(|k| !k.trim().is_empty()).unwrap_or(false) {
+    if std::env::var("OPENROUTER_API_KEY")
+        .map(|k| !k.trim().is_empty())
+        .unwrap_or(false)
+    {
         connected.push("OpenRouter".to_string());
     }
 
     if let Ok(settings_raw) = settings_store.load_raw() {
         if let Some(providers_arr) = settings_raw.get("providers").and_then(|v| v.as_array()) {
             for p in providers_arr {
-                if let Some(name) = p.get("name").or_else(|| p.get("id")).and_then(|v| v.as_str()) {
+                if let Some(name) = p
+                    .get("name")
+                    .or_else(|| p.get("id"))
+                    .and_then(|v| v.as_str())
+                {
                     if !connected.iter().any(|c| c.eq_ignore_ascii_case(name)) {
                         connected.push(name.to_string());
                     }
                 }
             }
         }
-        if let Some(model_str) = settings_raw.get("lastUsedModel").and_then(|m| m.get("model")).and_then(|v| v.as_str()) {
+        if let Some(model_str) = settings_raw
+            .get("lastUsedModel")
+            .and_then(|m| m.get("model"))
+            .and_then(|v| v.as_str())
+        {
             default_model = Some(model_str.to_string());
         }
     }
@@ -483,22 +603,37 @@ fn handle_doctor(workspace: &std::path::Path) {
     println!("================================================================");
     println!("SuperAgent Doctor Diagnostics");
     println!("================================================================");
-    println!("✓ CLI Version:        v{} (Pure Native Rust Engine)", env!("CARGO_PKG_VERSION"));
+    println!(
+        "✓ CLI Version:        v{} (Pure Native Rust Engine)",
+        env!("CARGO_PKG_VERSION")
+    );
     println!("✓ Workspace:          {} (Writable)", workspace.display());
 
     let sa_dir = get_superagent_dir();
     let (sa_bytes, sa_files, _) = calculate_dir_size(&sa_dir);
-    println!("✓ Global Config Dir:  {} ({} across {} files)", sa_dir.display(), format_bytes(sa_bytes), sa_files);
+    println!(
+        "✓ Global Config Dir:  {} ({} across {} files)",
+        sa_dir.display(),
+        format_bytes(sa_bytes),
+        sa_files
+    );
 
     let settings_store = superagent_core_v2::storage::SettingsStore::new();
     if let Ok(raw) = settings_store.load_raw() {
-        let count = raw.get("providers").and_then(|p| p.as_array()).map(|a| a.len()).unwrap_or(0);
+        let count = raw
+            .get("providers")
+            .and_then(|p| p.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0);
         println!("✓ Saved AI Providers: {} configured", count);
     }
 
     if let Some(lock) = read_web_server_lock() {
         if is_lock_alive(&lock) {
-            println!("✓ Web Server:         RUNNING on http://{}:{} (PID {})", lock.host, lock.port, lock.pid);
+            println!(
+                "✓ Web Server:         RUNNING on http://{}:{} (PID {})",
+                lock.host, lock.port, lock.pid
+            );
         } else {
             clear_web_server_lock();
             println!("✓ Web Server:         Stopped (Stale lock cleaned)");
@@ -514,7 +649,10 @@ fn handle_doctor(workspace: &std::path::Path) {
 fn handle_init(workspace: &std::path::Path) -> Result<()> {
     let agents_path = workspace.join("AGENTS.md");
     if agents_path.exists() {
-        println!("`AGENTS.md` already exists in workspace ({}).", agents_path.display());
+        println!(
+            "`AGENTS.md` already exists in workspace ({}).",
+            agents_path.display()
+        );
         return Ok(());
     }
     let template = r#"# Agent Instructions for this Workspace
@@ -528,7 +666,10 @@ This workspace uses SuperAgent for autonomous development and automation tasks.
 - Keep modifications clean, minimal, and well-documented.
 "#;
     std::fs::write(&agents_path, template)?;
-    println!("✓ Successfully initialized `AGENTS.md` in {}.", workspace.display());
+    println!(
+        "✓ Successfully initialized `AGENTS.md` in {}.",
+        workspace.display()
+    );
     Ok(())
 }
 
@@ -544,20 +685,32 @@ async fn handle_update(check_only: bool) -> Result<()> {
     let latest_version = match fetch_latest_release_version(&client).await {
         Ok(v) => v,
         Err(e) => {
-            println!("SuperAgent  current: v{}   (offline or check failed: {})", current_version, e);
+            println!(
+                "SuperAgent  current: v{}   (offline or check failed: {})",
+                current_version, e
+            );
             println!("Release page: https://github.com/Aninda7479/AgentApp/releases/latest");
             return Ok(());
         }
     };
 
-    println!("SuperAgent  current: v{}   latest: v{}", current_version, latest_version);
+    println!(
+        "SuperAgent  current: v{}   latest: v{}",
+        current_version, latest_version
+    );
 
     if compare_semver(current_version, &latest_version) >= 0 {
-        println!("\n[update] SuperAgent is already up to date (v{}).", current_version);
+        println!(
+            "\n[update] SuperAgent is already up to date (v{}).",
+            current_version
+        );
         return Ok(());
     }
 
-    let release_url = format!("https://github.com/Aninda7479/AgentApp/releases/tag/v{}", latest_version);
+    let release_url = format!(
+        "https://github.com/Aninda7479/AgentApp/releases/tag/v{}",
+        latest_version
+    );
 
     if check_only {
         println!("\n[update] New version available: v{}", latest_version);
@@ -573,11 +726,19 @@ async fn handle_update(check_only: bool) -> Result<()> {
     let is_win = cfg!(target_os = "windows");
     let mut cmd = if is_win {
         let mut c = std::process::Command::new("powershell.exe");
-        c.args(["-ExecutionPolicy", "Bypass", "-Command", "irm https://aninda7479.github.io/AgentApp/install.ps1 | iex"]);
+        c.args([
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "irm https://aninda7479.github.io/AgentApp/install.ps1 | iex",
+        ]);
         c
     } else {
         let mut c = std::process::Command::new("sh");
-        c.args(["-c", "curl -fsSL https://aninda7479.github.io/AgentApp/install.sh | sh"]);
+        c.args([
+            "-c",
+            "curl -fsSL https://aninda7479.github.io/AgentApp/install.sh | sh",
+        ]);
         c
     };
 
@@ -588,7 +749,10 @@ async fn handle_update(check_only: bool) -> Result<()> {
 
     match cmd.status() {
         Ok(status) if status.success() => {
-            println!("\n[update] SuperAgent successfully updated to v{}!", latest_version);
+            println!(
+                "\n[update] SuperAgent successfully updated to v{}!",
+                latest_version
+            );
         }
         _ => {
             println!("\n[update] Automatic installer failed or requires manual installation.");
@@ -640,7 +804,11 @@ async fn fetch_latest_release_version(client: &reqwest::Client) -> Result<String
 fn compare_semver(a: &str, b: &str) -> i32 {
     let parse = |s: &str| -> Vec<u64> {
         s.split('.')
-            .map(|part| part.chars().take_while(|c| c.is_ascii_digit()).collect::<String>())
+            .map(|part| {
+                part.chars()
+                    .take_while(|c| c.is_ascii_digit())
+                    .collect::<String>()
+            })
             .filter_map(|p| p.parse().ok())
             .collect()
     };
@@ -749,6 +917,7 @@ async fn run_one_shot(
         "openrouter" => ProviderType::OpenRouter,
         "deepseek" => ProviderType::DeepSeek,
         "groq" => ProviderType::Groq,
+        "opencode" => ProviderType::OpenCode,
         _ => ProviderType::OpenAI,
     };
 
@@ -758,19 +927,23 @@ async fn run_one_shot(
             ProviderType::Anthropic => "claude-3-5-sonnet-20241022".to_string(),
             ProviderType::Gemini => "gemini-2.0-flash".to_string(),
             ProviderType::Ollama => "llama3".to_string(),
+            ProviderType::OpenCode => "big-pickle".to_string(),
             _ => "gpt-4o".to_string(),
         });
 
     let mut model_config = ModelConfig::new(provider, model_id);
-    model_config.api_key = api_key_str.map(String::from).or_else(|| match model_config.provider {
-        ProviderType::OpenAI => std::env::var("OPENAI_API_KEY").ok(),
-        ProviderType::Anthropic => std::env::var("ANTHROPIC_API_KEY").ok(),
-        ProviderType::Gemini => std::env::var("GEMINI_API_KEY").ok(),
-        ProviderType::OpenRouter => std::env::var("OPENROUTER_API_KEY").ok(),
-        ProviderType::DeepSeek => std::env::var("DEEPSEEK_API_KEY").ok(),
-        ProviderType::Groq => std::env::var("GROQ_API_KEY").ok(),
-        _ => None,
-    });
+    model_config.api_key = api_key_str
+        .map(String::from)
+        .or_else(|| match model_config.provider {
+            ProviderType::OpenAI => std::env::var("OPENAI_API_KEY").ok(),
+            ProviderType::Anthropic => std::env::var("ANTHROPIC_API_KEY").ok(),
+            ProviderType::Gemini => std::env::var("GEMINI_API_KEY").ok(),
+            ProviderType::OpenRouter => std::env::var("OPENROUTER_API_KEY").ok(),
+            ProviderType::DeepSeek => std::env::var("DEEPSEEK_API_KEY").ok(),
+            ProviderType::Groq => std::env::var("GROQ_API_KEY").ok(),
+            ProviderType::OpenCode => std::env::var("OPENCODE_API_KEY").ok(),
+            _ => None,
+        });
     model_config.base_url = base_url_str.map(String::from);
 
     let mut registry = ToolRegistry::new();
@@ -804,8 +977,15 @@ async fn run_one_shot(
                 let _ = writeln!(err_handle, "\n[Tool Call] {}: {}", name, input);
                 let _ = err_handle.flush();
             }
-            superagent_core_v2::types::AgentEvent::ToolOutput { output, is_error, .. } => {
-                let _ = writeln!(err_handle, "[Tool Output{}] {}", if is_error { " (Error)" } else { "" }, output);
+            superagent_core_v2::types::AgentEvent::ToolOutput {
+                output, is_error, ..
+            } => {
+                let _ = writeln!(
+                    err_handle,
+                    "[Tool Output{}] {}",
+                    if is_error { " (Error)" } else { "" },
+                    output
+                );
                 let _ = err_handle.flush();
             }
             superagent_core_v2::types::AgentEvent::Error { message } => {

@@ -10,6 +10,7 @@ pub enum ProviderType {
     OpenRouter,
     DeepSeek,
     Groq,
+    OpenCode,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -60,6 +61,7 @@ impl ModelConfig {
             ProviderType::OpenRouter => "https://openrouter.ai/api/v1".to_string(),
             ProviderType::DeepSeek => "https://api.deepseek.com/v1".to_string(),
             ProviderType::Groq => "https://api.groq.com/openai/v1".to_string(),
+            ProviderType::OpenCode => "https://opencode.ai/zen/v1".to_string(),
         }
     }
 }
@@ -89,9 +91,15 @@ mod tests {
     #[test]
     fn test_gemini_base_url_normalization() {
         let mut cfg = ModelConfig::new(ProviderType::Gemini, "gemini-1.5-pro");
-        assert_eq!(cfg.get_base_url(), "https://generativelanguage.googleapis.com/v1beta");
+        assert_eq!(
+            cfg.get_base_url(),
+            "https://generativelanguage.googleapis.com/v1beta"
+        );
 
         cfg.base_url = Some("https://generativelanguage.googleapis.com".to_string());
-        assert_eq!(cfg.get_base_url(), "https://generativelanguage.googleapis.com/v1beta");
+        assert_eq!(
+            cfg.get_base_url(),
+            "https://generativelanguage.googleapis.com/v1beta"
+        );
     }
 }

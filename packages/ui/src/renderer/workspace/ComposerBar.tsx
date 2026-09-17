@@ -579,7 +579,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, plac
               {isPermissionOpen && (
                 <div
                   data-testid="approval-dropdown-menu"
-                  className="absolute bottom-full right-0 mb-2 w-72 bg-[#1f2024]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100"
+                  className="absolute bottom-full right-0 mb-2 w-72 max-w-[calc(100vw-1.5rem)] bg-[#1f2024]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100"
                 >
                   <div className="px-2.5 py-1.5 text-[10px] font-mono text-neutral-500 uppercase tracking-wider">
                     Permission Level

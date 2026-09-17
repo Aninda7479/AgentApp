@@ -250,7 +250,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return (
       <button
         data-testid={`nav-item-${id}`}
-        onClick={() => onSelectTab(id)}
+        onClick={() => {
+          onSelectTab(id);
+          onMobileClose?.();
+        }}
         title={locked ? `${label} is off — open Settings to enable it` : undefined}
         className={`relative w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2 rounded-lg transition-all duration-200 text-sm font-medium mb-0.5 select-none cursor-pointer ${isActive
             ? 'text-brand-textMain bg-[color:var(--brand-hover)] border border-brand-border/40 shadow-sm'
@@ -300,7 +303,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="mb-4 space-y-0.5">
           <button
             data-testid="nav-new-chat"
-            onClick={() => onNewChat && onNewChat()}
+            onClick={() => {
+              if (onNewChat) onNewChat();
+              onMobileClose?.();
+            }}
             className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-xl text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all duration-200 text-sm font-semibold mb-1 select-none cursor-pointer`}
           >
             <Plus className="w-4 h-4 flex-shrink-0 text-brand-highlight-text" />
@@ -309,7 +315,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             data-testid="nav-search"
-            onClick={onOpenSearch}
+            onClick={() => {
+              if (onOpenSearch) onOpenSearch();
+              onMobileClose?.();
+            }}
             className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2 rounded-lg text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all duration-200 text-sm font-medium mb-0.5 select-none cursor-pointer`}
           >
             <Search className="w-4 h-4 flex-shrink-0" />
@@ -375,6 +384,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         onClick={() => {
                           if (onSelectProject) onSelectProject(proj.name);
                           onSelectTab('trajectory');
+                          onMobileClose?.();
                         }}
                         className="flex items-center gap-2 flex-1 overflow-hidden"
                       >
@@ -389,6 +399,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           onClick={(e) => {
                             e.stopPropagation();
                             if (onNewChatInProject) onNewChatInProject(proj.name);
+                            onMobileClose?.();
                           }}
                           className="w-6 h-6 flex items-center justify-center rounded hover:bg-[color:var(--brand-hover-strong)] text-brand-textMuted hover:text-brand-textMain transition-colors"
                           title={`New chat in ${proj.name}`}
@@ -475,6 +486,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                   onClick={() => {
                                     if (onSelectChat) onSelectChat(chat.id);
                                     onSelectTab('trajectory');
+                                    onMobileClose?.();
                                   }}
                                   className={`group relative flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-[12px] transition-all duration-150 cursor-pointer select-none ${
                                     isChatSelected
@@ -631,6 +643,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           onClick={() => {
                             if (onSelectChat) onSelectChat(chat.id);
                             onSelectTab('trajectory');
+                            onMobileClose?.();
                           }}
                         >
                           {isSelected && (

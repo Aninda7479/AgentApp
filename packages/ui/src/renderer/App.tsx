@@ -1657,7 +1657,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        <main id="main-content" tabIndex={-1} className={`flex-1 flex flex-col min-h-0 relative isolate overflow-hidden workspace-canvas ${activeTab === 'pcb' || activeTab === 'image' || activeTab === 'video' ? 'm-0 rounded-none p-0' : 'm-1 rounded-xl pb-18 md:pb-0'} focus:outline-none`}>
+        <main id="main-content" tabIndex={-1} className={`flex-1 flex flex-col min-h-0 relative isolate overflow-hidden workspace-canvas ${activeTab === 'pcb' || activeTab === 'image' || activeTab === 'video' ? 'm-0 rounded-none p-0' : 'm-0 sm:m-1 rounded-none sm:rounded-xl pb-18 md:pb-0'} focus:outline-none`}>
 
           {/* Ambient "layered atmosphere" backdrop — a soft accent glow and three
               calm depth bands, painted behind all content (Atmosphere mode, low

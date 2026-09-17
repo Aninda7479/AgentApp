@@ -11,10 +11,24 @@ pub async fn handle_circle_search_channel(
 ) -> Option<Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)>> {
     match ch {
         "circle-search-analyze" => {
-            let arg = args.first().cloned().unwrap_or_else(|| serde_json::json!({}));
-            let prompt = arg.get("prompt").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-            let image_opt = arg.get("image").and_then(|v| v.as_str()).map(|s| s.to_string());
-            let mode = arg.get("mode").and_then(|v| v.as_str()).unwrap_or("general");
+            let arg = args
+                .first()
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            let prompt = arg
+                .get("prompt")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            let image_opt = arg
+                .get("image")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let mode = arg
+                .get("mode")
+                .and_then(|v| v.as_str())
+                .unwrap_or("general");
 
             let mut content_blocks = Vec::new();
             if let Some(ref img_b64) = image_opt {
@@ -62,8 +76,14 @@ pub async fn handle_circle_search_channel(
                 ChatMessage::new(Role::User, content_blocks),
             ];
 
-            let raw_settings = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
-            let circle_settings = raw_settings.get("circleSearch").cloned().unwrap_or_else(|| serde_json::json!({}));
+            let raw_settings = state
+                .settings_store
+                .load_raw()
+                .unwrap_or_else(|_| serde_json::json!({}));
+            let circle_settings = raw_settings
+                .get("circleSearch")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
 
             let query_provider = arg.get("provider").and_then(|v| v.as_str());
             let query_model = arg.get("model").and_then(|v| v.as_str());
@@ -87,9 +107,16 @@ pub async fn handle_circle_search_channel(
                 let lower_m = cfg_model.to_lowercase();
                 if lower_m.contains("gemini") || lower_m.contains("google") {
                     resolved_provider_str = "gemini".to_string();
-                } else if lower_m.contains("gpt") || lower_m.contains("o1") || lower_m.contains("o3") {
+                } else if lower_m.contains("gpt")
+                    || lower_m.contains("o1")
+                    || lower_m.contains("o3")
+                {
                     resolved_provider_str = "openai".to_string();
-                } else if lower_m.contains("claude") || lower_m.contains("sonnet") || lower_m.contains("haiku") || lower_m.contains("opus") {
+                } else if lower_m.contains("claude")
+                    || lower_m.contains("sonnet")
+                    || lower_m.contains("haiku")
+                    || lower_m.contains("opus")
+                {
                     resolved_provider_str = "anthropic".to_string();
                 } else if lower_m.contains("deepseek") {
                     resolved_provider_str = "deepseek".to_string();
@@ -103,12 +130,21 @@ pub async fn handle_circle_search_channel(
 
             if let Some(providers_list) = raw_settings.get("providers").and_then(|p| p.as_array()) {
                 if let Some(found_prov) = providers_list.iter().find(|p| {
-                    let id = p.get("id").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
-                    let name = p.get("name").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+                    let id = p
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_lowercase();
+                    let name = p
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_lowercase();
                     let target = resolved_provider_str.to_lowercase();
                     id == target
                         || name == target
-                        || (target == "gemini" && (id == "google" || name == "google" || id == "google-ai"))
+                        || (target == "gemini"
+                            && (id == "google" || name == "google" || id == "google-ai"))
                         || (target == "google" && (id == "gemini" || name == "gemini"))
                         || (target == "anthropic" && (id == "claude" || name == "claude"))
                 }) {
@@ -131,13 +167,19 @@ pub async fn handle_circle_search_channel(
                         api_key = Some(k.trim().to_string());
                     }
                 }
-                if api_key.is_none() && (resolved_provider_str == "gemini" || resolved_provider_str == "google") {
+                if api_key.is_none()
+                    && (resolved_provider_str == "gemini" || resolved_provider_str == "google")
+                {
                     if let Ok(Some(k)) = state.settings_store.get_api_key("gemini") {
-                        if !k.trim().is_empty() { api_key = Some(k.trim().to_string()); }
+                        if !k.trim().is_empty() {
+                            api_key = Some(k.trim().to_string());
+                        }
                     }
                     if api_key.is_none() {
                         if let Ok(Some(k)) = state.settings_store.get_api_key("google") {
-                            if !k.trim().is_empty() { api_key = Some(k.trim().to_string()); }
+                            if !k.trim().is_empty() {
+                                api_key = Some(k.trim().to_string());
+                            }
                         }
                     }
                 }
@@ -151,17 +193,21 @@ pub async fn handle_circle_search_channel(
                 "openrouter" => ProviderType::OpenRouter,
                 "deepseek" => ProviderType::DeepSeek,
                 "groq" => ProviderType::Groq,
+                "opencode" => ProviderType::OpenCode,
                 _ => model_config.provider,
             };
 
             if api_key.is_none() {
                 api_key = match provider_type {
-                    ProviderType::Gemini => std::env::var("GEMINI_API_KEY").or_else(|_| std::env::var("GOOGLE_API_KEY")).ok(),
+                    ProviderType::Gemini => std::env::var("GEMINI_API_KEY")
+                        .or_else(|_| std::env::var("GOOGLE_API_KEY"))
+                        .ok(),
                     ProviderType::OpenAI => std::env::var("OPENAI_API_KEY").ok(),
                     ProviderType::Anthropic => std::env::var("ANTHROPIC_API_KEY").ok(),
                     ProviderType::OpenRouter => std::env::var("OPENROUTER_API_KEY").ok(),
                     ProviderType::DeepSeek => std::env::var("DEEPSEEK_API_KEY").ok(),
                     ProviderType::Groq => std::env::var("GROQ_API_KEY").ok(),
+                    ProviderType::OpenCode => std::env::var("OPENCODE_API_KEY").ok(),
                     _ => None,
                 };
             }
@@ -177,13 +223,17 @@ pub async fn handle_circle_search_channel(
                 model_config.base_url = Some(u);
             }
 
-            let provider_instance = crate::providers::ProviderFactory::create(&model_config.provider);
+            let provider_instance =
+                crate::providers::ProviderFactory::create(&model_config.provider);
             let mut answer = String::new();
             let start_time = std::time::Instant::now();
             let mut completion_token_count = 0usize;
             let mut has_error = false;
 
-            match provider_instance.chat_stream(&model_config, &messages, &[]).await {
+            match provider_instance
+                .chat_stream(&model_config, &messages, &[])
+                .await
+            {
                 Ok(mut rx) => {
                     while let Some(event) = rx.recv().await {
                         match event {
@@ -207,8 +257,10 @@ pub async fn handle_circle_search_channel(
             }
 
             let duration_ms = start_time.elapsed().as_millis() as u64;
-            let prompt_token_count = std::cmp::max(1, (effective_prompt.len() + 3) / 4) + if has_image { 256 } else { 0 };
-            let final_completion_tokens = std::cmp::max(completion_token_count, (answer.len() + 3) / 4);
+            let prompt_token_count = std::cmp::max(1, (effective_prompt.len() + 3) / 4)
+                + if has_image { 256 } else { 0 };
+            let final_completion_tokens =
+                std::cmp::max(completion_token_count, (answer.len() + 3) / 4);
 
             record_usage(
                 &format!("{:?}", model_config.provider).to_lowercase(),

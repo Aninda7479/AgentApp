@@ -165,6 +165,7 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = (props) => {
       { providerId: 'groq', model: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', providerName: 'Groq' },
       { providerId: 'deepseek', model: 'deepseek-chat', name: 'DeepSeek Chat (V3)', providerName: 'DeepSeek' },
       { providerId: 'openrouter', model: 'google/gemini-2.0-flash-lite:free', name: 'Gemini 2.0 Flash Lite (Free)', providerName: 'OpenRouter' },
+      { providerId: 'opencode', model: 'big-pickle', name: 'Big Pickle (Free)', providerName: 'OpenCode' },
       { providerId: 'ollama', model: 'qwen2.5-coder', name: 'Qwen 2.5 Coder', providerName: 'Ollama (Local)' },
       { providerId: 'ollama', model: 'llama3.2', name: 'Llama 3.2', providerName: 'Ollama (Local)' }
     ];

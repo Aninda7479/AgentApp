@@ -280,9 +280,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     let ctxLimit = raw.contextLimit;
     let pricingInfo = raw.pricing;
 
-    if (providerId === 'groq' || providerId === 'nvidia' || providerId === 'deepinfra' || providerId === 'openrouter' || providerId === 'ollama' || providerId === 'ollama-cloud') {
+    if (providerId === 'groq' || providerId === 'nvidia' || providerId === 'deepinfra' || providerId === 'openrouter' || providerId === 'ollama' || providerId === 'ollama-cloud' || providerId === 'opencode') {
       if (providerId === 'ollama' || providerId === 'ollama-cloud') {
         isFree = true;
+      } else if (providerId === 'opencode') {
+        isFree = isFree ?? (raw.id.toLowerCase().includes('free') || raw.id === 'big-pickle' || raw.id === 'union-alpha');
       } else if (providerId === 'nvidia') {
         const normId = raw.id.toLowerCase().replace(/[^a-z0-9]/g, '');
         const slashIdx = raw.id.lastIndexOf('/');

@@ -332,7 +332,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         </div>
 
         {/* Back / Forward History Navigation */}
-        <div className="flex gap-1 text-brand-textMuted select-none border-l border-brand-border/30 pl-3">
+        <div className="hidden sm:flex gap-1 text-brand-textMuted select-none border-l border-brand-border/30 pl-3">
           <button
             onClick={onNavigateBack}
             disabled={!canNavigateBack}
@@ -430,7 +430,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         {/* Lock App / Session toggle */}
         <button
           onClick={onLockApp || onLogout}
-          className="atmo-btn w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
+          className="hidden sm:flex atmo-btn w-7 h-7 items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
           title="Lock session"
           aria-label="Lock session"
         >

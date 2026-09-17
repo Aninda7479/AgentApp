@@ -32,6 +32,7 @@ import { ProviderConnection, ModelConfig, ModelPricing } from '../pages/Settings
 import { ProviderLogo } from '../pages/Settings/ProvidersSettings';
 import { browserSafeFetch } from '../web-fetch.js';
 import { ProvidersService } from '../logic/providers';
+import { fetchOpenCodeModels } from '../logic/opencode.js';
 
 export interface OnboardingWizardProps {
   onComplete: () => void;
@@ -67,6 +68,7 @@ const POPULAR_PROVIDERS_CONFIG: ProviderItem[] = [
   { id: 'kimi', name: 'Kimi (Moonshot AI)', category: 'open', defaultUrl: 'https://api.moonshot.cn/v1', url: 'https://api.moonshot.cn/v1', apiKey: '', desc: 'Moonshot AI developer platform provider', status: 'idle', models: [] },
   { id: 'nvidia', name: 'NVIDIA NIM', category: 'open', defaultUrl: 'https://integrate.api.nvidia.com/v1', url: 'https://integrate.api.nvidia.com/v1', apiKey: '', desc: 'NVIDIA NIM inference microservices', status: 'idle', models: [] },
   { id: 'deepinfra', name: 'DeepInfra', category: 'open', defaultUrl: 'https://api.deepinfra.com/v1', url: 'https://api.deepinfra.com/v1', apiKey: '', desc: 'Low cost serverless inference provider', status: 'idle', models: [] },
+  { id: 'opencode', name: 'OpenCode Zen', category: 'open', defaultUrl: 'https://opencode.ai/zen/v1', url: 'https://opencode.ai/zen/v1', apiKey: '', desc: 'OpenCode Zen AI gateway with free models (Big Pickle, DeepSeek, etc.)', status: 'idle', models: [] },
   { id: 'ollama-cloud', name: 'Ollama Cloud', category: 'cloud', defaultUrl: 'https://api.ollama.com', url: 'https://api.ollama.com', apiKey: '', desc: 'Ollama Cloud hosted model inference API', status: 'idle', models: [] },
   { id: 'claude', name: 'Anthropic (Claude)', category: 'cloud', defaultUrl: 'https://api.anthropic.com/v1', url: 'https://api.anthropic.com/v1', apiKey: '', desc: 'Anthropic Claude Developer API platform', status: 'idle', models: [] },
   { id: 'chatgpt', name: 'OpenAI (ChatGPT)', category: 'cloud', defaultUrl: 'https://api.openai.com/v1', url: 'https://api.openai.com/v1', apiKey: '', desc: 'OpenAI Developer platform API access', status: 'idle', models: [] },
@@ -521,6 +523,8 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
           name: m.id,
           contextLimit: m.context_window ? fmtTokens(m.context_window) : undefined
         }));
+      } else if (pId === 'opencode') {
+        rawModels = await fetchOpenCodeModels(key, url);
       } else if (pId === 'ollama-cloud') {
         const base = url.replace(/\/+$/, '');
         const authHeaders: Record<string, string> = {};

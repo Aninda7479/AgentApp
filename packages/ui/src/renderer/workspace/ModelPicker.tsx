@@ -34,10 +34,12 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
       const rect = triggerRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
       const openUpward = spaceBelow < 340 && rect.top > spaceBelow;
+      const targetWidth = Math.min(window.innerWidth - 16, Math.max(rect.width, 280));
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - targetWidth - 8));
       setCoords({
         top: rect.top,
-        left: rect.left,
-        width: Math.max(rect.width, 280),
+        left,
+        width: targetWidth,
         height: rect.height,
         openUpward,
       });
@@ -141,6 +143,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
             position: 'fixed',
             left: `${coords.left}px`,
             width: `${coords.width}px`,
+            maxWidth: 'calc(100vw - 16px)',
             ...(coords.openUpward
               ? { bottom: `${window.innerHeight - coords.top + 6}px` }
               : { top: `${coords.top + coords.height + 6}px` }),

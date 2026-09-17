@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ProviderConnection, ModelConfig } from './types';
 import { ProvidersService } from '../../logic/providers';
+import { OPENCODE_PROVIDER_CONFIG, OPENCODE_PRESET_MODELS, fetchOpenCodeModels } from '../../logic/opencode.js';
 
 /** Props for the providers settings panel. */
 interface ProvidersSettingsProps {
@@ -137,6 +138,18 @@ export const ProviderLogo: React.FC<{ providerId: string; org?: string; logoUrl?
         )
       };
     }
+    if (key.includes('opencode')) {
+      return {
+        bg: 'bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+        svg: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
+            <polyline points="16 18 22 12 16 6"/>
+            <polyline points="8 6 2 12 8 18"/>
+            <line x1="14" y1="4" x2="10" y2="20"/>
+          </svg>
+        )
+      };
+    }
     return {
       bg: 'bg-brand-hover text-brand-textMuted border-brand-border',
       svg: (
@@ -163,7 +176,7 @@ export const ProviderLogo: React.FC<{ providerId: string; org?: string; logoUrl?
   const knownProviders = new Set([
     'chatgpt', 'openai', 'claude', 'anthropic', 'google', 'gemini', 'vertex',
     'ollama', 'deepseek', 'openrouter', 'groq', 'nvidia', 'omniroute',
-    'kimi', 'moonshot', 'deepinfra'
+    'kimi', 'moonshot', 'deepinfra', 'opencode'
   ]);
   const isKnown = [...knownProviders].some(p => key.includes(p));
 
@@ -223,13 +236,14 @@ const POPULAR_PROVIDERS = [
   { id: 'openrouter', name: 'OpenRouter', org: 'openrouter-ai', logoUrl: 'https://openrouter.ai/favicon.ico', desc: 'Unified open router endpoint broker', defaultUrl: 'https://openrouter.ai/api/v1' },
   { id: 'groq', name: 'Groq', org: 'groq', logoUrl: 'https://groq.com/favicon.ico', desc: 'Groq LPU Inference Engine (ultra-fast LLM inference)', defaultUrl: 'https://api.groq.com/openai/v1' },
   { id: 'nvidia', name: 'NVIDIA', org: 'NVIDIA', logoUrl: 'https://build.nvidia.com/favicon.ico', desc: 'NVIDIA NIM inference microservices (OpenAI-compatible)', defaultUrl: 'https://integrate.api.nvidia.com/v1' },
-  { id: 'deepinfra', name: 'DeepInfra', org: 'deepinfra', logoUrl: 'https://deepinfra.com/favicon.ico', desc: 'Low cost serverless inference hosting provider', defaultUrl: 'https://api.deepinfra.com/v1' }
+  { id: 'deepinfra', name: 'DeepInfra', org: 'deepinfra', logoUrl: 'https://deepinfra.com/favicon.ico', desc: 'Low cost serverless inference hosting provider', defaultUrl: 'https://api.deepinfra.com/v1' },
+  OPENCODE_PROVIDER_CONFIG
 ];
 
-// Providers that can function without an API key (local / self-hosted). Every
+// Providers that can function without an API key (local / self-hosted / free gateway). Every
 // other popular/known provider needs a credential, so "Add Without Testing"
 // must not create a provider that can never actually send a request.
-const KEYLESS_PROVIDER_IDS = new Set(['ollama', 'omniroute', 'custom']);
+const KEYLESS_PROVIDER_IDS = new Set(['ollama', 'omniroute', 'custom', 'opencode']);
 
 /**
  * Browser-safe fetch for provider connectivity tests. Shared with the other
@@ -354,6 +368,8 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         const data = await res.json();
         rawModels = (data.data ?? []).map((m: any) => ({ id: m.id, name: m.id }));
+      } else if (modalProviderId === 'opencode') {
+        rawModels = await fetchOpenCodeModels(key, url);
       } else if (modalProviderId === 'openrouter') {
         const res = await browserSafeFetch('https://openrouter.ai/api/v1/models', {
           headers: { Authorization: `Bearer ${key}` }
@@ -553,6 +569,7 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
       google:   [{ id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', ctx: '1M' }, { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', ctx: '2M' }, { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', ctx: '1M' }],
       claude:   [{ id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', ctx: '200k' }, { id: 'claude-haiku-3-5', name: 'Claude Haiku 3.5', ctx: '200k' }],
       kimi:     [{ id: 'moonshot-v1-128k', name: 'Moonshot v1 128k', ctx: '128k' }, { id: 'moonshot-v1-32k', name: 'Moonshot v1 32k', ctx: '32k' }],
+      opencode: OPENCODE_PRESET_MODELS.map(m => ({ id: m.id, name: m.name, ctx: m.ctx, free: m.free })),
       openrouter: [{ id: 'openrouter/auto', name: 'Auto Router' }],
       groq: [
         { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Versatile', ctx: '128k' },

@@ -3,9 +3,7 @@ use std::sync::Arc;
 
 use axum::{http::StatusCode, Json};
 
-use crate::automation::{
-    BrowserNavigateTool, BrowserScreenshotTool, WebSearchTool,
-};
+use crate::automation::{BrowserNavigateTool, BrowserScreenshotTool, WebSearchTool};
 use crate::media::{GeneratePdfTool, GeneratePresentationTool};
 use crate::orchestrator::{AgentEngine, SubagentRunner};
 use crate::server::ipc::usage::record_usage;
@@ -42,8 +40,15 @@ pub async fn handle_agent_channel(
                 .and_then(|v| v.as_str())
                 .unwrap_or("default-session")
                 .to_string();
-            let prompt = arg.get("prompt").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let config_val = arg.get("config").cloned().unwrap_or_else(|| serde_json::json!({}));
+            let prompt = arg
+                .get("prompt")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let config_val = arg
+                .get("config")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
 
             let mut provider_str = config_val
                 .get("provider")
@@ -83,16 +88,27 @@ pub async fn handle_agent_channel(
                 })
                 .unwrap_or_default();
 
-            let raw_settings = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
+            let raw_settings = state
+                .settings_store
+                .load_raw()
+                .unwrap_or_else(|_| serde_json::json!({}));
 
             // If model is Orchestrator, auto, or empty, resolve first enabled from settings
-            if model_str.is_empty() || model_str == "Orchestrator" || model_str == "auto" || model_str == "Model Governance" {
+            if model_str.is_empty()
+                || model_str == "Orchestrator"
+                || model_str == "auto"
+                || model_str == "Model Governance"
+            {
                 if let Some(models) = raw_settings.get("models").and_then(|m| m.as_array()) {
-                    if let Some(first_enabled) = models.iter().find(|m| m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false)) {
+                    if let Some(first_enabled) = models
+                        .iter()
+                        .find(|m| m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false))
+                    {
                         if let Some(id) = first_enabled.get("id").and_then(|v| v.as_str()) {
                             model_str = id.to_string();
                         }
-                        if let Some(pid) = first_enabled.get("providerId").and_then(|v| v.as_str()) {
+                        if let Some(pid) = first_enabled.get("providerId").and_then(|v| v.as_str())
+                        {
                             provider_str = pid.to_string();
                         }
                     }
@@ -127,7 +143,9 @@ pub async fn handle_agent_channel(
                 if let Some(providers) = raw_settings.get("providers").and_then(|p| p.as_array()) {
                     if let Some(prov) = providers.iter().find(|p| {
                         let id = p.get("id").and_then(|v| v.as_str()).unwrap_or("");
-                        id == provider_str || (provider_str == "gemini" && id == "google") || (provider_str == "google" && id == "gemini")
+                        id == provider_str
+                            || (provider_str == "gemini" && id == "google")
+                            || (provider_str == "google" && id == "gemini")
                     }) {
                         if api_key.is_none() {
                             if let Some(key) = prov.get("apiKey").and_then(|v| v.as_str()) {
@@ -163,6 +181,7 @@ pub async fn handle_agent_channel(
                 "openrouter" => ProviderType::OpenRouter,
                 "deepseek" => ProviderType::DeepSeek,
                 "groq" => ProviderType::Groq,
+                "opencode" => ProviderType::OpenCode,
                 _ => ProviderType::OpenAI,
             };
 
@@ -171,16 +190,23 @@ pub async fn handle_agent_channel(
                     if let Some(m) = models.iter().find(|m| {
                         let pid = m.get("providerId").and_then(|v| v.as_str()).unwrap_or("");
                         let en = m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
-                        en && (pid == provider_str || (provider_str == "gemini" && pid == "google") || (provider_str == "google" && pid == "gemini"))
+                        en && (pid == provider_str
+                            || (provider_str == "gemini" && pid == "google")
+                            || (provider_str == "google" && pid == "gemini"))
                     }) {
                         if let Some(id) = m.get("id").and_then(|v| v.as_str()) {
                             let prefix = format!("{}-", provider_str);
-                            model_str = if id.starts_with(&prefix) { id[prefix.len()..].to_string() } else { id.to_string() };
+                            model_str = if id.starts_with(&prefix) {
+                                id[prefix.len()..].to_string()
+                            } else {
+                                id.to_string()
+                            };
                         }
                     }
                 }
                 if model_str.is_empty() {
-                    let (_, fallback_id, _, _) = resolve_active_workspace_model(&raw_settings, &state.settings_store);
+                    let (_, fallback_id, _, _) =
+                        resolve_active_workspace_model(&raw_settings, &state.settings_store);
                     model_str = fallback_id;
                 }
             }
@@ -194,6 +220,7 @@ pub async fn handle_agent_channel(
                     ProviderType::OpenRouter => std::env::var("OPENROUTER_API_KEY").ok(),
                     ProviderType::DeepSeek => std::env::var("DEEPSEEK_API_KEY").ok(),
                     ProviderType::Groq => std::env::var("GROQ_API_KEY").ok(),
+                    ProviderType::OpenCode => std::env::var("OPENCODE_API_KEY").ok(),
                     _ => None,
                 };
             }
@@ -203,7 +230,8 @@ pub async fn handle_agent_channel(
             model_config.base_url = base_url;
 
             let clean_chat_id = session_id.trim_start_matches("session-").trim().to_string();
-            let effective_workspace: PathBuf = if let Some(proj_root) = config_val.get("projectRoot")
+            let effective_workspace: PathBuf = if let Some(proj_root) = config_val
+                .get("projectRoot")
                 .or_else(|| config_val.get("project_root"))
                 .or_else(|| config_val.get("workingDirectory"))
                 .or_else(|| config_val.get("workspace"))
@@ -214,12 +242,20 @@ pub async fn handle_agent_channel(
                 if p.exists() && p.is_dir() {
                     p
                 } else {
-                    let conv_dir = state.chat_storage.storage_dir().join("chats").join(&clean_chat_id);
+                    let conv_dir = state
+                        .chat_storage
+                        .storage_dir()
+                        .join("chats")
+                        .join(&clean_chat_id);
                     let _ = std::fs::create_dir_all(&conv_dir);
                     conv_dir
                 }
             } else {
-                let conv_dir = state.chat_storage.storage_dir().join("chats").join(&clean_chat_id);
+                let conv_dir = state
+                    .chat_storage
+                    .storage_dir()
+                    .join("chats")
+                    .join(&clean_chat_id);
                 let _ = std::fs::create_dir_all(&conv_dir);
                 conv_dir
             };
@@ -270,32 +306,71 @@ pub async fn handle_agent_channel(
                         let mut msgs = Vec::new();
                         for item in client_history {
                             let role_str = item.get("role").and_then(|v| v.as_str()).unwrap_or("");
-                            let content = item.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            let content = item
+                                .get("content")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
                             match role_str {
                                 "user" => msgs.push(crate::types::ChatMessage::user(content)),
                                 "assistant" => {
                                     // Check if this has tool_calls
-                                    if let Some(tool_calls) = item.get("tool_calls").and_then(|v| v.as_array()) {
+                                    if let Some(tool_calls) =
+                                        item.get("tool_calls").and_then(|v| v.as_array())
+                                    {
                                         let mut blocks = Vec::new();
                                         if !content.is_empty() {
-                                            blocks.push(crate::types::ContentBlock::Text { text: content });
+                                            blocks.push(crate::types::ContentBlock::Text {
+                                                text: content,
+                                            });
                                         }
                                         for tc in tool_calls {
-                                            let id = tc.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                                            let name = tc.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                                            let args_str = tc.get("arguments").and_then(|v| v.as_str()).unwrap_or("{}");
-                                            let input: serde_json::Value = serde_json::from_str(args_str).unwrap_or_else(|_| serde_json::json!({}));
-                                            blocks.push(crate::types::ContentBlock::ToolUse { id, name, input });
+                                            let id = tc
+                                                .get("id")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("")
+                                                .to_string();
+                                            let name = tc
+                                                .get("name")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("")
+                                                .to_string();
+                                            let args_str = tc
+                                                .get("arguments")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("{}");
+                                            let input: serde_json::Value =
+                                                serde_json::from_str(args_str)
+                                                    .unwrap_or_else(|_| serde_json::json!({}));
+                                            blocks.push(crate::types::ContentBlock::ToolUse {
+                                                id,
+                                                name,
+                                                input,
+                                            });
                                         }
-                                        msgs.push(crate::types::ChatMessage::new(crate::types::Role::Assistant, blocks));
+                                        msgs.push(crate::types::ChatMessage::new(
+                                            crate::types::Role::Assistant,
+                                            blocks,
+                                        ));
                                     } else {
                                         msgs.push(crate::types::ChatMessage::assistant(content));
                                     }
                                 }
                                 "tool" => {
-                                    let tool_call_id = item.get("tool_call_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                                    let is_error = item.get("is_error").and_then(|v| v.as_bool()).unwrap_or(false);
-                                    msgs.push(crate::types::ChatMessage::tool_result(tool_call_id, content, is_error));
+                                    let tool_call_id = item
+                                        .get("tool_call_id")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string();
+                                    let is_error = item
+                                        .get("is_error")
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false);
+                                    msgs.push(crate::types::ChatMessage::tool_result(
+                                        tool_call_id,
+                                        content,
+                                        is_error,
+                                    ));
                                 }
                                 _ => {}
                             }
@@ -325,7 +400,8 @@ pub async fn handle_agent_channel(
                 //    Tier 3 (<7B): No tools — pure text generation
                 let model_tier: u8 = {
                     // Check for manual override in settings
-                    let manual_tier = raw_settings.get("modelTiers")
+                    let manual_tier = raw_settings
+                        .get("modelTiers")
                         .and_then(|tiers| tiers.get(&model_str))
                         .and_then(|v| v.as_u64())
                         .map(|v| v as u8);
@@ -335,17 +411,27 @@ pub async fn handle_agent_channel(
                     } else {
                         // Auto-detect from model name heuristics
                         let lower = model_str.to_lowercase();
-                        if lower.contains("1b") || lower.contains("1.5b") || lower.contains("2b")
-                            || lower.contains("3b") || lower.contains("4b")
-                            || lower.contains(":1b") || lower.contains(":3b")
-                            || lower.contains("phi-2") || lower.contains("tinyllama")
+                        if lower.contains("1b")
+                            || lower.contains("1.5b")
+                            || lower.contains("2b")
+                            || lower.contains("3b")
+                            || lower.contains("4b")
+                            || lower.contains(":1b")
+                            || lower.contains(":3b")
+                            || lower.contains("phi-2")
+                            || lower.contains("tinyllama")
                         {
                             3 // Tier 3: < 7B
-                        } else if lower.contains("7b") || lower.contains("8b")
-                            || lower.contains("13b") || lower.contains("14b")
-                            || lower.contains("22b") || lower.contains("27b")
-                            || lower.contains(":7b") || lower.contains(":8b")
-                            || lower.contains("mistral-small") || lower.contains("gemma-2")
+                        } else if lower.contains("7b")
+                            || lower.contains("8b")
+                            || lower.contains("13b")
+                            || lower.contains("14b")
+                            || lower.contains("22b")
+                            || lower.contains("27b")
+                            || lower.contains(":7b")
+                            || lower.contains(":8b")
+                            || lower.contains("mistral-small")
+                            || lower.contains("gemma-2")
                         {
                             2 // Tier 2: 7-30B
                         } else {
@@ -357,9 +443,14 @@ pub async fn handle_agent_channel(
                 // 4. Build adaptive tool registry based on model tier
                 let mut session_tool_registry = ToolRegistry::new();
 
-                let allowed_commands: Vec<String> = config_val.get("allowedCommands")
+                let allowed_commands: Vec<String> = config_val
+                    .get("allowedCommands")
                     .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter().filter_map(|c| c.as_str().map(|s| s.to_string())).collect())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|c| c.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
                     .unwrap_or_default();
 
                 // Artifact tools are enabled across ALL tiers (Tier 1, 2, and 3)
@@ -373,25 +464,41 @@ pub async fn handle_agent_channel(
                     session_tool_registry.register(WriteFileTool::new(effective_workspace.clone()));
                     session_tool_registry.register(EditFileTool::new(effective_workspace.clone()));
                     session_tool_registry.register(ListDirTool::new(effective_workspace.clone()));
-                    session_tool_registry.register(RunCommandTool::with_allowed_commands(effective_workspace.clone(), allowed_commands));
-                    session_tool_registry.register(GrepSearchTool::new(effective_workspace.clone()));
+                    session_tool_registry.register(RunCommandTool::with_allowed_commands(
+                        effective_workspace.clone(),
+                        allowed_commands,
+                    ));
+                    session_tool_registry
+                        .register(GrepSearchTool::new(effective_workspace.clone()));
                 }
 
                 if model_tier == 1 {
                     // Heavy automation & media tools for Tier 1 only (large, capable models)
-                    session_tool_registry.register(GeneratePdfTool::new(effective_workspace.clone()));
-                    session_tool_registry.register(GeneratePresentationTool::new(effective_workspace.clone()));
+                    session_tool_registry
+                        .register(GeneratePdfTool::new(effective_workspace.clone()));
+                    session_tool_registry
+                        .register(GeneratePresentationTool::new(effective_workspace.clone()));
                     session_tool_registry.register(BrowserNavigateTool::new());
-                    session_tool_registry.register(BrowserScreenshotTool::new(effective_workspace.clone()));
+                    session_tool_registry
+                        .register(BrowserScreenshotTool::new(effective_workspace.clone()));
                     session_tool_registry.register(WebSearchTool::new());
                 }
 
                 // Register GetAvailableToolsTool for ALL tiers so any model can query its enabled capabilities
-                let tools_summary: Vec<(String, String)> = session_tool_registry.list_schemas()
+                let tools_summary: Vec<(String, String)> = session_tool_registry
+                    .list_schemas()
                     .iter()
                     .map(|s| {
-                        let name = s.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let desc = s.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                        let name = s
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let desc = s
+                            .get("description")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
                         (name, desc)
                     })
                     .collect();
@@ -410,9 +517,14 @@ pub async fn handle_agent_channel(
 
                 // 5. Build enriched system prompt
                 let sys_prompt = if instructions.is_empty() {
-                    let tool_names: Vec<String> = complete_registry.list_schemas()
+                    let tool_names: Vec<String> = complete_registry
+                        .list_schemas()
                         .iter()
-                        .filter_map(|s| s.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                        .filter_map(|s| {
+                            s.get("name")
+                                .and_then(|n| n.as_str())
+                                .map(|s| s.to_string())
+                        })
                         .collect();
 
                     let tools_section = format!(
@@ -572,9 +684,13 @@ pub async fn handle_agent_channel(
                 let prompt_token_count = std::cmp::max(1, (prompt_clone.len() + 3) / 4);
                 let full_text_len = {
                     let store = state_clone.session_store.lock();
-                    store.peek(&sid).map(|e| e.full_assistant_text.len()).unwrap_or(0)
+                    store
+                        .peek(&sid)
+                        .map(|e| e.full_assistant_text.len())
+                        .unwrap_or(0)
                 };
-                let final_completion_tokens = std::cmp::max(completion_token_count, (full_text_len + 3) / 4);
+                let final_completion_tokens =
+                    std::cmp::max(completion_token_count, (full_text_len + 3) / 4);
                 record_usage(
                     &format!("{:?}", model_config.provider).to_lowercase(),
                     &model_config.model_id,
@@ -604,13 +720,18 @@ pub async fn handle_agent_channel(
             }))))
         }
         "agent-stop" => {
-            let session_id = args.first().and_then(|v| {
-                if let Some(s) = v.as_str() {
-                    Some(s.to_string())
-                } else {
-                    v.get("sessionId").and_then(|s| s.as_str()).map(|s| s.to_string())
-                }
-            }).unwrap_or_default();
+            let session_id = args
+                .first()
+                .and_then(|v| {
+                    if let Some(s) = v.as_str() {
+                        Some(s.to_string())
+                    } else {
+                        v.get("sessionId")
+                            .and_then(|s| s.as_str())
+                            .map(|s| s.to_string())
+                    }
+                })
+                .unwrap_or_default();
 
             {
                 let cancellations = state.active_cancellations.lock();
@@ -639,11 +760,21 @@ pub async fn handle_agent_channel(
         }
         "agent-list" => {
             let store = state.session_store.lock();
-            let sessions: Vec<String> = store.iter().filter(|(_, v)| v.is_running).map(|(k, _)| k.clone()).collect();
-            Some(Ok(Json(serde_json::json!({ "data": { "sessions": sessions } }))))
+            let sessions: Vec<String> = store
+                .iter()
+                .filter(|(_, v)| v.is_running)
+                .map(|(k, _)| k.clone())
+                .collect();
+            Some(Ok(Json(
+                serde_json::json!({ "data": { "sessions": sessions } }),
+            )))
         }
-        "agent-permission-response" => Some(Ok(Json(serde_json::json!({ "data": { "success": true } })))),
-        "agent-compact" => Some(Ok(Json(serde_json::json!({ "data": { "compacted": false, "tokensBefore": 0, "tokensAfter": 0 } })))),
+        "agent-permission-response" => {
+            Some(Ok(Json(serde_json::json!({ "data": { "success": true } }))))
+        }
+        "agent-compact" => Some(Ok(Json(
+            serde_json::json!({ "data": { "compacted": false, "tokensBefore": 0, "tokensAfter": 0 } }),
+        ))),
         _ => None,
     }
 }

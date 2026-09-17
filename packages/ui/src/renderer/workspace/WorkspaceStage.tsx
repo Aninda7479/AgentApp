@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useChatStore, chatStore } from '../stores/chatStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { MessageCanvas } from './MessageCanvas';
@@ -24,10 +24,21 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
   onUndoStep,
   onEditStep,
 }) => {
+  const [isRightSidebarOpenMobile, setIsRightSidebarOpenMobile] = useState(false);
   const activeChatId = useChatStore((s) => s.activeChatId) || 'draft-chat';
   const activeChat = useChatStore((s) => s.chats.find((c) => c.id === activeChatId));
   const isGenerating = useSessionStore((s) => Boolean(s.runningSessions.get(activeChatId)?.isGenerating));
   const steps = activeChat?.steps || [];
+
+  const modifiedFilesCount = useMemo(() => {
+    const fileSet = new Set<string>();
+    steps.forEach((step) => {
+      if (step.metadata?.diff?.filename) {
+        fileSet.add(step.metadata.diff.filename);
+      }
+    });
+    return fileSet.size;
+  }, [steps]);
 
   const handleSendPrompt = (prompt: string, options: ComposerOptions, attachments: ComposerAttachment[]) => {
     if (activeChatId) {
@@ -59,7 +70,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
   return (
     <div className="flex-1 flex min-w-0 min-h-0 relative overflow-hidden h-full">
       {/* Active Chat Panel */}
-      <div className="flex-1 overflow-hidden flex flex-col min-h-0 h-full">
+      <div className="flex-1 w-full min-w-0 overflow-hidden flex flex-col min-h-0 h-full">
         {activeChatId ? (
           <div className="flex-1 flex flex-col min-h-0 h-full relative">
             <div className="flex-1 min-h-0 overflow-hidden">
@@ -69,11 +80,13 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
                   onUndoStep={onUndoStep}
                   onEditStep={onEditStep}
                   onViewDiff={onViewDiff}
+                  onToggleRightSidebar={() => setIsRightSidebarOpenMobile((prev) => !prev)}
+                  modifiedFilesCount={modifiedFilesCount}
                 />
               </ErrorBoundary>
             </div>
             {/* Global composer bar at the bottom */}
-            <div className="shrink-0 px-4 pb-4 pt-1">
+            <div className="shrink-0 px-2.5 pb-2 pt-1 sm:px-4 sm:pb-4">
               <ComposerBar
                 onSend={(prompt, options, attachments) => handleSendPrompt(prompt, options, attachments)}
               />
@@ -95,6 +108,8 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
           onViewDiff={onViewDiff}
           onAddAgentSession={handleAddAgentSession}
           onSelectChat={(id) => chatStore.setActiveChatId(id)}
+          isMobileOpen={isRightSidebarOpenMobile}
+          onMobileClose={() => setIsRightSidebarOpenMobile(false)}
         />
       </ErrorBoundary>
     </div>

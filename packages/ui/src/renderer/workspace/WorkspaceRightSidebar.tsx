@@ -23,7 +23,8 @@ import {
   Camera,
   Coffee,
   Moon,
-  Sun
+  Sun,
+  X
 } from 'lucide-react';
 import { useChatStore } from '../stores/chatStore';
 import { useSessionStore } from '../stores/sessionStore';
@@ -43,6 +44,8 @@ export interface WorkspaceRightSidebarProps {
   onViewDiff?: (filename: string, originalCode: string, modifiedCode: string) => void;
   onAddAgentSession?: () => void;
   onSelectChat?: (chatId: string) => void;
+  isMobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
 export interface ModifiedFileItem {
@@ -59,7 +62,9 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
   activeChatId,
   onViewDiff,
   onAddAgentSession,
-  onSelectChat
+  onSelectChat,
+  isMobileOpen = false,
+  onMobileClose
 }) => {
   const [activeTab, setActiveTab] = useState<WorkspaceSidebarTab>('files');
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -208,62 +213,24 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
     return parts.slice(0, -1).join('/');
   };
 
-  if (isCollapsed) {
-    return (
-      <div className="flex flex-col items-center py-3 px-1.5 bg-brand-sidebar/95 border-l border-brand-border/60 select-none z-20">
-        <button
-          onClick={() => setIsCollapsed(false)}
-          className="p-1.5 rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors mb-3"
-          title="Expand Right Sidebar"
-        >
-          <ChevronLeft size={16} />
-        </button>
+  // Listen for Escape key to close mobile drawer
+  useEffect(() => {
+    if (!isMobileOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onMobileClose?.();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileOpen, onMobileClose]);
 
-        <div className="flex flex-col gap-2">
-          <button
-            onClick={() => { setActiveTab('files'); setIsCollapsed(false); }}
-            className={`relative p-2 rounded-lg transition-colors ${activeTab === 'files' ? 'bg-brand-card text-brand-textMain border border-brand-border' : 'text-brand-textMuted hover:text-brand-textMain'}`}
-            title="File Changes"
-          >
-            <FileCode2 size={16} />
-            {modifiedFiles.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-brand-primary text-[9px] font-bold text-brand-bg flex items-center justify-center">
-                {modifiedFiles.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => { setActiveTab('agents'); setIsCollapsed(false); }}
-            className={`relative p-2 rounded-lg transition-colors ${activeTab === 'agents' ? 'bg-brand-card text-brand-textMain border border-brand-border' : 'text-brand-textMuted hover:text-brand-textMain'}`}
-            title="Multiagent Sessions"
-          >
-            <Users size={16} />
-            {agentItems.filter(a => a.isRunning).length > 0 && (
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[color:var(--neon-live)] animate-pulse" />
-            )}
-          </button>
-
-          <button
-            onClick={() => { setActiveTab('partner'); setIsCollapsed(false); }}
-            className={`p-2 rounded-lg transition-colors ${activeTab === 'partner' ? 'bg-brand-card text-brand-textMain border border-brand-border' : 'text-brand-textMuted hover:text-brand-textMain'}`}
-            title="Partner Companion"
-          >
-            <Sparkles size={16} />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <aside className="w-80 h-full flex flex-col bg-brand-sidebar/95 border-l border-brand-border/60 select-none z-20 overflow-hidden transition-all duration-200">
+  const renderSidebarContent = (isMobile: boolean) => (
+    <>
       {/* Sidebar Header & Tab Nav */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-brand-border/60 bg-brand-sidebar/80">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-brand-border/60 bg-brand-sidebar/80 shrink-0">
         <div className="flex items-center gap-1 bg-brand-bg/60 p-1 rounded-lg border border-brand-border/40">
           <button
             onClick={() => setActiveTab('files')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
               activeTab === 'files'
                 ? 'bg-brand-card text-brand-textMain shadow-sm border border-brand-border/60'
                 : 'text-brand-textMuted hover:text-brand-textMain'
@@ -280,7 +247,7 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
 
           <button
             onClick={() => setActiveTab('agents')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
               activeTab === 'agents'
                 ? 'bg-brand-card text-brand-textMain shadow-sm border border-brand-border/60'
                 : 'text-brand-textMuted hover:text-brand-textMain'
@@ -295,7 +262,7 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
 
           <button
             onClick={() => setActiveTab('partner')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
               activeTab === 'partner'
                 ? 'bg-brand-card text-brand-textMain shadow-sm border border-brand-border/60'
                 : 'text-brand-textMuted hover:text-brand-textMain'
@@ -306,14 +273,26 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
           </button>
         </div>
 
-        {/* Collapse button */}
-        <button
-          onClick={() => setIsCollapsed(true)}
-          className="p-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors"
-          title="Collapse Panel"
-        >
-          <ChevronRight size={15} />
-        </button>
+        {/* Collapse or Close button */}
+        {isMobile ? (
+          <button
+            onClick={onMobileClose}
+            className="p-1.5 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer"
+            title="Close drawer"
+            aria-label="Close drawer"
+          >
+            <X size={16} />
+          </button>
+        ) : (
+          <button
+            onClick={() => setIsCollapsed(true)}
+            className="p-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer"
+            title="Collapse Panel"
+            aria-label="Collapse Panel"
+          >
+            <ChevronRight size={15} />
+          </button>
+        )}
       </div>
 
       {/* Tab Content Body */}
@@ -353,7 +332,10 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
                 {filteredFiles.map((file) => (
                   <div
                     key={file.filename}
-                    onClick={() => onViewDiff?.(file.filename, file.originalCode, file.modifiedCode)}
+                    onClick={() => {
+                      onViewDiff?.(file.filename, file.originalCode, file.modifiedCode);
+                      if (isMobile) onMobileClose?.();
+                    }}
                     className="group glass-card p-2.5 rounded-xl border border-brand-border/60 hover:border-brand-border hover:bg-brand-hover cursor-pointer transition-all flex items-center justify-between gap-2"
                   >
                     <div className="flex items-center gap-2 min-w-0">
@@ -418,7 +400,10 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
                 {agentItems.map((agent) => (
                   <div
                     key={agent.id}
-                    onClick={() => onSelectChat?.(agent.id)}
+                    onClick={() => {
+                      onSelectChat?.(agent.id);
+                      if (isMobile) onMobileClose?.();
+                    }}
                     className={`p-3 rounded-xl border transition-all cursor-pointer ${
                       agent.id === activeChatId
                         ? 'bg-brand-card border-brand-border text-brand-textMain shadow-sm'
@@ -828,7 +813,79 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
           </div>
         )}
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop Collapsed Rail (only on desktop lg+ when collapsed) */}
+      {isCollapsed && (
+        <div className="hidden lg:flex flex-col items-center py-3 px-1.5 bg-brand-sidebar/95 border-l border-brand-border/60 select-none z-20 shrink-0">
+          <button
+            onClick={() => setIsCollapsed(false)}
+            className="p-1.5 rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors mb-3 cursor-pointer"
+            title="Expand Right Sidebar"
+          >
+            <ChevronLeft size={16} />
+          </button>
+
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => { setActiveTab('files'); setIsCollapsed(false); }}
+              className={`relative p-2 rounded-lg transition-colors cursor-pointer ${activeTab === 'files' ? 'bg-brand-card text-brand-textMain border border-brand-border' : 'text-brand-textMuted hover:text-brand-textMain'}`}
+              title="File Changes"
+            >
+              <FileCode2 size={16} />
+              {modifiedFiles.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-brand-primary text-[9px] font-bold text-brand-bg flex items-center justify-center">
+                  {modifiedFiles.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('agents'); setIsCollapsed(false); }}
+              className={`relative p-2 rounded-lg transition-colors cursor-pointer ${activeTab === 'agents' ? 'bg-brand-card text-brand-textMain border border-brand-border' : 'text-brand-textMuted hover:text-brand-textMain'}`}
+              title="Multiagent Sessions"
+            >
+              <Users size={16} />
+              {agentItems.filter(a => a.isRunning).length > 0 && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[color:var(--neon-live)] animate-pulse" />
+              )}
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('partner'); setIsCollapsed(false); }}
+              className={`p-2 rounded-lg transition-colors cursor-pointer ${activeTab === 'partner' ? 'bg-brand-card text-brand-textMain border border-brand-border' : 'text-brand-textMuted hover:text-brand-textMain'}`}
+              title="Partner Companion"
+            >
+              <Sparkles size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Expanded Sidebar (only on desktop lg+ when not collapsed) */}
+      {!isCollapsed && (
+        <aside className="hidden lg:flex w-80 h-full flex-col bg-brand-sidebar/95 border-l border-brand-border/60 select-none z-20 overflow-hidden transition-all duration-200 shrink-0">
+          {renderSidebarContent(false)}
+        </aside>
+      )}
+
+      {/* Mobile Drawer Overlay (only below lg when isMobileOpen is true) */}
+      {isMobileOpen && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/60 z-40 backdrop-blur-xs lg:hidden animate-in fade-in duration-200"
+            onClick={onMobileClose}
+            aria-hidden="true"
+          />
+          <aside className="fixed inset-y-0 right-0 z-50 w-[88vw] sm:w-88 max-w-sm h-full flex flex-col bg-brand-sidebar shadow-2xl border-l border-brand-border select-none overflow-hidden animate-in slide-in-from-right duration-200 lg:hidden">
+            {renderSidebarContent(true)}
+          </aside>
+        </>
+      )}
+    </>
   );
 };
 

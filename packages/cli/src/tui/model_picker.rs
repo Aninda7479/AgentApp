@@ -99,6 +99,13 @@ impl ModelPickerState {
                 context_window: "32k ctx",
                 capabilities: &["local", "offline", "coding"],
             },
+            ModelItem {
+                provider: "opencode".to_string(),
+                model_id: "big-pickle".to_string(),
+                display_name: "Big Pickle (OpenCode Free)".to_string(),
+                context_window: "200k ctx",
+                capabilities: &["free", "reasoning", "coding"],
+            },
         ];
 
         Self {

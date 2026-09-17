@@ -25,10 +25,20 @@ pub fn resolve_active_workspace_model(
                     m.get("id").and_then(|v| v.as_str()) == Some(last_used)
                         || m.get("name").and_then(|v| v.as_str()) == Some(last_used)
                 }) {
-                    let pid = matched.get("providerId").and_then(|v| v.as_str()).unwrap_or("gemini");
-                    let id = matched.get("id").and_then(|v| v.as_str()).unwrap_or(last_used);
+                    let pid = matched
+                        .get("providerId")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("gemini");
+                    let id = matched
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(last_used);
                     let prefix = format!("{}-", pid);
-                    let clean_id = if id.starts_with(&prefix) { &id[prefix.len()..] } else { id };
+                    let clean_id = if id.starts_with(&prefix) {
+                        &id[prefix.len()..]
+                    } else {
+                        id
+                    };
                     let prov_type = match pid.to_lowercase().as_str() {
                         "gemini" | "google" => ProviderType::Gemini,
                         "openai" => ProviderType::OpenAI,
@@ -37,6 +47,7 @@ pub fn resolve_active_workspace_model(
                         "openrouter" => ProviderType::OpenRouter,
                         "deepseek" => ProviderType::DeepSeek,
                         "groq" => ProviderType::Groq,
+                        "opencode" => ProviderType::OpenCode,
                         _ => ProviderType::Gemini,
                     };
                     let api_key = settings_store.get_api_key(pid).ok().flatten();
@@ -48,11 +59,24 @@ pub fn resolve_active_workspace_model(
 
     // 2. Check first enabled model in user's workspace settings
     if let Some(models) = raw_settings.get("models").and_then(|m| m.as_array()) {
-        if let Some(first_enabled) = models.iter().find(|m| m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true)) {
-            let pid = first_enabled.get("providerId").and_then(|v| v.as_str()).unwrap_or("gemini");
-            let id = first_enabled.get("id").and_then(|v| v.as_str()).unwrap_or("gemini-2.5-flash");
+        if let Some(first_enabled) = models
+            .iter()
+            .find(|m| m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true))
+        {
+            let pid = first_enabled
+                .get("providerId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("gemini");
+            let id = first_enabled
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("gemini-2.5-flash");
             let prefix = format!("{}-", pid);
-            let clean_id = if id.starts_with(&prefix) { &id[prefix.len()..] } else { id };
+            let clean_id = if id.starts_with(&prefix) {
+                &id[prefix.len()..]
+            } else {
+                id
+            };
             let prov_type = match pid.to_lowercase().as_str() {
                 "gemini" | "google" => ProviderType::Gemini,
                 "openai" => ProviderType::OpenAI,
@@ -61,6 +85,7 @@ pub fn resolve_active_workspace_model(
                 "openrouter" => ProviderType::OpenRouter,
                 "deepseek" => ProviderType::DeepSeek,
                 "groq" => ProviderType::Groq,
+                "opencode" => ProviderType::OpenCode,
                 _ => ProviderType::Gemini,
             };
             let api_key = settings_store.get_api_key(pid).ok().flatten();
@@ -69,7 +94,12 @@ pub fn resolve_active_workspace_model(
     }
 
     // 3. Fallback to Gemini
-    (ProviderType::Gemini, "gemini-2.5-flash".to_string(), None, None)
+    (
+        ProviderType::Gemini,
+        "gemini-2.5-flash".to_string(),
+        None,
+        None,
+    )
 }
 
 pub async fn handle_chat_stream(
@@ -87,12 +117,14 @@ pub async fn handle_chat_stream(
     let raw_settings = state.settings_store.load_raw().unwrap_or_default();
     let mut model_config = if let Some(p) = req.provider {
         let m_id = req.model_id.clone().unwrap_or_else(|| {
-            let (_, default_id, _, _) = resolve_active_workspace_model(&raw_settings, &state.settings_store);
+            let (_, default_id, _, _) =
+                resolve_active_workspace_model(&raw_settings, &state.settings_store);
             default_id
         });
         ModelConfig::new(p, m_id)
     } else if req.model_id.is_some() {
-        let (prov_type, default_id, _, _) = resolve_active_workspace_model(&raw_settings, &state.settings_store);
+        let (prov_type, default_id, _, _) =
+            resolve_active_workspace_model(&raw_settings, &state.settings_store);
         let m_id = req.model_id.clone().unwrap_or(default_id);
         ModelConfig::new(prov_type, m_id)
     } else {

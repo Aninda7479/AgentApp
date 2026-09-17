@@ -39,7 +39,7 @@ export interface ChatSession {
   messageCount: number;
 }
 
-export type ProviderType = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter' | 'deepseek' | 'groq';
+export type ProviderType = 'openai' | 'anthropic' | 'gemini' | 'ollama' | 'openrouter' | 'deepseek' | 'groq' | 'opencode';
 
 export interface ModelOption {
   id: string;

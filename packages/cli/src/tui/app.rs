@@ -1,7 +1,7 @@
-use std::path::PathBuf;
-use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use superagent_core_v2::orchestrator::{AgentEngine, CancellationToken};
 use superagent_core_v2::tools::builtin::{
@@ -121,10 +121,16 @@ impl AppState {
             if p.is_none() || m.is_none() {
                 if let Some(last_used) = settings.get("lastUsedModel") {
                     if p.is_none() {
-                        p = last_used.get("provider").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        p = last_used
+                            .get("provider")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
                     }
                     if m.is_none() {
-                        m = last_used.get("model").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        m = last_used
+                            .get("model")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
                     }
                 }
             }
@@ -132,15 +138,27 @@ impl AppState {
             if p.is_none() {
                 if let Some(prov_arr) = settings.get("providers").and_then(|v| v.as_array()) {
                     if let Some(first_prov) = prov_arr.first() {
-                        p = first_prov.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                        p = first_prov
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
                         if m.is_none() {
-                            m = first_prov.get("defaultModel").and_then(|v| v.as_str()).map(|s| s.to_string());
+                            m = first_prov
+                                .get("defaultModel")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
                         }
                         if k.is_none() {
-                            k = first_prov.get("apiKey").and_then(|v| v.as_str()).map(|s| s.to_string());
+                            k = first_prov
+                                .get("apiKey")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
                         }
                         if u.is_none() {
-                            u = first_prov.get("baseUrl").and_then(|v| v.as_str()).map(|s| s.to_string());
+                            u = first_prov
+                                .get("baseUrl")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
                         }
                     }
                 }
@@ -168,10 +186,16 @@ impl AppState {
         registry.register(GrepSearchTool::new(workspace_root.clone()));
 
         // Media & Automation tools
-        registry.register(superagent_core_v2::media::GeneratePdfTool::new(workspace_root.clone()));
-        registry.register(superagent_core_v2::media::GeneratePresentationTool::new(workspace_root.clone()));
+        registry.register(superagent_core_v2::media::GeneratePdfTool::new(
+            workspace_root.clone(),
+        ));
+        registry.register(superagent_core_v2::media::GeneratePresentationTool::new(
+            workspace_root.clone(),
+        ));
         registry.register(superagent_core_v2::automation::BrowserNavigateTool::new());
-        registry.register(superagent_core_v2::automation::BrowserScreenshotTool::new(workspace_root.clone()));
+        registry.register(superagent_core_v2::automation::BrowserScreenshotTool::new(
+            workspace_root.clone(),
+        ));
         registry.register(superagent_core_v2::automation::WebSearchTool::new());
 
         let engine = Arc::new(AgentEngine::new(Arc::new(registry)));
@@ -180,7 +204,10 @@ impl AppState {
 
         let has_model = !prov.is_empty() && !mod_id.is_empty();
         let welcome_text = if has_model {
-            format!("Welcome to SuperAgent Terminal — {}/{}. Type a prompt or / for skills.", prov, mod_id)
+            format!(
+                "Welcome to SuperAgent Terminal — {}/{}. Type a prompt or / for skills.",
+                prov, mod_id
+            )
         } else {
             "Welcome to SuperAgent Terminal — no model selected. Type a prompt, or / for skills & commands.\n⚠ No AI provider or model is connected. Run `/model` to pick a model or `/model set <provider/model>` (e.g. `/model set ollama/qwen2.5-coder`).".to_string()
         };
@@ -207,7 +234,11 @@ impl AppState {
                 messages.push(UiMessage {
                     id: "sys-resumed".to_string(),
                     role: MessageRole::System,
-                    content: format!("↺ Resumed session `{}` with {} messages.", res_id, messages.len()),
+                    content: format!(
+                        "↺ Resumed session `{}` with {} messages.",
+                        res_id,
+                        messages.len()
+                    ),
                     tool_calls: Vec::new(),
                     is_streaming: false,
                     timestamp: Utc::now(),
@@ -350,7 +381,11 @@ impl AppState {
                     }
                 }
             }
-            AgentEvent::ToolOutput { tool_use_id, output, is_error } => {
+            AgentEvent::ToolOutput {
+                tool_use_id,
+                output,
+                is_error,
+            } => {
                 if let Some(last) = self.messages.last_mut() {
                     if last.role == MessageRole::Assistant {
                         if let Some(tc) = last.tool_calls.iter_mut().find(|t| t.id == tool_use_id) {
@@ -413,6 +448,7 @@ impl AppState {
             "openrouter" => ProviderType::OpenRouter,
             "deepseek" => ProviderType::DeepSeek,
             "groq" => ProviderType::Groq,
+            "opencode" => ProviderType::OpenCode,
             _ => ProviderType::OpenAI,
         };
 
@@ -424,6 +460,7 @@ impl AppState {
             ProviderType::OpenRouter => std::env::var("OPENROUTER_API_KEY").ok(),
             ProviderType::DeepSeek => std::env::var("DEEPSEEK_API_KEY").ok(),
             ProviderType::Groq => std::env::var("GROQ_API_KEY").ok(),
+            ProviderType::OpenCode => std::env::var("OPENCODE_API_KEY").ok(),
             _ => None,
         });
         config.base_url = self.base_url.clone();

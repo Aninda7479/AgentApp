@@ -55,15 +55,25 @@ async fn main() -> Result<()> {
             println!("================================================================");
             println!(
                 "🚀 SuperAgent Core v2 Daemon ignited at: http://{}:{}",
-                if host == "0.0.0.0" { "localhost" } else { &host },
+                if host == "0.0.0.0" {
+                    "localhost"
+                } else {
+                    &host
+                },
                 port
             );
             if host == "0.0.0.0" || host == "::" {
                 for addr in lan_addresses() {
-                    println!("🌐 Network (LAN) URL:              http://{}:{}", addr, port);
+                    println!(
+                        "🌐 Network (LAN) URL:              http://{}:{}",
+                        addr, port
+                    );
                 }
             } else if host != "127.0.0.1" && host != "localhost" {
-                println!("🌐 Network URL:                    http://{}:{}", host, port);
+                println!(
+                    "🌐 Network URL:                    http://{}:{}",
+                    host, port
+                );
             }
             println!("⚡ Mode: Native Rust Axum Async Engine");
             println!("📂 Workspace: {}", workspace_root.display());
@@ -76,14 +86,13 @@ async fn main() -> Result<()> {
         }
         CliMode::Run(request) => {
             let provider = request.provider.unwrap_or(ProviderType::OpenAI);
-            let model_id = request
-                .model_id
-                .unwrap_or_else(|| match provider {
-                    ProviderType::Anthropic => "claude-3-5-sonnet-20241022".to_string(),
-                    ProviderType::Gemini => "gemini-1.5-pro".to_string(),
-                    ProviderType::Ollama => "llama3".to_string(),
-                    _ => "gpt-4o".to_string(),
-                });
+            let model_id = request.model_id.unwrap_or_else(|| match provider {
+                ProviderType::Anthropic => "claude-3-5-sonnet-20241022".to_string(),
+                ProviderType::Gemini => "gemini-1.5-pro".to_string(),
+                ProviderType::Ollama => "llama3".to_string(),
+                ProviderType::OpenCode => "big-pickle".to_string(),
+                _ => "gpt-4o".to_string(),
+            });
 
             let mut model_config = ModelConfig::new(provider, model_id);
             model_config.api_key = request.api_key.or_else(|| match model_config.provider {
@@ -93,6 +102,7 @@ async fn main() -> Result<()> {
                 ProviderType::OpenRouter => std::env::var("OPENROUTER_API_KEY").ok(),
                 ProviderType::DeepSeek => std::env::var("DEEPSEEK_API_KEY").ok(),
                 ProviderType::Groq => std::env::var("GROQ_API_KEY").ok(),
+                ProviderType::OpenCode => std::env::var("OPENCODE_API_KEY").ok(),
                 _ => None,
             });
             model_config.base_url = request.base_url;
@@ -114,12 +124,18 @@ async fn main() -> Result<()> {
             registry.register(GrepSearchTool::new(workspace_root.clone()));
 
             // Multimodal Media Generation Tools
-            registry.register(superagent_core_v2::media::GeneratePdfTool::new(workspace_root.clone()));
-            registry.register(superagent_core_v2::media::GeneratePresentationTool::new(workspace_root.clone()));
+            registry.register(superagent_core_v2::media::GeneratePdfTool::new(
+                workspace_root.clone(),
+            ));
+            registry.register(superagent_core_v2::media::GeneratePresentationTool::new(
+                workspace_root.clone(),
+            ));
 
             // Browser Automation & Search Tools
             registry.register(superagent_core_v2::automation::BrowserNavigateTool::new());
-            registry.register(superagent_core_v2::automation::BrowserScreenshotTool::new(workspace_root.clone()));
+            registry.register(superagent_core_v2::automation::BrowserScreenshotTool::new(
+                workspace_root.clone(),
+            ));
             registry.register(superagent_core_v2::automation::WebSearchTool::new());
 
             let engine = AgentEngine::new(Arc::new(registry));
@@ -179,12 +195,14 @@ fn parse_cli_mode(args: &[String]) -> Result<CliMode> {
                 println!("    --no-auth                   Disable authentication gate");
                 println!("    -p, --prompt <PROMPT>       User prompt instruction for one-shot execution");
                 println!("    -s, --system <SYSTEM>       Optional system prompt");
-                println!("    --provider <PROVIDER>       openai | anthropic | gemini | ollama | openrouter | deepseek | groq");
+                println!("    --provider <PROVIDER>       openai | anthropic | gemini | ollama | openrouter | deepseek | groq | opencode");
                 println!("    -m, --model <MODEL_ID>      Model ID (e.g. gpt-4o, claude-3-5-sonnet-20241022)");
                 println!("    --api-key <KEY>             API key override");
                 println!("    --base-url <URL>            API base URL override");
                 println!("    -w, --workspace <PATH>      Workspace root directory");
-                println!("    --json <JSON_STRING>        JSON payload string matching AgentRunRequest");
+                println!(
+                    "    --json <JSON_STRING>        JSON payload string matching AgentRunRequest"
+                );
                 println!("    -h, --help                  Print help information");
                 std::process::exit(0);
             }
@@ -311,4 +329,3 @@ fn parse_cli_mode(args: &[String]) -> Result<CliMode> {
         ui_dir,
     })
 }
-
