@@ -20,7 +20,6 @@ export const BYOKModal: React.FC<BYOKModalProps> = ({
     openai: initialKeys.openai || '',
     anthropic: initialKeys.anthropic || '',
     gemini: initialKeys.gemini || '',
-    opencode: initialKeys.opencode || '',
     ollamaUrl: initialKeys.ollamaUrl || 'http://localhost:11434',
     customEndpoint: initialKeys.customEndpoint || ''
   });
@@ -41,10 +40,6 @@ export const BYOKModal: React.FC<BYOKModalProps> = ({
   const handleTestConnection = (provider: string) => {
     const val = keys[provider];
     if (!val) {
-      if (provider === 'opencode') {
-        setTestStatus('✅ OPENCODE free models work without an API key!');
-        return;
-      }
       setTestStatus(`⚠️ No key or URL provided for ${provider.toUpperCase()}`);
       return;
     }
@@ -60,7 +55,6 @@ export const BYOKModal: React.FC<BYOKModalProps> = ({
   };
 
   const providers = [
-    { id: 'opencode', label: 'OpenCode Zen API Key', placeholder: 'Optional (Free models work without key)' },
     { id: 'openai', label: 'OpenAI API Key', placeholder: 'sk-proj-...' },
     { id: 'anthropic', label: 'Anthropic API Key', placeholder: 'sk-ant-...' },
     { id: 'gemini', label: 'Google Gemini API Key', placeholder: 'AIzaSy...' },

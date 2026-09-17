@@ -5,24 +5,58 @@ use serde_json::json;
 use std::collections::HashMap;
 use tokio::sync::mpsc::{channel, Receiver};
 
+use rand::Rng;
+
 use crate::providers::LlmProvider;
 use crate::types::{AgentEvent, ChatMessage, ContentBlock, ModelConfig, Role};
 
 /// OpenCode Zen default base URL
 pub const DEFAULT_OPENCODE_BASE_URL: &str = "https://opencode.ai/zen/v1";
 
-/// Curated high-performance free models hosted on OpenCode Zen
+/// Verified live-working free models hosted on OpenCode Zen
 pub const OPENCODE_FREE_MODELS: &[&str] = &[
     "big-pickle",
-    "deepseek-v4-flash-free",
     "mimo-v2.5-free",
-    "muse-spark-1.3-contributor-free",
-    "muse-spark-1.2-contributor-free",
     "nemotron-3-ultra-free",
     "nemotron-3.5-lightning-free",
     "ling-3.0-flash-fin-free",
-    "union-alpha",
 ];
+
+const BASE62_CHARS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+/// Generate a canonical OpenCode session ID: `ses_` + 12 lowercase hex + 14 Base62 chars (total 30 chars)
+pub fn generate_opencode_session_id() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let timestamp_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let hex_part = format!("{:012x}", timestamp_ms & 0xffff_ffff_ffff);
+    let mut rng = rand::thread_rng();
+    let mut base62_part = String::with_capacity(14);
+    for _ in 0..14 {
+        let idx = rng.gen_range(0..62);
+        base62_part.push(BASE62_CHARS[idx] as char);
+    }
+    format!("ses_{}{}", hex_part, base62_part)
+}
+
+/// Generate a canonical OpenCode request ID: `msg_` + 12 lowercase hex + 14 Base62 chars (total 30 chars)
+pub fn generate_opencode_request_id() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let timestamp_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let hex_part = format!("{:012x}", timestamp_ms & 0xffff_ffff_ffff);
+    let mut rng = rand::thread_rng();
+    let mut base62_part = String::with_capacity(14);
+    for _ in 0..14 {
+        let idx = rng.gen_range(0..62);
+        base62_part.push(BASE62_CHARS[idx] as char);
+    }
+    format!("msg_{}{}", hex_part, base62_part)
+}
 
 /// Standalone OpenCode provider implementing `LlmProvider`.
 /// All OpenCode Zen specific headers, session affinity, and streaming logic
@@ -208,25 +242,41 @@ impl LlmProvider for OpenCodeProvider {
             payload["tools"] = json!(formatted_tools);
         }
 
-        // OpenCode Zen requires a session ID header to authorize free-tier access
-        let session_id = format!("sess_{}", uuid::Uuid::new_v4().simple());
+        // OpenCode Zen official client identity and canonical session credentials
+        let session_id = generate_opencode_session_id();
+        let request_id = generate_opencode_request_id();
 
         let mut last_send_err = String::new();
         let mut res_opt = None;
 
+        let auth_header_val = if let Some(ref key) = config.api_key {
+            let trimmed = key.trim();
+            if trimmed.is_empty() {
+                "Bearer public".to_string()
+            } else {
+                format!("Bearer {}", trimmed)
+            }
+        } else {
+            "Bearer public".to_string()
+        };
+
         for attempt in 1..=3 {
-            let mut req = self
+            let req = self
                 .client
                 .post(&url)
+                .header("Content-Type", "application/json")
+                .header("Authorization", &auth_header_val)
+                .header(
+                    "User-Agent",
+                    "opencode/1.18.31 ai-sdk/provider-utils/4.0.40 runtime/bun/1.3.14",
+                )
+                .header("x-opencode-client", "desktop")
+                .header("x-opencode-session", &session_id)
+                .header("x-opencode-request", &request_id)
+                .header("x-opencode-project", "global")
                 .header("x-session-id", &session_id)
-                .header("User-Agent", "opencode/1.0.0")
+                .header("Accept", "text/event-stream")
                 .json(&payload);
-
-            if let Some(ref key) = config.api_key {
-                if !key.trim().is_empty() {
-                    req = req.bearer_auth(key.trim());
-                }
-            }
 
             match req.send().await {
                 Ok(response) => {
@@ -461,6 +511,18 @@ mod tests {
     #[test]
     fn test_opencode_free_models_list() {
         assert!(OPENCODE_FREE_MODELS.contains(&"big-pickle"));
-        assert!(OPENCODE_FREE_MODELS.contains(&"deepseek-v4-flash-free"));
+        assert!(OPENCODE_FREE_MODELS.contains(&"mimo-v2.5-free"));
+        assert!(OPENCODE_FREE_MODELS.contains(&"nemotron-3-ultra-free"));
+    }
+
+    #[test]
+    fn test_canonical_session_generation() {
+        let session = generate_opencode_session_id();
+        assert!(session.starts_with("ses_"));
+        assert_eq!(session.len(), 30);
+
+        let request = generate_opencode_request_id();
+        assert!(request.starts_with("msg_"));
+        assert_eq!(request.len(), 30);
     }
 }

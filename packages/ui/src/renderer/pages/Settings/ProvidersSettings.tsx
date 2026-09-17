@@ -761,17 +761,28 @@ export const ProvidersSettings: React.FC<ProvidersSettingsProps> = ({
                   className="ui-input"
                 />
               </div>
-              <div className="flex flex-col gap-1 text-left">
-                <label className="ui-label" htmlFor="connect-key">API Key / Token</label>
-                <input
-                  id="connect-key"
-                  type="password"
-                  placeholder="Enter credential token"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  className="ui-input"
-                />
-              </div>
+              {modalProviderId === 'opencode' ? (
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300 flex flex-col gap-1 text-left">
+                  <span className="font-semibold flex items-center gap-1.5 text-emerald-400">
+                    <span>✓</span> 100% Free &amp; Keyless Provider
+                  </span>
+                  <p className="text-brand-textMuted leading-relaxed">
+                    OpenCode Free models require no API key or account. They are powered directly by OpenCode's free tier gateway.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1 text-left">
+                  <label className="ui-label" htmlFor="connect-key">API Key / Token</label>
+                  <input
+                    id="connect-key"
+                    type="password"
+                    placeholder="Enter credential token"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    className="ui-input"
+                  />
+                </div>
+              )}
               <div className="flex flex-col gap-1 text-left">
                 <label className="ui-label" htmlFor="connect-url">Base Endpoint URL</label>
                 <input
