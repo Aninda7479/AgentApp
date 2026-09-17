@@ -29,6 +29,14 @@ import {
   Copy,
   Check,
   Layers,
+  Coins,
+  HardDrive,
+  Paperclip,
+  FileText,
+  Image as ImageIcon,
+  Video as VideoIcon,
+  ArrowLeft,
+  Cpu,
 } from 'lucide-react';
 import { useChatStore } from '../stores/chatStore';
 import { useSessionStore } from '../stores/sessionStore';
@@ -38,6 +46,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 import type { TrajectoryStep } from '../pages/Workspace/TrajectoryCanvas';
 import type { PartnerMood, PartnerManifest } from '../partner-popup/types';
 import { moodReaction } from '../partner-popup/types';
+import { computeChatContextStats, formatByteSize, type SubagentExecutionItem, type ChatAttachmentItem } from '../logic/context';
 
 export type WorkspaceSidebarTab = 'files' | 'agents' | 'partner' | 'info';
 
@@ -50,6 +59,7 @@ export interface WorkspaceRightSidebarProps {
   onSelectChat?: (chatId: string) => void;
   isMobileOpen?: boolean;
   onMobileClose?: () => void;
+  initialTab?: WorkspaceSidebarTab;
 }
 
 export interface ModifiedFileItem {
@@ -68,9 +78,10 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
   onAddAgentSession,
   onSelectChat,
   isMobileOpen = false,
-  onMobileClose
+  onMobileClose,
+  initialTab = 'files',
 }) => {
-  const [activeTab, setActiveTab] = useState<WorkspaceSidebarTab>('files');
+  const [activeTab, setActiveTab] = useState<WorkspaceSidebarTab>(initialTab);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [customMood, setCustomMood] = useState<PartnerMood | null>(null);
@@ -121,6 +132,29 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
   const runningSession = activeChatId ? runningSessions.get(activeChatId) : null;
   const contextUsage = runningSession?.contextUsage || null;
   const [copiedId, setCopiedId] = useState(false);
+  const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null);
+  const [copiedSubagentOutput, setCopiedSubagentOutput] = useState(false);
+  const [copiedAttachmentPath, setCopiedAttachmentPath] = useState<string | null>(null);
+
+  // Reset selected subagent drill-down when active chat changes
+  useEffect(() => {
+    setSelectedSubagentId(null);
+  }, [activeChatId]);
+
+  // Compute full chat context, token, pricing, size, subagents, and attachments stats
+  const chatStats = useMemo(() => {
+    return computeChatContextStats(
+      steps,
+      activeChat?.model,
+      undefined,
+      undefined,
+      activeChat
+    );
+  }, [steps, activeChat]);
+
+  // Scoped sub-agents in THIS specific chat
+  const subagentItems = chatStats.subagents;
+  const agentItems = subagentItems;
 
   // Partner hooks
   const partners = usePartners();
@@ -170,47 +204,6 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
     const q = searchQuery.toLowerCase();
     return modifiedFiles.filter((f) => f.filename.toLowerCase().includes(q));
   }, [modifiedFiles, searchQuery]);
-
-  // Compute multiagent running items
-  const agentItems = useMemo(() => {
-    const items: Array<{
-      id: string;
-      title: string;
-      isRunning: boolean;
-      startedAt?: number;
-      model?: string;
-      lastError?: string;
-    }> = [];
-
-    // Main running sessions from sessionStore
-    runningSessions.forEach((sess, id) => {
-      const chat = chats.find((c) => c.id === id);
-      items.push({
-        id,
-        title: chat?.title || `Session ${id.slice(0, 8)}`,
-        isRunning: sess.isGenerating,
-        startedAt: sess.startedAt,
-        model: chat?.model || 'Auto Orchestrator',
-        lastError: sess.lastError
-      });
-    });
-
-    // Also include other non-running active chats if list is short
-    chats.forEach((c) => {
-      if (!items.some((i) => i.id === c.id)) {
-        items.push({
-          id: c.id,
-          title: c.title || 'Untitled Session',
-          isRunning: c.isRunning || false,
-          startedAt: c.startedAt,
-          model: c.model || 'Default Model',
-          lastError: c.lastError
-        });
-      }
-    });
-
-    return items;
-  }, [runningSessions, chats]);
 
   // Partner derived mood
   const mood: PartnerMood = customMood || (activeChat?.lastError ? 'sad' : isGenerating ? 'working' : 'idle');
@@ -275,7 +268,12 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
           >
             <Users size={13} />
             <span>Agents</span>
-            {agentItems.filter(a => a.isRunning).length > 0 && (
+            {subagentItems.length > 0 && (
+              <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-brand-border text-[9px] text-brand-textMain font-mono">
+                {subagentItems.length}
+              </span>
+            )}
+            {subagentItems.some((a: SubagentExecutionItem) => a.status === 'running') && (
               <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)] animate-pulse" />
             )}
           </button>
@@ -401,81 +399,223 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
           </div>
         )}
 
-        {/* ── TAB 2: MULTIAGENT RUNNING NAMES ──────────────────────────────── */}
+        {/* ── TAB 2: SUB-AGENTS IN THIS CHAT ──────────────────────────────── */}
         {activeTab === 'agents' && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono text-brand-textMuted uppercase tracking-wider">
-                Multiagent Sessions ({agentItems.length})
-              </span>
-              {onAddAgentSession && (
-                <button
-                  onClick={onAddAgentSession}
-                  className="flex items-center gap-1 text-[10px] font-medium text-brand-primary hover:text-brand-primary/80 transition-colors"
-                >
-                  <Plus size={11} />
-                  <span>New Agent</span>
-                </button>
-              )}
-            </div>
-
-            {agentItems.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center text-brand-textMuted">
-                <Bot size={28} className="text-brand-textMuted/40 mb-2" />
-                <p className="text-xs font-medium text-brand-textMain">No Multiagent Sessions</p>
-                <p className="text-[11px] text-brand-textMuted mt-1">
-                  Launch parallel agents to execute independent tasks in background threads.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {agentItems.map((agent) => (
-                  <div
-                    key={agent.id}
-                    onClick={() => {
-                      onSelectChat?.(agent.id);
-                      if (isMobile) onMobileClose?.();
-                    }}
-                    className={`p-3 rounded-xl border transition-all cursor-pointer ${
-                      agent.id === activeChatId
-                        ? 'bg-brand-card border-brand-border text-brand-textMain shadow-sm'
-                        : 'bg-brand-bg/40 border-brand-border/40 text-brand-textMuted hover:bg-brand-hover hover:text-brand-textMain'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Bot
-                          size={15}
-                          className={agent.isRunning ? 'text-[color:var(--neon-live)] animate-pulse' : 'text-brand-textMuted'}
-                        />
-                        <span className="text-xs font-semibold truncate text-brand-textMain">
-                          {agent.title}
-                        </span>
-                      </div>
-
+            {selectedSubagentId ? (
+              (() => {
+                const subagent = subagentItems.find((s: SubagentExecutionItem) => s.id === selectedSubagentId);
+                if (!subagent) {
+                  return (
+                    <div className="py-8 text-center text-xs text-brand-textMuted">
+                      <p>Sub-agent not found.</p>
+                      <button
+                        onClick={() => setSelectedSubagentId(null)}
+                        className="mt-2 text-brand-primary underline cursor-pointer"
+                      >
+                        Back to sub-agents
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="space-y-3 animate-in fade-in duration-150">
+                    {/* Back header */}
+                    <div className="flex items-center justify-between pb-2 border-b border-brand-border/40">
+                      <button
+                        onClick={() => setSelectedSubagentId(null)}
+                        className="flex items-center gap-1.5 text-xs text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer py-1"
+                      >
+                        <ArrowLeft size={13} />
+                        <span>All Sub-agents</span>
+                      </button>
                       <span
                         className={`flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full ${
-                          agent.isRunning
+                          subagent.status === 'running'
                             ? 'bg-[color:var(--neon-live)]/15 text-[color:var(--neon-live)] font-semibold'
-                            : 'bg-brand-border/40 text-brand-textMuted'
+                            : subagent.status === 'error'
+                            ? 'bg-rose-500/15 text-rose-400 font-medium'
+                            : 'bg-emerald-500/15 text-emerald-400 font-medium'
                         }`}
                       >
                         <span
                           className={`w-1.5 h-1.5 rounded-full ${
-                            agent.isRunning ? 'bg-[color:var(--neon-live)] animate-pulse' : 'bg-brand-textMuted/40'
+                            subagent.status === 'running'
+                              ? 'bg-[color:var(--neon-live)] animate-pulse'
+                              : subagent.status === 'error'
+                              ? 'bg-rose-400'
+                              : 'bg-emerald-400'
                           }`}
                         />
-                        {agent.isRunning ? 'Running' : 'Idle'}
+                        {subagent.status === 'running' ? 'Running' : subagent.status === 'error' ? 'Failed' : 'Completed'}
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between text-[10px] font-mono text-brand-textMuted mt-2 pt-2 border-t border-brand-border/30">
-                      <span className="truncate">Model: {agent.model}</span>
-                      <span>{agent.id === activeChatId ? 'Active' : 'Switch'}</span>
+                    {/* Subagent Meta Card */}
+                    <div className="p-3 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                          <Cpu size={16} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-xs font-bold text-brand-textMain font-mono truncate">
+                            {subagent.name}
+                          </h4>
+                          <span className="text-[10px] text-brand-textMuted font-mono">
+                            Persona: {subagent.personaId}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-brand-border/40 text-[10px] font-mono">
+                        <div>
+                          <span className="text-brand-textMuted block">Duration</span>
+                          <span className="text-brand-textMain font-medium">{subagent.duration || 'Completed'}</span>
+                        </div>
+                        <div>
+                          <span className="text-brand-textMuted block">Token Footprint</span>
+                          <span className="text-brand-textMain font-medium">
+                            {subagent.tokens.total.toLocaleString()} tok ({subagent.cost < 0.001 ? '< $0.001' : `$${subagent.cost.toFixed(4)}`})
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Delegated Task */}
+                    <div className="p-3 rounded-xl bg-brand-card/50 border border-brand-border/40 space-y-1.5">
+                      <span className="text-[10px] font-mono text-brand-textMuted uppercase tracking-wider block">
+                        Delegated Task / Objective
+                      </span>
+                      <div className="text-xs text-brand-textMain whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto font-sans p-2.5 rounded-lg bg-brand-inner-bg/60 border border-brand-border/30">
+                        {subagent.prompt}
+                      </div>
+                    </div>
+
+                    {/* Subagent Execution Output / Result */}
+                    <div className="p-3 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono text-brand-textMuted uppercase tracking-wider">
+                          {subagent.status === 'error' ? 'Error Message' : 'Sub-agent Response & History'}
+                        </span>
+                        {subagent.output && (
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(subagent.output || '');
+                              setCopiedSubagentOutput(true);
+                              setTimeout(() => setCopiedSubagentOutput(false), 2000);
+                            }}
+                            className="flex items-center gap-1 text-[10px] text-brand-textMuted hover:text-brand-textMain cursor-pointer"
+                            title="Copy Response"
+                          >
+                            {copiedSubagentOutput ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                            <span>{copiedSubagentOutput ? 'Copied' : 'Copy'}</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div
+                        className={`p-2.5 rounded-lg text-xs leading-relaxed max-h-64 overflow-y-auto whitespace-pre-wrap font-sans ${
+                          subagent.status === 'error'
+                            ? 'bg-rose-500/10 text-rose-300 border border-rose-500/20'
+                            : 'bg-brand-inner-bg text-brand-textMain border border-brand-border/40'
+                        }`}
+                      >
+                        {subagent.output || 'No output recorded for this subagent execution.'}
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })()
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-brand-textMuted uppercase tracking-wider">
+                    Sub-agents in this Chat ({subagentItems.length})
+                  </span>
+                  {onAddAgentSession && (
+                    <button
+                      onClick={onAddAgentSession}
+                      className="flex items-center gap-1 text-[10px] font-medium text-brand-primary hover:text-brand-primary/80 transition-colors"
+                      title="Delegate task to a subagent"
+                    >
+                      <Plus size={11} />
+                      <span>New Agent</span>
+                    </button>
+                  )}
+                </div>
+
+                {subagentItems.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center text-brand-textMuted">
+                    <Bot size={28} className="text-brand-textMuted/40 mb-2" />
+                    <p className="text-xs font-medium text-brand-textMain">No Sub-agents in this Chat</p>
+                    <p className="text-[11px] text-brand-textMuted mt-1 max-w-[230px]">
+                      When the agent delegates work to specialized sub-agents (e.g., code research, review, or testing), they will appear here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {subagentItems.map((agent: SubagentExecutionItem) => (
+                      <div
+                        key={agent.id}
+                        onClick={() => setSelectedSubagentId(agent.id)}
+                        className="p-3 rounded-xl border border-brand-border/50 bg-brand-card/70 hover:bg-brand-hover hover:border-brand-border transition-all cursor-pointer group shadow-sm"
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Cpu
+                              size={15}
+                              className={
+                                agent.status === 'running'
+                                  ? 'text-[color:var(--neon-live)] animate-pulse'
+                                  : 'text-cyan-400'
+                              }
+                            />
+                            <span className="text-xs font-semibold truncate text-brand-textMain font-mono">
+                              {agent.name}
+                            </span>
+                          </div>
+
+                          <span
+                            className={`flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                              agent.status === 'running'
+                                ? 'bg-[color:var(--neon-live)]/15 text-[color:var(--neon-live)] font-semibold'
+                                : agent.status === 'error'
+                                ? 'bg-rose-500/15 text-rose-400 font-medium'
+                                : 'bg-emerald-500/15 text-emerald-400 font-medium'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                agent.status === 'running'
+                                  ? 'bg-[color:var(--neon-live)] animate-pulse'
+                                  : agent.status === 'error'
+                                  ? 'bg-rose-400'
+                                  : 'bg-emerald-400'
+                              }`}
+                            />
+                            {agent.status === 'running' ? 'Running' : agent.status === 'error' ? 'Failed' : 'Completed'}
+                          </span>
+                        </div>
+
+                        <p className="text-[11px] text-brand-textMuted line-clamp-2 leading-relaxed font-sans">
+                          {agent.prompt}
+                        </p>
+
+                        <div className="flex items-center justify-between text-[10px] font-mono text-brand-textMuted mt-2 pt-2 border-t border-brand-border/30">
+                          <span>
+                            {agent.tokens.total.toLocaleString()} tok ·{' '}
+                            {agent.cost < 0.001 ? '< $0.001' : `$${agent.cost.toFixed(4)}`}
+                          </span>
+                          <span className="flex items-center gap-0.5 text-brand-textMain font-medium group-hover:text-brand-primary transition-colors">
+                            <span>History</span>
+                            <ChevronRight size={11} />
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -852,49 +992,92 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
             <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-mono text-brand-textMuted uppercase tracking-wider">Session</span>
-                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                  isGenerating
-                    ? 'bg-[color:var(--neon-live)]/15 text-[color:var(--neon-live)] border border-[color:var(--neon-live)]/30'
-                    : 'bg-brand-inner-bg text-brand-textMuted border border-brand-border/40'
-                }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${isGenerating ? 'bg-[color:var(--neon-live)] animate-pulse' : 'bg-brand-textMuted/60'}`} />
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                    isGenerating
+                      ? 'bg-[color:var(--neon-live)]/15 text-[color:var(--neon-live)] border border-[color:var(--neon-live)]/30'
+                      : 'bg-brand-inner-bg text-brand-textMuted border border-brand-border/40'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isGenerating ? 'bg-[color:var(--neon-live)] animate-pulse' : 'bg-brand-textMuted/60'
+                    }`}
+                  />
                   {isGenerating ? 'Active Run' : 'Idle'}
                 </span>
               </div>
 
               <div>
-                <h4 className="text-sm font-semibold text-brand-textMain line-clamp-2">
+                <h4 className="text-sm font-semibold text-brand-textMain line-clamp-2 font-sans">
                   {activeChat?.title || 'Active Session'}
                 </h4>
                 <p className="text-[11px] text-brand-textMuted mt-0.5">
-                  Project: <span className="text-brand-textMain font-medium">{activeChat?.project || draftProject || activeProject || 'None (Standalone)'}</span>
+                  Project:{' '}
+                  <span className="text-brand-textMain font-medium">
+                    {activeChat?.project || draftProject || activeProject || 'None (Standalone)'}
+                  </span>
                 </p>
+              </div>
+
+              {/* Chat ID Display with Copy Button */}
+              <div className="p-2 rounded-lg bg-brand-inner-bg/80 border border-brand-border/50 flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <span className="text-[9px] font-mono text-brand-textMuted uppercase tracking-wider block">Chat ID</span>
+                  <span className="text-[11px] font-mono text-brand-textMain truncate block select-all">
+                    {activeChatId || 'draft-chat'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    if (activeChatId) {
+                      navigator.clipboard.writeText(activeChatId);
+                      setCopiedId(true);
+                      setTimeout(() => setCopiedId(false), 2000);
+                    }
+                  }}
+                  className="p-1.5 rounded-md hover:bg-brand-hover text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer shrink-0"
+                  title="Copy Chat ID"
+                >
+                  {copiedId ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                </button>
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-1 border-t border-brand-border/40 text-[11px]">
                 <div>
                   <span className="text-brand-textMuted text-[10px] block">Model</span>
                   <span className="text-brand-textMain font-mono font-medium truncate block">
-                    {activeChat?.model || 'Orchestrator'}
+                    {activeChat?.model || 'Auto Orchestrator'}
                   </span>
                 </div>
                 <div>
                   <span className="text-brand-textMuted text-[10px] block">Created</span>
                   <span className="text-brand-textMain font-medium block">
-                    {activeChat?.timestamp || 'Recent'}
+                    {activeChat?.timestamp ? new Date(activeChat.timestamp).toLocaleDateString() : 'Recent'}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Context Usage Card */}
-            <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2">
+            {/* Context Usage & Chat History Length Card */}
+            <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-mono text-brand-textMuted uppercase tracking-wider">Context Window</span>
-                <span className={`text-xs font-mono font-semibold ${
-                  (contextUsage?.pct ?? 0) > 80 ? 'text-[color:var(--neon-attention)]' : 'text-brand-textMain'
-                }`}>
-                  {contextUsage?.pct ?? 0}%
+                <span
+                  className={`text-xs font-mono font-semibold ${
+                    chatStats.pct > 80 ? 'text-[color:var(--neon-attention)]' : 'text-brand-textMain'
+                  }`}
+                >
+                  {chatStats.pct > 0 ? `${chatStats.pct}%` : chatStats.usedTokens > 0 ? '< 1%' : '0%'}
+                </span>
+              </div>
+
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm font-mono font-bold text-brand-textMain">
+                  {chatStats.formattedTokens} <span className="text-xs text-brand-textMuted font-normal">/ {chatStats.formattedLimit} tokens</span>
+                </span>
+                <span className="text-[10px] text-brand-textMuted font-mono">
+                  ~{Math.max(0, Math.round((chatStats.limitTokens - chatStats.usedTokens) / 1000))}k remaining
                 </span>
               </div>
 
@@ -902,20 +1085,171 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
               <div className="w-full h-2 rounded-full bg-brand-bg/80 border border-brand-border/40 overflow-hidden">
                 <div
                   className={`h-full transition-all duration-300 rounded-full ${
-                    (contextUsage?.pct ?? 0) > 80
+                    chatStats.pct > 80
                       ? 'bg-[color:var(--neon-attention)]'
-                      : (contextUsage?.pct ?? 0) > 50
+                      : chatStats.pct > 50
                       ? 'bg-amber-400'
                       : 'bg-emerald-500'
                   }`}
-                  style={{ width: `${Math.min(contextUsage?.pct ?? 0, 100)}%` }}
+                  style={{ width: `${Math.min(Math.max(chatStats.pct, chatStats.usedTokens > 0 ? 2 : 0), 100)}%` }}
                 />
               </div>
 
-              <div className="flex items-center justify-between text-[10px] text-brand-textMuted">
+              <div className="flex items-center justify-between text-[10px] text-brand-textMuted border-b border-brand-border/30 pb-2">
                 <span>Memory utilization</span>
-                <span>{(contextUsage?.pct ?? 0) > 80 ? 'Approaching capacity' : 'Healthy buffer'}</span>
+                <span>{chatStats.pct > 80 ? 'Approaching capacity' : 'Healthy buffer'}</span>
               </div>
+
+              {/* Token Breakdown */}
+              <div className="grid grid-cols-2 gap-1.5 pt-0.5 text-[10px] font-mono">
+                <div className="p-1.5 rounded bg-brand-inner-bg/60 border border-brand-border/30">
+                  <span className="text-brand-textMuted block text-[9px]">User Prompts</span>
+                  <span className="text-brand-textMain font-semibold">{chatStats.breakdown.user.toLocaleString()} tok</span>
+                </div>
+                <div className="p-1.5 rounded bg-brand-inner-bg/60 border border-brand-border/30">
+                  <span className="text-brand-textMuted block text-[9px]">Assistant</span>
+                  <span className="text-brand-textMain font-semibold">{chatStats.breakdown.assistant.toLocaleString()} tok</span>
+                </div>
+                <div className="p-1.5 rounded bg-brand-inner-bg/60 border border-brand-border/30">
+                  <span className="text-brand-textMuted block text-[9px]">Tools & System</span>
+                  <span className="text-brand-textMain font-semibold">{(chatStats.breakdown.tools + chatStats.breakdown.system).toLocaleString()} tok</span>
+                </div>
+                <div className="p-1.5 rounded bg-brand-inner-bg/60 border border-brand-border/30">
+                  <span className="text-brand-textMuted block text-[9px]">Sub-agents</span>
+                  <span className="text-brand-textMain font-semibold">{chatStats.breakdown.subagents.toLocaleString()} tok</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Total Cost Card (Main Chat + Sub-agents) */}
+            <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Coins size={13} className="text-amber-400" />
+                  <span className="text-[11px] font-mono text-brand-textMuted uppercase tracking-wider">Total Chat Cost</span>
+                </div>
+                <span className="text-xs font-mono font-bold text-brand-textMain">
+                  {chatStats.isFreeModel
+                    ? '$0.00'
+                    : chatStats.totalCost < 0.001
+                    ? '< $0.001'
+                    : `$${chatStats.totalCost.toFixed(4)}`}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1 text-[10px] font-mono">
+                <div>
+                  <span className="text-brand-textMuted block">Main Chat</span>
+                  <span className="text-brand-textMain font-medium">
+                    {chatStats.isFreeModel ? '$0.00' : chatStats.mainChatCost < 0.001 ? '< $0.001' : `$${chatStats.mainChatCost.toFixed(4)}`}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-brand-textMuted block">Sub-agents</span>
+                  <span className="text-brand-textMain font-medium">
+                    {chatStats.isFreeModel || chatStats.subagentsCost === 0
+                      ? '$0.00'
+                      : chatStats.subagentsCost < 0.001
+                      ? '< $0.001'
+                      : `$${chatStats.subagentsCost.toFixed(4)}`}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-[9px] text-brand-textMuted font-mono pt-1 border-t border-brand-border/30">
+                {chatStats.isFreeModel
+                  ? 'Local / Free model (zero API billing)'
+                  : `Rates: $${chatStats.pricingRates.inputPrice} in / $${chatStats.pricingRates.outputPrice} out per 1M tok`}
+              </div>
+            </div>
+
+            {/* Total Size Card */}
+            <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <HardDrive size={13} className="text-brand-textMuted" />
+                  <span className="text-[11px] font-mono text-brand-textMuted uppercase tracking-wider">Total Chat Size</span>
+                </div>
+                <span className="text-xs font-mono font-bold text-brand-textMain">
+                  {chatStats.formattedSize}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1 text-[10px] font-mono">
+                <div>
+                  <span className="text-brand-textMuted block">Transcript</span>
+                  <span className="text-brand-textMain font-medium">
+                    {formatByteSize(chatStats.transcriptBytes)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-brand-textMuted block">Media & Files</span>
+                  <span className="text-brand-textMain font-medium">
+                    {formatByteSize(chatStats.attachmentsBytes)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Attachments & Media Section */}
+            <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Paperclip size={13} className="text-brand-textMuted" />
+                  <span className="text-[11px] font-mono text-brand-textMuted uppercase tracking-wider">
+                    Attachments & Media ({chatStats.attachments.length})
+                  </span>
+                </div>
+              </div>
+
+              {chatStats.attachments.length === 0 ? (
+                <div className="py-4 text-center text-[11px] text-brand-textMuted">
+                  No files, images, or media attached in this session.
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {chatStats.attachments.map((att: ChatAttachmentItem) => (
+                    <div
+                      key={att.id}
+                      className="p-2 rounded-lg bg-brand-inner-bg/70 border border-brand-border/40 flex items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {att.mediaType === 'image' ? (
+                          <ImageIcon size={14} className="text-emerald-400 shrink-0" />
+                        ) : att.mediaType === 'video' ? (
+                          <VideoIcon size={14} className="text-purple-400 shrink-0" />
+                        ) : att.mediaType === 'code' ? (
+                          <FileCode2 size={14} className="text-cyan-400 shrink-0" />
+                        ) : (
+                          <FileText size={14} className="text-brand-textMuted shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="font-mono text-[11px] text-brand-textMain truncate">{att.name}</p>
+                          <span className="text-[9px] text-brand-textMuted font-mono">
+                            {att.mediaType} {att.formattedSize ? `· ${att.formattedSize}` : ''}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(att.path);
+                          setCopiedAttachmentPath(att.path);
+                          setTimeout(() => setCopiedAttachmentPath(null), 2000);
+                        }}
+                        className="p-1 rounded text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors shrink-0 cursor-pointer"
+                        title="Copy Path"
+                      >
+                        {copiedAttachmentPath === att.path ? (
+                          <Check size={12} className="text-emerald-400" />
+                        ) : (
+                          <Copy size={12} />
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Trajectory & Changes Summary */}
@@ -1000,12 +1334,16 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
             <button
               onClick={() => { setActiveTab('agents'); setIsCollapsed(false); }}
               className={`relative p-2 rounded-lg transition-colors cursor-pointer ${activeTab === 'agents' ? 'bg-brand-card text-brand-textMain border border-brand-border' : 'text-brand-textMuted hover:text-brand-textMain'}`}
-              title="Multiagent Sessions"
+              title="Sub-agents in this Chat"
             >
               <Users size={16} />
-              {agentItems.filter(a => a.isRunning).length > 0 && (
+              {subagentItems.some((a: SubagentExecutionItem) => a.status === 'running') ? (
                 <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[color:var(--neon-live)] animate-pulse" />
-              )}
+              ) : subagentItems.length > 0 ? (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-brand-border text-[9px] font-bold text-brand-textMain flex items-center justify-center">
+                  {subagentItems.length}
+                </span>
+              ) : null}
             </button>
 
             <button
