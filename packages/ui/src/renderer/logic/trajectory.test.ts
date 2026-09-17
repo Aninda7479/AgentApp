@@ -109,5 +109,75 @@ describe('TrajectoryService', () => {
       expect(details.category).toBe('thought');
       expect(details.actionLabel).toBe('Thought for 13s');
     });
+
+    it('parses running thought steps with Thinking... action label', () => {
+      const step: TrajectoryStep = {
+        id: '5',
+        type: 'thought',
+        status: 'running',
+        content: 'Analyzing deep chain of thought...',
+      };
+
+      const details = TrajectoryService.parseToolDetails(step);
+      expect(details.category).toBe('thought');
+      expect(details.actionLabel).toBe('Thinking...');
+    });
+  });
+
+  describe('parseThinkingContent', () => {
+    it('extracts completed think blocks and returns clean main content', () => {
+      const input = '<think>\nThe user just said "HI" - a casual greeting.\n</think>\n\nHey there! 👋 How can I help?';
+      const result = TrajectoryService.parseThinkingContent(input);
+
+      expect(result.thinking).toBe('The user just said "HI" - a casual greeting.');
+      expect(result.mainContent).toBe('Hey there! 👋 How can I help?');
+      expect(result.isThinkingActive).toBe(false);
+    });
+
+    it('handles unclosed think tags during live streaming', () => {
+      const streamingInput = '<think>\nFormulating response and planning tools...';
+      const result = TrajectoryService.parseThinkingContent(streamingInput);
+
+      expect(result.thinking).toBe('Formulating response and planning tools...');
+      expect(result.mainContent).toBe('');
+      expect(result.isThinkingActive).toBe(true);
+    });
+
+    it('supports thought and reasoning tags', () => {
+      const thoughtInput = '<thought>Internal model thought</thought>Hello!';
+      const res1 = TrajectoryService.parseThinkingContent(thoughtInput);
+      expect(res1.thinking).toBe('Internal model thought');
+      expect(res1.mainContent).toBe('Hello!');
+
+      const reasoningInput = '<reasoning>Step-by-step logic</reasoning>Done.';
+      const res2 = TrajectoryService.parseThinkingContent(reasoningInput);
+      expect(res2.thinking).toBe('Step-by-step logic');
+      expect(res2.mainContent).toBe('Done.');
+    });
+
+    it('handles multiple thinking tags in a single message', () => {
+      const multiInput = '<think>Part 1</think>\nInterim\n<think>Part 2</think>\nFinal answer.';
+      const result = TrajectoryService.parseThinkingContent(multiInput);
+
+      expect(result.thinking).toBe('Part 1\n\nPart 2');
+      expect(result.mainContent).toBe('Interim\n\nFinal answer.');
+      expect(result.isThinkingActive).toBe(false);
+    });
+
+    it('returns null thinking for normal content without thinking tags', () => {
+      const normalInput = 'Just a standard assistant reply.';
+      const result = TrajectoryService.parseThinkingContent(normalInput);
+
+      expect(result.thinking).toBe(null);
+      expect(result.mainContent).toBe('Just a standard assistant reply.');
+      expect(result.isThinkingActive).toBe(false);
+    });
+
+    it('handles empty input gracefully', () => {
+      const result = TrajectoryService.parseThinkingContent('');
+      expect(result.thinking).toBe(null);
+      expect(result.mainContent).toBe('');
+      expect(result.isThinkingActive).toBe(false);
+    });
   });
 });

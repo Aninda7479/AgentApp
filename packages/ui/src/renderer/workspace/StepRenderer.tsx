@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import type { TrajectoryStep, TrajectoryAttachment } from '../core/types';
 import { TrajectoryUtils } from '../services/TrajectoryUtils';
+import { TrajectoryService } from '../logic/trajectory';
 
 interface StepRendererProps {
   step: TrajectoryStep;
@@ -184,10 +185,28 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
   }
 
   if (step.type === 'assistant') {
+    const { thinking, mainContent } = TrajectoryService.parseThinkingContent(step.content);
     return (
       <div className="flex flex-col gap-1 my-3 px-4 group">
+        {thinking && (
+          <div className="mb-1.5">
+            <button
+              type="button"
+              onClick={() => setExpanded(!expanded)}
+              className="flex items-center gap-1.5 text-xs text-[color:var(--brand-text-muted)] hover:text-[color:var(--brand-text-main)] font-mono mb-1 transition-colors cursor-pointer select-none"
+            >
+              {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              <span>Thought</span>
+            </button>
+            {expanded && (
+              <div className="bg-[color:var(--brand-card)]/40 border border-[color:var(--brand-border)]/60 rounded-lg p-3 text-xs font-mono text-[color:var(--brand-text-muted)] whitespace-pre-wrap break-words [overflow-wrap:anywhere] max-h-60 overflow-y-auto scrollbar-thin">
+                {thinking}
+              </div>
+            )}
+          </div>
+        )}
         <div className="text-sm text-[color:var(--brand-text-main)] leading-relaxed whitespace-pre-wrap break-words font-sans">
-          {step.content}
+          {mainContent || step.content}
         </div>
         <div className="flex items-center justify-between mt-1 text-xs text-[color:var(--brand-text-muted)] font-mono">
           <div className="flex items-center gap-2">
@@ -351,12 +370,28 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
   if (step.type === 'thought') {
     return (
       <div className="my-1.5 px-4">
-        <div className="bg-[color:var(--brand-card)]/30 border border-[color:var(--brand-border)]/40 rounded-lg p-2.5 text-xs font-mono text-[color:var(--brand-text-muted)] italic">
-          <div className="flex items-center gap-2 mb-1 not-italic font-semibold text-[color:var(--brand-text-muted)]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)] animate-pulse" />
-            <span>Agent Thinking...</span>
-          </div>
-          <div>{step.content}</div>
+        <div className="bg-[color:var(--brand-card)]/30 border border-[color:var(--brand-border)]/40 rounded-lg overflow-hidden transition-colors">
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="w-full flex items-center justify-between px-3 py-2 text-xs font-mono text-[color:var(--brand-text-muted)] hover:text-[color:var(--brand-text-main)] select-none cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)]" />
+              <span className="font-semibold">Thought</span>
+            </div>
+            {step.metadata?.workedDuration && (
+              <span className="text-[10px] text-[color:var(--brand-text-muted)]/70">
+                {step.metadata.workedDuration as string}
+              </span>
+            )}
+          </button>
+          {expanded && (
+            <div className="px-3 pb-3 pt-1 text-xs font-mono text-[color:var(--brand-text-muted)] whitespace-pre-wrap break-words [overflow-wrap:anywhere] border-t border-[color:var(--brand-border)]/30 max-h-60 overflow-y-auto scrollbar-thin">
+              {step.content}
+            </div>
+          )}
         </div>
       </div>
     );

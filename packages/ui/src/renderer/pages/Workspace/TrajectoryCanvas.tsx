@@ -115,6 +115,7 @@ interface WorkedHeaderProps {
   children?: React.ReactNode;
   initialExpanded?: boolean;
   isWorking?: boolean;
+  isThoughtOnly?: boolean;
 }
 
 const WorkedHeader: React.FC<WorkedHeaderProps> = ({
@@ -125,6 +126,7 @@ const WorkedHeader: React.FC<WorkedHeaderProps> = ({
   children,
   initialExpanded = false,
   isWorking = false,
+  isThoughtOnly = false,
 }) => {
   const [expanded, setExpanded] = useState(isWorking || initialExpanded);
 
@@ -136,7 +138,7 @@ const WorkedHeader: React.FC<WorkedHeaderProps> = ({
 
   return (
     <div className="flex flex-col gap-1 select-none w-full text-left mb-1 font-sans">
-      {/* "Worked for Xs ˅" toggle */}
+      {/* "Worked for Xs ˅" or "Thought for Xs ˅" toggle */}
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -151,6 +153,10 @@ const WorkedHeader: React.FC<WorkedHeaderProps> = ({
           <span className="flex items-center gap-1.5 text-[color:var(--neon-live)] font-semibold animate-pulse">
             <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)]" />
             <span>Thinking... ({duration})</span>
+          </span>
+        ) : isThoughtOnly ? (
+          <span className="font-medium text-brand-textMuted">
+            Thought for {duration}
           </span>
         ) : (
           <span className="font-medium text-brand-textMuted">
@@ -276,6 +282,31 @@ const StreamingCursor: React.FC = () => (
     style={{ animation: 'blink 0.9s step-end infinite' }}
   />
 );
+
+// ─── Thought Copy Button ─────────────────────────────────────────────────────
+const ThoughtCopyButton: React.FC<{ content: string }> = ({ content }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="text-brand-textMuted hover:text-brand-textMain p-1 rounded hover:bg-brand-card transition-colors cursor-pointer flex items-center gap-1"
+      title="Copy reasoning"
+    >
+      {copied ? <Check size={11} className="text-[color:var(--neon-constructive)]" /> : <Copy size={11} />}
+      <span className="text-[10px]">{copied ? 'Copied' : 'Copy'}</span>
+    </button>
+  );
+};
 
 // ─── Expandable Tool Call Card ────────────────────────────────────────────────
 // ─── Modern Antigravity-Style Tool Call Card ──────────────────────────────────
@@ -437,9 +468,24 @@ const ToolCallCard: React.FC<ToolCallCardProps> = ({
               )}
             </div>
           ) : details.category === 'thought' ? (
-            /* Thought Markdown Block */
-            <div className="bg-brand-card/20 border border-brand-border/30 rounded-lg p-3 text-[12px] text-brand-textMuted leading-relaxed font-sans border-l-2 border-l-brand-highlight/50 break-words select-text">
-              <MarkdownText content={step.content} />
+            /* Thought Block - Wrappable, Scrollable & Optimized */
+            <div className="bg-brand-card/30 border border-brand-border/40 rounded-lg p-3 text-[12px] text-brand-textMuted leading-relaxed font-sans border-l-2 border-l-brand-highlight/60 break-words [overflow-wrap:anywhere] select-text animate-fade-in">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-brand-border/20 text-[11px] font-mono select-none">
+                <span className="flex items-center gap-1.5 text-brand-textMuted font-medium">
+                  <span className="text-[12px]">💡</span>
+                  <span>Reasoning Process</span>
+                  {isRunning && (
+                    <span className="flex items-center gap-1 text-[color:var(--neon-live)] ml-1 animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-live)]" />
+                      <span>Thinking...</span>
+                    </span>
+                  )}
+                </span>
+                {step.content && <ThoughtCopyButton content={step.content} />}
+              </div>
+              <div className="max-h-80 overflow-y-auto scrollbar-thin pr-1 break-words [overflow-wrap:anywhere] whitespace-pre-wrap font-mono text-[11.5px] leading-relaxed text-brand-textMuted/90">
+                {step.content}
+              </div>
             </div>
           ) : (
             /* File / Tool Generic Output */
@@ -1234,7 +1280,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
   const lastToolAbsoluteIdx = lastToolIdx === -1 ? -1 : steps.length - 1 - lastToolIdx;
 
   // Interleaved thinking steps (thoughts, tool calls, and intermediate assistant messages)
-  const thinkingSteps = steps.filter((s, idx) => {
+  const baseThinkingSteps = steps.filter((s, idx) => {
     if (s.type === 'thought') return true;
     if (s.type === 'tool_call' || s.type === 'tool_result') return true;
     if (s.type === 'assistant' && idx < lastToolAbsoluteIdx) return true;
@@ -1243,14 +1289,42 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
 
   const toolSteps = steps.filter(s => s.type === 'tool_call' || s.type === 'tool_result');
 
-  const assistantSteps = steps.filter((s, idx) => {
+  const rawAssistantSteps = steps.filter((s, idx) => {
     return s.type === 'assistant' && idx >= lastToolAbsoluteIdx;
   });
+
+  // Extract model reasoning (<think> tags) out of assistant steps into separate thought steps
+  const synthesizedThoughtSteps: TrajectoryStep[] = [];
+  const assistantSteps = rawAssistantSteps.map((step) => {
+    const parsed = TrajectoryService.parseThinkingContent(step.content);
+    const isStreamingThis = step.id === streamingStepId;
+
+    if (parsed.thinking) {
+      synthesizedThoughtSteps.push({
+        id: `thought-${step.id}`,
+        type: 'thought',
+        content: parsed.thinking,
+        status: isStreamingThis && isStreaming && parsed.isThinkingActive ? 'running' : 'success',
+        metadata: {
+          ...step.metadata,
+          workedDuration: step.metadata?.workedDuration || '1s',
+        },
+      });
+    }
+
+    return {
+      ...step,
+      content: parsed.mainContent,
+      isThinkingActive: parsed.isThinkingActive,
+    };
+  });
+
+  const thinkingSteps = [...baseThinkingSteps, ...synthesizedThoughtSteps];
 
   // Compute worked duration & edit stats from metadata
   const duration = thinkingSteps[0]?.metadata?.workedDuration ||
     toolSteps[0]?.metadata?.workedDuration ||
-    assistantSteps[0]?.metadata?.workedDuration || '0s';
+    rawAssistantSteps[0]?.metadata?.workedDuration || '0s';
 
   const totalFiles: number = toolSteps.reduce((acc, s) => acc + (s.metadata?.filesExplored || 0), 0);
   const totalFolders: number = toolSteps.reduce((acc, s) => acc + (s.metadata?.foldersExplored || 0), 0);
@@ -1263,6 +1337,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
       removed: s.metadata!.removedLines || 0
     }));
 
+  const isThoughtOnly = toolSteps.length === 0 && totalFiles === 0 && editedFiles.length === 0;
   const hasWorkDetails = thinkingSteps.length > 0 || totalFiles > 0 || editedFiles.length > 0 || isStreaming;
 
   // Summed file-change stats for the bottom chip
@@ -1281,6 +1356,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
           editedFiles={editedFiles}
           initialExpanded={initialExpanded}
           isWorking={isStreaming}
+          isThoughtOnly={isThoughtOnly}
         >
           {/* Chronological thinking/tool steps inside the collapsible */}
           {thinkingSteps.map((step, stepIdx) => (
@@ -1323,6 +1399,13 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
       {assistantSteps.map((step, idx) => {
         const isStreamingThis = step.id === streamingStepId;
         const isLast = idx === assistantSteps.length - 1;
+        const hasText = Boolean(step.content && step.content.trim().length > 0);
+
+        // While actively thinking during streaming and no text has been produced yet,
+        // do not render an empty assistant bubble in chat.
+        if (!hasText && isStreamingThis && step.isThinkingActive) {
+          return null;
+        }
 
         return (
           <div
@@ -1330,7 +1413,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
             data-testid={`step-assistant-${step.id}`}
             className="flex flex-col gap-1 w-full text-left"
           >
-            <MarkdownText content={step.content} streaming={isStreamingThis && isStreaming} />
+            <MarkdownText content={step.content} streaming={isStreamingThis && isStreaming && !step.isThinkingActive} />
 
             {/* What's Next suggestion */}
             {isLast && !isStreaming && step.content.toLowerCase().includes("what") && (
@@ -1432,7 +1515,7 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
       {assistantSteps.length > 0 && !isStreaming && (
         <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <MessageActions
-            content={assistantSteps.map(s => s.content).join('\n\n')}
+            content={assistantSteps.map(s => s.content).filter(Boolean).join('\n\n')}
           />
           {onRegenerate && (
             <TrajectoryIconButton

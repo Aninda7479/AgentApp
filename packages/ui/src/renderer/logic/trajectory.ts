@@ -1,6 +1,12 @@
 import type { TrajectoryStep } from './types';
 import { getIpc } from '../lib/ipc';
 
+export interface ParsedThinkingContent {
+  thinking: string | null;
+  mainContent: string;
+  isThinkingActive: boolean;
+}
+
 /**
  * Pure rendering-support transforms and the desktop image-read boundary
  * for the trajectory canvas. None of these hold React state — they are
@@ -8,9 +14,48 @@ import { getIpc } from '../lib/ipc';
  * view layer that only renders what this service computes.
  */
 export class TrajectoryService {
+  /**
+   * Separates reasoning/thinking blocks (<think>, <thought>, <reasoning>) from
+   * the final assistant response text. Handles completed tags and active streaming
+   * unclosed tags.
+   */
+  static parseThinkingContent(content: string): ParsedThinkingContent {
+    if (!content) {
+      return { thinking: null, mainContent: '', isThinkingActive: false };
+    }
+
+    const thinkTagRegex = /<(think|thought|reasoning)(?:\s+[^>]*)?>([\s\S]*?)<\/\1>/gi;
+    const thoughts: string[] = [];
+    let isThinkingActive = false;
+
+    // 1. Extract all closed thinking blocks
+    let stripped = content.replace(thinkTagRegex, (_match, _tag, inner) => {
+      if (inner && inner.trim()) {
+        thoughts.push(inner.trim());
+      }
+      return '';
+    });
+
+    // 2. Check for an unclosed thinking block at the end (active streaming)
+    const unclosedMatch = stripped.match(/<(think|thought|reasoning)(?:\s+[^>]*)?>([\s\S]*)$/i);
+    if (unclosedMatch) {
+      isThinkingActive = true;
+      const unclosedContent = unclosedMatch[2];
+      if (unclosedContent && unclosedContent.trim()) {
+        thoughts.push(unclosedContent.trim());
+      }
+      stripped = stripped.slice(0, unclosedMatch.index);
+    }
+
+    const thinking = thoughts.length > 0 ? thoughts.join('\n\n') : null;
+    const mainContent = stripped.replace(/^\n+/, '');
+
+    return { thinking, mainContent, isThinkingActive };
+  }
+
   /** Removes ANSI color / escape sequences from a raw tool-output string. */
   static stripAnsi(value: string): string {
-    return value.replace(/\[[0-9;]*m/g, '');
+    return value.replace(/ \[[0-9;]*m/g, '');
   }
 
   /**
@@ -245,12 +290,15 @@ export class TrajectoryService {
 
     // 6. Thought
     if (step.type === 'thought') {
+      const isRunning = step.status === 'running';
       const dur = meta.workedDuration || '13s';
       return {
         category: 'thought',
-        actionLabel: `Thought for ${dur}`,
+        actionLabel: isRunning ? 'Thinking...' : `Thought for ${dur}`,
         icon: '💡',
-        targetName: step.content ? TrajectoryService.truncatePreview(step.content, 60) : '',
+        targetName: step.content
+          ? TrajectoryService.truncatePreview(step.content.replace(/\s+/g, ' '), 60)
+          : '',
       };
     }
 
