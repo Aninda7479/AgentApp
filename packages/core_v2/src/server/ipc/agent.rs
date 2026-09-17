@@ -11,7 +11,8 @@ use crate::server::routes::chat::resolve_active_workspace_model;
 use crate::server::state::{AppState, SessionStateEntry};
 use crate::tools::builtin::{
     CreateArtifactTool, EditFileTool, GetAvailableToolsTool, GrepSearchTool, ListArtifactsTool,
-    ListDirTool, ReadArtifactTool, ReadFileTool, RunCommandTool, RunSubagentTool, WriteFileTool,
+    ListDirTool, ReadArtifactTool, ReadFileTool, RunCommandTool, RunSubagentTool, TelegramTool,
+    WriteFileTool,
 };
 use crate::tools::ToolRegistry;
 use crate::types::{ModelConfig, ProviderType};
@@ -468,6 +469,10 @@ pub async fn handle_agent_channel(
                 session_tool_registry.register(CreateArtifactTool::new());
                 session_tool_registry.register(ListArtifactsTool::new());
                 session_tool_registry.register(ReadArtifactTool::new());
+                session_tool_registry.register(TelegramTool::with_workspace(
+                    state_clone.settings_store.clone(),
+                    effective_workspace.clone(),
+                ));
 
                 if model_tier <= 2 {
                     // Core file and code tools for Tier 1 & 2

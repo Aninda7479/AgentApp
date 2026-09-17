@@ -110,6 +110,20 @@ impl Tool for RunCommandTool {
             #[cfg(target_os = "windows")]
             c.creation_flags(0x08000000);
             c.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command_str]);
+            if let Ok(path_var) = std::env::var("PATH") {
+                let mut custom_path = path_var;
+                if let Ok(userprofile) = std::env::var("USERPROFILE") {
+                    let sa_bin = format!("{}\\.superagent", userprofile);
+                    let win_apps = format!("{}\\AppData\\Local\\Microsoft\\WindowsApps", userprofile);
+                    if !custom_path.contains(&sa_bin) {
+                        custom_path = format!("{};{}", sa_bin, custom_path);
+                    }
+                    if !custom_path.contains(&win_apps) {
+                        custom_path = format!("{};{}", win_apps, custom_path);
+                    }
+                }
+                c.env("PATH", custom_path);
+            }
             c
         } else {
             let mut c = Command::new("sh");
