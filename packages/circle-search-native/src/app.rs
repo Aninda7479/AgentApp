@@ -1,19 +1,12 @@
-use egui::{
-    vec2, Align2, Color32, FontId, Id, Key, LayerId, Margin, Order, Pos2, Rect, Rounding,
-    ScrollArea, Stroke, TextEdit,
-};
+use egui::{Color32, Id, Key, LayerId, Order, Pos2, Rect, Rounding, Stroke};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::api::query_circle_search;
-use crate::capture::{crop_to_base64_jpeg, crop_to_color_image, CapturedScreen};
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum ActiveTab {
-    All,
-    Images,
-    Videos,
-    News,
-}
+use crate::capture::{
+    crop_to_base64_jpeg, crop_to_color_image, crop_to_image_data, CapturedScreen,
+};
+use crate::card::{render_hero_card, ActiveTab, CardAction, CardRenderContext};
+use crate::theme::{self, COLOR_BORDER_SUBTLE, COLOR_TEXT_MAIN, COLOR_TEXT_MUTED};
 
 pub struct CircleSearchApp {
     screen_info: CapturedScreen,
@@ -49,7 +42,8 @@ impl CircleSearchApp {
         let width = captured.image.width() as usize;
         let height = captured.image.height() as usize;
         let raw_rgba = captured.image.as_flat_samples();
-        let color_image = egui::ColorImage::from_rgba_unmultiplied([width, height], raw_rgba.as_slice());
+        let color_image =
+            egui::ColorImage::from_rgba_unmultiplied([width, height], raw_rgba.as_slice());
 
         let screen_texture = Some(cc.egui_ctx.load_texture(
             "screen_capture",
@@ -102,11 +96,8 @@ impl CircleSearchApp {
         let (px, py, pw, ph) = self.get_pixel_crop_coords(ctx, rect);
 
         if let Ok(color_img) = crop_to_color_image(&self.screen_info.image, px, py, pw, ph) {
-            self.crop_texture = Some(ctx.load_texture(
-                "crop_preview",
-                color_img,
-                egui::TextureOptions::LINEAR,
-            ));
+            self.crop_texture =
+                Some(ctx.load_texture("crop_preview", color_img, egui::TextureOptions::LINEAR));
         }
     }
 
@@ -119,57 +110,56 @@ impl CircleSearchApp {
         self.error_msg = None;
         self.active_mode = mode.clone();
 
-        let tx = self.response_tx.clone();
-        let prompt_clone = if prompt.trim().is_empty() {
-            match mode.as_str() {
-                "explain" => "Explain what is shown in this selection in detail.".to_string(),
-                "summarize" => "Summarize the key information visible in this selection.".to_string(),
-                "translate" => "Translate all visible text in this selection to English (or identify language and provide English translation).".to_string(),
-                "code" => "Analyze and solve or explain the code shown in this screenshot.".to_string(),
-                "ocr" => "Extract and transcribe all text from this selection cleanly with exact formatting.".to_string(),
-                _ => "Analyze this image selection and explain what it shows.".to_string(),
-            }
-        } else {
-            prompt
-        };
-
-        let img_w = self.screen_info.image.width();
-        let img_h = self.screen_info.image.height();
-
-        let img_base64 = if self.is_fullscreen_mode || self.selection_rect.is_none() {
-            crop_to_base64_jpeg(&self.screen_info.image, 0, 0, img_w, img_h).ok()
+        let image_b64 = if self.is_fullscreen_mode {
+            crop_to_base64_jpeg(
+                &self.screen_info.image,
+                0,
+                0,
+                self.screen_info.image.width(),
+                self.screen_info.image.height(),
+            )
+            .ok()
         } else if let Some(rect) = self.selection_rect {
             let (px, py, pw, ph) = self.get_pixel_crop_coords(ctx, rect);
-            self.update_crop_texture(ctx, rect);
             crop_to_base64_jpeg(&self.screen_info.image, px, py, pw, ph).ok()
         } else {
             None
         };
 
+        let tx = self.response_tx.clone();
         tokio::spawn(async move {
-            let res = query_circle_search(prompt_clone, img_base64, mode).await;
+            let res = query_circle_search(prompt, image_b64, mode).await;
             let _ = tx.send(res);
         });
     }
 
-    fn copy_text_to_clipboard(&mut self, text: &str) {
-        if let Ok(mut clipboard) = arboard::Clipboard::new() {
-            let _ = clipboard.set_text(text.to_string());
-            self.copied_toast_timer = 2.2;
-            self.copied_toast_msg = "✓ Text Copied".to_string();
+    fn copy_image_to_clipboard(&mut self, ctx: &egui::Context) {
+        let rect_opt = self.selection_rect.or_else(|| {
+            if self.is_fullscreen_mode {
+                Some(ctx.screen_rect())
+            } else {
+                None
+            }
+        });
+
+        if let Some(rect) = rect_opt {
+            let (px, py, pw, ph) = self.get_pixel_crop_coords(ctx, rect);
+            if let Ok(img_data) = crop_to_image_data(&self.screen_info.image, px, py, pw, ph) {
+                if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                    if clipboard.set_image(img_data).is_ok() {
+                        self.copied_toast_timer = 2.0;
+                        self.copied_toast_msg = "✓ Image copied to clipboard".to_string();
+                    }
+                }
+            }
         }
     }
 
-    fn copy_image_to_clipboard(&mut self, ctx: &egui::Context) {
-        if let Some(rect) = self.selection_rect {
-            let (px, py, pw, ph) = self.get_pixel_crop_coords(ctx, rect);
-
-            if let Ok(img_data) = crate::capture::crop_to_image_data(&self.screen_info.image, px, py, pw, ph) {
-                if let Ok(mut cb) = arboard::Clipboard::new() {
-                    let _ = cb.set_image(img_data);
-                    self.copied_toast_timer = 2.2;
-                    self.copied_toast_msg = "✓ Image Copied".to_string();
-                }
+    fn copy_text_to_clipboard(&mut self, text: &str) {
+        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+            if clipboard.set_text(text.to_string()).is_ok() {
+                self.copied_toast_timer = 2.0;
+                self.copied_toast_msg = "✓ Text copied to clipboard".to_string();
             }
         }
     }
@@ -177,28 +167,34 @@ impl CircleSearchApp {
 
 impl eframe::App for CircleSearchApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let dt = ctx.input(|i| i.stable_dt).min(0.1);
-        if self.copied_toast_timer > 0.0 {
-            self.copied_toast_timer = (self.copied_toast_timer - dt).max(0.0);
-            ctx.request_repaint();
-        }
-
+        // 1. Process async intelligence response
         if let Ok(res) = self.response_rx.try_recv() {
             self.is_loading = false;
             match res {
-                Ok(text) => self.ai_response = Some(text),
-                Err(err) => self.error_msg = Some(err),
+                Ok(content) => {
+                    self.ai_response = Some(content);
+                }
+                Err(err) => {
+                    self.error_msg = Some(err);
+                }
             }
         }
 
+        // 2. Decrement toast notification timer
+        if self.copied_toast_timer > 0.0 {
+            self.copied_toast_timer -= ctx.input(|i| i.unstable_dt);
+            ctx.request_repaint();
+        }
+
+        // 3. Global keyboard handlers: Escape quits immediately
         if ctx.input(|i| i.key_pressed(Key::Escape)) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
 
+        // 4. Draw Captured Desktop Background
         let screen_rect = ctx.screen_rect();
         let painter = ctx.layer_painter(LayerId::new(Order::Background, Id::new("screen_canvas")));
 
-        // 1. Draw Captured Desktop Background
         if let Some(ref tex) = self.screen_texture {
             painter.image(
                 tex.id(),
@@ -208,7 +204,7 @@ impl eframe::App for CircleSearchApp {
             );
         }
 
-        // 2. Mouse Drag & Region Selection
+        // 5. Mouse Drag & Region Selection
         let pointer = ctx.input(|i| i.pointer.clone());
         let is_over_card = self.is_dragging_card;
 
@@ -237,7 +233,7 @@ impl eframe::App for CircleSearchApp {
             }
         }
 
-        // Calculate live selection rect
+        // Determine current marquee rectangle
         let current_rect = if self.is_drawing {
             if let (Some(start), Some(curr)) = (self.drag_start, self.drag_current) {
                 let r = Rect::from_two_pos(start, curr);
@@ -253,487 +249,105 @@ impl eframe::App for CircleSearchApp {
             self.selection_rect
         };
 
-        // 3. Draw Translucent Dimmed Backdrop & Glowing Rounded Selection Marquee
+        // 6. Draw Dimmed Mask & Radiant Marquee
         if let Some(rect) = current_rect {
-            let dim_color = Color32::from_rgba_unmultiplied(0, 0, 0, 85);
+            theme::paint_cutout_mask(&painter, screen_rect, rect);
+            theme::paint_selection_marquee(&painter, rect);
 
-            // Cutout dimming around selection
-            let top_rect = Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(screen_rect.max.x, rect.min.y));
-            let bottom_rect = Rect::from_min_max(Pos2::new(0.0, rect.max.y), Pos2::new(screen_rect.max.x, screen_rect.max.y));
-            let left_rect = Rect::from_min_max(Pos2::new(0.0, rect.min.y), Pos2::new(rect.min.x, rect.max.y));
-            let right_rect = Rect::from_min_max(Pos2::new(rect.max.x, rect.min.y), Pos2::new(screen_rect.max.x, rect.max.y));
-
-            painter.rect_filled(top_rect, Rounding::ZERO, dim_color);
-            painter.rect_filled(bottom_rect, Rounding::ZERO, dim_color);
-            painter.rect_filled(left_rect, Rounding::ZERO, dim_color);
-            painter.rect_filled(right_rect, Rounding::ZERO, dim_color);
-
-            // Radiant Glowing Marquee (Google App on Windows style)
-            painter.rect_stroke(
-                rect.expand(4.0),
-                Rounding::same(16.0),
-                Stroke::new(6.0, Color32::from_rgba_unmultiplied(255, 255, 255, 45)),
-            );
-            painter.rect_stroke(
-                rect,
-                Rounding::same(14.0),
-                Stroke::new(2.5, Color32::WHITE),
+            // Floating Quick "Copy Image" Pill near selection bottom-right
+            let copy_btn_rect = Rect::from_min_size(
+                Pos2::new((rect.max.x - 110.0).max(rect.min.x), rect.max.y + 10.0),
+                egui::vec2(105.0, 28.0),
             );
 
-            // Blue Lens Circular Badge at bottom-right of marquee
-            let lens_center = Pos2::new(rect.max.x + 2.0, rect.max.y + 2.0);
-            painter.circle_filled(lens_center, 14.0, Color32::from_rgb(26, 115, 232)); // Google Blue
-            painter.circle_stroke(lens_center, 14.0, Stroke::new(1.5, Color32::WHITE));
-            painter.text(
-                lens_center,
-                Align2::CENTER_CENTER,
-                "✦",
-                FontId::proportional(12.0),
-                Color32::WHITE,
-            );
-
-            // Quick Copy Image Floating Button Pill above selection
-            let copy_btn_rect = Rect::from_min_max(
-                Pos2::new(rect.min.x, (rect.min.y - 28.0).max(8.0)),
-                Pos2::new(rect.min.x + 105.0, (rect.min.y - 4.0).max(32.0)),
-            );
-            let copy_hovered = ctx.input(|i| i.pointer.hover_pos().map_or(false, |p| copy_btn_rect.contains(p)));
+            let copy_hovered = ctx.input(|i| {
+                i.pointer
+                    .hover_pos()
+                    .is_some_and(|p| copy_btn_rect.contains(p))
+            });
 
             painter.rect_filled(
                 copy_btn_rect,
-                Rounding::same(12.0),
-                if copy_hovered { Color32::from_rgba_unmultiplied(30, 35, 48, 245) } else { Color32::from_rgba_unmultiplied(20, 24, 34, 225) },
+                Rounding::same(10.0),
+                if copy_hovered {
+                    Color32::from_rgba_unmultiplied(33, 34, 38, 250)
+                } else {
+                    Color32::from_rgba_unmultiplied(24, 25, 27, 230)
+                },
             );
             painter.rect_stroke(
                 copy_btn_rect,
-                Rounding::same(12.0),
-                Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 40)),
+                Rounding::same(10.0),
+                Stroke::new(1.0, COLOR_BORDER_SUBTLE),
             );
             painter.text(
                 copy_btn_rect.center(),
-                Align2::CENTER_CENTER,
+                egui::Align2::CENTER_CENTER,
                 "📷 Copy Image",
-                FontId::proportional(11.0),
-                if copy_hovered { Color32::WHITE } else { Color32::from_rgb(210, 225, 245) },
+                egui::FontId::proportional(11.0),
+                if copy_hovered {
+                    COLOR_TEXT_MAIN
+                } else {
+                    COLOR_TEXT_MUTED
+                },
             );
 
-            if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary) && copy_hovered) {
+            if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary) && copy_hovered)
+            {
                 self.copy_image_to_clipboard(ctx);
             }
         } else if self.is_lens_active {
-            painter.rect_filled(screen_rect, Rounding::ZERO, Color32::from_rgba_unmultiplied(0, 0, 0, 50));
+            painter.rect_filled(screen_rect, Rounding::ZERO, theme::COLOR_BG_OVERLAY);
         }
 
-        // 4. Floating Toast Notification (When Copied)
+        // 7. Draw Toast Notification
         if self.copied_toast_timer > 0.0 && !self.copied_toast_msg.is_empty() {
-            let toast_w = 210.0f32;
-            let toast_h = 34.0f32;
-            let toast_rect = Rect::from_center_size(Pos2::new(screen_rect.center().x, 42.0), vec2(toast_w, toast_h));
-
-            painter.rect_filled(
-                toast_rect,
-                Rounding::same(17.0),
-                Color32::from_rgb(16, 24, 20),
-            );
-            painter.rect_stroke(
-                toast_rect,
-                Rounding::same(17.0),
-                Stroke::new(1.0, Color32::from_rgb(52, 211, 153)),
-            );
-            painter.text(
-                toast_rect.center(),
-                Align2::CENTER_CENTER,
-                &self.copied_toast_msg,
-                FontId::proportional(12.0),
-                Color32::from_rgb(167, 243, 208),
-            );
+            theme::paint_toast(&painter, screen_rect, &self.copied_toast_msg);
         }
 
-        // 4. Floating Omnibox / Intelligence Panel (Hero Redesign)
-        let is_expanded = self.selection_rect.is_some() || self.ai_response.is_some() || self.is_loading || self.error_msg.is_some();
-        let card_w = if is_expanded { 500.0f32 } else { 440.0f32 };
-        let default_pos = if is_expanded {
-            Pos2::new(
-                (screen_rect.max.x - card_w - 32.0).max(20.0),
-                36.0,
-            )
-        } else {
-            Pos2::new(
-                (screen_rect.max.x - card_w - 48.0).max(20.0),
-                48.0,
-            )
+        // 8. Render Floating Intelligence Hero Panel
+        let render_ctx = CardRenderContext {
+            query: &mut self.query,
+            follow_up_query: &mut self.follow_up_query,
+            active_tab: &mut self.active_tab,
+            is_loading: self.is_loading,
+            is_lens_active: &mut self.is_lens_active,
+            is_fullscreen_mode: &mut self.is_fullscreen_mode,
+            ai_response: &self.ai_response,
+            error_msg: &self.error_msg,
+            selection_rect: &mut self.selection_rect,
+            crop_texture: &self.crop_texture,
+            copied_toast_timer: self.copied_toast_timer,
+            copied_toast_msg: &self.copied_toast_msg,
         };
 
-        let active_pos = self.card_pos.unwrap_or(default_pos);
-
-        egui::Window::new("SuperAgent Google App Card")
-            .id(Id::new("google_app_hero_card"))
-            .title_bar(false)
-            .resizable(false)
-            .fixed_pos(active_pos)
-            .fixed_size(vec2(card_w, 0.0))
-            .frame(
-                egui::Frame::none()
-                    .fill(Color32::from_rgba_unmultiplied(16, 20, 28, 235)) // Deep frosted acrylic
-                    .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 42))) // Crisp glass stroke
-                    .rounding(Rounding::same(22.0))
-                    .inner_margin(Margin::same(18.0))
-                    .shadow(egui::epaint::Shadow {
-                        offset: vec2(0.0, 18.0),
-                        blur: 40.0,
-                        spread: 0.0,
-                        color: Color32::from_black_alpha(220),
-                    }),
-            )
-            .show(ctx, |ui| {
-                ui.set_width(card_w - 36.0);
-
-                if !is_expanded {
-                    // ── STATE 1: COMPACT FLOATING OMNIBOX ─────────────────────
-                    ui.horizontal(|ui| {
-                        // Google/SuperAgent 4-Color Logo Glyph
-                        let (logo_rect, _) = ui.allocate_exact_size(vec2(22.0, 22.0), egui::Sense::hover());
-                        ui.painter().circle_filled(logo_rect.center(), 10.0, Color32::from_rgb(66, 133, 244)); // Blue
-                        ui.painter().text(logo_rect.center(), Align2::CENTER_CENTER, "G", FontId::proportional(12.0), Color32::WHITE);
-
-                        ui.add_space(2.0);
-                        ui.label(
-                            egui::RichText::new("Google app")
-                                .font(FontId::proportional(13.5))
-                                .strong()
-                                .color(Color32::from_rgb(240, 245, 255)),
-                        );
-
-                        ui.label(
-                            egui::RichText::new("Alt + Space")
-                                .font(FontId::proportional(11.0))
-                                .color(Color32::from_rgb(140, 155, 175)),
-                        );
-
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let close_btn = egui::Button::new(egui::RichText::new("✕").size(11.0).color(Color32::from_rgb(180, 190, 205)))
-                                .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 14))
-                                .rounding(Rounding::same(8.0));
-                            if ui.add(close_btn).clicked() {
-                                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                            }
-
-                            let avatar_rect = ui.allocate_exact_size(vec2(20.0, 20.0), egui::Sense::hover()).0;
-                            ui.painter().circle_filled(avatar_rect.center(), 9.0, Color32::from_rgb(234, 67, 53)); // Red avatar accent
-                        });
-                    });
-
-                    ui.add_space(10.0);
-
-                    // Large Rounded Input Box
-                    egui::Frame::none()
-                        .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 14))
-                        .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 28)))
-                        .rounding(Rounding::same(16.0))
-                        .inner_margin(Margin::symmetric(14.0, 10.0))
-                        .show(ui, |ui| {
-                            let text_edit = TextEdit::singleline(&mut self.query)
-                                .hint_text("Ask anything")
-                                .desired_width(ui.available_width())
-                                .font(FontId::proportional(14.0))
-                                .frame(false);
-
-                            let response = ui.add(text_edit);
-                            if response.lost_focus() && ctx.input(|i| i.key_pressed(Key::Enter)) {
-                                let q = self.query.clone();
-                                self.start_analysis(ctx, q, "general".to_string());
-                            }
-
-                            ui.add_space(8.0);
-
-                            ui.horizontal(|ui| {
-                                let plus_btn = egui::Button::new(egui::RichText::new("+").size(13.0).strong().color(Color32::from_rgb(220, 230, 245)))
-                                    .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 12))
-                                    .rounding(Rounding::same(12.0));
-                                ui.add(plus_btn);
-
-                                let share_btn = egui::Button::new(
-                                    egui::RichText::new("🖥 Share screen")
-                                        .size(11.5)
-                                        .color(if self.is_fullscreen_mode { Color32::WHITE } else { Color32::from_rgb(210, 225, 240) }),
-                                )
-                                .fill(if self.is_fullscreen_mode { Color32::from_rgb(66, 133, 244) } else { Color32::from_rgba_unmultiplied(255, 255, 255, 12) })
-                                .rounding(Rounding::same(12.0));
-
-                                if ui.add(share_btn).clicked() {
-                                    self.is_fullscreen_mode = !self.is_fullscreen_mode;
-                                }
-
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    // Blue Google Lens Action Button
-                                    let lens_btn = egui::Button::new(
-                                        egui::RichText::new("✦ Lens")
-                                            .size(11.5)
-                                            .strong()
-                                            .color(Color32::WHITE),
-                                    )
-                                    .fill(Color32::from_rgb(26, 115, 232))
-                                    .rounding(Rounding::same(12.0))
-                                    .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 50)));
-
-                                    if ui.add(lens_btn).clicked() {
-                                        self.is_lens_active = true;
-                                    }
-                                });
-                            });
-                        });
-                } else {
-                    // ── STATE 2: EXPANDED INTELLIGENCE WINDOW ────────────────
-                    // Top Navigation Bar (AI Mode ▾ | All | Images | Videos | News)
-                    ui.horizontal(|ui| {
-                        let ai_mode_btn = egui::Button::new(
-                            egui::RichText::new("AI Mode ▾")
-                                .size(13.0)
-                                .strong()
-                                .color(Color32::from_rgb(245, 248, 255)),
-                        )
-                        .fill(Color32::TRANSPARENT);
-                        ui.add(ai_mode_btn);
-
-                        ui.add_space(6.0);
-                        let tabs = [
-                            (ActiveTab::All, "All"),
-                            (ActiveTab::Images, "Images"),
-                            (ActiveTab::Videos, "Videos"),
-                            (ActiveTab::News, "News"),
-                        ];
-
-                        for (tab, label) in tabs {
-                            let is_active = self.active_tab == tab;
-                            let tab_btn = egui::Button::new(
-                                egui::RichText::new(label)
-                                    .size(12.0)
-                                    .color(if is_active { Color32::WHITE } else { Color32::from_rgb(160, 175, 195) }),
-                            )
-                            .fill(Color32::TRANSPARENT);
-
-                            if ui.add(tab_btn).clicked() {
-                                self.active_tab = tab;
-                            }
-                        }
-
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let close_btn = egui::Button::new(egui::RichText::new("✕").size(11.0).color(Color32::from_rgb(180, 190, 205)))
-                                .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 14))
-                                .rounding(Rounding::same(8.0));
-                            if ui.add(close_btn).clicked() {
-                                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                            }
-
-                            if self.ai_response.is_some() {
-                                let label = if self.copied_toast_timer > 0.0 && self.copied_toast_msg.contains("Text") { "✓ Text" } else { "📋 Text" };
-                                let copy_btn = egui::Button::new(egui::RichText::new(label).size(11.0).color(Color32::from_rgb(200, 215, 235)))
-                                    .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 14))
-                                    .rounding(Rounding::same(8.0));
-                                if ui.add(copy_btn).clicked() {
-                                    if let Some(ref text) = self.ai_response.clone() {
-                                        self.copy_text_to_clipboard(text);
-                                    }
-                                }
-                            }
-
-                            if self.selection_rect.is_some() {
-                                let label = if self.copied_toast_timer > 0.0 && self.copied_toast_msg.contains("Image") { "✓ Image" } else { "📷 Image" };
-                                let copy_img_btn = egui::Button::new(egui::RichText::new(label).size(11.0).color(Color32::from_rgb(200, 220, 245)))
-                                    .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 14))
-                                    .rounding(Rounding::same(8.0));
-                                if ui.add(copy_img_btn).clicked() {
-                                    self.copy_image_to_clipboard(ctx);
-                                }
-
-                                let redraw_btn = egui::Button::new(egui::RichText::new("🔄").size(11.0).color(Color32::from_rgb(200, 215, 235)))
-                                    .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 14))
-                                    .rounding(Rounding::same(8.0));
-                                if ui.add(redraw_btn).clicked() {
-                                    self.selection_rect = None;
-                                    self.crop_texture = None;
-                                    self.ai_response = None;
-                                    self.error_msg = None;
-                                }
-                            }
-                        });
-                    });
-
-                    ui.add_space(6.0);
-                    ui.separator();
-                    ui.add_space(8.0);
-
-                    // Content Area (Scrollable Insights + Upper Right Crop Thumbnail)
-                    ScrollArea::vertical()
-                        .max_height(340.0)
-                        .auto_shrink([false, false])
-                        .show(ui, |ui| {
-                            ui.horizontal_top(|ui| {
-                                ui.vertical(|ui| {
-                                    ui.set_width(ui.available_width() - if self.crop_texture.is_some() { 120.0 } else { 0.0 });
-
-                                    // Loading Spinner ("Looking 🔍")
-                                    if self.is_loading {
-                                        ui.horizontal(|ui| {
-                                            ui.spinner();
-                                            ui.add_space(4.0);
-                                            ui.label(
-                                                egui::RichText::new("Looking 🔍")
-                                                    .font(FontId::proportional(14.0))
-                                                    .strong()
-                                                    .color(Color32::from_rgb(220, 235, 255)),
-                                            );
-                                        });
-                                        ui.add_space(10.0);
-                                    }
-
-                                    // AI Response Formatted Insights
-                                    if let Some(ref text) = self.ai_response {
-                                        for line in text.lines() {
-                                            let trimmed = line.trim();
-                                            if trimmed.is_empty() {
-                                                ui.add_space(6.0);
-                                            } else if trimmed.starts_with("# ") || trimmed.starts_with("## ") {
-                                                let h = trimmed.trim_start_matches('#').trim();
-                                                ui.label(
-                                                    egui::RichText::new(h)
-                                                        .font(FontId::proportional(14.5))
-                                                        .strong()
-                                                        .color(Color32::from_rgb(245, 248, 255)),
-                                                );
-                                            } else if trimmed.starts_with("### ") || trimmed.starts_with("Key Facts") {
-                                                ui.add_space(4.0);
-                                                ui.label(
-                                                    egui::RichText::new(trimmed.trim_start_matches('#').trim())
-                                                        .font(FontId::proportional(13.0))
-                                                        .strong()
-                                                        .color(Color32::from_rgb(220, 230, 245)),
-                                                );
-                                            } else if trimmed.starts_with("- ") || trimmed.starts_with("• ") || trimmed.starts_with("* ") {
-                                                let bullet_text = &trimmed[2..];
-                                                ui.horizontal_top(|ui| {
-                                                    ui.label(egui::RichText::new("•").color(Color32::from_rgb(140, 165, 200)));
-                                                    ui.label(
-                                                        egui::RichText::new(bullet_text)
-                                                            .font(FontId::proportional(12.5))
-                                                            .color(Color32::from_rgb(225, 232, 240)),
-                                                    );
-                                                });
-                                            } else {
-                                                ui.label(
-                                                    egui::RichText::new(trimmed)
-                                                        .font(FontId::proportional(13.0))
-                                                        .color(Color32::from_rgb(235, 240, 248)),
-                                                );
-                                            }
-                                        }
-                                    }
-
-                                    // Error Message
-                                    if let Some(ref err) = self.error_msg {
-                                        ui.label(
-                                            egui::RichText::new(format!("⚠ {}", err))
-                                                .font(FontId::proportional(12.5))
-                                                .color(Color32::from_rgb(254, 202, 202)),
-                                        );
-                                    }
-                                });
-
-                                // Upper-Right Cropped Selection Thumbnail (Clickable to Copy Image)
-                                if let Some(ref crop_tex) = self.crop_texture {
-                                    let (rect, response) = ui.allocate_exact_size(vec2(110.0, 125.0), egui::Sense::click());
-
-                                    ui.painter().image(
-                                        crop_tex.id(),
-                                        rect,
-                                        Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
-                                        Color32::WHITE,
-                                    );
-                                    ui.painter().rect_stroke(
-                                        rect,
-                                        Rounding::same(12.0),
-                                        Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 50)),
-                                    );
-
-                                    if response.hovered() {
-                                        ui.painter().rect_filled(
-                                            rect,
-                                            Rounding::same(12.0),
-                                            Color32::from_rgba_unmultiplied(0, 0, 0, 120),
-                                        );
-                                        ui.painter().text(
-                                            rect.center(),
-                                            Align2::CENTER_CENTER,
-                                            "📷 Copy Image",
-                                            FontId::proportional(11.0),
-                                            Color32::WHITE,
-                                        );
-                                    }
-
-                                    if response.clicked() {
-                                        self.copy_image_to_clipboard(ctx);
-                                    }
-                                }
-                            });
-                        });
-
-                    ui.add_space(10.0);
-
-                    // Persistent Bottom Input Bar ("Ask anything")
-                    egui::Frame::none()
-                        .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 12))
-                        .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 24)))
-                        .rounding(Rounding::same(16.0))
-                        .inner_margin(Margin::symmetric(14.0, 8.0))
-                        .show(ui, |ui| {
-                            let text_edit = TextEdit::singleline(&mut self.follow_up_query)
-                                .hint_text("Ask anything")
-                                .desired_width(ui.available_width())
-                                .font(FontId::proportional(13.0))
-                                .frame(false);
-
-                            let response = ui.add(text_edit);
-                            if response.lost_focus() && ctx.input(|i| i.key_pressed(Key::Enter)) {
-                                let q = self.follow_up_query.clone();
-                                self.follow_up_query.clear();
-                                self.start_analysis(ctx, q, "general".to_string());
-                            }
-
-                            ui.add_space(6.0);
-
-                            ui.horizontal(|ui| {
-                                let plus_btn = egui::Button::new(egui::RichText::new("+").size(12.0).strong().color(Color32::from_rgb(220, 230, 245)))
-                                    .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 10))
-                                    .rounding(Rounding::same(10.0));
-                                ui.add(plus_btn);
-
-                                let share_btn = egui::Button::new(
-                                    egui::RichText::new("🖥 Share screen")
-                                        .size(11.0)
-                                        .color(Color32::from_rgb(200, 215, 235)),
-                                )
-                                .fill(Color32::from_rgba_unmultiplied(255, 255, 255, 10))
-                                .rounding(Rounding::same(10.0));
-                                ui.add(share_btn);
-
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    let lens_btn = egui::Button::new(
-                                        egui::RichText::new("✦")
-                                            .size(12.0)
-                                            .strong()
-                                            .color(Color32::WHITE),
-                                    )
-                                    .fill(Color32::from_rgb(26, 115, 232))
-                                    .rounding(Rounding::same(10.0));
-
-                                    if ui.add(lens_btn).clicked() {
-                                        self.is_lens_active = true;
-                                        self.selection_rect = None;
-                                    }
-                                });
-                            });
-                        });
+        if let Some(action) = render_hero_card(
+            ctx,
+            screen_rect,
+            &mut self.card_pos,
+            &mut self.is_dragging_card,
+            render_ctx,
+        ) {
+            match action {
+                CardAction::SubmitQuery(q) => {
+                    self.start_analysis(ctx, q, "general".to_string());
                 }
-            });
+                CardAction::CopyText(t) => {
+                    self.copy_text_to_clipboard(&t);
+                }
+                CardAction::CopyImage => {
+                    self.copy_image_to_clipboard(ctx);
+                }
+                CardAction::Redraw => {
+                    self.selection_rect = None;
+                    self.crop_texture = None;
+                    self.ai_response = None;
+                    self.error_msg = None;
+                }
+                CardAction::Close => {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
+        }
     }
 }

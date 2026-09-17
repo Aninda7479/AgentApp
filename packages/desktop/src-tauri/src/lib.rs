@@ -153,10 +153,18 @@ pub fn run() {
             let show_item = MenuItemBuilder::with_id("show", "Show Main App").build(app)?;
             let artifacts_item =
                 MenuItemBuilder::with_id("artifacts", "Artifacts Inspector").build(app)?;
+            let circle_search_item = MenuItemBuilder::with_id(
+                "circle_search",
+                #[cfg(target_os = "macos")]
+                "Circle to Search (⌘+Shift+S)",
+                #[cfg(not(target_os = "macos"))]
+                "Circle to Search (Ctrl+Shift+S)",
+            )
+            .build(app)?;
             let quit_item = MenuItemBuilder::with_id("quit", "Quit SuperAgent").build(app)?;
 
             let menu = MenuBuilder::new(app)
-                .items(&[&artifacts_item, &show_item, &quit_item])
+                .items(&[&artifacts_item, &circle_search_item, &show_item, &quit_item])
                 .build()?;
 
             if let Some(icon) = app.default_window_icon().cloned() {
@@ -173,6 +181,9 @@ pub fn run() {
                         }
                         "artifacts" => {
                             open_artifacts_inspector(app);
+                        }
+                        "circle_search" => {
+                            let _ = circle_search_toggle(app.clone());
                         }
                         "quit" => {
                             IS_EXPLICIT_QUIT.store(true, Ordering::SeqCst);
