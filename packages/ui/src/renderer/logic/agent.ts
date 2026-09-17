@@ -55,7 +55,7 @@ export class AgentService {
    * an id here makes the engine POST to `<baseUrl>/chat/completions`, which such
    * servers reject (Ollama replies with the plaintext "404 page not found").
    */
-  static readonly NON_OPENAI_COMPATIBLE_PROVIDER_IDS = ['ollama', 'ollama-cloud'];
+  static readonly NON_OPENAI_COMPATIBLE_PROVIDER_IDS = ['ollama', 'ollama-cloud', 'opencode'];
 
   /**
    * Resolves the engine-facing provider id for a connection. Env/key providers
@@ -64,6 +64,7 @@ export class AgentService {
    * endpoint collapses to the generic OpenAI-compatible `custom` provider.
    */
   static resolveEngineProviderId(provider: ProviderConnection): string {
+    if (provider.id === 'opencode' || provider.baseUrl?.includes('opencode.ai')) return 'opencode';
     if (provider.type === 'env' || provider.type === 'key') return provider.id;
     if (AgentService.NON_OPENAI_COMPATIBLE_PROVIDER_IDS.includes(provider.id)) return provider.id;
     return 'custom';

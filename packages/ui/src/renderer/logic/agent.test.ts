@@ -39,4 +39,14 @@ describe('AgentService.resolveEngineProviderId', () => {
     const p = mkProvider({ id: 'ollama-cloud', type: 'custom', baseUrl: 'https://api.ollama.com' });
     expect(AgentService.resolveEngineProviderId(p)).toBe('ollama-cloud');
   });
+
+  it('preserves the "opencode" id even though it is a keyless type:custom connection', () => {
+    const p = mkProvider({ id: 'opencode', type: 'custom', baseUrl: 'https://opencode.ai/zen/v1' });
+    expect(AgentService.resolveEngineProviderId(p)).toBe('opencode');
+  });
+
+  it('preserves the "opencode" id if baseUrl points to opencode.ai', () => {
+    const p = mkProvider({ id: 'custom-opencode', type: 'custom', baseUrl: 'https://opencode.ai/zen/v1' });
+    expect(AgentService.resolveEngineProviderId(p)).toBe('opencode');
+  });
 });

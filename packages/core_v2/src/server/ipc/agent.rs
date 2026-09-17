@@ -174,7 +174,7 @@ pub async fn handle_agent_channel(
                 }
             }
 
-            let provider_type = match provider_str.to_lowercase().as_str() {
+            let mut provider_type = match provider_str.to_lowercase().as_str() {
                 "anthropic" | "claude" => ProviderType::Anthropic,
                 "gemini" | "google" => ProviderType::Gemini,
                 "ollama" => ProviderType::Ollama,
@@ -184,6 +184,18 @@ pub async fn handle_agent_channel(
                 "opencode" => ProviderType::OpenCode,
                 _ => ProviderType::OpenAI,
             };
+
+            if provider_type == ProviderType::OpenAI {
+                let is_opencode_url = base_url
+                    .as_deref()
+                    .map(|u| u.contains("opencode.ai"))
+                    .unwrap_or(false);
+                let is_opencode_model =
+                    crate::providers::opencode::OPENCODE_FREE_MODELS.contains(&model_str.as_str());
+                if is_opencode_url || is_opencode_model {
+                    provider_type = ProviderType::OpenCode;
+                }
+            }
 
             if model_str.is_empty() {
                 if let Some(models) = raw_settings.get("models").and_then(|m| m.as_array()) {

@@ -146,6 +146,12 @@ impl LlmProvider for OpenAiProvider {
             format!("{}/chat/completions", base_trimmed)
         };
 
+        // Fallback / redirect if OpenAiProvider is called with an OpenCode endpoint
+        if url.contains("opencode.ai") || base_trimmed.contains("opencode.ai") {
+            let opencode = crate::providers::OpenCodeProvider::new();
+            return opencode.chat_stream(config, messages, tools).await;
+        }
+
         let mut payload = json!({
             "model": config.model_id,
             "messages": Self::format_messages(messages),

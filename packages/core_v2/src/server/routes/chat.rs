@@ -39,7 +39,7 @@ pub fn resolve_active_workspace_model(
                     } else {
                         id
                     };
-                    let prov_type = match pid.to_lowercase().as_str() {
+                    let mut prov_type = match pid.to_lowercase().as_str() {
                         "gemini" | "google" => ProviderType::Gemini,
                         "openai" => ProviderType::OpenAI,
                         "anthropic" | "claude" => ProviderType::Anthropic,
@@ -50,6 +50,9 @@ pub fn resolve_active_workspace_model(
                         "opencode" => ProviderType::OpenCode,
                         _ => ProviderType::Gemini,
                     };
+                    if crate::providers::opencode::OPENCODE_FREE_MODELS.contains(&clean_id) {
+                        prov_type = ProviderType::OpenCode;
+                    }
                     let api_key = settings_store.get_api_key(pid).ok().flatten();
                     return (prov_type, clean_id.to_string(), api_key, None);
                 }
@@ -77,7 +80,7 @@ pub fn resolve_active_workspace_model(
             } else {
                 id
             };
-            let prov_type = match pid.to_lowercase().as_str() {
+            let mut prov_type = match pid.to_lowercase().as_str() {
                 "gemini" | "google" => ProviderType::Gemini,
                 "openai" => ProviderType::OpenAI,
                 "anthropic" | "claude" => ProviderType::Anthropic,
@@ -88,6 +91,9 @@ pub fn resolve_active_workspace_model(
                 "opencode" => ProviderType::OpenCode,
                 _ => ProviderType::Gemini,
             };
+            if crate::providers::opencode::OPENCODE_FREE_MODELS.contains(&clean_id) {
+                prov_type = ProviderType::OpenCode;
+            }
             let api_key = settings_store.get_api_key(pid).ok().flatten();
             return (prov_type, clean_id.to_string(), api_key, None);
         }
@@ -140,6 +146,14 @@ pub async fn handle_chat_stream(
     });
     if req.base_url.is_some() {
         model_config.base_url = req.base_url;
+    }
+    if let Some(ref u) = model_config.base_url {
+        if u.contains("opencode.ai") {
+            model_config.provider = ProviderType::OpenCode;
+        }
+    }
+    if crate::providers::opencode::OPENCODE_FREE_MODELS.contains(&model_config.model_id.as_str()) {
+        model_config.provider = ProviderType::OpenCode;
     }
     if req.temperature.is_some() {
         model_config.temperature = req.temperature;

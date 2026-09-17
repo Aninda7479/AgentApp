@@ -8,7 +8,7 @@ import type { ProviderConnection, ModelConfig } from '../core/types';
 import { ChatRepository } from './ChatRepository';
 
 export class ProviderRegistry {
-  static NON_OPENAI_COMPATIBLE_IDS = ['ollama', 'ollama-cloud'];
+  static NON_OPENAI_COMPATIBLE_IDS = ['ollama', 'ollama-cloud', 'opencode'];
 
   static resolveActiveProvider(selectedModelName: string): ProviderConnection | undefined {
     const { providers, models } = providerStore.getState();
@@ -19,6 +19,7 @@ export class ProviderRegistry {
   }
 
   static resolveEngineProviderId(provider: ProviderConnection): string {
+    if (provider.id === 'opencode' || provider.baseUrl?.includes('opencode.ai')) return 'opencode';
     if (provider.type === 'env' || provider.type === 'key') return provider.id;
     if (ProviderRegistry.NON_OPENAI_COMPATIBLE_IDS.includes(provider.id)) return provider.id;
     return 'custom';
