@@ -10,6 +10,7 @@ import { useAgent } from '../hooks/useAgent';
 import { TrajectoryCanvas } from '../pages/Workspace/TrajectoryCanvas';
 import { chatStore, useChatStore } from '../stores/chatStore';
 import { ChatRepository } from '../services/ChatRepository';
+import { IpcBridge } from '../core/ipc';
 
 interface MessageCanvasProps {
   chatId: string;
@@ -39,6 +40,21 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({
   const chat = useChatStore((s) => s.chats.find((c) => c.id === chatId));
   const draftProject = useChatStore((s) => s.draftProject);
   const displayProject = chatId === 'draft-chat' ? (draftProject || 'No Project') : (chat?.project || 'No Project');
+
+  // Lazy-load steps from disk when opening a chat whose steps are not resident
+  useEffect(() => {
+    if (chatId && chatId !== 'draft-chat' && steps.length === 0 && !isRunning) {
+      IpcBridge.readChatSteps(chatId)
+        .then((diskSteps) => {
+          if (diskSteps && diskSteps.length > 0) {
+            if (chatStore.getSteps(chatId).length === 0) {
+              chatStore.setSteps(chatId, diskSteps);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [chatId, steps.length, isRunning]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

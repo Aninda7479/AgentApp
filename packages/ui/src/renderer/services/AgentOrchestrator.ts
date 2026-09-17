@@ -505,7 +505,7 @@ export class AgentOrchestrator {
           : c
       )
     );
-    ChatRepository.persistAll().catch(console.error);
+    ChatRepository.persistAll(true).catch(console.error);
 
     // Drain next item in queue for this chat session
     const nextQueuedItem = sessionStore.dequeue(chatId);

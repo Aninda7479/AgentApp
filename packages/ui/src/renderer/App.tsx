@@ -348,6 +348,12 @@ export const App: React.FC = () => {
       setActiveChatId((prev) => (prev === state.activeChatId ? prev : state.activeChatId));
       setActiveProject((prev) => (prev === state.activeProject ? prev : state.activeProject));
       setDraftProject((prev) => (prev === state.draftProject ? prev : state.draftProject));
+      if (state.activeChatId && state.activeChatId !== 'draft-chat') {
+        const storeSteps = chatStore.getSteps(state.activeChatId);
+        if (storeSteps.length > 0) {
+          setTrajectorySteps(storeSteps);
+        }
+      }
     });
 
     const unsubProvider = providerStore.subscribe(() => {
@@ -414,8 +420,10 @@ export const App: React.FC = () => {
 
   // Sync trajectorySteps from React state to Zustand chatStore
   useEffect(() => {
-    if (activeChatId) {
-      chatStore.setSteps(activeChatId, trajectorySteps);
+    if (activeChatId && activeChatId !== 'draft-chat') {
+      if (trajectorySteps.length > 0) {
+        chatStore.setSteps(activeChatId, trajectorySteps);
+      }
     }
   }, [activeChatId, trajectorySteps]);
 
@@ -439,11 +447,19 @@ export const App: React.FC = () => {
       if (persistDebounceRef.current) clearTimeout(persistDebounceRef.current);
       persistDebounceRef.current = setTimeout(() => {
         persistDebounceRef.current = null;
+        const rawChats = currentChats ?? stateRef.current.chats;
+        const fullChats = rawChats.map((c) => {
+          const resident = chatStore.getSteps(c.id);
+          return {
+            ...c,
+            steps: resident.length > 0 ? resident : (c.steps || []),
+          };
+        });
         ipc?.invoke('store-write', {
           connectedProviders: resolvedProviders,
           modelsCatalog: resolvedModels,
           projects: currentProjects ?? stateRef.current.projects,
-          chats: currentChats ?? stateRef.current.chats
+          chats: fullChats
         });
       }, 300);
     },
@@ -1365,6 +1381,12 @@ export const App: React.FC = () => {
       setTrajectorySteps([]);
       return;
     }
+    // Check resident steps in chatStore first!
+    const inStore = chatStore.getSteps(activeChatId);
+    if (inStore && inStore.length > 0) {
+      setTrajectorySteps(inStore);
+      return;
+    }
     const chat = chats.find((c) => c.id === activeChatId);
     // Prefer resident (still-held-in-RAM) steps. Dormant chats now carry
     // steps: [] in the array (offloaded to disk), so fall back to a lazy
@@ -1379,7 +1401,12 @@ export const App: React.FC = () => {
       ipc
         .invoke('chat-steps-read', activeChatId)
         .then((steps: unknown) => {
-          if (!cancelled) setTrajectorySteps(Array.isArray(steps) ? (steps as []) : []);
+          if (!cancelled && Array.isArray(steps) && steps.length > 0) {
+            setTrajectorySteps(steps as TrajectoryStep[]);
+            if (chatStore.getSteps(activeChatId).length === 0) {
+              chatStore.setSteps(activeChatId, steps as TrajectoryStep[]);
+            }
+          }
         })
         .catch(() => {});
     }

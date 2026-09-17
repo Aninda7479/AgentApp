@@ -434,41 +434,8 @@ pub fn store_read() -> serde_json::Value {
     let models = settings_val.get("models").cloned().unwrap_or_else(|| serde_json::json!([]));
 
     let storage = superagent_core_v2::storage::ChatStorage::new();
-    let chats_meta = storage.list_sessions().unwrap_or_default();
-    
-    let mut chats = Vec::new();
-    for meta in chats_meta {
-        chats.push(serde_json::json!({
-            "id": meta.id,
-            "title": meta.title,
-            "project": meta.project,
-            "model": meta.model,
-            "timestamp": meta.created_at,
-            "updatedAt": meta.updated_at,
-            "stepCount": meta.message_count,
-            "isRunning": false
-        }));
-    }
-
-    let conv_dir = get_user_data_dir().join("conversation");
-    let mut projects = Vec::new();
-    for dir_name in &["projects", "Projects"] {
-        let projects_dir = conv_dir.join(dir_name);
-        if let Ok(entries) = fs::read_dir(&projects_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    let meta_file = path.join("meta.json");
-                    let proj_file = path.join("project.json");
-                    if let Ok(c) = fs::read_to_string(&meta_file).or_else(|_| fs::read_to_string(&proj_file)) {
-                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&c) {
-                            projects.push(v);
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let chats = storage.load_all_stored_chats();
+    let projects = storage.load_all_stored_projects();
 
     serde_json::json!({
         "connectedProviders": providers,
@@ -555,13 +522,7 @@ pub fn chat_steps_read(chat_id: Option<String>, id: Option<String>, payload: Opt
         })
     });
     if let Some(cid) = target_id {
-        let chat_dir = get_user_data_dir().join("conversation").join("Chats").join(&cid);
-        let steps_file = chat_dir.join("steps.json");
-        if let Ok(content) = fs::read_to_string(&steps_file) {
-            if let Ok(steps) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
-                return steps;
-            }
-        }
+        return superagent_core_v2::storage::ChatStorage::new().load_chat_steps(&cid);
     }
     Vec::new()
 }

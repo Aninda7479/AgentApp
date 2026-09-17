@@ -39,6 +39,8 @@ function forgetResident(chatId: string): void {
  * lazy `chat-steps-read` IPC call (disk). Returns [] when nothing is found.
  */
 async function loadSteps(ctx: AppContext, chatId: string): Promise<TrajectoryStep[]> {
+  const inStore = chatStore.getSteps(chatId);
+  if (inStore && inStore.length > 0) return inStore;
   const resident = ctx.getChats().find((c) => c.id === chatId);
   if (resident && resident.steps && resident.steps.length > 0) return resident.steps;
   if (!ctx.ipc) return [];
@@ -159,10 +161,13 @@ export class StoreService {
 
     residentOrder.length = 0;
     if (activeChat) {
+      const initialSteps = (activeChat.steps && activeChat.steps.length > 0)
+        ? activeChat.steps
+        : await loadSteps(ctx, activeChat.id);
       ctx.setActiveChatId(activeChat.id);
       ctx.setActiveProject(activeChat.project || defaultProject);
-      ctx.setTrajectorySteps(activeChat.steps || []);
-      chatStore.setSteps(activeChat.id, activeChat.steps || []);
+      ctx.setTrajectorySteps(initialSteps);
+      chatStore.setSteps(activeChat.id, initialSteps);
       chatStore.setActiveChatId(activeChat.id);
       residentOrder.push(activeChat.id);
     } else {

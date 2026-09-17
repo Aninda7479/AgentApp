@@ -154,48 +154,54 @@ export class ChatRepository {
 
   /**
    * Persists all store changes to disk.
-   * Debounces parallel invocations (300ms) to avoid file write race conditions.
+   * Debounces parallel invocations (300ms) to avoid file write race conditions,
+   * with support for immediate flush on turn completion or exit.
    */
-  static persistAll(): Promise<void> {
-    if (!IpcBridge.isDesktop()) return Promise.resolve();
+  static persistAll(immediate: boolean = false): Promise<void> {
+    if (!IpcBridge.getIpc()) return Promise.resolve();
 
     if (ChatRepository.persistTimeout) {
       clearTimeout(ChatRepository.persistTimeout);
+      ChatRepository.persistTimeout = null;
+    }
+
+    const doPersist = async (): Promise<void> => {
+      const resolvers = [...ChatRepository.pendingResolvers];
+      ChatRepository.pendingResolvers = [];
+
+      try {
+        const { projects, chats } = chatStore.getState();
+        const { providers, models } = providerStore.getState();
+
+        // Preserve resident steps in memory when persisting store
+        const fullChats = chats.map((c) => {
+          const resident = chatStore.getSteps(c.id);
+          return {
+            ...c,
+            steps: resident.length > 0 ? resident : c.steps,
+          };
+        });
+
+        await IpcBridge.writeStore({
+          connectedProviders: providers,
+          modelsCatalog: models,
+          projects,
+          chats: fullChats,
+        });
+      } catch (err) {
+        console.error('[ChatRepository] Persist failed:', err);
+      } finally {
+        resolvers.forEach((r) => r());
+      }
+    };
+
+    if (immediate) {
+      return doPersist();
     }
 
     return new Promise<void>((resolve) => {
       ChatRepository.pendingResolvers.push(resolve);
-
-      ChatRepository.persistTimeout = setTimeout(async () => {
-        ChatRepository.persistTimeout = null;
-        const resolvers = [...ChatRepository.pendingResolvers];
-        ChatRepository.pendingResolvers = [];
-
-        try {
-          const { projects, chats } = chatStore.getState();
-          const { providers, models } = providerStore.getState();
-
-          // Preserve resident steps in memory when persisting store
-          const fullChats = chats.map((c) => {
-            const resident = chatStore.getSteps(c.id);
-            return {
-              ...c,
-              steps: resident.length > 0 ? resident : c.steps,
-            };
-          });
-
-          await IpcBridge.writeStore({
-            connectedProviders: providers,
-            modelsCatalog: models,
-            projects,
-            chats: fullChats,
-          });
-        } catch (err) {
-          console.error('[ChatRepository] Persist failed:', err);
-        } finally {
-          resolvers.forEach((r) => r());
-        }
-      }, 300);
+      ChatRepository.persistTimeout = setTimeout(doPersist, 300);
     });
   }
 }

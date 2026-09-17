@@ -325,7 +325,7 @@ impl ChatStorage {
         let _ = fs::create_dir_all(&chat_dir);
 
         // Save chat.json metadata
-        let meta_json = serde_json::json!({
+        let mut meta_json = serde_json::json!({
             "id": id,
             "title": title,
             "project": project,
@@ -333,6 +333,14 @@ impl ChatStorage {
             "createdAt": created_at,
             "updatedAt": updated_at,
         });
+
+        if let Some(settings) = chat_val.get("settings") {
+            meta_json["settings"] = settings.clone();
+        }
+        if let Some(standalone_config) = chat_val.get("standaloneConfig") {
+            meta_json["standaloneConfig"] = standalone_config.clone();
+        }
+
         let _ = fs::write(chat_dir.join("chat.json"), serde_json::to_string_pretty(&meta_json)?);
 
         // Save steps.json
@@ -443,7 +451,7 @@ impl ChatStorage {
                                             .map(|dt| dt.to_rfc3339())
                                             .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
 
-                                        chats.push(serde_json::json!({
+                                        let mut chat_obj = serde_json::json!({
                                             "id": id,
                                             "title": title,
                                             "project": project,
@@ -453,7 +461,16 @@ impl ChatStorage {
                                             "updatedAt": updated_at,
                                             "steps": [],
                                             "isRunning": false
-                                        }));
+                                        });
+
+                                        if let Some(settings) = val.get("settings") {
+                                            chat_obj["settings"] = settings.clone();
+                                        }
+                                        if let Some(standalone_config) = val.get("standaloneConfig") {
+                                            chat_obj["standaloneConfig"] = standalone_config.clone();
+                                        }
+
+                                        chats.push(chat_obj);
                                     }
                                 }
                             }
