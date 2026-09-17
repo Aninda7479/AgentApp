@@ -222,11 +222,16 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
     return parts.slice(0, -1).join('/');
   };
 
+  const handleCloseMobileDrawer = () => {
+    onMobileClose?.();
+    window.dispatchEvent(new CustomEvent('close-mobile-right-sidebar'));
+  };
+
   // Listen for Escape key to close mobile drawer
   useEffect(() => {
     if (!isMobileOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onMobileClose?.();
+      if (e.key === 'Escape') handleCloseMobileDrawer();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -297,7 +302,7 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
         {/* Collapse or Close button */}
         {isMobile ? (
           <button
-            onClick={onMobileClose}
+            onClick={handleCloseMobileDrawer}
             className="p-1.5 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer"
             title="Close drawer"
             aria-label="Close drawer"
@@ -1028,7 +1033,7 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
         <>
           <div
             className="fixed inset-0 bg-black/60 z-40 backdrop-blur-xs lg:hidden animate-in fade-in duration-200"
-            onClick={onMobileClose}
+            onClick={handleCloseMobileDrawer}
             aria-hidden="true"
           />
           <aside className="fixed inset-y-0 right-0 z-50 w-[88vw] sm:w-88 max-w-sm h-full flex flex-col bg-brand-sidebar shadow-2xl border-l border-brand-border select-none overflow-hidden animate-in slide-in-from-right duration-200 lg:hidden">

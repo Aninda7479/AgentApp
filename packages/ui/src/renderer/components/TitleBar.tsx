@@ -292,7 +292,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     <div
       data-testid="title-bar"
       data-tauri-drag-region
-      className="title-bar h-10 flex items-center justify-between px-3 select-none drag-window z-100"
+      className="title-bar h-10 flex items-center justify-between px-3 select-none drag-window relative z-20"
       style={isDesktop ? ({ WebkitAppRegion: 'drag' } as React.CSSProperties) : undefined}
       onDoubleClick={(e) => {
         if (e.target === e.currentTarget && isDesktop) {

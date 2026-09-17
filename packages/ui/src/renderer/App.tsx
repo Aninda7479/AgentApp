@@ -162,6 +162,19 @@ export const App: React.FC = () => {
   const [showStudio, setShowStudio] = useState<boolean>(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [mobileNavOpen, setMobileNavOpen] = useState<boolean>(false);
+  const [mobileRightOpen, setMobileRightOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleToggle = () => setMobileRightOpen((prev) => !prev);
+    const handleClose = () => setMobileRightOpen(false);
+    window.addEventListener('toggle-mobile-right-sidebar', handleToggle);
+    window.addEventListener('close-mobile-right-sidebar', handleClose);
+    return () => {
+      window.removeEventListener('toggle-mobile-right-sidebar', handleToggle);
+      window.removeEventListener('close-mobile-right-sidebar', handleClose);
+    };
+  }, []);
+
   const [isBYOKOpen, setIsBYOKOpen] = useState<boolean>(false);
   const [searchModalOpen, setSearchModalOpen] = useState<boolean>(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
@@ -1591,7 +1604,10 @@ export const App: React.FC = () => {
         onNavigateForward={handleNavigateForward}
         canNavigateBack={navigationIndex > 1}
         canNavigateForward={navigationIndex >= 0 && navigationIndex < navigationHistory.length - 1}
-        onToggleMobileNav={activeTab !== 'settings' ? () => setMobileNavOpen((prev) => !prev) : undefined}
+        onToggleMobileNav={activeTab !== 'settings' ? () => {
+          setMobileRightOpen(false);
+          setMobileNavOpen((prev) => !prev);
+        } : undefined}
         themeMode={themeMode}
         onNewChat={() => handleNewChat()}
         onOpenFolder={handleOpenFolder}
@@ -1632,16 +1648,17 @@ export const App: React.FC = () => {
         onStopAgent={handleStopActiveRun}
         modifiedFilesCount={currentModifiedFilesCount}
         onToggleRightSidebar={() => {
+          setMobileNavOpen(false);
           window.dispatchEvent(new CustomEvent('toggle-mobile-right-sidebar'));
         }}
       />
 
       {/* Main Body container */}
-      <div className="flex-1 flex overflow-hidden overflow-x-hidden relative min-w-0">
+      <div className={`flex-1 flex overflow-hidden overflow-x-hidden relative min-w-0 ${(mobileNavOpen || mobileRightOpen) ? 'z-50' : 'z-10 lg:z-auto'}`}>
         {/* Mobile drawer backdrop */}
         {mobileNavOpen && activeTab !== 'settings' && activeTab !== 'studio' && activeTab !== 'project-settings' && activeTab !== 'standalone-chat' && activeTab !== 'pcb' && activeTab !== 'image' && activeTab !== 'video' && (
           <div
-            className="lg:hidden fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
+            className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-xs transition-opacity duration-200"
             onClick={() => setMobileNavOpen(false)}
             aria-hidden="true"
           />

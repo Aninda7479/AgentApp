@@ -20,6 +20,7 @@ import {
   Package,
   Cpu,
 } from 'lucide-react';
+import { BrandLogo } from '../../BrandLogo';
 
 
 /** Props for the Sidebar navigation component. */
@@ -279,26 +280,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div
       data-testid="sidebar-container"
-      style={{ width: collapsed ? '70px' : '260px', maxWidth: '85vw' }}
-      className={`ml-1 flex flex-col h-full box-border transition-transform duration-200 z-40 pb-4 bg-brand-bg
-        fixed inset-y-0 left-0 lg:static lg:translate-x-0
+      className={`ml-0 lg:ml-1 flex flex-col h-full box-border transition-transform duration-200 z-50 lg:z-auto pb-4 bg-brand-bg
+        fixed inset-y-0 left-0 lg:static lg:translate-x-0 w-[280px] max-w-[85vw] ${collapsed ? 'lg:w-[70px]' : 'lg:w-[260px]'}
         ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}`}
     >
-      {/* Mobile-only close button */}
-      {onMobileClose && (
-        <button
-          onClick={onMobileClose}
-          className="lg:hidden absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover-strong)] transition-colors z-10"
-          title="Close menu"
-          aria-label="Close menu"
-        >
-          <PanelLeftClose className="w-5 h-5" />
-        </button>
-      )}
-
+      {/* Mobile-only header with SuperAgent brand & close button */}
+      <div className="lg:hidden flex items-center justify-between px-3.5 pt-3.5 pb-2.5 mb-1 shrink-0 border-b border-brand-border/40">
+        <div className="flex items-center gap-2.5 text-brand-textMain font-semibold text-sm select-none">
+          <BrandLogo size={20} />
+          <span className="font-outfit font-bold tracking-tight">SuperAgent</span>
+        </div>
+        {onMobileClose && (
+          <button
+            onClick={onMobileClose}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-[color:var(--brand-hover-strong)] transition-colors cursor-pointer"
+            title="Close menu"
+            aria-label="Close menu"
+          >
+            <PanelLeftClose className="w-5 h-5" />
+          </button>
+        )}
+      </div>
 
       {/* Main scrollable nav list */}
-      <div className="flex-1 overflow-y-auto pr-0.5 sidebar-scroll">
+      <div className="flex-1 overflow-y-auto px-1 lg:px-0 lg:pr-0.5 sidebar-scroll">
         {/* Core action buttons */}
         <div className="mb-4 space-y-0.5">
           <button
@@ -743,7 +748,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
-            className={`flex items-center justify-center p-2 rounded-lg text-brand-textMuted bg-[color:var(--brand-hover)] border border-brand-border/20 hover:text-brand-textMain hover:bg-[color:var(--brand-hover-strong)] hover:border-brand-border/45 transition-all duration-200 cursor-pointer ${collapsed ? 'w-full' : 'w-9 h-9'}`}
+            className={`hidden lg:flex items-center justify-center p-2 rounded-lg text-brand-textMuted bg-[color:var(--brand-hover)] border border-brand-border/20 hover:text-brand-textMain hover:bg-[color:var(--brand-hover-strong)] hover:border-brand-border/45 transition-all duration-200 cursor-pointer ${collapsed ? 'w-full' : 'w-9 h-9'}`}
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {collapsed ? <ChevronRight className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
