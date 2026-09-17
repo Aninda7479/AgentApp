@@ -22,7 +22,7 @@ debug = 1
 # When to change back: Change back to `true` (or run `$env:CARGO_INCREMENTAL=1`) if you are
 # doing frequent iterative full binary compiles (`cargo build` / `cargo run`) on a single crate
 # and want faster partial-crate LLVM codegen reuse (~2-4s vs ~6-10s).
-incremental = false
+incremental = true #false
 opt-level = 0
 
 [profile.dev.package."*"]
