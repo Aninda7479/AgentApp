@@ -97,6 +97,36 @@ export class SetupService {
   }
 
   /**
+   * Determines whether the Host Ownership & Branding setup prompt should be displayed on startup.
+   * Prompts the user to configure Host Ownership if:
+   * - Loading and bootstrapping have finished
+   * - User is authenticated (not blocked behind master lock screen)
+   * - Full onboarding wizard is not active
+   * - Host owner name is not yet configured
+   * - User has not dismissed the prompt for this session
+   */
+  static shouldShowHostSetupPrompt(params: {
+    bootstrapping: boolean;
+    authStatus: AuthStatus;
+    onboardingVisible: boolean;
+    hostSetupDismissed: boolean;
+    ownerName?: string | null;
+  }): boolean {
+    const { bootstrapping, authStatus, onboardingVisible, hostSetupDismissed, ownerName } = params;
+    if (bootstrapping) return false;
+    if (hostSetupDismissed) return false;
+    if (onboardingVisible) return false;
+    if (authStatus.authRequired && !authStatus.authenticated) return false;
+
+    const effectiveOwner = (ownerName || authStatus.ownerName || '').trim();
+    if (effectiveOwner.length > 0 && effectiveOwner !== 'SuperAgent User') {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * Returns the recommended starting step of OnboardingWizard based on what is missing.
    * Step 1: Welcome & Developer Name
    * Step 2: Providers & Models Catalog

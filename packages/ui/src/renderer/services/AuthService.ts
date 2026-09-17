@@ -1,4 +1,4 @@
-import { getStoredAuthToken, setStoredAuthToken, reconnectWebSocket, disconnectWebSocket } from '../lib/ipc';
+import { getStoredAuthToken, setStoredAuthToken, reconnectWebSocket, disconnectWebSocket, getIpc } from '../lib/ipc';
 
 export interface AuthStatus {
   authenticated: boolean;
@@ -36,6 +36,11 @@ class AuthServiceClass {
     return { ...this.currentStatus };
   }
 
+  public setOwnerName(name: string | null): void {
+    this.currentStatus.ownerName = name ? name.trim() : null;
+    this.notify();
+  }
+
   public subscribe(listener: AuthListener): () => void {
     this.listeners.add(listener);
     listener(this.getStatus());
@@ -53,6 +58,35 @@ class AuthServiceClass {
         console.error('[AuthService] Listener error:', err);
       }
     });
+  }
+
+  private async resolveOwnerNameFromSettings(): Promise<string | null> {
+    try {
+      const ipc = getIpc();
+      if (!ipc) return null;
+      interface SettingsOwnerFallback {
+        general?: { ownerName?: string; hostOwnerName?: string };
+        ownerName?: string;
+        webApp?: { ownerName?: string };
+        branding?: { ownerName?: string };
+        hostOwnerName?: string;
+      }
+      const settings = (await ipc.invoke('settings-read')) as SettingsOwnerFallback | null | undefined;
+      if (!settings) return null;
+      const owner =
+        settings.general?.ownerName ||
+        settings.ownerName ||
+        settings.webApp?.ownerName ||
+        settings.branding?.ownerName ||
+        settings.general?.hostOwnerName ||
+        settings.hostOwnerName;
+      if (typeof owner === 'string' && owner.trim().length > 0) {
+        return owner.trim();
+      }
+    } catch {
+      /* ignore */
+    }
+    return null;
   }
 
   public async checkStatus(): Promise<AuthStatus> {
@@ -78,28 +112,36 @@ class AuthServiceClass {
 
         if (res.ok) {
           const data = await res.json();
+          let owner = data.ownerName ?? null;
+          if (!owner) {
+            owner = await this.resolveOwnerNameFromSettings();
+          }
           this.currentStatus = {
             authenticated: Boolean(data.authenticated),
             authRequired: Boolean(data.authRequired),
             passwordSet: Boolean(data.passwordSet),
-            ownerName: data.ownerName ?? null,
+            ownerName: owner,
             user: data.user ?? null,
             version: data.version,
           };
         } else {
           // Fallback if rejected (e.g. 401 unauthenticated with invalid token)
+          const owner = await this.resolveOwnerNameFromSettings();
           this.currentStatus = {
             authenticated: false,
             authRequired: true,
             passwordSet: true,
+            ownerName: owner || this.currentStatus.ownerName,
           };
         }
       } catch {
-        // Backend offline or unreachable
+        // Backend offline or unreachable - check IPC settings directly
+        const owner = await this.resolveOwnerNameFromSettings();
         this.currentStatus = {
           authenticated: false,
           authRequired: true,
           passwordSet: false,
+          ownerName: owner || this.currentStatus.ownerName,
         };
       } finally {
         this.checkInFlight = null;
@@ -110,6 +152,22 @@ class AuthServiceClass {
     })();
 
     return this.checkInFlight;
+  }
+
+  /**
+   * Periodically re-checks status during startup so that as soon as the Core daemon
+   * finishes booting (e.g. in the 3s loading screen), authStatus is fully resolved.
+   */
+  public async checkStatusWithRetry(retries = 4, delayMs = 500): Promise<AuthStatus> {
+    let s = await this.checkStatus();
+    for (let i = 0; i < retries; i++) {
+      if (s.version) {
+        break;
+      }
+      await new Promise((r) => setTimeout(r, delayMs));
+      s = await this.checkStatus();
+    }
+    return s;
   }
 
   public async setup(password: string, username = 'admin'): Promise<{ ok: boolean; token?: string; error?: string }> {

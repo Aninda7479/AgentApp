@@ -73,11 +73,23 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
     const ipcRenderer = getIpc();
     if (ipcRenderer) {
       ipcRenderer.invoke('settings-read').then((s: any) => {
-        if (s?.general?.ownerName) {
-          setOwnerName(s.general.ownerName);
+        const name =
+          s?.general?.ownerName ||
+          s?.ownerName ||
+          s?.webApp?.ownerName ||
+          s?.branding?.ownerName ||
+          s?.general?.hostOwnerName;
+        if (name) {
+          setOwnerName(name);
         }
       }).catch(() => {});
     }
+    const unsub = AuthService.subscribe((status) => {
+      if (status.ownerName) {
+        setOwnerName(status.ownerName);
+      }
+    });
+    return unsub;
   }, []);
 
   const activeChatId = useChatStore((s) => s.activeChatId) || 'draft-chat';

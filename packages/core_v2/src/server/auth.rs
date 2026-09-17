@@ -39,7 +39,9 @@ pub fn extract_session_token(headers: &HeaderMap) -> Option<String> {
 
 /// Verifies whether a request is authenticated when auth is required.
 pub fn is_request_authenticated(state: &AppState, headers: &HeaderMap) -> bool {
-    let disable_auth = std::env::var("SUPERAGENT_DISABLE_AUTH").map(|v| v == "true").unwrap_or(false);
+    let disable_auth = std::env::var("SUPERAGENT_DISABLE_AUTH")
+        .map(|v| v == "true")
+        .unwrap_or(false);
     if disable_auth {
         return true;
     }
@@ -93,16 +95,12 @@ pub fn is_public_path(path: &str) -> bool {
         || path.ends_with(".webm")
         || path.ends_with(".webmanifest")
         || (path.starts_with("/api/images/generations/") && path.ends_with("/file"))
-        || (path.starts_with("/api/videos/generations/") && (path.ends_with("/file") || path.ends_with("/thumbnail")))
+        || (path.starts_with("/api/videos/generations/")
+            && (path.ends_with("/file") || path.ends_with("/thumbnail")))
 }
 
-
 /// Axum middleware guarding all protected API routes, WebSockets, and SPA pages.
-pub async fn auth_middleware(
-    State(state): State<AppState>,
-    req: Request,
-    next: Next,
-) -> Response {
+pub async fn auth_middleware(State(state): State<AppState>, req: Request, next: Next) -> Response {
     // Allow CORS preflight requests
     if req.method() == Method::OPTIONS {
         return next.run(req).await;
@@ -111,7 +109,9 @@ pub async fn auth_middleware(
     let path = req.uri().path().to_string();
 
     // Check if auth is disabled via environment variable override
-    let disable_auth = std::env::var("SUPERAGENT_DISABLE_AUTH").map(|v| v == "true").unwrap_or(false);
+    let disable_auth = std::env::var("SUPERAGENT_DISABLE_AUTH")
+        .map(|v| v == "true")
+        .unwrap_or(false);
     if disable_auth {
         return next.run(req).await;
     }
@@ -136,7 +136,10 @@ pub async fn auth_middleware(
     // Check query params (?token=... or ?sa_session=...) for WebSocket upgrades or direct links
     if let Some(query) = req.uri().query() {
         for part in query.split('&') {
-            if let Some(token) = part.strip_prefix("token=").or_else(|| part.strip_prefix("sa_session=")) {
+            if let Some(token) = part
+                .strip_prefix("token=")
+                .or_else(|| part.strip_prefix("sa_session="))
+            {
                 if state.auth_store.validate_session_token(token).is_some() {
                     return next.run(req).await;
                 }
@@ -148,14 +151,14 @@ pub async fn auth_middleware(
     if path.starts_with("/api/") || path.starts_with("/ws/") {
         return (
             StatusCode::UNAUTHORIZED,
-            [
-                (header::CONTENT_TYPE, "application/json"),
-            ],
+            [(header::CONTENT_TYPE, "application/json")],
             serde_json::json!({
                 "error": "Authentication required",
                 "authRequired": true
-            }).to_string(),
-        ).into_response();
+            })
+            .to_string(),
+        )
+            .into_response();
     }
 
     // Browser navigation / page requests get redirected to /login
@@ -166,7 +169,8 @@ pub async fn auth_middleware(
             (header::CACHE_CONTROL, "no-cache"),
         ],
         "",
-    ).into_response()
+    )
+        .into_response()
 }
 
 pub async fn serve_login(State(state): State<AppState>) -> Response {
@@ -208,10 +212,26 @@ pub async fn get_auth_status(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    let raw_settings = state.settings_store.load_raw().unwrap_or_else(|_| serde_json::json!({}));
-    let owner_name = raw_settings.get("general").and_then(|g| g.get("ownerName")).and_then(|v| v.as_str());
+    let raw_settings = state
+        .settings_store
+        .load_raw()
+        .unwrap_or_else(|_| serde_json::json!({}));
+    let owner_name = raw_settings
+        .get("general")
+        .and_then(|g| g.get("ownerName"))
+        .or_else(|| raw_settings.get("ownerName"))
+        .or_else(|| raw_settings.get("webApp").and_then(|w| w.get("ownerName")))
+        .or_else(|| {
+            raw_settings
+                .get("general")
+                .and_then(|g| g.get("hostOwnerName"))
+        })
+        .or_else(|| raw_settings.get("hostOwnerName"))
+        .and_then(|v| v.as_str());
 
-    let disable_auth = std::env::var("SUPERAGENT_DISABLE_AUTH").map(|v| v == "true").unwrap_or(false);
+    let disable_auth = std::env::var("SUPERAGENT_DISABLE_AUTH")
+        .map(|v| v == "true")
+        .unwrap_or(false);
     let settings = state.settings_store.load().unwrap_or_default();
     let auth_required = !disable_auth && settings.enable_auth.unwrap_or(true);
     let password_set = state.auth_store.is_password_set();
@@ -261,7 +281,10 @@ pub async fn setup_auth(
     }
 
     let token = state.auth_store.create_session_token("admin");
-    let cookie_header = format!("sa_session={}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax", token);
+    let cookie_header = format!(
+        "sa_session={}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax",
+        token
+    );
     let body = Json(serde_json::json!({
         "ok": true,
         "success": true,
@@ -298,20 +321,25 @@ pub async fn login_auth(
             .into_response());
     }
 
-    if state.auth_store.verify_password(&req.username, &req.password) {
+    if state
+        .auth_store
+        .verify_password(&req.username, &req.password)
+    {
         state.auth_store.clear_failed_attempts(&ip);
         let user_agent = headers
             .get(header::USER_AGENT)
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
 
-        let token = state.auth_store.create_session_with_metadata(
-            &req.username,
-            Some(ip),
-            user_agent,
-        );
+        let token =
+            state
+                .auth_store
+                .create_session_with_metadata(&req.username, Some(ip), user_agent);
 
-        let cookie_header = format!("sa_session={}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax", token);
+        let cookie_header = format!(
+            "sa_session={}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax",
+            token
+        );
         let body = Json(serde_json::json!({
             "ok": true,
             "success": true,
@@ -337,10 +365,7 @@ pub async fn login_auth(
     }
 }
 
-pub async fn logout_auth(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
+pub async fn logout_auth(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     if let Some(token) = extract_session_token(&headers) {
         state.auth_store.invalidate_session(&token);
     }
@@ -370,7 +395,9 @@ pub async fn change_auth_password(
     State(state): State<AppState>,
     Json(req): Json<AuthPasswordRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let current_pass = req.current_password.unwrap_or_else(|| "admin123".to_string());
+    let current_pass = req
+        .current_password
+        .unwrap_or_else(|| "admin123".to_string());
     state
         .auth_store
         .change_password(&req.username, &current_pass, &req.new_password)
@@ -390,8 +417,14 @@ pub async fn get_auth_devices(
 
     // Sort by last_used descending, but keep current session at the top
     list.sort_by(|a, b| {
-        let is_a_cur = current_token.as_ref().map(|ct| ct == &a.token).unwrap_or(false);
-        let is_b_cur = current_token.as_ref().map(|ct| ct == &b.token).unwrap_or(false);
+        let is_a_cur = current_token
+            .as_ref()
+            .map(|ct| ct == &a.token)
+            .unwrap_or(false);
+        let is_b_cur = current_token
+            .as_ref()
+            .map(|ct| ct == &b.token)
+            .unwrap_or(false);
         if is_a_cur && !is_b_cur {
             std::cmp::Ordering::Less
         } else if !is_a_cur && is_b_cur {
@@ -404,7 +437,10 @@ pub async fn get_auth_devices(
     let sessions: Vec<serde_json::Value> = list
         .into_iter()
         .map(|s| {
-            let is_current = current_token.as_ref().map(|ct| ct == &s.token).unwrap_or(false);
+            let is_current = current_token
+                .as_ref()
+                .map(|ct| ct == &s.token)
+                .unwrap_or(false);
             serde_json::json!({
                 "id": s.token,
                 "token": s.token,
@@ -433,7 +469,9 @@ pub async fn delete_auth_device(
         return Err(StatusCode::UNAUTHORIZED);
     }
     let deleted = state.auth_store.invalidate_session(&session_id);
-    Ok(Json(serde_json::json!({ "ok": deleted, "success": deleted })))
+    Ok(Json(
+        serde_json::json!({ "ok": deleted, "success": deleted }),
+    ))
 }
 
 pub async fn get_auth_history(

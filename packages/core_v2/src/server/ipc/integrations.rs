@@ -411,7 +411,7 @@ pub async fn handle_integrations_channel(
                 let current = arg
                     .get("current")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("admin123");
+                    .unwrap_or("admin");
                 let next = arg.get("next").and_then(|v| v.as_str()).unwrap_or("");
                 if next.len() < 6 {
                     return Some(Ok(Json(

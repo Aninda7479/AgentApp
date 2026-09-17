@@ -526,6 +526,25 @@ pub fn settings_write(
 }
 
 #[tauri::command]
+pub fn web_change_password(current: Option<String>, next: Option<String>) -> serde_json::Value {
+    let current_pass = current.unwrap_or_else(|| "admin".to_string());
+    let next_pass = next.unwrap_or_default();
+    if next_pass.len() < 6 {
+        return serde_json::json!({
+            "ok": false,
+            "error": "Password must be at least 6 characters"
+        });
+    }
+
+    let superagent_dir = superagent_core_v2::storage::settings::get_superagent_dir();
+    let auth_store = superagent_core_v2::storage::AuthStore::new(superagent_dir);
+    match auth_store.change_password("admin", &current_pass, &next_pass) {
+        Ok(_) => serde_json::json!({ "ok": true }),
+        Err(e) => serde_json::json!({ "ok": false, "error": e.to_string() }),
+    }
+}
+
+#[tauri::command]
 pub fn store_read() -> serde_json::Value {
     let settings_val = settings_read();
     let providers = settings_val

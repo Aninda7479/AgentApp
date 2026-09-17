@@ -89,4 +89,107 @@ describe('SetupService - Application Readiness & Adaptive Setup', () => {
     expect(SetupService.getRecommendedStep(['name', 'providers'])).toBe(1);
     expect(SetupService.getRecommendedStep(['providers', 'models'])).toBe(2);
   });
+
+  describe('shouldShowHostSetupPrompt', () => {
+    const unlockedAuth: AuthStatus = {
+      authRequired: true,
+      passwordSet: true,
+      authenticated: true,
+    };
+
+    it('returns false during bootstrapping', () => {
+      expect(
+        SetupService.shouldShowHostSetupPrompt({
+          bootstrapping: true,
+          authStatus: unlockedAuth,
+          onboardingVisible: false,
+          hostSetupDismissed: false,
+          ownerName: undefined,
+        })
+      ).toBe(false);
+    });
+
+    it('returns false when locked behind master lock screen', () => {
+      expect(
+        SetupService.shouldShowHostSetupPrompt({
+          bootstrapping: false,
+          authStatus: baseAuthStatus,
+          onboardingVisible: false,
+          hostSetupDismissed: false,
+          ownerName: undefined,
+        })
+      ).toBe(false);
+    });
+
+    it('returns false when onboarding wizard is visible', () => {
+      expect(
+        SetupService.shouldShowHostSetupPrompt({
+          bootstrapping: false,
+          authStatus: unlockedAuth,
+          onboardingVisible: true,
+          hostSetupDismissed: false,
+          ownerName: undefined,
+        })
+      ).toBe(false);
+    });
+
+    it('returns false when dismissed for current session', () => {
+      expect(
+        SetupService.shouldShowHostSetupPrompt({
+          bootstrapping: false,
+          authStatus: unlockedAuth,
+          onboardingVisible: false,
+          hostSetupDismissed: true,
+          ownerName: undefined,
+        })
+      ).toBe(false);
+    });
+
+    it('returns false when ownerName is already configured in params or authStatus', () => {
+      expect(
+        SetupService.shouldShowHostSetupPrompt({
+          bootstrapping: false,
+          authStatus: unlockedAuth,
+          onboardingVisible: false,
+          hostSetupDismissed: false,
+          ownerName: 'Aninda',
+        })
+      ).toBe(false);
+
+      expect(
+        SetupService.shouldShowHostSetupPrompt({
+          bootstrapping: false,
+          authStatus: { ...unlockedAuth, ownerName: 'Aninda' },
+          onboardingVisible: false,
+          hostSetupDismissed: false,
+          ownerName: undefined,
+        })
+      ).toBe(false);
+    });
+
+    it('returns true when authenticated, not onboarding, not dismissed, and ownerName is missing or default', () => {
+      // Completely empty / undefined
+      expect(
+        SetupService.shouldShowHostSetupPrompt({
+          bootstrapping: false,
+          authStatus: unlockedAuth,
+          onboardingVisible: false,
+          hostSetupDismissed: false,
+          ownerName: '',
+        })
+      ).toBe(true);
+
+      // Default placeholder name
+      expect(
+        SetupService.shouldShowHostSetupPrompt({
+          bootstrapping: false,
+          authStatus: unlockedAuth,
+          onboardingVisible: false,
+          hostSetupDismissed: false,
+          ownerName: 'SuperAgent User',
+        })
+      ).toBe(true);
+    });
+  });
 });
+

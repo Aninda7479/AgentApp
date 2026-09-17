@@ -25,6 +25,7 @@ import { VoiceIndicator } from './components/VoiceIndicator';
 import { LoadingScreen } from './components/LoadingScreen';
 import { WorkspaceView } from './pages/Workspace/WorkspaceView';
 import { OnboardingWizard } from './components/OnboardingWizard';
+import { HostSetupModal } from './components/HostSetupModal';
 import { ProjectSettingsModal } from './pages/Workspace/ProjectSettingsModal';
 import { StandaloneChatPage } from './pages/Workspace/StandaloneChatPage';
 import { builtinSuggestions, SkillInfo } from './components/slashCommands';
@@ -113,7 +114,7 @@ export const App: React.FC = () => {
   const [authStatus, setAuthStatus] = useState<AuthStatus>(() => AuthService.getStatus());
 
   useEffect(() => {
-    AuthService.checkStatus();
+    void AuthService.checkStatusWithRetry();
     const unsubscribe = AuthService.subscribe((s) => {
       setAuthStatus(s);
     });
@@ -242,6 +243,13 @@ export const App: React.FC = () => {
   // panels must show a loading state rather than a false "nothing connected".
   const [bootstrapping, setBootstrapping] = useState<boolean>(true);
   const [onboardingDismissed, setOnboardingDismissed] = useState<boolean>(false);
+  const [hostSetupDismissed, setHostSetupDismissed] = useState<boolean>(() => {
+    try {
+      return typeof sessionStorage !== 'undefined' && sessionStorage.getItem('superagent_host_setup_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [setupCompleted, setSetupCompleted] = useState<boolean>(() => {
     try {
       return typeof localStorage !== 'undefined' && localStorage.getItem('superagent_setup_completed') === 'true';
@@ -284,6 +292,14 @@ export const App: React.FC = () => {
     ipc.invoke('settings-read')
       .then((current: any) => {
         setEnabledSkills(current?.skills || {});
+        const retrievedOwner = current?.general?.ownerName 
+          || current?.ownerName 
+          || current?.webApp?.ownerName 
+          || current?.general?.hostOwnerName
+          || current?.hostOwnerName;
+        if (retrievedOwner && typeof retrievedOwner === 'string' && retrievedOwner.trim()) {
+          AuthService.setOwnerName(retrievedOwner.trim());
+        }
         if (current?.general?.setupState?.completed === true) {
           setSetupCompleted(true);
           try {
@@ -2058,6 +2074,40 @@ export const App: React.FC = () => {
           authStatus={authStatus}
           onUnlocked={() => {
             void AuthService.checkStatus();
+          }}
+        />
+      )}
+
+      {/* Host Ownership & Branding Setup Prompt */}
+      {SetupService.shouldShowHostSetupPrompt({
+        bootstrapping,
+        authStatus,
+        onboardingVisible: SetupService.shouldShowOnboardingWizard({
+          bootstrapping,
+          setupCompleted,
+          onboardingDismissed,
+          authStatus,
+        }),
+        hostSetupDismissed,
+        ownerName: authStatus.ownerName,
+      }) && (
+        <HostSetupModal
+          onClose={() => {
+            setHostSetupDismissed(true);
+            try {
+              if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.setItem('superagent_host_setup_dismissed', 'true');
+              }
+            } catch {}
+          }}
+          onSaved={(name) => {
+            AuthService.setOwnerName(name);
+            setHostSetupDismissed(true);
+            try {
+              if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.setItem('superagent_host_setup_dismissed', 'true');
+              }
+            } catch {}
           }}
         />
       )}

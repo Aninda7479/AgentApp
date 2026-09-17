@@ -279,6 +279,7 @@ pub fn run() {
             write_settings_file,
             settings_read,
             settings_write,
+            web_change_password,
             store_read,
             store_write,
             chat_steps_read,

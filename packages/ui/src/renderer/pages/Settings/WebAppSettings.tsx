@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Globe, Play, Square, KeyRound, CheckCircle2, AlertTriangle, ExternalLink, RotateCw, Copy, Check, ShieldCheck, User, Smartphone, Laptop, Clock } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
 import { getIpc } from '../../lib/ipc';
+import { AuthService } from '../../services/AuthService';
 
 /** Status payload returned by the main-process `web-status` IPC. */
 interface WebStatus {
@@ -67,8 +68,14 @@ export const WebAppSettings: React.FC = () => {
           if (settings.webApp.port) setPort(settings.webApp.port);
           setAutoStart(Boolean(settings.webApp.autoStart));
         }
-        if (settings?.general?.ownerName) {
-          setOwnerName(settings.general.ownerName);
+        const existingName =
+          settings?.general?.ownerName ||
+          settings?.ownerName ||
+          settings?.webApp?.ownerName ||
+          settings?.branding?.ownerName ||
+          settings?.general?.hostOwnerName;
+        if (existingName) {
+          setOwnerName(existingName);
         }
       })
       .catch(() => {
@@ -86,11 +93,14 @@ export const WebAppSettings: React.FC = () => {
       return;
     }
     try {
+      const trimmed = ownerName.trim();
       await ipc.invoke('settings-write', {
         general: {
-          ownerName: ownerName.trim()
+          ownerName: trimmed
         }
       });
+      AuthService.setOwnerName(trimmed || null);
+      void AuthService.checkStatus();
       setSaveResult({ ok: true });
     } catch (err: any) {
       setSaveResult({ ok: false, error: err?.message || 'Failed to save owner name.' });
