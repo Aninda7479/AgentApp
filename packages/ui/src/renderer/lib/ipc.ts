@@ -8,12 +8,26 @@
 
 import { reportError, type IpcErrorEnvelope } from './errorReporter';
 
+export type IpcCallback = (...args: unknown[]) => void;
+
+export interface IpcBridge {
+  (channel: string, ...args: unknown[]): Promise<unknown> | (() => void);
+  invoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T | null>;
+  send: (channel: string, ...args: unknown[]) => void;
+  on: (channel: string, listener: IpcCallback) => () => void;
+  off: (channel: string, listener: IpcCallback) => void;
+  removeListener: (channel: string, listener: IpcCallback) => void;
+  removeAllListeners: (channel?: string) => void;
+  shell?: { openPath: (targetPath: string) => Promise<string> };
+  loop?: { read: (workspacePath: string) => Promise<string | null> };
+}
+
 interface SuperagentApi {
   ipc: {
-    invoke: (channel: string, ...args: any[]) => Promise<any>;
-    send: (channel: string, ...args: any[]) => void;
-    on: (channel: string, listener: (...args: any[]) => void) => () => void;
-    off: (channel: string, listener: (...args: any[]) => void) => void;
+    invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
+    send: (channel: string, ...args: unknown[]) => void;
+    on: (channel: string, listener: (...args: unknown[]) => void) => () => void;
+    off: (channel: string, listener: (...args: unknown[]) => void) => void;
   };
   shell?: { openPath: (targetPath: string) => Promise<string> };
   loop?: { read: (workspacePath: string) => Promise<string | null> };
@@ -21,103 +35,85 @@ interface SuperagentApi {
 
 function superagent(): SuperagentApi | null {
   if (typeof window === 'undefined') return null;
-  return (window as any).superagent ?? null;
+  const win = window as unknown as { superagent?: SuperagentApi };
+  return win.superagent ?? null;
 }
 
-const TAURI_COMMAND_MAP: Record<string, string> = {
+export const TAURI_COMMAND_MAP: Record<string, string> = {
   'system-info': 'get_system_info',
-  'system_info': 'get_system_info',
   'get-system-info': 'get_system_info',
-  'get_system_info': 'get_system_info',
   'app-version': 'get_app_version',
-  'app_version': 'get_app_version',
   'get-app-version': 'get_app_version',
-  'get_app_version': 'get_app_version',
   'window-minimize': 'minimize_window',
   'window-maximize': 'toggle_window_maximize',
   'window-close': 'close_window',
-  'minimize_window': 'minimize_window',
-  'toggle_window_maximize': 'toggle_window_maximize',
-  'close_window': 'close_window',
-  'autostart-enable': 'autostart_enable',
-  'autostart-disable': 'autostart_disable',
   'autostart-status': 'autostart_is_enabled',
-  'settings-read': 'settings_read',
-  'settings-write': 'settings_write',
-  'store-read': 'store_read',
-  'store-write': 'store_write',
-  'chat-steps-read': 'chat_steps_read',
-  'check-for-updates': 'check_for_updates',
-  'check_for_updates': 'check_for_updates',
-  'download-update': 'download_update',
-  'download_update': 'download_update',
-  'auto-detect-providers': 'auto_detect_providers',
-  'auto_detect_providers': 'auto_detect_providers',
-  'skills-catalog': 'skills_catalog',
-  'skills_catalog': 'skills_catalog',
-  'mcp-catalog': 'mcp_catalog',
-  'mcp_catalog': 'mcp_catalog',
-  'plugins-catalog': 'plugins_catalog',
-  'plugins_catalog': 'plugins_catalog',
-  'skills-list': 'skills_list',
-  'skills_list': 'skills_list',
-  'skills-save': 'skills_save',
-  'skills_save': 'skills_save',
-  'skills-import-check': 'skills_import_check',
-  'skills_import_check': 'skills_import_check',
-  'skills-import-perform': 'skills_import_perform',
-  'skills_import_perform': 'skills_import_perform',
-  'kanban-load': 'kanban_load',
-  'kanban_load': 'kanban_load',
-  'kanban-save': 'kanban_save',
-  'kanban_save': 'kanban_save',
-  'circle-search-get-screen-image': 'circle_search_get_screen_image',
-  'circle_search_get_screen_image': 'circle_search_get_screen_image',
-  'circle-search-show': 'circle_search_show',
-  'circle_search_show': 'circle_search_show',
-  'circle-search-hide': 'circle_search_hide',
-  'circle_search_hide': 'circle_search_hide',
-  'circle-search-toggle': 'circle_search_toggle',
-  'circle_search_toggle': 'circle_search_toggle',
-  'circle-search-capture-area': 'circle_search_capture_area',
-  'circle_search_capture_area': 'circle_search_capture_area',
   'overlay-capture-screen': 'circle_search_get_screen_image',
   'overlay-hide': 'circle_search_hide',
-  'ollama-status': 'ollama_status',
-  'ollama_status': 'ollama_status',
-  'check-ollama-installed': 'check_ollama_installed',
-  'check_ollama_installed': 'check_ollama_installed',
-  'ollama-installed-models': 'ollama_installed_models',
-  'ollama_installed_models': 'ollama_installed_models',
+  'screenshot-screen': 'circle_search_get_screen_image',
+  'screenshot_screen': 'circle_search_get_screen_image',
   'ollama-models': 'ollama_installed_models',
-  'ollama_models': 'ollama_installed_models',
-  'ollama-start': 'ollama_start',
-  'ollama_start': 'ollama_start',
+  'check-ollama-installed': 'check_ollama_installed',
   'start-ollama-service': 'start_ollama_service',
-  'start_ollama_service': 'start_ollama_service',
-  'ollama-settings-get': 'ollama_settings_get',
-  'ollama_settings_get': 'ollama_settings_get',
-  'ollama-settings-save': 'ollama_settings_save',
 };
 
-const SAFE_EMPTY_CHANNELS = new Set<string>([
+export function toTauriCommand(channel: string): string {
+  return TAURI_COMMAND_MAP[channel] || TAURI_COMMAND_MAP[channel.replace(/_/g, '-')] || channel.replace(/[:\-]/g, '_');
+}
+
+export function buildTauriPayload(firstArg: unknown): Record<string, unknown> | undefined {
+  if (firstArg && typeof firstArg === 'object') {
+    const obj = firstArg as Record<string, unknown>;
+    return {
+      ...obj,
+      data: obj,
+      content: obj,
+      settings: obj,
+      payload: obj,
+    };
+  }
+  if (firstArg !== undefined) {
+    return {
+      id: firstArg,
+      arg: firstArg,
+      chatId: firstArg,
+      chat_id: firstArg,
+      content: firstArg,
+      data: firstArg,
+      settings: firstArg,
+      payload: firstArg,
+    };
+  }
+  return undefined;
+}
+
+export function isAgentRunChannel(channel: string): boolean {
+  return channel === 'agent-run' || channel === 'agent_run';
+}
+
+export function isAgentStopChannel(channel: string): boolean {
+  return channel === 'agent-stop' || channel === 'agent_stop';
+}
+
+export function isSettingsReadChannel(channel: string): boolean {
+  return channel === 'settings-read' || channel === 'settings_read';
+}
+
+export const SAFE_EMPTY_CHANNELS = new Set<string>([
   'skills-catalog',
-  'skills_catalog',
   'mcp-catalog',
-  'mcp_catalog',
   'plugins-catalog',
-  'plugins_catalog',
   'skills-list',
-  'skills_list',
   'skills-import-check',
-  'skills_import_check',
   'kanban-load',
-  'kanban_load',
   'ollama-installed-models',
-  'ollama_installed_models',
 ]);
 
-let cachedBridge: any = null;
+export function isSafeEmptyChannel(channel: string): boolean {
+  return SAFE_EMPTY_CHANNELS.has(channel) || SAFE_EMPTY_CHANNELS.has(channel.replace(/_/g, '-'));
+}
+
+let cachedBridge: IpcBridge | null = null;
 
 export function getStoredAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -182,19 +178,20 @@ function getCoreWsUrl(): string {
 }
 
 // Live WebSocket connection and listener registry for streaming (e.g. agent-event)
-const webListeners = new Map<string, Set<Function>>();
+const webListeners = new Map<string, Set<IpcCallback>>();
 let webSocket: WebSocket | null = null;
 let webSocketConnecting = false;
 
 // Active running sessions tracked so disconnect cleans up zombie runs
 const activeSessions = new Set<string>();
 
-function registerActiveSessionFromArgs(channel: string, args: any[]) {
-  if (channel === 'agent-run' || channel === 'agent_run') {
-    const sessId = args[0]?.sessionId || (typeof args[0] === 'string' ? args[0] : undefined);
+function registerActiveSessionFromArgs(channel: string, args: unknown[]) {
+  const first = args[0] as { sessionId?: string } | string | undefined;
+  if (isAgentRunChannel(channel)) {
+    const sessId = typeof first === 'object' && first !== null ? first.sessionId : (typeof first === 'string' ? first : undefined);
     if (sessId) activeSessions.add(sessId);
-  } else if (channel === 'agent-stop' || channel === 'agent_stop') {
-    const sessId = typeof args[0] === 'string' ? args[0] : args[0]?.sessionId;
+  } else if (isAgentStopChannel(channel)) {
+    const sessId = typeof first === 'string' ? first : (typeof first === 'object' && first !== null ? first.sessionId : undefined);
     if (sessId) activeSessions.delete(sessId);
   }
 }
@@ -328,40 +325,25 @@ function ensureWebSocketConnected() {
  *     an unsubscribe fn; `await ipc(channel, ...args)` performs an invoke.
  *   - object: `ipc.invoke / ipc.send / ipc.on / ipc.off / ipc.removeListener`
  */
-export function getIpc(): any {
+export function getIpc(): IpcBridge {
   if (cachedBridge) return cachedBridge;
 
   // 1. Tauri IPC path (native Tauri runtime on macOS, Windows, Linux).
   const tauri = getTauriInvoke();
   if (tauri) {
     const tauriSurface = {
-      invoke: async (channel: string, ...args: any[]) => {
+      invoke: async (channel: string, ...args: unknown[]) => {
         registerActiveSessionFromArgs(channel, args);
-        const isCoreApiChannel =
-          channel === 'agent-run' ||
-          channel === 'agent-stop' ||
-          channel === 'agent_run' ||
-          channel === 'agent_stop';
+        const isCoreApiChannel = isAgentRunChannel(channel) || isAgentStopChannel(channel);
 
         if (!isCoreApiChannel) {
-          const rustCmd = TAURI_COMMAND_MAP[channel] || channel.replace(/[:\-]/g, '_');
-          const payload =
-            args[0] && typeof args[0] === 'object'
-              ? {
-                  ...args[0],
-                  data: args[0],
-                  content: args[0],
-                  settings: args[0],
-                  payload: args[0],
-                }
-              : args[0] !== undefined
-              ? { id: args[0], arg: args[0], chatId: args[0], chat_id: args[0], content: args[0], data: args[0], settings: args[0], payload: args[0] }
-              : undefined;
+          const rustCmd = toTauriCommand(channel);
+          const payload = buildTauriPayload(args[0]);
 
           try {
             const res = await tauri(rustCmd, payload);
             if (res !== undefined) {
-              if (typeof res === 'string' && (channel === 'settings-read' || channel === 'settings_read')) {
+              if (typeof res === 'string' && isSettingsReadChannel(channel)) {
                 try {
                   return JSON.parse(res);
                 } catch {
@@ -370,8 +352,8 @@ export function getIpc(): any {
               }
               return res;
             }
-          } catch (err: any) {
-            const errMsg = String(err?.message || err || '');
+          } catch (err: unknown) {
+            const errMsg = err instanceof Error ? err.message : String(err || '');
             if (!errMsg.includes('not found') && !errMsg.includes('Command')) {
               throw err;
             }
@@ -386,8 +368,8 @@ export function getIpc(): any {
             credentials: 'include',
             body: JSON.stringify({ channel, args }),
           });
-          const isTauri = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
-          if (!isTauri && httpRes.status === 401 && typeof window !== 'undefined' && window.location && window.location.pathname !== '/login') {
+          const isTauriEnv = typeof window !== 'undefined' && Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown; __TAURI__?: unknown }).__TAURI_INTERNALS__ || (window as unknown as { __TAURI_INTERNALS__?: unknown; __TAURI__?: unknown }).__TAURI__);
+          if (!isTauriEnv && httpRes.status === 401 && typeof window !== 'undefined' && window.location && window.location.pathname !== '/login') {
             window.location.href = '/login';
           }
           if (httpRes.ok) {
@@ -400,21 +382,16 @@ export function getIpc(): any {
         } catch {
           /* ignore network error */
         }
-        if (SAFE_EMPTY_CHANNELS.has(channel)) {
+        if (isSafeEmptyChannel(channel)) {
           return [];
         }
         return null;
       },
-      send: (channel: string, ...args: any[]) => {
+      send: (channel: string, ...args: unknown[]) => {
         registerActiveSessionFromArgs(channel, args);
         ensureWebSocketConnected();
-        const rustCmd = TAURI_COMMAND_MAP[channel] || channel.replace(/[:\-]/g, '_');
-        const payload =
-          args[0] && typeof args[0] === 'object'
-            ? args[0]
-            : args[0] !== undefined
-            ? { id: args[0], arg: args[0], chatId: args[0], chat_id: args[0], content: args[0] }
-            : undefined;
+        const rustCmd = toTauriCommand(channel);
+        const payload = buildTauriPayload(args[0]);
         tauri(rustCmd, payload).catch(() => {
           const jsonPayload = JSON.stringify({ channel, args });
           if (webSocket && webSocket.readyState === WebSocket.OPEN) {
@@ -429,7 +406,7 @@ export function getIpc(): any {
           }
         });
       },
-      on: (channel: string, fn: any) => {
+      on: (channel: string, fn: IpcCallback) => {
         ensureWebSocketConnected();
         let set = webListeners.get(channel);
         if (!set) {
@@ -441,7 +418,7 @@ export function getIpc(): any {
           set?.delete(fn);
         };
       },
-      off: (channel: string, fn: any) => {
+      off: (channel: string, fn: IpcCallback) => {
         const set = webListeners.get(channel);
         if (set) {
           set.delete(fn);
@@ -461,7 +438,7 @@ export function getIpc(): any {
 
   // 3. Web HTTP IPC path — communicates with SuperAgent Core v2 over HTTP / REST and WebSocket
   const webHttpSurface = {
-    invoke: async (channel: string, ...args: any[]) => {
+    invoke: async (channel: string, ...args: unknown[]) => {
       registerActiveSessionFromArgs(channel, args);
       try {
         const httpRes = await fetch(`${getCoreApiBaseUrl()}/api/ipc/${encodeURIComponent(channel)}`, {
@@ -482,7 +459,7 @@ export function getIpc(): any {
       }
 
       // Direct REST fallback for settings when offline or during bootstrap
-      if (channel === 'settings-read' || channel === 'settings_read') {
+      if (isSettingsReadChannel(channel)) {
         try {
           const res = await fetch(`${getCoreApiBaseUrl()}/api/settings`, {
             headers: getAuthHeaders(),
@@ -494,12 +471,12 @@ export function getIpc(): any {
         } catch {}
       }
 
-      if (SAFE_EMPTY_CHANNELS.has(channel)) {
+      if (isSafeEmptyChannel(channel)) {
         return [];
       }
       return null;
     },
-    send: (channel: string, ...args: any[]) => {
+    send: (channel: string, ...args: unknown[]) => {
       registerActiveSessionFromArgs(channel, args);
       ensureWebSocketConnected();
       const payload = JSON.stringify({ channel, args });
@@ -514,7 +491,7 @@ export function getIpc(): any {
         }).catch(() => {});
       }
     },
-    on: (channel: string, fn: any) => {
+    on: (channel: string, fn: IpcCallback) => {
       ensureWebSocketConnected();
       let set = webListeners.get(channel);
       if (!set) {
@@ -526,7 +503,7 @@ export function getIpc(): any {
         set?.delete(fn);
       };
     },
-    off: (channel: string, fn: any) => {
+    off: (channel: string, fn: IpcCallback) => {
       const set = webListeners.get(channel);
       if (set) {
         set.delete(fn);
@@ -542,26 +519,32 @@ export function getIpc(): any {
  * `{ invoke, send, on, off }`.
  */
 function makeIpcBridge(
-  surface: { invoke: (...a: any[]) => any; send: (...a: any[]) => any; on: (...a: any[]) => any; off: (...a: any[]) => any },
+  surface: {
+    invoke: (channel: string, ...a: unknown[]) => Promise<unknown>;
+    send: (channel: string, ...a: unknown[]) => void;
+    on: (channel: string, listener: IpcCallback) => () => void;
+    off: (channel: string, listener: IpcCallback) => void;
+  },
   shell?: { openPath: (targetPath: string) => Promise<string> }
-): any {
-  const safeInvoke = wrapInvoke((ch: string, ...a: any[]) => surface.invoke(ch, ...a));
+): IpcBridge {
+  const safeInvoke = wrapInvoke((ch: string, ...a: unknown[]) => surface.invoke(ch, ...a));
 
-  const bridge: any = (channel: string, ...args: any[]) => {
-    const fn = args.find((a) => typeof a === 'function');
+  const bridge = ((channel: string, ...args: unknown[]) => {
+    const fn = args.find((a): a is IpcCallback => typeof a === 'function');
     if (fn) return surface.on(channel, fn);
     return safeInvoke(channel, ...args);
-  };
+  }) as IpcBridge;
 
   bridge.invoke = safeInvoke;
-  bridge.send = (ch: string, ...a: any[]) => surface.send(ch, ...a);
-  bridge.on = (ch: string, fn: (...a: any[]) => void) => surface.on(ch, fn);
-  const safeOff = (ch: string, fn: (...a: any[]) => void) => {
+  bridge.send = (ch: string, ...a: unknown[]) => surface.send(ch, ...a);
+  bridge.on = (ch: string, fn: IpcCallback) => surface.on(ch, fn);
+  const safeOff = (ch: string, fn: IpcCallback) => {
     if (typeof surface?.off === 'function') {
       return surface.off(ch, fn);
     }
-    if (typeof (surface as any)?.removeListener === 'function') {
-      return (surface as any).removeListener(ch, fn);
+    const s = surface as unknown as { removeListener?: (ch: string, fn: IpcCallback) => void };
+    if (typeof s?.removeListener === 'function') {
+      return s.removeListener(ch, fn);
     }
   };
   bridge.off = safeOff;
@@ -583,43 +566,25 @@ export function isDesktopApp(): boolean {
   return isTauri();
 }
 
-const SILENT_IPC_CHANNELS = new Set<string>([
+export const SILENT_IPC_CHANNELS = new Set<string>([
   'system-info',
-  'system_info',
   'get-system-info',
-  'get_system_info',
   'settings-read',
-  'settings_read',
   'settings-write',
-  'settings_write',
   'store-read',
-  'store_read',
   'store-write',
-  'store_write',
   'chat-steps-read',
-  'chat_steps_read',
   'app-version',
-  'app_version',
   'get-app-version',
-  'get_app_version',
   'auto-detect-providers',
-  'auto_detect_providers',
   'skills-catalog',
-  'skills_catalog',
   'mcp-catalog',
-  'mcp_catalog',
   'plugins-catalog',
-  'plugins_catalog',
   'skills-list',
-  'skills_list',
   'skills-import-check',
-  'skills_import_check',
   'skills-import-perform',
-  'skills_import_perform',
   'kanban-load',
-  'kanban_load',
   'kanban-save',
-  'kanban_save',
   'pet-set-partner',
   'pet-say',
   'pet-status',
@@ -628,9 +593,7 @@ const SILENT_IPC_CHANNELS = new Set<string>([
   'pet-set-visible',
   'web-status',
   'check-for-updates',
-  'check_for_updates',
   'download-update',
-  'download_update',
   'provider-proxy',
   'telegram-test',
   'telegram-config-get',
@@ -640,58 +603,50 @@ const SILENT_IPC_CHANNELS = new Set<string>([
   'autostart-disable',
   'autostart-status',
   'autostart-is-enabled',
-  'autostart_enable',
-  'autostart_disable',
-  'autostart_is_enabled',
   'circle-search-get-screen-image',
-  'circle_search_get_screen_image',
   'circle-search-show',
-  'circle_search_show',
   'circle-search-hide',
-  'circle_search_hide',
   'circle-search-toggle',
-  'circle_search_toggle',
   'circle-search-analyze',
   'overlay-capture-screen',
   'overlay-hide',
+  'screenshot-screen',
   'ollama-status',
-  'ollama_status',
   'check-ollama-installed',
-  'check_ollama_installed',
   'ollama-installed-models',
-  'ollama_installed_models',
   'ollama-models',
-  'ollama_models',
   'ollama-start',
-  'ollama_start',
   'start-ollama-service',
-  'start_ollama_service',
   'ollama-settings-get',
-  'ollama_settings_get',
   'ollama-settings-save',
-  'ollama_settings_save',
 ]);
 
+export function isSilentIpcChannel(channel: string): boolean {
+  return SILENT_IPC_CHANNELS.has(channel) || SILENT_IPC_CHANNELS.has(channel.replace(/_/g, '-'));
+}
 
-function wrapInvoke(fn: (channel: string, ...args: any[]) => Promise<any>) {
-  return async (channel: string, ...args: any[]): Promise<any> => {
+function wrapInvoke(fn: (channel: string, ...args: unknown[]) => Promise<unknown>) {
+  return async <T = unknown>(channel: string, ...args: unknown[]): Promise<T | null> => {
     try {
       const result = await fn(channel, ...args);
       if (result && typeof result === 'object' && (result as IpcErrorEnvelope).__ipcError) {
-        if (!SILENT_IPC_CHANNELS.has(channel)) {
+        if (!isSilentIpcChannel(channel)) {
           reportError('ipc:' + channel, (result as IpcErrorEnvelope).error);
         }
         return null;
       }
-      if (result && typeof result === 'object' && result.ok === false && result.error) {
-        if (!SILENT_IPC_CHANNELS.has(channel) && !result.unsupported) {
-          reportError('ipc:' + channel, result.error);
+      if (result && typeof result === 'object') {
+        const obj = result as { ok?: boolean; error?: unknown; unsupported?: boolean };
+        if (obj.ok === false && obj.error) {
+          if (!isSilentIpcChannel(channel) && !obj.unsupported) {
+            reportError('ipc:' + channel, obj.error);
+          }
         }
       }
-      return result;
-    } catch (err: any) {
-      const msg = String(err?.message || err || '');
-      if (!SILENT_IPC_CHANNELS.has(channel) && !msg.includes('not found') && !msg.includes('Command')) {
+      return result as T;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err || '');
+      if (!isSilentIpcChannel(channel) && !msg.includes('not found') && !msg.includes('Command')) {
         reportError('ipc:' + channel, err);
       }
       return null;
@@ -699,46 +654,29 @@ function wrapInvoke(fn: (channel: string, ...args: any[]) => Promise<any>) {
   };
 }
 
-function getTauriInvoke(): ((cmd: string, args?: any) => Promise<any>) | null {
+type TauriInvokeFn = (cmd: string, args?: Record<string, unknown>) => Promise<unknown>;
+
+function getTauriInvoke(): TauriInvokeFn | null {
   if (typeof window === 'undefined') return null;
-  const w = window as any;
+  const w = window as unknown as {
+    __TAURI_INTERNALS__?: { invoke: TauriInvokeFn };
+    __TAURI__?: { core?: { invoke: TauriInvokeFn } };
+  };
   if (w.__TAURI_INTERNALS__?.invoke) {
-    return (cmd: string, args?: any) => w.__TAURI_INTERNALS__.invoke(cmd, args);
+    return (cmd: string, args?: Record<string, unknown>) => w.__TAURI_INTERNALS__!.invoke(cmd, args);
   }
   if (w.__TAURI__?.core?.invoke) {
-    return (cmd: string, args?: any) => w.__TAURI__.core.invoke(cmd, args);
+    return (cmd: string, args?: Record<string, unknown>) => w.__TAURI__!.core!.invoke(cmd, args);
   }
   return null;
 }
 
-export function invoke(channel: string, ...args: unknown[]): Promise<any> {
+export function invoke<T = unknown>(channel: string, ...args: unknown[]): Promise<T | null> {
   const tauri = getTauriInvoke();
   if (tauri) {
-    const rustCmd = TAURI_COMMAND_MAP[channel] || channel.replace(/[:\-]/g, '_');
-    const firstArg = args[0];
-    let payload: any;
-    if (firstArg && typeof firstArg === 'object') {
-      payload = {
-        ...firstArg,
-        data: firstArg,
-        content: firstArg,
-        settings: firstArg,
-        payload: firstArg,
-      };
-    } else if (firstArg !== undefined) {
-      payload = {
-        id: firstArg,
-        arg: firstArg,
-        chatId: firstArg,
-        chat_id: firstArg,
-        content: firstArg,
-        data: firstArg,
-        payload: firstArg,
-      };
-    } else {
-      payload = undefined;
-    }
-    return wrapInvoke((_ch, a) => tauri(rustCmd, a))(channel, payload);
+    const rustCmd = toTauriCommand(channel);
+    const payload = buildTauriPayload(args[0]);
+    return wrapInvoke((_ch, a) => tauri(rustCmd, a as Record<string, unknown> | undefined))(channel, payload);
   }
   const api = superagent();
   if (api?.ipc) return wrapInvoke((ch, ...a) => api.ipc.invoke(ch, ...a))(channel, ...args);
@@ -748,11 +686,8 @@ export function invoke(channel: string, ...args: unknown[]): Promise<any> {
 export function send(channel: string, ...args: unknown[]): void {
   const tauri = getTauriInvoke();
   if (tauri) {
-    const rustCmd = TAURI_COMMAND_MAP[channel] || channel.replace(/[:\-]/g, '_');
-    const firstArg = args[0];
-    const payload = firstArg && typeof firstArg === 'object'
-      ? { ...firstArg, data: firstArg, content: firstArg, settings: firstArg, payload: firstArg }
-      : (firstArg !== undefined ? { id: firstArg, arg: firstArg, chatId: firstArg, chat_id: firstArg, content: firstArg, data: firstArg, payload: firstArg } : undefined);
+    const rustCmd = toTauriCommand(channel);
+    const payload = buildTauriPayload(args[0]);
     tauri(rustCmd, payload).catch(() => {});
     return;
   }
@@ -762,13 +697,13 @@ export function send(channel: string, ...args: unknown[]): void {
   }
 }
 
-export function on(channel: string, listener: (...args: any[]) => void): () => void {
+export function on(channel: string, listener: IpcCallback): () => void {
   const api = superagent();
   if (api?.ipc) return api.ipc.on(channel, listener);
   return () => {};
 }
 
-export function off(channel: string, listener: (...args: any[]) => void): void {
+export function off(channel: string, listener: IpcCallback): void {
   const api = superagent();
   if (api?.ipc) {
     api.ipc.off(channel, listener);
