@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useChatStore, chatStore } from '../stores/chatStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { MessageCanvas } from './MessageCanvas';
@@ -25,6 +25,12 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
   onEditStep,
 }) => {
   const [isRightSidebarOpenMobile, setIsRightSidebarOpenMobile] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setIsRightSidebarOpenMobile((prev) => !prev);
+    window.addEventListener('toggle-mobile-right-sidebar', handler);
+    return () => window.removeEventListener('toggle-mobile-right-sidebar', handler);
+  }, []);
   const activeChatId = useChatStore((s) => s.activeChatId) || 'draft-chat';
   const activeChat = useChatStore((s) => s.chats.find((c) => c.id === activeChatId));
   const isGenerating = useSessionStore((s) => Boolean(s.runningSessions.get(activeChatId)?.isGenerating));

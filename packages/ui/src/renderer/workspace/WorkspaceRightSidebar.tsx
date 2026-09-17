@@ -24,7 +24,11 @@ import {
   Coffee,
   Moon,
   Sun,
-  X
+  X,
+  Info,
+  Copy,
+  Check,
+  Layers,
 } from 'lucide-react';
 import { useChatStore } from '../stores/chatStore';
 import { useSessionStore } from '../stores/sessionStore';
@@ -35,7 +39,7 @@ import type { TrajectoryStep } from '../pages/Workspace/TrajectoryCanvas';
 import type { PartnerMood, PartnerManifest } from '../partner-popup/types';
 import { moodReaction } from '../partner-popup/types';
 
-export type WorkspaceSidebarTab = 'files' | 'agents' | 'partner';
+export type WorkspaceSidebarTab = 'files' | 'agents' | 'partner' | 'info';
 
 export interface WorkspaceRightSidebarProps {
   steps?: TrajectoryStep[];
@@ -104,8 +108,13 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
 
   // Read stores
   const chats = useChatStore((s) => s.chats);
+  const activeProject = useChatStore((s) => s.activeProject);
+  const draftProject = useChatStore((s) => s.draftProject);
   const activeChat = chats.find((c) => c.id === activeChatId);
   const runningSessions = useSessionStore((s) => s.runningSessions);
+  const runningSession = activeChatId ? runningSessions.get(activeChatId) : null;
+  const contextUsage = runningSession?.contextUsage || null;
+  const [copiedId, setCopiedId] = useState(false);
 
   // Partner hooks
   const partners = usePartners();
@@ -270,6 +279,18 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
           >
             <Sparkles size={13} />
             <span>Partner</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('info')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
+              activeTab === 'info'
+                ? 'bg-brand-card text-brand-textMain shadow-sm border border-brand-border/60'
+                : 'text-brand-textMuted hover:text-brand-textMain'
+            }`}
+          >
+            <Info size={13} />
+            <span>Info</span>
           </button>
         </div>
 
@@ -812,6 +833,128 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
             )}
           </div>
         )}
+
+        {/* ── TAB 4: CHAT INFO & CONTEXT ─────────────────────────────────── */}
+        {activeTab === 'info' && (
+          <div className="space-y-3 animate-in fade-in duration-150">
+            {/* Session Details Card */}
+            <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono text-brand-textMuted uppercase tracking-wider">Session</span>
+                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                  isGenerating
+                    ? 'bg-[color:var(--neon-live)]/15 text-[color:var(--neon-live)] border border-[color:var(--neon-live)]/30'
+                    : 'bg-brand-inner-bg text-brand-textMuted border border-brand-border/40'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${isGenerating ? 'bg-[color:var(--neon-live)] animate-pulse' : 'bg-brand-textMuted/60'}`} />
+                  {isGenerating ? 'Active Run' : 'Idle'}
+                </span>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold text-brand-textMain line-clamp-2">
+                  {activeChat?.title || 'Active Session'}
+                </h4>
+                <p className="text-[11px] text-brand-textMuted mt-0.5">
+                  Project: <span className="text-brand-textMain font-medium">{activeChat?.project || draftProject || activeProject || 'None (Standalone)'}</span>
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-brand-border/40 text-[11px]">
+                <div>
+                  <span className="text-brand-textMuted text-[10px] block">Model</span>
+                  <span className="text-brand-textMain font-mono font-medium truncate block">
+                    {activeChat?.model || 'Orchestrator'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-brand-textMuted text-[10px] block">Created</span>
+                  <span className="text-brand-textMain font-medium block">
+                    {activeChat?.timestamp || 'Recent'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Context Usage Card */}
+            <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono text-brand-textMuted uppercase tracking-wider">Context Window</span>
+                <span className={`text-xs font-mono font-semibold ${
+                  (contextUsage?.pct ?? 0) > 80 ? 'text-[color:var(--neon-attention)]' : 'text-brand-textMain'
+                }`}>
+                  {contextUsage?.pct ?? 0}%
+                </span>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full h-2 rounded-full bg-brand-bg/80 border border-brand-border/40 overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-300 rounded-full ${
+                    (contextUsage?.pct ?? 0) > 80
+                      ? 'bg-[color:var(--neon-attention)]'
+                      : (contextUsage?.pct ?? 0) > 50
+                      ? 'bg-amber-400'
+                      : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${Math.min(contextUsage?.pct ?? 0, 100)}%` }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[10px] text-brand-textMuted">
+                <span>Memory utilization</span>
+                <span>{(contextUsage?.pct ?? 0) > 80 ? 'Approaching capacity' : 'Healthy buffer'}</span>
+              </div>
+            </div>
+
+            {/* Trajectory & Changes Summary */}
+            <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono text-brand-textMuted uppercase tracking-wider">Trajectory Stats</span>
+                <Layers size={13} className="text-brand-textMuted" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2 rounded-lg bg-brand-inner-bg border border-brand-border/30">
+                  <span className="text-[10px] text-brand-textMuted block">Total Steps</span>
+                  <span className="font-semibold text-brand-textMain text-sm">{steps.length}</span>
+                </div>
+                <div className="p-2 rounded-lg bg-brand-inner-bg border border-brand-border/30">
+                  <span className="text-[10px] text-brand-textMuted block">Modified Files</span>
+                  <span className="font-semibold text-brand-textMain text-sm">{modifiedFiles.length}</span>
+                </div>
+              </div>
+
+              {modifiedFiles.length > 0 && (
+                <button
+                  onClick={() => setActiveTab('files')}
+                  className="w-full mt-1 py-1.5 px-3 rounded-lg text-xs font-medium bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary border border-brand-primary/20 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <FileCode2 size={13} />
+                  <span>Review {modifiedFiles.length} Changed File{modifiedFiles.length > 1 ? 's' : ''}</span>
+                </button>
+              )}
+            </div>
+
+            {/* Quick Actions */}
+            <div className="p-3 rounded-xl bg-brand-card/40 border border-brand-border/40 space-y-1.5">
+              <span className="text-[10px] font-mono text-brand-textMuted uppercase tracking-wider block px-1">Actions</span>
+              <button
+                onClick={() => {
+                  if (activeChatId) {
+                    navigator.clipboard.writeText(activeChatId);
+                    setCopiedId(true);
+                    setTimeout(() => setCopiedId(false), 2000);
+                  }
+                }}
+                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer"
+              >
+                <span>Copy Session ID</span>
+                {copiedId ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
@@ -860,6 +1003,14 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
               title="Partner Companion"
             >
               <Sparkles size={16} />
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('info'); setIsCollapsed(false); }}
+              className={`p-2 rounded-lg transition-colors cursor-pointer ${activeTab === 'info' ? 'bg-brand-card text-brand-textMain border border-brand-border' : 'text-brand-textMuted hover:text-brand-textMain'}`}
+              title="Chat Info & Context"
+            >
+              <Info size={16} />
             </button>
           </div>
         </div>

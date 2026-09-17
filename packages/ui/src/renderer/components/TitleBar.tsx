@@ -32,6 +32,8 @@ import {
   Lock,
   Image as ImageIcon,
   Film,
+  Info,
+  SquarePen,
 } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { ThemeMode } from '../types';
@@ -88,6 +90,22 @@ interface TitleBarProps {
   updateAvailableVersion?: string | null;
   /** Action when clicking the update available badge. */
   onOpenUpdates?: () => void;
+
+  // ── Adaptive Mobile / Unified Top Bar Props ──
+  /** Current active navigation tab / view. */
+  activeTab?: string;
+  /** Current active project name (if any). */
+  activeProject?: string;
+  /** Title of the current active chat session. */
+  activeChatTitle?: string;
+  /** Whether an agent prompt is currently streaming / running. */
+  isGenerating?: boolean;
+  /** Callback to stop the currently running agent. */
+  onStopAgent?: () => void;
+  /** Total count of modified files in active chat. */
+  modifiedFilesCount?: number;
+  /** Toggles the right inspection drawer on mobile. */
+  onToggleRightSidebar?: () => void;
 }
 
 const isMac = isMacOS();
@@ -143,6 +161,13 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   isBackendDisconnected = false,
   updateAvailableVersion = null,
   onOpenUpdates,
+  activeTab = 'trajectory',
+  activeProject = '',
+  activeChatTitle = '',
+  isGenerating = false,
+  onStopAgent,
+  modifiedFilesCount = 0,
+  onToggleRightSidebar,
 }) => {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -314,21 +339,30 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           </div>
         )}
 
-        {/* Mobile nav toggle (hamburger) */}
-        {onToggleMobileNav && (
+        {/* Mobile nav toggle (hamburger or back button depending on view) */}
+        {canNavigateBack && activeTab && !['trajectory', 'tasks', 'scheduled', 'partner'].includes(activeTab) ? (
+          <button
+            onClick={onNavigateBack}
+            className="atmo-btn lg:hidden w-7 h-7 flex items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer shrink-0"
+            title="Go back"
+            aria-label="Go back"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        ) : onToggleMobileNav ? (
           <button
             onClick={onToggleMobileNav}
-            className="atmo-btn lg:hidden w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer shrink-0"
+            className="atmo-btn lg:hidden w-7 h-7 flex items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer shrink-0"
             title="Menu"
             aria-label="Toggle navigation menu"
           >
             <Menu className="w-4 h-4" />
           </button>
-        )}
+        ) : null}
 
         {/* App Logo */}
         <div className="flex items-center text-brand-textMain transition-colors shrink-0">
-          <BrandLogo size={22} />
+          <BrandLogo size={20} />
         </div>
 
         {/* Back / Forward History Navigation */}
@@ -382,16 +416,82 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       </div>
 
 
-      {/* Middle side: Window Title label */}
-      <div className="hidden sm:block text-[9px] font-mono text-brand-textMuted/40 absolute left-1/2 -translate-x-1/2 pointer-events-none select-none tracking-widest uppercase">
+      {/* Middle side: Adaptive Title on Mobile (< lg) */}
+      <div className="lg:hidden flex-1 flex items-center justify-center px-1.5 text-center min-w-0 no-drag-window">
+        {activeTab === 'trajectory' ? (
+          <div className="flex items-center gap-1 text-xs truncate max-w-[190px] sm:max-w-xs select-none">
+            {activeProject ? (
+              <>
+                <span className="font-semibold text-brand-textMain truncate max-w-[85px] sm:max-w-[120px]">{activeProject}</span>
+                <span className="text-brand-textMuted/40 shrink-0">/</span>
+                <span className="text-brand-textMuted truncate max-w-[95px] sm:max-w-[140px]">{activeChatTitle || 'New chat'}</span>
+              </>
+            ) : (
+              <span className="font-semibold text-brand-textMain truncate">{activeChatTitle || 'SuperAgent'}</span>
+            )}
+          </div>
+        ) : (
+          <span className="text-xs font-semibold text-brand-textMain capitalize truncate select-none">
+            {activeTab === 'project-settings' ? 'Project Settings' :
+             activeTab === 'standalone-chat' ? 'Chat Settings' :
+             activeTab === 'diff' ? 'Diff Review' :
+             activeTab || 'SuperAgent'}
+          </span>
+        )}
+      </div>
+
+      {/* Middle side: Window Title label on Desktop (lg+) */}
+      <div className="hidden lg:block text-[9px] font-mono text-brand-textMuted/40 absolute left-1/2 -translate-x-1/2 pointer-events-none select-none tracking-widest uppercase">
         superagent
       </div>
 
       {/* Right side: theme, BYOK status, menu (mobile), and Windows/Linux window controls */}
       <div
-        className="flex items-center gap-2 sm:gap-3 no-drag-window shrink-0"
+        className="flex items-center gap-1.5 sm:gap-2.5 no-drag-window shrink-0"
         style={isDesktop ? ({ WebkitAppRegion: 'no-drag' } as React.CSSProperties) : undefined}
       >
+        {/* Stop button on mobile/desktop when running */}
+        {isGenerating && onStopAgent && (
+          <button
+            onClick={onStopAgent}
+            className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 transition-colors cursor-pointer"
+            title="Stop agent run"
+          >
+            <Square size={10} className="fill-current" />
+            <span className="hidden sm:inline">Stop</span>
+          </button>
+        )}
+
+        {/* Mobile-only Trajectory actions: Info Drawer & Quick New Chat */}
+        <div className="lg:hidden flex items-center gap-0.5">
+          {activeTab === 'trajectory' && onToggleRightSidebar && (
+            <button
+              onClick={onToggleRightSidebar}
+              className="relative atmo-btn w-7 h-7 flex items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer shrink-0"
+              title="Chat Info & Diffs"
+              aria-label="Chat Info & Diffs"
+            >
+              <Info className="w-4 h-4" />
+              {(modifiedFilesCount || 0) > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-3.5 h-3.5 px-1 rounded-full bg-brand-primary text-[8px] font-bold text-brand-bg flex items-center justify-center leading-none">
+                  {modifiedFilesCount}
+                </span>
+              )}
+            </button>
+          )}
+
+          {onNewChat && (
+            <button
+              onClick={onNewChat}
+              className="atmo-btn w-7 h-7 flex items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer shrink-0"
+              title="New chat"
+              aria-label="New chat"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
         {/* Backend Disconnected Warning — only shown when backend core / daemon / server is unreachable */}
         {isBackendDisconnected && (
           <div
@@ -400,7 +500,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             title="Backend core disconnected. Please ensure the backend server or daemon process is running."
           >
             <WifiOff size={11} className="text-rose-400 shrink-0" />
-            <span>Backend Disconnected</span>
+            <span className="hidden sm:inline">Backend Disconnected</span>
           </div>
         )}
 
@@ -413,24 +513,24 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             title={`Update available (${updateAvailableVersion}). Click to view updates.`}
           >
             <ArrowUpCircle size={11} className="text-emerald-400 shrink-0 animate-bounce" />
-            <span>Update {updateAvailableVersion !== 'available' ? `v${updateAvailableVersion}` : 'Available'}</span>
+            <span className="hidden sm:inline">Update {updateAvailableVersion !== 'available' ? `v${updateAvailableVersion}` : 'Available'}</span>
           </button>
         )}
 
-        {/* Theme toggle (all sizes) */}
+        {/* Theme toggle (desktop) */}
         <button
           onClick={onToggleTheme}
-          className="atmo-btn w-7 h-7 flex items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
+          className="hidden sm:flex atmo-btn w-7 h-7 items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
           title={themeMode === 'light' ? 'Switch to dark' : 'Switch to light'}
           aria-label="Toggle theme"
         >
           {themeMode === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
         </button>
 
-        {/* Lock App / Session toggle */}
+        {/* Lock App / Session toggle (desktop) */}
         <button
           onClick={onLockApp || onLogout}
-          className="hidden sm:flex atmo-btn w-7 h-7 items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
+          className="hidden md:flex atmo-btn w-7 h-7 items-center justify-center rounded text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer"
           title="Lock session"
           aria-label="Lock session"
         >

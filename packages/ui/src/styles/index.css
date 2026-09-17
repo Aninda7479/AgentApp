@@ -883,25 +883,9 @@ body {
   border: 1px solid var(--brand-border-strong);
 }
 
-/* ── Mobile bottom navigation bar ── */
+/* ── Mobile bottom navigation bar (retired in favor of unified adaptive navigation) ── */
 .ui-bottom-nav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 40;
-  display: none;
-  align-items: stretch;
-  gap: 0.25rem;
-  padding: 0.35rem 0.5rem;
-  padding-bottom: calc(0.35rem + env(safe-area-inset-bottom));
-  background: color-mix(in srgb, var(--brand-sidebar) 90%, transparent);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-top: 1px solid var(--brand-border);
-}
-@media (max-width: 767px) {
-  .ui-bottom-nav { display: flex; }
+  display: none !important;
 }
 .ui-bottom-nav-item {
   flex: 1;

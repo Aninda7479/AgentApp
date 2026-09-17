@@ -280,7 +280,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <div
       data-testid="sidebar-container"
       style={{ width: collapsed ? '70px' : '260px', maxWidth: '85vw' }}
-      className={`ml-1 flex flex-col h-full box-border transition-transform duration-200 z-40 pb-[68px] md:pb-4 bg-brand-bg
+      className={`ml-1 flex flex-col h-full box-border transition-transform duration-200 z-40 pb-4 bg-brand-bg
         fixed inset-y-0 left-0 lg:static lg:translate-x-0
         ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}`}
     >
@@ -307,7 +307,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               if (onNewChat) onNewChat();
               onMobileClose?.();
             }}
-            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-xl text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all duration-200 text-sm font-semibold mb-1 select-none cursor-pointer`}
+            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-3.5'} py-2 rounded-xl text-brand-textMain bg-brand-card/60 hover:bg-[color:var(--brand-hover)] border border-brand-border/50 hover:border-brand-border/80 transition-all duration-200 text-sm font-medium mb-1.5 shadow-xs select-none cursor-pointer`}
           >
             <Plus className="w-4 h-4 flex-shrink-0 text-brand-textMain" />
             {!collapsed && <span>New chat</span>}
@@ -319,14 +319,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               if (onOpenSearch) onOpenSearch();
               onMobileClose?.();
             }}
-            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2 rounded-lg text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all duration-200 text-sm font-medium mb-0.5 select-none cursor-pointer`}
+            className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-3.5'} py-2 rounded-lg text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all duration-200 text-sm font-medium mb-0.5 select-none cursor-pointer`}
           >
             <Search className="w-4 h-4 flex-shrink-0" />
             {!collapsed && <span>Search</span>}
           </button>
 
-          {renderNavItem('scheduled', 'Scheduled', Clock)}
           {renderNavItem('tasks', 'Tasks', KanbanSquare)}
+          {renderNavItem('scheduled', 'Scheduled', Clock)}
           {renderNavItem('artifacts', 'Artifacts', Package)}
           {renderNavItem('partner', 'Partner', PawPrint)}
 

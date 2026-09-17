@@ -28,7 +28,6 @@ import { OnboardingWizard } from './components/OnboardingWizard';
 import { ProjectSettingsModal } from './pages/Workspace/ProjectSettingsModal';
 import { StandaloneChatPage } from './pages/Workspace/StandaloneChatPage';
 import { builtinSuggestions, SkillInfo } from './components/slashCommands';
-import { BottomNav } from './components/BottomNav';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { usePartners } from './pages/Settings/companion/library';
 import { ThreeDStudio } from './pages/Studio/ThreeDStudio';
@@ -1539,6 +1538,17 @@ export const App: React.FC = () => {
     };
   }, []);
 
+  const currentActiveChat = chats.find((c) => c.id === activeChatId);
+  const currentModifiedFilesCount = useMemo(() => {
+    const fileSet = new Set<string>();
+    (currentActiveChat?.steps || []).forEach((step) => {
+      if (step.metadata?.diff?.filename) {
+        fileSet.add(step.metadata.diff.filename);
+      }
+    });
+    return fileSet.size;
+  }, [currentActiveChat?.steps]);
+
   // ─── Render ─────────────────────────────────────────────────────────────────
   if (loading) {
     return <LoadingScreen signature="Build by Aninda" />;
@@ -1615,6 +1625,15 @@ export const App: React.FC = () => {
         onOpenAccount={handleOpenAccount}
         onLogout={handleLogout}
         onLockApp={handleLogout}
+        activeTab={activeTab}
+        activeProject={activeProject}
+        activeChatTitle={currentActiveChat?.title}
+        isGenerating={isGenerating}
+        onStopAgent={handleStopActiveRun}
+        modifiedFilesCount={currentModifiedFilesCount}
+        onToggleRightSidebar={() => {
+          window.dispatchEvent(new CustomEvent('toggle-mobile-right-sidebar'));
+        }}
       />
 
       {/* Main Body container */}
@@ -1683,7 +1702,7 @@ export const App: React.FC = () => {
           />
         )}
 
-        <main id="main-content" tabIndex={-1} className={`flex-1 flex flex-col min-h-0 relative isolate overflow-hidden workspace-canvas ${activeTab === 'pcb' || activeTab === 'image' || activeTab === 'video' ? 'm-0 rounded-none p-0' : 'm-0 sm:m-1 rounded-none sm:rounded-xl pb-18 md:pb-0'} focus:outline-none`}>
+        <main id="main-content" tabIndex={-1} className={`flex-1 flex flex-col min-h-0 relative isolate overflow-hidden workspace-canvas ${activeTab === 'pcb' || activeTab === 'image' || activeTab === 'video' ? 'm-0 rounded-none p-0' : 'm-0 sm:m-1 rounded-none sm:rounded-xl'} focus:outline-none`}>
 
           {/* Ambient "layered atmosphere" backdrop — a soft accent glow and three
               calm depth bands, painted behind all content (Atmosphere mode, low
@@ -1918,15 +1937,6 @@ export const App: React.FC = () => {
           </ErrorBoundary>
         </main>
       </div>
-
-      {/* Mobile bottom navigation (phones only) */}
-      <BottomNav
-        activeTab={activeTab}
-        onSelectTab={(tab) => {
-          setActiveTab(tab);
-          setMobileNavOpen(false);
-        }}
-      />
 
       {/* search dialog overlay */}
       <SearchModal

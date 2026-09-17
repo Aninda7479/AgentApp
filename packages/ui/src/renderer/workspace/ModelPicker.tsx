@@ -116,7 +116,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
 
   return (
     <div className="relative inline-block">
-      {/* Trigger Button: Shows only text by default, hover state with lighter background and rounded edges */}
+      {/* Trigger Button: Shows text + subtle chevron with brand theme colors */}
       <button
         ref={triggerRef}
         type="button"
@@ -125,15 +125,16 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
           updateCoords();
           setIsOpen(!isOpen);
         }}
-        className={`group inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold transition-colors select-none cursor-pointer ${
+        className={`group inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors select-none cursor-pointer ${
           isOpen
-            ? 'bg-white/10 text-white'
-            : 'text-white hover:bg-white/10'
+            ? 'bg-brand-hover text-brand-textMain'
+            : 'text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover'
         }`}
         title={`Model: ${displayLabel}`}
         aria-label={`Select model, currently ${displayLabel}`}
       >
         <span className="truncate max-w-[140px] sm:max-w-[200px]">{displayLabel}</span>
+        <ChevronDown size={11} className="text-brand-textMuted/60 group-hover:text-brand-textMuted shrink-0 transition-transform duration-150" />
       </button>
 
       {isOpen && typeof document !== 'undefined' && createPortal(
