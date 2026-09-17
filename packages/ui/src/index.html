@@ -11,10 +11,33 @@
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SuperAgent</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='32' y2='32'><stop stop-color='%238b5cf6'/><stop offset='1' stop-color='%2338bdf8'/></linearGradient></defs><rect width='32' height='32' rx='8' fill='url(%23g)'/><path d='M11 22L16 10l5 12' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/><circle cx='16' cy='22.5' r='1.8' fill='white'/><circle cx='21' cy='10' r='1.8' fill='white'/></svg>">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="alternate icon" type="image/png" href="/icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/icon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/icon-16.png">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#08090d">
+  <meta name="theme-color" content="#18191B">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SuperAgent">
+  <meta name="application-name" content="SuperAgent">
   <meta name="description" content="SuperAgent — autonomous AI agent for coding, browser automation, and multimodal media generation.">
+  <script>
+    if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
+          .then(function(reg) {
+            console.log('[PWA] ServiceWorker active with scope:', reg.scope);
+          })
+          .catch(function(err) {
+            console.warn('[PWA] ServiceWorker registration failed:', err);
+          });
+      });
+    }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">

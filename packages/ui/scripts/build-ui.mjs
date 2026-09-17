@@ -30,6 +30,7 @@ const MIME_TYPES = {
   '.mjs': 'application/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -85,8 +86,8 @@ function compileCss(watch = false) {
   }
 }
 
-// 3. Copy HTML templates
-const htmlFiles = [
+// 3. Copy HTML templates and PWA artifacts
+const staticFiles = [
   { src: 'src/index.html', dest: 'dist/index.html' },
   { src: 'src/ui.html', dest: 'dist/ui.html' },
   { src: 'src/login.html', dest: 'dist/login.html' },
@@ -94,10 +95,18 @@ const htmlFiles = [
   { src: 'src/circle-search.html', dest: 'dist/circle-search.html' },
   { src: 'src/tray.html', dest: 'dist/tray.html' },
   { src: 'src/overlay.html', dest: 'dist/overlay.html' },
+  { src: 'src/manifest.webmanifest', dest: 'dist/manifest.webmanifest' },
+  { src: 'src/manifest.json', dest: 'dist/manifest.json' },
+  { src: 'src/sw.js', dest: 'dist/sw.js' },
+  { src: 'assets/icon.png', dest: 'dist/icon.png' },
+  { src: 'assets/icon.svg', dest: 'dist/icon.svg' },
+  { src: 'assets/icon.ico', dest: 'dist/favicon.ico' },
+  { src: 'assets/icon-192.png', dest: 'dist/icon-192.png' },
+  { src: 'assets/icon-512.png', dest: 'dist/icon-512.png' },
 ];
 
-function copyHtmlTemplates() {
-  for (const { src, dest } of htmlFiles) {
+function copyStaticFiles() {
+  for (const { src, dest } of staticFiles) {
     const srcPath = path.join(ROOT, src);
     const destPath = path.join(ROOT, dest);
     if (fs.existsSync(srcPath)) {
@@ -120,7 +129,7 @@ function copyStaticAssets() {
 }
 
 // Run initial copies
-copyHtmlTemplates();
+copyStaticFiles();
 copyStaticAssets();
 
 // Dev server
@@ -190,12 +199,16 @@ function startDevServer(port = DEV_PORT) {
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
       const ext = path.extname(filePath).toLowerCase();
       const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-      res.writeHead(200, {
+      const headers = {
         'Content-Type': contentType,
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
         'Expires': '0',
-      });
+      };
+      if (filePath.endsWith('sw.js')) {
+        headers['Service-Worker-Allowed'] = '/';
+      }
+      res.writeHead(200, headers);
       fs.createReadStream(filePath).pipe(res);
     } else {
       res.writeHead(404, { 'Content-Type': 'text/plain' });

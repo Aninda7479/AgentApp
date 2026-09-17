@@ -70,6 +70,8 @@ pub fn is_public_path(path: &str) -> bool {
             | "/api/ipc/media-transcribe"
             | "/api/ipc/dictation-transcribe"
             | "/manifest.json"
+            | "/manifest.webmanifest"
+            | "/sw.js"
             | "/icon.svg"
             | "/icon.png"
             | "/favicon.ico"
@@ -89,6 +91,7 @@ pub fn is_public_path(path: &str) -> bool {
         || path.ends_with(".gif")
         || path.ends_with(".mp4")
         || path.ends_with(".webm")
+        || path.ends_with(".webmanifest")
         || (path.starts_with("/api/images/generations/") && path.ends_with("/file"))
         || (path.starts_with("/api/videos/generations/") && (path.ends_with("/file") || path.ends_with("/thumbnail")))
 }

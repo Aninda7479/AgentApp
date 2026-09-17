@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use axum::{
+    body::Body,
     extract::State,
     http::{header, StatusCode, Uri},
     response::{IntoResponse, Response},
@@ -86,6 +87,47 @@ pub fn find_ui_dist_dir(workspace_root: &Path) -> Option<PathBuf> {
     None
 }
 
+pub fn build_asset_response(path: &str, bytes: Vec<u8>) -> Response {
+    let is_sw = path == "sw.js" || path.ends_with("/sw.js");
+    let is_manifest = path == "manifest.webmanifest"
+        || path.ends_with(".webmanifest")
+        || path == "manifest.json"
+        || path.ends_with("/manifest.json");
+
+    let mime_str = if is_sw {
+        "application/javascript; charset=utf-8".to_string()
+    } else if is_manifest {
+        "application/manifest+json; charset=utf-8".to_string()
+    } else {
+        mime_guess::from_path(path).first_or_octet_stream().to_string()
+    };
+
+    let cache_header = if is_sw
+        || is_manifest
+        || path.ends_with(".html")
+        || path.ends_with(".js")
+        || path.ends_with(".css")
+        || path.ends_with(".map")
+    {
+        "no-cache, no-store, must-revalidate"
+    } else {
+        "public, max-age=3600"
+    };
+
+    let mut builder = Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, mime_str)
+        .header(header::CACHE_CONTROL, cache_header);
+
+    if is_sw {
+        builder = builder.header("Service-Worker-Allowed", "/");
+    }
+
+    builder
+        .body(Body::from(bytes))
+        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+}
+
 pub async fn spa_fallback_handler(
     uri: Uri,
     State(state): State<AppState>,
@@ -122,23 +164,7 @@ pub async fn spa_fallback_handler(
                 {
                     if canonical_target.starts_with(&canonical_dist) {
                         if let Ok(bytes) = tokio::fs::read(&canonical_target).await {
-                            let mime = mime_guess::from_path(&canonical_target).first_or_octet_stream();
-                            let cache_header = if canonical_target
-                                .extension()
-                                .map_or(false, |ext| ext == "html" || ext == "js" || ext == "css" || ext == "map")
-                            {
-                                "no-cache, no-store, must-revalidate"
-                            } else {
-                                "public, max-age=3600"
-                            };
-                            return (
-                                [
-                                    (header::CONTENT_TYPE, mime.to_string()),
-                                    (header::CACHE_CONTROL, cache_header.to_string()),
-                                ],
-                                bytes,
-                            )
-                                .into_response();
+                            return build_asset_response(path_str, bytes);
                         }
                     }
                 }
@@ -156,23 +182,7 @@ pub async fn spa_fallback_handler(
                     {
                         if canonical_target.starts_with(&canonical_dist) {
                             if let Ok(bytes) = tokio::fs::read(&canonical_target).await {
-                                let mime = mime_guess::from_path(&canonical_target).first_or_octet_stream();
-                                let cache_header = if canonical_target
-                                    .extension()
-                                    .map_or(false, |ext| ext == "html" || ext == "js" || ext == "css" || ext == "map")
-                                {
-                                    "no-cache, no-store, must-revalidate"
-                                } else {
-                                    "public, max-age=3600"
-                                };
-                                return (
-                                    [
-                                        (header::CONTENT_TYPE, mime.to_string()),
-                                        (header::CACHE_CONTROL, cache_header.to_string()),
-                                    ],
-                                    bytes,
-                                )
-                                    .into_response();
+                                return build_asset_response(&subpath, bytes);
                             }
                         }
                     }
@@ -217,20 +227,7 @@ pub async fn spa_fallback_handler(
     // 2. Serve from embedded UI assets (self-contained pure Rust binary)
     if !path_str.is_empty() {
         if let Some(file) = EmbeddedUi::get(path_str) {
-            let mime = mime_guess::from_path(path_str).first_or_octet_stream();
-            let cache_header = if path_str.ends_with(".html") || path_str.ends_with(".js") || path_str.ends_with(".css") || path_str.ends_with(".map") {
-                "no-cache, no-store, must-revalidate"
-            } else {
-                "public, max-age=3600"
-            };
-            return (
-                [
-                    (header::CONTENT_TYPE, mime.to_string()),
-                    (header::CACHE_CONTROL, cache_header.to_string()),
-                ],
-                file.data.into_owned(),
-            )
-                .into_response();
+            return build_asset_response(path_str, file.data.into_owned());
         }
 
         // Fallback for nested asset requests in EmbeddedUi
@@ -239,20 +236,7 @@ pub async fn spa_fallback_handler(
             segments.remove(0);
             let subpath = segments.join("/");
             if let Some(file) = EmbeddedUi::get(&subpath) {
-                let mime = mime_guess::from_path(&subpath).first_or_octet_stream();
-                let cache_header = if subpath.ends_with(".html") || subpath.ends_with(".js") || subpath.ends_with(".css") || subpath.ends_with(".map") {
-                    "no-cache, no-store, must-revalidate"
-                } else {
-                    "public, max-age=3600"
-                };
-                return (
-                    [
-                        (header::CONTENT_TYPE, mime.to_string()),
-                        (header::CACHE_CONTROL, cache_header.to_string()),
-                    ],
-                    file.data.into_owned(),
-                )
-                    .into_response();
+                return build_asset_response(&subpath, file.data.into_owned());
             }
         }
 

@@ -280,6 +280,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <div
       data-testid="sidebar-container"
+      style={{ width: collapsed ? '70px' : '260px', maxWidth: '85vw' }}
       className={`ml-0 lg:ml-1 flex flex-col h-full box-border transition-transform duration-200 z-50 lg:z-auto pb-4 bg-brand-bg
         fixed inset-y-0 left-0 lg:static lg:translate-x-0 w-[280px] max-w-[85vw] ${collapsed ? 'lg:w-[70px]' : 'lg:w-[260px]'}
         ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}`}

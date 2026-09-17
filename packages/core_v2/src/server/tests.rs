@@ -134,6 +134,20 @@ async fn test_public_endpoints_accessible_without_auth() {
     let res_sdk = app.clone().oneshot(req_sdk).await.unwrap();
     assert_eq!(res_sdk.status(), StatusCode::OK);
 
+    // PWA Manifest endpoint
+    let req_manifest = Request::builder().uri("/manifest.webmanifest").method("GET").body(Body::empty()).unwrap();
+    let res_manifest = app.clone().oneshot(req_manifest).await.unwrap();
+    assert_eq!(res_manifest.status(), StatusCode::OK);
+    let manifest_ct = res_manifest.headers().get("content-type").unwrap().to_str().unwrap();
+    assert!(manifest_ct.contains("application/manifest+json"));
+
+    // PWA Service Worker endpoint
+    let req_sw = Request::builder().uri("/sw.js").method("GET").body(Body::empty()).unwrap();
+    let res_sw = app.clone().oneshot(req_sw).await.unwrap();
+    assert_eq!(res_sw.status(), StatusCode::OK);
+    let sw_allowed = res_sw.headers().get("service-worker-allowed").unwrap().to_str().unwrap();
+    assert_eq!(sw_allowed, "/");
+
     // Login endpoint (served via EmbeddedUi or filesystem)
     let req_login = Request::builder().uri("/login").method("GET").body(Body::empty()).unwrap();
     let res_login = app.oneshot(req_login).await.unwrap();

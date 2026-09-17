@@ -34,6 +34,7 @@ import {
   Film,
   Info,
   SquarePen,
+  Download,
 } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo';
 import { ThemeMode } from '../types';
@@ -41,6 +42,7 @@ import { LucideIcon } from 'lucide-react';
 import { WindowService } from '../logic/window';
 import { formatShortcut, isMacOS } from '../lib/platform';
 import { getIpc } from '../lib/ipc';
+import { usePwaInstall } from '../hooks/usePwaInstall';
 
 
 /** Props for the TitleBar component. */
@@ -172,6 +174,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { canInstall, promptInstall } = usePwaInstall();
 
   const toggleMenu = (key: string) => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -220,6 +223,11 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           ? [
               'sep' as const,
               { label: 'Quit SuperAgent', icon: Power, danger: true, onClick: () => onQuit?.() },
+            ]
+          : canInstall
+          ? [
+              'sep' as const,
+              { label: 'Install SuperAgent App', icon: Download, onClick: () => { void promptInstall(); } },
             ]
           : []),
       ],
@@ -514,6 +522,19 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           >
             <ArrowUpCircle size={11} className="text-emerald-400 shrink-0 animate-bounce" />
             <span className="hidden sm:inline">Update {updateAvailableVersion !== 'available' ? `v${updateAvailableVersion}` : 'Available'}</span>
+          </button>
+        )}
+
+        {/* PWA Install Button — shown when running in Web Mode and browser supports installation */}
+        {isWebMode && canInstall && (
+          <button
+            data-testid="pwa-install-button"
+            onClick={() => { void promptInstall(); }}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-brand-accent/15 hover:bg-brand-accent/25 border border-brand-accent/40 text-brand-accent shadow-sm transition-all cursor-pointer active:scale-[0.98]"
+            title="Install SuperAgent as a Chrome standalone application"
+          >
+            <Download size={11} className="text-brand-accent shrink-0" />
+            <span className="hidden sm:inline">Install App</span>
           </button>
         )}
 
