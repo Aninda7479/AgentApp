@@ -309,7 +309,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }}
             className={`w-full flex items-center ${collapsed ? 'justify-center px-0' : 'gap-3 px-4'} py-2.5 rounded-xl text-brand-textMuted bg-transparent hover:text-brand-textMain hover:bg-[color:var(--brand-hover)] transition-all duration-200 text-sm font-semibold mb-1 select-none cursor-pointer`}
           >
-            <Plus className="w-4 h-4 flex-shrink-0 text-brand-highlight-text" />
+            <Plus className="w-4 h-4 flex-shrink-0 text-brand-textMain" />
             {!collapsed && <span>New chat</span>}
           </button>
 

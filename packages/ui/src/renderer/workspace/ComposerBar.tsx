@@ -456,11 +456,11 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, plac
           className={`relative w-full flex items-end gap-2 px-3 py-2 sm:py-2.5 rounded-2xl sm:rounded-[22px] border transition-all duration-200 shadow-lg ${
             isDraggingOver
               ? 'bg-cyan-950/40 border-cyan-500/80 ring-2 ring-cyan-500/30'
-              : 'bg-[#1e1f23]/95 dark:bg-[#1f2024]/95 border-white/10 dark:border-white/10 focus-within:border-white/25 focus-within:ring-1 focus-within:ring-white/10'
+              : 'bg-brand-card/90 border-brand-border hover:border-brand-borderStrong focus-within:border-brand-borderStrong focus-within:ring-1 focus-within:ring-brand-borderStrong/30 backdrop-blur-xl'
           }`}
         >
           {isDraggingOver && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#1e1f23]/95 rounded-[22px] text-cyan-400 text-xs font-semibold animate-pulse select-none">
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-brand-card/95 rounded-[22px] text-cyan-400 text-xs font-semibold animate-pulse select-none">
               Drop images or files here to attach
             </div>
           )}
@@ -479,7 +479,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, plac
             onClick={() => fileInputRef.current?.click()}
             title="Attach files or media"
             aria-label="Attach files or media"
-            className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer mb-0.5"
+            className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer mb-0.5"
           >
             <Plus size={18} strokeWidth={2} />
           </button>
@@ -501,7 +501,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, plac
             placeholder={placeholder}
             rows={1}
             disabled={disabled}
-            className="flex-1 bg-transparent resize-none text-white text-sm sm:text-base py-1 px-1 focus:outline-none min-h-[36px] max-h-[220px] leading-relaxed placeholder:text-neutral-500 scrollbar-thin scrollbar-thumb-neutral-700 font-sans"
+            className="flex-1 bg-transparent resize-none text-brand-textMain text-sm sm:text-base py-1 px-1 focus:outline-none min-h-[36px] max-h-[220px] leading-relaxed placeholder:text-brand-textMuted/60 scrollbar-thin scrollbar-thumb-neutral-700 font-sans"
           />
 
           {/* Most Right: Voice Dictation (Mic) & Send (Rounded Arrow Button) */}
@@ -514,7 +514,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, plac
                 className={`w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer ${
                   listening
                     ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse'
-                    : 'text-neutral-400 hover:text-white hover:bg-white/10'
+                    : 'text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover'
                 }`}
                 title={listening ? 'Stop voice input' : 'Voice input'}
                 aria-label={listening ? 'Stop voice input' : 'Voice input'}
@@ -532,8 +532,8 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, plac
               title="Send (Enter)"
               className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150 active:scale-95 ${
                 !prompt.trim() && attachments.length === 0
-                  ? 'bg-white/5 text-neutral-500 cursor-not-allowed border border-white/5'
-                  : 'bg-white text-black hover:bg-neutral-200 shadow-md cursor-pointer'
+                  ? 'bg-brand-hover text-brand-textMuted/40 cursor-not-allowed border border-brand-border'
+                  : 'bg-brand-highlight text-brand-highlightText hover:bg-brand-highlight/90 shadow-md cursor-pointer'
               }`}
             >
               <ArrowUp size={16} strokeWidth={2.5} />
@@ -567,8 +567,8 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, plac
                 onClick={() => setIsPermissionOpen(!isPermissionOpen)}
                 className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors select-none cursor-pointer ${
                   isPermissionOpen
-                    ? 'bg-white/10 text-white'
-                    : 'text-neutral-400 hover:text-white hover:bg-white/10'
+                    ? 'bg-brand-hover text-brand-textMain'
+                    : 'text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover'
                 }`}
                 title={`Permission Mode: ${getApprovalLabel()}`}
                 aria-label={`Permission Mode: ${getApprovalLabel()}`}
@@ -579,9 +579,9 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, plac
               {isPermissionOpen && (
                 <div
                   data-testid="approval-dropdown-menu"
-                  className="absolute bottom-full right-0 mb-2 w-72 max-w-[calc(100vw-1.5rem)] bg-[#1f2024]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100"
+                  className="absolute bottom-full right-0 mb-2 w-72 max-w-[calc(100vw-1.5rem)] bg-brand-popover/95 backdrop-blur-2xl border border-brand-border rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100"
                 >
-                  <div className="px-2.5 py-1.5 text-[10px] font-mono text-neutral-500 uppercase tracking-wider">
+                  <div className="px-2.5 py-1.5 text-[10px] font-mono text-brand-textMuted/70 uppercase tracking-wider">
                     Permission Level
                   </div>
                   
@@ -593,17 +593,17 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, plac
                       setIsPermissionOpen(false);
                     }}
                     className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
-                      approvalMode === 'ask' ? 'bg-white/10 text-white font-medium' : 'hover:bg-white/5 text-neutral-400 hover:text-white'
+                      approvalMode === 'ask' ? 'bg-brand-hoverStrong text-brand-textMain font-medium' : 'hover:bg-brand-hover text-brand-textMuted hover:text-brand-textMain'
                     }`}
                   >
                     <UserCheck size={16} className="text-cyan-400 shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <div className="text-xs font-medium text-white">Ask for approval</div>
-                      <div className="text-[11px] text-neutral-400 leading-tight mt-0.5">
+                      <div className="text-xs font-medium text-brand-textMain">Ask for approval</div>
+                      <div className="text-[11px] text-brand-textMuted leading-tight mt-0.5">
                         Confirm commands and file edits before execution.
                       </div>
                     </div>
-                    {approvalMode === 'ask' && <Check size={14} className="text-cyan-400 shrink-0 mt-0.5 ml-1" />}
+                    {approvalMode === 'ask' && <Check size={14} className="text-brand-accent shrink-0 mt-0.5 ml-1" />}
                   </button>
 
                   <button
@@ -614,17 +614,17 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, plac
                       setIsPermissionOpen(false);
                     }}
                     className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
-                      approvalMode === 'always' ? 'bg-white/10 text-white font-medium' : 'hover:bg-white/5 text-neutral-400 hover:text-white'
+                      approvalMode === 'always' ? 'bg-brand-hoverStrong text-brand-textMain font-medium' : 'hover:bg-brand-hover text-brand-textMuted hover:text-brand-textMain'
                     }`}
                   >
                     <Zap size={16} className="text-amber-400 shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <div className="text-xs font-medium text-white">Always approve</div>
-                      <div className="text-[11px] text-neutral-400 leading-tight mt-0.5">
+                      <div className="text-xs font-medium text-brand-textMain">Always approve</div>
+                      <div className="text-[11px] text-brand-textMuted leading-tight mt-0.5">
                         Execute actions autonomously without interruption.
                       </div>
                     </div>
-                    {approvalMode === 'always' && <Check size={14} className="text-cyan-400 shrink-0 mt-0.5 ml-1" />}
+                    {approvalMode === 'always' && <Check size={14} className="text-brand-accent shrink-0 mt-0.5 ml-1" />}
                   </button>
 
                   <button
@@ -635,17 +635,17 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({ onSend, disabled, plac
                       setIsPermissionOpen(false);
                     }}
                     className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
-                      approvalMode === 'never' ? 'bg-white/10 text-white font-medium' : 'hover:bg-white/5 text-neutral-400 hover:text-white'
+                      approvalMode === 'never' ? 'bg-brand-hoverStrong text-brand-textMain font-medium' : 'hover:bg-brand-hover text-brand-textMuted hover:text-brand-textMain'
                     }`}
                   >
                     <ShieldAlert size={16} className="text-rose-400 shrink-0 mt-0.5" />
                     <div className="flex-1">
-                      <div className="text-xs font-medium text-white">Never approve</div>
-                      <div className="text-[11px] text-neutral-400 leading-tight mt-0.5">
+                      <div className="text-xs font-medium text-brand-textMain">Never approve</div>
+                      <div className="text-[11px] text-brand-textMuted leading-tight mt-0.5">
                         Read-only safety mode; block all execution requests.
                       </div>
                     </div>
-                    {approvalMode === 'never' && <Check size={14} className="text-cyan-400 shrink-0 mt-0.5 ml-1" />}
+                    {approvalMode === 'never' && <Check size={14} className="text-brand-accent shrink-0 mt-0.5 ml-1" />}
                   </button>
                 </div>
               )}

@@ -815,7 +815,7 @@ export const Composer: React.FC<ComposerProps> = ({
       <div className={`relative w-full flex flex-col gap-2 p-2.5 sm:p-3 rounded-2xl sm:rounded-[22px] border transition-all duration-200 shadow-lg ${
         isDraggingOver
           ? 'bg-cyan-950/40 border-cyan-500/80 ring-2 ring-cyan-500/30'
-          : 'bg-[#1e1f23]/95 dark:bg-[#1f2024]/95 border-white/10 dark:border-white/10 focus-within:border-white/25 focus-within:ring-1 focus-within:ring-white/10'
+          : 'bg-brand-card/90 border-brand-border hover:border-brand-borderStrong focus-within:border-brand-borderStrong focus-within:ring-1 focus-within:ring-brand-borderStrong/30 backdrop-blur-xl'
       }`}>
         {isDraggingOver && (
           <div className="flex items-center justify-center py-2 text-cyan-400 text-xs font-semibold animate-pulse select-none">
@@ -825,7 +825,7 @@ export const Composer: React.FC<ComposerProps> = ({
 
         {/* Selected Skills/Tools Chips */}
         {selectedTools.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-1 pb-1.5 border-b border-white/10 select-none animate-fade-in">
+          <div className="flex flex-wrap gap-1.5 mb-1 pb-1.5 border-b border-brand-border select-none animate-fade-in">
             {selectedTools.map(tool => (
               <span
                 key={tool.id}
@@ -858,14 +858,14 @@ export const Composer: React.FC<ComposerProps> = ({
 
         {/* Composer Attachments Queue Row */}
         {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-1 pb-2 border-b border-white/10 select-none">
+          <div className="flex flex-wrap gap-2 mb-1 pb-2 border-b border-brand-border select-none">
             {attachments.map((file, idx) => {
               const isImage =
                 file.filename.match(/\.(png|jpe?g|webp|gif|svg)$/i) ||
                 (file.sourcePath && file.sourcePath.startsWith('data:image/'));
 
               return (
-                <div key={idx} className="flex items-center gap-1.5 bg-black/40 hover:bg-black/60 border border-white/10 px-2.5 py-1 rounded-xl text-xs text-white animate-fade-in group transition-colors">
+                <div key={idx} className="flex items-center gap-1.5 bg-brand-innerBg hover:bg-brand-hoverStrong border border-brand-border px-2.5 py-1 rounded-xl text-xs text-brand-textMain animate-fade-in group transition-colors">
                   {isImage && file.sourcePath ? (
                     <img
                       src={file.sourcePath}
@@ -876,13 +876,13 @@ export const Composer: React.FC<ComposerProps> = ({
                       }}
                     />
                   ) : (
-                    <span className="text-neutral-400 text-[10px]">📎</span>
+                    <span className="text-brand-textMuted text-[10px]">📎</span>
                   )}
                   <span className="truncate max-w-35 font-medium font-sans">{file.filename}</span>
                   <button
                     type="button"
                     onClick={() => onRemoveAttachment && onRemoveAttachment(idx)}
-                    className="text-neutral-400 hover:text-white font-bold ml-1 rounded hover:bg-white/10 w-4 h-4 flex items-center justify-center transition-colors cursor-pointer"
+                    className="text-brand-textMuted hover:text-brand-textMain font-bold ml-1 rounded hover:bg-brand-hover w-4 h-4 flex items-center justify-center transition-colors cursor-pointer"
                     aria-label={`Remove ${file.filename}`}
                   >
                     &times;
@@ -902,7 +902,7 @@ export const Composer: React.FC<ComposerProps> = ({
             onClick={() => onAttachClick?.()}
             aria-label="Attach file"
             title="Attach file"
-            className="shrink-0 w-8 h-8 rounded-full text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer flex items-center justify-center mb-0.5"
+            className="shrink-0 w-8 h-8 rounded-full text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer flex items-center justify-center mb-0.5"
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -924,7 +924,7 @@ export const Composer: React.FC<ComposerProps> = ({
             placeholder={placeholder || (hasModels ? "Ask anything — or type / for skills, commands & tools" : (emptyStateMessage || "No models are connected yet. Please go to Settings to connect a provider."))}
             disabled={disabled}
             rows={1}
-            className="flex-1 bg-transparent border-none outline-none text-white text-sm sm:text-base resize-none w-full min-h-[36px] max-h-[180px] leading-relaxed placeholder:text-neutral-500 font-sans disabled:opacity-50 py-1.5 px-1 scrollbar-thin scrollbar-thumb-neutral-700"
+            className="flex-1 bg-transparent border-none outline-none text-brand-textMain text-sm sm:text-base resize-none w-full min-h-[36px] max-h-[180px] leading-relaxed placeholder:text-brand-textMuted/60 font-sans disabled:opacity-50 py-1.5 px-1 scrollbar-thin scrollbar-thumb-neutral-700"
           />
 
           {/* On the most right: Mic and Enter (Rounded arrow) button */}
@@ -957,7 +957,7 @@ export const Composer: React.FC<ComposerProps> = ({
                     ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse'
                     : transcribing
                     ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 animate-pulse'
-                    : 'text-neutral-400 hover:text-white hover:bg-white/10'
+                    : 'text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover'
                 }`}
               >
                 <Mic className="w-4 h-4" />
@@ -985,8 +985,8 @@ export const Composer: React.FC<ComposerProps> = ({
                 disabled={disabled || !prompt.trim() || !hasModels}
                 className={`rounded-full w-8 h-8 flex items-center justify-center transition-all duration-150 active:scale-95 ${
                   !prompt.trim() || disabled || !hasModels
-                    ? 'bg-white/5 text-neutral-500 cursor-not-allowed border border-white/5'
-                    : 'bg-white text-black hover:bg-neutral-200 shadow-md cursor-pointer'
+                    ? 'bg-brand-hover text-brand-textMuted/40 cursor-not-allowed border border-brand-border'
+                    : 'bg-brand-highlight text-brand-highlightText hover:bg-brand-highlight/90 shadow-md cursor-pointer'
                 }`}
               >
                 <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
@@ -998,9 +998,9 @@ export const Composer: React.FC<ComposerProps> = ({
         {selectedIsRouter && (
           <div
             data-testid="composer-router-hint"
-            className="mt-0.5 flex items-center gap-1.5 text-[10px] font-mono text-neutral-400 leading-none"
+            className="mt-0.5 flex items-center gap-1.5 text-[10px] font-mono text-brand-textMuted leading-none"
           >
-            <Info className="w-3 h-3 shrink-0 text-neutral-500" />
+            <Info className="w-3 h-3 shrink-0 text-brand-textMuted" />
             <span>
               auto-routing: active across available models
             </span>
@@ -1018,8 +1018,8 @@ export const Composer: React.FC<ComposerProps> = ({
               onClick={() => setShowModelDropdown(!showModelDropdown)}
               className={`group inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold transition-colors select-none cursor-pointer ${
                 showModelDropdown
-                  ? 'bg-white/10 text-white'
-                  : 'text-white hover:bg-white/10'
+                  ? 'bg-brand-hover text-brand-textMain'
+                  : 'text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover'
               }`}
               title={`Model: ${selectedModel === AUTO_ROUTE_MODEL ? AUTO_ROUTE_LABEL : (selectedModel || (hasModels ? 'Select model...' : (emptyStateMessage || 'No models connected')))}`}
               aria-label={`Select model, currently ${selectedModel || 'none'}`}
@@ -1033,12 +1033,12 @@ export const Composer: React.FC<ComposerProps> = ({
 
             {showModelDropdown && (
               <div
-                className="absolute bottom-full right-0 mb-2 w-72 max-h-80 flex flex-col bg-[#1f2024]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100"
+                className="absolute bottom-full right-0 mb-2 w-72 max-h-80 flex flex-col bg-brand-popover/95 backdrop-blur-2xl border border-brand-border rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100"
               >
                 {/* Search Input Box */}
-                <div className="p-2 border-b border-white/10 shrink-0 bg-[#1f2024]/50">
-                  <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-black/40 border border-white/10 focus-within:border-white/20 text-xs">
-                    <Search className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                <div className="p-2 border-b border-brand-border shrink-0 bg-brand-sidebar/50">
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-brand-innerBg border border-brand-border focus-within:border-brand-borderStrong text-xs">
+                    <Search className="w-3.5 h-3.5 text-brand-textMuted shrink-0" />
                     <input
                       ref={modelSearchInputRef}
                       type="text"
@@ -1051,13 +1051,13 @@ export const Composer: React.FC<ComposerProps> = ({
                         }
                       }}
                       placeholder="Search models..."
-                      className="w-full bg-transparent text-xs text-white placeholder:text-neutral-500 focus:outline-none"
+                      className="w-full bg-transparent text-xs text-brand-textMain placeholder:text-brand-textMuted/60 focus:outline-none"
                     />
                     {modelSearchQuery && (
                       <button
                         type="button"
                         onClick={() => setModelSearchQuery('')}
-                        className="text-neutral-400 hover:text-white p-0.5 rounded cursor-pointer"
+                        className="text-brand-textMuted hover:text-brand-textMain p-0.5 rounded cursor-pointer"
                         aria-label="Clear search"
                       >
                         <X className="w-3 h-3" />
@@ -1069,7 +1069,7 @@ export const Composer: React.FC<ComposerProps> = ({
                 {/* Model List */}
                 <div className="overflow-y-auto p-1.5 scrollbar-thin scrollbar-thumb-neutral-700 flex-1">
                   {filteredAvailableModels.length === 0 ? (
-                    <div className="p-3 text-center text-xs text-neutral-400">
+                    <div className="p-3 text-center text-xs text-brand-textMuted">
                       {modelSearchQuery ? `No models found matching "${modelSearchQuery}"` : (emptyStateMessage || 'No models connected')}
                     </div>
                   ) : (
@@ -1085,28 +1085,28 @@ export const Composer: React.FC<ComposerProps> = ({
                             setShowModelDropdown(false);
                             setModelSearchQuery('');
                           }}
-                          className={`flex items-center justify-between p-2 rounded-xl hover:bg-white/5 cursor-pointer text-xs transition-colors ${
-                            isSelected ? 'text-white font-semibold bg-white/10' : 'text-neutral-300'
+                          className={`flex items-center justify-between p-2 rounded-xl hover:bg-brand-hover cursor-pointer text-xs transition-colors ${
+                            isSelected ? 'text-brand-textMain font-semibold bg-brand-hoverStrong' : 'text-brand-textMuted hover:text-brand-textMain'
                           }`}
                         >
                           <div className="flex items-center gap-2 truncate">
                             {isAuto ? (
-                              <Workflow className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                              <Workflow className="w-3.5 h-3.5 text-brand-accent shrink-0" />
                             ) : (
-                              <Cpu className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                              <Cpu className="w-3.5 h-3.5 text-brand-textMuted shrink-0" />
                             )}
                             <div className="truncate">
-                              <div className="truncate text-xs font-medium text-white">
+                              <div className="truncate text-xs font-medium text-brand-textMain">
                                 {isAuto ? AUTO_ROUTE_LABEL : model}
                               </div>
                               {isAuto && (
-                                <div className="text-[10px] text-neutral-400 truncate">
+                                <div className="text-[10px] text-brand-textMuted truncate">
                                   Auto-routes to best model
                                 </div>
                               )}
                             </div>
                           </div>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0 ml-2" />}
+                          {isSelected && <Check className="w-3.5 h-3.5 text-brand-accent shrink-0 ml-2" />}
                         </div>
                       );
                     })
@@ -1124,8 +1124,8 @@ export const Composer: React.FC<ComposerProps> = ({
               onClick={() => setShowApprovalDropdown(!showApprovalDropdown)}
               className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors select-none cursor-pointer ${
                 showApprovalDropdown
-                  ? 'bg-white/10 text-white'
-                  : 'text-neutral-400 hover:text-white hover:bg-white/10'
+                  ? 'bg-brand-hover text-brand-textMain'
+                  : 'text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover'
               }`}
               title={`Permission Mode: ${getApprovalLabel()}`}
               aria-label={`Permission Mode: ${getApprovalLabel()}`}
@@ -1136,9 +1136,9 @@ export const Composer: React.FC<ComposerProps> = ({
             {showApprovalDropdown && (
               <div
                 data-testid="approval-dropdown-menu"
-                className="absolute bottom-full right-0 mb-2 w-72 bg-[#1f2024]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100"
+                className="absolute bottom-full right-0 mb-2 w-72 bg-brand-popover/95 backdrop-blur-2xl border border-brand-border rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100"
               >
-                <div className="px-2.5 py-1.5 text-[10px] font-mono text-neutral-500 uppercase tracking-wider">
+                <div className="px-2.5 py-1.5 text-[10px] font-mono text-brand-textMuted/70 uppercase tracking-wider">
                   Permission Level
                 </div>
                 <button
@@ -1149,17 +1149,17 @@ export const Composer: React.FC<ComposerProps> = ({
                     setShowApprovalDropdown(false);
                   }}
                   className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
-                    approvalMode === 'ask' ? 'bg-white/10 text-white font-medium' : 'hover:bg-white/5 text-neutral-400 hover:text-white'
+                    approvalMode === 'ask' ? 'bg-brand-hoverStrong text-brand-textMain font-medium' : 'hover:bg-brand-hover text-brand-textMuted hover:text-brand-textMain'
                   }`}
                 >
                   <UserCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <div className="text-xs font-medium text-white">Ask for approval</div>
-                    <div className="text-[11px] text-neutral-400 leading-tight mt-0.5">
+                    <div className="text-xs font-medium text-brand-textMain">Ask for approval</div>
+                    <div className="text-[11px] text-brand-textMuted leading-tight mt-0.5">
                       Confirm commands and file edits before execution.
                     </div>
                   </div>
-                  {approvalMode === 'ask' && <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5 ml-1" />}
+                  {approvalMode === 'ask' && <Check className="w-3.5 h-3.5 text-brand-accent shrink-0 mt-0.5 ml-1" />}
                 </button>
 
                 <button
@@ -1170,17 +1170,17 @@ export const Composer: React.FC<ComposerProps> = ({
                     setShowApprovalDropdown(false);
                   }}
                   className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
-                    approvalMode === 'always' ? 'bg-white/10 text-white font-medium' : 'hover:bg-white/5 text-neutral-400 hover:text-white'
+                    approvalMode === 'always' ? 'bg-brand-hoverStrong text-brand-textMain font-medium' : 'hover:bg-brand-hover text-brand-textMuted hover:text-brand-textMain'
                   }`}
                 >
                   <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <div className="text-xs font-medium text-white">Always approve</div>
-                    <div className="text-[11px] text-neutral-400 leading-tight mt-0.5">
+                    <div className="text-xs font-medium text-brand-textMain">Always approve</div>
+                    <div className="text-[11px] text-brand-textMuted leading-tight mt-0.5">
                       Execute actions autonomously without interruption.
                     </div>
                   </div>
-                  {approvalMode === 'always' && <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5 ml-1" />}
+                  {approvalMode === 'always' && <Check className="w-3.5 h-3.5 text-brand-accent shrink-0 mt-0.5 ml-1" />}
                 </button>
 
                 <button
@@ -1191,17 +1191,17 @@ export const Composer: React.FC<ComposerProps> = ({
                     setShowApprovalDropdown(false);
                   }}
                   className={`w-full flex items-start gap-2.5 p-2 rounded-xl text-left cursor-pointer transition-colors ${
-                    approvalMode === 'never' ? 'bg-white/10 text-white font-medium' : 'hover:bg-white/5 text-neutral-400 hover:text-white'
+                    approvalMode === 'never' ? 'bg-brand-hoverStrong text-brand-textMain font-medium' : 'hover:bg-brand-hover text-brand-textMuted hover:text-brand-textMain'
                   }`}
                 >
                   <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <div className="text-xs font-medium text-white">Never approve</div>
-                    <div className="text-[11px] text-neutral-400 leading-tight mt-0.5">
+                    <div className="text-xs font-medium text-brand-textMain">Never approve</div>
+                    <div className="text-[11px] text-brand-textMuted leading-tight mt-0.5">
                       Read-only safety mode; block all execution requests.
                     </div>
                   </div>
-                  {approvalMode === 'never' && <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5 ml-1" />}
+                  {approvalMode === 'never' && <Check className="w-3.5 h-3.5 text-brand-accent shrink-0 mt-0.5 ml-1" />}
                 </button>
               </div>
             )}
