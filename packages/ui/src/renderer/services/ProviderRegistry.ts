@@ -12,10 +12,45 @@ export class ProviderRegistry {
 
   static resolveActiveProvider(selectedModelName: string): ProviderConnection | undefined {
     const { providers, models } = providerStore.getState();
-    return (
-      providers.find((p) => models.some((m) => m.providerId === p.id && m.name === selectedModelName && m.enabled)) ||
-      providers[0]
+    const lower = selectedModelName.toLowerCase().trim();
+
+    // Explicit check for OpenCode models (e.g. big-pickle)
+    if (
+      lower === 'big-pickle' ||
+      lower.startsWith('opencode-') ||
+      lower.startsWith('opencode/') ||
+      lower.includes('nemotron') ||
+      lower.includes('mimo') ||
+      lower.includes('ling-3.0')
+    ) {
+      const opencodeProv = providers.find((p) => p.id === 'opencode');
+      if (opencodeProv) return opencodeProv;
+      return {
+        id: 'opencode',
+        name: 'OpenCode',
+        type: 'custom',
+        baseUrl: 'https://opencode.ai/zen/v1',
+      };
+    }
+
+    // Match by model name, ID, or prefixed ID across providers
+    const matched = providers.find((p) =>
+      models.some(
+        (m) =>
+          m.providerId === p.id &&
+          (m.name === selectedModelName ||
+            m.id === selectedModelName ||
+            m.id === `${p.id}-${selectedModelName}` ||
+            m.id.endsWith(`-${selectedModelName}`))
+      )
     );
+    if (matched) return matched;
+
+    // Match by provider prefix
+    const byPrefix = providers.find((p) => selectedModelName.startsWith(`${p.id}-`) || selectedModelName.startsWith(`${p.id}/`));
+    if (byPrefix) return byPrefix;
+
+    return providers[0];
   }
 
   static resolveEngineProviderId(provider: ProviderConnection): string {
@@ -28,10 +63,25 @@ export class ProviderRegistry {
   static resolveModelId(activeProvider: ProviderConnection | undefined, selectedModelName: string): string {
     const { models } = providerStore.getState();
     const config =
-      models.find((m) => m.providerId === activeProvider?.id && m.name === selectedModelName && m.enabled) ||
-      models.find((m) => m.providerId === activeProvider?.id && m.name === selectedModelName);
+      models.find(
+        (m) =>
+          m.providerId === activeProvider?.id &&
+          (m.name === selectedModelName || m.id === selectedModelName || m.id === `${activeProvider?.id}-${selectedModelName}`) &&
+          m.enabled
+      ) ||
+      models.find(
+        (m) =>
+          m.providerId === activeProvider?.id &&
+          (m.name === selectedModelName || m.id === selectedModelName || m.id === `${activeProvider?.id}-${selectedModelName}`)
+      );
 
-    return config && activeProvider ? config.id.replace(`${activeProvider.id}-`, '') : selectedModelName;
+    if (config && activeProvider) {
+      return config.id.replace(`${activeProvider.id}-`, '');
+    }
+    if (activeProvider && selectedModelName.startsWith(`${activeProvider.id}-`)) {
+      return selectedModelName.replace(`${activeProvider.id}-`, '');
+    }
+    return selectedModelName;
   }
 
   static detectFree(

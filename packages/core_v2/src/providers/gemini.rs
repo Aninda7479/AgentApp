@@ -38,6 +38,16 @@ impl LlmProvider for GeminiProvider {
     ) -> anyhow::Result<Receiver<AgentEvent>> {
         let base_url = config.get_base_url();
         let base_trimmed = base_url.trim_end_matches('/');
+
+        // Fallback / redirect if GeminiProvider is called with an OpenCode endpoint or OpenCode model
+        if base_trimmed.contains("opencode.ai")
+            || crate::providers::opencode::OPENCODE_FREE_MODELS.contains(&config.model_id.as_str())
+            || config.model_id == "big-pickle"
+        {
+            let opencode = crate::providers::OpenCodeProvider::new();
+            return opencode.chat_stream(config, messages, tools).await;
+        }
+
         let effective_base = if !base_trimmed.contains("/v1") {
             format!("{}/v1beta", base_trimmed)
         } else {

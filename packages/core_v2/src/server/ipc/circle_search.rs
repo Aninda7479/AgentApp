@@ -197,16 +197,15 @@ pub async fn handle_circle_search_channel(
                 _ => model_config.provider,
             };
 
-            if provider_type == ProviderType::OpenAI {
-                let is_opencode_url = base_url
-                    .as_deref()
-                    .map(|u| u.contains("opencode.ai"))
-                    .unwrap_or(false);
-                let is_opencode_model =
-                    crate::providers::opencode::OPENCODE_FREE_MODELS.contains(&cfg_model);
-                if is_opencode_url || is_opencode_model {
-                    provider_type = ProviderType::OpenCode;
-                }
+            let is_opencode_url = base_url
+                .as_deref()
+                .map(|u| u.contains("opencode.ai"))
+                .unwrap_or(false);
+            let is_opencode_model =
+                crate::providers::opencode::OPENCODE_FREE_MODELS.contains(&cfg_model)
+                || cfg_model == "big-pickle";
+            if is_opencode_url || is_opencode_model {
+                provider_type = ProviderType::OpenCode;
             }
 
             if api_key.is_none() {

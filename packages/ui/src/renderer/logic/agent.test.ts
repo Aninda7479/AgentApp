@@ -50,3 +50,18 @@ describe('AgentService.resolveEngineProviderId', () => {
     expect(AgentService.resolveEngineProviderId(p)).toBe('opencode');
   });
 });
+
+describe('AgentService.resolveActiveProvider', () => {
+  it('resolves opencode provider when big-pickle model is selected, even if gemini is default', () => {
+    const gemini = mkProvider({ id: 'google', type: 'env' });
+    const opencode = mkProvider({ id: 'opencode', type: 'custom', baseUrl: 'https://opencode.ai/zen/v1' });
+    const providers = [gemini, opencode];
+    const models = [
+      { id: 'opencode-big-pickle', name: 'Big Pickle (Free)', providerId: 'opencode', enabled: true },
+      { id: 'google-gemini-2.5-flash', name: 'Gemini 2.5 Flash', providerId: 'google', enabled: true },
+    ];
+
+    const result = AgentService.resolveActiveProvider({ model: 'big-pickle', mode: 'chat', attachments: [] }, providers, models);
+    expect(result?.id).toBe('opencode');
+  });
+});
