@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Copy, X, AlertTriangle, Check, Info } from 'lucide-react';
+import { copyToClipboard } from '../util/clipboard';
 
 interface AppToastProps {
   open: boolean;
@@ -15,11 +16,12 @@ export const AppToast: React.FC<AppToastProps> = ({ open, message, type = 'info'
 
   if (!open) return null;
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(message).then(() => {
+  const handleCopy = async () => {
+    const success = await copyToClipboard(message);
+    if (success) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
+    }
   };
 
   const isError = type === 'error' || message.toLowerCase().includes('error') || message.toLowerCase().includes('failed');

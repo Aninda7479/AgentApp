@@ -3,6 +3,7 @@ import { ChevronRight, ChevronDown, ChevronLeft, Copy, FileText, FolderOpen, Che
 import { TrajectoryService } from '../../logic/trajectory';
 import { getIpc } from '../../lib/ipc';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
+import { copyToClipboard } from '../../util/clipboard';
 
 /** A single step in the agent execution trajectory. */
 export interface TrajectoryStep {
@@ -248,11 +249,12 @@ const TrajectoryIconButton: React.FC<TrajectoryIconButtonProps> = ({ title, onCl
 const CopyUserButton: React.FC<{ content: string }> = ({ content }) => {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(content).then(() => {
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(content);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    }
   };
 
   return (
@@ -270,11 +272,12 @@ interface MessageActionsProps {
 const MessageActions: React.FC<MessageActionsProps> = ({ content }) => {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(content).then(() => {
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(content);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    }
   };
 
   return (
@@ -302,12 +305,13 @@ const StreamingCursor: React.FC = () => (
 const ThoughtCopyButton: React.FC<{ content: string }> = ({ content }) => {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = (e: React.MouseEvent) => {
+  const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(content).then(() => {
+    const ok = await copyToClipboard(content);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    }
   };
 
   return (
@@ -474,7 +478,7 @@ export const ToolCallCard: React.FC<ToolCallCardProps> = ({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      navigator.clipboard.writeText(step.content);
+                      copyToClipboard(step.content);
                     }}
                     className="text-slate-500 hover:text-slate-200 text-[10px] p-1 rounded hover:bg-slate-800 transition-colors cursor-pointer"
                     title="Copy output"
@@ -571,11 +575,12 @@ const InteractiveArtifactCard: React.FC<InteractiveArtifactCardProps> = ({
   const cleanId = artifactId.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^-+|-+$/g, '') || 'app';
   const displayTitle = title || (isWebHtml ? 'Interactive Web App / Game' : `${language.toUpperCase()} Code`);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(content).then(() => {
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(content);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
+    }
   };
 
   const handleSaveToArtifacts = async () => {

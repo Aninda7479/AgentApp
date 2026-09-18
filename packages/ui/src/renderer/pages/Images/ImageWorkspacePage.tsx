@@ -415,6 +415,10 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
 
   const handleCopyImage = async (url: string) => {
     try {
+      if (!navigator?.clipboard?.write || typeof ClipboardItem === 'undefined') {
+        notify('Clipboard image copy is not supported in this browser environment');
+        return;
+      }
       const resp = await fetch(url);
       const blob = await resp.blob();
       await navigator.clipboard.write([

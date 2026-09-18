@@ -12,6 +12,7 @@ import {
   Info,
   HelpCircle
 } from 'lucide-react';
+import { copyToClipboard } from '../util/clipboard';
 
 export interface GlobalErrorPayload {
   context: string;
@@ -90,12 +91,13 @@ Runtime Platform: ${typeof navigator !== 'undefined' ? navigator.platform : 'N/A
 ${error.stack || 'No stack trace captured.'}
 `;
 
-  const handleCopy = () => {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(fullReport).then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }).catch(() => {});
+  const handleCopy = async () => {
+    const success = await copyToClipboard(fullReport);
+    if (success) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } else if (typeof window !== 'undefined' && typeof window.prompt === 'function') {
+      window.prompt('Copy Diagnostic Logs (Ctrl+C / Cmd+C, Enter):', fullReport);
     }
   };
 

@@ -51,6 +51,7 @@ import { moodReaction } from '../partner-popup/types';
 import { computeChatContextStats, formatByteSize, type SubagentExecutionItem, type ChatAttachmentItem } from '../logic/context';
 import { TrajectoryService } from '../logic/trajectory';
 import type { StoredChat } from '../core/types';
+import { copyToClipboard } from '../util/clipboard';
 
 export type WorkspaceSidebarTab = 'overview' | 'files' | 'agents' | 'partner' | 'info';
 
@@ -132,11 +133,13 @@ export const AttachmentPreviewItem: React.FC<AttachmentPreviewItemProps> = ({
     };
   }, [attachment.path, attachment.mediaType, imgSrc]);
 
-  const handleCopyPath = (e: React.MouseEvent) => {
+  const handleCopyPath = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(attachment.path);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const ok = await copyToClipboard(attachment.path);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const isImage = attachment.mediaType === 'image';
@@ -743,10 +746,12 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
                         </span>
                         {subagent.output && (
                           <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(subagent.output || '');
-                              setCopiedSubagentOutput(true);
-                              setTimeout(() => setCopiedSubagentOutput(false), 2000);
+                            onClick={async () => {
+                              const ok = await copyToClipboard(subagent.output || '');
+                              if (ok) {
+                                setCopiedSubagentOutput(true);
+                                setTimeout(() => setCopiedSubagentOutput(false), 2000);
+                              }
                             }}
                             className="flex items-center gap-1 text-[10px] text-brand-textMuted hover:text-brand-textMain cursor-pointer"
                             title="Copy Response"
@@ -1274,11 +1279,13 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
                     {activeChatId || 'draft-chat'}
                   </span>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (activeChatId) {
-                        navigator.clipboard.writeText(activeChatId);
-                        setCopiedId(true);
-                        setTimeout(() => setCopiedId(false), 2000);
+                        const ok = await copyToClipboard(activeChatId);
+                        if (ok) {
+                          setCopiedId(true);
+                          setTimeout(() => setCopiedId(false), 2000);
+                        }
                       }
                     }}
                     className="p-1 rounded text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer"

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DiffService, DiffLine } from '../../logic/diff';
 import { Copy, Check } from 'lucide-react';
+import { copyToClipboard } from '../../util/clipboard';
 
 /** Props for the DiffViewer component. */
 export interface DiffViewerProps {
@@ -41,11 +42,12 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
 
   const { lines, additions, deletions } = DiffService.computeDiff(originalCode, modifiedCode);
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(modifiedCode).then(() => {
+  const handleCopyCode = async () => {
+    const ok = await copyToClipboard(modifiedCode);
+    if (ok) {
       setCopiedCode(true);
       setTimeout(() => setCopiedCode(false), 1500);
-    });
+    }
   };
 
   const origSplitLines = originalCode.split('\n');

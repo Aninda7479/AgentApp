@@ -25,6 +25,7 @@ import {
   Maximize2
 } from 'lucide-react';
 import { getIpc, getCoreApiBaseUrl } from '../../lib/ipc';
+import { copyToClipboard } from '../../util/clipboard';
 
 export interface ArtifactManifest {
   id: string;
@@ -191,9 +192,9 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
     }
   };
 
-  const handleCopyPath = (text: string, id: string) => {
-    if (navigator?.clipboard) {
-      navigator.clipboard.writeText(text);
+  const handleCopyPath = async (text: string, id: string) => {
+    const ok = await copyToClipboard(text);
+    if (ok) {
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
       triggerToast?.('Copied path to clipboard');

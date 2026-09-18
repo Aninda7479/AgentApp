@@ -26,6 +26,7 @@ import {
 import type { TrajectoryStep, TrajectoryAttachment } from '../core/types';
 import { TrajectoryUtils } from '../services/TrajectoryUtils';
 import { TrajectoryService } from '../logic/trajectory';
+import { copyToClipboard } from '../util/clipboard';
 
 interface StepRendererProps {
   step: TrajectoryStep;
@@ -58,10 +59,12 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(step.content);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(step.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(step.content);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }
   };
 
   const modelName = step.model || step.metadata?.model;

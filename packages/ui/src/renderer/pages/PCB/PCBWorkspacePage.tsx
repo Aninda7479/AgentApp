@@ -81,6 +81,7 @@ import {
   PcbChatMessage,
 } from '../../services/pcbService';
 import { isMacOS, isUndoShortcut, isRedoShortcut } from '../../lib/platform';
+import { copyToClipboard } from '../../util/clipboard';
 
 interface PCBWorkspacePageProps {
   ipc?: any;
@@ -167,10 +168,12 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
   // Copy message state
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
 
-  const handleCopyMessage = (id: string, text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedMsgId(id);
-    setTimeout(() => setCopiedMsgId(null), 2000);
+  const handleCopyMessage = async (id: string, text: string) => {
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      setCopiedMsgId(id);
+      setTimeout(() => setCopiedMsgId(null), 2000);
+    }
   };
 
   // PCB Settings Modal
@@ -630,11 +633,13 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
     }
   }, [graph, exportFormat]);
 
-  const handleCopyExport = () => {
-    navigator.clipboard.writeText(exportPayload);
-    setCopiedExport(true);
-    setTimeout(() => setCopiedExport(false), 2000);
-    triggerToast?.(`Copied ${exportFormat.toUpperCase()} to clipboard`);
+  const handleCopyExport = async () => {
+    const ok = await copyToClipboard(exportPayload);
+    if (ok) {
+      setCopiedExport(true);
+      setTimeout(() => setCopiedExport(false), 2000);
+      triggerToast?.(`Copied ${exportFormat.toUpperCase()} to clipboard`);
+    }
   };
 
   const handleDownloadExport = () => {
@@ -851,7 +856,10 @@ export const PCBWorkspacePage: React.FC<PCBWorkspacePageProps> = ({
             <span>Export</span>
           </button>
           <button
-            onClick={() => { navigator.clipboard.writeText(JSON.stringify(graph, null, 2)); triggerToast?.('Project JSON copied'); }}
+            onClick={async () => {
+              const ok = await copyToClipboard(JSON.stringify(graph, null, 2));
+              if (ok) triggerToast?.('Project JSON copied');
+            }}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/5 hover:bg-white/10 text-brand-textMuted hover:text-white border border-white/10 text-xs font-medium transition-colors cursor-pointer"
           >
             <Share2 className="w-3.5 h-3.5" />

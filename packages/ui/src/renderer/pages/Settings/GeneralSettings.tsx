@@ -4,6 +4,7 @@ import { ThemeMode } from '../../types';
 import { InternetAccessLevel, ModelConfig, ProviderConnection } from './types';
 import { getIpc } from '../../lib/ipc';
 import { SearchableSelect, SearchableSelectOption } from '../../components/ui/SearchableSelect';
+import { copyToClipboard } from '../../util/clipboard';
 
 /**
  * Copy for the terminal execution-scope toggle. The old label
@@ -467,10 +468,12 @@ export const GeneralSettings: React.FC<GeneralSettingsProps> = (props) => {
           </div>
           <button
             type="button"
-            onClick={() => {
-              navigator.clipboard.writeText('superagent --serve --web-port 1469');
-              setCopiedCli(true);
-              setTimeout(() => setCopiedCli(false), 2000);
+            onClick={async () => {
+              const ok = await copyToClipboard('superagent --serve --web-port 1469');
+              if (ok) {
+                setCopiedCli(true);
+                setTimeout(() => setCopiedCli(false), 2000);
+              }
             }}
             className="flex items-center gap-1 text-[11px] font-semibold text-brand-accent hover:text-brand-accent-hover cursor-pointer"
           >

@@ -28,6 +28,7 @@ import {
   buildSuggestions,
 } from '../../components/slashCommands';
 import { ComposerService } from '../../logic/composer';
+import { readClipboardText } from '../../util/clipboard';
 
 /**
  * The auto-routing sentinel. The internal value is `'Orchestrator'` so the
@@ -458,39 +459,38 @@ export const Composer: React.FC<ComposerProps> = ({
     }
   };
 
-  const handleRightClickPaste = (e: React.MouseEvent) => {
+  const handleRightClickPaste = async (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest('button, select, option, input:not([type="text"]):not([type="password"])')) {
       return;
     }
 
+    const clipText = await readClipboardText();
+    if (!clipText) {
+      return;
+    }
+
     e.preventDefault();
-    navigator.clipboard.readText().then((clipText) => {
-      if (!clipText) return;
+    const textarea = textareaRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart ?? textarea.value.length;
+      const end = textarea.selectionEnd ?? textarea.value.length;
+      const text = textarea.value;
+      const before = text.substring(0, start);
+      const after = text.substring(end, text.length);
+      const newText = before + clipText + after;
 
-      const textarea = textareaRef.current;
-      if (textarea) {
-        const start = textarea.selectionStart ?? textarea.value.length;
-        const end = textarea.selectionEnd ?? textarea.value.length;
-        const text = textarea.value;
-        const before = text.substring(0, start);
-        const after = text.substring(end, text.length);
-        const newText = before + clipText + after;
+      setPrompt(newText);
 
-        setPrompt(newText);
-
-        // Focus and set cursor position after paste
-        const newCursorPos = start + clipText.length;
-        requestAnimationFrame(() => {
-          textarea.focus();
-          textarea.setSelectionRange(newCursorPos, newCursorPos);
-        });
-      } else {
-        setPrompt(prompt + clipText);
-      }
-    }).catch((err) => {
-      console.error('Failed to read clipboard text on right click:', err);
-    });
+      // Focus and set cursor position after paste
+      const newCursorPos = start + clipText.length;
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+      });
+    } else {
+      setPrompt(prompt + clipText);
+    }
   };
 
   const hasModels = availableModels && availableModels.length > 0;

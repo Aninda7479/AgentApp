@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, RotateCcw, Copy, Check, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { reportError } from '../lib/errorReporter';
+import { copyToClipboard } from '../util/clipboard';
 
 interface Props {
   children: React.ReactNode;
@@ -86,14 +87,17 @@ export class ErrorBoundary extends React.Component<Props, State> {
     this.setState((prev) => ({ showDetails: !prev.showDetails }));
   };
 
-  private handleCopyError = (): void => {
+  private handleCopyError = async (): Promise<void> => {
     const { error } = this.state;
     if (!error) return;
     const text = `Component: ${this.props.name || 'Root'}\nError: ${error.name}: ${error.message}\nStack:\n${error.stack || 'N/A'}`;
-    navigator.clipboard.writeText(text).then(() => {
+    const success = await copyToClipboard(text);
+    if (success) {
       this.setState({ copied: true });
       setTimeout(() => this.setState({ copied: false }), 2000);
-    }).catch(() => {});
+    } else if (typeof window !== 'undefined' && typeof window.prompt === 'function') {
+      window.prompt('Copy Error Details:', text);
+    }
   };
 
   render(): React.ReactNode {

@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { getIpc } from '../lib/ipc';
 import { getPlatform, getKeySymbols, formatShortcut } from '../lib/platform';
+import { copyToClipboard } from '../util/clipboard';
 
 const ipc = getIpc();
 
@@ -310,11 +311,13 @@ export const CircleSearchOverlay: React.FC = () => {
     setFollowUpQuery('');
   };
 
-  const handleCopyResponse = () => {
+  const handleCopyResponse = async () => {
     if (!aiResponse) return;
-    navigator.clipboard.writeText(aiResponse);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    const ok = await copyToClipboard(aiResponse);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    }
   };
 
   const handleOpenInMainChat = () => {

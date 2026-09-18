@@ -30,6 +30,7 @@ import {
   Radio
 } from 'lucide-react';
 import { getIpc } from '../../lib/ipc';
+import { copyToClipboard } from '../../util/clipboard';
 
 export interface ScheduledViewProps {
   onCreateTask?: (taskType: string) => void;
@@ -485,11 +486,13 @@ export const ScheduledView: React.FC<ScheduledViewProps> = ({ onCreateTask, onUs
     });
   };
 
-  const handleCopyWebhookUrl = (triggerId: string) => {
+  const handleCopyWebhookUrl = async (triggerId: string) => {
     const curlCommand = `curl -X POST http://localhost:1469/api/ipc/triggers-run-now -H "Content-Type: application/json" -d '{"args": ["${triggerId}"]}'`;
-    navigator.clipboard?.writeText(curlCommand);
-    setCopiedId(triggerId);
-    setTimeout(() => setCopiedId(null), 2000);
+    const ok = await copyToClipboard(curlCommand);
+    if (ok) {
+      setCopiedId(triggerId);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
   };
 
   const toggleDaySelection = (day: number) => {

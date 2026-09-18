@@ -3,6 +3,7 @@ import { Globe, Play, Square, KeyRound, CheckCircle2, AlertTriangle, ExternalLin
 import { BrandLogo } from '../../BrandLogo';
 import { getIpc } from '../../lib/ipc';
 import { AuthService } from '../../services/AuthService';
+import { copyToClipboard } from '../../util/clipboard';
 
 /** Status payload returned by the main-process `web-status` IPC. */
 interface WebStatus {
@@ -190,11 +191,12 @@ export const WebAppSettings: React.FC = () => {
     }
   };
 
-  const copyUrl = (text: string, type: 'local' | 'lan') => {
-    navigator.clipboard.writeText(text).then(() => {
+  const copyUrl = async (text: string, type: 'local' | 'lan') => {
+    const ok = await copyToClipboard(text);
+    if (ok) {
       setCopiedUrl(type);
       setTimeout(() => setCopiedUrl(null), 2000);
-    });
+    }
   };
 
   return (

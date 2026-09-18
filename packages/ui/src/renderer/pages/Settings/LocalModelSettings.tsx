@@ -58,6 +58,7 @@ import {
   DEFAULT_OLLAMA_URL
 } from '../../logic/ollama-manager';
 import { SettingsLoadingProgressBar } from '../../components/SettingsLoadingProgressBar';
+import { copyToClipboard as copyToClipboardUtil } from '../../util/clipboard';
 
 /** Props for the Local Model (Ollama) settings panel. */
 interface LocalModelSettingsProps {
@@ -419,9 +420,9 @@ export const LocalModelSettings: React.FC<LocalModelSettingsProps> = ({
     await checkStatusAndModels();
   };
 
-  const copyToClipboard = (text: string, label: string) => {
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string, label: string) => {
+    const ok = await copyToClipboardUtil(text);
+    if (ok) {
       setCopiedCmd(label);
       notify(`Copied ${label} to clipboard`);
       setTimeout(() => setCopiedCmd(null), 2000);

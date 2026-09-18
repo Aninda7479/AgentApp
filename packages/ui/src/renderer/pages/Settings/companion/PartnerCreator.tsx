@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { X, Copy, Save, Upload } from 'lucide-react';
 import { PetSprite } from '../../../partner-popup/PetSprite';
+import { copyToClipboard } from '../../../util/clipboard';
 import {
   PARTNER_MOODS,
   validatePartnerManifest,
@@ -152,11 +153,11 @@ export const PartnerCreator: React.FC<PartnerCreatorProps> = ({ isOpen, onClose,
   };
 
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(json);
+    const ok = await copyToClipboard(json);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
+    } else {
       setError('Clipboard unavailable — select the JSON below to copy manually.');
     }
   };
