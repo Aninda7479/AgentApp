@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde_json::json;
-use std::collections::HashMap;
 use tokio::sync::mpsc::{channel, Receiver};
 
 use rand::Rng;
@@ -81,6 +80,77 @@ impl OpenCodeProvider {
         Self { client }
     }
 
+    /// Ensures that the local `opencode serve` daemon is running and reachable.
+    /// If not responding, automatically spawns it on port 4096.
+    pub async fn ensure_opencode_server(client: &Client) -> anyhow::Result<String> {
+        let port = std::env::var("OPENCODE_PORT").unwrap_or_else(|_| "4096".to_string());
+        let base_url = format!("http://127.0.0.1:{}", port);
+        let check_url = format!("{}/session", base_url);
+
+        // Quick check if already responding
+        if let Ok(res) = client
+            .get(&check_url)
+            .timeout(std::time::Duration::from_millis(800))
+            .send()
+            .await
+        {
+            if res.status().is_success() {
+                return Ok(base_url);
+            }
+        }
+
+        // Spawn opencode serve
+        tracing::info!("OpenCode server not responding on port {}. Spawning opencode serve...", port);
+        let exe_name = if cfg!(target_os = "windows") { "opencode.exe" } else { "opencode" };
+
+        let mut spawn_cmd = None;
+        if let Ok(userprofile) = std::env::var("USERPROFILE") {
+            let candidate1 = std::path::PathBuf::from(&userprofile).join(".superagent").join(exe_name);
+            let candidate2 = std::path::PathBuf::from(&userprofile)
+                .join("AppData\\Local\\Microsoft\\WindowsApps")
+                .join(exe_name);
+            if candidate1.exists() {
+                spawn_cmd = Some(candidate1);
+            } else if candidate2.exists() {
+                spawn_cmd = Some(candidate2);
+            }
+        }
+
+        let mut child = if let Some(path) = spawn_cmd {
+            std::process::Command::new(path)
+        } else {
+            std::process::Command::new(exe_name)
+        };
+
+        child.args(["serve", "--port", &port, "--hostname", "127.0.0.1"]);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            child.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+
+        match child.spawn() {
+            Ok(_) => {
+                // Wait up to 5s for server to initialize
+                for _ in 0..25 {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+                    if let Ok(res) = client.get(&check_url).send().await {
+                        if res.status().is_success() {
+                            tracing::info!("OpenCode server successfully booted on {}", base_url);
+                            return Ok(base_url);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to spawn opencode serve: {}", e);
+            }
+        }
+
+        Ok(base_url)
+    }
+
+    #[allow(dead_code)]
     fn format_messages(messages: &[ChatMessage]) -> Vec<serde_json::Value> {
         let mut formatted = Vec::new();
         for msg in messages {
@@ -197,256 +267,150 @@ impl LlmProvider for OpenCodeProvider {
         messages: &[ChatMessage],
         tools: &[serde_json::Value],
     ) -> anyhow::Result<Receiver<AgentEvent>> {
-        let base_url = config.get_base_url();
-        let trimmed_base = base_url.trim_end_matches('/');
-        let url = if trimmed_base.ends_with("/chat/completions") {
-            trimmed_base.to_string()
+        // Route through local opencode serve daemon to ensure valid Zen credentials and avoid 403 errors
+        let server_base = Self::ensure_opencode_server(&self.client).await?;
+
+        // Create a dedicated session for this execution
+        let session_create_url = format!("{}/session", server_base);
+        let s_res = self
+            .client
+            .post(&session_create_url)
+            .json(&json!({ "title": "SuperAgent Execution" }))
+            .send()
+            .await;
+
+        let session_id = if let Ok(resp) = s_res {
+            if let Ok(v) = resp.json::<serde_json::Value>().await {
+                v.get("id").and_then(|id| id.as_str()).unwrap_or("").to_string()
+            } else {
+                generate_opencode_session_id()
+            }
         } else {
-            format!("{}/chat/completions", trimmed_base)
+            generate_opencode_session_id()
         };
 
-        let mut payload = json!({
-            "model": config.model_id,
-            "messages": Self::format_messages(messages),
-            "stream": true,
-        });
+        // Construct system prompt and tools guide
+        let mut system_text = String::new();
+        let mut prompt_lines = Vec::new();
 
-        if let Some(temp) = config.temperature {
-            payload["temperature"] = json!(temp);
-        }
-        if let Some(tokens) = config.max_tokens {
-            payload["max_tokens"] = json!(tokens);
+        for msg in messages {
+            match msg.role {
+                Role::System => {
+                    if !system_text.is_empty() {
+                        system_text.push('\n');
+                    }
+                    system_text.push_str(&msg.text_content());
+                }
+                Role::User => {
+                    prompt_lines.push(msg.text_content());
+                }
+                Role::Assistant => {
+                    prompt_lines.push(format!("[Assistant]: {}", msg.text_content()));
+                }
+                Role::Tool => {
+                    for block in &msg.content {
+                        if let ContentBlock::ToolResult {
+                            tool_use_id,
+                            content,
+                            ..
+                        } = block
+                        {
+                            prompt_lines.push(format!("[Tool Result for {}]: {}", tool_use_id, content));
+                        }
+                    }
+                }
+            }
         }
 
         if !tools.is_empty() {
-            let formatted_tools: Vec<serde_json::Value> = tools
-                .iter()
-                .map(|t| {
-                    if t.get("type").is_none() {
-                        json!({
-                            "type": "function",
-                            "function": {
-                                "name": t.get("name").and_then(|v| v.as_str()).unwrap_or_default(),
-                                "description": t.get("description").and_then(|v| v.as_str()).unwrap_or_default(),
-                                "parameters": t.get("parameters").cloned().unwrap_or(json!({
-                                    "type": "object",
-                                    "properties": {}
-                                }))
-                            }
-                        })
-                    } else {
-                        t.clone()
-                    }
-                })
-                .collect();
-            payload["tools"] = json!(formatted_tools);
+            let mut tools_guide = String::from("\n\nYou have access to the following execution tools:\n");
+            for t in tools {
+                let name = t
+                    .get("name")
+                    .or_else(|| t.get("function").and_then(|f| f.get("name")))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let desc = t
+                    .get("description")
+                    .or_else(|| t.get("function").and_then(|f| f.get("description")))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let params = t
+                    .get("parameters")
+                    .or_else(|| t.get("function").and_then(|f| f.get("parameters")))
+                    .map(|p| p.to_string())
+                    .unwrap_or_default();
+                tools_guide.push_str(&format!("- {}({}): {}\n", name, params, desc));
+            }
+            tools_guide.push_str(
+                "\nWhen you need to execute a tool, respond with a tool call in format:\n<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"tool_name\">\n<｜DSML｜parameter name=\"param_name\">value</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n"
+            );
+            system_text.push_str(&tools_guide);
         }
 
-        // OpenCode Zen official client identity and canonical session credentials
-        let session_id = generate_opencode_session_id();
-        let request_id = generate_opencode_request_id();
-
-        let mut last_send_err = String::new();
-        let mut res_opt = None;
-
-        let auth_header_val = if let Some(ref key) = config.api_key {
-            let trimmed = key.trim();
-            if trimmed.is_empty() {
-                "Bearer public".to_string()
-            } else {
-                format!("Bearer {}", trimmed)
-            }
+        let user_prompt = if prompt_lines.len() == 1 {
+            prompt_lines.remove(0)
         } else {
-            "Bearer public".to_string()
-        };
-
-        for attempt in 1..=3 {
-            let req = self
-                .client
-                .post(&url)
-                .header("Content-Type", "application/json")
-                .header("Authorization", &auth_header_val)
-                .header(
-                    "User-Agent",
-                    "opencode/1.18.31 ai-sdk/provider-utils/4.0.40 runtime/bun/1.3.14",
-                )
-                .header("x-opencode-client", "desktop")
-                .header("x-opencode-session", &session_id)
-                .header("x-opencode-request", &request_id)
-                .header("x-opencode-project", "global")
-                .header("x-session-id", &session_id)
-                .header("Accept", "text/event-stream")
-                .json(&payload);
-
-            match req.send().await {
-                Ok(response) => {
-                    let status = response.status();
-                    if status.is_success() {
-                        res_opt = Some(response);
-                        break;
-                    } else if (status.as_u16() == 429 || status.is_server_error()) && attempt < 3 {
-                        tracing::warn!(
-                            "OpenCode Zen returned status {} (attempt {}/3). Retrying in 2s...",
-                            status,
-                            attempt
-                        );
-                        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                        continue;
-                    } else {
-                        let err_text = response.text().await.unwrap_or_default();
-                        anyhow::bail!("OpenCode Zen API error ({}): {}", url, err_text);
-                    }
-                }
-                Err(err) => {
-                    last_send_err = err.to_string();
-                    if attempt < 3 {
-                        tracing::warn!(
-                            "OpenCode Zen request error (attempt {}/3): {}. Retrying in 2s...",
-                            attempt,
-                            last_send_err
-                        );
-                        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                    }
-                }
-            }
-        }
-
-        let res = match res_opt {
-            Some(r) => r,
-            None => anyhow::bail!(
-                "OpenCode request failed after 3 attempts: {}",
-                last_send_err
-            ),
+            prompt_lines.join("\n\n")
         };
 
         let (tx, rx) = channel(100);
-        let mut stream = res.bytes_stream();
+
+        let event_url = format!("{}/event", server_base);
+        let msg_url = format!("{}/session/{}/message", server_base, session_id);
+        let client_clone = self.client.clone();
+        let target_session_id = session_id.clone();
+        let model_id = config.model_id.clone();
 
         tokio::spawn(async move {
-            let mut buffer = String::new();
-            let mut tool_calls_map: HashMap<usize, (String, String, String)> = HashMap::new();
-            let mut stop_reason = String::from("stop");
-            let mut in_thinking = false;
+            use std::sync::atomic::{AtomicBool, Ordering};
+            use std::sync::Arc;
 
-            while let Some(item) = stream.next().await {
-                let bytes = match item {
-                    Ok(b) => b,
-                    Err(e) => {
-                        let _ = tx
-                            .send(AgentEvent::Error {
-                                message: e.to_string(),
-                            })
-                            .await;
-                        return;
-                    }
-                };
+            let streamed_any = Arc::new(AtomicBool::new(false));
+            let streamed_any_clone = streamed_any.clone();
+            let is_idle = Arc::new(AtomicBool::new(false));
+            let is_idle_clone = is_idle.clone();
 
-                buffer.push_str(&String::from_utf8_lossy(&bytes));
+            // Subscribe to SSE events for live token streaming
+            let sse_tx = tx.clone();
+            let sse_sess_id = target_session_id.clone();
+            let sse_client = client_clone.clone();
 
-                while let Some(pos) = buffer.find('\n') {
-                    let line = buffer[..pos].trim_end_matches('\r').trim().to_string();
-                    buffer.drain(..=pos);
+            let sse_task = tokio::spawn(async move {
+                if let Ok(res) = sse_client.get(&event_url).send().await {
+                    let mut stream = res.bytes_stream();
+                    let mut buffer = String::new();
+                    while let Some(item) = stream.next().await {
+                        let bytes = match item {
+                            Ok(b) => b,
+                            Err(_) => break,
+                        };
+                        buffer.push_str(&String::from_utf8_lossy(&bytes));
+                        while let Some(pos) = buffer.find('\n') {
+                            let line = buffer[..pos].trim_end_matches('\r').trim().to_string();
+                            buffer.drain(..=pos);
+                            if let Some(data_str) = line.strip_prefix("data: ") {
+                                if let Ok(val) = serde_json::from_str::<serde_json::Value>(data_str) {
+                                    let msg_type = val.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                                    let props = val.get("properties");
+                                    let sid = props.and_then(|p| p.get("sessionID")).and_then(|s| s.as_str()).unwrap_or("");
 
-                    if line.is_empty() || line.starts_with(':') {
-                        continue;
-                    }
-
-                    if let Some(data_str) = line.strip_prefix("data: ") {
-                        let data_str = data_str.trim();
-                        if data_str == "[DONE]" {
-                            break;
-                        }
-
-                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(data_str) {
-                            if let Some(choice) = v.get("choices").and_then(|c| c.get(0)) {
-                                if let Some(reason) =
-                                    choice.get("finish_reason").and_then(|r| r.as_str())
-                                {
-                                    if !reason.is_empty() {
-                                        stop_reason = reason.to_string();
-                                    }
-                                }
-
-                                if let Some(delta) = choice.get("delta") {
-                                    // Handle reasoning content (e.g. Big Pickle / DeepSeek reasoning tokens)
-                                    if let Some(reasoning) =
-                                        delta.get("reasoning_content").and_then(|r| r.as_str())
-                                    {
-                                        if !reasoning.is_empty() {
-                                            if !in_thinking {
-                                                in_thinking = true;
-                                                let _ = tx
-                                                    .send(AgentEvent::Token {
-                                                        text: "<think>\n".to_string(),
-                                                    })
-                                                    .await;
-                                            }
-                                            if tx
-                                                .send(AgentEvent::Token {
-                                                    text: reasoning.to_string(),
-                                                })
-                                                .await
-                                                .is_err()
-                                            {
-                                                return;
-                                            }
+                                    if sid == sse_sess_id {
+                                        if msg_type == "session.idle" {
+                                            is_idle_clone.store(true, Ordering::Relaxed);
+                                            return;
                                         }
-                                    }
 
-                                    // Handle standard text content
-                                    if let Some(content) =
-                                        delta.get("content").and_then(|c| c.as_str())
-                                    {
-                                        if !content.is_empty() {
-                                            if in_thinking {
-                                                in_thinking = false;
-                                                let _ = tx
-                                                    .send(AgentEvent::Token {
-                                                        text: "\n</think>\n\n".to_string(),
-                                                    })
-                                                    .await;
-                                            }
-                                            if tx
-                                                .send(AgentEvent::Token {
-                                                    text: content.to_string(),
-                                                })
-                                                .await
-                                                .is_err()
-                                            {
-                                                return;
-                                            }
-                                        }
-                                    }
-
-                                    // Handle streaming tool calls
-                                    if let Some(tcs) =
-                                        delta.get("tool_calls").and_then(|t| t.as_array())
-                                    {
-                                        for tc in tcs {
-                                            let idx = tc
-                                                .get("index")
-                                                .and_then(|i| i.as_u64())
-                                                .unwrap_or(0)
-                                                as usize;
-                                            let entry =
-                                                tool_calls_map.entry(idx).or_insert_with(|| {
-                                                    (String::new(), String::new(), String::new())
-                                                });
-
-                                            if let Some(id) = tc.get("id").and_then(|i| i.as_str())
-                                            {
-                                                entry.0 = id.to_string();
-                                            }
-                                            if let Some(func) = tc.get("function") {
-                                                if let Some(name) =
-                                                    func.get("name").and_then(|n| n.as_str())
-                                                {
-                                                    entry.1.push_str(name);
-                                                }
-                                                if let Some(args) =
-                                                    func.get("arguments").and_then(|a| a.as_str())
-                                                {
-                                                    entry.2.push_str(args);
+                                        if msg_type == "message.part.delta" {
+                                            if let Some(props) = props {
+                                                let field = props.get("field").and_then(|f| f.as_str()).unwrap_or("");
+                                                if field == "text" || field == "reasoning" {
+                                                    if let Some(delta) = props.get("delta").and_then(|d| d.as_str()) {
+                                                        streamed_any_clone.store(true, Ordering::Relaxed);
+                                                        if sse_tx.send(AgentEvent::Token { text: delta.to_string() }).await.is_err() {
+                                                            return;
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -456,38 +420,57 @@ impl LlmProvider for OpenCodeProvider {
                         }
                     }
                 }
-            }
+            });
 
-            if in_thinking {
-                let _ = tx
-                    .send(AgentEvent::Token {
-                        text: "\n</think>\n\n".to_string(),
-                    })
-                    .await;
-            }
+            // Post the message to opencode serve
+            let payload = json!({
+                "model": {
+                    "providerID": "opencode",
+                    "modelID": model_id
+                },
+                "system": system_text,
+                "parts": [
+                    { "type": "text", "text": user_prompt }
+                ]
+            });
 
-            let mut indices: Vec<_> = tool_calls_map.keys().cloned().collect();
-            indices.sort_unstable();
-            for idx in indices {
-                if let Some((id, name, args_str)) = tool_calls_map.remove(&idx) {
-                    let final_id = if id.trim().is_empty() {
-                        format!("call_{}", uuid::Uuid::new_v4().simple())
-                    } else {
-                        id
-                    };
-                    let input: serde_json::Value = serde_json::from_str(&args_str)
-                        .unwrap_or_else(|_| json!({ "raw": args_str }));
-                    let _ = tx
-                        .send(AgentEvent::ToolCall {
-                            id: final_id,
-                            name,
-                            input,
-                        })
-                        .await;
+            let _ = client_clone.post(&msg_url).json(&payload).send().await;
+
+            // Wait for session to finish or timeout (up to 90s for multi-step agent actions)
+            let mut wait_count = 0;
+            while !is_idle.load(Ordering::Relaxed) && wait_count < 180 {
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                wait_count += 1;
+            }
+            sse_task.abort();
+
+            // Fetch final messages to guarantee complete output
+            let history_url = format!("{}/session/{}/message", server_base, target_session_id);
+            if let Ok(hist_res) = client_clone.get(&history_url).send().await {
+                if let Ok(messages_val) = hist_res.json::<Vec<serde_json::Value>>().await {
+                    let mut final_text = String::new();
+                    for m in &messages_val {
+                        if m.get("info").and_then(|i| i.get("role")).and_then(|r| r.as_str()) == Some("assistant") {
+                            if let Some(parts) = m.get("parts").and_then(|p| p.as_array()) {
+                                for p in parts {
+                                    if p.get("type").and_then(|t| t.as_str()) == Some("text") {
+                                        if let Some(t) = p.get("text").and_then(|txt| txt.as_str()) {
+                                            if !t.is_empty() {
+                                                final_text = t.to_string();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if !streamed_any.load(Ordering::Relaxed) && !final_text.is_empty() {
+                        let _ = tx.send(AgentEvent::Token { text: final_text }).await;
+                    }
                 }
             }
 
-            let _ = tx.send(AgentEvent::Finished { stop_reason }).await;
+            let _ = tx.send(AgentEvent::Finished { stop_reason: "stop".to_string() }).await;
         });
 
         Ok(rx)

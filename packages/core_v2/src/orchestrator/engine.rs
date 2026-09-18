@@ -758,7 +758,54 @@ fn try_recover_text_tool_call(text: &str, valid_tool_names: &[String]) -> Option
         }
     }
 
-    // 2. Check for Hermes/XML <tool_call>...</tool_call> or <function=...>{...}</function>
+    // 2. Check for DeepSeek / DSML / XML tool calls: <...invoke name="tool_name">...<...parameter name="param_name"...>val</...parameter>...</...invoke>
+    if let Some(inv_idx) = trimmed.find("invoke name=\"") {
+        let after_inv = &trimmed[inv_idx + 13..];
+        if let Some(quote_idx) = after_inv.find('"') {
+            let tool_name = &after_inv[..quote_idx];
+            if valid_tool_names.iter().any(|v| v == tool_name) {
+                let invoke_body = if let Some(end_inv) = after_inv.find("invoke>") {
+                    let end_bracket = after_inv[..end_inv].rfind('<').unwrap_or(end_inv);
+                    &after_inv[quote_idx + 1..end_bracket]
+                } else {
+                    &after_inv[quote_idx + 1..]
+                };
+
+                let mut params_obj = serde_json::Map::new();
+                let mut search_pos = 0;
+                while let Some(p_idx) = invoke_body[search_pos..].find("parameter name=\"") {
+                    let p_start = search_pos + p_idx + 16;
+                    if let Some(p_quote) = invoke_body[p_start..].find('"') {
+                        let p_name = &invoke_body[p_start..p_start + p_quote];
+                        let after_p_quote = &invoke_body[p_start + p_quote..];
+                        if let Some(tag_close) = after_p_quote.find('>') {
+                            let val_start = p_start + p_quote + tag_close + 1;
+                            let val_end = if let Some(p_end) = invoke_body[val_start..].find("parameter>") {
+                                let end_bracket = invoke_body[val_start..val_start + p_end].rfind('<').unwrap_or(p_end);
+                                val_start + end_bracket
+                            } else {
+                                invoke_body.len()
+                            };
+                            let val_raw = invoke_body[val_start..val_end].trim();
+                            let parsed_val = if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(val_raw) {
+                                json_val
+                            } else {
+                                serde_json::json!(val_raw)
+                            };
+                            params_obj.insert(p_name.to_string(), parsed_val);
+                            search_pos = val_end;
+                            continue;
+                        }
+                    }
+                    break;
+                }
+
+                return Some((tool_name.to_string(), serde_json::Value::Object(params_obj)));
+            }
+        }
+    }
+
+    // 3. Check for Hermes/XML <tool_call>...</tool_call> or <function=...>{...}</function>
     if let (Some(start), Some(end)) = (trimmed.find("<tool_call>"), trimmed.rfind("</tool_call>")) {
         let inside = &trimmed[start + 11..end].trim();
         if let Ok(val) = serde_json::from_str::<serde_json::Value>(inside) {
@@ -867,6 +914,17 @@ mod tests {
         assert!(block.is_none());
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_recover_dsml_tool_call() {
+        let text = "<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"run_command\">\n<｜DSML｜parameter name=\"command\" string=\"true\">yt-dlp --version</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>";
+        let valid_tools = vec!["run_command".to_string(), "telegram".to_string()];
+        let recovered = try_recover_text_tool_call(text, &valid_tools);
+        assert!(recovered.is_some());
+        let (name, params) = recovered.unwrap();
+        assert_eq!(name, "run_command");
+        assert_eq!(params.get("command").and_then(|v| v.as_str()), Some("yt-dlp --version"));
     }
 
     #[tokio::test]

@@ -107,7 +107,7 @@ impl Tool for TelegramTool {
         })
     }
 
-    async fn execute(&self, arguments: Value) -> Result<Value> {
+    async fn execute(&self, arguments: Value) -> Result<String> {
         let (bot_token, chat_id) = self.resolve_credentials(&arguments)?;
 
         let file_path = arguments
@@ -160,11 +160,8 @@ impl Tool for TelegramTool {
 
             let res = client.send_media(&send_opts).await?;
             if res.success {
-                Ok(json!({
-                    "success": true,
-                    "message_id": res.message_id,
-                    "status": "Delivered media to Telegram successfully"
-                }))
+                let msg_id = res.message_id.map(|id| id.to_string()).unwrap_or_else(|| "unknown".to_string());
+                Ok(format!("Delivered media to Telegram successfully (message_id: {})", msg_id))
             } else {
                 Err(anyhow!(res.error.unwrap_or_else(|| "Failed to send media to Telegram".to_string())))
             }
@@ -179,11 +176,8 @@ impl Tool for TelegramTool {
 
             let res = client.send_message(&send_opts).await?;
             if res.success {
-                Ok(json!({
-                    "success": true,
-                    "message_id": res.message_id,
-                    "status": "Delivered message to Telegram successfully"
-                }))
+                let msg_id = res.message_id.map(|id| id.to_string()).unwrap_or_else(|| "unknown".to_string());
+                Ok(format!("Delivered message to Telegram successfully (message_id: {})", msg_id))
             } else {
                 Err(anyhow!(res.error.unwrap_or_else(|| "Failed to send message to Telegram".to_string())))
             }
