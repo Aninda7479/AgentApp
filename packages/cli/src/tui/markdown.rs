@@ -3,10 +3,20 @@ use ratatui::text::{Line, Span};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MarkdownToken {
-    Header { level: usize, text: String },
-    CodeBlock { language: String, lines: Vec<String> },
-    Bullet { text: String },
-    Text { text: String },
+    Header {
+        level: usize,
+        text: String,
+    },
+    CodeBlock {
+        language: String,
+        lines: Vec<String>,
+    },
+    Bullet {
+        text: String,
+    },
+    Text {
+        text: String,
+    },
     Empty,
 }
 
@@ -44,7 +54,10 @@ pub fn parse_markdown(content: &str) -> Vec<MarkdownToken> {
         } else if trimmed.starts_with('#') {
             let hashes = trimmed.chars().take_while(|c| *c == '#').count();
             let text = trimmed[hashes..].trim().to_string();
-            tokens.push(MarkdownToken::Header { level: hashes, text });
+            tokens.push(MarkdownToken::Header {
+                level: hashes,
+                text,
+            });
         } else if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
             tokens.push(MarkdownToken::Bullet {
                 text: trimmed[2..].trim().to_string(),
@@ -105,13 +118,18 @@ pub fn format_inline_spans(text: &str, base_style: Style) -> Vec<Span<'static>> 
                 } else {
                     spans.push(Span::styled(
                         inner.to_string(),
-                        Style::default().fg(Color::Yellow).bg(Color::Rgb(30, 30, 30)),
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .bg(Color::Rgb(30, 30, 30)),
                     ));
                 }
                 remaining = &after_delim[end_pos + delim.len()..];
             } else {
                 // Unclosed delimiter, output as plain text
-                spans.push(Span::styled(remaining[pos..pos + delim.len()].to_string(), base_style));
+                spans.push(Span::styled(
+                    remaining[pos..pos + delim.len()].to_string(),
+                    base_style,
+                ));
                 remaining = after_delim;
             }
         } else {
@@ -143,9 +161,7 @@ pub fn token_to_lines(token: &MarkdownToken, max_code_lines: Option<usize>) -> V
                 Span::styled(prefix, Style::default().fg(Color::DarkGray)),
                 Span::styled(
                     text.clone(),
-                    Style::default()
-                        .fg(color)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(color).add_modifier(Modifier::BOLD),
                 ),
             ]));
         }
@@ -161,16 +177,35 @@ pub fn token_to_lines(token: &MarkdownToken, max_code_lines: Option<usize>) -> V
         MarkdownToken::Empty => {
             lines.push(Line::from(""));
         }
-        MarkdownToken::CodeBlock { language, lines: code_lines } => {
+        MarkdownToken::CodeBlock {
+            language,
+            lines: code_lines,
+        } => {
             let total = code_lines.len();
             let limit = max_code_lines.unwrap_or(usize::MAX);
-            let display_lines = if total > limit { &code_lines[..limit] } else { &code_lines[..] };
+            let display_lines = if total > limit {
+                &code_lines[..limit]
+            } else {
+                &code_lines[..]
+            };
 
-            let lang_tag = if language.is_empty() { "code" } else { language.as_str() };
+            let lang_tag = if language.is_empty() {
+                "code"
+            } else {
+                language.as_str()
+            };
             lines.push(Line::from(vec![
                 Span::styled("┌── ", Style::default().fg(Color::Cyan)),
-                Span::styled(lang_tag.to_string(), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                Span::styled(format!(" ({} lines) ────────", total), Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    lang_tag.to_string(),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!(" ({} lines) ────────", total),
+                    Style::default().fg(Color::DarkGray),
+                ),
             ]));
 
             let line_num_width = format!("{}", total).len().max(2);
@@ -189,14 +224,17 @@ pub fn token_to_lines(token: &MarkdownToken, max_code_lines: Option<usize>) -> V
                     Span::styled("│ ", Style::default().fg(Color::Cyan)),
                     Span::styled(
                         format!("... ({} more lines hidden)", total - limit),
-                        Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
+                        Style::default()
+                            .fg(Color::DarkGray)
+                            .add_modifier(Modifier::ITALIC),
                     ),
                 ]));
             }
 
-            lines.push(Line::from(vec![
-                Span::styled("└────────────────────────────────────────", Style::default().fg(Color::Cyan)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "└────────────────────────────────────────",
+                Style::default().fg(Color::Cyan),
+            )]));
         }
     }
 

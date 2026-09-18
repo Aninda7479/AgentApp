@@ -271,7 +271,7 @@ impl SlashCommand for ModelCommand {
         "List or switch active AI model (or opens picker)"
     }
     fn usage(&self) -> &'static str {
-        "/model [list | set <provider/model>]"
+        "/model [list [--all] | refresh | set <provider/model>]"
     }
     async fn execute(&self, args: &str, ctx: &mut CommandContext) -> CommandResult {
         let args = args.trim();
@@ -280,14 +280,48 @@ impl SlashCommand for ModelCommand {
             return CommandResult::with_action("", CommandAction::OpenModelPicker);
         }
 
-        if args == "list" {
+        if args == "refresh" {
+            let (catalog, local_count, enabled_count) =
+                crate::tui::model_picker::refresh_models_catalog();
+            return CommandResult::ok(format!(
+                "✓ Model catalog refreshed: **{}** total available (**{}** enabled, **{}** local on disk).",
+                catalog.len(),
+                enabled_count,
+                local_count
+            ));
+        }
+
+        if args == "list" || args == "list --all" || args == "list -a" || args == "all" {
+            let show_all = args.contains("--all") || args.contains("-a") || args == "all";
             let settings = superagent_core_v2::storage::SettingsStore::new()
                 .load_raw()
                 .unwrap_or_default();
             let catalog = crate::tui::model_picker::load_models_catalog();
-            let mut list = String::new();
 
-            list.push_str("**Available & Configured AI Models:**\n\n");
+            let filtered_catalog: Vec<&crate::tui::model_picker::ModelItem> = if show_all {
+                catalog.iter().collect()
+            } else {
+                let enabled: Vec<&crate::tui::model_picker::ModelItem> =
+                    catalog.iter().filter(|m| m.is_enabled).collect();
+                if enabled.is_empty() {
+                    catalog.iter().collect()
+                } else {
+                    enabled
+                }
+            };
+
+            let mut list = String::new();
+            if show_all {
+                list.push_str(&format!(
+                    "**All Available AI Models ({}):**\n\n",
+                    catalog.len()
+                ));
+            } else {
+                list.push_str(&format!(
+                    "**Enabled AI Models ({}):**\n\n",
+                    filtered_catalog.len()
+                ));
+            }
 
             let ordered_providers = [
                 "openai",
@@ -304,7 +338,7 @@ impl SlashCommand for ModelCommand {
                 String,
                 Vec<&crate::tui::model_picker::ModelItem>,
             > = std::collections::BTreeMap::new();
-            for item in &catalog {
+            for item in &filtered_catalog {
                 grouped
                     .entry(item.provider.to_lowercase())
                     .or_default()
@@ -330,9 +364,18 @@ impl SlashCommand for ModelCommand {
                 out.push_str(&format!("• **{}**{}:\n", prov_id, badge));
                 for item in items {
                     let custom_mark = if item.is_custom { " *(custom)*" } else { "" };
+                    let disabled_mark = if show_all && !item.is_enabled {
+                        " *(disabled)*"
+                    } else {
+                        ""
+                    };
                     out.push_str(&format!(
-                        "  - `{}` — {} ({}{})\n",
-                        item.model_id, item.display_name, item.context_window, custom_mark
+                        "  - `{}` — {} ({}{}{})\n",
+                        item.model_id,
+                        item.display_name,
+                        item.context_window,
+                        custom_mark,
+                        disabled_mark
                     ));
                 }
             };
@@ -359,6 +402,13 @@ impl SlashCommand for ModelCommand {
                 "\n*Current model:* **{}**\n*To switch:* `/model set <provider/model>` or type `/model` for the interactive picker.",
                 curr
             ));
+            if show_all {
+                list.push_str(
+                    "\n*Tip:* Run `/model list` without `--all` to view only enabled models.",
+                );
+            } else {
+                list.push_str("\n*Tip:* Run `/model list --all` to view all catalog models, or `/model refresh` to rescan.");
+            }
             return CommandResult::ok(list);
         }
 

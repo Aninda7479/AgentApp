@@ -1,6 +1,6 @@
-use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 #[derive(Parser, Debug, Clone)]
 #[command(
@@ -10,9 +10,17 @@ use serde::{Deserialize, Serialize};
     arg_required_else_help = false
 )]
 pub struct Cli {
-    /// List all available model IDs for easy copying
+    /// List available AI model IDs (shows enabled models by default)
     #[arg(long)]
     pub models: bool,
+
+    /// Show all models in catalog when listing models (including disabled)
+    #[arg(short = 'a', long = "all", visible_alias = "all-models")]
+    pub all_models: bool,
+
+    /// Force refresh/rescan models from disk and local runners
+    #[arg(short = 'r', long = "refresh", visible_alias = "refresh-models")]
+    pub refresh_models: bool,
 
     /// Start the SuperAgent web server (same as `superagent serve`)
     #[arg(long, visible_alias = "serve")]
@@ -31,7 +39,12 @@ pub struct Cli {
     pub status: bool,
 
     /// Port for the web server when using --start-web / --serve
-    #[arg(long, visible_alias = "serve-port", alias = "port", default_value = "1469")]
+    #[arg(
+        long,
+        visible_alias = "serve-port",
+        alias = "port",
+        default_value = "1469"
+    )]
     pub web_port: u16,
 
     /// Run as background HTTP/WebSocket daemon
@@ -152,8 +165,16 @@ pub enum Commands {
     /// Check if the SuperAgent web server daemon is currently running
     WebStatus,
 
-    /// List all available model IDs across providers
-    Models,
+    /// List available model IDs across providers (shows enabled models by default)
+    Models {
+        /// Show all models in catalog (including disabled)
+        #[arg(short = 'a', long)]
+        all: bool,
+
+        /// Force refresh/rescan models from disk and local runners
+        #[arg(short = 'r', long)]
+        refresh: bool,
+    },
 
     /// Run system and API connectivity diagnostics
     #[command(visible_alias = "diag")]

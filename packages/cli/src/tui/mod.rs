@@ -238,6 +238,23 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                             KeyCode::Down => {
                                 app.model_picker_state.next();
                             }
+                            KeyCode::Tab | KeyCode::Char('a') | KeyCode::Char('A') => {
+                                app.model_picker_state.toggle_show_all();
+                            }
+                            KeyCode::Char('r') | KeyCode::Char('R') => {
+                                app.model_picker_state.refresh();
+                                let enabled = app
+                                    .model_picker_state
+                                    .all_models
+                                    .iter()
+                                    .filter(|m| m.is_enabled)
+                                    .count();
+                                app.add_system_message(format!(
+                                    "Refreshed models: {} in catalog ({} enabled).",
+                                    app.model_picker_state.all_models.len(),
+                                    enabled
+                                ));
+                            }
                             KeyCode::Enter => {
                                 if let Some(selected) = app.model_picker_state.selected().cloned() {
                                     app.provider = selected.provider;

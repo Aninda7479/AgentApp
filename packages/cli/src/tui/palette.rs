@@ -31,24 +31,72 @@ impl CommandPaletteState {
         // Built-in slash commands
         let commands = [
             ("model", "List or switch AI models and providers", vec!["m"]),
-            ("permissions", "Show, set, or cycle tool execution permission levels", vec!["perm"]),
-            ("diff", "Review pending file modifications made by agent", vec!["d"]),
-            ("compact", "Compact conversation context to save tokens", vec![]),
+            (
+                "permissions",
+                "Show, set, or cycle tool execution permission levels",
+                vec!["perm"],
+            ),
+            (
+                "diff",
+                "Review pending file modifications made by agent",
+                vec!["d"],
+            ),
+            (
+                "compact",
+                "Compact conversation context to save tokens",
+                vec![],
+            ),
             ("doctor", "Run setup checkup and diagnostics", vec!["diag"]),
-            ("init", "Generate project AGENTS.md in current directory", vec!["i"]),
+            (
+                "init",
+                "Generate project AGENTS.md in current directory",
+                vec!["i"],
+            ),
             ("config", "Show SuperAgent configuration and paths", vec![]),
-            ("mcp", "Show attached Model Context Protocol servers", vec![]),
-            ("review", "Perform automated code review on current workspace", vec![]),
+            (
+                "mcp",
+                "Show attached Model Context Protocol servers",
+                vec![],
+            ),
+            (
+                "review",
+                "Perform automated code review on current workspace",
+                vec![],
+            ),
             ("security", "Run workspace security audit", vec![]),
-            ("plan", "Generate detailed architectural implementation plan", vec![]),
+            (
+                "plan",
+                "Generate detailed architectural implementation plan",
+                vec![],
+            ),
             ("cost", "Display estimated session token cost", vec![]),
-            ("startup", "Manage OS auto-start on boot (enable, disable, status)", vec![]),
-            ("learn", "Self-improving skill loop: record insights, codify skills", vec!["l"]),
+            (
+                "startup",
+                "Manage OS auto-start on boot (enable, disable, status)",
+                vec![],
+            ),
+            (
+                "learn",
+                "Self-improving skill loop: record insights, codify skills",
+                vec!["l"],
+            ),
             ("theme", "List or switch terminal visual themes", vec!["t"]),
-            ("status", "Show session status and server info", vec!["stat"]),
-            ("btw", "Ask a quick side question without polluting history", vec![]),
+            (
+                "status",
+                "Show session status and server info",
+                vec!["stat"],
+            ),
+            (
+                "btw",
+                "Ask a quick side question without polluting history",
+                vec![],
+            ),
             ("clear", "Clear conversation history", vec!["cls"]),
-            ("help", "Show available slash commands and key shortcuts", vec!["h", "?"]),
+            (
+                "help",
+                "Show available slash commands and key shortcuts",
+                vec!["h", "?"],
+            ),
             ("exit", "Quit SuperAgent", vec!["quit", "q"]),
         ];
 
@@ -96,7 +144,10 @@ impl CommandPaletteState {
             .iter()
             .filter(|item| {
                 HistorySearch::fuzzy_match(q, &item.name, false)
-                    || item.aliases.iter().any(|a| HistorySearch::fuzzy_match(q, a, false))
+                    || item
+                        .aliases
+                        .iter()
+                        .any(|a| HistorySearch::fuzzy_match(q, a, false))
                     || HistorySearch::fuzzy_match(q, &item.description, false)
             })
             .collect()

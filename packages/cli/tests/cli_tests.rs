@@ -341,3 +341,72 @@ fn test_provider_connection_checker() {
     });
     assert!(is_provider_connected("anthropic", &settings_with_api_keys));
 }
+
+#[test]
+fn test_models_cli_args_parsing() {
+    use clap::Parser;
+    use superagent_cli::cli::args::{Cli, Commands};
+
+    // 1. superagent --models
+    let cli = Cli::try_parse_from(["superagent", "--models"]).unwrap();
+    assert!(cli.models);
+    assert!(!cli.all_models);
+    assert!(!cli.refresh_models);
+
+    // 2. superagent --models --all
+    let cli = Cli::try_parse_from(["superagent", "--models", "--all"]).unwrap();
+    assert!(cli.models);
+    assert!(cli.all_models);
+
+    // 3. superagent --models -a
+    let cli = Cli::try_parse_from(["superagent", "--models", "-a"]).unwrap();
+    assert!(cli.models);
+    assert!(cli.all_models);
+
+    // 4. superagent --models --refresh
+    let cli = Cli::try_parse_from(["superagent", "--models", "--refresh"]).unwrap();
+    assert!(cli.models);
+    assert!(cli.refresh_models);
+
+    // 5. superagent models --all
+    let cli = Cli::try_parse_from(["superagent", "models", "--all"]).unwrap();
+    match cli.command {
+        Some(Commands::Models { all, refresh }) => {
+            assert!(all);
+            assert!(!refresh);
+        }
+        other => panic!("Expected Commands::Models, got {:?}", other),
+    }
+
+    // 6. superagent models --refresh
+    let cli = Cli::try_parse_from(["superagent", "models", "-r"]).unwrap();
+    match cli.command {
+        Some(Commands::Models { all, refresh }) => {
+            assert!(!all);
+            assert!(refresh);
+        }
+        other => panic!("Expected Commands::Models, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_model_picker_toggle_and_filter() {
+    use superagent_cli::tui::model_picker::ModelPickerState;
+
+    let mut state = ModelPickerState::with_options(false);
+    assert!(!state.show_all);
+    assert!(!state.models.is_empty());
+
+    // Toggle to show all
+    state.toggle_show_all();
+    assert!(state.show_all);
+    assert_eq!(state.models.len(), state.all_models.len());
+
+    // Toggle back to enabled only
+    state.toggle_show_all();
+    assert!(!state.show_all);
+
+    // Refresh reloads
+    state.refresh();
+    assert!(!state.models.is_empty());
+}

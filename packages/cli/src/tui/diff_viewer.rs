@@ -1,5 +1,5 @@
-use similar::{ChangeTag, TextDiff};
 use crate::commands::{DiffFileChange, DiffStatus};
+use similar::{ChangeTag, TextDiff};
 
 #[derive(Debug, Clone)]
 pub struct DiffLine {

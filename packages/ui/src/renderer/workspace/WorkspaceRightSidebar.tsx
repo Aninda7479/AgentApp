@@ -52,7 +52,7 @@ import { computeChatContextStats, formatByteSize, type SubagentExecutionItem, ty
 import { TrajectoryService } from '../logic/trajectory';
 import type { StoredChat } from '../core/types';
 
-export type WorkspaceSidebarTab = 'files' | 'agents' | 'partner' | 'info';
+export type WorkspaceSidebarTab = 'overview' | 'files' | 'agents' | 'partner' | 'info';
 
 export interface WorkspaceRightSidebarProps {
   steps?: TrajectoryStep[];
@@ -306,9 +306,10 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
   onSelectChat,
   isMobileOpen = false,
   onMobileClose,
-  initialTab = 'files',
+  initialTab = 'overview',
 }) => {
   const [activeTab, setActiveTab] = useState<WorkspaceSidebarTab>(initialTab);
+  const isOverviewTab = activeTab === 'overview' || activeTab === 'files';
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [customMood, setCustomMood] = useState<PartnerMood | null>(null);
@@ -482,18 +483,18 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
   const renderSidebarContent = (isMobile: boolean) => (
     <>
       {/* Sidebar Header & Tab Nav */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-brand-border/60 bg-brand-sidebar/80 shrink-0">
-        <div className="flex items-center gap-1 bg-brand-bg/60 p-1 rounded-lg border border-brand-border/40">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-brand-border/40 bg-brand-inner-bg/90 backdrop-blur-xs shrink-0">
+        <div className="flex items-center gap-1 bg-black/10 dark:bg-black/30 p-1 rounded-lg border border-brand-border/30">
           <button
-            onClick={() => setActiveTab('files')}
+            onClick={() => setActiveTab('overview')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
-              activeTab === 'files'
+              isOverviewTab
                 ? 'bg-brand-card text-brand-textMain shadow-sm border border-brand-border/60'
                 : 'text-brand-textMuted hover:text-brand-textMain'
             }`}
           >
             <FileCode2 size={13} />
-            <span>Diffs</span>
+            <span>Overview</span>
             {modifiedFiles.length > 0 && (
               <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-brand-border text-[9px] text-brand-textMain font-mono">
                 {modifiedFiles.length}
@@ -570,8 +571,8 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
 
       {/* Tab Content Body */}
       <div className="flex-1 overflow-y-auto p-3 scrollbar-thin scrollbar-thumb-brand-border">
-        {/* ── TAB 1: FILE CHANGES ────────────────────────────────────────── */}
-        {activeTab === 'files' && (
+        {/* ── TAB 1: OVERVIEW & FILE CHANGES ─────────────────────────────── */}
+        {isOverviewTab && (
           <div className="space-y-3">
             {/* Search filter */}
             {modifiedFiles.length > 0 && (
@@ -598,7 +599,7 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
             ) : (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-[10px] font-mono text-brand-textMuted px-1">
-                  <span>CHANGED FILES ({filteredFiles.length})</span>
+                  <span>OVERVIEW · CHANGED FILES ({filteredFiles.length})</span>
                   <span>CLICK TO VIEW DIFF</span>
                 </div>
 
@@ -609,7 +610,7 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
                       onViewDiff?.(file.filename, file.originalCode, file.modifiedCode);
                       if (isMobile) onMobileClose?.();
                     }}
-                    className="group glass-card p-2.5 rounded-xl border border-brand-border/60 hover:border-brand-border hover:bg-brand-hover cursor-pointer transition-all flex items-center justify-between gap-2"
+                    className="group rounded-xl p-2.5 bg-brand-inner-bg/60 hover:bg-brand-inner-bg border border-brand-border/40 hover:border-brand-border/70 transition-all flex items-center justify-between gap-2 cursor-pointer"
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <FileCode2 size={15} className="text-brand-primary flex-shrink-0" />
@@ -1461,7 +1462,7 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
     <>
       {/* Desktop Collapsed Rail (only on desktop lg+ when collapsed) */}
       {isCollapsed && (
-        <div className="hidden lg:flex flex-col items-center py-3 px-1.5 bg-brand-sidebar/95 border-l border-brand-border/60 select-none z-20 shrink-0">
+        <div className="hidden lg:flex flex-col items-center py-3 px-1.5 bg-brand-inner-bg border-l border-brand-border/40 select-none z-20 shrink-0">
           <button
             onClick={() => setIsCollapsed(false)}
             className="p-1.5 rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors mb-3 cursor-pointer"
@@ -1472,9 +1473,9 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
 
           <div className="flex flex-col gap-2">
             <button
-              onClick={() => { setActiveTab('files'); setIsCollapsed(false); }}
-              className={`relative p-2 rounded-lg transition-colors cursor-pointer ${activeTab === 'files' ? 'bg-brand-card text-brand-textMain border border-brand-border' : 'text-brand-textMuted hover:text-brand-textMain'}`}
-              title="File Changes"
+              onClick={() => { setActiveTab('overview'); setIsCollapsed(false); }}
+              className={`relative p-2 rounded-lg transition-colors cursor-pointer ${isOverviewTab ? 'bg-brand-card text-brand-textMain border border-brand-border' : 'text-brand-textMuted hover:text-brand-textMain'}`}
+              title="Overview & File Changes"
             >
               <FileCode2 size={16} />
               {modifiedFiles.length > 0 && (
@@ -1520,7 +1521,7 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
 
       {/* Desktop Expanded Sidebar (only on desktop lg+ when not collapsed) */}
       {!isCollapsed && (
-        <aside className="hidden lg:flex w-80 h-full flex-col bg-brand-sidebar/95 border-l border-brand-border/60 select-none z-20 overflow-hidden transition-all duration-200 shrink-0">
+        <aside className="hidden lg:flex w-80 h-full flex-col bg-brand-inner-bg border-l border-brand-border/40 select-none z-20 overflow-hidden transition-all duration-200 shrink-0">
           {renderSidebarContent(false)}
         </aside>
       )}
@@ -1533,7 +1534,7 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
             onClick={handleCloseMobileDrawer}
             aria-hidden="true"
           />
-          <aside className="fixed inset-y-0 right-0 z-50 w-[88vw] sm:w-88 max-w-sm h-full flex flex-col bg-brand-sidebar shadow-2xl border-l border-brand-border select-none overflow-hidden animate-in slide-in-from-right duration-200 lg:hidden">
+          <aside className="fixed inset-y-0 right-0 z-50 w-[88vw] sm:w-88 max-w-sm h-full flex flex-col bg-brand-inner-bg shadow-2xl border-l border-brand-border/40 select-none overflow-hidden animate-in slide-in-from-right duration-200 lg:hidden">
             {renderSidebarContent(true)}
           </aside>
         </>

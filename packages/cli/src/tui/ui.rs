@@ -371,10 +371,14 @@ fn draw_model_picker(f: &mut Frame, app: &AppState, size: Rect) {
             let is_curr = item.provider == app.provider && item.model_id == app.model;
             let marker = if is_sel { "❯ " } else { "  " };
 
+            let is_disabled = app.model_picker_state.show_all && !item.is_enabled;
+
             let name_style = if is_sel {
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD)
+            } else if is_disabled {
+                Style::default().fg(Color::DarkGray)
             } else {
                 Style::default().fg(Color::White)
             };
@@ -391,6 +395,13 @@ fn draw_model_picker(f: &mut Frame, app: &AppState, size: Rect) {
                 ));
             }
 
+            if is_disabled {
+                spans.push(Span::styled(
+                    " [disabled]",
+                    Style::default().fg(Color::DarkGray),
+                ));
+            }
+
             spans.push(Span::styled(
                 format!("  [{}] · {}", item.provider, item.context_window),
                 Style::default().fg(Color::DarkGray),
@@ -400,11 +411,20 @@ fn draw_model_picker(f: &mut Frame, app: &AppState, size: Rect) {
         })
         .collect();
 
-    let scroll_info = if total_models > inner_height {
-        format!(" ({}/{} - ↑/↓ to scroll) ", sel + 1, total_models)
+    let show_all = app.model_picker_state.show_all;
+    let mode_label = if show_all {
+        "All Catalog"
     } else {
-        " (↑/↓ to navigate, Enter to select, Esc to cancel) ".to_string()
+        "Enabled Only"
     };
+    let toggle_hint = if show_all { "Show Enabled" } else { "Show All" };
+    let scroll_info = format!(
+        " [{}: {}/{} | Tab/A: {} · R: Refresh · Esc: Close] ",
+        mode_label,
+        if total_models > 0 { sel + 1 } else { 0 },
+        total_models,
+        toggle_hint
+    );
 
     let block = Block::default()
         .title(format!(" Select AI Model{} ", scroll_info.trim()))

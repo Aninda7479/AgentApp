@@ -10,12 +10,15 @@ pub struct ModelItem {
     pub capabilities: Vec<String>,
     pub is_custom: bool,
     pub is_local: bool,
+    pub is_enabled: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct ModelPickerState {
+    pub all_models: Vec<ModelItem>,
     pub models: Vec<ModelItem>,
     pub selected_index: usize,
+    pub show_all: bool,
 }
 
 impl Default for ModelPickerState {
@@ -26,11 +29,50 @@ impl Default for ModelPickerState {
 
 impl ModelPickerState {
     pub fn new() -> Self {
-        let models = load_models_catalog();
-        Self {
-            models,
+        Self::with_options(false)
+    }
+
+    pub fn with_options(show_all: bool) -> Self {
+        let all_models = load_models_catalog();
+        let mut state = Self {
+            all_models,
+            models: Vec::new(),
             selected_index: 0,
+            show_all,
+        };
+        state.apply_filter();
+        state
+    }
+
+    pub fn apply_filter(&mut self) {
+        if self.show_all {
+            self.models = self.all_models.clone();
+        } else {
+            let enabled: Vec<ModelItem> = self
+                .all_models
+                .iter()
+                .filter(|m| m.is_enabled)
+                .cloned()
+                .collect();
+            if enabled.is_empty() {
+                self.models = self.all_models.clone();
+            } else {
+                self.models = enabled;
+            }
         }
+        if self.selected_index >= self.models.len() {
+            self.selected_index = 0;
+        }
+    }
+
+    pub fn toggle_show_all(&mut self) {
+        self.show_all = !self.show_all;
+        self.apply_filter();
+    }
+
+    pub fn refresh(&mut self) {
+        self.all_models = load_models_catalog();
+        self.apply_filter();
     }
 
     pub fn next(&mut self) {
@@ -143,6 +185,8 @@ pub fn load_models_catalog() -> Vec<ModelItem> {
         .load_raw()
         .unwrap_or_default();
 
+    let mut user_enabled_count = 0;
+
     // 1. Load user-configured models from settings.json or models.json
     if let Some(models_arr) = settings.get("models").and_then(|m| m.as_array()) {
         for m in models_arr {
@@ -156,7 +200,33 @@ pub fn load_models_catalog() -> Vec<ModelItem> {
             if id.is_empty() || provider.is_empty() {
                 continue;
             }
-            let name = m.get("name").and_then(|v| v.as_str()).unwrap_or(id).trim();
+
+            let is_enabled = m.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+            if is_enabled {
+                user_enabled_count += 1;
+            }
+
+            let provider_norm = match provider.to_lowercase().as_str() {
+                "google" => "gemini".to_string(),
+                "claude" => "anthropic".to_string(),
+                "chatgpt" => "openai".to_string(),
+                other => other.to_string(),
+            };
+
+            // Strip "<provider>-" or "<provider_norm>-" prefix if present
+            let clean_id = if let Some(stripped) = id.strip_prefix(&format!("{}-", provider)) {
+                stripped
+            } else if let Some(stripped) = id.strip_prefix(&format!("{}-", provider_norm)) {
+                stripped
+            } else {
+                id
+            };
+
+            let name = m
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or(clean_id)
+                .trim();
             let ctx = m
                 .get("contextLimit")
                 .or_else(|| m.get("context_window"))
@@ -178,24 +248,18 @@ pub fn load_models_catalog() -> Vec<ModelItem> {
                 caps.push("tools".to_string());
             }
 
-            let provider_norm = match provider.to_lowercase().as_str() {
-                "google" => "gemini".to_string(),
-                "claude" => "anthropic".to_string(),
-                "chatgpt" => "openai".to_string(),
-                other => other.to_string(),
-            };
-
-            let key = (provider_norm.clone(), id.to_lowercase());
+            let key = (provider_norm.clone(), clean_id.to_lowercase());
             if !seen.contains(&key) {
                 seen.insert(key);
                 catalog.push(ModelItem {
                     provider: provider_norm.clone(),
-                    model_id: id.to_string(),
+                    model_id: clean_id.to_string(),
                     display_name: name.to_string(),
                     context_window: format!("{} ctx", ctx),
                     capabilities: caps,
                     is_custom: true,
                     is_local: provider_norm == "ollama",
+                    is_enabled,
                 });
             }
         }
@@ -232,22 +296,44 @@ pub fn load_models_catalog() -> Vec<ModelItem> {
                     capabilities: vec!["local".to_string(), "offline".to_string()],
                     is_custom: false,
                     is_local: true,
+                    is_enabled: true,
                 });
+            } else if let Some(existing) = catalog
+                .iter_mut()
+                .find(|m| m.provider == "ollama" && m.model_id.eq_ignore_ascii_case(name_clean))
+            {
+                existing.is_local = true;
             }
         }
     }
 
     // 3. Curated built-in defaults
     let defaults = get_curated_default_models(found_local_ollama);
-    for item in defaults {
+    let has_user_enabled_models = user_enabled_count > 0;
+    for mut item in defaults {
         let key = (item.provider.to_lowercase(), item.model_id.to_lowercase());
         if !seen.contains(&key) {
             seen.insert(key);
+            if has_user_enabled_models {
+                item.is_enabled = false;
+            } else {
+                let is_conn = is_provider_connected(&item.provider, &settings);
+                item.is_enabled = is_conn || item.provider == "opencode";
+            }
             catalog.push(item);
         }
     }
 
     catalog
+}
+
+/// Refreshes the models catalog from disk and settings.
+/// Returns (catalog, local_count, enabled_count).
+pub fn refresh_models_catalog() -> (Vec<ModelItem>, usize, usize) {
+    let catalog = load_models_catalog();
+    let local_count = catalog.iter().filter(|m| m.is_local).count();
+    let enabled_count = catalog.iter().filter(|m| m.is_enabled).count();
+    (catalog, local_count, enabled_count)
 }
 
 fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
@@ -265,6 +351,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             ],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         ModelItem {
             provider: "openai".to_string(),
@@ -274,6 +361,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             capabilities: vec!["fast".to_string(), "cheap".to_string(), "tools".to_string()],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         ModelItem {
             provider: "openai".to_string(),
@@ -287,6 +375,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             ],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         ModelItem {
             provider: "openai".to_string(),
@@ -300,6 +389,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             ],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         // Anthropic
         ModelItem {
@@ -314,6 +404,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             ],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         ModelItem {
             provider: "anthropic".to_string(),
@@ -327,6 +418,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             ],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         ModelItem {
             provider: "anthropic".to_string(),
@@ -336,6 +428,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             capabilities: vec!["fast".to_string(), "tools".to_string()],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         // Google Gemini
         ModelItem {
@@ -350,6 +443,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             ],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         ModelItem {
             provider: "gemini".to_string(),
@@ -363,6 +457,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             ],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         ModelItem {
             provider: "gemini".to_string(),
@@ -372,6 +467,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             capabilities: vec!["ultra-fast".to_string(), "multimodal".to_string()],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         ModelItem {
             provider: "gemini".to_string(),
@@ -381,6 +477,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             capabilities: vec!["massive-context".to_string(), "reasoning".to_string()],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         // DeepSeek
         ModelItem {
@@ -395,6 +492,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             ],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         ModelItem {
             provider: "deepseek".to_string(),
@@ -404,6 +502,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             capabilities: vec!["deep-thinking".to_string(), "math".to_string()],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         // Groq
         ModelItem {
@@ -414,6 +513,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             capabilities: vec!["realtime-speed".to_string()],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         // OpenCode (Free Tier)
         ModelItem {
@@ -428,6 +528,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             ],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
         // OpenRouter
         ModelItem {
@@ -438,6 +539,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             capabilities: vec!["router".to_string(), "multi-provider".to_string()],
             is_custom: false,
             is_local: false,
+            is_enabled: true,
         },
     ];
 
@@ -454,6 +556,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             ],
             is_custom: false,
             is_local: true,
+            is_enabled: true,
         });
         models.push(ModelItem {
             provider: "ollama".to_string(),
@@ -463,6 +566,7 @@ fn get_curated_default_models(skip_ollama_defaults: bool) -> Vec<ModelItem> {
             capabilities: vec!["local".to_string(), "offline".to_string()],
             is_custom: false,
             is_local: true,
+            is_enabled: true,
         });
     }
 

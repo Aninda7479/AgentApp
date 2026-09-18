@@ -482,13 +482,13 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           </button>
         )}
 
-        {/* Trajectory Right Sidebar Info & Diffs toggle (desktop and mobile) */}
+        {/* Trajectory Right Sidebar Info & Overview toggle (desktop and mobile) */}
         {activeTab === 'trajectory' && onToggleRightSidebar && (
           <button
             onClick={onToggleRightSidebar}
             className="relative atmo-btn w-7 h-7 flex items-center justify-center rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-white/5 transition-colors cursor-pointer shrink-0"
-            title="Chat Info & Diffs"
-            aria-label="Chat Info & Diffs"
+            title="Chat Info & Overview"
+            aria-label="Chat Info & Overview"
           >
             <Info className="w-4 h-4" />
             {(modifiedFilesCount || 0) > 0 && (

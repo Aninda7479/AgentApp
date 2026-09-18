@@ -218,4 +218,26 @@ describe('WorkspaceRightSidebar Component', () => {
     expect(html).toContain('Click to enlarge');
     expect(html).toContain('240.0 KB');
   });
+
+  it('renders Overview tab by default with unified chat background color', () => {
+    const html = renderToStaticMarkup(
+      <WorkspaceRightSidebar
+        steps={[]}
+        activeChatId="chat-1"
+        isGenerating={false}
+      />
+    );
+
+    // Tab button renamed from Diffs to Overview
+    expect(html).toContain('Overview');
+    expect(html).not.toContain('>Diffs<');
+
+    // Default tab body should show Overview & Changed Files
+    expect(html).toContain('No File Changes');
+
+    // Sidebar aside should use bg-brand-inner-bg to match the chat canvas
+    expect(html).toContain('bg-brand-inner-bg');
+    expect(html).not.toContain('bg-brand-sidebar/95');
+  });
 });
+

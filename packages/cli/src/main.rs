@@ -20,7 +20,9 @@ use superagent_core_v2::types::{ModelConfig, ProviderType};
 use superagent_cli::cli::args::{Cli, Commands, PasswordAction, PermissionLevelArg};
 use superagent_cli::shortcuts::permissions::PermissionLevel;
 use superagent_cli::tui::app::AppState;
-use superagent_cli::tui::model_picker::{is_provider_connected, load_models_catalog, ModelItem};
+use superagent_cli::tui::model_picker::{
+    is_provider_connected, load_models_catalog, refresh_models_catalog, ModelItem,
+};
 use superagent_cli::tui::run_tui;
 
 #[tokio::main]
@@ -39,8 +41,18 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|| PathBuf::from("."));
 
     // 1. --models flag or models subcommand
-    if cli.models || matches!(cli.command, Some(Commands::Models)) {
-        print_models_list();
+    let is_models_cmd = match &cli.command {
+        Some(Commands::Models { all, refresh }) => Some((*all, *refresh)),
+        _ => None,
+    };
+
+    if cli.models || is_models_cmd.is_some() {
+        let (show_all, do_refresh) = if let Some((a, r)) = is_models_cmd {
+            (a || cli.all_models, r || cli.refresh_models)
+        } else {
+            (cli.all_models, cli.refresh_models)
+        };
+        print_models_list(show_all, do_refresh).await;
         return Ok(());
     }
 
@@ -828,13 +840,44 @@ fn compare_semver(a: &str, b: &str) -> i32 {
     0
 }
 
-fn print_models_list() {
+async fn print_models_list(show_all: bool, do_refresh: bool) {
+    if do_refresh {
+        println!("⟳ Refreshing models catalog from local runners and settings...");
+        let (_refreshed, local_count, enabled_count) = refresh_models_catalog();
+        println!(
+            "✓ Discovered {} local Ollama model(s) on disk, {} enabled model(s) configured.",
+            local_count, enabled_count
+        );
+        println!();
+    }
+
     let raw_settings = superagent_core_v2::storage::SettingsStore::new()
         .load_raw()
         .unwrap_or_default();
     let catalog = load_models_catalog();
 
-    println!("=== Available AI Model IDs ===");
+    let enabled_count = catalog.iter().filter(|m| m.is_enabled).count();
+    let total_count = catalog.len();
+
+    let models_to_display: Vec<&ModelItem> = if show_all {
+        catalog.iter().collect()
+    } else {
+        let enabled: Vec<&ModelItem> = catalog.iter().filter(|m| m.is_enabled).collect();
+        if enabled.is_empty() {
+            catalog.iter().collect()
+        } else {
+            enabled
+        }
+    };
+
+    if show_all {
+        println!(
+            "=== Available AI Model IDs (All Catalog Models: {}) ===",
+            total_count
+        );
+    } else {
+        println!("=== Enabled AI Models ({}) ===", enabled_count);
+    }
     println!();
 
     let ordered_providers = [
@@ -850,7 +893,7 @@ fn print_models_list() {
 
     let mut grouped: std::collections::BTreeMap<String, Vec<&ModelItem>> =
         std::collections::BTreeMap::new();
-    for item in &catalog {
+    for item in &models_to_display {
         grouped
             .entry(item.provider.to_lowercase())
             .or_default()
@@ -880,9 +923,14 @@ fn print_models_list() {
         println!("[Provider: {}]{}", prov_id, status_badge);
         for item in items {
             let custom_tag = if item.is_custom { " [custom]" } else { "" };
+            let disabled_tag = if show_all && !item.is_enabled {
+                " (disabled)"
+            } else {
+                ""
+            };
             println!(
-                "  {:<36} ({}{})",
-                item.model_id, item.display_name, custom_tag
+                "  {:<36} ({}{}{})",
+                item.model_id, item.display_name, custom_tag, disabled_tag
             );
         }
         println!();
@@ -901,6 +949,18 @@ fn print_models_list() {
         }
     }
 
+    if show_all {
+        println!(
+            "Showing all {} catalog models ({} enabled).",
+            total_count, enabled_count
+        );
+        println!("Tip: Run 'superagent --models' without --all to show only enabled models.");
+    } else {
+        println!("Showing {} enabled model(s).", models_to_display.len());
+        println!("Tip: Use 'superagent --models --all' (or -a) to list all available models.");
+        println!("Tip: Use 'superagent --models --refresh' (or -r) to rescan local models.");
+    }
+    println!();
     println!("Usage:");
     println!("  superagent -p openai -m gpt-4o --chat \"Your prompt\"");
     println!("  superagent -p ollama -m <model> --chat \"Your prompt\"");

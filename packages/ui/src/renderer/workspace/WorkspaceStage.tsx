@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Sparkles, Terminal, Code2, Wrench } from 'lucide-react';
-import { useChatStore, chatStore } from '../stores/chatStore';
-import { useSessionStore } from '../stores/sessionStore';
+import { useChatStore, chatStore, type ChatStoreState } from '../stores/chatStore';
+import { useSessionStore, type SessionStoreState } from '../stores/sessionStore';
 import { MessageCanvas } from './MessageCanvas';
 import { ComposerBar } from './ComposerBar';
 import { ProjectPicker } from './ProjectPicker';
@@ -9,9 +9,10 @@ import { WorkspaceRightSidebar } from './WorkspaceRightSidebar';
 import { BrandLogo } from '../BrandLogo';
 import { AgentOrchestrator } from '../services/AgentOrchestrator';
 import { ErrorBoundary } from '../components/ErrorBoundary';
-import { AuthService } from '../services/AuthService';
+import { AuthService, type AuthStatus } from '../services/AuthService';
 import { getIpc } from '../lib/ipc';
 import type { ComposerOptions, ComposerAttachment, StoredChat } from '../core/types';
+import type { TrajectoryStep } from '../pages/Workspace/TrajectoryCanvas';
 
 interface WorkspaceStageProps {
   activeProject: string;
@@ -84,7 +85,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
         }
       }).catch(() => {});
     }
-    const unsub = AuthService.subscribe((status) => {
+    const unsub = AuthService.subscribe((status: AuthStatus) => {
       if (status.ownerName) {
         setOwnerName(status.ownerName);
       }
@@ -92,11 +93,11 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
     return unsub;
   }, []);
 
-  const activeChatId = useChatStore((s) => s.activeChatId) || 'draft-chat';
-  const activeChat = useChatStore((s) => s.chats.find((c) => c.id === activeChatId));
-  const draftProject = useChatStore((s) => s.draftProject);
+  const activeChatId = useChatStore((s: ChatStoreState) => s.activeChatId) || 'draft-chat';
+  const activeChat = useChatStore((s: ChatStoreState) => s.chats.find((c: StoredChat) => c.id === activeChatId));
+  const draftProject = useChatStore((s: ChatStoreState) => s.draftProject);
   const currentProject = activeProject || draftProject || '';
-  const isGenerating = useSessionStore((s) => Boolean(s.runningSessions.get(activeChatId)?.isGenerating));
+  const isGenerating = useSessionStore((s: SessionStoreState) => Boolean(s.runningSessions.get(activeChatId)?.isGenerating));
   const steps = activeChat?.steps || [];
 
   const greeting = useMemo(() => {
@@ -115,7 +116,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
 
   const modifiedFilesCount = useMemo(() => {
     const fileSet = new Set<string>();
-    steps.forEach((step) => {
+    steps.forEach((step: TrajectoryStep) => {
       if (step.metadata?.diff?.filename) {
         fileSet.add(step.metadata.diff.filename);
       }
@@ -129,8 +130,9 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
         .then(() => {
           onToast('Agent run started');
         })
-        .catch((err) => {
-          onToast(`Error: ${err.message || err}`);
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          onToast(`Error: ${msg}`);
         });
     }
   };
@@ -151,7 +153,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
   };
 
   return (
-    <div className="flex-1 flex min-w-0 min-h-0 relative overflow-hidden h-full">
+    <div className="flex-1 flex min-w-0 min-h-0 relative overflow-hidden h-full bg-brand-inner-bg">
       {/* Active Chat Panel */}
       <div className="flex-1 w-full min-w-0 overflow-hidden flex flex-col min-h-0 h-full">
         {activeChatId ? (
@@ -176,7 +178,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
                   <ProjectPicker
                     variant="pill"
                     selectedProject={currentProject}
-                    onSelectProject={(proj) => {
+                    onSelectProject={(proj: string) => {
                       chatStore.setDraftProject(proj);
                       chatStore.setActiveProject(proj);
                     }}
@@ -188,7 +190,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
               <div className="w-full max-w-2xl sm:max-w-3xl">
                 <ComposerBar
                   initialPrompt={composerPrompt}
-                  onSend={(prompt, options, attachments) => {
+                  onSend={(prompt: string, options: ComposerOptions, attachments: ComposerAttachment[]) => {
                     setComposerPrompt('');
                     handleSendPrompt(prompt, options, attachments);
                   }}
@@ -227,7 +229,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
               {/* Global composer bar at the bottom */}
               <div className="shrink-0 px-2.5 pb-2 pt-1 sm:px-4 sm:pb-4">
                 <ComposerBar
-                  onSend={(prompt, options, attachments) => handleSendPrompt(prompt, options, attachments)}
+                  onSend={(prompt: string, options: ComposerOptions, attachments: ComposerAttachment[]) => handleSendPrompt(prompt, options, attachments)}
                 />
               </div>
             </div>
@@ -247,7 +249,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
           activeChatId={activeChatId}
           onViewDiff={onViewDiff}
           onAddAgentSession={handleAddAgentSession}
-          onSelectChat={(id) => chatStore.setActiveChatId(id)}
+          onSelectChat={(id: string) => chatStore.setActiveChatId(id)}
           isMobileOpen={isRightSidebarOpenMobile}
           onMobileClose={() => setIsRightSidebarOpenMobile(false)}
         />

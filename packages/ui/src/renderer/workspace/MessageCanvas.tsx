@@ -59,7 +59,7 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Panel Header — on mobile, the unified TitleBar replaces this */}
-      <div className="hidden lg:flex items-center justify-between px-3 py-2.5 sm:px-4 sm:py-3 bg-[color:var(--brand-card)] border-b border-[color:var(--brand-border)] select-none gap-2">
+      <div className="hidden lg:flex items-center justify-between px-3 py-2.5 sm:px-4 sm:py-3 bg-brand-inner-bg/90 backdrop-blur-xs border-b border-brand-border/40 select-none gap-2">
         <div className="flex items-center gap-1.5 min-w-0 text-[color:var(--brand-text-muted)] text-xs">
           <div className="w-2.5 h-2.5 rounded-full bg-[color:var(--neon-live)] shadow-sm shadow-[color:var(--neon-live)]/50 shrink-0 mr-0.5" />
           <span className="hidden sm:inline hover:text-[color:var(--brand-text-main)] transition-colors">Workspace</span>
@@ -101,8 +101,8 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({
             <button
               onClick={onToggleRightSidebar}
               className="relative flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-lg text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover border border-transparent hover:border-brand-border/60 transition-colors cursor-pointer lg:hidden"
-              title="Toggle Diffs & Inspector"
-              aria-label="Toggle Diffs & Inspector"
+              title="Toggle Overview & Inspector"
+              aria-label="Toggle Overview & Inspector"
             >
               <FileCode2 size={16} />
               {modifiedFilesCount > 0 && (
