@@ -255,14 +255,36 @@ impl OpenCodeProvider {
         Ok(binary_path)
     }
 
+    /// Finds an available local TCP port, starting with `default_port` and falling back to next available port.
+    pub fn find_available_port(default_port: u16) -> u16 {
+        if std::net::TcpListener::bind(("127.0.0.1", default_port)).is_ok() {
+            return default_port;
+        }
+        for p in (default_port + 1)..=(default_port + 20) {
+            if std::net::TcpListener::bind(("127.0.0.1", p)).is_ok() {
+                return p;
+            }
+        }
+        if let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", 0)) {
+            if let Ok(addr) = listener.local_addr() {
+                return addr.port();
+            }
+        }
+        default_port
+    }
+
     /// Ensures that the local `opencode serve` daemon is running and reachable.
-    /// If not responding, automatically locates or provisions the binary and spawns it on port 4096.
+    /// If not responding, automatically locates or provisions the binary and spawns it on an available port.
     pub async fn ensure_opencode_server(client: &Client) -> anyhow::Result<String> {
-        let port = std::env::var("OPENCODE_PORT").unwrap_or_else(|_| "4096".to_string());
-        let base_url = format!("http://127.0.0.1:{}", port);
+        let requested_port = std::env::var("OPENCODE_PORT")
+            .ok()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(4096);
+
+        let base_url = format!("http://127.0.0.1:{}", requested_port);
         let check_url = format!("{}/session", base_url);
 
-        // 1. Quick check if already responding
+        // 1. Quick check if already responding on requested port
         if let Ok(res) = client
             .get(&check_url)
             .timeout(std::time::Duration::from_millis(800))
@@ -273,6 +295,12 @@ impl OpenCodeProvider {
                 return Ok(base_url);
             }
         }
+
+        // Determine an available port (handles port 4096 in use by another app)
+        let active_port = Self::find_available_port(requested_port);
+        let active_port_str = active_port.to_string();
+        let active_base_url = format!("http://127.0.0.1:{}", active_port);
+        let active_check_url = format!("{}/session", active_base_url);
 
         // 2. Find binary or automatically provision it on demand (Zero-Install workflow)
         let binary_path = match Self::find_opencode_binary() {
@@ -288,12 +316,18 @@ impl OpenCodeProvider {
         // 3. Spawn opencode serve headless
         tracing::info!(
             "Starting OpenCode server on port {} using binary: {}",
-            port,
+            active_port,
             binary_path.display()
         );
 
         let mut child = std::process::Command::new(&binary_path);
-        child.args(["serve", "--port", &port, "--hostname", "127.0.0.1"]);
+        child.args([
+            "serve",
+            "--port",
+            &active_port_str,
+            "--hostname",
+            "127.0.0.1",
+        ]);
         #[cfg(target_os = "windows")]
         {
             use std::os::windows::process::CommandExt;
@@ -305,25 +339,27 @@ impl OpenCodeProvider {
                 // Wait up to 6s for server to initialize
                 for _ in 0..30 {
                     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-                    if let Ok(res) = client.get(&check_url).send().await {
+                    if let Ok(res) = client.get(&active_check_url).send().await {
                         if res.status().is_success() {
-                            tracing::info!("OpenCode server successfully booted on {}", base_url);
-                            return Ok(base_url);
+                            tracing::info!(
+                                "OpenCode server successfully booted on {}",
+                                active_base_url
+                            );
+                            return Ok(active_base_url);
                         }
                     }
                 }
                 anyhow::bail!(
-                    "OpenCode server was spawned on port {} but did not become ready within 6 seconds. Check if port {} is occupied.",
-                    port, port
+                    "OpenCode server was spawned on port {} but did not become ready within 6 seconds.",
+                    active_port
                 );
             }
             Err(e) => {
                 anyhow::bail!(
-                    "Failed to start OpenCode server using binary '{}': {}. \
-                     To use OpenCode models (such as big-pickle), ensure port {} is free.",
+                    "Failed to start OpenCode server using binary '{}' on port {}: {}.",
                     binary_path.display(),
-                    e,
-                    port
+                    active_port,
+                    e
                 );
             }
         }
@@ -446,7 +482,26 @@ impl LlmProvider for OpenCodeProvider {
         messages: &[ChatMessage],
         tools: &[serde_json::Value],
     ) -> anyhow::Result<Receiver<AgentEvent>> {
-        // Route through local opencode serve daemon to ensure valid Zen credentials and avoid 403 errors
+        // 1. Direct Cloud API Mode (Zero Download & No Local Port):
+        // If the user has configured an OpenCode Zen API key in Settings, route directly
+        // to https://opencode.ai/zen/v1 over pure HTTPS without spawning a local daemon or port.
+        if let Some(ref key) = config.api_key {
+            let trimmed = key.trim();
+            if !trimmed.is_empty() && trimmed != "public" {
+                tracing::info!(
+                    "Routing directly to OpenCode Zen Cloud API via configured API key (no local daemon/port required)"
+                );
+                let mut cloud_config = config.clone();
+                if cloud_config.base_url.is_none() {
+                    cloud_config.base_url = Some(DEFAULT_OPENCODE_BASE_URL.to_string());
+                }
+                let openai = crate::providers::OpenAiProvider::new();
+                return openai.chat_stream(&cloud_config, messages, tools).await;
+            }
+        }
+
+        // 2. Free Tier Mode:
+        // Route through local headless opencode serve daemon to ensure valid Zen credentials and avoid 403 FreeTierError
         let server_base = Self::ensure_opencode_server(&self.client).await?;
 
         // Create a dedicated session for this execution
