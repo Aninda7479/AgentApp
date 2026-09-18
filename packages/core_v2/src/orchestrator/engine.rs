@@ -1,10 +1,10 @@
+use base64::Engine;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 use tokio_util::sync::CancellationToken;
-use base64::Engine;
 
-use crate::memory::ConversationContext;
 use crate::mcp::{McpClient, McpToolWrapper};
+use crate::memory::ConversationContext;
 use crate::providers::ProviderFactory;
 use crate::tools::ToolRegistry;
 use crate::types::{AgentEvent, ChatMessage, ContentBlock, ModelConfig, Role};
@@ -63,10 +63,7 @@ impl AgentEngine {
     }
 
     /// Creates a new `AgentEngine` with both a `ToolRegistry` and an `McpClient`.
-    pub fn with_mcp(
-        tools: Arc<ToolRegistry>,
-        mcp_client: Arc<Mutex<McpClient>>,
-    ) -> Self {
+    pub fn with_mcp(tools: Arc<ToolRegistry>, mcp_client: Arc<Mutex<McpClient>>) -> Self {
         Self {
             tools,
             mcp_client: Some(mcp_client),
@@ -107,7 +104,8 @@ impl AgentEngine {
         system_prompt: &str,
         user_prompt: &str,
     ) -> anyhow::Result<mpsc::Receiver<AgentEvent>> {
-        self.run_loop_with_attachments(config, system_prompt, user_prompt, Vec::new(), None).await
+        self.run_loop_with_attachments(config, system_prompt, user_prompt, Vec::new(), None)
+            .await
     }
 
     /// Runs the multi-turn agent interaction loop with a cancellation token.
@@ -175,6 +173,8 @@ impl AgentEngine {
                 let schemas = tools.list_schemas();
                 let mut turn_text = String::new();
                 let mut turn_tool_calls = Vec::new();
+                let mut stream_tool_outputs = std::collections::HashMap::new();
+                let mut stream_stop_reason = None;
                 let mut turn_succeeded = false;
                 let mut last_error_msg = String::new();
 
@@ -194,9 +194,7 @@ impl AgentEngine {
                             res = provider.chat_stream(&config, &messages, &schemas) => res,
                         }
                     } else {
-                        provider
-                            .chat_stream(&config, &messages, &schemas)
-                            .await
+                        provider.chat_stream(&config, &messages, &schemas).await
                     };
 
                     let mut stream_rx = match stream_res {
@@ -222,13 +220,19 @@ impl AgentEngine {
                                         _ = tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)) => {}
                                     }
                                 } else {
-                                    tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                                    tokio::time::sleep(tokio::time::Duration::from_secs(
+                                        RETRY_DELAY_SECS,
+                                    ))
+                                    .await;
                                 }
                                 continue;
                             } else {
                                 let _ = tx
                                     .send(AgentEvent::Error {
-                                        message: format!("Failed after {} attempts: {}", MAX_RETRIES, last_error_msg),
+                                        message: format!(
+                                            "Failed after {} attempts: {}",
+                                            MAX_RETRIES, last_error_msg
+                                        ),
                                     })
                                     .await;
                                 return;
@@ -238,6 +242,8 @@ impl AgentEngine {
 
                     turn_text.clear();
                     turn_tool_calls.clear();
+                    stream_tool_outputs.clear();
+                    stream_stop_reason = None;
                     let mut stream_error = None;
 
                     loop {
@@ -272,10 +278,17 @@ impl AgentEngine {
                             AgentEvent::Error { message } => {
                                 stream_error = Some(message.clone());
                             }
-                            AgentEvent::ToolOutput { .. } => {
+                            AgentEvent::ToolOutput {
+                                tool_use_id,
+                                output,
+                                is_error,
+                            } => {
+                                stream_tool_outputs
+                                    .insert(tool_use_id.clone(), (output.clone(), *is_error));
                                 let _ = tx.send(event).await;
                             }
-                            AgentEvent::Finished { .. } => {
+                            AgentEvent::Finished { stop_reason } => {
+                                stream_stop_reason = Some(stop_reason.clone());
                                 // Suppress per-turn provider finish events until outer loop turn ends
                             }
                             AgentEvent::AgentHandover { .. }
@@ -308,13 +321,19 @@ impl AgentEngine {
                                     _ = tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)) => {}
                                 }
                             } else {
-                                tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                                tokio::time::sleep(tokio::time::Duration::from_secs(
+                                    RETRY_DELAY_SECS,
+                                ))
+                                .await;
                             }
                             continue;
                         } else {
                             let _ = tx
                                 .send(AgentEvent::Error {
-                                    message: format!("Stream error after {} attempts: {}", MAX_RETRIES, last_error_msg),
+                                    message: format!(
+                                        "Stream error after {} attempts: {}",
+                                        MAX_RETRIES, last_error_msg
+                                    ),
                                 })
                                 .await;
                             return;
@@ -341,7 +360,10 @@ impl AgentEngine {
                                     _ = tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)) => {}
                                 }
                             } else {
-                                tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                                tokio::time::sleep(tokio::time::Duration::from_secs(
+                                    RETRY_DELAY_SECS,
+                                ))
+                                .await;
                             }
                             continue;
                         }
@@ -368,9 +390,15 @@ impl AgentEngine {
                 if turn_tool_calls.is_empty() && !turn_text.is_empty() {
                     let valid_names: Vec<String> = schemas
                         .iter()
-                        .filter_map(|s| s.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                        .filter_map(|s| {
+                            s.get("name")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                        })
                         .collect();
-                    if let Some((name, input)) = try_recover_text_tool_call(&turn_text, &valid_names) {
+                    if let Some((name, input)) =
+                        try_recover_text_tool_call(&turn_text, &valid_names)
+                    {
                         let call_id = format!("call_{}", uuid::Uuid::new_v4().simple());
                         let _ = tx
                             .send(AgentEvent::ToolCall {
@@ -400,44 +428,70 @@ impl AgentEngine {
                     }
                     context.add_message(ChatMessage::new(Role::Assistant, content_blocks));
 
+                    let total_calls = turn_tool_calls.len();
+                    let mut provider_executed_count = 0usize;
+
                     for (id, name, input) in turn_tool_calls {
                         if let Some(ref token) = cancellation_token {
                             if token.is_cancelled() {
-                                let _ = tx.send(AgentEvent::Finished {
-                                    stop_reason: "cancelled".to_string(),
-                                }).await;
+                                let _ = tx
+                                    .send(AgentEvent::Finished {
+                                        stop_reason: "cancelled".to_string(),
+                                    })
+                                    .await;
                                 return;
                             }
                         }
 
-                        let exec_res = if let Some(ref token) = cancellation_token {
-                            tokio::select! {
-                                _ = token.cancelled() => {
-                                    let _ = tx.send(AgentEvent::Finished {
-                                        stop_reason: "cancelled".to_string(),
-                                    }).await;
-                                    return;
-                                }
-                                res = tools.execute_tool(&name, input) => res,
-                            }
+                        let (output, is_error) = if let Some((stream_out, stream_err)) =
+                            stream_tool_outputs.remove(&id)
+                        {
+                            provider_executed_count += 1;
+                            (stream_out, stream_err)
                         } else {
-                            tools.execute_tool(&name, input).await
-                        };
+                            let exec_res = if let Some(ref token) = cancellation_token {
+                                tokio::select! {
+                                    _ = token.cancelled() => {
+                                        let _ = tx.send(AgentEvent::Finished {
+                                            stop_reason: "cancelled".to_string(),
+                                        }).await;
+                                        return;
+                                    }
+                                    res = tools.execute_tool(&name, input) => res,
+                                }
+                            } else {
+                                tools.execute_tool(&name, input).await
+                            };
 
-                        let (output, is_error) = match exec_res {
-                            Ok(out) => (out, false),
-                            Err(err) => (err.to_string(), true),
-                        };
+                            let (out, is_err) = match exec_res {
+                                Ok(out) => (out, false),
+                                Err(err) => (err.to_string(), true),
+                            };
 
-                        let _ = tx
-                            .send(AgentEvent::ToolOutput {
-                                tool_use_id: id.clone(),
-                                output: output.clone(),
-                                is_error,
-                            })
-                            .await;
+                            let _ = tx
+                                .send(AgentEvent::ToolOutput {
+                                    tool_use_id: id.clone(),
+                                    output: out.clone(),
+                                    is_error: is_err,
+                                })
+                                .await;
+                            (out, is_err)
+                        };
 
                         context.add_tool_result(id, output, is_error);
+                    }
+
+                    // If the provider executed all tools autonomously and finished its turn, complete the run
+                    if provider_executed_count == total_calls
+                        && (!turn_text.trim().is_empty()
+                            || stream_stop_reason.as_deref() == Some("stop"))
+                    {
+                        let _ = tx
+                            .send(AgentEvent::Finished {
+                                stop_reason: "end_turn".to_string(),
+                            })
+                            .await;
+                        return;
                     }
                 } else {
                     if !turn_text.is_empty() {
@@ -518,7 +572,9 @@ impl AgentEngine {
             let mut new_messages: Vec<ChatMessage> = Vec::new();
 
             // Add the new user message (with attachments if any)
-            let mut user_blocks = vec![ContentBlock::Text { text: user_prompt.clone() }];
+            let mut user_blocks = vec![ContentBlock::Text {
+                text: user_prompt.clone(),
+            }];
             for att in &attachments {
                 if let Some(img_block) = load_attachment_image_block(att).await {
                     user_blocks.push(img_block);
@@ -532,6 +588,8 @@ impl AgentEngine {
                 let schemas = tools.list_schemas();
                 let mut turn_text = String::new();
                 let mut turn_tool_calls = Vec::new();
+                let mut stream_tool_outputs = std::collections::HashMap::new();
+                let mut stream_stop_reason = None;
                 let mut turn_succeeded = false;
                 let mut last_error_msg = String::new();
 
@@ -548,12 +606,18 @@ impl AgentEngine {
                         Err(err) => {
                             last_error_msg = err.to_string();
                             if attempt < MAX_RETRIES {
-                                tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                                tokio::time::sleep(tokio::time::Duration::from_secs(
+                                    RETRY_DELAY_SECS,
+                                ))
+                                .await;
                                 continue;
                             } else {
                                 let _ = tx
                                     .send(AgentEvent::Error {
-                                        message: format!("Failed after {} attempts: {}", MAX_RETRIES, last_error_msg),
+                                        message: format!(
+                                            "Failed after {} attempts: {}",
+                                            MAX_RETRIES, last_error_msg
+                                        ),
                                     })
                                     .await;
                                 let _ = history_tx.send(new_messages).await;
@@ -564,6 +628,8 @@ impl AgentEngine {
 
                     turn_text.clear();
                     turn_tool_calls.clear();
+                    stream_tool_outputs.clear();
+                    stream_stop_reason = None;
                     let mut stream_error = None;
 
                     while let Some(event) = stream_rx.recv().await {
@@ -579,10 +645,18 @@ impl AgentEngine {
                             AgentEvent::Error { message } => {
                                 stream_error = Some(message.clone());
                             }
-                            AgentEvent::ToolOutput { .. } => {
+                            AgentEvent::ToolOutput {
+                                tool_use_id,
+                                output,
+                                is_error,
+                            } => {
+                                stream_tool_outputs
+                                    .insert(tool_use_id.clone(), (output.clone(), *is_error));
                                 let _ = tx.send(event).await;
                             }
-                            AgentEvent::Finished { .. } => {}
+                            AgentEvent::Finished { stop_reason } => {
+                                stream_stop_reason = Some(stop_reason.clone());
+                            }
                             _ => {
                                 let _ = tx.send(event).await;
                             }
@@ -592,12 +666,16 @@ impl AgentEngine {
                     if let Some(err) = stream_error {
                         last_error_msg = err;
                         if attempt < MAX_RETRIES {
-                            tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                            tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS))
+                                .await;
                             continue;
                         } else {
                             let _ = tx
                                 .send(AgentEvent::Error {
-                                    message: format!("Stream error after {} attempts: {}", MAX_RETRIES, last_error_msg),
+                                    message: format!(
+                                        "Stream error after {} attempts: {}",
+                                        MAX_RETRIES, last_error_msg
+                                    ),
                                 })
                                 .await;
                             let _ = history_tx.send(new_messages).await;
@@ -607,7 +685,8 @@ impl AgentEngine {
 
                     if turn_text.trim().is_empty() && turn_tool_calls.is_empty() {
                         if attempt < MAX_RETRIES {
-                            tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS)).await;
+                            tokio::time::sleep(tokio::time::Duration::from_secs(RETRY_DELAY_SECS))
+                                .await;
                             continue;
                         }
                     }
@@ -634,9 +713,15 @@ impl AgentEngine {
                 if turn_tool_calls.is_empty() && !turn_text.is_empty() {
                     let valid_names: Vec<String> = schemas
                         .iter()
-                        .filter_map(|s| s.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                        .filter_map(|s| {
+                            s.get("name")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                        })
                         .collect();
-                    if let Some((name, input)) = try_recover_text_tool_call(&turn_text, &valid_names) {
+                    if let Some((name, input)) =
+                        try_recover_text_tool_call(&turn_text, &valid_names)
+                    {
                         let call_id = format!("call_{}", uuid::Uuid::new_v4().simple());
                         let _ = tx
                             .send(AgentEvent::ToolCall {
@@ -668,23 +753,48 @@ impl AgentEngine {
                     context.add_message(assistant_msg.clone());
                     new_messages.push(assistant_msg);
 
-                    for (id, name, input) in turn_tool_calls {
-                        let (output, is_error) = match tools.execute_tool(&name, input).await {
-                            Ok(out) => (out, false),
-                            Err(err) => (err.to_string(), true),
-                        };
+                    let total_calls = turn_tool_calls.len();
+                    let mut provider_executed_count = 0usize;
 
-                        let _ = tx
-                            .send(AgentEvent::ToolOutput {
-                                tool_use_id: id.clone(),
-                                output: output.clone(),
-                                is_error,
-                            })
-                            .await;
+                    for (id, name, input) in turn_tool_calls {
+                        let (output, is_error) = if let Some((stream_out, stream_err)) =
+                            stream_tool_outputs.remove(&id)
+                        {
+                            provider_executed_count += 1;
+                            (stream_out, stream_err)
+                        } else {
+                            let (out, is_err) = match tools.execute_tool(&name, input).await {
+                                Ok(out) => (out, false),
+                                Err(err) => (err.to_string(), true),
+                            };
+
+                            let _ = tx
+                                .send(AgentEvent::ToolOutput {
+                                    tool_use_id: id.clone(),
+                                    output: out.clone(),
+                                    is_error: is_err,
+                                })
+                                .await;
+                            (out, is_err)
+                        };
 
                         let tool_msg = ChatMessage::tool_result(&id, &output, is_error);
                         context.add_message(tool_msg.clone());
                         new_messages.push(tool_msg);
+                    }
+
+                    // If the provider executed all tools autonomously and finished its turn, complete the run
+                    if provider_executed_count == total_calls
+                        && (!turn_text.trim().is_empty()
+                            || stream_stop_reason.as_deref() == Some("stop"))
+                    {
+                        let _ = tx
+                            .send(AgentEvent::Finished {
+                                stop_reason: "end_turn".to_string(),
+                            })
+                            .await;
+                        let _ = history_tx.send(new_messages).await;
+                        return;
                     }
                 } else {
                     if !turn_text.is_empty() {
@@ -716,16 +826,23 @@ impl AgentEngine {
 
 /// Attempts to parse and recover a tool call emitted as raw JSON, XML tags, or markdown text
 /// by smaller models (e.g. Llama 3.2 3B, Gemma 2 9B, Ollama local models).
-fn try_recover_text_tool_call(text: &str, valid_tool_names: &[String]) -> Option<(String, serde_json::Value)> {
+fn try_recover_text_tool_call(
+    text: &str,
+    valid_tool_names: &[String],
+) -> Option<(String, serde_json::Value)> {
     let trimmed = text.trim();
 
     // 1. Check for XML <artifact id="...">...</artifact> tags
     if valid_tool_names.iter().any(|v| v == "create_artifact") {
-        if let (Some(start_tag), Some(end_tag)) = (trimmed.find("<artifact"), trimmed.rfind("</artifact>")) {
+        if let (Some(start_tag), Some(end_tag)) =
+            (trimmed.find("<artifact"), trimmed.rfind("</artifact>"))
+        {
             let tag_content = &trimmed[start_tag..=end_tag + 10];
             let id = if let Some(id_start) = tag_content.find("id=\"") {
                 let rest = &tag_content[id_start + 4..];
-                rest.find('"').map(|end| rest[..end].to_string()).unwrap_or_else(|| "app".to_string())
+                rest.find('"')
+                    .map(|end| rest[..end].to_string())
+                    .unwrap_or_else(|| "app".to_string())
             } else {
                 "app".to_string()
             };
@@ -780,14 +897,19 @@ fn try_recover_text_tool_call(text: &str, valid_tool_names: &[String]) -> Option
                         let after_p_quote = &invoke_body[p_start + p_quote..];
                         if let Some(tag_close) = after_p_quote.find('>') {
                             let val_start = p_start + p_quote + tag_close + 1;
-                            let val_end = if let Some(p_end) = invoke_body[val_start..].find("parameter>") {
-                                let end_bracket = invoke_body[val_start..val_start + p_end].rfind('<').unwrap_or(p_end);
-                                val_start + end_bracket
-                            } else {
-                                invoke_body.len()
-                            };
+                            let val_end =
+                                if let Some(p_end) = invoke_body[val_start..].find("parameter>") {
+                                    let end_bracket = invoke_body[val_start..val_start + p_end]
+                                        .rfind('<')
+                                        .unwrap_or(p_end);
+                                    val_start + end_bracket
+                                } else {
+                                    invoke_body.len()
+                                };
                             let val_raw = invoke_body[val_start..val_end].trim();
-                            let parsed_val = if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(val_raw) {
+                            let parsed_val = if let Ok(json_val) =
+                                serde_json::from_str::<serde_json::Value>(val_raw)
+                            {
                                 json_val
                             } else {
                                 serde_json::json!(val_raw)
@@ -811,7 +933,8 @@ fn try_recover_text_tool_call(text: &str, valid_tool_names: &[String]) -> Option
         if let Ok(val) = serde_json::from_str::<serde_json::Value>(inside) {
             if let Some(name) = val.get("name").and_then(|n| n.as_str()) {
                 if valid_tool_names.iter().any(|v| v == name) {
-                    let params = val.get("parameters")
+                    let params = val
+                        .get("parameters")
                         .or_else(|| val.get("arguments"))
                         .or_else(|| val.get("input"))
                         .cloned()
@@ -823,7 +946,10 @@ fn try_recover_text_tool_call(text: &str, valid_tool_names: &[String]) -> Option
     }
 
     // 3. Try stripping markdown code fences if wrapped in ```json ... ```
-    let candidate = if let Some(code_block) = trimmed.strip_prefix("```json").or_else(|| trimmed.strip_prefix("```")) {
+    let candidate = if let Some(code_block) = trimmed
+        .strip_prefix("```json")
+        .or_else(|| trimmed.strip_prefix("```"))
+    {
         if let Some(end) = code_block.rfind("```") {
             code_block[..end].trim()
         } else {
@@ -841,7 +967,8 @@ fn try_recover_text_tool_call(text: &str, valid_tool_names: &[String]) -> Option
                 // Shape A: { "name": "...", "parameters": { ... } } or { "name": "...", "arguments": { ... } }
                 if let Some(name) = val.get("name").and_then(|n| n.as_str()) {
                     if valid_tool_names.iter().any(|v| v == name) {
-                        let params = val.get("parameters")
+                        let params = val
+                            .get("parameters")
                             .or_else(|| val.get("arguments"))
                             .or_else(|| val.get("input"))
                             .cloned()
@@ -850,9 +977,14 @@ fn try_recover_text_tool_call(text: &str, valid_tool_names: &[String]) -> Option
                     }
                 }
                 // Shape B: { "tool": "...", "input": { ... } } or { "tool_name": "...", "tool_args": { ... } }
-                if let Some(name) = val.get("tool").or_else(|| val.get("tool_name")).and_then(|n| n.as_str()) {
+                if let Some(name) = val
+                    .get("tool")
+                    .or_else(|| val.get("tool_name"))
+                    .and_then(|n| n.as_str())
+                {
                     if valid_tool_names.iter().any(|v| v == name) {
-                        let params = val.get("input")
+                        let params = val
+                            .get("input")
                             .or_else(|| val.get("tool_args"))
                             .or_else(|| val.get("parameters"))
                             .cloned()
@@ -895,7 +1027,10 @@ mod tests {
         assert!(block.is_some());
         if let Some(ContentBlock::Image { media_type, data }) = block {
             assert_eq!(media_type, "image/png");
-            assert_eq!(data, base64::engine::general_purpose::STANDARD.encode(fake_bytes));
+            assert_eq!(
+                data,
+                base64::engine::general_purpose::STANDARD.encode(fake_bytes)
+            );
         } else {
             panic!("Expected ContentBlock::Image");
         }
@@ -924,7 +1059,10 @@ mod tests {
         assert!(recovered.is_some());
         let (name, params) = recovered.unwrap();
         assert_eq!(name, "run_command");
-        assert_eq!(params.get("command").and_then(|v| v.as_str()), Some("yt-dlp --version"));
+        assert_eq!(
+            params.get("command").and_then(|v| v.as_str()),
+            Some("yt-dlp --version")
+        );
     }
 
     #[tokio::test]
@@ -948,4 +1086,3 @@ mod tests {
         );
     }
 }
-

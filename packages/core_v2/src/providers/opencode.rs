@@ -279,9 +279,9 @@ impl OpenCodeProvider {
         if let Ok(res) = client.get(&mcp_url).send().await {
             if let Ok(mcp_val) = res.json::<serde_json::Value>().await {
                 if mcp_val.get("telegram").is_none() {
-                    let user_bin = crate::storage::settings::get_superagent_dir()
-                        .join("bin")
-                        .join("telegram-mcp.js");
+                    let sa_dir = crate::storage::settings::get_superagent_dir();
+                    let root_mcp = sa_dir.join("telegram-mcp.js");
+                    let user_bin = sa_dir.join("bin").join("telegram-mcp.js");
                     let node_bin = std::env::current_dir()
                         .unwrap_or_default()
                         .join("node_modules")
@@ -291,14 +291,16 @@ impl OpenCodeProvider {
                         "C:\\ProgramData\\SuperAgent\\bin\\telegram-mcp.js",
                     );
 
-                    let resolved_path = if user_bin.exists() {
+                    let resolved_path = if root_mcp.exists() {
+                        root_mcp
+                    } else if user_bin.exists() {
                         user_bin
                     } else if node_bin.exists() {
                         node_bin
                     } else if fallback_bin.exists() {
                         fallback_bin
                     } else {
-                        user_bin
+                        root_mcp
                     };
 
                     let _ = client
@@ -678,15 +680,10 @@ impl LlmProvider for OpenCodeProvider {
                     .or_else(|| t.get("function").and_then(|f| f.get("parameters")))
                     .map(|p| p.to_string())
                     .unwrap_or_default();
-                let display_name = if name == "telegram" {
-                    "telegram_telegram"
-                } else {
-                    name
-                };
-                tools_guide.push_str(&format!("- {}({}): {}\n", display_name, params, desc));
+                tools_guide.push_str(&format!("- {}({}): {}\n", name, params, desc));
             }
             tools_guide.push_str(
-                "\nWhen you need to execute a tool, respond with a tool call in format:\n<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"tool_name\">\n<｜DSML｜parameter name=\"param_name\">value</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n\nYou can also execute any CLI command via bash, including yt-dlp to download media, ffmpeg to process media, or the telegram CLI command: telegram <file_path> [caption].\n\nCRITICAL FORMATTING RULES:\n- Put all your step-by-step reasoning, analysis, and execution planning inside <think>...</think> tags.\n- Do NOT write informal commentary outside <think> tags while calling tools.\n- Only output your final user-facing response once all actions and tools have completed successfully.\n"
+                "\nWhen you need to execute a tool, respond with a tool call in format:\n<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"tool_name\">\n<｜DSML｜parameter name=\"param_name\">value</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n\nWhen executing tasks, invoke the available tools according to their schema.\n\nCRITICAL FORMATTING RULES:\n- Put all your step-by-step reasoning, analysis, and execution planning inside <think>...</think> tags.\n- Do NOT write informal commentary outside <think> tags while calling tools.\n- Only output your final user-facing response once all actions and tools have completed successfully.\n"
             );
             system_text.push_str(&tools_guide);
         }
@@ -846,11 +843,17 @@ impl LlmProvider for OpenCodeProvider {
                                                         .and_then(|c| c.as_str())
                                                         .unwrap_or("")
                                                         .to_string();
-                                                    let tool_name = part
+                                                    let raw_tool_name = part
                                                         .get("tool")
                                                         .and_then(|t| t.as_str())
-                                                        .unwrap_or("")
-                                                        .to_string();
+                                                        .unwrap_or("");
+                                                    let tool_name = match raw_tool_name {
+                                                        "telegram_telegram" => {
+                                                            "telegram".to_string()
+                                                        }
+                                                        "bash" => "run_command".to_string(),
+                                                        _ => raw_tool_name.to_string(),
+                                                    };
                                                     let state = part.get("state");
                                                     let status = state
                                                         .and_then(|s| s.get("status"))
@@ -858,24 +861,52 @@ impl LlmProvider for OpenCodeProvider {
                                                         .unwrap_or("");
 
                                                     if !call_id.is_empty() {
-                                                        if seen_tool_calls.insert(call_id.clone()) {
-                                                            let input = state
-                                                                .and_then(|s| s.get("input"))
-                                                                .cloned()
-                                                                .unwrap_or_else(|| json!({}));
+                                                        let input = state
+                                                            .and_then(|s| s.get("input"))
+                                                            .cloned()
+                                                            .unwrap_or_else(|| json!({}));
+                                                        let has_non_empty_input =
+                                                            if let Some(obj) = input.as_object() {
+                                                                !obj.is_empty()
+                                                            } else {
+                                                                !input.is_null()
+                                                            };
+
+                                                        // Emit ToolCall once input is populated or status is active/done
+                                                        if !seen_tool_calls.contains(&call_id)
+                                                            && (has_non_empty_input
+                                                                || status == "running"
+                                                                || status == "completed"
+                                                                || status == "error")
+                                                        {
+                                                            seen_tool_calls.insert(call_id.clone());
                                                             let _ = sse_tx
                                                                 .send(AgentEvent::ToolCall {
                                                                     id: call_id.clone(),
                                                                     name: tool_name.clone(),
-                                                                    input,
+                                                                    input: input.clone(),
                                                                 })
                                                                 .await;
                                                         }
+
                                                         if (status == "completed"
                                                             || status == "error")
                                                             && seen_tool_outputs
                                                                 .insert(call_id.clone())
                                                         {
+                                                            // Ensure ToolCall was emitted before ToolOutput if somehow skipped
+                                                            if seen_tool_calls
+                                                                .insert(call_id.clone())
+                                                            {
+                                                                let _ = sse_tx
+                                                                    .send(AgentEvent::ToolCall {
+                                                                        id: call_id.clone(),
+                                                                        name: tool_name.clone(),
+                                                                        input,
+                                                                    })
+                                                                    .await;
+                                                            }
+
                                                             let output = if status == "completed" {
                                                                 state
                                                                     .and_then(|s| s.get("output"))
