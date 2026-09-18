@@ -37,9 +37,11 @@ import {
   Video as VideoIcon,
   ArrowLeft,
   Cpu,
+  Loader2,
+  Maximize2,
 } from 'lucide-react';
-import { useChatStore } from '../stores/chatStore';
-import { useSessionStore } from '../stores/sessionStore';
+import { useChatStore, type ChatStoreState } from '../stores/chatStore';
+import { useSessionStore, type SessionStoreState } from '../stores/sessionStore';
 import { usePartners } from '../pages/Settings/companion/library';
 import { PetSprite } from '../partner-popup/PetSprite';
 import { ErrorBoundary } from '../components/ErrorBoundary';
@@ -47,6 +49,8 @@ import type { TrajectoryStep } from '../pages/Workspace/TrajectoryCanvas';
 import type { PartnerMood, PartnerManifest } from '../partner-popup/types';
 import { moodReaction } from '../partner-popup/types';
 import { computeChatContextStats, formatByteSize, type SubagentExecutionItem, type ChatAttachmentItem } from '../logic/context';
+import { TrajectoryService } from '../logic/trajectory';
+import type { StoredChat } from '../core/types';
 
 export type WorkspaceSidebarTab = 'files' | 'agents' | 'partner' | 'info';
 
@@ -69,6 +73,229 @@ export interface ModifiedFileItem {
   modifiedCode: string;
   stepId: string;
 }
+
+export interface AttachmentPreviewItemProps {
+  attachment: ChatAttachmentItem;
+  defaultExpanded?: boolean;
+  onEnlarge?: (src: string, title: string) => void;
+}
+
+export const AttachmentPreviewItem: React.FC<AttachmentPreviewItemProps> = ({
+  attachment,
+  defaultExpanded = false,
+  onEnlarge,
+}) => {
+  const initialSrc =
+    attachment.url ||
+    attachment.dataUrl ||
+    (attachment.path.startsWith('data:') ||
+    attachment.path.startsWith('blob:') ||
+    attachment.path.startsWith('http://') ||
+    attachment.path.startsWith('https://')
+      ? attachment.path
+      : null);
+
+  const [imgSrc, setImgSrc] = useState<string | null>(initialSrc);
+  const [isLoading, setIsLoading] = useState<boolean>(attachment.mediaType === 'image' && !initialSrc);
+  const [hasError, setHasError] = useState<boolean>(false);
+  const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
+  const [copied, setCopied] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (attachment.mediaType !== 'image') return;
+    if (imgSrc) return;
+
+    let active = true;
+    setIsLoading(true);
+    setHasError(false);
+
+    TrajectoryService.readLocalImageBase64(attachment.path)
+      .then((base64: string | null) => {
+        if (!active) return;
+        if (base64) {
+          setImgSrc(base64);
+          setHasError(false);
+        } else {
+          setHasError(true);
+        }
+        setIsLoading(false);
+      })
+      .catch(() => {
+        if (active) {
+          setHasError(true);
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [attachment.path, attachment.mediaType, imgSrc]);
+
+  const handleCopyPath = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(attachment.path);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const isImage = attachment.mediaType === 'image';
+  const isVideo = attachment.mediaType === 'video';
+  const isCode = attachment.mediaType === 'code';
+
+  return (
+    <div className="rounded-xl bg-brand-inner-bg/50 hover:bg-brand-inner-bg/80 border border-brand-border/30 overflow-hidden transition-all duration-150">
+      {/* Attachment Row Header */}
+      <div
+        className="p-2 flex items-center justify-between gap-2.5 text-xs select-none"
+        onClick={() => {
+          if (isImage || isVideo) {
+            setIsExpanded((prev) => !prev);
+          }
+        }}
+      >
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          {/* Thumbnail / Icon */}
+          {isImage ? (
+            <div
+              className="w-10 h-10 rounded-lg overflow-hidden bg-black/30 border border-brand-border/40 shrink-0 relative flex items-center justify-center cursor-pointer group/thumb"
+              onClick={(e) => {
+                if (imgSrc && onEnlarge) {
+                  e.stopPropagation();
+                  onEnlarge(imgSrc, attachment.name);
+                }
+              }}
+              title={imgSrc ? 'Click to enlarge preview' : attachment.name}
+            >
+              {imgSrc ? (
+                <img
+                  src={imgSrc}
+                  alt={attachment.name}
+                  onError={() => setHasError(true)}
+                  className="w-full h-full object-cover transition-transform duration-200 group-hover/thumb:scale-110"
+                />
+              ) : isLoading ? (
+                <Loader2 size={14} className="animate-spin text-brand-textMuted" />
+              ) : (
+                <ImageIcon size={16} className="text-emerald-400/80" />
+              )}
+            </div>
+          ) : isVideo ? (
+            <div className="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 shrink-0 flex items-center justify-center text-purple-400">
+              <VideoIcon size={16} />
+            </div>
+          ) : isCode ? (
+            <div className="w-10 h-10 rounded-lg bg-cyan-500/10 border border-cyan-500/20 shrink-0 flex items-center justify-center text-cyan-400">
+              <FileCode2 size={16} />
+            </div>
+          ) : (
+            <div className="w-10 h-10 rounded-lg bg-brand-card border border-brand-border/40 shrink-0 flex items-center justify-center text-brand-textMuted">
+              <FileText size={16} />
+            </div>
+          )}
+
+          {/* Details */}
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-[11px] font-medium text-brand-textMain truncate select-text" title={attachment.name}>
+              {attachment.name}
+            </p>
+            <div className="flex items-center gap-1.5 text-[9px] text-brand-textMuted font-mono mt-0.5">
+              <span className="capitalize">{attachment.mediaType}</span>
+              {attachment.formattedSize && <span>· {attachment.formattedSize}</span>}
+              {attachment.source && (
+                <span className="px-1 py-0.2 rounded bg-brand-border/30 text-[8px] uppercase tracking-wider">
+                  {attachment.source}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {isImage && imgSrc && (
+            <button
+              onClick={() => onEnlarge?.(imgSrc, attachment.name)}
+              className="p-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer"
+              title="Enlarge preview"
+            >
+              <Maximize2 size={12} />
+            </button>
+          )}
+
+          <button
+            onClick={handleCopyPath}
+            className="p-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer"
+            title="Copy path"
+          >
+            {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+          </button>
+
+          {(isImage || isVideo) && (
+            <button
+              onClick={() => setIsExpanded((prev) => !prev)}
+              className="p-1 rounded-md text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer"
+              title={isExpanded ? 'Collapse preview' : 'Expand preview'}
+            >
+              {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Expanded Inline Preview */}
+      {isExpanded && (
+        <div className="px-2.5 pb-2.5 pt-0.5 border-t border-brand-border/20">
+          {isImage && (
+            imgSrc ? (
+              <div
+                className="relative group/preview rounded-lg overflow-hidden border border-brand-border/40 bg-black/40 cursor-zoom-in"
+                onClick={() => onEnlarge?.(imgSrc, attachment.name)}
+                title="Click to view full preview"
+              >
+                <img
+                  src={imgSrc}
+                  alt={attachment.name}
+                  className="w-full max-h-48 object-contain transition-transform duration-200 group-hover/preview:scale-[1.01]"
+                />
+                <div className="absolute inset-0 bg-black/35 opacity-0 group-hover/preview:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                  <span className="px-2 py-1 rounded bg-black/70 text-[10px] text-white backdrop-blur-xs flex items-center gap-1 font-mono">
+                    <Maximize2 size={11} /> Click to enlarge
+                  </span>
+                </div>
+              </div>
+            ) : isLoading ? (
+              <div className="h-32 rounded-lg border border-brand-border/30 bg-black/20 flex flex-col items-center justify-center gap-2 text-brand-textMuted animate-pulse">
+                <Loader2 size={16} className="animate-spin text-brand-primary" />
+                <span className="text-[10px] font-mono">Loading preview...</span>
+              </div>
+            ) : (
+              <div className="p-3 rounded-lg border border-brand-border/30 bg-black/20 text-center">
+                <p className="text-[10px] text-brand-textMuted font-mono">Image preview unavailable</p>
+                <p className="text-[9px] text-brand-textMuted/60 font-mono truncate mt-0.5">{attachment.path}</p>
+              </div>
+            )
+          )}
+
+          {isVideo && (
+            attachment.url ? (
+              <video
+                src={attachment.url}
+                controls
+                className="w-full max-h-44 rounded-lg bg-black border border-brand-border/40"
+              />
+            ) : (
+              <div className="p-3 rounded-lg border border-brand-border/30 bg-black/20 text-center">
+                <p className="text-[10px] text-brand-textMuted font-mono">Video file</p>
+                <p className="text-[9px] text-brand-textMuted/60 font-mono truncate mt-0.5">{attachment.path}</p>
+              </div>
+            )
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
   steps = [],
@@ -124,17 +351,30 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
   }, []);
 
   // Read stores
-  const chats = useChatStore((s) => s.chats);
-  const activeProject = useChatStore((s) => s.activeProject);
-  const draftProject = useChatStore((s) => s.draftProject);
-  const activeChat = chats.find((c) => c.id === activeChatId);
-  const runningSessions = useSessionStore((s) => s.runningSessions);
+  const chats = useChatStore((s: ChatStoreState) => s.chats);
+  const activeProject = useChatStore((s: ChatStoreState) => s.activeProject);
+  const draftProject = useChatStore((s: ChatStoreState) => s.draftProject);
+  const activeChat = chats.find((c: StoredChat) => c.id === activeChatId);
+  const runningSessions = useSessionStore((s: SessionStoreState) => s.runningSessions);
   const runningSession = activeChatId ? runningSessions.get(activeChatId) : null;
   const contextUsage = runningSession?.contextUsage || null;
   const [copiedId, setCopiedId] = useState(false);
   const [selectedSubagentId, setSelectedSubagentId] = useState<string | null>(null);
   const [copiedSubagentOutput, setCopiedSubagentOutput] = useState(false);
   const [copiedAttachmentPath, setCopiedAttachmentPath] = useState<string | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; title: string } | null>(null);
+
+  // Close lightbox on Escape key
+  useEffect(() => {
+    if (!lightboxImage) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setLightboxImage(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lightboxImage]);
 
   // Reset selected subagent drill-down when active chat changes
   useEffect(() => {
@@ -158,7 +398,7 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
 
   // Partner hooks
   const partners = usePartners();
-  const activePartner = partners.pets.find((p) => p.id === partners.activeId) || partners.pets[0] || null;
+  const activePartner = partners.pets.find((p: PartnerManifest) => p.id === partners.activeId) || partners.pets[0] || null;
 
   // Compute file changes from trajectory steps
   const modifiedFiles = useMemo(() => {
@@ -684,7 +924,7 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
                             cameraAngle={cameraAngle}
                             lipSync={lipSync}
                             darkCircles={darkCircles}
-                            onPoke={(part) => {
+                            onPoke={(part: string) => {
                               let response = "Hmm? Did you touch something?";
                               if (part === 'head') {
                                 const lines = [
@@ -1199,46 +1439,14 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
                   </span>
                 </div>
 
-                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                <div className="space-y-2 max-h-80 overflow-y-auto pr-0.5">
                   {chatStats.attachments.map((att: ChatAttachmentItem) => (
-                    <div
+                    <AttachmentPreviewItem
                       key={att.id}
-                      className="p-2 rounded-lg bg-brand-inner-bg/60 hover:bg-brand-inner-bg border border-brand-border/30 flex items-center justify-between gap-2 text-xs transition-colors"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        {att.mediaType === 'image' ? (
-                          <ImageIcon size={14} className="text-emerald-400 shrink-0" />
-                        ) : att.mediaType === 'video' ? (
-                          <VideoIcon size={14} className="text-purple-400 shrink-0" />
-                        ) : att.mediaType === 'code' ? (
-                          <FileCode2 size={14} className="text-cyan-400 shrink-0" />
-                        ) : (
-                          <FileText size={14} className="text-brand-textMuted shrink-0" />
-                        )}
-                        <div className="min-w-0">
-                          <p className="font-mono text-[11px] text-brand-textMain truncate">{att.name}</p>
-                          <span className="text-[9px] text-brand-textMuted font-mono">
-                            {att.mediaType} {att.formattedSize ? `· ${att.formattedSize}` : ''}
-                          </span>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(att.path);
-                          setCopiedAttachmentPath(att.path);
-                          setTimeout(() => setCopiedAttachmentPath(null), 2000);
-                        }}
-                        className="p-1 rounded text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors shrink-0 cursor-pointer"
-                        title="Copy Path"
-                      >
-                        {copiedAttachmentPath === att.path ? (
-                          <Check size={12} className="text-emerald-400" />
-                        ) : (
-                          <Copy size={12} />
-                        )}
-                      </button>
-                    </div>
+                      attachment={att}
+                      defaultExpanded={chatStats.attachments.length <= 3}
+                      onEnlarge={(src, title) => setLightboxImage({ src, title })}
+                    />
                   ))}
                 </div>
               </div>
@@ -1329,6 +1537,51 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
             {renderSidebarContent(true)}
           </aside>
         </>
+      )}
+
+      {/* Lightbox Modal for Attachment Image Preview */}
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-[3000] bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-4 sm:p-6 animate-in fade-in duration-150"
+          onClick={() => setLightboxImage(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image Preview"
+        >
+          {/* Header Bar */}
+          <div
+            className="w-full max-w-4xl flex items-center justify-between py-2.5 px-4 mb-2 bg-brand-sidebar/90 rounded-xl border border-white/10 backdrop-blur-md select-none"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <ImageIcon size={15} className="text-emerald-400 shrink-0" />
+              <span className="text-xs font-mono font-medium text-white truncate">
+                {lightboxImage.title}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setLightboxImage(null)}
+                className="p-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                title="Close (Esc)"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Centered Image */}
+          <div
+            className="relative max-w-4xl max-h-[80vh] flex items-center justify-center overflow-hidden rounded-2xl border border-white/10 shadow-2xl bg-black/50"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={lightboxImage.src}
+              alt={lightboxImage.title}
+              className="max-w-full max-h-[80vh] object-contain rounded-2xl"
+            />
+          </div>
+        </div>
       )}
     </>
   );

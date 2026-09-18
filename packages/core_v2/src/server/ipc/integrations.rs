@@ -1047,6 +1047,51 @@ pub async fn handle_integrations_channel(
                         }
                     }
                 }
+
+                // If not found directly, check if filename exists inside any chat or project directory
+                let filename_only = std::path::Path::new(path_str)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(path_str);
+                let superagent_dir = get_superagent_dir();
+                let search_dirs = vec![
+                    superagent_dir.join("chats"),
+                    superagent_dir.join("projects"),
+                ];
+                for base_dir in search_dirs {
+                    if let Ok(mut entries) = tokio::fs::read_dir(&base_dir).await {
+                        while let Ok(Some(entry)) = entries.next_entry().await {
+                            let p = entry.path();
+                            if p.is_dir() {
+                                let target = p.join(filename_only);
+                                if target.exists() && target.is_file() {
+                                    if let Ok(bytes) = tokio::fs::read(&target).await {
+                                        let b64_str = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                                        let mime = mime_guess::from_path(&target).first_or_octet_stream();
+                                        let data_uri = format!("data:{};base64,{}", mime, b64_str);
+                                        return Some(Ok(Json(serde_json::json!({ "data": data_uri }))));
+                                    }
+                                }
+                                let nested_chats = p.join("chats");
+                                if nested_chats.is_dir() {
+                                    if let Ok(mut sub_entries) = tokio::fs::read_dir(&nested_chats).await {
+                                        while let Ok(Some(sub_entry)) = sub_entries.next_entry().await {
+                                            let sub_target = sub_entry.path().join(filename_only);
+                                            if sub_target.exists() && sub_target.is_file() {
+                                                if let Ok(bytes) = tokio::fs::read(&sub_target).await {
+                                                    let b64_str = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                                                    let mime = mime_guess::from_path(&sub_target).first_or_octet_stream();
+                                                    let data_uri = format!("data:{};base64,{}", mime, b64_str);
+                                                    return Some(Ok(Json(serde_json::json!({ "data": data_uri }))));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Some(Ok(Json(serde_json::json!({ "data": null }))))
         }

@@ -29,6 +29,8 @@ export interface ChatAttachmentItem {
   id: string;
   name: string;
   path: string;
+  url?: string;
+  dataUrl?: string;
   mediaType: 'image' | 'pdf' | 'ppt' | 'audio' | 'video' | 'code' | 'file';
   size?: number;
   formattedSize?: string;
@@ -323,15 +325,53 @@ export function extractChatAttachments(steps: TrajectoryStep[], chat?: StoredCha
     // 1. Direct attachments array in step metadata
     if (Array.isArray(meta.attachments)) {
       for (const att of meta.attachments) {
-        if (typeof att === 'object' && att !== null) {
-          const item = att as { path?: string; url?: string; name?: string; mediaType?: ChatAttachmentItem['mediaType']; size?: number };
-          const path = item.path || item.url || item.name;
+        if (typeof att === 'string') {
+          const path = att;
           if (path && !seenPaths.has(path)) {
             seenPaths.add(path);
+            const resolvedUrl =
+              path.startsWith('data:') || path.startsWith('blob:') || path.startsWith('http://') || path.startsWith('https://')
+                ? path
+                : undefined;
             items.push({
               id: `att-${items.length}`,
-              name: item.name || getBasename(path),
+              name: getBasename(path),
               path,
+              url: resolvedUrl,
+              mediaType: getMediaType(path),
+              source: step.type === 'user' ? 'user' : 'tool',
+              stepId: step.id,
+              timestamp: step.timestamp,
+            });
+          }
+        } else if (typeof att === 'object' && att !== null) {
+          const item = att as {
+            path?: string;
+            fullPath?: string;
+            sourcePath?: string;
+            url?: string;
+            dataUrl?: string;
+            name?: string;
+            filename?: string;
+            mediaType?: ChatAttachmentItem['mediaType'];
+            size?: number;
+          };
+          const path = item.fullPath || item.sourcePath || item.path || item.url || item.dataUrl || item.filename || item.name;
+          if (path && !seenPaths.has(path)) {
+            seenPaths.add(path);
+            const resolvedUrl =
+              item.url ||
+              item.dataUrl ||
+              (path.startsWith('data:') || path.startsWith('blob:') || path.startsWith('http://') || path.startsWith('https://')
+                ? path
+                : undefined);
+
+            items.push({
+              id: `att-${items.length}`,
+              name: item.name || item.filename || getBasename(path),
+              path,
+              url: resolvedUrl,
+              dataUrl: item.dataUrl,
               mediaType: item.mediaType || getMediaType(path),
               size: item.size,
               formattedSize: item.size ? formatByteSize(item.size) : undefined,
@@ -348,10 +388,15 @@ export function extractChatAttachments(steps: TrajectoryStep[], chat?: StoredCha
     const mediaPath = typeof meta.mediaPath === 'string' ? meta.mediaPath : undefined;
     if (mediaPath && !seenPaths.has(mediaPath)) {
       seenPaths.add(mediaPath);
+      const resolvedUrl =
+        mediaPath.startsWith('data:') || mediaPath.startsWith('blob:') || mediaPath.startsWith('http://') || mediaPath.startsWith('https://')
+          ? mediaPath
+          : undefined;
       items.push({
         id: `att-${items.length}`,
         name: getBasename(mediaPath),
         path: mediaPath,
+        url: resolvedUrl,
         mediaType: (typeof meta.mediaType === 'string' ? (meta.mediaType as ChatAttachmentItem['mediaType']) : undefined) || getMediaType(mediaPath),
         source: 'generated',
         stepId: step.id,

@@ -181,4 +181,41 @@ describe('WorkspaceRightSidebar Component', () => {
     expect(html).toContain('Attachments (1)');
     expect(html).toContain('architecture.png');
   });
+
+  it('renders image attachment with visual thumbnail and preview', () => {
+    const stepsWithImage: TrajectoryStep[] = [
+      {
+        id: 'step-img',
+        type: 'user',
+        content: 'Check this image',
+        metadata: {
+          attachments: [
+            {
+              name: 'bollywoods.jpg',
+              path: 'bollywoods.jpg',
+              url: 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD',
+              mediaType: 'image',
+              size: 245760,
+            },
+          ],
+        },
+      },
+    ];
+
+    const html = renderToStaticMarkup(
+      <WorkspaceRightSidebar
+        steps={stepsWithImage}
+        activeChatId="chat-img"
+        isGenerating={false}
+        initialTab="info"
+      />
+    );
+
+    expect(html).toContain('Attachments (1)');
+    expect(html).toContain('bollywoods.jpg');
+    expect(html).toContain('<img');
+    expect(html).toContain('data:image/jpeg;base64');
+    expect(html).toContain('Click to enlarge');
+    expect(html).toContain('240.0 KB');
+  });
 });
