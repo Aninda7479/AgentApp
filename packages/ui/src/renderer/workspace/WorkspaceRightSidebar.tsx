@@ -167,7 +167,10 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
     steps.forEach((step) => {
       // Check tool metadata or content for file modifications
       if (step.metadata?.diff) {
-        const { filename, originalCode, modifiedCode } = step.metadata.diff as any;
+        const diff = step.metadata.diff as { filename?: string; originalCode?: string; modifiedCode?: string } | undefined;
+        const filename = diff?.filename;
+        const originalCode = diff?.originalCode;
+        const modifiedCode = diff?.modifiedCode;
         if (filename) {
           fileMap.set(filename, {
             filename,
@@ -936,7 +939,9 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
 
                         // Synth beep play
                         try {
-                          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                          const AudioContextClass =
+                            window.AudioContext ||
+                            (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
                           if (AudioContextClass) {
                             const audioCtx = new AudioContextClass();
                             const osc = audioCtx.createOscillator();
@@ -985,18 +990,30 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
           </div>
         )}
 
-        {/* ── TAB 4: CHAT INFO & CONTEXT ─────────────────────────────────── */}
+        {/* ── TAB 4: CHAT INFO & CONTEXT (Soft Apple/Claude UI) ───────────── */}
         {activeTab === 'info' && (
-          <div className="space-y-3 animate-in fade-in duration-150">
-            {/* Session Details Card */}
-            <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono text-brand-textMuted uppercase tracking-wider">Session</span>
+          <div className="space-y-5 px-1 py-1 text-xs animate-in fade-in duration-150">
+            {/* 1. Session Overview */}
+            <div className="space-y-3 pb-4 border-b border-brand-border/30">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-semibold text-brand-textMain leading-snug line-clamp-2">
+                    {activeChat?.title || 'Active Session'}
+                  </h4>
+                  {(activeChat?.project || draftProject || activeProject) && (
+                    <div className="mt-1 flex items-center gap-1.5 text-[11px] text-brand-textMuted">
+                      <span>Project:</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-brand-inner-bg/80 text-brand-textMain border border-brand-border/30">
+                        {activeChat?.project || draftProject || activeProject}
+                      </span>
+                    </div>
+                  )}
+                </div>
                 <span
-                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${
                     isGenerating
                       ? 'bg-[color:var(--neon-live)]/15 text-[color:var(--neon-live)] border border-[color:var(--neon-live)]/30'
-                      : 'bg-brand-inner-bg text-brand-textMuted border border-brand-border/40'
+                      : 'bg-brand-inner-bg/80 text-brand-textMuted border border-brand-border/30'
                   }`}
                 >
                   <span
@@ -1004,214 +1021,189 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
                       isGenerating ? 'bg-[color:var(--neon-live)] animate-pulse' : 'bg-brand-textMuted/60'
                     }`}
                   />
-                  {isGenerating ? 'Active Run' : 'Idle'}
+                  {isGenerating ? 'Active' : 'Idle'}
                 </span>
               </div>
 
-              <div>
-                <h4 className="text-sm font-semibold text-brand-textMain line-clamp-2 font-sans">
-                  {activeChat?.title || 'Active Session'}
-                </h4>
-                <p className="text-[11px] text-brand-textMuted mt-0.5">
-                  Project:{' '}
-                  <span className="text-brand-textMain font-medium">
-                    {activeChat?.project || draftProject || activeProject || 'None (Standalone)'}
-                  </span>
-                </p>
-              </div>
-
-              {/* Chat ID Display with Copy Button */}
-              <div className="p-2 rounded-lg bg-brand-inner-bg/80 border border-brand-border/50 flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <span className="text-[9px] font-mono text-brand-textMuted uppercase tracking-wider block">Chat ID</span>
-                  <span className="text-[11px] font-mono text-brand-textMain truncate block select-all">
+              {/* Chat ID row */}
+              <div className="flex items-center justify-between py-1 text-[11px]">
+                <span className="text-brand-textMuted font-mono">Chat ID</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-[11px] text-brand-textMain px-1.5 py-0.5 rounded bg-brand-inner-bg/80 border border-brand-border/30 select-all max-w-[140px] truncate">
                     {activeChatId || 'draft-chat'}
                   </span>
+                  <button
+                    onClick={() => {
+                      if (activeChatId) {
+                        navigator.clipboard.writeText(activeChatId);
+                        setCopiedId(true);
+                        setTimeout(() => setCopiedId(false), 2000);
+                      }
+                    }}
+                    className="p-1 rounded text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer"
+                    title="Copy Chat ID"
+                  >
+                    {copiedId ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                  </button>
                 </div>
-                <button
-                  onClick={() => {
-                    if (activeChatId) {
-                      navigator.clipboard.writeText(activeChatId);
-                      setCopiedId(true);
-                      setTimeout(() => setCopiedId(false), 2000);
-                    }
-                  }}
-                  className="p-1.5 rounded-md hover:bg-brand-hover text-brand-textMuted hover:text-brand-textMain transition-colors cursor-pointer shrink-0"
-                  title="Copy Chat ID"
-                >
-                  {copiedId ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-                </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-brand-border/40 text-[11px]">
-                <div>
-                  <span className="text-brand-textMuted text-[10px] block">Model</span>
-                  <span className="text-brand-textMain font-mono font-medium truncate block">
-                    {activeChat?.model || 'Auto Orchestrator'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-brand-textMuted text-[10px] block">Created</span>
-                  <span className="text-brand-textMain font-medium block">
-                    {activeChat?.timestamp ? new Date(activeChat.timestamp).toLocaleDateString() : 'Recent'}
-                  </span>
-                </div>
+              {/* Adaptive Mode / Model row */}
+              <div className="flex items-center justify-between py-1 text-[11px]">
+                <span className="text-brand-textMuted">Mode</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-mono text-[10px] font-medium bg-brand-inner-bg/90 text-brand-textMain border border-brand-border/30">
+                  <Sparkles size={11} className="text-brand-primary" />
+                  {chatStats.models.displayLabel}
+                </span>
               </div>
+
+              {/* Created row */}
+              {activeChat?.timestamp && (
+                <div className="flex items-center justify-between py-1 text-[11px]">
+                  <span className="text-brand-textMuted">Created</span>
+                  <span className="text-brand-textMain font-medium">
+                    {new Date(activeChat.timestamp).toLocaleDateString()}
+                  </span>
+                </div>
+              )}
             </div>
 
-            {/* Context Usage & Chat History Length Card */}
-            <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2.5">
+            {/* 2. Context & Tokens (No Progress Bar, Zero-Suppressed) */}
+            <div className="space-y-2.5 pb-4 border-b border-brand-border/30">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono text-brand-textMuted uppercase tracking-wider">Context Window</span>
-                <span
-                  className={`text-xs font-mono font-semibold ${
-                    chatStats.pct > 80 ? 'text-[color:var(--neon-attention)]' : 'text-brand-textMain'
-                  }`}
-                >
+                <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-brand-textMuted">
+                  Context Window
+                </span>
+                <span className="text-[11px] font-mono font-semibold text-brand-textMain">
                   {chatStats.pct > 0 ? `${chatStats.pct}%` : chatStats.usedTokens > 0 ? '< 1%' : '0%'}
                 </span>
               </div>
 
-              <div className="flex items-baseline justify-between">
-                <span className="text-sm font-mono font-bold text-brand-textMain">
-                  {chatStats.formattedTokens} <span className="text-xs text-brand-textMuted font-normal">/ {chatStats.formattedLimit} tokens</span>
+              <div className="flex items-baseline justify-between text-xs">
+                <span className="font-mono font-semibold text-brand-textMain text-sm">
+                  {chatStats.formattedTokens}{' '}
+                  <span className="text-[11px] text-brand-textMuted font-normal">
+                    / {chatStats.formattedLimit} tokens
+                  </span>
                 </span>
                 <span className="text-[10px] text-brand-textMuted font-mono">
                   ~{Math.max(0, Math.round((chatStats.limitTokens - chatStats.usedTokens) / 1000))}k remaining
                 </span>
               </div>
 
-              {/* Progress Bar */}
-              <div className="w-full h-2 rounded-full bg-brand-bg/80 border border-brand-border/40 overflow-hidden">
-                <div
-                  className={`h-full transition-all duration-300 rounded-full ${
-                    chatStats.pct > 80
-                      ? 'bg-[color:var(--neon-attention)]'
-                      : chatStats.pct > 50
-                      ? 'bg-amber-400'
-                      : 'bg-emerald-500'
-                  }`}
-                  style={{ width: `${Math.min(Math.max(chatStats.pct, chatStats.usedTokens > 0 ? 2 : 0), 100)}%` }}
-                />
-              </div>
-
-              <div className="flex items-center justify-between text-[10px] text-brand-textMuted border-b border-brand-border/30 pb-2">
-                <span>Memory utilization</span>
-                <span>{chatStats.pct > 80 ? 'Approaching capacity' : 'Healthy buffer'}</span>
-              </div>
-
-              {/* Token Breakdown */}
-              <div className="grid grid-cols-2 gap-1.5 pt-0.5 text-[10px] font-mono">
-                <div className="p-1.5 rounded bg-brand-inner-bg/60 border border-brand-border/30">
-                  <span className="text-brand-textMuted block text-[9px]">User Prompts</span>
-                  <span className="text-brand-textMain font-semibold">{chatStats.breakdown.user.toLocaleString()} tok</span>
-                </div>
-                <div className="p-1.5 rounded bg-brand-inner-bg/60 border border-brand-border/30">
-                  <span className="text-brand-textMuted block text-[9px]">Assistant</span>
-                  <span className="text-brand-textMain font-semibold">{chatStats.breakdown.assistant.toLocaleString()} tok</span>
-                </div>
-                <div className="p-1.5 rounded bg-brand-inner-bg/60 border border-brand-border/30">
-                  <span className="text-brand-textMuted block text-[9px]">Tools & System</span>
-                  <span className="text-brand-textMain font-semibold">{(chatStats.breakdown.tools + chatStats.breakdown.system).toLocaleString()} tok</span>
-                </div>
-                <div className="p-1.5 rounded bg-brand-inner-bg/60 border border-brand-border/30">
-                  <span className="text-brand-textMuted block text-[9px]">Sub-agents</span>
-                  <span className="text-brand-textMain font-semibold">{chatStats.breakdown.subagents.toLocaleString()} tok</span>
-                </div>
+              {/* Non-zero Token Breakdown Chips */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {chatStats.breakdown.user > 0 && (
+                  <span className="px-2 py-0.5 rounded-md bg-brand-inner-bg/80 text-[10px] font-mono text-brand-textMuted border border-brand-border/30">
+                    User: <strong className="text-brand-textMain font-medium">{chatStats.breakdown.user.toLocaleString()}</strong>
+                  </span>
+                )}
+                {chatStats.breakdown.assistant > 0 && (
+                  <span className="px-2 py-0.5 rounded-md bg-brand-inner-bg/80 text-[10px] font-mono text-brand-textMuted border border-brand-border/30">
+                    Assistant: <strong className="text-brand-textMain font-medium">{chatStats.breakdown.assistant.toLocaleString()}</strong>
+                  </span>
+                )}
+                {(chatStats.breakdown.tools + chatStats.breakdown.system) > 0 && (
+                  <span className="px-2 py-0.5 rounded-md bg-brand-inner-bg/80 text-[10px] font-mono text-brand-textMuted border border-brand-border/30">
+                    Tools & System: <strong className="text-brand-textMain font-medium">{(chatStats.breakdown.tools + chatStats.breakdown.system).toLocaleString()}</strong>
+                  </span>
+                )}
+                {chatStats.breakdown.subagents > 0 && (
+                  <span className="px-2 py-0.5 rounded-md bg-brand-inner-bg/80 text-[10px] font-mono text-brand-textMuted border border-brand-border/30">
+                    Sub-agents: <strong className="text-brand-textMain font-medium">{chatStats.breakdown.subagents.toLocaleString()}</strong>
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* Total Cost Card (Main Chat + Sub-agents) */}
-            <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Coins size={13} className="text-amber-400" />
-                  <span className="text-[11px] font-mono text-brand-textMuted uppercase tracking-wider">Total Chat Cost</span>
-                </div>
-                <span className="text-xs font-mono font-bold text-brand-textMain">
-                  {chatStats.isFreeModel
-                    ? '$0.00'
-                    : chatStats.totalCost < 0.001
-                    ? '< $0.001'
-                    : `$${chatStats.totalCost.toFixed(4)}`}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 pt-1 text-[10px] font-mono">
-                <div>
-                  <span className="text-brand-textMuted block">Main Chat</span>
-                  <span className="text-brand-textMain font-medium">
-                    {chatStats.isFreeModel ? '$0.00' : chatStats.mainChatCost < 0.001 ? '< $0.001' : `$${chatStats.mainChatCost.toFixed(4)}`}
+            {/* 3. Cost & Usage (Zero-Suppressed) */}
+            {(!chatStats.isFreeModel || chatStats.totalCost > 0) && (
+              <div className="space-y-2 pb-4 border-b border-brand-border/30">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-brand-textMuted">
+                    Estimated Cost
                   </span>
-                </div>
-                <div>
-                  <span className="text-brand-textMuted block">Sub-agents</span>
-                  <span className="text-brand-textMain font-medium">
-                    {chatStats.isFreeModel || chatStats.subagentsCost === 0
-                      ? '$0.00'
-                      : chatStats.subagentsCost < 0.001
+                  <span className="text-xs font-mono font-bold text-brand-textMain">
+                    {chatStats.isFreeModel
+                      ? 'Free (Local)'
+                      : chatStats.totalCost < 0.001
                       ? '< $0.001'
-                      : `$${chatStats.subagentsCost.toFixed(4)}`}
+                      : `$${chatStats.totalCost.toFixed(4)}`}
                   </span>
                 </div>
-              </div>
 
-              <div className="text-[9px] text-brand-textMuted font-mono pt-1 border-t border-brand-border/30">
-                {chatStats.isFreeModel
-                  ? 'Local / Free model (zero API billing)'
-                  : `Rates: $${chatStats.pricingRates.inputPrice} in / $${chatStats.pricingRates.outputPrice} out per 1M tok`}
-              </div>
-            </div>
+                {chatStats.subagentsCost > 0 && (
+                  <div className="flex items-center justify-between text-[11px] text-brand-textMuted font-mono">
+                    <span>Main Chat: {chatStats.mainChatCost < 0.001 ? '< $0.001' : `$${chatStats.mainChatCost.toFixed(4)}`}</span>
+                    <span>Sub-agents: {chatStats.subagentsCost < 0.001 ? '< $0.001' : `$${chatStats.subagentsCost.toFixed(4)}`}</span>
+                  </div>
+                )}
 
-            {/* Total Size Card */}
-            <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <HardDrive size={13} className="text-brand-textMuted" />
-                  <span className="text-[11px] font-mono text-brand-textMuted uppercase tracking-wider">Total Chat Size</span>
+                {!chatStats.isFreeModel && (
+                  <p className="text-[9px] text-brand-textMuted/70 font-mono">
+                    Rates: ${chatStats.pricingRates.inputPrice} in / ${chatStats.pricingRates.outputPrice} out per 1M tok
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* 4. Storage & Trajectory (Zero-Suppressed) */}
+            {(chatStats.totalSizeBytes > 0 || steps.length > 0) && (
+              <div className="space-y-2 pb-4 border-b border-brand-border/30">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-brand-textMuted">
+                    Storage & Activity
+                  </span>
+                  {chatStats.totalSizeBytes > 0 && (
+                    <span className="text-xs font-mono font-medium text-brand-textMain">
+                      {chatStats.formattedSize}
+                    </span>
+                  )}
                 </div>
-                <span className="text-xs font-mono font-bold text-brand-textMain">
-                  {chatStats.formattedSize}
-                </span>
-              </div>
 
-              <div className="grid grid-cols-2 gap-2 pt-1 text-[10px] font-mono">
-                <div>
-                  <span className="text-brand-textMuted block">Transcript</span>
-                  <span className="text-brand-textMain font-medium">
-                    {formatByteSize(chatStats.transcriptBytes)}
+                {chatStats.attachmentsBytes > 0 && (
+                  <div className="flex items-center justify-between text-[11px] text-brand-textMuted font-mono">
+                    <span>Transcript: {formatByteSize(chatStats.transcriptBytes)}</span>
+                    <span>Media: {formatByteSize(chatStats.attachmentsBytes)}</span>
+                  </div>
+                )}
+
+                {steps.length > 0 && (
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-brand-textMuted">Trajectory Steps</span>
+                    <span className="font-mono text-brand-textMain font-medium">{steps.length}</span>
+                  </div>
+                )}
+
+                {modifiedFiles.length > 0 && (
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-brand-textMuted">Modified Files</span>
+                    <button
+                      onClick={() => setActiveTab('files')}
+                      className="font-mono text-brand-primary hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <span>{modifiedFiles.length} file{modifiedFiles.length > 1 ? 's' : ''}</span>
+                      <ChevronRight size={12} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 5. Attachments & Media (STRICTLY ZERO-SUPPRESSED: Only if attachments.length > 0) */}
+            {chatStats.attachments.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-brand-textMuted">
+                    Attachments ({chatStats.attachments.length})
                   </span>
                 </div>
-                <div>
-                  <span className="text-brand-textMuted block">Media & Files</span>
-                  <span className="text-brand-textMain font-medium">
-                    {formatByteSize(chatStats.attachmentsBytes)}
-                  </span>
-                </div>
-              </div>
-            </div>
 
-            {/* Attachments & Media Section */}
-            <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Paperclip size={13} className="text-brand-textMuted" />
-                  <span className="text-[11px] font-mono text-brand-textMuted uppercase tracking-wider">
-                    Attachments & Media ({chatStats.attachments.length})
-                  </span>
-                </div>
-              </div>
-
-              {chatStats.attachments.length === 0 ? (
-                <div className="py-4 text-center text-[11px] text-brand-textMuted">
-                  No files, images, or media attached in this session.
-                </div>
-              ) : (
                 <div className="space-y-1.5 max-h-48 overflow-y-auto">
                   {chatStats.attachments.map((att: ChatAttachmentItem) => (
                     <div
                       key={att.id}
-                      className="p-2 rounded-lg bg-brand-inner-bg/70 border border-brand-border/40 flex items-center justify-between gap-2 text-xs"
+                      className="p-2 rounded-lg bg-brand-inner-bg/60 hover:bg-brand-inner-bg border border-brand-border/30 flex items-center justify-between gap-2 text-xs transition-colors"
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         {att.mediaType === 'image' ? (
@@ -1249,55 +1241,8 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-
-            {/* Trajectory & Changes Summary */}
-            <div className="p-3.5 rounded-xl bg-brand-card/70 border border-brand-border/60 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono text-brand-textMuted uppercase tracking-wider">Trajectory Stats</span>
-                <Layers size={13} className="text-brand-textMuted" />
               </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="p-2 rounded-lg bg-brand-inner-bg border border-brand-border/30">
-                  <span className="text-[10px] text-brand-textMuted block">Total Steps</span>
-                  <span className="font-semibold text-brand-textMain text-sm">{steps.length}</span>
-                </div>
-                <div className="p-2 rounded-lg bg-brand-inner-bg border border-brand-border/30">
-                  <span className="text-[10px] text-brand-textMuted block">Modified Files</span>
-                  <span className="font-semibold text-brand-textMain text-sm">{modifiedFiles.length}</span>
-                </div>
-              </div>
-
-              {modifiedFiles.length > 0 && (
-                <button
-                  onClick={() => setActiveTab('files')}
-                  className="w-full mt-1 py-1.5 px-3 rounded-lg text-xs font-medium bg-brand-primary/10 hover:bg-brand-primary/20 text-brand-primary border border-brand-primary/20 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
-                >
-                  <FileCode2 size={13} />
-                  <span>Review {modifiedFiles.length} Changed File{modifiedFiles.length > 1 ? 's' : ''}</span>
-                </button>
-              )}
-            </div>
-
-            {/* Quick Actions */}
-            <div className="p-3 rounded-xl bg-brand-card/40 border border-brand-border/40 space-y-1.5">
-              <span className="text-[10px] font-mono text-brand-textMuted uppercase tracking-wider block px-1">Actions</span>
-              <button
-                onClick={() => {
-                  if (activeChatId) {
-                    navigator.clipboard.writeText(activeChatId);
-                    setCopiedId(true);
-                    setTimeout(() => setCopiedId(false), 2000);
-                  }
-                }}
-                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer"
-              >
-                <span>Copy Session ID</span>
-                {copiedId ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-              </button>
-            </div>
+            )}
           </div>
         )}
       </div>

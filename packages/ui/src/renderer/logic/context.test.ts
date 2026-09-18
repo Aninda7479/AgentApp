@@ -5,6 +5,7 @@ import {
   getModelPricingRates,
   extractChatSubagents,
   extractChatAttachments,
+  extractChatModels,
   computeChatContextStats,
   formatByteSize,
   formatTokenCount,
@@ -171,5 +172,27 @@ describe('context logic and estimation', () => {
     expect(stats.totalSizeBytes).toBe(0);
     expect(stats.subagents).toHaveLength(0);
     expect(stats.attachments).toHaveLength(0);
+    expect(stats.models.displayLabel).toBe('Adaptive');
+  });
+
+  it('extracts models adaptively across chat steps', () => {
+    const singleModelSteps: TrajectoryStep[] = [
+      { id: '1', type: 'user', content: 'hello' },
+      { id: '2', type: 'assistant', content: 'hi', model: 'gpt-4o' },
+    ];
+    const singleInfo = extractChatModels(singleModelSteps);
+    expect(singleInfo.distinctModels).toEqual(['gpt-4o']);
+    expect(singleInfo.isAdaptive).toBe(false);
+    expect(singleInfo.displayLabel).toBe('Adaptive · gpt-4o');
+
+    const multiModelSteps: TrajectoryStep[] = [
+      { id: '1', type: 'user', content: 'hello' },
+      { id: '2', type: 'assistant', content: 'step 1', model: 'gpt-4o' },
+      { id: '3', type: 'assistant', content: 'step 2', model: 'claude-3-5-sonnet' },
+    ];
+    const multiInfo = extractChatModels(multiModelSteps);
+    expect(multiInfo.distinctModels).toEqual(['gpt-4o', 'claude-3-5-sonnet']);
+    expect(multiInfo.isAdaptive).toBe(true);
+    expect(multiInfo.displayLabel).toBe('Adaptive (2 models)');
   });
 });

@@ -104,7 +104,7 @@ describe('WorkspaceRightSidebar Component', () => {
     expect(html).not.toContain('Unrelated Chat 2');
   });
 
-  it('renders accurate context window tokens, cost, size, and chat ID in the Info tab', () => {
+  it('renders clean Apple/Claude Soft UI without progress bar and suppresses zero stats', () => {
     const conversationSteps: TrajectoryStep[] = [
       {
         id: 'step-1',
@@ -127,27 +127,58 @@ describe('WorkspaceRightSidebar Component', () => {
       />
     );
 
-    // Session ID display
+    // Session ID display & adaptive mode
     expect(html).toContain('chat-1');
     expect(html).toContain('Copy Chat ID');
+    expect(html).toContain('Mode');
+    expect(html).toContain('Adaptive');
 
     // Context Window should show actual tokens, NOT 0%!
     expect(html).toContain('Context Window');
     expect(html).not.toContain('>0%<');
     expect(html).toContain('tokens');
-    expect(html).toContain('User Prompts');
-    expect(html).toContain('Assistant');
+    expect(html).toContain('User:');
+    expect(html).toContain('Assistant:');
 
-    // Total Cost
-    expect(html).toContain('Total Chat Cost');
-    expect(html).toContain('Main Chat');
-    expect(html).toContain('Sub-agents');
+    // NO progress bar
+    expect(html).not.toContain('Memory utilization');
+    expect(html).not.toContain('h-2 rounded-full');
 
-    // Total Size
-    expect(html).toContain('Total Chat Size');
-    expect(html).toContain('Transcript');
+    // Zero-Stat Suppression:
+    // With 0 sub-agents, Sub-agents token breakdown & cost breakdown must NOT be displayed!
+    expect(html).not.toContain('Sub-agents:');
+    // With 0 attachments, Attachments section must NOT be rendered!
+    expect(html).not.toContain('Attachments (');
 
-    // Attachments section
-    expect(html).toContain('Attachments &amp; Media');
+    // Cost & Storage
+    expect(html).toContain('Estimated Cost');
+    expect(html).toContain('Storage &amp; Activity');
+  });
+
+  it('renders attachments section only when attachments exist', () => {
+    const stepsWithAttachment: TrajectoryStep[] = [
+      {
+        id: 'step-1',
+        type: 'user',
+        content: 'Check this diagram',
+        metadata: {
+          attachments: [
+            { name: 'architecture.png', path: '/docs/architecture.png', mediaType: 'image' },
+          ],
+        },
+      },
+    ];
+
+    const html = renderToStaticMarkup(
+      <WorkspaceRightSidebar
+        steps={stepsWithAttachment}
+        activeChatId="chat-1"
+        isGenerating={false}
+        initialTab="info"
+      />
+    );
+
+    expect(html).toContain('Attachments (1)');
+    expect(html).toContain('architecture.png');
   });
 });

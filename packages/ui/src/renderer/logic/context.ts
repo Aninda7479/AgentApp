@@ -37,6 +37,12 @@ export interface ChatAttachmentItem {
   timestamp?: string;
 }
 
+export interface ChatModelInfo {
+  distinctModels: string[];
+  isAdaptive: boolean;
+  displayLabel: string;
+}
+
 export interface ChatContextStats {
   usedTokens: number;
   limitTokens: number;
@@ -59,6 +65,7 @@ export interface ChatContextStats {
   formattedSize: string;
   transcriptBytes: number;
   attachmentsBytes: number;
+  models: ChatModelInfo;
   subagents: SubagentExecutionItem[];
   attachments: ChatAttachmentItem[];
 }
@@ -418,6 +425,44 @@ export function extractChatAttachments(steps: TrajectoryStep[], chat?: StoredCha
 }
 
 /**
+ * Extracts models used across chat trajectory steps.
+ * When multiple models or mid-conversation switches occur, provides an adaptive label.
+ */
+export function extractChatModels(steps?: TrajectoryStep[], chat?: StoredChat): ChatModelInfo {
+  const modelsSet = new Set<string>();
+
+  for (const step of steps || []) {
+    if (step.model && typeof step.model === 'string' && step.model.trim()) {
+      modelsSet.add(step.model.trim());
+    }
+    const meta = step.metadata as Record<string, unknown> | undefined;
+    if (meta && typeof meta.model === 'string' && meta.model.trim()) {
+      modelsSet.add(meta.model.trim());
+    }
+  }
+
+  if (chat?.model && typeof chat.model === 'string' && chat.model.trim()) {
+    modelsSet.add(chat.model.trim());
+  }
+
+  const distinctModels = Array.from(modelsSet).filter(Boolean);
+  const isAdaptive = distinctModels.length !== 1;
+
+  let displayLabel = 'Adaptive';
+  if (distinctModels.length === 1) {
+    displayLabel = `Adaptive · ${distinctModels[0]}`;
+  } else if (distinctModels.length > 1) {
+    displayLabel = `Adaptive (${distinctModels.length} models)`;
+  }
+
+  return {
+    distinctModels,
+    isAdaptive,
+    displayLabel,
+  };
+}
+
+/**
  * Computes comprehensive context, token, pricing, size, subagent, and attachment stats for a chat.
  */
 export function computeChatContextStats(
@@ -429,6 +474,7 @@ export function computeChatContextStats(
 ): ChatContextStats {
   const subagents = extractChatSubagents(steps);
   const attachments = extractChatAttachments(steps, chat);
+  const models = extractChatModels(steps, chat);
 
   if (!steps || steps.length === 0) {
     const rates = getModelPricingRates(provider, model);
@@ -453,6 +499,7 @@ export function computeChatContextStats(
       formattedSize: '0 B',
       transcriptBytes: 0,
       attachmentsBytes: 0,
+      models,
       subagents,
       attachments,
     };
@@ -543,6 +590,7 @@ export function computeChatContextStats(
     formattedSize: formatByteSize(totalSizeBytes),
     transcriptBytes,
     attachmentsBytes,
+    models,
     subagents,
     attachments,
   };
