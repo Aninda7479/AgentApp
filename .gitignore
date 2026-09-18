@@ -48,6 +48,7 @@ packages/desktop/src-tauri/binaries
 *.pem
 *.key
 ~/.tauri
+opencode.jsonc
 
 # IDEs and Editors
 .idea/

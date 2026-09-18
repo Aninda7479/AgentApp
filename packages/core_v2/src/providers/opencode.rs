@@ -273,6 +273,51 @@ impl OpenCodeProvider {
         default_port
     }
 
+    /// Ensures that the telegram MCP tool is dynamically registered on the OpenCode server
+    pub async fn ensure_mcp_registered(client: &Client, base_url: &str) {
+        let mcp_url = format!("{}/mcp", base_url);
+        if let Ok(res) = client.get(&mcp_url).send().await {
+            if let Ok(mcp_val) = res.json::<serde_json::Value>().await {
+                if mcp_val.get("telegram").is_none() {
+                    let user_bin = crate::storage::settings::get_superagent_dir()
+                        .join("bin")
+                        .join("telegram-mcp.js");
+                    let node_bin = std::env::current_dir()
+                        .unwrap_or_default()
+                        .join("node_modules")
+                        .join(".bin")
+                        .join("telegram-mcp.js");
+                    let fallback_bin = std::path::PathBuf::from(
+                        "C:\\ProgramData\\SuperAgent\\bin\\telegram-mcp.js",
+                    );
+
+                    let resolved_path = if user_bin.exists() {
+                        user_bin
+                    } else if node_bin.exists() {
+                        node_bin
+                    } else if fallback_bin.exists() {
+                        fallback_bin
+                    } else {
+                        user_bin
+                    };
+
+                    let _ = client
+                        .post(&mcp_url)
+                        .json(&json!({
+                            "name": "telegram",
+                            "config": {
+                                "type": "local",
+                                "command": ["node", resolved_path.to_string_lossy()],
+                                "enabled": true
+                            }
+                        }))
+                        .send()
+                        .await;
+                }
+            }
+        }
+    }
+
     /// Ensures that the local `opencode serve` daemon is running and reachable.
     /// If not responding, automatically locates or provisions the binary and spawns it on an available port.
     pub async fn ensure_opencode_server(client: &Client) -> anyhow::Result<String> {
@@ -292,6 +337,7 @@ impl OpenCodeProvider {
             .await
         {
             if res.status().is_success() {
+                Self::ensure_mcp_registered(client, &base_url).await;
                 return Ok(base_url);
             }
         }
@@ -328,6 +374,21 @@ impl OpenCodeProvider {
             "--hostname",
             "127.0.0.1",
         ]);
+
+        // Inject global bin directory and telegram credentials into child environment
+        let current_path = std::env::var("PATH").unwrap_or_default();
+        let global_bin = "C:\\ProgramData\\SuperAgent\\bin";
+        let new_path = format!("{};{}", global_bin, current_path);
+        child.env("PATH", new_path);
+        child.env(
+            "TELEGRAM_BOT_TOKEN",
+            "8668981318:AAGYs5H0l8AL1Jds9qeXfXhhE_mKiwIPei8",
+        );
+        child.env("TELEGRAM_CHAT_ID", "5084960883");
+        if let Ok(cwd) = std::env::current_dir() {
+            child.current_dir(cwd);
+        }
+
         #[cfg(target_os = "windows")]
         {
             use std::os::windows::process::CommandExt;
@@ -345,6 +406,7 @@ impl OpenCodeProvider {
                                 "OpenCode server successfully booted on {}",
                                 active_base_url
                             );
+                            Self::ensure_mcp_registered(client, &active_base_url).await;
                             return Ok(active_base_url);
                         }
                     }
@@ -579,10 +641,15 @@ impl LlmProvider for OpenCodeProvider {
                     .or_else(|| t.get("function").and_then(|f| f.get("parameters")))
                     .map(|p| p.to_string())
                     .unwrap_or_default();
-                tools_guide.push_str(&format!("- {}({}): {}\n", name, params, desc));
+                let display_name = if name == "telegram" {
+                    "telegram_telegram"
+                } else {
+                    name
+                };
+                tools_guide.push_str(&format!("- {}({}): {}\n", display_name, params, desc));
             }
             tools_guide.push_str(
-                "\nWhen you need to execute a tool, respond with a tool call in format:\n<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"tool_name\">\n<｜DSML｜parameter name=\"param_name\">value</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n"
+                "\nWhen you need to execute a tool, respond with a tool call in format:\n<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"tool_name\">\n<｜DSML｜parameter name=\"param_name\">value</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n\nYou can also execute any CLI command via bash, including yt-dlp to download media, ffmpeg to process media, or the telegram CLI command: telegram <file_path> [caption].\n\nCRITICAL FORMATTING RULES:\n- Put all your step-by-step reasoning, analysis, and execution planning inside <think>...</think> tags.\n- Do NOT write informal commentary outside <think> tags while calling tools.\n- Only output your final user-facing response once all actions and tools have completed successfully.\n"
             );
             system_text.push_str(&tools_guide);
         }
@@ -609,6 +676,8 @@ impl LlmProvider for OpenCodeProvider {
             let streamed_any_clone = streamed_any.clone();
             let is_idle = Arc::new(AtomicBool::new(false));
             let is_idle_clone = is_idle.clone();
+            let in_thinking = Arc::new(AtomicBool::new(false));
+            let in_thinking_clone = in_thinking.clone();
 
             // Subscribe to SSE events for live token streaming
             let sse_tx = tx.clone();
@@ -616,6 +685,10 @@ impl LlmProvider for OpenCodeProvider {
             let sse_client = client_clone.clone();
 
             let sse_task = tokio::spawn(async move {
+                let mut pending_step_text = String::new();
+                let mut seen_tool_calls = std::collections::HashSet::new();
+                let mut seen_tool_outputs = std::collections::HashSet::new();
+
                 if let Ok(res) = sse_client.get(&event_url).send().await {
                     let mut stream = res.bytes_stream();
                     let mut buffer = String::new();
@@ -641,6 +714,23 @@ impl LlmProvider for OpenCodeProvider {
 
                                     if sid == sse_sess_id {
                                         if msg_type == "session.idle" {
+                                            if in_thinking_clone.load(Ordering::Relaxed) {
+                                                in_thinking_clone.store(false, Ordering::Relaxed);
+                                                let _ = sse_tx
+                                                    .send(AgentEvent::Token {
+                                                        text: "\n</think>\n\n".to_string(),
+                                                    })
+                                                    .await;
+                                            }
+                                            if !pending_step_text.is_empty() {
+                                                let _ = sse_tx
+                                                    .send(AgentEvent::Token {
+                                                        text: pending_step_text.clone(),
+                                                    })
+                                                    .await;
+                                                pending_step_text.clear();
+                                                streamed_any_clone.store(true, Ordering::Relaxed);
+                                            }
                                             is_idle_clone.store(true, Ordering::Relaxed);
                                             return;
                                         }
@@ -651,10 +741,21 @@ impl LlmProvider for OpenCodeProvider {
                                                     .get("field")
                                                     .and_then(|f| f.as_str())
                                                     .unwrap_or("");
-                                                if field == "text" || field == "reasoning" {
-                                                    if let Some(delta) =
-                                                        props.get("delta").and_then(|d| d.as_str())
-                                                    {
+                                                if let Some(delta) =
+                                                    props.get("delta").and_then(|d| d.as_str())
+                                                {
+                                                    if field == "reasoning" {
+                                                        if !in_thinking_clone
+                                                            .load(Ordering::Relaxed)
+                                                        {
+                                                            in_thinking_clone
+                                                                .store(true, Ordering::Relaxed);
+                                                            let _ = sse_tx
+                                                                .send(AgentEvent::Token {
+                                                                    text: "<think>\n".to_string(),
+                                                                })
+                                                                .await;
+                                                        }
                                                         streamed_any_clone
                                                             .store(true, Ordering::Relaxed);
                                                         if sse_tx
@@ -665,6 +766,154 @@ impl LlmProvider for OpenCodeProvider {
                                                             .is_err()
                                                         {
                                                             return;
+                                                        }
+                                                    } else if field == "text" {
+                                                        pending_step_text.push_str(delta);
+                                                    }
+                                                }
+                                            }
+                                        } else if msg_type == "message.part.updated" {
+                                            if let Some(part) = props.and_then(|p| p.get("part")) {
+                                                let p_type = part
+                                                    .get("type")
+                                                    .and_then(|t| t.as_str())
+                                                    .unwrap_or("");
+
+                                                if p_type == "tool" {
+                                                    if in_thinking_clone.load(Ordering::Relaxed) {
+                                                        in_thinking_clone
+                                                            .store(false, Ordering::Relaxed);
+                                                        let _ = sse_tx
+                                                            .send(AgentEvent::Token {
+                                                                text: "\n</think>\n\n".to_string(),
+                                                            })
+                                                            .await;
+                                                    }
+                                                    if !pending_step_text.trim().is_empty() {
+                                                        let thought = format!(
+                                                            "<think>\n{}\n</think>\n\n",
+                                                            pending_step_text.trim()
+                                                        );
+                                                        let _ = sse_tx
+                                                            .send(AgentEvent::Token {
+                                                                text: thought,
+                                                            })
+                                                            .await;
+                                                        pending_step_text.clear();
+                                                        streamed_any_clone
+                                                            .store(true, Ordering::Relaxed);
+                                                    }
+
+                                                    let call_id = part
+                                                        .get("callID")
+                                                        .and_then(|c| c.as_str())
+                                                        .unwrap_or("")
+                                                        .to_string();
+                                                    let tool_name = part
+                                                        .get("tool")
+                                                        .and_then(|t| t.as_str())
+                                                        .unwrap_or("")
+                                                        .to_string();
+                                                    let state = part.get("state");
+                                                    let status = state
+                                                        .and_then(|s| s.get("status"))
+                                                        .and_then(|st| st.as_str())
+                                                        .unwrap_or("");
+
+                                                    if !call_id.is_empty() {
+                                                        if seen_tool_calls.insert(call_id.clone()) {
+                                                            let input = state
+                                                                .and_then(|s| s.get("input"))
+                                                                .cloned()
+                                                                .unwrap_or_else(|| json!({}));
+                                                            let _ = sse_tx
+                                                                .send(AgentEvent::ToolCall {
+                                                                    id: call_id.clone(),
+                                                                    name: tool_name.clone(),
+                                                                    input,
+                                                                })
+                                                                .await;
+                                                        }
+                                                        if (status == "completed"
+                                                            || status == "error")
+                                                            && seen_tool_outputs
+                                                                .insert(call_id.clone())
+                                                        {
+                                                            let output = if status == "completed" {
+                                                                state
+                                                                    .and_then(|s| s.get("output"))
+                                                                    .and_then(|o| o.as_str())
+                                                                    .unwrap_or("completed")
+                                                                    .to_string()
+                                                            } else {
+                                                                state
+                                                                    .and_then(|s| s.get("error"))
+                                                                    .and_then(|e| e.as_str())
+                                                                    .unwrap_or("error")
+                                                                    .to_string()
+                                                            };
+                                                            let _ = sse_tx
+                                                                .send(AgentEvent::ToolOutput {
+                                                                    tool_use_id: call_id,
+                                                                    output,
+                                                                    is_error: status == "error",
+                                                                })
+                                                                .await;
+                                                        }
+                                                    }
+                                                } else if p_type == "step-finish" {
+                                                    let reason = part
+                                                        .get("reason")
+                                                        .and_then(|r| r.as_str())
+                                                        .unwrap_or("");
+
+                                                    if reason == "tool-calls" {
+                                                        if in_thinking_clone.load(Ordering::Relaxed)
+                                                        {
+                                                            in_thinking_clone
+                                                                .store(false, Ordering::Relaxed);
+                                                            let _ = sse_tx
+                                                                .send(AgentEvent::Token {
+                                                                    text: "\n</think>\n\n"
+                                                                        .to_string(),
+                                                                })
+                                                                .await;
+                                                        }
+                                                        if !pending_step_text.trim().is_empty() {
+                                                            let thought = format!(
+                                                                "<think>\n{}\n</think>\n\n",
+                                                                pending_step_text.trim()
+                                                            );
+                                                            let _ = sse_tx
+                                                                .send(AgentEvent::Token {
+                                                                    text: thought,
+                                                                })
+                                                                .await;
+                                                            pending_step_text.clear();
+                                                            streamed_any_clone
+                                                                .store(true, Ordering::Relaxed);
+                                                        }
+                                                    } else if reason == "stop" {
+                                                        if in_thinking_clone.load(Ordering::Relaxed)
+                                                        {
+                                                            in_thinking_clone
+                                                                .store(false, Ordering::Relaxed);
+                                                            let _ = sse_tx
+                                                                .send(AgentEvent::Token {
+                                                                    text: "\n</think>\n\n"
+                                                                        .to_string(),
+                                                                })
+                                                                .await;
+                                                        }
+                                                        if !pending_step_text.is_empty() {
+                                                            let _ = sse_tx
+                                                                .send(AgentEvent::Token {
+                                                                    text: pending_step_text.clone(),
+                                                                })
+                                                                .await;
+                                                            pending_step_text.clear();
+                                                            streamed_any_clone
+                                                                .store(true, Ordering::Relaxed);
                                                         }
                                                     }
                                                 }
@@ -690,61 +939,51 @@ impl LlmProvider for OpenCodeProvider {
                 ]
             });
 
-            let post_res = client_clone.post(&msg_url).json(&payload).send().await;
-            let resp_json: Option<serde_json::Value> = match post_res {
-                Ok(resp) if resp.status().is_success() => {
-                    resp.json::<serde_json::Value>().await.ok()
-                }
-                Ok(resp) => {
-                    let err_text = resp.text().await.unwrap_or_default();
-                    let _ = tx
-                        .send(AgentEvent::Error {
-                            message: format!("OpenCode server rejected message: {}", err_text),
-                        })
-                        .await;
-                    let _ = tx
-                        .send(AgentEvent::Finished {
-                            stop_reason: "error".to_string(),
-                        })
-                        .await;
-                    return;
-                }
-                Err(err) => {
-                    let _ = tx
-                        .send(AgentEvent::Error {
-                            message: format!("Failed to send message to OpenCode server: {}", err),
-                        })
-                        .await;
-                    let _ = tx
-                        .send(AgentEvent::Finished {
-                            stop_reason: "error".to_string(),
-                        })
-                        .await;
-                    return;
-                }
-            };
+            let _ = client_clone.post(&msg_url).json(&payload).send().await;
 
-            // Allow any in-flight SSE tokens to flush
-            tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
+            // Wait for session to finish or timeout (up to 120s for multi-step agent actions)
+            let mut wait_count = 0;
+            while !is_idle.load(Ordering::Relaxed) && wait_count < 240 {
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                wait_count += 1;
+            }
             sse_task.abort();
 
-            // If SSE did not stream tokens, emit the complete text from post response
-            if !streamed_any.load(Ordering::Relaxed) {
-                if let Some(json_val) = resp_json {
-                    if let Some(parts) = json_val.get("parts").and_then(|p| p.as_array()) {
-                        for p in parts {
-                            if p.get("type").and_then(|t| t.as_str()) == Some("text") {
-                                if let Some(t) = p.get("text").and_then(|txt| txt.as_str()) {
-                                    if !t.is_empty() {
-                                        let _ = tx
-                                            .send(AgentEvent::Token {
-                                                text: t.to_string(),
-                                            })
-                                            .await;
+            if in_thinking.load(Ordering::Relaxed) {
+                let _ = tx
+                    .send(AgentEvent::Token {
+                        text: "\n</think>\n\n".to_string(),
+                    })
+                    .await;
+            }
+
+            // Fetch final messages to guarantee complete output
+            let history_url = format!("{}/session/{}/message", server_base, target_session_id);
+            if let Ok(hist_res) = client_clone.get(&history_url).send().await {
+                if let Ok(messages_val) = hist_res.json::<Vec<serde_json::Value>>().await {
+                    let mut final_text = String::new();
+                    for m in &messages_val {
+                        if m.get("info")
+                            .and_then(|i| i.get("role"))
+                            .and_then(|r| r.as_str())
+                            == Some("assistant")
+                        {
+                            if let Some(parts) = m.get("parts").and_then(|p| p.as_array()) {
+                                for p in parts {
+                                    if p.get("type").and_then(|t| t.as_str()) == Some("text") {
+                                        if let Some(t) = p.get("text").and_then(|txt| txt.as_str())
+                                        {
+                                            if !t.is_empty() {
+                                                final_text = t.to_string();
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
+                    }
+                    if !streamed_any.load(Ordering::Relaxed) && !final_text.is_empty() {
+                        let _ = tx.send(AgentEvent::Token { text: final_text }).await;
                     }
                 }
             }
