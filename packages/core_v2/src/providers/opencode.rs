@@ -375,16 +375,53 @@ impl OpenCodeProvider {
             "127.0.0.1",
         ]);
 
-        // Inject global bin directory and telegram credentials into child environment
+        // Inject global and user bin directory into child environment
         let current_path = std::env::var("PATH").unwrap_or_default();
-        let global_bin = "C:\\ProgramData\\SuperAgent\\bin";
-        let new_path = format!("{};{}", global_bin, current_path);
+        let user_bin_dir = crate::storage::settings::get_superagent_dir().join("bin");
+        let path_sep = if cfg!(windows) { ";" } else { ":" };
+        let mut new_path = format!("{}{}{}", user_bin_dir.display(), path_sep, current_path);
+        #[cfg(target_os = "windows")]
+        {
+            new_path = format!("C:\\ProgramData\\SuperAgent\\bin;{}", new_path);
+        }
         child.env("PATH", new_path);
-        child.env(
-            "TELEGRAM_BOT_TOKEN",
-            "8668981318:AAGYs5H0l8AL1Jds9qeXfXhhE_mKiwIPei8",
-        );
-        child.env("TELEGRAM_CHAT_ID", "5084960883");
+
+        // Dynamically resolve Telegram credentials from env or user settings store
+        let (tg_bot_token, tg_chat_id) = {
+            let env_token = std::env::var("TELEGRAM_BOT_TOKEN").ok();
+            let env_chat = std::env::var("TELEGRAM_CHAT_ID").ok();
+            if env_token.as_ref().map_or(false, |t| !t.trim().is_empty())
+                || env_chat.as_ref().map_or(false, |c| !c.trim().is_empty())
+            {
+                (env_token.unwrap_or_default(), env_chat.unwrap_or_default())
+            } else if let Ok(raw_settings) = crate::storage::SettingsStore::new().load_raw() {
+                let tg_val = raw_settings.get("telegram").or_else(|| {
+                    raw_settings
+                        .get("integrations")
+                        .and_then(|i| i.get("telegram"))
+                });
+                let token = tg_val
+                    .and_then(|t| t.get("botToken").or_else(|| t.get("bot_token")))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let chat = tg_val
+                    .and_then(|t| t.get("chatId").or_else(|| t.get("chat_id")))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                (token, chat)
+            } else {
+                (String::new(), String::new())
+            }
+        };
+
+        if !tg_bot_token.trim().is_empty() {
+            child.env("TELEGRAM_BOT_TOKEN", tg_bot_token);
+        }
+        if !tg_chat_id.trim().is_empty() {
+            child.env("TELEGRAM_CHAT_ID", tg_chat_id);
+        }
         if let Ok(cwd) = std::env::current_dir() {
             child.current_dir(cwd);
         }
