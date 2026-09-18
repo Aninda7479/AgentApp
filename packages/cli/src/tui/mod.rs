@@ -12,19 +12,23 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
-use crossterm::event::{DisableMouseCapture, EnableMouseCapture, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    DisableMouseCapture, EnableMouseCapture, KeyCode, KeyEventKind, KeyModifiers,
+};
 use crossterm::execute;
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-use superagent_core_v2::orchestrator::CancellationToken;
 use crate::attachments::prepare_attachments;
 use crate::commands::{CommandAction, CommandContext};
 use crate::shortcuts::clipboard::ClipboardManager;
 use crate::shortcuts::editor_bridge::EditorBridge;
 use crate::tui::app::{AppState, Mode};
 use crate::tui::events::{AppEvent, EventHandler};
+use superagent_core_v2::orchestrator::CancellationToken;
 
 pub async fn run_tui(mut app: AppState) -> Result<()> {
     enable_raw_mode()?;
@@ -72,16 +76,28 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                             let tx = events.tx.clone();
 
                             tokio::spawn(async move {
-                                match engine.run_loop_with_cancellation(&model_config, "", &next_prompt, cancel_token).await {
+                                match engine
+                                    .run_loop_with_cancellation(
+                                        &model_config,
+                                        "",
+                                        &next_prompt,
+                                        cancel_token,
+                                    )
+                                    .await
+                                {
                                     Ok(mut rx) => {
                                         while let Some(evt) = rx.recv().await {
                                             let _ = tx.send(AppEvent::Agent(evt)).await;
                                         }
                                     }
                                     Err(err) => {
-                                        let _ = tx.send(AppEvent::Agent(superagent_core_v2::types::AgentEvent::Error {
-                                            message: err.to_string(),
-                                        })).await;
+                                        let _ = tx
+                                            .send(AppEvent::Agent(
+                                                superagent_core_v2::types::AgentEvent::Error {
+                                                    message: err.to_string(),
+                                                },
+                                            ))
+                                            .await;
                                     }
                                 }
                             });
@@ -104,7 +120,9 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                     }
 
                     // Global shortcut: Ctrl+C
-                    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+                    if key.modifiers.contains(KeyModifiers::CONTROL)
+                        && key.code == KeyCode::Char('c')
+                    {
                         if app.is_busy {
                             if let Some(token) = app.active_cancel_token.take() {
                                 token.cancel();
@@ -119,22 +137,25 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                     }
 
                     // Global shortcut: Shift+Tab to cycle permission
-                    if key.modifiers.contains(KeyModifiers::SHIFT) && key.code == KeyCode::BackTab
-                        || key.code == KeyCode::BackTab
+                    if key.code == KeyCode::BackTab
+                        || (key.modifiers.contains(KeyModifiers::SHIFT) && key.code == KeyCode::Tab)
                     {
                         app.permission = app.permission.cycle();
                         continue;
                     }
 
                     // Global shortcut: Ctrl+R for Reverse History Search
-                    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('r') {
+                    if key.modifiers.contains(KeyModifiers::CONTROL)
+                        && key.code == KeyCode::Char('r')
+                    {
                         if app.mode == Mode::HistorySearch {
                             app.history_search.next_match();
                         } else {
                             app.mode = Mode::HistorySearch;
-                            app.history_search = crate::shortcuts::history_search::HistorySearch::new(
-                                app.composer.history().to_vec(),
-                            );
+                            app.history_search =
+                                crate::shortcuts::history_search::HistorySearch::new(
+                                    app.composer.history().to_vec(),
+                                );
                             app.history_search.start_search();
                         }
                         continue;
@@ -153,13 +174,16 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                         }
 
                         let _ = enable_raw_mode();
-                        let _ = execute!(std::io::stdout(), EnterAlternateScreen, EnableMouseCapture);
+                        let _ =
+                            execute!(std::io::stdout(), EnterAlternateScreen, EnableMouseCapture);
                         let _ = terminal.clear();
                         continue;
                     }
 
                     // Global shortcut: Ctrl+V Clipboard Paste
-                    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('v') {
+                    if key.modifiers.contains(KeyModifiers::CONTROL)
+                        && key.code == KeyCode::Char('v')
+                    {
                         if let Ok(clip) = ClipboardManager::get_text() {
                             app.composer.insert_str(&clip);
                         }
@@ -168,123 +192,116 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
 
                     // Modal specific handling
                     match app.mode {
-                        Mode::CommandPalette => {
-                            match key.code {
-                                KeyCode::Esc => {
+                        Mode::CommandPalette => match key.code {
+                            KeyCode::Esc => {
+                                app.mode = Mode::Normal;
+                            }
+                            KeyCode::Up => {
+                                app.palette_state.previous();
+                            }
+                            KeyCode::Down => {
+                                app.palette_state.next();
+                            }
+                            KeyCode::Enter | KeyCode::Tab => {
+                                if let Some(item) = app.palette_state.selected_item().cloned() {
                                     app.mode = Mode::Normal;
-                                }
-                                KeyCode::Up => {
-                                    app.palette_state.previous();
-                                }
-                                KeyCode::Down => {
-                                    app.palette_state.next();
-                                }
-                                KeyCode::Enter | KeyCode::Tab => {
-                                    if let Some(item) = app.palette_state.selected_item().cloned() {
-                                        app.mode = Mode::Normal;
-                                        if let Some(prompt) = item.prompt {
-                                            app.composer.set_text(&prompt);
-                                        } else {
-                                            app.composer.set_text(&format!("/{} ", item.name));
-                                        }
+                                    if let Some(prompt) = item.prompt {
+                                        app.composer.set_text(&prompt);
+                                    } else {
+                                        app.composer.set_text(&format!("/{} ", item.name));
                                     }
                                 }
-                                KeyCode::Char(c) => {
-                                    let mut q = app.palette_state.query.clone();
-                                    q.push(c);
+                            }
+                            KeyCode::Char(c) => {
+                                let mut q = app.palette_state.query.clone();
+                                q.push(c);
+                                app.palette_state.set_query(q);
+                            }
+                            KeyCode::Backspace => {
+                                let mut q = app.palette_state.query.clone();
+                                q.pop();
+                                if q.is_empty() {
+                                    app.mode = Mode::Normal;
+                                } else {
                                     app.palette_state.set_query(q);
                                 }
-                                KeyCode::Backspace => {
-                                    let mut q = app.palette_state.query.clone();
-                                    q.pop();
-                                    if q.is_empty() {
-                                        app.mode = Mode::Normal;
-                                    } else {
-                                        app.palette_state.set_query(q);
-                                    }
-                                }
-                                _ => {}
                             }
-                        }
-                        Mode::ModelPicker => {
-                            match key.code {
-                                KeyCode::Esc => {
-                                    app.mode = Mode::Normal;
-                                }
-                                KeyCode::Up => {
-                                    app.model_picker_state.previous();
-                                }
-                                KeyCode::Down => {
-                                    app.model_picker_state.next();
-                                }
-                                KeyCode::Enter => {
-                                    if let Some(selected) = app.model_picker_state.selected().cloned() {
-                                        app.provider = selected.provider;
-                                        app.model = selected.model_id;
-                                        app.add_system_message(format!(
-                                            "Switched active model to **{}/{}**",
-                                            app.provider, app.model
-                                        ));
-                                    }
-                                    app.mode = Mode::Normal;
-                                }
-                                _ => {}
+                            _ => {}
+                        },
+                        Mode::ModelPicker => match key.code {
+                            KeyCode::Esc => {
+                                app.mode = Mode::Normal;
                             }
-                        }
-                        Mode::DiffReview => {
-                            match key.code {
-                                KeyCode::Esc | KeyCode::Char('q') => {
-                                    app.mode = Mode::Normal;
-                                }
-                                KeyCode::Char('n') | KeyCode::Down => {
-                                    app.diff_viewer_state.next_file();
-                                }
-                                KeyCode::Char('p') | KeyCode::Up => {
-                                    app.diff_viewer_state.previous_file();
-                                }
-                                KeyCode::Char('a') => {
-                                    app.diff_viewer_state.accept_current();
-                                    app.diff_viewer_state.next_file();
-                                }
-                                KeyCode::Char('r') => {
-                                    app.diff_viewer_state.reject_current();
-                                    app.diff_viewer_state.next_file();
-                                }
-                                KeyCode::Char('A') => {
-                                    app.diff_viewer_state.accept_all();
-                                    app.mode = Mode::Normal;
-                                }
-                                _ => {}
+                            KeyCode::Up => {
+                                app.model_picker_state.previous();
                             }
-                        }
-                        Mode::HistorySearch => {
-                            match key.code {
-                                KeyCode::Esc => {
-                                    app.mode = Mode::Normal;
-                                    app.history_search.cancel_search();
-                                }
-                                KeyCode::Enter => {
-                                    if let Some(m) = app.history_search.current_match() {
-                                        app.composer.set_text(m);
-                                    }
-                                    app.mode = Mode::Normal;
-                                    app.history_search.cancel_search();
-                                }
-                                KeyCode::Char(c) => {
-                                    app.history_search.append_char(c);
-                                }
-                                KeyCode::Backspace => {
-                                    app.history_search.pop_char();
-                                }
-                                _ => {}
+                            KeyCode::Down => {
+                                app.model_picker_state.next();
                             }
-                        }
+                            KeyCode::Enter => {
+                                if let Some(selected) = app.model_picker_state.selected().cloned() {
+                                    app.provider = selected.provider;
+                                    app.model = selected.model_id;
+                                    app.add_system_message(format!(
+                                        "Switched active model to **{}/{}**",
+                                        app.provider, app.model
+                                    ));
+                                }
+                                app.mode = Mode::Normal;
+                            }
+                            _ => {}
+                        },
+                        Mode::DiffReview => match key.code {
+                            KeyCode::Esc | KeyCode::Char('q') => {
+                                app.mode = Mode::Normal;
+                            }
+                            KeyCode::Char('n') | KeyCode::Down => {
+                                app.diff_viewer_state.next_file();
+                            }
+                            KeyCode::Char('p') | KeyCode::Up => {
+                                app.diff_viewer_state.previous_file();
+                            }
+                            KeyCode::Char('a') => {
+                                app.diff_viewer_state.accept_current();
+                                app.diff_viewer_state.next_file();
+                            }
+                            KeyCode::Char('r') => {
+                                app.diff_viewer_state.reject_current();
+                                app.diff_viewer_state.next_file();
+                            }
+                            KeyCode::Char('A') => {
+                                app.diff_viewer_state.accept_all();
+                                app.mode = Mode::Normal;
+                            }
+                            _ => {}
+                        },
+                        Mode::HistorySearch => match key.code {
+                            KeyCode::Esc => {
+                                app.mode = Mode::Normal;
+                                app.history_search.cancel_search();
+                            }
+                            KeyCode::Enter => {
+                                if let Some(m) = app.history_search.current_match() {
+                                    app.composer.set_text(m);
+                                }
+                                app.mode = Mode::Normal;
+                                app.history_search.cancel_search();
+                            }
+                            KeyCode::Char(c) => {
+                                app.history_search.append_char(c);
+                            }
+                            KeyCode::Backspace => {
+                                app.history_search.pop_char();
+                            }
+                            _ => {}
+                        },
                         Mode::Normal => {
                             match key.code {
                                 KeyCode::Char('/') if app.composer.is_empty() => {
                                     app.composer.insert_char('/');
                                     app.mode = Mode::CommandPalette;
-                                    app.palette_state = crate::tui::palette::CommandPaletteState::new(&app.skills);
+                                    app.palette_state =
+                                        crate::tui::palette::CommandPaletteState::new(&app.skills);
                                     app.palette_state.set_query("/".to_string());
                                 }
                                 KeyCode::Char(c) => {
@@ -326,7 +343,8 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                                     // If user presses Tab while typing, trigger command palette if starting with /
                                     if app.composer.is_slash_command() {
                                         app.mode = Mode::CommandPalette;
-                                        app.palette_state.set_query(app.composer.text().to_string());
+                                        app.palette_state
+                                            .set_query(app.composer.text().to_string());
                                     }
                                 }
                                 KeyCode::Enter => {
@@ -347,7 +365,9 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                                             diff_changes: Vec::new(),
                                         };
 
-                                        if let Some(res) = app.router.dispatch(&raw_input, &mut ctx).await {
+                                        if let Some(res) =
+                                            app.router.dispatch(&raw_input, &mut ctx).await
+                                        {
                                             if !res.message.is_empty() {
                                                 app.add_system_message(res.message);
                                             }
@@ -363,7 +383,10 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                                                     CommandAction::ClearChat => {
                                                         app.messages.clear();
                                                     }
-                                                    CommandAction::SwitchModel { provider, model } => {
+                                                    CommandAction::SwitchModel {
+                                                        provider,
+                                                        model,
+                                                    } => {
                                                         app.provider = provider;
                                                         app.model = model;
                                                     }
@@ -379,17 +402,32 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                                                         app.start_assistant_turn();
 
                                                         let cancel_token = CancellationToken::new();
-                                                        app.active_cancel_token = Some(cancel_token.clone());
+                                                        app.active_cancel_token =
+                                                            Some(cancel_token.clone());
 
                                                         let engine = Arc::clone(&app.engine);
                                                         let model_config = app.build_model_config();
                                                         let tx = events.tx.clone();
 
                                                         tokio::spawn(async move {
-                                                            match engine.run_loop_with_cancellation(&model_config, "", &prompt, cancel_token).await {
+                                                            match engine
+                                                                .run_loop_with_cancellation(
+                                                                    &model_config,
+                                                                    "",
+                                                                    &prompt,
+                                                                    cancel_token,
+                                                                )
+                                                                .await
+                                                            {
                                                                 Ok(mut rx) => {
-                                                                    while let Some(evt) = rx.recv().await {
-                                                                        let _ = tx.send(AppEvent::Agent(evt)).await;
+                                                                    while let Some(evt) =
+                                                                        rx.recv().await
+                                                                    {
+                                                                        let _ = tx
+                                                                            .send(AppEvent::Agent(
+                                                                                evt,
+                                                                            ))
+                                                                            .await;
                                                                     }
                                                                 }
                                                                 Err(err) => {
@@ -407,7 +445,8 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                                     }
 
                                     // Normal User prompt
-                                    let (clean_text, _attachments) = prepare_attachments(&raw_input);
+                                    let (clean_text, _attachments) =
+                                        prepare_attachments(&raw_input);
 
                                     if app.provider.is_empty() || app.model.is_empty() {
                                         app.add_user_message(clean_text);
@@ -431,7 +470,15 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
                                     let tx = events.tx.clone();
 
                                     tokio::spawn(async move {
-                                        match engine.run_loop_with_cancellation(&model_config, "", &clean_text, cancel_token).await {
+                                        match engine
+                                            .run_loop_with_cancellation(
+                                                &model_config,
+                                                "",
+                                                &clean_text,
+                                                cancel_token,
+                                            )
+                                            .await
+                                        {
                                             Ok(mut rx) => {
                                                 while let Some(evt) = rx.recv().await {
                                                     let _ = tx.send(AppEvent::Agent(evt)).await;
@@ -456,7 +503,11 @@ pub async fn run_tui(mut app: AppState) -> Result<()> {
 
     // Teardown terminal
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
     terminal.show_cursor()?;
 
     println!(

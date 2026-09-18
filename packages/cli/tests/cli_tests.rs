@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use superagent_cli::attachments::{format_bytes, sniff_image_type, strip_wrapping_quotes};
 use superagent_cli::commands::{CommandAction, CommandContext, SlashCommandRouter};
 use superagent_cli::session::{generate_session_id, load_session, save_session, SavedMessage};
@@ -8,22 +9,31 @@ use superagent_cli::skills::get_builtin_skills;
 use superagent_cli::tui::composer::Composer;
 use superagent_cli::tui::diff_viewer::DiffViewerState;
 use superagent_cli::tui::markdown::{parse_markdown, MarkdownToken};
-use std::path::PathBuf;
 
 #[test]
 fn test_markdown_parser() {
     let md = "# Title\n\n- item 1\n- item 2\n\n```rust\nfn main() {}\n```\nPlain text";
     let tokens = parse_markdown(md);
 
-    assert!(tokens.iter().any(|t| matches!(t, MarkdownToken::Header { level: 1, text } if text == "Title")));
-    assert!(tokens.iter().any(|t| matches!(t, MarkdownToken::Bullet { text } if text == "item 1")));
+    assert!(tokens
+        .iter()
+        .any(|t| matches!(t, MarkdownToken::Header { level: 1, text } if text == "Title")));
+    assert!(tokens
+        .iter()
+        .any(|t| matches!(t, MarkdownToken::Bullet { text } if text == "item 1")));
     assert!(tokens.iter().any(|t| matches!(t, MarkdownToken::CodeBlock { language, lines } if language == "rust" && lines[0] == "fn main() {}")));
-    assert!(tokens.iter().any(|t| matches!(t, MarkdownToken::Text { text } if text == "Plain text")));
+    assert!(tokens
+        .iter()
+        .any(|t| matches!(t, MarkdownToken::Text { text } if text == "Plain text")));
 }
 
 #[test]
 fn test_history_fuzzy_search() {
-    assert!(HistorySearch::fuzzy_match("mod", "model set openai/gpt-4o", false));
+    assert!(HistorySearch::fuzzy_match(
+        "mod",
+        "model set openai/gpt-4o",
+        false
+    ));
     assert!(HistorySearch::fuzzy_match("diff", "/diff review", false));
     assert!(!HistorySearch::fuzzy_match("xyz", "hello world", false));
 
@@ -91,24 +101,41 @@ fn test_slash_command_router() {
 
         let res = router.dispatch("/help", &mut ctx).await;
         assert!(res.is_some());
-        assert!(res.unwrap().message.contains("SuperAgent Terminal Commands"));
+        assert!(res
+            .unwrap()
+            .message
+            .contains("SuperAgent Terminal Commands"));
 
         let res = router.dispatch("/permissions deny", &mut ctx).await;
         assert!(res.is_some());
         let r = res.unwrap();
-        assert!(matches!(r.action, Some(CommandAction::SetPermission(PermissionLevel::Deny))));
+        assert!(matches!(
+            r.action,
+            Some(CommandAction::SetPermission(PermissionLevel::Deny))
+        ));
         assert_eq!(ctx.permission_level, PermissionLevel::Deny);
 
-        let res = router.dispatch("/model set claude-3-5-sonnet-20241022", &mut ctx).await;
+        let res = router
+            .dispatch("/model set claude-3-5-sonnet-20241022", &mut ctx)
+            .await;
         assert!(res.is_some());
-        assert!(matches!(res.unwrap().action, Some(CommandAction::SwitchModel { .. })));
+        assert!(matches!(
+            res.unwrap().action,
+            Some(CommandAction::SwitchModel { .. })
+        ));
     });
 }
 
 #[test]
 fn test_attachments_and_helpers() {
-    assert_eq!(strip_wrapping_quotes("\"path/to/image.png\""), "path/to/image.png");
-    assert_eq!(strip_wrapping_quotes("'path/to/image.png'"), "path/to/image.png");
+    assert_eq!(
+        strip_wrapping_quotes("\"path/to/image.png\""),
+        "path/to/image.png"
+    );
+    assert_eq!(
+        strip_wrapping_quotes("'path/to/image.png'"),
+        "path/to/image.png"
+    );
     assert_eq!(strip_wrapping_quotes("plain_text"), "plain_text");
 
     let png_header = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
@@ -165,8 +192,12 @@ fn test_diff_generation() {
 
     let diff_lines = DiffViewerState::generate_diff_lines(original, modified);
     assert!(!diff_lines.is_empty());
-    assert!(diff_lines.iter().any(|l| l.tag == similar::ChangeTag::Delete && l.content.contains("old")));
-    assert!(diff_lines.iter().any(|l| l.tag == similar::ChangeTag::Insert && l.content.contains("new")));
+    assert!(diff_lines
+        .iter()
+        .any(|l| l.tag == similar::ChangeTag::Delete && l.content.contains("old")));
+    assert!(diff_lines
+        .iter()
+        .any(|l| l.tag == similar::ChangeTag::Insert && l.content.contains("new")));
 }
 
 #[test]
@@ -177,7 +208,9 @@ fn test_password_cli_parsing() {
     // 1. superagent password set
     let cli = Cli::try_parse_from(["superagent", "password", "set"]).unwrap();
     match cli.command {
-        Some(Commands::Password { action: Some(PasswordAction::Set { password }) }) => {
+        Some(Commands::Password {
+            action: Some(PasswordAction::Set { password }),
+        }) => {
             assert_eq!(password, None);
         }
         other => panic!("Expected Password Set, got {:?}", other),
@@ -186,7 +219,9 @@ fn test_password_cli_parsing() {
     // 2. superagent password set mysecret123
     let cli = Cli::try_parse_from(["superagent", "password", "set", "mysecret123"]).unwrap();
     match cli.command {
-        Some(Commands::Password { action: Some(PasswordAction::Set { password }) }) => {
+        Some(Commands::Password {
+            action: Some(PasswordAction::Set { password }),
+        }) => {
             assert_eq!(password, Some("mysecret123".to_string()));
         }
         other => panic!("Expected Password Set with secret, got {:?}", other),
@@ -195,7 +230,9 @@ fn test_password_cli_parsing() {
     // 3. superagent password status
     let cli = Cli::try_parse_from(["superagent", "password", "status"]).unwrap();
     match cli.command {
-        Some(Commands::Password { action: Some(PasswordAction::Status) }) => {}
+        Some(Commands::Password {
+            action: Some(PasswordAction::Status),
+        }) => {}
         other => panic!("Expected Password Status, got {:?}", other),
     }
 
@@ -209,7 +246,98 @@ fn test_password_cli_parsing() {
     // 5. superagent password reset
     let cli = Cli::try_parse_from(["superagent", "password", "reset"]).unwrap();
     match cli.command {
-        Some(Commands::Password { action: Some(PasswordAction::Reset) }) => {}
+        Some(Commands::Password {
+            action: Some(PasswordAction::Reset),
+        }) => {}
         other => panic!("Expected Password Reset, got {:?}", other),
     }
+}
+
+#[test]
+fn test_dynamic_model_catalog() {
+    use superagent_cli::tui::model_picker::load_models_catalog;
+
+    let catalog = load_models_catalog();
+    assert!(!catalog.is_empty());
+
+    // Verify key providers are represented
+    assert!(catalog
+        .iter()
+        .any(|m| m.provider == "openai" && m.model_id == "gpt-4o"));
+    assert!(catalog
+        .iter()
+        .any(|m| m.provider == "anthropic" && m.model_id.contains("claude")));
+    assert!(catalog
+        .iter()
+        .any(|m| m.provider == "gemini" && m.model_id.contains("gemini")));
+    assert!(catalog
+        .iter()
+        .any(|m| m.provider == "deepseek" && m.model_id == "deepseek-chat"));
+    assert!(catalog
+        .iter()
+        .any(|m| m.provider == "groq" && m.model_id == "llama-3.3-70b-versatile"));
+    assert!(catalog
+        .iter()
+        .any(|m| m.provider == "opencode" && m.model_id == "big-pickle"));
+    assert!(catalog.iter().any(|m| m.provider == "ollama"));
+
+    // Verify deduplication: every (provider, model_id) must be unique
+    let mut seen = std::collections::HashSet::new();
+    for item in &catalog {
+        let key = (item.provider.to_lowercase(), item.model_id.to_lowercase());
+        assert!(
+            !seen.contains(&key),
+            "Duplicate model found in catalog: {:?}",
+            key
+        );
+        seen.insert(key);
+    }
+}
+
+#[test]
+fn test_model_picker_state_navigation() {
+    use superagent_cli::tui::model_picker::ModelPickerState;
+
+    let mut state = ModelPickerState::new();
+    assert!(!state.models.is_empty());
+    assert_eq!(state.selected_index, 0);
+
+    let first = state.selected().cloned().unwrap();
+    state.next();
+    assert_eq!(state.selected_index, 1);
+
+    state.previous();
+    assert_eq!(state.selected_index, 0);
+    assert_eq!(state.selected().unwrap(), &first);
+
+    // Test wrap-around backwards
+    state.previous();
+    assert_eq!(state.selected_index, state.models.len() - 1);
+
+    // Test wrap-around forwards
+    state.next();
+    assert_eq!(state.selected_index, 0);
+}
+
+#[test]
+fn test_provider_connection_checker() {
+    use superagent_cli::tui::model_picker::is_provider_connected;
+
+    let empty_settings = serde_json::json!({});
+    // OpenCode has a free tier so is_provider_connected is always true
+    assert!(is_provider_connected("opencode", &empty_settings));
+
+    let settings_with_key = serde_json::json!({
+        "providers": [
+            { "id": "openai", "apiKey": "sk-test-12345" }
+        ]
+    });
+    assert!(is_provider_connected("openai", &settings_with_key));
+
+    let settings_with_api_keys = serde_json::json!({
+        "api_keys": {
+            "anthropic": "sk-ant-test"
+        }
+    });
+    assert!(is_provider_connected("anthropic", &settings_with_api_keys));
 }

@@ -1,7 +1,7 @@
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use async_trait::async_trait;
 
 use crate::shortcuts::permissions::PermissionLevel;
 
@@ -187,10 +187,18 @@ impl SlashCommandRouter {
 pub struct HelpCommand;
 #[async_trait]
 impl SlashCommand for HelpCommand {
-    fn name(&self) -> &'static str { "help" }
-    fn aliases(&self) -> &'static [&'static str] { &["h", "?"] }
-    fn description(&self) -> &'static str { "Show available slash commands and shortcuts" }
-    fn usage(&self) -> &'static str { "/help" }
+    fn name(&self) -> &'static str {
+        "help"
+    }
+    fn aliases(&self) -> &'static [&'static str] {
+        &["h", "?"]
+    }
+    fn description(&self) -> &'static str {
+        "Show available slash commands and shortcuts"
+    }
+    fn usage(&self) -> &'static str {
+        "/help"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         let help_text = "\
 **SuperAgent Terminal Commands:**
@@ -219,9 +227,15 @@ impl SlashCommand for HelpCommand {
 pub struct ClearCommand;
 #[async_trait]
 impl SlashCommand for ClearCommand {
-    fn name(&self) -> &'static str { "clear" }
-    fn aliases(&self) -> &'static [&'static str] { &["cls"] }
-    fn description(&self) -> &'static str { "Clear conversation history" }
+    fn name(&self) -> &'static str {
+        "clear"
+    }
+    fn aliases(&self) -> &'static [&'static str] {
+        &["cls"]
+    }
+    fn description(&self) -> &'static str {
+        "Clear conversation history"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         CommandResult::with_action("Conversation history cleared.", CommandAction::ClearChat)
     }
@@ -230,9 +244,15 @@ impl SlashCommand for ClearCommand {
 pub struct ExitCommand;
 #[async_trait]
 impl SlashCommand for ExitCommand {
-    fn name(&self) -> &'static str { "exit" }
-    fn aliases(&self) -> &'static [&'static str] { &["quit", "q"] }
-    fn description(&self) -> &'static str { "Exit SuperAgent Terminal" }
+    fn name(&self) -> &'static str {
+        "exit"
+    }
+    fn aliases(&self) -> &'static [&'static str] {
+        &["quit", "q"]
+    }
+    fn description(&self) -> &'static str {
+        "Exit SuperAgent Terminal"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         CommandResult::with_action("Exiting SuperAgent...", CommandAction::Exit)
     }
@@ -241,10 +261,18 @@ impl SlashCommand for ExitCommand {
 pub struct ModelCommand;
 #[async_trait]
 impl SlashCommand for ModelCommand {
-    fn name(&self) -> &'static str { "model" }
-    fn aliases(&self) -> &'static [&'static str] { &["m"] }
-    fn description(&self) -> &'static str { "List or switch active AI model (or opens picker)" }
-    fn usage(&self) -> &'static str { "/model [list | set <provider/model>]" }
+    fn name(&self) -> &'static str {
+        "model"
+    }
+    fn aliases(&self) -> &'static [&'static str] {
+        &["m"]
+    }
+    fn description(&self) -> &'static str {
+        "List or switch active AI model (or opens picker)"
+    }
+    fn usage(&self) -> &'static str {
+        "/model [list | set <provider/model>]"
+    }
     async fn execute(&self, args: &str, ctx: &mut CommandContext) -> CommandResult {
         let args = args.trim();
         if args.is_empty() {
@@ -253,28 +281,73 @@ impl SlashCommand for ModelCommand {
         }
 
         if args == "list" {
-            let settings = superagent_core_v2::storage::SettingsStore::new().load_raw().unwrap_or_default();
+            let settings = superagent_core_v2::storage::SettingsStore::new()
+                .load_raw()
+                .unwrap_or_default();
+            let catalog = crate::tui::model_picker::load_models_catalog();
             let mut list = String::new();
-            
-            let providers_opt = settings.get("providers").and_then(|v| v.as_array());
-            let has_providers = providers_opt.map(|arr| !arr.is_empty()).unwrap_or(false);
 
-            if has_providers {
-                list.push_str("**Connected Providers & Models:**\n");
-                if let Some(arr) = providers_opt {
-                    for p in arr {
-                        let name = p.get("name").or_else(|| p.get("id")).and_then(|v| v.as_str()).unwrap_or("unknown");
-                        let id = p.get("id").and_then(|v| v.as_str()).unwrap_or("unknown");
-                        let def_model = p.get("defaultModel").and_then(|v| v.as_str()).unwrap_or("default");
-                        list.push_str(&format!("• **{}** (`{}`): default model `{}`\n", name, id, def_model));
-                    }
+            list.push_str("**Available & Configured AI Models:**\n\n");
+
+            let ordered_providers = [
+                "openai",
+                "anthropic",
+                "gemini",
+                "deepseek",
+                "groq",
+                "ollama",
+                "opencode",
+                "openrouter",
+            ];
+
+            let mut grouped: std::collections::BTreeMap<
+                String,
+                Vec<&crate::tui::model_picker::ModelItem>,
+            > = std::collections::BTreeMap::new();
+            for item in &catalog {
+                grouped
+                    .entry(item.provider.to_lowercase())
+                    .or_default()
+                    .push(item);
+            }
+
+            let mut printed_providers = std::collections::HashSet::new();
+
+            let append_provider = |prov_id: &str,
+                                   items: &[&crate::tui::model_picker::ModelItem],
+                                   out: &mut String| {
+                let is_conn = crate::tui::model_picker::is_provider_connected(prov_id, &settings);
+                let badge = if prov_id == "opencode" {
+                    " *(free tier)*"
+                } else if prov_id == "ollama" && items.iter().any(|m| m.is_local) {
+                    " *(local on disk)*"
+                } else if is_conn {
+                    " *(✓ connected)*"
+                } else {
+                    ""
+                };
+
+                out.push_str(&format!("• **{}**{}:\n", prov_id, badge));
+                for item in items {
+                    let custom_mark = if item.is_custom { " *(custom)*" } else { "" };
+                    out.push_str(&format!(
+                        "  - `{}` — {} ({}{})\n",
+                        item.model_id, item.display_name, item.context_window, custom_mark
+                    ));
                 }
-            } else {
-                list.push_str("**No connected AI providers found in settings.**\n");
-                list.push_str("To connect a provider, you can:\n");
-                list.push_str("• Configure via Web UI / Settings at http://localhost:1469\n");
-                list.push_str("• Use a local runner (keyless): `/model set ollama/qwen2.5-coder` or `/model set omniroute/default`\n");
-                list.push_str("• Or select a model using the interactive picker: `/model`\n");
+            };
+
+            for prov in &ordered_providers {
+                if let Some(items) = grouped.get(*prov) {
+                    append_provider(prov, items, &mut list);
+                    printed_providers.insert(prov.to_string());
+                }
+            }
+
+            for (prov, items) in &grouped {
+                if !printed_providers.contains(prov) {
+                    append_provider(prov, items, &mut list);
+                }
             }
 
             let curr = if !ctx.active_provider.is_empty() && !ctx.active_model.is_empty() {
@@ -282,7 +355,10 @@ impl SlashCommand for ModelCommand {
             } else {
                 "none configured (run `/model set <provider/model>`)".to_string()
             };
-            list.push_str(&format!("\n*Current model:* **{}**", curr));
+            list.push_str(&format!(
+                "\n*Current model:* **{}**\n*To switch:* `/model set <provider/model>` or type `/model` for the interactive picker.",
+                curr
+            ));
             return CommandResult::ok(list);
         }
 
@@ -318,10 +394,18 @@ impl SlashCommand for ModelCommand {
 pub struct PermissionsCommand;
 #[async_trait]
 impl SlashCommand for PermissionsCommand {
-    fn name(&self) -> &'static str { "permissions" }
-    fn aliases(&self) -> &'static [&'static str] { &["perm", "permission"] }
-    fn description(&self) -> &'static str { "View or set tool execution permission level" }
-    fn usage(&self) -> &'static str { "/permissions [auto | ask | deny]" }
+    fn name(&self) -> &'static str {
+        "permissions"
+    }
+    fn aliases(&self) -> &'static [&'static str] {
+        &["perm", "permission"]
+    }
+    fn description(&self) -> &'static str {
+        "View or set tool execution permission level"
+    }
+    fn usage(&self) -> &'static str {
+        "/permissions [auto | ask | deny]"
+    }
     async fn execute(&self, args: &str, ctx: &mut CommandContext) -> CommandResult {
         let args = args.trim().to_lowercase();
         let new_perm = match args.as_str() {
@@ -336,13 +420,19 @@ impl SlashCommand for PermissionsCommand {
                 ));
             }
             _ => {
-                return CommandResult::err("Invalid permission level. Choose `auto`, `ask`, or `deny`.");
+                return CommandResult::err(
+                    "Invalid permission level. Choose `auto`, `ask`, or `deny`.",
+                );
             }
         };
 
         ctx.permission_level = new_perm;
         CommandResult::with_action(
-            format!("Permission level set to **[{}]** ({})", new_perm.label(), new_perm.description()),
+            format!(
+                "Permission level set to **[{}]** ({})",
+                new_perm.label(),
+                new_perm.description()
+            ),
             CommandAction::SetPermission(new_perm),
         )
     }
@@ -351,9 +441,15 @@ impl SlashCommand for PermissionsCommand {
 pub struct DiffCommand;
 #[async_trait]
 impl SlashCommand for DiffCommand {
-    fn name(&self) -> &'static str { "diff" }
-    fn aliases(&self) -> &'static [&'static str] { &["d"] }
-    fn description(&self) -> &'static str { "Review pending file modifications" }
+    fn name(&self) -> &'static str {
+        "diff"
+    }
+    fn aliases(&self) -> &'static [&'static str] {
+        &["d"]
+    }
+    fn description(&self) -> &'static str {
+        "Review pending file modifications"
+    }
     async fn execute(&self, _args: &str, ctx: &mut CommandContext) -> CommandResult {
         if ctx.diff_changes.is_empty() {
             return CommandResult::ok("No modified files in this session yet.");
@@ -374,14 +470,23 @@ impl SlashCommand for DiffCommand {
 pub struct StatusCommand;
 #[async_trait]
 impl SlashCommand for StatusCommand {
-    fn name(&self) -> &'static str { "status" }
-    fn aliases(&self) -> &'static [&'static str] { &["stat"] }
-    fn description(&self) -> &'static str { "Display system, model, and server status" }
+    fn name(&self) -> &'static str {
+        "status"
+    }
+    fn aliases(&self) -> &'static [&'static str] {
+        &["stat"]
+    }
+    fn description(&self) -> &'static str {
+        "Display system, model, and server status"
+    }
     async fn execute(&self, _args: &str, ctx: &mut CommandContext) -> CommandResult {
         let lock = superagent_core_v2::storage::read_web_server_lock();
         let server_status = if let Some(l) = lock {
             if superagent_core_v2::storage::is_lock_alive(&l) {
-                format!("Running on http://{}:{} (PID {}, started by {})", l.host, l.port, l.pid, l.started_by)
+                format!(
+                    "Running on http://{}:{} (PID {}, started by {})",
+                    l.host, l.port, l.pid, l.started_by
+                )
             } else {
                 "Stopped (stale lock cleaned)".to_string()
             }
@@ -393,7 +498,10 @@ impl SlashCommand for StatusCommand {
         let mut sa_size = 0u64;
         let mut sa_files = 0usize;
         if sa_dir.exists() {
-            for entry in walkdir::WalkDir::new(&sa_dir).into_iter().filter_map(|e| e.ok()) {
+            for entry in walkdir::WalkDir::new(&sa_dir)
+                .into_iter()
+                .filter_map(|e| e.ok())
+            {
                 if entry.file_type().is_file() {
                     if let Ok(meta) = entry.metadata() {
                         sa_size += meta.len();
@@ -440,21 +548,37 @@ impl SlashCommand for StatusCommand {
 pub struct DoctorCommand;
 #[async_trait]
 impl SlashCommand for DoctorCommand {
-    fn name(&self) -> &'static str { "doctor" }
-    fn aliases(&self) -> &'static [&'static str] { &["diag"] }
-    fn description(&self) -> &'static str { "Run setup checkup and diagnostics" }
+    fn name(&self) -> &'static str {
+        "doctor"
+    }
+    fn aliases(&self) -> &'static [&'static str] {
+        &["diag"]
+    }
+    fn description(&self) -> &'static str {
+        "Run setup checkup and diagnostics"
+    }
     async fn execute(&self, _args: &str, ctx: &mut CommandContext) -> CommandResult {
         let mut report = String::from("**SuperAgent Doctor Diagnostics:**\n");
         report.push_str("✓ Pure Rust Core Engine: Ready\n");
-        report.push_str(&format!("✓ Workspace: `{}` exists and is writable\n", ctx.working_dir.display()));
+        report.push_str(&format!(
+            "✓ Workspace: `{}` exists and is writable\n",
+            ctx.working_dir.display()
+        ));
 
         let sa_dir = superagent_core_v2::storage::get_superagent_dir();
         report.push_str(&format!("✓ User Data Directory: `{}`\n", sa_dir.display()));
 
         let settings_store = superagent_core_v2::storage::SettingsStore::new();
         if let Ok(raw) = settings_store.load_raw() {
-            let providers_count = raw.get("providers").and_then(|p| p.as_array()).map(|a| a.len()).unwrap_or(0);
-            report.push_str(&format!("✓ Saved Config Providers: {} configured\n", providers_count));
+            let providers_count = raw
+                .get("providers")
+                .and_then(|p| p.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            report.push_str(&format!(
+                "✓ Saved Config Providers: {} configured\n",
+                providers_count
+            ));
         }
 
         report.push_str("✓ System Status: Healthy\n");
@@ -465,9 +589,15 @@ impl SlashCommand for DoctorCommand {
 pub struct InitCommand;
 #[async_trait]
 impl SlashCommand for InitCommand {
-    fn name(&self) -> &'static str { "init" }
-    fn aliases(&self) -> &'static [&'static str] { &["i"] }
-    fn description(&self) -> &'static str { "Generate project AGENTS.md in current directory" }
+    fn name(&self) -> &'static str {
+        "init"
+    }
+    fn aliases(&self) -> &'static [&'static str] {
+        &["i"]
+    }
+    fn description(&self) -> &'static str {
+        "Generate project AGENTS.md in current directory"
+    }
     async fn execute(&self, _args: &str, ctx: &mut CommandContext) -> CommandResult {
         let agents_path = ctx.working_dir.join("AGENTS.md");
         if agents_path.exists() {
@@ -494,19 +624,30 @@ This repository contains instructions for autonomous AI agents working in this w
 pub struct ConfigCommand;
 #[async_trait]
 impl SlashCommand for ConfigCommand {
-    fn name(&self) -> &'static str { "config" }
-    fn description(&self) -> &'static str { "Show SuperAgent configuration" }
+    fn name(&self) -> &'static str {
+        "config"
+    }
+    fn description(&self) -> &'static str {
+        "Show SuperAgent configuration"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         let settings_path = superagent_core_v2::storage::resolve_settings_file_path(None);
-        CommandResult::ok(format!("Configuration file location: `{}`", settings_path.display()))
+        CommandResult::ok(format!(
+            "Configuration file location: `{}`",
+            settings_path.display()
+        ))
     }
 }
 
 pub struct CompactCommand;
 #[async_trait]
 impl SlashCommand for CompactCommand {
-    fn name(&self) -> &'static str { "compact" }
-    fn description(&self) -> &'static str { "Compact chat context window" }
+    fn name(&self) -> &'static str {
+        "compact"
+    }
+    fn description(&self) -> &'static str {
+        "Compact chat context window"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         CommandResult::ok("Context compaction initiated.")
     }
@@ -515,8 +656,12 @@ impl SlashCommand for CompactCommand {
 pub struct McpCommand;
 #[async_trait]
 impl SlashCommand for McpCommand {
-    fn name(&self) -> &'static str { "mcp" }
-    fn description(&self) -> &'static str { "Model Context Protocol servers" }
+    fn name(&self) -> &'static str {
+        "mcp"
+    }
+    fn description(&self) -> &'static str {
+        "Model Context Protocol servers"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         CommandResult::ok("Model Context Protocol (MCP) clients active in SuperAgent Core.")
     }
@@ -525,8 +670,12 @@ impl SlashCommand for McpCommand {
 pub struct ReviewCommand;
 #[async_trait]
 impl SlashCommand for ReviewCommand {
-    fn name(&self) -> &'static str { "review" }
-    fn description(&self) -> &'static str { "Perform automated code review on current diffs" }
+    fn name(&self) -> &'static str {
+        "review"
+    }
+    fn description(&self) -> &'static str {
+        "Perform automated code review on current diffs"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         CommandResult::with_action(
             "Starting automated code review...",
@@ -538,12 +687,19 @@ impl SlashCommand for ReviewCommand {
 pub struct SecurityCommand;
 #[async_trait]
 impl SlashCommand for SecurityCommand {
-    fn name(&self) -> &'static str { "security" }
-    fn description(&self) -> &'static str { "Run workspace security audit" }
+    fn name(&self) -> &'static str {
+        "security"
+    }
+    fn description(&self) -> &'static str {
+        "Run workspace security audit"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         CommandResult::with_action(
             "Starting security audit...",
-            CommandAction::RunPrompt("Audit this workspace for secrets, vulnerabilities, and insecure patterns.".to_string()),
+            CommandAction::RunPrompt(
+                "Audit this workspace for secrets, vulnerabilities, and insecure patterns."
+                    .to_string(),
+            ),
         )
     }
 }
@@ -551,15 +707,22 @@ impl SlashCommand for SecurityCommand {
 pub struct PlanCommand;
 #[async_trait]
 impl SlashCommand for PlanCommand {
-    fn name(&self) -> &'static str { "plan" }
-    fn description(&self) -> &'static str { "Generate architectural plan" }
+    fn name(&self) -> &'static str {
+        "plan"
+    }
+    fn description(&self) -> &'static str {
+        "Generate architectural plan"
+    }
     async fn execute(&self, args: &str, _ctx: &mut CommandContext) -> CommandResult {
         if args.is_empty() {
             CommandResult::ok("Usage: `/plan <task description>`")
         } else {
             CommandResult::with_action(
                 "Generating implementation plan...",
-                CommandAction::RunPrompt(format!("Generate a detailed architectural plan for: {}", args)),
+                CommandAction::RunPrompt(format!(
+                    "Generate a detailed architectural plan for: {}",
+                    args
+                )),
             )
         }
     }
@@ -568,8 +731,12 @@ impl SlashCommand for PlanCommand {
 pub struct CostCommand;
 #[async_trait]
 impl SlashCommand for CostCommand {
-    fn name(&self) -> &'static str { "cost" }
-    fn description(&self) -> &'static str { "Display estimated session token cost" }
+    fn name(&self) -> &'static str {
+        "cost"
+    }
+    fn description(&self) -> &'static str {
+        "Display estimated session token cost"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         CommandResult::ok("Estimated session token cost: < $0.01")
     }
@@ -578,12 +745,17 @@ impl SlashCommand for CostCommand {
 pub struct StartupCommand;
 #[async_trait]
 impl SlashCommand for StartupCommand {
-    fn name(&self) -> &'static str { "startup" }
-    fn description(&self) -> &'static str { "Manage OS auto-start on boot" }
+    fn name(&self) -> &'static str {
+        "startup"
+    }
+    fn description(&self) -> &'static str {
+        "Manage OS auto-start on boot"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         let is_enabled = superagent_core_v2::startup::AutostartManager::is_enabled(
             superagent_core_v2::startup::AutostartTarget::Cli,
-        ).await;
+        )
+        .await;
         CommandResult::ok(format!(
             "OS Autostart on boot status: **{}** (Use `superagent startup enable/disable` to toggle)",
             if is_enabled { "Enabled" } else { "Disabled" }
@@ -594,8 +766,12 @@ impl SlashCommand for StartupCommand {
 pub struct LearnCommand;
 #[async_trait]
 impl SlashCommand for LearnCommand {
-    fn name(&self) -> &'static str { "learn" }
-    fn description(&self) -> &'static str { "Record insights or list learned skills" }
+    fn name(&self) -> &'static str {
+        "learn"
+    }
+    fn description(&self) -> &'static str {
+        "Record insights or list learned skills"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         CommandResult::ok("SuperAgent Learning Engine active. Insights persist to ~/.superagent/learned_insights.json.")
     }
@@ -604,18 +780,28 @@ impl SlashCommand for LearnCommand {
 pub struct ThemeCommand;
 #[async_trait]
 impl SlashCommand for ThemeCommand {
-    fn name(&self) -> &'static str { "theme" }
-    fn description(&self) -> &'static str { "List or switch terminal themes" }
+    fn name(&self) -> &'static str {
+        "theme"
+    }
+    fn description(&self) -> &'static str {
+        "List or switch terminal themes"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
-        CommandResult::ok("Current theme: **Default Cyan** (Options: `cyan`, `green`, `amber`, `monokai`)")
+        CommandResult::ok(
+            "Current theme: **Default Cyan** (Options: `cyan`, `green`, `amber`, `monokai`)",
+        )
     }
 }
 
 pub struct BtwCommand;
 #[async_trait]
 impl SlashCommand for BtwCommand {
-    fn name(&self) -> &'static str { "btw" }
-    fn description(&self) -> &'static str { "Ask a quick side question without polluting history" }
+    fn name(&self) -> &'static str {
+        "btw"
+    }
+    fn description(&self) -> &'static str {
+        "Ask a quick side question without polluting history"
+    }
     async fn execute(&self, args: &str, _ctx: &mut CommandContext) -> CommandResult {
         if args.is_empty() {
             CommandResult::ok("Usage: `/btw <question>`")
@@ -631,8 +817,12 @@ impl SlashCommand for BtwCommand {
 pub struct ExportCommand;
 #[async_trait]
 impl SlashCommand for ExportCommand {
-    fn name(&self) -> &'static str { "export" }
-    fn description(&self) -> &'static str { "Export current session conversation" }
+    fn name(&self) -> &'static str {
+        "export"
+    }
+    fn description(&self) -> &'static str {
+        "Export current session conversation"
+    }
     async fn execute(&self, args: &str, ctx: &mut CommandContext) -> CommandResult {
         let filename = if args.trim().is_empty() {
             format!("conversation-{}.md", ctx.session_id)
@@ -640,10 +830,18 @@ impl SlashCommand for ExportCommand {
             args.trim().to_string()
         };
         let target_path = ctx.working_dir.join(&filename);
-        let header = format!("# Conversation Export ({})\n\nSession ID: `{}`\nActive Model: `{}/{}`\n\n", 
-            chrono::Utc::now().to_rfc3339(), ctx.session_id, ctx.active_provider, ctx.active_model);
+        let header = format!(
+            "# Conversation Export ({})\n\nSession ID: `{}`\nActive Model: `{}/{}`\n\n",
+            chrono::Utc::now().to_rfc3339(),
+            ctx.session_id,
+            ctx.active_provider,
+            ctx.active_model
+        );
         match std::fs::write(&target_path, header) {
-            Ok(_) => CommandResult::ok(format!("Exported conversation to `{}`", target_path.display())),
+            Ok(_) => CommandResult::ok(format!(
+                "Exported conversation to `{}`",
+                target_path.display()
+            )),
             Err(e) => CommandResult::err(format!("Failed to export conversation: {}", e)),
         }
     }
@@ -652,8 +850,12 @@ impl SlashCommand for ExportCommand {
 pub struct GoalCommand;
 #[async_trait]
 impl SlashCommand for GoalCommand {
-    fn name(&self) -> &'static str { "goal" }
-    fn description(&self) -> &'static str { "Set or execute an overarching autonomous goal" }
+    fn name(&self) -> &'static str {
+        "goal"
+    }
+    fn description(&self) -> &'static str {
+        "Set or execute an overarching autonomous goal"
+    }
     async fn execute(&self, args: &str, _ctx: &mut CommandContext) -> CommandResult {
         if args.is_empty() {
             CommandResult::ok("Usage: `/goal <objective description>`")
@@ -669,8 +871,12 @@ impl SlashCommand for GoalCommand {
 pub struct VerifyCommand;
 #[async_trait]
 impl SlashCommand for VerifyCommand {
-    fn name(&self) -> &'static str { "verify" }
-    fn description(&self) -> &'static str { "Run project automated tests and build checks" }
+    fn name(&self) -> &'static str {
+        "verify"
+    }
+    fn description(&self) -> &'static str {
+        "Run project automated tests and build checks"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         CommandResult::with_action(
             "Starting automated project verification...",
@@ -682,9 +888,15 @@ impl SlashCommand for VerifyCommand {
 pub struct AgentCommand;
 #[async_trait]
 impl SlashCommand for AgentCommand {
-    fn name(&self) -> &'static str { "agent" }
-    fn aliases(&self) -> &'static [&'static str] { &["persona"] }
-    fn description(&self) -> &'static str { "List or select agent persona" }
+    fn name(&self) -> &'static str {
+        "agent"
+    }
+    fn aliases(&self) -> &'static [&'static str] {
+        &["persona"]
+    }
+    fn description(&self) -> &'static str {
+        "List or select agent persona"
+    }
     async fn execute(&self, args: &str, _ctx: &mut CommandContext) -> CommandResult {
         let args = args.trim();
         if args.is_empty() || args == "list" {
@@ -693,7 +905,10 @@ impl SlashCommand for AgentCommand {
             let personas = store.list().await;
             let mut list = format!("**Available Agent Personas ({})**:\n", personas.len());
             for p in personas {
-                list.push_str(&format!("• **{}** (`{}`): {}\n", p.name, p.id, p.role_title));
+                list.push_str(&format!(
+                    "• **{}** (`{}`): {}\n",
+                    p.name, p.id, p.role_title
+                ));
             }
             list.push_str("\nSwitch with: `/agent <id>`");
             CommandResult::ok(list)
@@ -706,8 +921,12 @@ impl SlashCommand for AgentCommand {
 pub struct MemoryCommand;
 #[async_trait]
 impl SlashCommand for MemoryCommand {
-    fn name(&self) -> &'static str { "memory" }
-    fn description(&self) -> &'static str { "View or manage agent persistent memory" }
+    fn name(&self) -> &'static str {
+        "memory"
+    }
+    fn description(&self) -> &'static str {
+        "View or manage agent persistent memory"
+    }
     async fn execute(&self, args: &str, _ctx: &mut CommandContext) -> CommandResult {
         let sa_dir = superagent_core_v2::storage::get_superagent_dir();
         let memory_dir = sa_dir.join("memory");
@@ -716,11 +935,19 @@ impl SlashCommand for MemoryCommand {
             CommandResult::ok("Agent persistent memory cleared.")
         } else {
             let size = if memory_dir.exists() {
-                walkdir::WalkDir::new(&memory_dir).into_iter().filter_map(|e| e.ok()).filter(|e| e.file_type().is_file()).count()
+                walkdir::WalkDir::new(&memory_dir)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.file_type().is_file())
+                    .count()
             } else {
                 0
             };
-            CommandResult::ok(format!("Persistent Memory Location: `{}` ({} items stored)", memory_dir.display(), size))
+            CommandResult::ok(format!(
+                "Persistent Memory Location: `{}` ({} items stored)",
+                memory_dir.display(),
+                size
+            ))
         }
     }
 }
@@ -728,9 +955,15 @@ impl SlashCommand for MemoryCommand {
 pub struct RegistryCommand;
 #[async_trait]
 impl SlashCommand for RegistryCommand {
-    fn name(&self) -> &'static str { "tools" }
-    fn aliases(&self) -> &'static [&'static str] { &["registry"] }
-    fn description(&self) -> &'static str { "List all active tools in registry" }
+    fn name(&self) -> &'static str {
+        "tools"
+    }
+    fn aliases(&self) -> &'static [&'static str] {
+        &["registry"]
+    }
+    fn description(&self) -> &'static str {
+        "List all active tools in registry"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         let tools = vec![
             ("read_file", "Read file contents from filesystem"),
@@ -740,7 +973,10 @@ impl SlashCommand for RegistryCommand {
             ("grep_search", "Fast pattern search via ripgrep"),
             ("run_command", "Execute shell command in workspace"),
             ("generate_pdf", "Generate PDF documentation"),
-            ("generate_presentation", "Generate HTML/PDF presentation decks"),
+            (
+                "generate_presentation",
+                "Generate HTML/PDF presentation decks",
+            ),
             ("browser_navigate", "Headless browser navigation"),
             ("browser_screenshot", "Capture browser screenshots"),
             ("web_search", "Search public web for documentation"),
@@ -756,8 +992,12 @@ impl SlashCommand for RegistryCommand {
 pub struct TasksCommand;
 #[async_trait]
 impl SlashCommand for TasksCommand {
-    fn name(&self) -> &'static str { "tasks" }
-    fn description(&self) -> &'static str { "List background tasks" }
+    fn name(&self) -> &'static str {
+        "tasks"
+    }
+    fn description(&self) -> &'static str {
+        "List background tasks"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         CommandResult::ok("Background Task Runner: No pending background tasks.")
     }
@@ -766,8 +1006,12 @@ impl SlashCommand for TasksCommand {
 pub struct BugCommand;
 #[async_trait]
 impl SlashCommand for BugCommand {
-    fn name(&self) -> &'static str { "bug" }
-    fn description(&self) -> &'static str { "File a bug report on GitHub" }
+    fn name(&self) -> &'static str {
+        "bug"
+    }
+    fn description(&self) -> &'static str {
+        "File a bug report on GitHub"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         let url = "https://github.com/Aninda7479/AgentApp/issues/new?template=bug_report.md";
         let _ = open::that(url);
@@ -778,8 +1022,12 @@ impl SlashCommand for BugCommand {
 pub struct UpdateCommand;
 #[async_trait]
 impl SlashCommand for UpdateCommand {
-    fn name(&self) -> &'static str { "update" }
-    fn description(&self) -> &'static str { "Check for SuperAgent updates" }
+    fn name(&self) -> &'static str {
+        "update"
+    }
+    fn description(&self) -> &'static str {
+        "Check for SuperAgent updates"
+    }
     async fn execute(&self, _args: &str, _ctx: &mut CommandContext) -> CommandResult {
         CommandResult::ok(format!(
             "SuperAgent current version: **v{}** (Run `superagent update` in shell to update)",
@@ -791,12 +1039,18 @@ impl SlashCommand for UpdateCommand {
 pub struct PasswordCommand;
 #[async_trait]
 impl SlashCommand for PasswordCommand {
-    fn name(&self) -> &'static str { "password" }
-    fn description(&self) -> &'static str { "Set or update Web UI password" }
+    fn name(&self) -> &'static str {
+        "password"
+    }
+    fn description(&self) -> &'static str {
+        "Set or update Web UI password"
+    }
     async fn execute(&self, args: &str, _ctx: &mut CommandContext) -> CommandResult {
         let new_pass = args.trim();
         if new_pass.len() < 6 {
-            return CommandResult::err("Password must be at least 6 characters. Usage: `/password <new_password>`");
+            return CommandResult::err(
+                "Password must be at least 6 characters. Usage: `/password <new_password>`",
+            );
         }
         let sa_dir = superagent_core_v2::storage::get_superagent_dir();
         let auth_store = superagent_core_v2::storage::auth::AuthStore::new(sa_dir);
@@ -806,4 +1060,3 @@ impl SlashCommand for PasswordCommand {
         }
     }
 }
-

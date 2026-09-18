@@ -301,7 +301,7 @@ impl AppState {
             self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();
             if let Some(start) = self.start_time {
                 self.elapsed_secs = start.elapsed().as_secs();
-                if self.elapsed_secs > 0 && self.elapsed_secs % 6 == 0 {
+                if self.elapsed_secs > 0 && self.elapsed_secs.is_multiple_of(6) {
                     self.tip_index = ((self.elapsed_secs / 6) as usize) % TIPS.len();
                 }
             }
@@ -442,8 +442,8 @@ impl AppState {
 
     pub fn build_model_config(&self) -> ModelConfig {
         let provider_type = match self.provider.to_lowercase().as_str() {
-            "anthropic" => ProviderType::Anthropic,
-            "gemini" => ProviderType::Gemini,
+            "anthropic" | "claude" => ProviderType::Anthropic,
+            "gemini" | "google" => ProviderType::Gemini,
             "ollama" => ProviderType::Ollama,
             "openrouter" => ProviderType::OpenRouter,
             "deepseek" => ProviderType::DeepSeek,

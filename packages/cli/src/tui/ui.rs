@@ -15,10 +15,10 @@ pub fn draw(f: &mut Frame, app: &mut AppState) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(4),      // Banner
-            Constraint::Min(6),         // Message viewport
-            Constraint::Length(3),      // Composer input
-            Constraint::Length(1),      // Status bar / footer
+            Constraint::Length(4), // Banner
+            Constraint::Min(6),    // Message viewport
+            Constraint::Length(3), // Composer input
+            Constraint::Length(1), // Status bar / footer
         ])
         .split(size);
 
@@ -38,23 +38,25 @@ pub fn draw(f: &mut Frame, app: &mut AppState) {
 }
 
 fn draw_banner(f: &mut Frame, app: &AppState, area: Rect) {
-    let title_line = Line::from(vec![
-        Span::styled("SuperAgent Terminal", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-    ]);
+    let title_line = Line::from(vec![Span::styled(
+        "SuperAgent Terminal",
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    )]);
     let model_text = if !app.provider.is_empty() && !app.model.is_empty() {
         format!("{}/{} · effort xhigh", app.provider, app.model)
     } else {
         "no model configured · effort xhigh".to_string()
     };
-    let info_line = Line::from(vec![
-        Span::styled(
-            model_text,
-            Style::default().fg(Color::DarkGray),
-        ),
-    ]);
-    let path_line = Line::from(vec![
-        Span::styled(app.workspace_root.display().to_string(), Style::default().fg(Color::DarkGray)),
-    ]);
+    let info_line = Line::from(vec![Span::styled(
+        model_text,
+        Style::default().fg(Color::DarkGray),
+    )]);
+    let path_line = Line::from(vec![Span::styled(
+        app.workspace_root.display().to_string(),
+        Style::default().fg(Color::DarkGray),
+    )]);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -71,8 +73,18 @@ fn draw_messages(f: &mut Frame, app: &AppState, area: Rect) {
         match msg.role {
             MessageRole::User => {
                 lines.push(Line::from(vec![
-                    Span::styled("❯ ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                    Span::styled(msg.content.clone(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        "❯ ",
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        msg.content.clone(),
+                        Style::default()
+                            .fg(Color::White)
+                            .add_modifier(Modifier::BOLD),
+                    ),
                 ]));
                 lines.push(Line::from(""));
             }
@@ -93,13 +105,34 @@ fn draw_messages(f: &mut Frame, app: &AppState, area: Rect) {
             MessageRole::Assistant => {
                 // Render tool calls if present
                 for tc in &msg.tool_calls {
-                    let icon = if tc.is_error { "✗" } else if tc.output.is_some() { "✓" } else { "⏳" };
-                    let icon_color = if tc.is_error { Color::Red } else { Color::Green };
+                    let icon = if tc.is_error {
+                        "✗"
+                    } else if tc.output.is_some() {
+                        "✓"
+                    } else {
+                        "⏳"
+                    };
+                    let icon_color = if tc.is_error {
+                        Color::Red
+                    } else {
+                        Color::Green
+                    };
 
                     lines.push(Line::from(vec![
-                        Span::styled(format!("  {} 🛠 Tool: ", icon), Style::default().fg(icon_color)),
-                        Span::styled(tc.name.clone(), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                        Span::styled(format!(" {}", tc.input), Style::default().fg(Color::DarkGray)),
+                        Span::styled(
+                            format!("  {} 🛠 Tool: ", icon),
+                            Style::default().fg(icon_color),
+                        ),
+                        Span::styled(
+                            tc.name.clone(),
+                            Style::default()
+                                .fg(Color::Cyan)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            format!(" {}", tc.input),
+                            Style::default().fg(Color::DarkGray),
+                        ),
                     ]));
 
                     if let Some(ref out) = tc.output {
@@ -121,9 +154,10 @@ fn draw_messages(f: &mut Frame, app: &AppState, area: Rect) {
 
                 // Streaming cursor
                 if msg.is_streaming {
-                    lines.push(Line::from(vec![
-                        Span::styled(" █", Style::default().fg(Color::Magenta)),
-                    ]));
+                    lines.push(Line::from(vec![Span::styled(
+                        " █",
+                        Style::default().fg(Color::Magenta),
+                    )]));
                 }
 
                 lines.push(Line::from(""));
@@ -138,7 +172,8 @@ fn draw_messages(f: &mut Frame, app: &AppState, area: Rect) {
         if app.auto_scroll {
             total_lines.saturating_sub(visible_height)
         } else {
-            app.scroll_offset.min(total_lines.saturating_sub(visible_height))
+            app.scroll_offset
+                .min(total_lines.saturating_sub(visible_height))
         }
     } else {
         0
@@ -168,7 +203,12 @@ fn draw_composer(f: &mut Frame, app: &AppState, area: Rect) {
     let prefix = if app.is_busy {
         Span::styled("⏳ ", Style::default().fg(Color::Yellow))
     } else {
-        Span::styled("❯ ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        Span::styled(
+            "❯ ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        )
     };
 
     let text_content = app.composer.text();
@@ -204,7 +244,10 @@ fn draw_status_bar(f: &mut Frame, app: &AppState, area: Rect) {
     };
 
     let mut spans = vec![
-        Span::styled(format!(" [{}] ", app.permission.label()), Style::default().fg(perm_color).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            format!(" [{}] ", app.permission.label()),
+            Style::default().fg(perm_color).add_modifier(Modifier::BOLD),
+        ),
         Span::styled("│ ", Style::default().fg(Color::DarkGray)),
         Span::styled(model_label, Style::default().fg(Color::White)),
         Span::styled("│ ", Style::default().fg(Color::DarkGray)),
@@ -212,17 +255,31 @@ fn draw_status_bar(f: &mut Frame, app: &AppState, area: Rect) {
 
     if app.is_busy {
         let frame = SPINNER_FRAMES[app.spinner_frame];
-        spans.push(Span::styled(format!("{} Working ({}s) ", frame, app.elapsed_secs), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)));
+        spans.push(Span::styled(
+            format!("{} Working ({}s) ", frame, app.elapsed_secs),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ));
         spans.push(Span::styled("│ ", Style::default().fg(Color::DarkGray)));
 
         let tip = TIPS[app.tip_index];
-        spans.push(Span::styled(format!("Tip: {} ", tip), Style::default().fg(Color::DarkGray)));
+        spans.push(Span::styled(
+            format!("Tip: {} ", tip),
+            Style::default().fg(Color::DarkGray),
+        ));
     } else {
         if !app.turn_queue.is_empty() {
-            spans.push(Span::styled(format!("[+{} queued] ", app.turn_queue.len()), Style::default().fg(Color::Magenta)));
+            spans.push(Span::styled(
+                format!("[+{} queued] ", app.turn_queue.len()),
+                Style::default().fg(Color::Magenta),
+            ));
             spans.push(Span::styled("│ ", Style::default().fg(Color::DarkGray)));
         }
-        spans.push(Span::styled("/ for commands · Shift+Tab perm · Ctrl+R history · Ctrl+C exit", Style::default().fg(Color::DarkGray)));
+        spans.push(Span::styled(
+            "/ for commands · Shift+Tab perm · Ctrl+R history · Ctrl+C exit",
+            Style::default().fg(Color::DarkGray),
+        ));
     }
 
     let paragraph = Paragraph::new(Line::from(spans));
@@ -243,10 +300,16 @@ fn draw_command_palette(f: &mut Frame, app: &AppState, size: Rect) {
         .enumerate()
         .map(|(idx, item)| {
             let is_sel = idx == app.palette_state.selected_index;
-            let prefix = if item.kind == PaletteItemKind::Skill { "⚡ " } else { "/" };
+            let prefix = if item.kind == PaletteItemKind::Skill {
+                "⚡ "
+            } else {
+                "/"
+            };
             let marker = if is_sel { "❯ " } else { "  " };
             let style = if is_sel {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
@@ -255,14 +318,20 @@ fn draw_command_palette(f: &mut Frame, app: &AppState, size: Rect) {
                 Span::styled(marker, Style::default().fg(Color::Cyan)),
                 Span::styled(prefix, Style::default().fg(Color::Green)),
                 Span::styled(item.name.clone(), style),
-                Span::styled(format!(" — {}", item.description), Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    format!(" — {}", item.description),
+                    Style::default().fg(Color::DarkGray),
+                ),
             ]);
 
             ListItem::new(line)
         })
         .collect();
 
-    let title = format!(" Commands & Skills ({}) — type to filter ", app.palette_state.query);
+    let title = format!(
+        " Commands & Skills ({}) — type to filter ",
+        app.palette_state.query
+    );
     let block = Block::default()
         .title(title)
         .borders(Borders::ALL)
@@ -273,24 +342,39 @@ fn draw_command_palette(f: &mut Frame, app: &AppState, size: Rect) {
 }
 
 fn draw_model_picker(f: &mut Frame, app: &AppState, size: Rect) {
-    let width = 64.min(size.width.saturating_sub(4));
-    let height = 16.min(size.height.saturating_sub(4));
+    let width = 74.min(size.width.saturating_sub(4));
+    let height = 20.min(size.height.saturating_sub(4));
     let area = centered_rect(width, height, size);
 
     f.render_widget(Clear, area);
 
-    let items: Vec<ListItem> = app
-        .model_picker_state
-        .models
+    let inner_height = (area.height.saturating_sub(2) as usize).max(1);
+    let total_models = app.model_picker_state.models.len();
+    let sel = app.model_picker_state.selected_index;
+
+    // Window the items if list is longer than inner_height so the selected model is always visible
+    let start_idx = if total_models <= inner_height || sel < inner_height / 2 {
+        0
+    } else if sel + inner_height / 2 >= total_models {
+        total_models.saturating_sub(inner_height)
+    } else {
+        sel.saturating_sub(inner_height / 2)
+    };
+    let end_idx = (start_idx + inner_height).min(total_models);
+
+    let items: Vec<ListItem> = app.model_picker_state.models[start_idx..end_idx]
         .iter()
         .enumerate()
-        .map(|(idx, item)| {
-            let is_sel = idx == app.model_picker_state.selected_index;
+        .map(|(rel_idx, item)| {
+            let actual_idx = start_idx + rel_idx;
+            let is_sel = actual_idx == sel;
             let is_curr = item.provider == app.provider && item.model_id == app.model;
             let marker = if is_sel { "❯ " } else { "  " };
 
             let name_style = if is_sel {
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(Color::White)
             };
@@ -301,17 +385,29 @@ fn draw_model_picker(f: &mut Frame, app: &AppState, size: Rect) {
             ];
 
             if is_curr {
-                spans.push(Span::styled(" ● (active)", Style::default().fg(Color::Green)));
+                spans.push(Span::styled(
+                    " ● (active)",
+                    Style::default().fg(Color::Green),
+                ));
             }
 
-            spans.push(Span::styled(format!("  [{}] · {}", item.provider, item.context_window), Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled(
+                format!("  [{}] · {}", item.provider, item.context_window),
+                Style::default().fg(Color::DarkGray),
+            ));
 
             ListItem::new(Line::from(spans))
         })
         .collect();
 
+    let scroll_info = if total_models > inner_height {
+        format!(" ({}/{} - ↑/↓ to scroll) ", sel + 1, total_models)
+    } else {
+        " (↑/↓ to navigate, Enter to select, Esc to cancel) ".to_string()
+    };
+
     let block = Block::default()
-        .title(" Select AI Model (↑/↓ to navigate, Enter to select, Esc to cancel) ")
+        .title(format!(" Select AI Model{} ", scroll_info.trim()))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan));
 
@@ -359,14 +455,17 @@ fn draw_diff_viewer(f: &mut Frame, app: &AppState, size: Rect) {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Yellow));
 
-        let paragraph = Paragraph::new(lines).block(block).wrap(Wrap { trim: false });
+        let paragraph = Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false });
         f.render_widget(paragraph, area);
     } else {
         let block = Block::default()
             .title(" Diff Reviewer ")
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Yellow));
-        let paragraph = Paragraph::new("No file modifications recorded in this session.").block(block);
+        let paragraph =
+            Paragraph::new("No file modifications recorded in this session.").block(block);
         f.render_widget(paragraph, area);
     }
 }
@@ -380,7 +479,12 @@ fn draw_history_search(f: &mut Frame, app: &AppState, size: Rect) {
 
     let query_line = Line::from(vec![
         Span::styled("Query: ", Style::default().fg(Color::Cyan)),
-        Span::styled(app.history_search.query(), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            app.history_search.query(),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
     ]);
 
     let match_line = Line::from(vec![

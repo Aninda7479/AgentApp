@@ -1,7 +1,7 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RunnableSkill {
@@ -78,7 +78,11 @@ pub fn parse_skill_file<P: AsRef<Path>>(file_path: P, origin: &str) -> Option<Ru
         .to_string();
 
     if name.eq_ignore_ascii_case("skill") || name.eq_ignore_ascii_case("readme") {
-        if let Some(parent) = p.parent().and_then(|p| p.file_name()).and_then(|s| s.to_str()) {
+        if let Some(parent) = p
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|s| s.to_str())
+        {
             if parent != "skills" && parent != ".claude" && parent != ".superagent" {
                 name = parent.to_string();
             }
@@ -88,9 +92,9 @@ pub fn parse_skill_file<P: AsRef<Path>>(file_path: P, origin: &str) -> Option<Ru
     let mut description = "Discovered skill".to_string();
 
     // Check for YAML frontmatter
-    if content.starts_with("---") {
-        if let Some(end_idx) = content[3..].find("---") {
-            let frontmatter = &content[3..3 + end_idx];
+    if let Some(stripped) = content.strip_prefix("---") {
+        if let Some(end_idx) = stripped.find("---") {
+            let frontmatter = &stripped[..end_idx];
             for line in frontmatter.lines() {
                 if let Some((k, v)) = line.split_once(':') {
                     let key = k.trim().to_lowercase();
@@ -116,7 +120,13 @@ pub fn parse_skill_file<P: AsRef<Path>>(file_path: P, origin: &str) -> Option<Ru
     let id = name
         .to_lowercase()
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect::<String>();
 
     Some(RunnableSkill {
@@ -137,7 +147,10 @@ pub fn discover_project_skills(root: &Path) -> Vec<RunnableSkill> {
         (root.join(".claude").join("skills"), "local .claude"),
         (root.join(".agents").join("skills"), "local .agents"),
         (root.join("skills"), "local skills"),
-        (home.join(".superagent").join("skills"), "global .superagent"),
+        (
+            home.join(".superagent").join("skills"),
+            "global .superagent",
+        ),
         (home.join(".claude").join("skills"), "global .claude"),
     ];
 

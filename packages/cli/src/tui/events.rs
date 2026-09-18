@@ -1,6 +1,6 @@
-use std::time::Duration;
 use crossterm::event::{Event as CrosstermEvent, KeyEvent, MouseEvent};
 use futures_util::StreamExt;
+use std::time::Duration;
 use superagent_core_v2::types::AgentEvent;
 use tokio::sync::mpsc;
 
@@ -38,6 +38,7 @@ impl EventHandler {
                         }
                     }
                     Some(Ok(evt)) = crossterm_event => {
+                        #[allow(clippy::collapsible_match)]
                         match evt {
                             CrosstermEvent::Key(key) => {
                                 if event_tx.send(AppEvent::Key(key)).await.is_err() {

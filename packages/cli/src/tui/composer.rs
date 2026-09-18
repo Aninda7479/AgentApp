@@ -113,10 +113,8 @@ impl Composer {
 
     pub fn submit(&mut self) -> String {
         let submitted = self.buffer.trim().to_string();
-        if !submitted.is_empty() {
-            if self.history.last().map(|s| s.as_str()) != Some(&submitted) {
-                self.history.push(submitted.clone());
-            }
+        if !submitted.is_empty() && self.history.last().map(|s| s.as_str()) != Some(&submitted) {
+            self.history.push(submitted.clone());
         }
         self.clear();
         submitted

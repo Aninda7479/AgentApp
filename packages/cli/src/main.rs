@@ -20,6 +20,7 @@ use superagent_core_v2::types::{ModelConfig, ProviderType};
 use superagent_cli::cli::args::{Cli, Commands, PasswordAction, PermissionLevelArg};
 use superagent_cli::shortcuts::permissions::PermissionLevel;
 use superagent_cli::tui::app::AppState;
+use superagent_cli::tui::model_picker::{is_provider_connected, load_models_catalog, ModelItem};
 use superagent_cli::tui::run_tui;
 
 #[tokio::main]
@@ -441,6 +442,7 @@ async fn print_system_status(workspace: &std::path::Path) {
     let test_file = workspace.join(".superagent_write_test");
     let is_writable = std::fs::OpenOptions::new()
         .create(true)
+        .truncate(true)
         .write(true)
         .open(&test_file)
         .map(|f| {
@@ -827,35 +829,82 @@ fn compare_semver(a: &str, b: &str) -> i32 {
 }
 
 fn print_models_list() {
+    let raw_settings = superagent_core_v2::storage::SettingsStore::new()
+        .load_raw()
+        .unwrap_or_default();
+    let catalog = load_models_catalog();
+
     println!("=== Available AI Model IDs ===");
     println!();
-    println!("[Provider: openai]");
-    println!("  gpt-4o                               (GPT-4o Multimodal)");
-    println!("  gpt-4o-mini                          (GPT-4o Mini Fast)");
-    println!("  o1                                   (o1 Deep Reasoning)");
-    println!("  o3-mini                              (o3-mini Fast Reasoning)");
-    println!();
-    println!("[Provider: anthropic]");
-    println!("  claude-3-5-sonnet-20241022           (Claude 3.5 Sonnet)");
-    println!("  claude-3-5-haiku-20241022            (Claude 3.5 Haiku)");
-    println!();
-    println!("[Provider: gemini]");
-    println!("  gemini-2.0-flash                     (Gemini 2.0 Flash)");
-    println!("  gemini-1.5-pro                       (Gemini 1.5 Pro 2M ctx)");
-    println!();
-    println!("[Provider: deepseek]");
-    println!("  deepseek-chat                        (DeepSeek V3)");
-    println!("  deepseek-reasoner                    (DeepSeek R1 Reasoning)");
-    println!();
-    println!("[Provider: groq]");
-    println!("  llama-3.3-70b-versatile              (Llama 3.3 70B Fast)");
-    println!();
-    println!("[Provider: ollama]");
-    println!("  qwen2.5-coder                        (Qwen 2.5 Coder Local)");
-    println!("  llama3                               (Llama 3 Local)");
-    println!();
+
+    let ordered_providers = [
+        "openai",
+        "anthropic",
+        "gemini",
+        "deepseek",
+        "groq",
+        "ollama",
+        "opencode",
+        "openrouter",
+    ];
+
+    let mut grouped: std::collections::BTreeMap<String, Vec<&ModelItem>> =
+        std::collections::BTreeMap::new();
+    for item in &catalog {
+        grouped
+            .entry(item.provider.to_lowercase())
+            .or_default()
+            .push(item);
+    }
+
+    let mut printed_providers = std::collections::HashSet::new();
+
+    let print_provider_group = |prov_id: &str, items: &[&ModelItem]| {
+        let is_connected = is_provider_connected(prov_id, &raw_settings);
+        let status_badge = if prov_id == "opencode" {
+            " (Free tier available)"
+        } else if prov_id == "ollama" {
+            if items.iter().any(|m| m.is_local) {
+                " (Local - Installed on disk)"
+            } else if is_connected {
+                " (Local runner ready)"
+            } else {
+                " (Local runner)"
+            }
+        } else if is_connected {
+            " (✓ Connected / API key configured)"
+        } else {
+            ""
+        };
+
+        println!("[Provider: {}]{}", prov_id, status_badge);
+        for item in items {
+            let custom_tag = if item.is_custom { " [custom]" } else { "" };
+            println!(
+                "  {:<36} ({}{})",
+                item.model_id, item.display_name, custom_tag
+            );
+        }
+        println!();
+    };
+
+    for prov in &ordered_providers {
+        if let Some(items) = grouped.get(*prov) {
+            print_provider_group(prov, items);
+            printed_providers.insert(prov.to_string());
+        }
+    }
+
+    for (prov, items) in &grouped {
+        if !printed_providers.contains(prov) {
+            print_provider_group(prov, items);
+        }
+    }
+
     println!("Usage:");
     println!("  superagent -p openai -m gpt-4o --chat \"Your prompt\"");
+    println!("  superagent -p ollama -m <model> --chat \"Your prompt\"");
+    println!("  superagent -p opencode -m big-pickle --chat \"Your prompt\"");
 }
 
 async fn handle_startup(action: &str, desktop: bool, _port: u16) -> Result<()> {
@@ -911,8 +960,8 @@ async fn run_one_shot(
     user_prompt: &str,
 ) -> Result<()> {
     let provider = match provider_str.unwrap_or("openai").to_lowercase().as_str() {
-        "anthropic" => ProviderType::Anthropic,
-        "gemini" => ProviderType::Gemini,
+        "anthropic" | "claude" => ProviderType::Anthropic,
+        "gemini" | "google" => ProviderType::Gemini,
         "ollama" => ProviderType::Ollama,
         "openrouter" => ProviderType::OpenRouter,
         "deepseek" => ProviderType::DeepSeek,
