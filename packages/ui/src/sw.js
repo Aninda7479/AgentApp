@@ -31,10 +31,19 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => {
-        return cache.addAll(PRECACHE_ASSETS).catch((err) => {
-          console.warn('[PWA-SW] Pre-cache partial warning:', err);
-        });
+      .then(async (cache) => {
+        await Promise.allSettled(
+          PRECACHE_ASSETS.map(async (url) => {
+            try {
+              const res = await fetch(url);
+              if (res.ok) {
+                await cache.put(url, res);
+              }
+            } catch (err) {
+              console.warn('[PWA-SW] Pre-cache skip for:', url, err);
+            }
+          })
+        );
       })
       .then(() => self.skipWaiting())
   );
@@ -78,11 +87,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. Navigation requests (HTML pages): Network-first with cache fallback
+  // 2. Navigation requests (HTML pages): Network-first with safe cache fallback
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
-        .then((networkResponse) => {
+      (async () => {
+        try {
+          const networkResponse = await fetch(req);
           if (networkResponse && networkResponse.ok) {
             const copy = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => {
@@ -90,25 +100,36 @@ self.addEventListener('fetch', (event) => {
             });
           }
           return networkResponse;
-        })
-        .catch(async () => {
-          const cachedResponse = await caches.match(req);
+        } catch {
+          const cachedResponse =
+            (await caches.match(req)) ||
+            (await caches.match('/index.html')) ||
+            (await caches.match('/'));
           if (cachedResponse) {
             return cachedResponse;
           }
-          return caches.match('/index.html');
-        })
+          return new Response(
+            '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SuperAgent Offline</title><style>body{margin:0;background:#090a0f;color:#f4f4f5;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;padding:1rem;box-sizing:border-box;}div{background:#12131a;border:1px solid #27272a;border-radius:12px;padding:2rem;max-width:440px;}h2{margin-top:0;color:#38bdf8;}button{background:#2563eb;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-weight:500;cursor:pointer;margin-top:1rem;}</style></head><body><div><h2>SuperAgent Offline</h2><p>Could not connect to the SuperAgent daemon at localhost:1469.</p><button onclick="location.reload()">Retry Connection</button></div></body></html>',
+            {
+              status: 503,
+              statusText: 'Service Unavailable',
+              headers: { 'Content-Type': 'text/html; charset=utf-8' },
+            }
+          );
+        }
+      })()
     );
     return;
   }
 
-  // 3. Static assets: Network-first with cache fallback for scripts; Stale-While-Revalidate for images/fonts
+  // 3. Static assets: Network-first with safe cache fallback for scripts
   const isCode = url.pathname.endsWith('.js') || url.pathname.endsWith('.css');
 
   if (isCode) {
     event.respondWith(
-      fetch(req)
-        .then((networkResponse) => {
+      (async () => {
+        try {
+          const networkResponse = await fetch(req);
           if (networkResponse && networkResponse.ok) {
             const copy = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => {
@@ -116,27 +137,58 @@ self.addEventListener('fetch', (event) => {
             });
           }
           return networkResponse;
-        })
-        .catch(() => caches.match(req))
+        } catch {
+          const cached = await caches.match(req);
+          if (cached) {
+            return cached;
+          }
+          return new Response('/* Resource offline */', {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: {
+              'Content-Type': url.pathname.endsWith('.css')
+                ? 'text/css; charset=utf-8'
+                : 'application/javascript; charset=utf-8',
+            },
+          });
+        }
+      })()
     );
   } else {
-    // Images, icons, fonts, manifest: Cache-first / Stale-While-Revalidate
+    // Images, icons, fonts, manifest: Cache-first / Stale-While-Revalidate with guaranteed Response
     event.respondWith(
-      caches.match(req).then((cachedResponse) => {
-        const fetchPromise = fetch(req)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.ok) {
-              const copy = networkResponse.clone();
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(req, copy);
-              });
-            }
-            return networkResponse;
-          })
-          .catch(() => cachedResponse);
+      (async () => {
+        const cachedResponse = await caches.match(req);
+        if (cachedResponse) {
+          fetch(req)
+            .then((networkResponse) => {
+              if (networkResponse && networkResponse.ok) {
+                const copy = networkResponse.clone();
+                caches.open(CACHE_NAME).then((cache) => {
+                  cache.put(req, copy);
+                });
+              }
+            })
+            .catch(() => {});
+          return cachedResponse;
+        }
 
-        return cachedResponse || fetchPromise;
-      })
+        try {
+          const networkResponse = await fetch(req);
+          if (networkResponse && networkResponse.ok) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(req, copy);
+            });
+          }
+          return networkResponse;
+        } catch {
+          return new Response(null, {
+            status: 503,
+            statusText: 'Service Unavailable',
+          });
+        }
+      })()
     );
   }
 });

@@ -100,12 +100,21 @@ impl OpenCodeProvider {
         }
 
         // Spawn opencode serve
-        tracing::info!("OpenCode server not responding on port {}. Spawning opencode serve...", port);
-        let exe_name = if cfg!(target_os = "windows") { "opencode.exe" } else { "opencode" };
+        tracing::info!(
+            "OpenCode server not responding on port {}. Spawning opencode serve...",
+            port
+        );
+        let exe_name = if cfg!(target_os = "windows") {
+            "opencode.exe"
+        } else {
+            "opencode"
+        };
 
         let mut spawn_cmd = None;
         if let Ok(userprofile) = std::env::var("USERPROFILE") {
-            let candidate1 = std::path::PathBuf::from(&userprofile).join(".superagent").join(exe_name);
+            let candidate1 = std::path::PathBuf::from(&userprofile)
+                .join(".superagent")
+                .join(exe_name);
             let candidate2 = std::path::PathBuf::from(&userprofile)
                 .join("AppData\\Local\\Microsoft\\WindowsApps")
                 .join(exe_name);
@@ -141,13 +150,20 @@ impl OpenCodeProvider {
                         }
                     }
                 }
+                anyhow::bail!(
+                    "OpenCode server was spawned on port {} but did not become ready within 5 seconds. Check if port {} is occupied or start 'opencode serve' manually.",
+                    port, port
+                );
             }
             Err(e) => {
-                tracing::warn!("Failed to spawn opencode serve: {}", e);
+                anyhow::bail!(
+                    "OpenCode CLI ('opencode') is not installed or failed to start: {}. \
+                     To use OpenCode models (such as big-pickle), please install opencode ('npm i -g opencode' or see https://opencode.ai) \
+                     or select another provider (such as Gemini, OpenAI, Anthropic, Ollama, Groq, DeepSeek) in Settings.",
+                    e
+                );
             }
         }
-
-        Ok(base_url)
     }
 
     #[allow(dead_code)]
@@ -281,7 +297,10 @@ impl LlmProvider for OpenCodeProvider {
 
         let session_id = if let Ok(resp) = s_res {
             if let Ok(v) = resp.json::<serde_json::Value>().await {
-                v.get("id").and_then(|id| id.as_str()).unwrap_or("").to_string()
+                v.get("id")
+                    .and_then(|id| id.as_str())
+                    .unwrap_or("")
+                    .to_string()
             } else {
                 generate_opencode_session_id()
             }
@@ -315,7 +334,8 @@ impl LlmProvider for OpenCodeProvider {
                             ..
                         } = block
                         {
-                            prompt_lines.push(format!("[Tool Result for {}]: {}", tool_use_id, content));
+                            prompt_lines
+                                .push(format!("[Tool Result for {}]: {}", tool_use_id, content));
                         }
                     }
                 }
@@ -323,7 +343,8 @@ impl LlmProvider for OpenCodeProvider {
         }
 
         if !tools.is_empty() {
-            let mut tools_guide = String::from("\n\nYou have access to the following execution tools:\n");
+            let mut tools_guide =
+                String::from("\n\nYou have access to the following execution tools:\n");
             for t in tools {
                 let name = t
                     .get("name")
@@ -390,10 +411,15 @@ impl LlmProvider for OpenCodeProvider {
                             let line = buffer[..pos].trim_end_matches('\r').trim().to_string();
                             buffer.drain(..=pos);
                             if let Some(data_str) = line.strip_prefix("data: ") {
-                                if let Ok(val) = serde_json::from_str::<serde_json::Value>(data_str) {
-                                    let msg_type = val.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                                if let Ok(val) = serde_json::from_str::<serde_json::Value>(data_str)
+                                {
+                                    let msg_type =
+                                        val.get("type").and_then(|t| t.as_str()).unwrap_or("");
                                     let props = val.get("properties");
-                                    let sid = props.and_then(|p| p.get("sessionID")).and_then(|s| s.as_str()).unwrap_or("");
+                                    let sid = props
+                                        .and_then(|p| p.get("sessionID"))
+                                        .and_then(|s| s.as_str())
+                                        .unwrap_or("");
 
                                     if sid == sse_sess_id {
                                         if msg_type == "session.idle" {
@@ -403,11 +429,23 @@ impl LlmProvider for OpenCodeProvider {
 
                                         if msg_type == "message.part.delta" {
                                             if let Some(props) = props {
-                                                let field = props.get("field").and_then(|f| f.as_str()).unwrap_or("");
+                                                let field = props
+                                                    .get("field")
+                                                    .and_then(|f| f.as_str())
+                                                    .unwrap_or("");
                                                 if field == "text" || field == "reasoning" {
-                                                    if let Some(delta) = props.get("delta").and_then(|d| d.as_str()) {
-                                                        streamed_any_clone.store(true, Ordering::Relaxed);
-                                                        if sse_tx.send(AgentEvent::Token { text: delta.to_string() }).await.is_err() {
+                                                    if let Some(delta) =
+                                                        props.get("delta").and_then(|d| d.as_str())
+                                                    {
+                                                        streamed_any_clone
+                                                            .store(true, Ordering::Relaxed);
+                                                        if sse_tx
+                                                            .send(AgentEvent::Token {
+                                                                text: delta.to_string(),
+                                                            })
+                                                            .await
+                                                            .is_err()
+                                                        {
                                                             return;
                                                         }
                                                     }
@@ -434,7 +472,37 @@ impl LlmProvider for OpenCodeProvider {
                 ]
             });
 
-            let _ = client_clone.post(&msg_url).json(&payload).send().await;
+            let post_res = client_clone.post(&msg_url).json(&payload).send().await;
+            match post_res {
+                Ok(resp) if resp.status().is_success() => {}
+                Ok(resp) => {
+                    let err_text = resp.text().await.unwrap_or_default();
+                    let _ = tx
+                        .send(AgentEvent::Error {
+                            message: format!("OpenCode server rejected message: {}", err_text),
+                        })
+                        .await;
+                    let _ = tx
+                        .send(AgentEvent::Finished {
+                            stop_reason: "error".to_string(),
+                        })
+                        .await;
+                    return;
+                }
+                Err(err) => {
+                    let _ = tx
+                        .send(AgentEvent::Error {
+                            message: format!("Failed to send message to OpenCode server: {}", err),
+                        })
+                        .await;
+                    let _ = tx
+                        .send(AgentEvent::Finished {
+                            stop_reason: "error".to_string(),
+                        })
+                        .await;
+                    return;
+                }
+            }
 
             // Wait for session to finish or timeout (up to 90s for multi-step agent actions)
             let mut wait_count = 0;
@@ -450,11 +518,16 @@ impl LlmProvider for OpenCodeProvider {
                 if let Ok(messages_val) = hist_res.json::<Vec<serde_json::Value>>().await {
                     let mut final_text = String::new();
                     for m in &messages_val {
-                        if m.get("info").and_then(|i| i.get("role")).and_then(|r| r.as_str()) == Some("assistant") {
+                        if m.get("info")
+                            .and_then(|i| i.get("role"))
+                            .and_then(|r| r.as_str())
+                            == Some("assistant")
+                        {
                             if let Some(parts) = m.get("parts").and_then(|p| p.as_array()) {
                                 for p in parts {
                                     if p.get("type").and_then(|t| t.as_str()) == Some("text") {
-                                        if let Some(t) = p.get("text").and_then(|txt| txt.as_str()) {
+                                        if let Some(t) = p.get("text").and_then(|txt| txt.as_str())
+                                        {
                                             if !t.is_empty() {
                                                 final_text = t.to_string();
                                             }
@@ -470,7 +543,19 @@ impl LlmProvider for OpenCodeProvider {
                 }
             }
 
-            let _ = tx.send(AgentEvent::Finished { stop_reason: "stop".to_string() }).await;
+            if !streamed_any.load(Ordering::Relaxed) && wait_count >= 180 {
+                let _ = tx
+                    .send(AgentEvent::Error {
+                        message: "OpenCode request timed out after 90 seconds without receiving any response.".to_string(),
+                    })
+                    .await;
+            }
+
+            let _ = tx
+                .send(AgentEvent::Finished {
+                    stop_reason: "stop".to_string(),
+                })
+                .await;
         });
 
         Ok(rx)
@@ -507,5 +592,17 @@ mod tests {
         let request = generate_opencode_request_id();
         assert!(request.starts_with("msg_"));
         assert_eq!(request.len(), 30);
+    }
+
+    #[tokio::test]
+    async fn test_opencode_server_missing_error() {
+        // When opencode CLI is not installed and port is not listening, ensure_opencode_server must return an Err
+        let client = reqwest::Client::new();
+        std::env::set_var("OPENCODE_PORT", "59999");
+        let result = OpenCodeProvider::ensure_opencode_server(&client).await;
+        // Port 59999 is not running, and opencode CLI is not installed on test runner
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("OpenCode"));
     }
 }
