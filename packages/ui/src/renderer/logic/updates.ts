@@ -5,6 +5,12 @@
 import type { AppContext, UpdateStatus } from './types';
 import { isTauriEnv } from '../tauriBridge';
 
+export type UpdateEnvironment = 'desktop' | 'cli';
+
+export function detectEnvironment(): UpdateEnvironment {
+  return isTauriEnv() ? 'desktop' : 'cli';
+}
+
 let cachedPendingUpdate: any = null;
 
 /**
@@ -447,16 +453,13 @@ export class UpdateService {
             if (checkRes.ok) {
               const checkData = await checkRes.json();
               clearInterval(checkInterval);
-              ctx.setUpdateStatus({
-                status: 'not-available',
-                version: checkData.current,
-                message: `SuperAgent CLI successfully updated to v${checkData.current} and online!`
-              });
-              setTimeout(() => {
-                if (typeof window !== 'undefined') {
-                  window.location.reload();
-                }
-              }, 1200);
+              ctx.setUpdateStatus((prev) => ({
+                status: 'downloaded',
+                version: checkData.current || prev?.version,
+                releaseUrl: prev?.releaseUrl,
+                releaseNotes: prev?.releaseNotes,
+                message: `SuperAgent CLI successfully updated to v${checkData.current || prev?.version || ''}! Restart to apply.`
+              }));
             }
           } catch {
             if (attempts > 30) {

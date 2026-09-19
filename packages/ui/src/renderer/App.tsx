@@ -1686,11 +1686,14 @@ export const App: React.FC = () => {
       <TitleBar
         hasOpenAiKey={Boolean(byokKeys.openai)}
         isBackendDisconnected={isBackendDisconnected}
+        updateStatus={updateStatus}
         updateAvailableVersion={
           updateStatus?.status === 'available'
             ? updateStatus.version || 'available'
             : null
         }
+        onDownloadUpdate={handleDownloadUpdate}
+        onRestartApp={handleRestartApp}
         onOpenUpdates={() => {
           setActiveTab('settings');
           setSettingsCategory('updates');

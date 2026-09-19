@@ -1102,6 +1102,8 @@ pub async fn fetch_latest_release_info() -> Result<(String, String, Option<Strin
 
 pub async fn check_for_updates() -> impl IntoResponse {
     let current_version = env!("CARGO_PKG_VERSION");
+    let os_name = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
     match fetch_latest_release_info().await {
         Ok((latest_version, release_url, notes)) => {
             let has_update = compare_semver(current_version, &latest_version) < 0;
@@ -1110,7 +1112,10 @@ pub async fn check_for_updates() -> impl IntoResponse {
                 "latest": latest_version,
                 "hasUpdate": has_update,
                 "releaseUrl": release_url,
-                "notes": notes.unwrap_or_default()
+                "notes": notes.unwrap_or_default(),
+                "environment": "cli_daemon",
+                "os": os_name,
+                "arch": arch
             }))
         }
         Err(e) => Json(serde_json::json!({
@@ -1118,15 +1123,50 @@ pub async fn check_for_updates() -> impl IntoResponse {
             "latest": current_version,
             "hasUpdate": false,
             "releaseUrl": "https://github.com/Aninda7479/AgentApp/releases",
-            "error": e.to_string()
+            "error": e.to_string(),
+            "environment": "cli_daemon",
+            "os": os_name,
+            "arch": arch
         })),
     }
 }
 
 pub async fn apply_update() -> impl IntoResponse {
+    // Spawn self-update in background so it doesn't block the HTTP request
+    tokio::task::spawn_blocking(|| {
+        let is_win = cfg!(target_os = "windows");
+        let mut cmd = if is_win {
+            let mut c = std::process::Command::new("powershell.exe");
+            c.args([
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                "irm https://aninda7479.github.io/AgentApp/install.ps1 | iex",
+            ]);
+            c
+        } else {
+            let mut c = std::process::Command::new("sh");
+            c.args([
+                "-c",
+                "curl -fsSL https://aninda7479.github.io/AgentApp/install.sh | sh",
+            ]);
+            c
+        };
+
+        cmd.env("FORCE", "1");
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+
+        let _ = cmd.spawn();
+    });
+
     Json(serde_json::json!({
         "ok": true,
-        "message": "SuperAgent Core v2 Daemon is up to date."
+        "status": "updating",
+        "message": "SuperAgent CLI self-update initiated on server."
     }))
 }
 

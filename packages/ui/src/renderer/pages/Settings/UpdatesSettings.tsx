@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { RefreshCw, CheckCircle2, AlertTriangle, Info, ExternalLink, Download, ChevronDown, ChevronUp, Globe } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
 import { getIpc } from '../../lib/ipc';
+import { detectEnvironment } from '../../logic/updates';
 import type { UpdateStatus } from './types';
 
 export type { UpdateStatus };
@@ -32,6 +33,7 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
 
   const ipc = getIpc();
   const currentVer = appVersion || '0.39.0';
+  const env = detectEnvironment();
 
   useEffect(() => {
     if (ipc) {
@@ -174,7 +176,7 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
               onClick={handleDownload}
               className="ui-btn ui-btn-primary btn-sm flex items-center gap-1.5"
             >
-              <Download size={13} /> Download and Install
+              <Download size={13} /> {env === 'desktop' ? 'Download and Install' : 'Update Server CLI'}
             </button>
           </div>
         )}
@@ -214,7 +216,7 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
               onClick={handleRestart}
               className="ui-btn ui-btn-primary btn-sm flex items-center gap-1.5"
             >
-              <RefreshCw size={12} /> Restart and Install
+              <RefreshCw size={12} /> {env === 'desktop' ? 'Restart and Install' : 'Restart and Reconnect'}
             </button>
           </div>
         )}
@@ -241,10 +243,21 @@ export const UpdatesSettings: React.FC<UpdatesSettingsProps> = ({
             <BrandLogo size={48} />
           </div>
           <div>
-            <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain">Updates</h1>
-            <p className="mt-1 text-sm leading-6 text-brand-textMuted">
-              SuperAgent updates itself from GitHub Releases. In packaged builds, new versions download
-              automatically and install when you quit.
+            <div className="flex items-center gap-2.5 mb-1.5">
+              <h1 className="font-outfit text-2xl font-semibold tracking-tight text-brand-textMain">Updates</h1>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${
+                env === 'desktop' 
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                  : 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${env === 'desktop' ? 'bg-emerald-400' : 'bg-cyan-400'}`} />
+                {env === 'desktop' ? 'Desktop App (Tauri v2)' : 'Web UI & CLI Daemon'}
+              </span>
+            </div>
+            <p className="text-sm leading-6 text-brand-textMuted">
+              {env === 'desktop'
+                ? 'SuperAgent Desktop updates itself from GitHub Releases. In packaged builds, new versions download automatically and install when you quit.'
+                : 'SuperAgent Web UI updates the host CLI daemon from GitHub Releases. Updates download and apply to the daemon on your server.'}
             </p>
           </div>
         </div>

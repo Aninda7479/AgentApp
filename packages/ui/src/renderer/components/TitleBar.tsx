@@ -42,7 +42,6 @@ import { LucideIcon } from 'lucide-react';
 import { WindowService } from '../logic/window';
 import { formatShortcut, isMacOS } from '../lib/platform';
 import { getIpc } from '../lib/ipc';
-import { usePwaInstall } from '../hooks/usePwaInstall';
 
 
 /** Props for the TitleBar component. */
@@ -88,10 +87,21 @@ interface TitleBarProps {
   onLockApp?: () => void;
   /** Warning state: backend core disconnected. */
   isBackendDisconnected?: boolean;
+  /** Full update status object for tracking download and restart state. */
+  updateStatus?: {
+    status: 'checking' | 'available' | 'not-available' | 'unsupported' | 'error' | 'downloading' | 'downloaded';
+    version?: string;
+    message?: string;
+    progress?: { percent: number; bytesPerSecond: number; transferred: number; total: number };
+  } | null;
   /** Available update version string. Null/undefined if none. */
   updateAvailableVersion?: string | null;
   /** Action when clicking the update available badge. */
   onOpenUpdates?: () => void;
+  /** Trigger to download the update in-place. */
+  onDownloadUpdate?: () => void;
+  /** Trigger to restart the app or reload to apply update. */
+  onRestartApp?: () => void;
 
   // ── Adaptive Mobile / Unified Top Bar Props ──
   /** Current active navigation tab / view. */
@@ -161,8 +171,11 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onLogout,
   onLockApp,
   isBackendDisconnected = false,
+  updateStatus = null,
   updateAvailableVersion = null,
   onOpenUpdates,
+  onDownloadUpdate,
+  onRestartApp,
   activeTab = 'trajectory',
   activeProject = '',
   activeChatTitle = '',
@@ -174,7 +187,6 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { canInstall, promptInstall } = usePwaInstall();
 
   const toggleMenu = (key: string) => {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -223,11 +235,6 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           ? [
               'sep' as const,
               { label: 'Quit SuperAgent', icon: Power, danger: true, onClick: () => onQuit?.() },
-            ]
-          : canInstall
-          ? [
-              'sep' as const,
-              { label: 'Install SuperAgent App', icon: Download, onClick: () => { void promptInstall(); } },
             ]
           : []),
       ],
@@ -523,31 +530,67 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           </div>
         )}
 
-        {/* Update Available Badge — only shown when a new update is available */}
-        {updateAvailableVersion && (
-          <button
-            data-testid="update-available-badge"
-            onClick={onOpenUpdates || onCheckUpdates}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-400 shadow-sm transition-all cursor-pointer active:scale-[0.98]"
-            title={`Update available (${updateAvailableVersion}). Click to view updates.`}
-          >
-            <ArrowUpCircle size={11} className="text-emerald-400 shrink-0 animate-bounce" />
-            <span className="hidden sm:inline">Update {updateAvailableVersion !== 'available' ? `v${updateAvailableVersion}` : 'Available'}</span>
-          </button>
-        )}
+        {/* Adaptive Update Action Button — handles Available -> Downloading (spinner) -> Restart to update */}
+        {(() => {
+          const currentStatus = updateStatus?.status || (updateAvailableVersion ? 'available' : null);
+          const version = updateStatus?.version || updateAvailableVersion;
+          const pct = updateStatus?.progress?.percent ?? null;
 
-        {/* PWA Install Button — shown when running in Web Mode and browser supports installation */}
-        {isWebMode && canInstall && (
-          <button
-            data-testid="pwa-install-button"
-            onClick={() => { void promptInstall(); }}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-brand-accent/15 hover:bg-brand-accent/25 border border-brand-accent/40 text-brand-accent shadow-sm transition-all cursor-pointer active:scale-[0.98]"
-            title="Install SuperAgent as a Chrome standalone application"
-          >
-            <Download size={11} className="text-brand-accent shrink-0" />
-            <span className="hidden sm:inline">Install App</span>
-          </button>
-        )}
+          if (currentStatus === 'available') {
+            return (
+              <button
+                data-testid="update-available-badge"
+                onClick={() => {
+                  if (onDownloadUpdate) {
+                    onDownloadUpdate();
+                  } else if (onOpenUpdates) {
+                    onOpenUpdates();
+                  } else if (onCheckUpdates) {
+                    onCheckUpdates();
+                  }
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-500/30 text-emerald-400 shadow-sm transition-all cursor-pointer active:scale-[0.98] shrink-0"
+                title={`Update available (${version || 'latest'}). Click to download and install.`}
+              >
+                <ArrowUpCircle size={11} className="text-emerald-400 shrink-0 animate-bounce" />
+                <span className="hidden sm:inline">Update {version && version !== 'available' ? `v${version}` : 'Available'}</span>
+                <span className="sm:hidden">Update</span>
+              </button>
+            );
+          }
+
+          if (currentStatus === 'downloading') {
+            return (
+              <button
+                data-testid="update-downloading-badge"
+                onClick={onOpenUpdates}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyan-500/30 text-cyan-400 shadow-sm transition-all cursor-pointer active:scale-[0.98] shrink-0"
+                title={`Downloading update${pct !== null ? ` (${pct}%)` : ''}… Click to view progress.`}
+              >
+                <RefreshCw size={11} className="text-cyan-400 shrink-0 animate-spin" />
+                <span className="hidden sm:inline">Downloading{pct !== null ? ` (${pct}%)` : '…'}</span>
+                <span className="sm:hidden">{pct !== null ? `${pct}%` : '…'}</span>
+              </button>
+            );
+          }
+
+          if (currentStatus === 'downloaded') {
+            return (
+              <button
+                data-testid="update-downloaded-badge"
+                onClick={onRestartApp}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-white/5 hover:bg-white/10 border border-emerald-500/30 hover:border-emerald-500/50 text-emerald-300 shadow-sm transition-all cursor-pointer active:scale-[0.98] animate-pulse shrink-0"
+                title="Update ready! Click to restart and apply."
+              >
+                <RefreshCw size={11} className="text-emerald-300 shrink-0" />
+                <span className="hidden sm:inline">Restart to update</span>
+                <span className="sm:hidden">Restart</span>
+              </button>
+            );
+          }
+
+          return null;
+        })()}
 
         {/* Theme toggle (desktop) */}
         <button
