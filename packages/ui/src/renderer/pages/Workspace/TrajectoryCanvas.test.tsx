@@ -91,4 +91,57 @@ describe('TrajectoryCanvas Component', () => {
     expect(html).toContain('What is today&#x27;s date?');
     expect(html).toContain('Today is Friday, September 18, 2026.');
   });
+
+  it('renders markdown tables properly in table design with thead and tbody instead of raw text pipes', () => {
+    const tableMarkdown = `Here are the tools I have access to:
+
+| Tool | Description |
+|---|---|
+| bash | Execute shell commands (PowerShell) |
+| glob | Find files by pattern (e.g. \`**/*.rs\` ) |
+| todowrite | Track multi-step task progress |
+
+How can I help you?`;
+
+    const steps: TrajectoryStep[] = [
+      {
+        id: 'u-1',
+        type: 'user',
+        content: 'What tools do you have access to?'
+      },
+      {
+        id: 'a-1',
+        type: 'assistant',
+        content: tableMarkdown
+      }
+    ];
+
+    const html = renderToStaticMarkup(
+      <TrajectoryCanvas steps={steps} />
+    );
+
+    // Verify structured table elements exist
+    expect(html).toContain('<table');
+    expect(html).toContain('<thead');
+    expect(html).toContain('<tbody');
+    expect(html).toContain('<th');
+    expect(html).toContain('Tool');
+    expect(html).toContain('Description');
+    expect(html).toContain('bash');
+    expect(html).toContain('Execute shell commands (PowerShell)');
+    expect(html).toContain('todowrite');
+    expect(html).toContain('3 items');
+
+    // Inline code in table cell
+    expect(html).toContain('<code');
+    expect(html).toContain('**/*.rs');
+
+    // Paragraphs before and after the table
+    expect(html).toContain('Here are the tools I have access to:');
+    expect(html).toContain('How can I help you?');
+
+    // The raw delimiter |---|---| should not be rendered as text
+    expect(html).not.toContain('|---|---|');
+  });
 });
+

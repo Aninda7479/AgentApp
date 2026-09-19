@@ -726,6 +726,282 @@ const InteractiveArtifactCard: React.FC<InteractiveArtifactCardProps> = ({
   );
 };
 
+// ─── Markdown Table & Inline Formatting Helpers ──────────────────────────────
+export function splitTableRow(line: string): string[] {
+  let trimmed = line.trim();
+  if (trimmed.startsWith('|')) {
+    trimmed = trimmed.substring(1);
+  }
+  if (trimmed.endsWith('|')) {
+    trimmed = trimmed.substring(0, trimmed.length - 1);
+  }
+
+  const cells: string[] = [];
+  let current = '';
+  let inCode = false;
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const char = trimmed[i];
+    if (char === '`') {
+      inCode = !inCode;
+      current += char;
+    } else if (char === '\\' && i + 1 < trimmed.length && trimmed[i + 1] === '|') {
+      current += '|';
+      i++; // skip escaped pipe
+    } else if (char === '|' && !inCode) {
+      cells.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+export function isDelimiterRow(line: string): boolean {
+  if (!line.includes('-')) return false;
+  const cells = splitTableRow(line);
+  if (cells.length === 0) return false;
+  return cells.every((c) => /^:?-{1,}:?$/.test(c.trim()));
+}
+
+export function getColumnAlignments(delimiterLine: string): Array<'left' | 'center' | 'right'> {
+  const cells = splitTableRow(delimiterLine);
+  return cells.map((cell) => {
+    const trimmed = cell.trim();
+    const startColon = trimmed.startsWith(':');
+    const endColon = trimmed.endsWith(':');
+    if (startColon && endColon) return 'center';
+    if (endColon) return 'right';
+    return 'left';
+  });
+}
+
+export function formatTableAsMarkdown(headers: string[], rows: string[][]): string {
+  const headerLine = `| ${headers.join(' | ')} |`;
+  const delimiterLine = `| ${headers.map(() => '---').join(' | ')} |`;
+  const rowLines = rows.map((r) => `| ${headers.map((_, i) => r[i] ?? '').join(' | ')} |`);
+  return [headerLine, delimiterLine, ...rowLines].join('\n');
+}
+
+export const renderFormattedText = (text: string, baseKey: string | number): React.ReactNode => {
+  const tokenRegex = /(\[[^\]]+\]\([^\s)]+\)|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  const parts = text.split(tokenRegex);
+  return parts.map((part, i) => {
+    const key = `${baseKey}-${i}`;
+    if (part.startsWith('[') && part.includes('](') && part.endsWith(')')) {
+      const linkMatch = part.match(/^\[([^\]]+)\]\(([^\s)]+)\)$/);
+      if (linkMatch) {
+        return (
+          <a
+            key={key}
+            href={linkMatch[2]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[color:var(--brand-highlight)] hover:underline font-medium break-all"
+          >
+            {linkMatch[1]}
+          </a>
+        );
+      }
+    }
+    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+      return (
+        <strong key={key} className="font-bold text-brand-textMain">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (part.startsWith('*') && part.endsWith('*') && part.length >= 2) {
+      return (
+        <em key={key} className="italic text-brand-textMain/90">
+          {part.slice(1, -1)}
+        </em>
+      );
+    }
+    return part;
+  });
+};
+
+export const renderInline = (text: string): React.ReactNode => {
+  const parts: React.ReactNode[] = [];
+  let remaining = text;
+  let keyIdx = 0;
+
+  while (remaining.length > 0) {
+    const codeMatch = remaining.match(/^(.*?)`([^`]+)`(.*)/s);
+    if (codeMatch) {
+      if (codeMatch[1]) parts.push(<span key={keyIdx++}>{renderFormattedText(codeMatch[1], keyIdx)}</span>);
+      parts.push(
+        <code
+          key={keyIdx++}
+          className="font-mono text-[12px] bg-brand-card/90 border border-brand-border/60 px-1.5 py-0.5 rounded text-brand-textMain break-all"
+        >
+          {codeMatch[2]}
+        </code>
+      );
+      remaining = codeMatch[3];
+      continue;
+    }
+    parts.push(<span key={keyIdx++}>{renderFormattedText(remaining, keyIdx)}</span>);
+    break;
+  }
+  return parts;
+};
+
+export interface ParsedTableBlock {
+  type: 'table';
+  headers: string[];
+  alignments: ('left' | 'center' | 'right')[];
+  rows: string[][];
+}
+
+export interface ParsedLineBlock {
+  type: 'line';
+  line: string;
+}
+
+export type ParsedBlock = ParsedTableBlock | ParsedLineBlock;
+
+export function parseBlocksFromLines(lines: string[]): ParsedBlock[] {
+  const blocks: ParsedBlock[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Check if line is a table header followed by a delimiter row
+    if (trimmed.includes('|') && i + 1 < lines.length) {
+      const nextTrimmed = lines[i + 1].trim();
+      if (isDelimiterRow(nextTrimmed)) {
+        const headers = splitTableRow(trimmed);
+        const alignments = getColumnAlignments(nextTrimmed);
+        if (headers.length > 0 && alignments.length > 0) {
+          const rows: string[][] = [];
+          let j = i + 2;
+          while (j < lines.length) {
+            const bodyLine = lines[j].trim();
+            if (bodyLine === '' || !bodyLine.includes('|')) {
+              break;
+            }
+            rows.push(splitTableRow(bodyLine));
+            j++;
+          }
+
+          blocks.push({
+            type: 'table',
+            headers,
+            alignments,
+            rows,
+          });
+
+          i = j;
+          continue;
+        }
+      }
+    }
+
+    blocks.push({
+      type: 'line',
+      line,
+    });
+    i++;
+  }
+
+  return blocks;
+}
+
+export const MarkdownTable: React.FC<{
+  headers: string[];
+  alignments: ('left' | 'center' | 'right')[];
+  rows: string[][];
+}> = ({ headers, alignments, rows }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    const md = formatTableAsMarkdown(headers, rows);
+    const ok = await copyToClipboard(md);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }
+  };
+
+  return (
+    <div className="my-3 w-full rounded-xl border border-brand-border/60 bg-brand-card/30 shadow-xs overflow-hidden select-text animate-fade-in group/table">
+      {/* Top bar with count & copy button */}
+      <div className="flex items-center justify-between px-3.5 py-1.5 bg-brand-card/70 border-b border-brand-border/40 select-none text-[11px] text-brand-textMuted">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[12px] opacity-70">📋</span>
+          <span className="font-medium tracking-wide">
+            {rows.length} {rows.length === 1 ? 'item' : 'items'}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer"
+          title="Copy table as Markdown"
+        >
+          {copied ? (
+            <Check size={11} className="text-[color:var(--neon-constructive)]" />
+          ) : (
+            <Copy size={11} />
+          )}
+          <span>{copied ? 'Copied!' : 'Copy table'}</span>
+        </button>
+      </div>
+
+      <div className="overflow-x-auto scrollbar-thin max-w-full">
+        <table className="w-full text-left border-collapse text-[13px] font-sans whitespace-normal">
+          <thead className="bg-brand-card/50 border-b border-brand-border/60 text-brand-textMain select-none">
+            <tr>
+              {headers.map((h, i) => {
+                const align = alignments[i] || 'left';
+                const alignClass =
+                  align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left';
+                return (
+                  <th
+                    key={i}
+                    className={`px-3.5 py-2.5 font-semibold text-[12.5px] text-brand-textMain border-r border-brand-border/20 last:border-r-0 ${alignClass}`}
+                  >
+                    {renderInline(h)}
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-brand-border/25">
+            {rows.map((row, rIdx) => (
+              <tr
+                key={rIdx}
+                className="hover:bg-brand-hover/30 transition-colors even:bg-brand-card/10"
+              >
+                {headers.map((_, cIdx) => {
+                  const cellContent = row[cIdx] ?? '';
+                  const align = alignments[cIdx] || 'left';
+                  const alignClass =
+                    align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left';
+                  return (
+                    <td
+                      key={cIdx}
+                      className={`px-3.5 py-2.5 text-[13px] ${cIdx === 0 ? 'font-medium text-brand-textMain' : 'text-brand-textMain/90'} leading-relaxed align-top border-r border-brand-border/15 last:border-r-0 ${alignClass}`}
+                    >
+                      {renderInline(cellContent)}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 // ─── Markdown Renderer with Code & Artifact Block Support ──────────────────────
 const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ content, streaming }) => {
   // Parse multi-line blocks (code blocks, artifact tags, and text)
@@ -819,9 +1095,23 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
 
   const renderParagraphs = (text: string, keyPrefix: string) => {
     const lines = text.split('\n');
+    const blocks = parseBlocksFromLines(lines);
+
     return (
-      <div key={`p-${keyPrefix}`} className="text-brand-textMain font-sans text-[14px] leading-[1.7] tracking-[0.01em] break-words whitespace-pre-wrap w-full text-left">
-        {lines.map((line, i) => renderLine(line, i))}
+      <div key={`p-${keyPrefix}`} className="text-brand-textMain font-sans text-[14px] leading-[1.7] tracking-[0.01em] break-words w-full text-left">
+        {blocks.map((block, idx) => {
+          if (block.type === 'table') {
+            return (
+              <MarkdownTable
+                key={`tbl-${keyPrefix}-${idx}`}
+                headers={block.headers}
+                alignments={block.alignments}
+                rows={block.rows}
+              />
+            );
+          }
+          return renderLine(block.line, idx);
+        })}
       </div>
     );
   };
@@ -853,6 +1143,14 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
     if (line.trim() === '---') {
       return <hr key={idx} className="border-brand-border/40 my-3 w-full" />;
     }
+    // Blockquote
+    if (line.startsWith('> ')) {
+      return (
+        <blockquote key={idx} className="border-l-2 border-brand-border-strong/80 pl-3 my-1.5 text-brand-textMuted italic text-[13px] leading-relaxed">
+          {renderInline(line.slice(2))}
+        </blockquote>
+      );
+    }
     // Numbered list
     if (/^\d+\.\s/.test(line)) {
       const match = line.match(/^(\d+)\.\s(.*)/);
@@ -880,43 +1178,10 @@ const MarkdownText: React.FC<{ content: string; streaming?: boolean }> = ({ cont
     }
     // Normal paragraph
     return (
-      <p key={idx} className="text-[13px] leading-relaxed break-words w-full text-left">
+      <p key={idx} className="text-[13px] leading-relaxed break-words whitespace-pre-wrap w-full text-left">
         {renderInline(line)}
       </p>
     );
-  };
-
-  const renderInline = (text: string): React.ReactNode => {
-    const parts: React.ReactNode[] = [];
-    let remaining = text;
-    let keyIdx = 0;
-
-    while (remaining.length > 0) {
-      const codeMatch = remaining.match(/^(.*?)`([^`]+)`(.*)/s);
-      if (codeMatch) {
-        if (codeMatch[1]) parts.push(<span key={keyIdx++}>{renderBoldItalic(codeMatch[1])}</span>);
-        parts.push(
-          <code key={keyIdx++} className="font-mono text-[12px] bg-brand-card border border-brand-border/60 px-1.5 py-0.5 rounded text-brand-textMain break-all">
-            {codeMatch[2]}
-          </code>
-        );
-        remaining = codeMatch[3];
-        continue;
-      }
-      parts.push(<span key={keyIdx++}>{renderBoldItalic(remaining)}</span>);
-      break;
-    }
-    return parts;
-  };
-
-  const renderBoldItalic = (text: string): React.ReactNode => {
-    const parts = text.split(/(\*\*[^*]+\*\*)/g);
-    return parts.map((part, i) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={i} className="font-bold text-brand-textMain">{part.slice(2, -2)}</strong>;
-      }
-      return part;
-    });
   };
 
   return (
