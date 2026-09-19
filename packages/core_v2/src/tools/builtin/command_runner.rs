@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::Arc;
 use std::time::Duration;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -8,6 +9,7 @@ use tokio::process::Command;
 use tokio::time::timeout;
 
 use crate::tools::builtin::file_ops::validate_path_in_workspace;
+use crate::tools::builtin::task_manager::TaskManager;
 use crate::tools::r#trait::Tool;
 
 /// Tool for executing shell commands asynchronously with working directory restriction, timeout, and output capture.
@@ -15,6 +17,7 @@ pub struct RunCommandTool {
     workspace_root: PathBuf,
     default_timeout_secs: u64,
     allowed_commands: Vec<String>,
+    task_manager: Option<Arc<TaskManager>>,
 }
 
 impl RunCommandTool {
@@ -23,6 +26,7 @@ impl RunCommandTool {
             workspace_root,
             default_timeout_secs: 60,
             allowed_commands: Vec::new(),
+            task_manager: None,
         }
     }
 
@@ -31,6 +35,7 @@ impl RunCommandTool {
             workspace_root,
             default_timeout_secs,
             allowed_commands: Vec::new(),
+            task_manager: None,
         }
     }
 
@@ -39,7 +44,13 @@ impl RunCommandTool {
             workspace_root,
             default_timeout_secs: 60,
             allowed_commands,
+            task_manager: None,
         }
+    }
+
+    pub fn with_task_manager(mut self, task_manager: Arc<TaskManager>) -> Self {
+        self.task_manager = Some(task_manager);
+        self
     }
 }
 
@@ -68,6 +79,10 @@ impl Tool for RunCommandTool {
                 "timeout_secs": {
                     "type": "integer",
                     "description": "Execution timeout in seconds (optional, default 60)"
+                },
+                "background": {
+                    "type": "boolean",
+                    "description": "If true, starts command in the background immediately without waiting, returning a task_id. Use 'peek_tasks' to inspect output or 'sleep_timer' to wait."
                 }
             },
             "required": ["command"]
@@ -104,6 +119,30 @@ impl Tool for RunCommandTool {
             Some(dir) => validate_path_in_workspace(dir, &self.workspace_root)?,
             None => self.workspace_root.clone(),
         };
+
+        // Handle background task execution
+        let is_background = input["background"].as_bool().unwrap_or(false);
+        if is_background {
+            if let Some(tm) = &self.task_manager {
+                let task_id = tm.spawn_background(command_str, working_dir.clone())?;
+                return Ok(format!(
+                    "Started background task '{}' for command: {}\nWorking directory: {}\nUse 'peek_tasks' to inspect output and status, or 'sleep_timer' to pause execution while it runs.",
+                    task_id,
+                    command_str,
+                    working_dir.display()
+                ));
+            } else {
+                // Fallback: spawn with task manager or notify
+                let tm = Arc::new(TaskManager::new());
+                let task_id = tm.spawn_background(command_str, working_dir.clone())?;
+                return Ok(format!(
+                    "Started background task '{}' for command: {}\nWorking directory: {}\nUse 'peek_tasks' to inspect output and status, or 'sleep_timer' to pause execution while it runs.",
+                    task_id,
+                    command_str,
+                    working_dir.display()
+                ));
+            }
+        }
 
         let mut cmd = if cfg!(target_os = "windows") {
             let mut c = Command::new("powershell");

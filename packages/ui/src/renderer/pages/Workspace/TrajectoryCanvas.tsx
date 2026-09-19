@@ -1750,7 +1750,12 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
       {/* Surface error when a run fails (whether mid-stream with partial steps or before producing any output),
           or surface an explanatory note if the run completed with no assistant output. */}
       {(() => {
-        const hasAssistantResponse = assistantSteps.some((s) => s.content && s.content.trim().length > 0);
+        // An agent responded if it produced text, executed tools, or reasoned in thoughts.
+        // Prevents false 'No response' errors for reasoning models (e.g. DeepSeek-R1) or tool-only turns.
+        const hasAssistantResponse =
+          assistantSteps.some((s) => s.content && s.content.trim().length > 0) ||
+          toolSteps.length > 0 ||
+          thinkingSteps.length > 0;
         if (!lastError && (hasAssistantResponse || isStreaming)) return null;
 
         return (

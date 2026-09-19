@@ -6,6 +6,15 @@
 import { useSyncExternalStore } from 'react';
 import type { QueuedRunItem, ContextUsage } from '../core/types';
 
+export interface ActiveTaskState {
+  id?: string;
+  type: 'tool' | 'timer' | 'command';
+  name: string;
+  detail?: string;
+  startedAt: number;
+  totalSeconds?: number;
+}
+
 export interface ActiveSessionState {
   chatId: string;
   isGenerating: boolean;
@@ -13,6 +22,7 @@ export interface ActiveSessionState {
   lastError?: string;
   contextUsage?: ContextUsage | null;
   sandboxMode?: 'sandboxed' | 'full';
+  activeTask?: ActiveTaskState | null;
 }
 
 export interface SessionStoreState {
@@ -107,8 +117,47 @@ class SessionStoreManager {
     return next;
   }
 
-  public getQueueDepth(chatId: string): number {
-    return this.state.queues.get(chatId)?.length ?? 0;
+  public setActiveTask(chatId: string, task: ActiveTaskState | null): void {
+    const newSessions = new Map(this.state.runningSessions);
+    const existing = newSessions.get(chatId);
+    if (existing) {
+      newSessions.set(chatId, { ...existing, activeTask: task });
+      this.state = { ...this.state, runningSessions: newSessions };
+      this.emit();
+    }
+  }
+
+  public getActiveTask(chatId: string): ActiveTaskState | null {
+    return this.state.runningSessions.get(chatId)?.activeTask ?? null;
+  }
+
+  public getQueuedItems(chatId: string): QueuedRunItem[] {
+    return this.state.queues.get(chatId) || [];
+  }
+
+  public clearQueue(chatId: string): number {
+    const newQueues = new Map(this.state.queues);
+    const list = newQueues.get(chatId);
+    const count = list?.length ?? 0;
+    newQueues.delete(chatId);
+    this.state = { ...this.state, queues: newQueues };
+    this.emit();
+    return count;
+  }
+
+  public removeQueuedItem(chatId: string, index: number): boolean {
+    const newQueues = new Map(this.state.queues);
+    const list = newQueues.get(chatId);
+    if (!list || index < 0 || index >= list.length) return false;
+    const updated = list.filter((_, i) => i !== index);
+    if (updated.length > 0) {
+      newQueues.set(chatId, updated);
+    } else {
+      newQueues.delete(chatId);
+    }
+    this.state = { ...this.state, queues: newQueues };
+    this.emit();
+    return true;
   }
 }
 

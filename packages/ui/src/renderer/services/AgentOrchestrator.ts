@@ -377,6 +377,37 @@ export class AgentOrchestrator {
           buffer.resetTurn();
 
           if (event.toolName) {
+            const toolName = event.toolName || 'tool';
+            let detail = '';
+            let taskType: 'tool' | 'timer' | 'command' = 'tool';
+            let totalSeconds: number | undefined;
+
+            if (toolName === 'sleep_timer' || toolName === 'wait') {
+              taskType = 'timer';
+              totalSeconds = Number(event.toolArgs?.seconds) || 10;
+              detail = event.toolArgs?.reason ? String(event.toolArgs.reason) : `Pausing for ${totalSeconds}s`;
+            } else if (toolName === 'run_command') {
+              taskType = 'command';
+              detail = event.toolArgs?.command ? String(event.toolArgs.command) : '';
+            } else if (toolName === 'telegram') {
+              taskType = 'tool';
+              detail = event.toolArgs?.file_path
+                ? `Uploading ${event.toolArgs.file_path}`
+                : (event.toolArgs?.text ? 'Sending Telegram message' : 'Sending Telegram media');
+            } else if (event.toolArgs && typeof event.toolArgs === 'object') {
+              const keys = Object.keys(event.toolArgs);
+              detail = keys.length > 0 ? `${keys[0]}: ${String((event.toolArgs as Record<string, unknown>)[keys[0]])}` : '';
+            }
+
+            sessionStore.setActiveTask(chatId, {
+              id: event.toolCallId,
+              type: taskType,
+              name: toolName,
+              detail,
+              startedAt: Date.now(),
+              totalSeconds,
+            });
+
             const currentChat = chatStore.getState().chats.find((c) => c.id === chatId);
             const activeModel = buffer.modelName || currentChat?.model || '';
             const toolStep = StepFactory.toolCallStep(
@@ -399,6 +430,7 @@ export class AgentOrchestrator {
           break;
 
         case 'tool_result': {
+          sessionStore.setActiveTask(chatId, null);
           const toolResult = event.toolResult || '';
           const isError = Boolean(event.isError);
 
@@ -582,6 +614,7 @@ export class AgentOrchestrator {
       }
     }
 
+    sessionStore.setActiveTask(chatId, null);
     sessionStore.markIdle(chatId, error);
     chatStore.setChats(
       chatStore.getState().chats.map((c) =>
@@ -601,6 +634,11 @@ export class AgentOrchestrator {
     // Drain next item in queue for this chat session
     const nextQueuedItem = sessionStore.dequeue(chatId);
     if (nextQueuedItem) {
+      const remaining = sessionStore.getQueueDepth(chatId);
+      AgentOrchestrator.toastTrigger?.(
+        `▶ Starting queued prompt (${remaining} waiting)`,
+        'info'
+      );
       AgentOrchestrator.sendPrompt(
         nextQueuedItem.chatId,
         nextQueuedItem.prompt,

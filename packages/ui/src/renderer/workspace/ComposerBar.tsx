@@ -20,6 +20,7 @@ import {
   Users
 } from 'lucide-react';
 import { ModelPicker } from './ModelPicker';
+import { PeekingTaskDeck } from './components/PeekingTaskDeck';
 import { useSlashCommands } from '../hooks/useSlashCommands';
 import { useAgentMentions } from '../hooks/useAgentMentions';
 import { TaskRecorderModal } from './TaskRecorderModal';
@@ -33,6 +34,7 @@ interface ComposerBarProps {
   disabled?: boolean;
   placeholder?: string;
   initialPrompt?: string;
+  chatId?: string;
 }
 
 // Web Speech API types are not in the standard lib; treat as any.
@@ -46,6 +48,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({
   disabled,
   placeholder = 'Write a message...',
   initialPrompt,
+  chatId,
 }) => {
   const [prompt, setPrompt] = useState('');
   const lastUsedModel = useLastUsedModel();
@@ -460,6 +463,9 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({
           })}
         </div>
       )}
+
+      {/* Active Processing Deck & Queue Peeking Card */}
+      <PeekingTaskDeck chatId={chatId} />
 
       {/* Main Composer Box */}
       <div className="flex flex-col gap-1.5 w-full">

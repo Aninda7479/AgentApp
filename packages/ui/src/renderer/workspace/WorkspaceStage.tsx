@@ -189,6 +189,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
               {/* Centered Composer */}
               <div className="w-full max-w-2xl sm:max-w-3xl">
                 <ComposerBar
+                  chatId={activeChatId}
                   initialPrompt={composerPrompt}
                   onSend={(prompt: string, options: ComposerOptions, attachments: ComposerAttachment[]) => {
                     setComposerPrompt('');
@@ -229,6 +230,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
               {/* Global composer bar at the bottom */}
               <div className="shrink-0 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1 sm:px-4 sm:pb-4">
                 <ComposerBar
+                  chatId={activeChatId}
                   onSend={(prompt: string, options: ComposerOptions, attachments: ComposerAttachment[]) => handleSendPrompt(prompt, options, attachments)}
                 />
               </div>

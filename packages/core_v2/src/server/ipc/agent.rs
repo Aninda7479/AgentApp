@@ -11,8 +11,8 @@ use crate::server::routes::chat::resolve_active_workspace_model;
 use crate::server::state::{AppState, SessionStateEntry};
 use crate::tools::builtin::{
     CreateArtifactTool, EditFileTool, GetAvailableToolsTool, GrepSearchTool, ListArtifactsTool,
-    ListDirTool, ReadArtifactTool, ReadFileTool, RunCommandTool, RunSubagentTool, TelegramTool,
-    WriteFileTool,
+    ListDirTool, PeekTaskTool, ReadArtifactTool, ReadFileTool, RunCommandTool, RunSubagentTool,
+    SleepTimerTool, TaskManager, TelegramTool, WriteFileTool,
 };
 use crate::tools::ToolRegistry;
 use crate::types::{ModelConfig, ProviderType};
@@ -465,10 +465,13 @@ pub async fn handle_agent_channel(
                     })
                     .unwrap_or_default();
 
-                // Artifact tools are enabled across ALL tiers (Tier 1, 2, and 3)
+                let task_manager = Arc::new(TaskManager::new());
+
+                // Artifact and utility tools enabled across ALL tiers (Tier 1, 2, and 3)
                 session_tool_registry.register(CreateArtifactTool::new());
                 session_tool_registry.register(ListArtifactsTool::new());
                 session_tool_registry.register(ReadArtifactTool::new());
+                session_tool_registry.register(SleepTimerTool::new());
                 session_tool_registry.register(TelegramTool::with_workspace(
                     state_clone.settings_store.clone(),
                     effective_workspace.clone(),
@@ -480,10 +483,14 @@ pub async fn handle_agent_channel(
                     session_tool_registry.register(WriteFileTool::new(effective_workspace.clone()));
                     session_tool_registry.register(EditFileTool::new(effective_workspace.clone()));
                     session_tool_registry.register(ListDirTool::new(effective_workspace.clone()));
-                    session_tool_registry.register(RunCommandTool::with_allowed_commands(
-                        effective_workspace.clone(),
-                        allowed_commands,
-                    ));
+                    session_tool_registry.register(
+                        RunCommandTool::with_allowed_commands(
+                            effective_workspace.clone(),
+                            allowed_commands,
+                        )
+                        .with_task_manager(task_manager.clone()),
+                    );
+                    session_tool_registry.register(PeekTaskTool::new(task_manager.clone()));
                     session_tool_registry
                         .register(GrepSearchTool::new(effective_workspace.clone()));
                 }
