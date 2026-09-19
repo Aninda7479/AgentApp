@@ -74,6 +74,10 @@ export interface StoredChat {
   /** Number of prompts queued behind the in-flight run for this chat (drained
    *  automatically when the current response ends). Drives the sidebar badge. */
   queuedCount?: number;
+  /** Whether the chat is pinned to the top of its list. */
+  pinned?: boolean;
+  /** Whether the chat has unread messages / updates. */
+  unread?: boolean;
 }
 
 /** Theme preference: light, dark, or system-managed. */

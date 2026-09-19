@@ -34,7 +34,7 @@ describe('LoadingScreen Component', () => {
     );
     expect(html).toContain('Core Daemon Offline');
     expect(html).toContain('Intelligence Engine Not Detected');
-    expect(html).toContain('npm run dev:web');
+    expect(html).toContain('superagent --serve');
     expect(html).toContain('Retry Connection');
     expect(html).toContain('Auto-reconnecting every 3s...');
   });

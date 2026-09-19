@@ -340,6 +340,12 @@ impl ChatStorage {
         if let Some(standalone_config) = chat_val.get("standaloneConfig") {
             meta_json["standaloneConfig"] = standalone_config.clone();
         }
+        if let Some(pinned) = chat_val.get("pinned") {
+            meta_json["pinned"] = pinned.clone();
+        }
+        if let Some(unread) = chat_val.get("unread") {
+            meta_json["unread"] = unread.clone();
+        }
 
         let _ = fs::write(chat_dir.join("chat.json"), serde_json::to_string_pretty(&meta_json)?);
 
@@ -468,6 +474,12 @@ impl ChatStorage {
                                         }
                                         if let Some(standalone_config) = val.get("standaloneConfig") {
                                             chat_obj["standaloneConfig"] = standalone_config.clone();
+                                        }
+                                        if let Some(pinned) = val.get("pinned") {
+                                            chat_obj["pinned"] = pinned.clone();
+                                        }
+                                        if let Some(unread) = val.get("unread") {
+                                            chat_obj["unread"] = unread.clone();
                                         }
 
                                         chats.push(chat_obj);

@@ -392,33 +392,6 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           <BrandLogo size={20} />
         </div>
 
-        {/* Back / Forward History Navigation */}
-        <div className="hidden sm:flex gap-1 text-brand-textMuted select-none border-l border-brand-border/30 pl-3">
-          <button
-            onClick={onNavigateBack}
-            disabled={!canNavigateBack}
-            className={`atmo-btn w-6 h-6 flex items-center justify-center rounded transition-all ${
-              canNavigateBack
-                ? 'hover:bg-white/5 hover:text-brand-textMain cursor-pointer'
-                : 'opacity-35 cursor-not-allowed'
-            }`}
-            title="Go back"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={onNavigateForward}
-            disabled={!canNavigateForward}
-            className={`atmo-btn w-6 h-6 flex items-center justify-center rounded transition-all ${
-              canNavigateForward
-                ? 'hover:bg-white/5 hover:text-brand-textMain cursor-pointer'
-                : 'opacity-35 cursor-not-allowed'
-            }`}
-            title="Go forward"
-          >
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
 
         <div className="hidden lg:flex items-center gap-0.5 text-brand-textMuted text-[11px] font-medium tracking-wide border-l border-brand-border/30 pl-3">
           {groups.map((group) => (

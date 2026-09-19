@@ -51,6 +51,7 @@ import { chatStore } from './stores/chatStore';
 import { providerStore } from './stores/providerStore';
 import { sessionStore } from './stores/sessionStore';
 import { AgentOrchestrator } from './services/AgentOrchestrator';
+import { ChatRepository } from './services/ChatRepository';
 import { AuthService, AuthStatus } from './services/AuthService';
 import { DesktopLockScreen } from './components/DesktopLockScreen';
 
@@ -848,14 +849,53 @@ export const App: React.FC = () => {
   const handleSaveProjectConfig = (updatedProj: StoredProject) => ConversationService.saveProjectConfig(ctx, updatedProj);
   const handleDeleteProject = (projectName: string) => ConversationService.deleteProject(ctx, projectName);
   const handleSelectProject = (project: string) => ConversationService.selectProject(ctx, project);
-  const handleSelectChat = (chatId: string) => ConversationService.selectChat(ctx, chatId);
-  const handleDeleteChat = (chatId: string) => ConversationService.deleteChat(ctx, chatId);
-  const handleNewChat = (forProject?: string) => {
-    if (forProject !== undefined) {
-      ConversationService.newChat(ctx, forProject);
-    } else {
-      setIsNewChatOpen(true);
+  const handleSelectChat = (chatId: string) => {
+    setChats((prev) => {
+      const chat = prev.find((c) => c.id === chatId);
+      if (chat?.unread) {
+        const next = prev.map((c) => (c.id === chatId ? { ...c, unread: false } : c));
+        ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), next);
+        return next;
+      }
+      return prev;
+    });
+    ConversationService.selectChat(ctx, chatId);
+  };
+  const handleDeleteChat = async (chatId: string) => {
+    const chat = chats.find((c) => c.id === chatId);
+    const title = chat?.title ? `"${chat.title}"` : 'this chat';
+    if (!window.confirm(`Are you sure you want to delete ${title}? This cannot be undone.`)) {
+      return;
     }
+    // Delete conversation from backend disk storage
+    if (ipc) {
+      await ipc.invoke('chat-delete', chatId).catch(() => {});
+    }
+    try {
+      fetch(`/api/conversations/${chatId}`, { method: 'DELETE' }).catch(() => {});
+    } catch {
+      // Ignore web offline
+    }
+
+    ConversationService.deleteChat(ctx, chatId);
+    ChatRepository.deleteChat(chatId).catch(() => {});
+  };
+  const handlePinChat = (chatId: string) => {
+    setChats((prev) => {
+      const next = prev.map((c) => (c.id === chatId ? { ...c, pinned: !c.pinned } : c));
+      ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), next);
+      return next;
+    });
+  };
+  const handleMarkUnreadChat = (chatId: string) => {
+    setChats((prev) => {
+      const next = prev.map((c) => (c.id === chatId ? { ...c, unread: !c.unread } : c));
+      ctx.persistStore(ctx.getConnectedProviders(), ctx.getModelsCatalog(), ctx.getProjects(), next);
+      return next;
+    });
+  };
+  const handleNewChat = (forProject?: string) => {
+    ConversationService.newChat(ctx, forProject);
   };
   const handleUndoStep = (stepId: string) => ConversationService.undoStep(ctx, stepId);
   const handleEditStep = useCallback(async (stepId: string, newContent: string) => {
@@ -1812,6 +1852,8 @@ export const App: React.FC = () => {
             }}
             onDeleteChat={handleDeleteChat}
             onSelectChat={handleSelectChat}
+            onPinChat={handlePinChat}
+            onMarkUnreadChat={handleMarkUnreadChat}
             onChatSettings={(chat) => {
               setChatToConfigure(chat);
               setIsChatSettingsOpen(true);

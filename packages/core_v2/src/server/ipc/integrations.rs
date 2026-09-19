@@ -120,6 +120,20 @@ pub async fn handle_integrations_channel(
             let chats = state.chat_storage.load_all_stored_chats();
             Some(Ok(Json(serde_json::json!({ "data": chats }))))
         }
+        "chat-delete" | "conversation-delete" => {
+            let chat_id = args.first().and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s)
+                } else {
+                    v.get("chatId").or_else(|| v.get("id")).and_then(|c| c.as_str())
+                }
+            });
+            if let Some(id) = chat_id {
+                let _ = state.chat_storage.delete_session(id);
+                let _ = state.chat_storage.delete_session(&format!("session_{}", id));
+            }
+            Some(Ok(Json(serde_json::json!({ "data": { "success": true } }))))
+        }
         "settings-read" => {
             let settings = state
                 .settings_store

@@ -30,7 +30,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
   const handleCopyCommand = () => {
     try {
       if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        navigator.clipboard.writeText('npm run dev:web');
+        navigator.clipboard.writeText('superagent --serve');
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }
@@ -264,7 +264,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
               <div className="flex items-center gap-2 overflow-hidden min-w-0">
                 <Terminal className="w-3.5 h-3.5 text-[#d9a066] shrink-0" />
                 <code className="text-xs font-mono text-zinc-200 truncate select-all">
-                  npm run dev:web
+                  superagent --serve
                 </code>
               </div>
               <button
@@ -308,7 +308,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
               {showTroubleshoot && (
                 <div className="mt-2 text-[11px] text-[#9aa6b8]/90 text-left bg-black/25 rounded-xl p-3 space-y-1.5 border border-white/[0.05]">
                   <p>• Make sure port <strong>1469</strong> is not blocked by another process or firewall.</p>
-                  <p>• For Desktop or Rust engine: run <code>cargo run -p superagent-core-v2</code>.</p>
+                  {/* <p>• For Desktop or Rust engine: run <code>cargo run -p superagent-core-v2</code>.</p> */}
                   <p>• If running under another Windows user, start the server in that user session.</p>
                 </div>
               )}
