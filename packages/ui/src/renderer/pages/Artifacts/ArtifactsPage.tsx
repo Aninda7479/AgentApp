@@ -24,7 +24,7 @@ import {
   Info,
   Maximize2
 } from 'lucide-react';
-import { getIpc, getCoreApiBaseUrl } from '../../lib/ipc';
+import { getIpc, getCoreApiBaseUrl, isDesktopApp } from '../../lib/ipc';
 import { copyToClipboard } from '../../util/clipboard';
 
 export interface ArtifactManifest {
@@ -53,6 +53,18 @@ export interface ArtifactRuntimeState {
   url?: string;
   path: string;
   errorMessage?: string;
+}
+
+export function getArtifactUrl(art: ArtifactRuntimeState): string {
+  const type = (art.manifest?.type || 'static').toLowerCase();
+  if (type === 'static' || type === 'web') {
+    return `${getCoreApiBaseUrl()}/api/artifacts/${art.id}/view/`;
+  }
+  if (art.url && !art.url.includes(':3080')) {
+    return art.url;
+  }
+  const port = art.actualPort || art.port || art.manifest?.port || 3080;
+  return `http://127.0.0.1:${port}`;
 }
 
 interface ArtifactsPageProps {
@@ -151,12 +163,17 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
   };
 
   const handleLaunchExternal = async (art: ArtifactRuntimeState) => {
-    if (!ipc) return;
-    try {
-      await ipc.invoke('artifact:open', art.id);
-    } catch (err: any) {
-      console.error('[Artifacts] Failed to launch artifact:', err);
-      triggerToast?.('Could not open artifact in OS window', 'error');
+    const url = getArtifactUrl(art);
+    if (isDesktopApp() && ipc) {
+      try {
+        await ipc.invoke('artifact:open', art.id);
+        return;
+      } catch (err: any) {
+        console.warn('[Artifacts] Desktop IPC launch failed, falling back to window.open:', err);
+      }
+    }
+    if (typeof window !== 'undefined') {
+      window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -587,21 +604,19 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
                     </div>
 
                     {/* Live URL Pill (Click to copy / open) */}
-                    {(art.url || art.actualPort || art.manifest.port) && (
-                      <div className="mt-2.5 flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-brand-inner-bg/80 border border-brand-border/40 text-[11px] font-mono">
-                        <span className="text-brand-textMuted flex items-center gap-1.5 truncate">
-                          <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                          <span className="text-brand-textMain/90 truncate">{art.url || `http://127.0.0.1:${art.actualPort || art.manifest.port || 3080}`}</span>
-                        </span>
-                        <button
-                          onClick={() => handleCopyPath(art.url || `http://127.0.0.1:${art.actualPort || art.manifest.port || 3080}`, `url-${art.id}`)}
-                          className="text-brand-textMuted hover:text-brand-textMain flex items-center gap-1 hover:underline cursor-pointer"
-                          title="Copy HTTP URL"
-                        >
-                          {copiedId === `url-${art.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                        </button>
-                      </div>
-                    )}
+                    <div className="mt-2.5 flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-brand-inner-bg/80 border border-brand-border/40 text-[11px] font-mono">
+                      <span className="text-brand-textMuted flex items-center gap-1.5 truncate">
+                        <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                        <span className="text-brand-textMain/90 truncate">{getArtifactUrl(art)}</span>
+                      </span>
+                      <button
+                        onClick={() => handleCopyPath(getArtifactUrl(art), `url-${art.id}`)}
+                        className="text-brand-textMuted hover:text-brand-textMain flex items-center gap-1 hover:underline cursor-pointer"
+                        title="Copy HTTP URL"
+                      >
+                        {copiedId === `url-${art.id}` ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Card Bottom Actions Toolbar */}
@@ -772,13 +787,13 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
                       HTTP
                     </span>
                     <span className="text-brand-textMain/90 truncate">
-                      {previewArtifact.url || `http://127.0.0.1:${previewArtifact.actualPort || previewArtifact.manifest.port || 3080}`}
+                      {getArtifactUrl(previewArtifact)}
                     </span>
                   </div>
                   <button
                     onClick={() =>
                       handleCopyPath(
-                        previewArtifact.url || `http://127.0.0.1:${previewArtifact.actualPort || previewArtifact.manifest.port || 3080}`,
+                        getArtifactUrl(previewArtifact),
                         'modal-url'
                       )
                     }
@@ -794,11 +809,7 @@ export const ArtifactsPage: React.FC<ArtifactsPageProps> = ({
                 <iframe
                   key={previewKey}
                   title={previewArtifact.manifest.name}
-                  src={
-                    previewArtifact.url
-                      ? String(previewArtifact.url)
-                      : `${getCoreApiBaseUrl()}/api/artifacts/${previewArtifact.id}/view/`
-                  }
+                  src={getArtifactUrl(previewArtifact)}
                   sandbox="allow-scripts allow-forms allow-modals allow-same-origin"
                   className="w-full h-full border-none bg-slate-950"
                 />

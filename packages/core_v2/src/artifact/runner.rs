@@ -61,6 +61,14 @@ impl ArtifactRunner {
                             let port = active_port.or(manifest.port).unwrap_or(3080);
                             let autostart = manifest.autostart;
 
+                            let a_type = manifest.artifact_type.as_str();
+                            let is_static = a_type == "web" || a_type == "static";
+                            let url = if is_static {
+                                Some(format!("http://127.0.0.1:1469/api/artifacts/{}/view/", id))
+                            } else {
+                                Some(format!("http://127.0.0.1:{}", port))
+                            };
+
                             results.push(ArtifactRuntimeState {
                                 id,
                                 manifest,
@@ -70,7 +78,7 @@ impl ArtifactRunner {
                                     "stopped".to_string()
                                 },
                                 port: Some(port),
-                                url: Some(format!("http://127.0.0.1:{}", port)),
+                                url,
                                 path: path.to_string_lossy().to_string(),
                                 autostart,
                             });
@@ -153,7 +161,12 @@ impl ArtifactRunner {
 
         let mut running = artifact.clone();
         running.status = "running".to_string();
-        running.url = Some(format!("http://127.0.0.1:{}", port));
+        let is_static = a_type == "web" || a_type == "static";
+        running.url = Some(if is_static {
+            format!("http://127.0.0.1:1469/api/artifacts/{}/view/", id)
+        } else {
+            format!("http://127.0.0.1:{}", port)
+        });
 
         Ok(running)
     }

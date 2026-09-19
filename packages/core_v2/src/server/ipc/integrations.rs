@@ -852,6 +852,27 @@ pub async fn handle_integrations_channel(
             let _ = state.artifact_runner.stop_artifact(id).await;
             Some(Ok(Json(serde_json::json!({ "data": { "success": true } }))))
         }
+        "artifact:open" | "artifact_open" | "artifact-open" => {
+            let id = args
+                .first()
+                .and_then(|v| {
+                    if let Some(s) = v.as_str() {
+                        Some(s)
+                    } else {
+                        v.get("id").and_then(|s| s.as_str())
+                    }
+                })
+                .unwrap_or("");
+            let artifacts = state.artifact_runner.scan_artifacts();
+            if let Some(art) = artifacts.into_iter().find(|a| a.id == id) {
+                let url = art.url.unwrap_or_else(|| {
+                    format!("http://127.0.0.1:1469/api/artifacts/{}/view/", id)
+                });
+                Some(Ok(Json(serde_json::json!({ "data": { "success": true, "url": url } }))))
+            } else {
+                Some(Ok(Json(serde_json::json!({ "data": { "success": false, "error": "Artifact not found" } }))))
+            }
+        }
         "artifact:toggleAutostart" | "artifact_toggle_autostart" => {
             let id = args
                 .first()

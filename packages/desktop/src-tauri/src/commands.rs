@@ -54,14 +54,20 @@ pub fn artifact_list() -> Vec<ArtifactRuntimeState> {
                             .map(|s| s.to_string_lossy().to_string())
                             .unwrap_or_default();
 
+                        let is_static = manifest.artifact_type == "web" || manifest.artifact_type == "static";
                         let port = manifest.port.unwrap_or(3080);
                         let autostart = manifest.autostart;
+                        let url = if is_static {
+                            format!("http://127.0.0.1:1469/api/artifacts/{}/view/", id)
+                        } else {
+                            format!("http://127.0.0.1:{}", port)
+                        };
                         items.push(ArtifactRuntimeState {
                             id,
                             manifest,
                             status: "stopped".to_string(),
                             port: Some(port),
-                            url: Some(format!("http://127.0.0.1:{}", port)),
+                            url: Some(url),
                             path: path.to_string_lossy().to_string(),
                             autostart,
                         });
@@ -89,6 +95,7 @@ pub fn artifact_start(id: String) -> Result<ArtifactRuntimeState, String> {
     let list = artifact_list();
     if let Some(mut art) = list.into_iter().find(|a| a.id == id) {
         art.status = "running".to_string();
+        let is_static = art.manifest.artifact_type == "web" || art.manifest.artifact_type == "static";
         let port = art.manifest.port.unwrap_or(3080);
         let dir = get_artifacts_dir().join(&id);
         let entry_path = dir.join(&art.manifest.entry);
@@ -108,7 +115,11 @@ pub fn artifact_start(id: String) -> Result<ArtifactRuntimeState, String> {
         }
 
         art.port = Some(port);
-        art.url = Some(format!("http://127.0.0.1:{}", port));
+        art.url = Some(if is_static {
+            format!("http://127.0.0.1:1469/api/artifacts/{}/view/", id)
+        } else {
+            format!("http://127.0.0.1:{}", port)
+        });
         Ok(art)
     } else {
         Err(format!("Artifact {} not found", id))
@@ -131,9 +142,11 @@ pub fn artifact_open(id: String) -> Result<(), String> {
     let dir = get_artifacts_dir().join(&id);
     let manifest_path = dir.join("manifest.json");
     let mut port: u16 = 3080;
+    let mut is_static = true;
 
     if let Ok(content) = fs::read_to_string(&manifest_path) {
         if let Ok(manifest) = serde_json::from_str::<ArtifactManifest>(&content) {
+            is_static = manifest.artifact_type == "web" || manifest.artifact_type == "static";
             if let Some(p) = manifest.port {
                 port = p;
             }
@@ -164,18 +177,13 @@ pub fn artifact_open(id: String) -> Result<(), String> {
         }
     }
 
-    let live_url = format!("http://127.0.0.1:{}", port);
+    let live_url = if is_static {
+        format!("http://127.0.0.1:1469/api/artifacts/{}/view/", id)
+    } else {
+        format!("http://127.0.0.1:{}", port)
+    };
 
-    #[cfg(target_os = "windows")]
-    {
-        let _ = silent_command("cmd")
-            .args(["/C", "start", "", &live_url])
-            .spawn();
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = open::that(&live_url);
-    }
+    let _ = open::that(&live_url);
     Ok(())
 }
 
