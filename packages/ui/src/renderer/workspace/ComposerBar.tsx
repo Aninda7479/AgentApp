@@ -465,7 +465,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({
       <div className="flex flex-col gap-1.5 w-full">
         {/* Capsule Text Bar */}
         <div
-          className={`relative w-full flex items-end gap-2 px-3 py-2 sm:py-2.5 rounded-2xl sm:rounded-[22px] border transition-all duration-200 shadow-lg ${
+          className={`relative w-full min-w-0 flex items-end gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-2xl sm:rounded-[22px] border transition-all duration-200 shadow-lg ${
             isDraggingOver
               ? 'bg-cyan-950/40 border-cyan-500/80 ring-2 ring-cyan-500/30'
               : 'bg-brand-card/90 border-brand-border hover:border-brand-borderStrong focus-within:border-brand-borderStrong focus-within:ring-1 focus-within:ring-brand-borderStrong/30 backdrop-blur-xl'
@@ -513,7 +513,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({
             placeholder={placeholder}
             rows={1}
             disabled={disabled}
-            className="flex-1 bg-transparent resize-none text-brand-textMain text-sm sm:text-base py-1 px-1 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:shadow-none min-h-[36px] max-h-[220px] leading-relaxed placeholder:text-brand-textMuted/60 scrollbar-thin scrollbar-thumb-neutral-700 font-sans"
+            className="flex-1 min-w-0 bg-transparent resize-none text-brand-textMain text-sm sm:text-base py-1 px-1 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:shadow-none min-h-[36px] max-h-[220px] leading-relaxed placeholder:text-brand-textMuted/60 scrollbar-thin scrollbar-thumb-neutral-700 font-sans break-words [overflow-wrap:anywhere]"
           />
 
           {/* Most Right: Voice Dictation (Mic) & Send (Rounded Arrow Button) */}
@@ -554,7 +554,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({
         </div>
 
         {/* Under the text box: Model Select and Permission Mode Level */}
-        <div className="flex items-center justify-end gap-2 sm:gap-3 px-2 pt-0.5 text-xs select-none">
+        <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-3 px-1.5 sm:px-2 pt-0.5 text-xs select-none">
           {/* Model Select */}
           <ModelPicker
               selectedModel={lastUsedModel}

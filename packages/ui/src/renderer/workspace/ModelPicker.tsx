@@ -133,7 +133,7 @@ export const ModelPicker: React.FC<ModelPickerProps> = ({ selectedModel, onSelec
         title={`Model: ${displayLabel}`}
         aria-label={`Select model, currently ${displayLabel}`}
       >
-        <span className="truncate max-w-[140px] sm:max-w-[200px]">{displayLabel}</span>
+        <span className="truncate max-w-[110px] xs:max-w-[140px] sm:max-w-[200px]">{displayLabel}</span>
         <ChevronDown size={11} className="text-brand-textMuted/60 group-hover:text-brand-textMuted shrink-0 transition-transform duration-150" />
       </button>
 

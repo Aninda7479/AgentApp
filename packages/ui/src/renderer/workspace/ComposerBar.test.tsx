@@ -36,6 +36,21 @@ describe('ComposerBar Component', () => {
     // Under-input Model select button
     expect(html).toContain('model-select-btn');
   });
+
+  it('includes responsive min-w-0 and break-words classes to prevent mobile overflow', () => {
+    const html = renderToStaticMarkup(
+      <ComposerBar onSend={vi.fn()} />
+    );
+
+    // Textarea must have min-w-0 and word wrapping to avoid expanding parent flex row on narrow screens
+    expect(html).toContain('min-w-0');
+    expect(html).toContain('break-words');
+    expect(html).toContain('[overflow-wrap:anywhere]');
+
+    // Sub-bar should use justify-between on mobile screens
+    expect(html).toContain('justify-between');
+    expect(html).toContain('sm:justify-end');
+  });
 });
 
 describe('ModelPicker Component', () => {

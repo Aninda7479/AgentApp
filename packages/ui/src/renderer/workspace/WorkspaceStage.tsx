@@ -158,7 +158,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
       <div className="flex-1 w-full min-w-0 overflow-hidden flex flex-col min-h-0 h-full">
         {activeChatId ? (
           steps.length === 0 ? (
-            <div className="flex-1 flex flex-col justify-center items-center px-4 py-8 max-w-3xl mx-auto w-full min-h-0 overflow-y-auto select-none">
+            <div className="flex-1 flex flex-col justify-start sm:justify-center items-center px-3 sm:px-4 py-6 sm:py-8 max-w-3xl mx-auto w-full min-h-0 overflow-y-auto select-none my-auto">
               <div className="w-full flex flex-col items-center text-center mb-6 sm:mb-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {/* Brand icon / subtle glow */}
                 <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-brand-card/80 border border-brand-border/60 flex items-center justify-center mb-4 text-brand-highlight shadow-sm">
@@ -198,13 +198,13 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
               </div>
 
               {/* Starter Prompt Suggestion Chips */}
-              <div className="mt-6 w-full max-w-2xl sm:max-w-3xl flex flex-wrap items-center justify-center gap-2">
+              <div className="mt-6 w-full max-w-2xl sm:max-w-3xl flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
                 {PROMPT_SUGGESTIONS.map((item, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => setComposerPrompt(item.prompt)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-brand-card/70 hover:bg-brand-hover text-brand-textMuted hover:text-brand-textMain border border-brand-border/50 hover:border-brand-border transition-all cursor-pointer shadow-2xs"
+                    className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl text-[11px] sm:text-xs font-medium bg-brand-card/70 hover:bg-brand-hover text-brand-textMuted hover:text-brand-textMain border border-brand-border/50 hover:border-brand-border transition-all cursor-pointer shadow-2xs"
                   >
                     {item.icon}
                     <span>{item.label}</span>
@@ -227,7 +227,7 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
                 </ErrorBoundary>
               </div>
               {/* Global composer bar at the bottom */}
-              <div className="shrink-0 px-2.5 pb-2 pt-1 sm:px-4 sm:pb-4">
+              <div className="shrink-0 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1 sm:px-4 sm:pb-4">
                 <ComposerBar
                   onSend={(prompt: string, options: ComposerOptions, attachments: ComposerAttachment[]) => handleSendPrompt(prompt, options, attachments)}
                 />
