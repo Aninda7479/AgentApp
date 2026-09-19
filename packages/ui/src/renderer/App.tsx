@@ -412,11 +412,11 @@ export const App: React.FC = () => {
   useEffect(() => {
     const unsubChat = chatStore.subscribe(() => {
       const state = chatStore.getState();
-      if (state.projects && (state.projects.length > 0 || prevProjectsLengthRef.current === 0)) {
+      if (state.projects) {
         setProjects((prev) => (JSON.stringify(prev) === JSON.stringify(state.projects) ? prev : state.projects));
         prevProjectsLengthRef.current = state.projects.length;
       }
-      if (state.chats && (state.chats.length > 0 || prevChatsLengthRef.current === 0)) {
+      if (state.chats) {
         setChats((prev) => {
           // Compare meta arrays to avoid infinite loops, but map resident steps
           const prevMeta = prev.map(c => ({
@@ -867,18 +867,33 @@ export const App: React.FC = () => {
     if (!window.confirm(`Are you sure you want to delete ${title}? This cannot be undone.`)) {
       return;
     }
-    // Delete conversation from backend disk storage
+
+    // 1. Immediately delete from React state and Zustand store
+    ConversationService.deleteChat(ctx, chatId);
+    ChatRepository.deleteChat(chatId).catch(() => {});
+
+    // 2. Clean up from localStorage pinned & unread sets
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const pinned = JSON.parse(localStorage.getItem('superagent_sidebar_pinned_chats') || '[]');
+        const unread = JSON.parse(localStorage.getItem('superagent_sidebar_unread_chats') || '[]');
+        localStorage.setItem('superagent_sidebar_pinned_chats', JSON.stringify(pinned.filter((id: string) => id !== chatId)));
+        localStorage.setItem('superagent_sidebar_unread_chats', JSON.stringify(unread.filter((id: string) => id !== chatId)));
+      }
+    } catch {}
+
+    // 3. Delete conversation from backend disk storage
     if (ipc) {
       await ipc.invoke('chat-delete', chatId).catch(() => {});
     }
     try {
-      fetch(`/api/conversations/${chatId}`, { method: 'DELETE' }).catch(() => {});
+      await fetch(`/api/conversations/${encodeURIComponent(chatId)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      }).catch(() => {});
     } catch {
       // Ignore web offline
     }
-
-    ConversationService.deleteChat(ctx, chatId);
-    ChatRepository.deleteChat(chatId).catch(() => {});
   };
   const handlePinChat = (chatId: string) => {
     setChats((prev) => {

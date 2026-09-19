@@ -289,14 +289,119 @@ impl ChatStorage {
     }
 
     pub fn delete_session(&self, id: &str) -> Result<()> {
-        if let Some(file_path) = self.find_chat_file(id) {
-            let _ = fs::remove_file(&file_path);
-            if let Some(parent) = file_path.parent() {
-                if parent.file_name().and_then(|n| n.to_str()) == Some(id) {
-                    let _ = fs::remove_dir_all(parent);
+        let clean_id = id.trim();
+        let stripped_id = clean_id
+            .trim_start_matches("session_")
+            .trim_start_matches("session-")
+            .trim_start_matches("chat_")
+            .trim_start_matches("chat-");
+
+        let search_dirs = [
+            self.storage_dir.join("chats"),
+            self.storage_dir.join("Chats"),
+            get_superagent_dir().join("conversation").join("chats"),
+            get_superagent_dir().join("conversation").join("Chats"),
+            get_superagent_dir().join("chats"),
+        ];
+
+        for dir in &search_dirs {
+            if !dir.exists() {
+                continue;
+            }
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    let name = entry.file_name().to_string_lossy().to_string();
+
+                    // Check if folder name matches id
+                    let matches_name = name.eq_ignore_ascii_case(clean_id)
+                        || name.eq_ignore_ascii_case(stripped_id)
+                        || name.eq_ignore_ascii_case(&format!("session_{}", clean_id))
+                        || name.eq_ignore_ascii_case(&format!("chat_{}", clean_id));
+
+                    if path.is_dir() {
+                        let chat_json = path.join("chat.json");
+                        let mut matches_content = false;
+                        if chat_json.exists() {
+                            if let Ok(content) = fs::read_to_string(&chat_json) {
+                                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                                    if let Some(chat_id) = val.get("id").and_then(|v| v.as_str()) {
+                                        if chat_id.eq_ignore_ascii_case(clean_id)
+                                            || chat_id.eq_ignore_ascii_case(stripped_id)
+                                        {
+                                            matches_content = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if matches_name || matches_content {
+                            let _ = fs::remove_dir_all(&path);
+                        }
+                    } else if path.is_file() {
+                        if matches_name
+                            || name.eq_ignore_ascii_case(&format!("{}.json", clean_id))
+                            || name.eq_ignore_ascii_case(&format!("session_{}.json", clean_id))
+                            || name.eq_ignore_ascii_case(&format!("{}.json", stripped_id))
+                            || name.eq_ignore_ascii_case(&format!("session_{}.json", stripped_id))
+                        {
+                            let _ = fs::remove_file(&path);
+                        }
+                    }
                 }
             }
         }
+
+        // Also check project directories
+        for p_name in &["projects", "Projects"] {
+            let p_dir = self.storage_dir.join(p_name);
+            if p_dir.exists() {
+                if let Ok(entries) = fs::read_dir(&p_dir) {
+                    for entry in entries.flatten() {
+                        let proj_path = entry.path();
+                        if proj_path.is_dir() {
+                            let proj_chat = proj_path.join("chats").join(clean_id);
+                            if proj_chat.exists() {
+                                let _ = fs::remove_dir_all(&proj_chat);
+                            }
+                            let proj_chat_stripped = proj_path.join("chats").join(stripped_id);
+                            if proj_chat_stripped.exists() {
+                                let _ = fs::remove_dir_all(&proj_chat_stripped);
+                            }
+                            let proj_chat_file = proj_path.join(format!("{}.json", clean_id));
+                            if proj_chat_file.exists() {
+                                let _ = fs::remove_file(&proj_chat_file);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Also legacy appdata dirs
+        for legacy in get_legacy_appdata_dirs() {
+            let legacy_dirs = [
+                legacy.join("Conversation").join("Chats"),
+                legacy.join("Conversation").join("chats"),
+                legacy.join("conversation").join("chats"),
+                legacy.join("Conversation"),
+                legacy.join("conversation"),
+            ];
+            for ldir in &legacy_dirs {
+                if ldir.exists() {
+                    let target_dir = ldir.join(clean_id);
+                    if target_dir.exists() {
+                        let _ = fs::remove_dir_all(&target_dir);
+                    }
+                    let target_file = ldir.join(format!("{}.json", clean_id));
+                    if target_file.exists() {
+                        let _ = fs::remove_file(&target_file);
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 
