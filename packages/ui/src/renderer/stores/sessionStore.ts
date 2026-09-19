@@ -3,7 +3,7 @@
  * Manages active parallel agent runs and prompt queues per chat session.
  */
 
-import { useSyncExternalStore } from 'react';
+import { useStoreWithSelector } from './storeUtils';
 import type { QueuedRunItem, ContextUsage } from '../core/types';
 
 export interface ActiveTaskState {
@@ -163,10 +163,14 @@ class SessionStoreManager {
 
 export const sessionStore = new SessionStoreManager();
 
-export function useSessionStore<T>(selector: (state: SessionStoreState) => T): T {
-  return useSyncExternalStore(
+export function useSessionStore<T>(
+  selector: (state: SessionStoreState) => T,
+  isEqual?: (a: T, b: T) => boolean
+): T {
+  return useStoreWithSelector(
     sessionStore.subscribe,
-    () => selector(sessionStore.getState()),
-    () => selector(sessionStore.getState())
+    () => sessionStore.getState(),
+    selector,
+    isEqual
   );
 }

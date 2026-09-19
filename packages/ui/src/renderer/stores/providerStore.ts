@@ -4,6 +4,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { useStoreWithSelector } from './storeUtils';
 import type { ProviderConnection, ModelConfig } from '../core/types';
 
 export interface ProviderStoreState {
@@ -112,11 +113,15 @@ class ProviderStoreManager {
 
 export const providerStore = new ProviderStoreManager();
 
-export function useProviderStore<T>(selector: (state: ProviderStoreState) => T): T {
-  return useSyncExternalStore(
+export function useProviderStore<T>(
+  selector: (state: ProviderStoreState) => T,
+  isEqual?: (a: T, b: T) => boolean
+): T {
+  return useStoreWithSelector(
     providerStore.subscribe,
-    () => selector(providerStore.getState()),
-    () => selector(providerStore.getState())
+    () => providerStore.getState(),
+    selector,
+    isEqual
   );
 }
 

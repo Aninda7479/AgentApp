@@ -4,7 +4,7 @@
  * Uses useSyncExternalStore pattern for reactivity.
  */
 
-import { useSyncExternalStore } from 'react';
+import { useStoreWithSelector } from './storeUtils';
 import type { StoredProject, StoredChat, TrajectoryStep } from '../core/types';
 
 const EMPTY_STEPS: TrajectoryStep[] = [];
@@ -143,10 +143,14 @@ class ChatStoreManager {
 
 export const chatStore = new ChatStoreManager();
 
-export function useChatStore<T>(selector: (state: ChatStoreState) => T): T {
-  return useSyncExternalStore(
+export function useChatStore<T>(
+  selector: (state: ChatStoreState) => T,
+  isEqual?: (a: T, b: T) => boolean
+): T {
+  return useStoreWithSelector(
     chatStore.subscribe,
-    () => selector(chatStore.getState()),
-    () => selector(chatStore.getState())
+    () => chatStore.getState(),
+    selector,
+    isEqual
   );
 }
