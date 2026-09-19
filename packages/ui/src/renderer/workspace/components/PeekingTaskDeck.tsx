@@ -6,45 +6,47 @@
  * Automatically hides completely when no tasks or queues are active.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Terminal,
-  Clock,
-  X,
   Loader2,
+  Clock,
+  Terminal,
+  Trash2,
   ChevronDown,
   ChevronUp,
-  Trash2,
-  Layers,
+  X,
+  Layers
 } from 'lucide-react';
 import { sessionStore, useSessionStore } from '../../stores/sessionStore';
 import { useChatStore } from '../../stores/chatStore';
+import type { QueuedRunItem } from '../../core/types';
+
+const EMPTY_QUEUE: QueuedRunItem[] = [];
 
 interface PeekingTaskDeckProps {
   chatId?: string;
 }
 
 export const PeekingTaskDeck: React.FC<PeekingTaskDeckProps> = ({ chatId: propChatId }) => {
-  const activeChatId = useChatStore((s) => propChatId || s.activeChatId);
+  const storeChatId = useChatStore((s) => s.activeChatId);
+  const activeChatId = propChatId || storeChatId;
   const [now, setNow] = useState(Date.now());
   const [isExpanded, setIsExpanded] = useState(true);
 
-  // Subscribe to sessionStore changes
-  const sessionState = useSessionStore((s) => {
-    if (!activeChatId) return null;
-    const session = s.runningSessions.get(activeChatId);
-    const queue = s.queues.get(activeChatId) || [];
-    return {
-      activeTask: session?.activeTask || null,
-      isGenerating: session?.isGenerating || false,
-      startedAt: session?.startedAt,
-      queue,
-    };
-  });
+  // Subscribe to sessionStore changes using referentially stable selectors
+  const session = useSessionStore(
+    useCallback((s) => (activeChatId ? s.runningSessions.get(activeChatId) : undefined), [activeChatId])
+  );
+  const queueItems = useSessionStore(
+    useCallback((s) => (activeChatId ? s.queues.get(activeChatId) : undefined), [activeChatId])
+  );
+
+  const activeTask = session?.activeTask || null;
+  const queue = queueItems || EMPTY_QUEUE;
 
   // Tick every 1 second while there is an active task or timer to update elapsed/remaining time
-  const hasActiveTask = Boolean(sessionState?.activeTask);
-  const hasQueue = (sessionState?.queue.length || 0) > 0;
+  const hasActiveTask = Boolean(activeTask);
+  const hasQueue = queue.length > 0;
 
   useEffect(() => {
     if (!hasActiveTask && !hasQueue) return;
@@ -53,11 +55,9 @@ export const PeekingTaskDeck: React.FC<PeekingTaskDeckProps> = ({ chatId: propCh
   }, [hasActiveTask, hasQueue]);
 
   // "When those things are done, don't show anything else"
-  if (!activeChatId || !sessionState || (!hasActiveTask && !hasQueue)) {
+  if (!activeChatId || (!hasActiveTask && !hasQueue)) {
     return null;
   }
-
-  const { activeTask, queue } = sessionState;
 
   const handleCancelQueue = () => {
     sessionStore.clearQueue(activeChatId);

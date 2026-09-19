@@ -1,5 +1,7 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import React from 'react';
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PeekingTaskDeck } from './PeekingTaskDeck';
 import { sessionStore } from '../../stores/sessionStore';
@@ -62,5 +64,22 @@ describe('PeekingTaskDeck Component', () => {
     expect(html).toContain('Queued to Run Next (1)');
     expect(html).toContain('Send another message');
     expect(html).toContain('Cancel Queue');
+  });
+
+  it('mounts into DOM without triggering infinite render loop or Maximum update depth exceeded', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    expect(() => {
+      act(() => {
+        root.render(<PeekingTaskDeck chatId="chat-test-1" />);
+      });
+    }).not.toThrow();
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
   });
 });
