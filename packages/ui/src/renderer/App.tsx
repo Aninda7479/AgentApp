@@ -8,6 +8,7 @@ import { BYOKModal } from './pages/Settings/BYOKModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { DoctorModal } from './components/DoctorModal';
 import { PermissionDialog } from './pages/Workspace/PermissionDialog';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import { MCPDashboard, MCPServerInfo } from './pages/Settings/MCPDashboard';
 import { SearchModal } from './components/SearchModal';
 import { ScheduledView } from './pages/Workspace/ScheduledView';
@@ -296,6 +297,19 @@ export const App: React.FC = () => {
   const [projectToConfigure, setProjectToConfigure] = useState<StoredProject | null>(null);
   const [isChatSettingsOpen, setIsChatSettingsOpen] = useState<boolean>(false);
   const [chatToConfigure, setChatToConfigure] = useState<StoredChat | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: React.ReactNode;
+    description?: React.ReactNode;
+    variant?: 'danger' | 'warning' | 'info' | 'neutral';
+    confirmLabel?: string;
+    cancelLabel?: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    onConfirm: () => {},
+  });
   const [composerAttachments, setComposerAttachments] = useState<{ filename: string; sourcePath?: string; buffer?: number[] }[]>(() => {
     try {
       const cached = localStorage.getItem('composer_attachments_cache');
@@ -847,7 +861,24 @@ export const App: React.FC = () => {
   // ── Project / chat CRUD (delegates to ConversationService) ─────────────────
   const handleCreateProject = (newProj: StoredProject) => ConversationService.createProject(ctx, newProj);
   const handleSaveProjectConfig = (updatedProj: StoredProject) => ConversationService.saveProjectConfig(ctx, updatedProj);
-  const handleDeleteProject = (projectName: string) => ConversationService.deleteProject(ctx, projectName);
+  const handleDeleteProject = (projectName: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Project?',
+      description: (
+        <span>
+          Are you sure you want to delete project <strong className="text-brand-textMain">"{projectName}"</strong> and its associated chats? This action cannot be undone.
+        </span>
+      ),
+      variant: 'danger',
+      confirmLabel: 'Delete Project',
+      cancelLabel: 'Cancel',
+      onConfirm: () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
+        ConversationService.deleteProject(ctx, projectName);
+      },
+    });
+  };
   const handleSelectProject = (project: string) => ConversationService.selectProject(ctx, project);
   const handleSelectChat = (chatId: string) => {
     setChats((prev) => {
@@ -861,39 +892,52 @@ export const App: React.FC = () => {
     });
     ConversationService.selectChat(ctx, chatId);
   };
-  const handleDeleteChat = async (chatId: string) => {
+  const handleDeleteChat = (chatId: string) => {
     const chat = chats.find((c) => c.id === chatId);
     const title = chat?.title ? `"${chat.title}"` : 'this chat';
-    if (!window.confirm(`Are you sure you want to delete ${title}? This cannot be undone.`)) {
-      return;
-    }
 
-    // 1. Immediately delete from React state and Zustand store
-    ConversationService.deleteChat(ctx, chatId);
-    ChatRepository.deleteChat(chatId).catch(() => {});
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Chat Conversation?',
+      description: (
+        <span>
+          Are you sure you want to delete <strong className="text-brand-textMain">{title}</strong>? This action cannot be undone and will permanently remove the conversation and history from disk.
+        </span>
+      ),
+      variant: 'danger',
+      confirmLabel: 'Delete Chat',
+      cancelLabel: 'Cancel',
+      onConfirm: async () => {
+        setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
 
-    // 2. Clean up from localStorage pinned & unread sets
-    try {
-      if (typeof localStorage !== 'undefined') {
-        const pinned = JSON.parse(localStorage.getItem('superagent_sidebar_pinned_chats') || '[]');
-        const unread = JSON.parse(localStorage.getItem('superagent_sidebar_unread_chats') || '[]');
-        localStorage.setItem('superagent_sidebar_pinned_chats', JSON.stringify(pinned.filter((id: string) => id !== chatId)));
-        localStorage.setItem('superagent_sidebar_unread_chats', JSON.stringify(unread.filter((id: string) => id !== chatId)));
-      }
-    } catch {}
+        // 1. Immediately delete from React state and Zustand store
+        ConversationService.deleteChat(ctx, chatId);
+        ChatRepository.deleteChat(chatId).catch(() => {});
 
-    // 3. Delete conversation from backend disk storage
-    if (ipc) {
-      await ipc.invoke('chat-delete', chatId).catch(() => {});
-    }
-    try {
-      await fetch(`/api/conversations/${encodeURIComponent(chatId)}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      }).catch(() => {});
-    } catch {
-      // Ignore web offline
-    }
+        // 2. Clean up from localStorage pinned & unread sets
+        try {
+          if (typeof localStorage !== 'undefined') {
+            const pinned = JSON.parse(localStorage.getItem('superagent_sidebar_pinned_chats') || '[]');
+            const unread = JSON.parse(localStorage.getItem('superagent_sidebar_unread_chats') || '[]');
+            localStorage.setItem('superagent_sidebar_pinned_chats', JSON.stringify(pinned.filter((id: string) => id !== chatId)));
+            localStorage.setItem('superagent_sidebar_unread_chats', JSON.stringify(unread.filter((id: string) => id !== chatId)));
+          }
+        } catch {}
+
+        // 3. Delete conversation from backend disk storage
+        if (ipc) {
+          await ipc.invoke('chat-delete', chatId).catch(() => {});
+        }
+        try {
+          await fetch(`/api/conversations/${encodeURIComponent(chatId)}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          }).catch(() => {});
+        } catch {
+          // Ignore web offline
+        }
+      },
+    });
   };
   const handlePinChat = (chatId: string) => {
     setChats((prev) => {
@@ -2166,6 +2210,18 @@ export const App: React.FC = () => {
         isOpen={pendingPermission !== null}
         request={pendingPermission?.request ?? null}
         onResolve={resolvePermission}
+      />
+
+      {/* Generic, customizable confirmation dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        variant={confirmDialog.variant}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
       />
 
       {/* Interactive Global Error Modal with Copy Details Prompt */}

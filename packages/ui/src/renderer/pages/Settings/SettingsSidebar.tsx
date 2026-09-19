@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Archive,
   ArrowLeft,
+  Blocks,
   Box,
   Boxes,
   Brain,
@@ -77,7 +78,8 @@ const CATEGORIES: Record<string, SidebarItem[]> = {
     { id: 'archived-projects', label: 'Archived Projects', Icon: FolderArchive }
   ],
   Storage: [
-    { id: 'artifacts', label: 'Storage & Artifacts', Icon: HardDrive }
+    { id: 'storage', label: 'Storage', Icon: HardDrive },
+    { id: 'artifacts', label: 'Artifacts', Icon: Blocks }
   ],
   Hosting: [
     { id: 'web-app', label: 'Web App', Icon: Globe }

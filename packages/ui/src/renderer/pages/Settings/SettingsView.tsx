@@ -24,6 +24,7 @@ import { WebAppSettings } from './WebAppSettings';
 import { CircleSearchSettings } from './CircleSearchSettings';
 import { MemorySettings } from './MemorySettings';
 import { ArtifactSettings } from './ArtifactSettings';
+import { StorageSettings } from './StorageSettings';
 import { TelegramSettings } from './TelegramSettings';
 import { browserSafeFetch } from '../../web-fetch.js';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
@@ -53,7 +54,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   'archived-chats': 'Archived Chats',
   'archived-projects': 'Archived Projects',
   'web-app': 'Web App',
-  artifacts: 'Storage & Artifacts',
+  storage: 'Storage',
+  artifacts: 'Artifacts',
   updates: 'Updates',
   about: 'About'
 };
@@ -523,6 +525,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             connectedProviders={connectedProviders}
             modelsCatalog={modelsCatalog}
           />
+        )}
+
+        {activeCategory === 'storage' && (
+          <StorageSettings />
         )}
 
         {activeCategory === 'artifacts' && (

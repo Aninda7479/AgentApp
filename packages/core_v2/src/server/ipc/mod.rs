@@ -3,6 +3,7 @@ pub mod circle_search;
 pub mod helpers;
 pub mod integrations;
 pub mod memory;
+pub mod storage;
 pub mod usage;
 pub mod voice;
 
@@ -93,6 +94,9 @@ pub async fn handle_ipc(
         return res;
     }
     if let Some(res) = memory::handle_memory_channel(ch, &state, args.clone()).await {
+        return res;
+    }
+    if let Some(res) = storage::handle_storage_channel(ch, &state, args.clone()).await {
         return res;
     }
     if let Some(res) = usage::handle_usage_channel(ch, &state, args.clone()).await {
