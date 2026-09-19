@@ -176,12 +176,26 @@ pub async fn handle_storage_channel(
                     "last_modified": m_mod,
                 }));
 
-                // 5. Models (from cache_dir)
-                let models_dir = cache_dir.join("models");
-                let (mod_size, mod_files, mod_last) = calculate_dir_stats(&models_dir);
+                // 5. Models (check both superagent_dir/models and cache_dir/models)
+                let sa_models = superagent_dir.join("models");
+                let cache_models = cache_dir.join("models");
+                let (mut mod_size, mut mod_files, mut mod_last) = (0u64, 0usize, 0i64);
+                let models_path = if sa_models.exists() {
+                    let (s, f, l) = calculate_dir_stats(&sa_models);
+                    mod_size += s;
+                    mod_files += f;
+                    mod_last = mod_last.max(l);
+                    sa_models
+                } else {
+                    let (s, f, l) = calculate_dir_stats(&cache_models);
+                    mod_size += s;
+                    mod_files += f;
+                    mod_last = mod_last.max(l);
+                    cache_models
+                };
                 total_size_bytes += mod_size;
                 folders.push(serde_json::json!({
-                    "path": models_dir.to_string_lossy(),
+                    "path": models_path.to_string_lossy(),
                     "label": "Models",
                     "size_bytes": mod_size,
                     "file_count": mod_files,
@@ -223,6 +237,49 @@ pub async fn handle_storage_channel(
                     "file_count": cfg_files,
                     "last_modified": cfg_last,
                 }));
+
+                // 9. Binaries & Tools (bin, engines, standalone binaries)
+                let mut bin_size = 0u64;
+                let mut bin_files = 0usize;
+                let mut bin_last = 0i64;
+                for sub in &["bin", "engines"] {
+                    let d = superagent_dir.join(sub);
+                    if d.exists() {
+                        let (s, f, l) = calculate_dir_stats(&d);
+                        bin_size += s;
+                        bin_files += f;
+                        bin_last = bin_last.max(l);
+                    }
+                }
+                if let Ok(entries) = std::fs::read_dir(&superagent_dir) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if p.is_file() {
+                            let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+                            if ext == "exe" || ext == "cmd" || ext == "bat" || ext == "js" || ext == "lock" {
+                                if let Ok(meta) = p.metadata() {
+                                    bin_size += meta.len();
+                                    bin_files += 1;
+                                    if let Ok(t) = meta.modified() {
+                                        if let Ok(dur) = t.duration_since(std::time::UNIX_EPOCH) {
+                                            bin_last = bin_last.max(dur.as_secs() as i64);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if bin_files > 0 {
+                    total_size_bytes += bin_size;
+                    folders.push(serde_json::json!({
+                        "path": superagent_dir.to_string_lossy(),
+                        "label": "Binaries & Tools",
+                        "size_bytes": bin_size,
+                        "file_count": bin_files,
+                        "last_modified": bin_last,
+                    }));
+                }
 
                 serde_json::json!({
                     "data": {

@@ -64,6 +64,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Images': '#3b82f6',
   'Videos': '#ef4444',
   'Config': '#6b7280',
+  'Binaries & Tools': '#14b8a6',
+  'Other': '#94a3b8',
 };
 
 export const StorageSettings: React.FC = () => {
@@ -91,21 +93,41 @@ export const StorageSettings: React.FC = () => {
     if (!ipc) return;
     setLoading(true);
     try {
-      const scanResult = await ipc.invoke('storage:scan');
-      if (scanResult?.data) {
-        setFolders(scanResult.data.folders || []);
-        setTotalSize(scanResult.data.total_size_bytes || 0);
+      const scanResult: unknown = await ipc.invoke('storage:scan');
+      const scanObj = (scanResult && typeof scanResult === 'object') ? (scanResult as Record<string, unknown>) : null;
+      const scanData = (scanObj?.data && typeof scanObj.data === 'object' ? scanObj.data : scanObj) as {
+        folders?: FolderInfo[];
+        total_size_bytes?: number;
+      } | null;
+
+      if (scanData) {
+        if (Array.isArray(scanData.folders)) {
+          setFolders(scanData.folders);
+        }
+        if (typeof scanData.total_size_bytes === 'number') {
+          setTotalSize(scanData.total_size_bytes);
+        }
       }
       
-      const cfResult = await ipc.invoke('storage:get-conversation-files');
-      if (cfResult?.data) {
-        setConvFiles(cfResult.data);
-      }
+      const cfResult: unknown = await ipc.invoke('storage:get-conversation-files');
+      const cfObj = (cfResult && typeof cfResult === 'object') ? (cfResult as Record<string, unknown>) : null;
+      const cfData = Array.isArray(cfResult) ? cfResult : (Array.isArray(cfObj?.data) ? cfObj.data : []);
+      setConvFiles(cfData as ConversationFileGroup[]);
       
-      const memResult = await ipc.invoke('storage:get-memory-index');
-      if (memResult?.data) {
-        setMemoryConversations(memResult.data.conversations || []);
-        setTotalMediaCount(memResult.data.total_media_count || 0);
+      const memResult: unknown = await ipc.invoke('storage:get-memory-index');
+      const memObj = (memResult && typeof memResult === 'object') ? (memResult as Record<string, unknown>) : null;
+      const memData = (memObj?.data && typeof memObj.data === 'object' ? memObj.data : memObj) as {
+        conversations?: MemoryConversation[];
+        total_media_count?: number;
+      } | null;
+
+      if (memData) {
+        if (Array.isArray(memData.conversations)) {
+          setMemoryConversations(memData.conversations);
+        }
+        if (typeof memData.total_media_count === 'number') {
+          setTotalMediaCount(memData.total_media_count);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch storage data', err);
@@ -319,8 +341,13 @@ export const StorageSettings: React.FC = () => {
       <section className="mb-8">
         <h3 className="mb-3 text-base font-semibold text-brand-textMain">Folder Breakdown</h3>
         <div className="rounded-lg border border-brand-border bg-brand-card overflow-hidden">
-          <div className="divide-y divide-brand-border">
-            {folders.filter(f => !f.label.startsWith('Project: ')).map(folder => {
+          {folders.length === 0 ? (
+            <div className="p-8 text-center text-sm text-brand-textMuted">
+              {loading ? 'Scanning storage...' : 'No folders discovered.'}
+            </div>
+          ) : (
+            <div className="divide-y divide-brand-border">
+              {folders.filter(f => !f.label.startsWith('Project: ')).map(folder => {
               const isProjects = folder.label === 'Projects';
               const subFolders = isProjects ? folders.filter(f => f.label.startsWith('Project: ')) : [];
               
@@ -376,7 +403,8 @@ export const StorageSettings: React.FC = () => {
                 </React.Fragment>
               );
             })}
-          </div>
+            </div>
+          )}
         </div>
       </section>
 
