@@ -46,9 +46,11 @@ impl Tool for RunSubagentTool {
     async fn execute(&self, input: Value) -> Result<String> {
         let persona_id = input["persona_id"]
             .as_str()
-            .ok_or_else(|| anyhow!("Missing 'persona_id' parameter"))?;
+            .or_else(|| input["subagent_type"].as_str())
+            .unwrap_or("code-architect");
         let prompt = input["prompt"]
             .as_str()
+            .or_else(|| input["description"].as_str())
             .ok_or_else(|| anyhow!("Missing 'prompt' parameter"))?;
 
         self.runner.execute_subagent(persona_id, prompt).await

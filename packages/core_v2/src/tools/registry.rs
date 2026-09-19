@@ -46,6 +46,7 @@ impl ToolRegistry {
             "load_skill" | "list_skills" => "skill",
             "todowrite" | "checklist" => "todo",
             "plan_tool" | "roadmap" => "plan",
+            "ask_question" => "question",
             _ => name,
         }
     }
@@ -148,11 +149,15 @@ mod tests {
         registry.register(DummyTool {
             name: "todo".to_string(),
         });
+        registry.register(DummyTool {
+            name: "question".to_string(),
+        });
 
         // Direct lookup
         assert!(registry.get("telegram").is_some());
         assert!(registry.get("run_command").is_some());
         assert!(registry.get("read_file").is_some());
+        assert!(registry.get("question").is_some());
 
         // Alias lookup
         assert!(registry.get("telegram_telegram").is_some());
@@ -169,6 +174,7 @@ mod tests {
         assert!(registry.get("invoke_subagent").is_some());
         assert!(registry.get("load_skill").is_some());
         assert!(registry.get("todowrite").is_some());
+        assert!(registry.get("ask_question").is_some());
 
         // Execution via alias
         let tg_res = registry

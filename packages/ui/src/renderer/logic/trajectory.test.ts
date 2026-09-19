@@ -237,6 +237,49 @@ describe('TrajectoryService', () => {
       expect(globDetails.actionLabel).toBe('Searched');
       expect(globDetails.targetName).toBe('**/*.rs');
     });
+
+    it('parses question / ask_question tools and summarizes content', () => {
+      const questionStep: TrajectoryStep = {
+        id: '12',
+        type: 'tool_call',
+        toolName: 'question',
+        content: 'prompt',
+        metadata: {
+          toolInput: {
+            question: 'Which language powers SuperAgent?',
+            options: ['Rust', 'Go'],
+          },
+        },
+      };
+      const details = TrajectoryService.parseToolDetails(questionStep);
+      expect(details.category).toBe('task');
+      expect(details.actionLabel).toBe('Asked question');
+      expect(details.icon).toBe('❓');
+      expect(details.targetName).toBe('Which language powers SuperAgent?');
+
+      const summary = TrajectoryService.summarizeToolContent(questionStep);
+      expect(summary).toBe('Asked user a question');
+
+      const multiQStep: TrajectoryStep = {
+        id: '13',
+        type: 'tool_call',
+        toolName: 'ask_question',
+        content: 'quiz',
+        metadata: {
+          toolInput: {
+            questions: [
+              { question: 'Q1' },
+              { question: 'Q2' },
+              { question: 'Q3' },
+            ],
+          },
+        },
+      };
+      const multiDetails = TrajectoryService.parseToolDetails(multiQStep);
+      expect(multiDetails.category).toBe('task');
+      expect(multiDetails.actionLabel).toBe('Asked question');
+      expect(multiDetails.targetName).toBe('3 questions');
+    });
   });
 
   describe('parseThinkingContent', () => {

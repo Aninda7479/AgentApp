@@ -82,6 +82,7 @@ pub async fn start_server(
     registry.register(CreateArtifactTool::new());
     registry.register(ListArtifactsTool::new());
     registry.register(ReadArtifactTool::new());
+    registry.register(QuestionTool::new());
 
     let tool_registry_arc = Arc::new(registry);
     let subagent_runner = Arc::new(SubagentRunner::new(

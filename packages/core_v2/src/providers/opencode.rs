@@ -139,13 +139,47 @@ pub fn get_official_opencode_tools() -> Vec<serde_json::Value> {
                     }),
                 ),
                 "question" => (
-                    "Ask the user a question for clarification or input",
+                    "Ask the user one or more questions, clarification prompts, or quiz items",
                     json!({
                         "type": "object",
                         "properties": {
-                            "question": { "type": "string", "description": "Question text" }
-                        },
-                        "required": ["question"]
+                            "question": { "type": "string", "description": "Single question text" },
+                            "questions": {
+                                "type": "array",
+                                "description": "Array of question objects for multi-question surveys or quizzes",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "header": { "type": "string", "description": "Category or header" },
+                                        "question": { "type": "string", "description": "Question text" },
+                                        "options": {
+                                            "type": "array",
+                                            "description": "Selectable choices",
+                                            "items": {
+                                                "oneOf": [
+                                                    { "type": "string" },
+                                                    {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "label": { "type": "string" },
+                                                            "description": { "type": "string" }
+                                                        },
+                                                        "required": ["label"]
+                                                    }
+                                                ]
+                                            }
+                                        },
+                                        "is_multi_select": { "type": "boolean" }
+                                    },
+                                    "required": ["question"]
+                                }
+                            },
+                            "options": {
+                                "type": "array",
+                                "description": "Selectable choices for a single question",
+                                "items": { "type": "string" }
+                            }
+                        }
                     }),
                 ),
                 "todo" => (
@@ -271,25 +305,92 @@ pub fn prepare_opencode_free_tier_tools(tools: &[serde_json::Value]) -> Vec<serd
             "plan" | "roadmap" => "plan",
             "todo" | "todowrite" => "todo",
             other if OPENCODE_OFFICIAL_TOOLS.contains(&other) => other,
-            _ => "task", // Safe fallback to official whitelist
+            _ => continue, // Do not map non-whitelisted tools (e.g. create_artifact, generate_pdf) to avoid 403 FreeTierError and schema corruption
         };
 
         if seen_names.insert(mapped_name) {
-            let mut t = tool.clone();
-            if let Some(f) = t.get_mut("function") {
-                f["name"] = json!(mapped_name);
-            } else if t.get("type").and_then(|tp| tp.as_str()) == Some("function") {
-                t["name"] = json!(mapped_name);
-            } else {
-                t = json!({
+            let t = if mapped_name == "task" {
+                json!({
                     "type": "function",
                     "function": {
-                        "name": mapped_name,
-                        "description": tool.get("description").unwrap_or(&json!("OpenCode tool")),
-                        "parameters": tool.get("parameters").unwrap_or(&json!({"type": "object", "properties": {}}))
+                        "name": "task",
+                        "description": "Spawn or manage background subtasks and workflows",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "prompt": { "type": "string", "description": "Subagent prompt or task description" }
+                            },
+                            "required": ["prompt"]
+                        }
                     }
-                });
-            }
+                })
+            } else if mapped_name == "question" {
+                json!({
+                    "type": "function",
+                    "function": {
+                        "name": "question",
+                        "description": "Ask the user one or more questions, clarification prompts, or quiz items",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "question": { "type": "string", "description": "Single question text" },
+                                "questions": {
+                                    "type": "array",
+                                    "description": "Array of question objects for multi-question surveys or quizzes",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "header": { "type": "string", "description": "Category or header" },
+                                            "question": { "type": "string", "description": "Question text" },
+                                            "options": {
+                                                "type": "array",
+                                                "description": "Selectable choices",
+                                                "items": {
+                                                    "oneOf": [
+                                                        { "type": "string" },
+                                                        {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "label": { "type": "string" },
+                                                                "description": { "type": "string" }
+                                                            },
+                                                            "required": ["label"]
+                                                        }
+                                                    ]
+                                                }
+                                            },
+                                            "is_multi_select": { "type": "boolean" }
+                                        },
+                                        "required": ["question"]
+                                    }
+                                },
+                                "options": {
+                                    "type": "array",
+                                    "description": "Selectable choices for a single question",
+                                    "items": { "type": "string" }
+                                }
+                            }
+                        }
+                    }
+                })
+            } else {
+                let mut base = tool.clone();
+                if let Some(f) = base.get_mut("function") {
+                    f["name"] = json!(mapped_name);
+                } else if base.get("type").and_then(|tp| tp.as_str()) == Some("function") {
+                    base["name"] = json!(mapped_name);
+                } else {
+                    base = json!({
+                        "type": "function",
+                        "function": {
+                            "name": mapped_name,
+                            "description": tool.get("description").unwrap_or(&json!("OpenCode tool")),
+                            "parameters": tool.get("parameters").unwrap_or(&json!({"type": "object", "properties": {}}))
+                        }
+                    });
+                }
+                base
+            };
             prepared.push(t);
         }
     }
@@ -317,6 +418,8 @@ pub fn map_opencode_tool_name_to_superagent(raw_name: &str) -> String {
         "skill" => "skill".to_string(),
         "plan" => "plan".to_string(),
         "todo" => "todo".to_string(),
+        "question" => "question".to_string(),
+        "ask_question" => "question".to_string(),
         // Antigravity & legacy aliases
         "view_file" => "read_file".to_string(),
         "write_to_file" => "write_file".to_string(),
@@ -1733,11 +1836,28 @@ mod tests {
                     "parameters": {"type": "object", "properties": {}}
                 }
             }),
+            json!({
+                "type": "function",
+                "function": {
+                    "name": "create_artifact",
+                    "description": "Create artifact",
+                    "parameters": {"type": "object", "properties": {}}
+                }
+            }),
+            json!({
+                "type": "function",
+                "function": {
+                    "name": "ask_question",
+                    "description": "Ask question",
+                    "parameters": {"type": "object", "properties": {}}
+                }
+            }),
         ];
         let prepared = prepare_opencode_free_tier_tools(&client_tools);
-        assert_eq!(prepared.len(), 2);
+        assert_eq!(prepared.len(), 3);
         assert_eq!(prepared[0]["function"]["name"], "bash");
         assert_eq!(prepared[1]["function"]["name"], "read");
+        assert_eq!(prepared[2]["function"]["name"], "question");
     }
 
     #[test]
@@ -1760,6 +1880,14 @@ mod tests {
         assert_eq!(map_opencode_tool_name_to_superagent("skill"), "skill");
         assert_eq!(map_opencode_tool_name_to_superagent("plan"), "plan");
         assert_eq!(map_opencode_tool_name_to_superagent("todo"), "todo");
+        assert_eq!(
+            map_opencode_tool_name_to_superagent("question"),
+            "question"
+        );
+        assert_eq!(
+            map_opencode_tool_name_to_superagent("ask_question"),
+            "question"
+        );
         assert_eq!(
             map_opencode_tool_name_to_superagent("view_file"),
             "read_file"

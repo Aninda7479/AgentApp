@@ -120,6 +120,10 @@ export class TrajectoryService {
       return 'Loaded agent skill instructions';
     }
 
+    if (toolName === 'question' || toolName === 'ask_question') {
+      return 'Asked user a question';
+    }
+
     return TrajectoryService.truncatePreview(trimmed);
   }
 
@@ -378,6 +382,17 @@ export class TrajectoryService {
         actionLabel: toolName === 'list_artifacts' ? 'Listed artifacts' : 'Explored directory',
         icon: toolName === 'list_artifacts' ? '🎨' : '📁',
         targetName: target,
+      };
+    }
+
+    // 8. Question / Quiz tool
+    if (toolName === 'question' || toolName === 'ask_question') {
+      const qText = input.question || (Array.isArray(input.questions) ? `${input.questions.length} questions` : 'Question');
+      return {
+        category: 'task',
+        actionLabel: 'Asked question',
+        icon: '❓',
+        targetName: TrajectoryService.truncatePreview(typeof qText === 'string' ? qText : 'questions', 50),
       };
     }
 
