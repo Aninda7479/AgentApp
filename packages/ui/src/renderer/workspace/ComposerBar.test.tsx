@@ -3,6 +3,8 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ComposerBar } from './ComposerBar';
 import { ModelPicker } from './ModelPicker';
+import { sessionStore } from '../stores/sessionStore';
+import { chatStore } from '../stores/chatStore';
 
 describe('ComposerBar Component', () => {
   it('renders text bar with left plus button, textarea, right mic and rounded arrow send button', () => {
@@ -50,6 +52,33 @@ describe('ComposerBar Component', () => {
     // Sub-bar should use justify-between on mobile screens
     expect(html).toContain('justify-between');
     expect(html).toContain('sm:justify-end');
+  });
+
+  it('integrates active task cue card seamlessly inside the composer card when a task is running', () => {
+    chatStore.setActiveChatId('chat-composer-test');
+    sessionStore.markRunning('chat-composer-test');
+    sessionStore.setActiveTask('chat-composer-test', {
+      type: 'command',
+      name: 'run_command',
+      detail: 'cargo check --workspace',
+      startedAt: Date.now(),
+    });
+
+    const html = renderToStaticMarkup(
+      <ComposerBar chatId="chat-composer-test" onSend={vi.fn()} />
+    );
+
+    // Both PeekingTaskDeck and textarea input are rendered inside the ComposerBar
+    expect(html).toContain('peeking-task-deck');
+    expect(html).toContain('Active Processing Deck');
+    expect(html).toContain('cargo check --workspace');
+    expect(html).toContain('composer-input');
+    // Verifies brand tokens are used
+    expect(html).toContain('bg-brand-card/90');
+    expect(html).toContain('border-brand-border');
+
+    // Cleanup
+    sessionStore.setActiveTask('chat-composer-test', null);
   });
 });
 

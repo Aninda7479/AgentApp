@@ -122,6 +122,121 @@ describe('TrajectoryService', () => {
       expect(details.category).toBe('thought');
       expect(details.actionLabel).toBe('Thinking...');
     });
+
+    it('parses plan tool with roadmap badge and goal', () => {
+      const step: TrajectoryStep = {
+        id: '6',
+        type: 'tool_call',
+        toolName: 'plan',
+        content: 'roadmap',
+        metadata: {
+          toolInput: {
+            title: 'Refactor Core Architecture',
+          },
+        },
+      };
+
+      const details = TrajectoryService.parseToolDetails(step);
+      expect(details.category).toBe('task');
+      expect(details.actionLabel).toBe('Planned roadmap');
+      expect(details.icon).toBe('🗺️');
+      expect(details.targetName).toBe('Refactor Core Architecture');
+    });
+
+    it('parses todo tool with checklist icon and task count', () => {
+      const step: TrajectoryStep = {
+        id: '7',
+        type: 'tool_call',
+        toolName: 'todo',
+        content: 'checklist',
+        metadata: {
+          toolInput: {
+            items: ['Web search', 'Read config', 'Run tests'],
+          },
+        },
+      };
+
+      const details = TrajectoryService.parseToolDetails(step);
+      expect(details.category).toBe('task');
+      expect(details.actionLabel).toBe('Updated checklist');
+      expect(details.icon).toBe('☑️');
+      expect(details.targetName).toBe('3 tasks');
+    });
+
+    it('parses skill tool with skill icon and name', () => {
+      const step: TrajectoryStep = {
+        id: '8',
+        type: 'tool_call',
+        toolName: 'skill',
+        content: 'loaded',
+        metadata: {
+          toolInput: {
+            name: 'code-review',
+          },
+        },
+      };
+
+      const details = TrajectoryService.parseToolDetails(step);
+      expect(details.category).toBe('task');
+      expect(details.actionLabel).toBe('Loaded skill');
+      expect(details.icon).toBe('✨');
+      expect(details.targetName).toBe('code-review');
+    });
+
+    it('parses browser_navigate / webfetch with globe icon', () => {
+      const step: TrajectoryStep = {
+        id: '9',
+        type: 'tool_call',
+        toolName: 'browser_navigate',
+        content: 'content',
+        metadata: {
+          toolInput: {
+            url: 'https://opencode.ai/docs',
+          },
+        },
+      };
+
+      const details = TrajectoryService.parseToolDetails(step);
+      expect(details.category).toBe('search');
+      expect(details.actionLabel).toBe('Browsed');
+      expect(details.icon).toBe('🌐');
+      expect(details.targetName).toBe('https://opencode.ai/docs');
+    });
+
+    it('parses websearch / web_search and glob search tools', () => {
+      const searchStep: TrajectoryStep = {
+        id: '10',
+        type: 'tool_call',
+        toolName: 'web_search',
+        content: 'results',
+        metadata: {
+          toolInput: {
+            query: 'Axum 0.7 WebSocket router',
+          },
+        },
+      };
+      const searchDetails = TrajectoryService.parseToolDetails(searchStep);
+      expect(searchDetails.category).toBe('search');
+      expect(searchDetails.actionLabel).toBe('Searched');
+      expect(searchDetails.icon).toBe('🔍');
+      expect(searchDetails.targetName).toBe('Axum 0.7 WebSocket router');
+
+      const globStep: TrajectoryStep = {
+        id: '11',
+        type: 'tool_call',
+        toolName: 'glob',
+        content: 'files',
+        metadata: {
+          toolInput: {
+            pattern: '**/*.rs',
+          },
+        },
+      };
+      const globDetails = TrajectoryService.parseToolDetails(globStep);
+      expect(globDetails.category).toBe('search');
+      expect(globDetails.actionLabel).toBe('Searched');
+      expect(globDetails.targetName).toBe('**/*.rs');
+    });
   });
 
   describe('parseThinkingContent', () => {

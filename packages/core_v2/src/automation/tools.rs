@@ -47,7 +47,14 @@ impl Tool for BrowserNavigateTool {
     }
 
     async fn execute(&self, input: Value) -> Result<String> {
-        let url = input["url"].as_str().ok_or_else(|| anyhow!("Missing url parameter"))?;
+        let url = input
+            .get("url")
+            .or_else(|| input.get("Url"))
+            .or_else(|| input.get("URL"))
+            .or_else(|| input.get("link"))
+            .or_else(|| input.get("endpoint"))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("Missing url parameter"))?;
         let page = self.engine.fetch_page_content(url).await?;
         Ok(format!(
             "Title: {}\nURL: {}\nStatus: {}\n\nContent:\n{}",
@@ -141,8 +148,20 @@ impl Tool for WebSearchTool {
     }
 
     async fn execute(&self, input: Value) -> Result<String> {
-        let query = input["query"].as_str().ok_or_else(|| anyhow!("Missing query parameter"))?;
-        let max_results = input["max_results"].as_u64().unwrap_or(5) as usize;
+        let query = input
+            .get("query")
+            .or_else(|| input.get("Query"))
+            .or_else(|| input.get("q"))
+            .or_else(|| input.get("search_query"))
+            .or_else(|| input.get("searchQuery"))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("Missing query parameter"))?;
+        let max_results = input
+            .get("max_results")
+            .or_else(|| input.get("maxResults"))
+            .or_else(|| input.get("limit"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(5) as usize;
 
         let results = self.engine.search(query, max_results).await?;
         serde_json::to_string_pretty(&results).map_err(|e| anyhow!("Failed to serialize search results: {}", e))

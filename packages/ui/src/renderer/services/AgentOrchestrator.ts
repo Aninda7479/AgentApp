@@ -396,7 +396,24 @@ export class AgentOrchestrator {
                 : (event.toolArgs?.text ? 'Sending Telegram message' : 'Sending Telegram media');
             } else if (event.toolArgs && typeof event.toolArgs === 'object') {
               const keys = Object.keys(event.toolArgs);
-              detail = keys.length > 0 ? `${keys[0]}: ${String((event.toolArgs as Record<string, unknown>)[keys[0]])}` : '';
+              if (keys.length > 0) {
+                const firstVal = (event.toolArgs as Record<string, unknown>)[keys[0]];
+                if (typeof firstVal === 'string') {
+                  detail = `${keys[0]}: ${firstVal}`;
+                } else if (Array.isArray(firstVal)) {
+                  detail = `${keys[0]}: (${firstVal.length} item${firstVal.length === 1 ? '' : 's'})`;
+                } else if (typeof firstVal === 'object' && firstVal !== null) {
+                  try {
+                    detail = `${keys[0]}: ${JSON.stringify(firstVal)}`;
+                  } catch {
+                    detail = `${keys[0]}`;
+                  }
+                } else {
+                  detail = `${keys[0]}: ${String(firstVal)}`;
+                }
+              } else {
+                detail = '';
+              }
             }
 
             sessionStore.setActiveTask(chatId, {

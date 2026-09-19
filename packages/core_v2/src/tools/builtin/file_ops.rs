@@ -115,8 +115,13 @@ impl Tool for ReadFileTool {
     }
 
     async fn execute(&self, input: Value) -> Result<String> {
-        let path_str = input["path"]
-            .as_str()
+        let path_str = input
+            .get("path")
+            .or_else(|| input.get("filePath"))
+            .or_else(|| input.get("file_path"))
+            .or_else(|| input.get("AbsolutePath"))
+            .or_else(|| input.get("file"))
+            .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required string parameter 'path'"))?;
 
         let safe_path = validate_path_in_workspace(path_str, &self.workspace_root)?;
@@ -125,8 +130,18 @@ impl Tool for ReadFileTool {
             .await
             .map_err(|e| anyhow!("Failed to read file '{}': {}", safe_path.display(), e))?;
 
-        let start_line = input["start_line"].as_u64().map(|n| n as usize);
-        let end_line = input["end_line"].as_u64().map(|n| n as usize);
+        let start_line = input
+            .get("start_line")
+            .or_else(|| input.get("StartLine"))
+            .or_else(|| input.get("start"))
+            .and_then(|v| v.as_u64())
+            .map(|n| n as usize);
+        let end_line = input
+            .get("end_line")
+            .or_else(|| input.get("EndLine"))
+            .or_else(|| input.get("end"))
+            .and_then(|v| v.as_u64())
+            .map(|n| n as usize);
 
         if start_line.is_some() || end_line.is_some() {
             let lines: Vec<&str> = content.lines().collect();
@@ -188,15 +203,29 @@ impl Tool for WriteFileTool {
     }
 
     async fn execute(&self, input: Value) -> Result<String> {
-        let path_str = input["path"]
-            .as_str()
+        let path_str = input
+            .get("path")
+            .or_else(|| input.get("filePath"))
+            .or_else(|| input.get("file_path"))
+            .or_else(|| input.get("TargetFile"))
+            .or_else(|| input.get("file"))
+            .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required string parameter 'path'"))?;
 
-        let content = input["content"]
-            .as_str()
+        let content = input
+            .get("content")
+            .or_else(|| input.get("CodeContent"))
+            .or_else(|| input.get("contents"))
+            .or_else(|| input.get("text"))
+            .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required string parameter 'content'"))?;
 
-        let create_dirs = input["create_dirs"].as_bool().unwrap_or(true);
+        let create_dirs = input
+            .get("create_dirs")
+            .or_else(|| input.get("createDirs"))
+            .or_else(|| input.get("Overwrite"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
 
         let safe_path = validate_path_in_workspace(path_str, &self.workspace_root)?;
 

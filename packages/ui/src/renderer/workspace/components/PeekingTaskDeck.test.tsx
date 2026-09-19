@@ -66,6 +66,36 @@ describe('PeekingTaskDeck Component', () => {
     expect(html).toContain('Cancel Queue');
   });
 
+  it('uses brand design system tokens instead of hardcoded slate colors', () => {
+    sessionStore.markRunning('chat-test-1');
+    sessionStore.setActiveTask('chat-test-1', {
+      type: 'command',
+      name: 'run_command',
+      detail: 'npm test',
+      startedAt: Date.now(),
+    });
+
+    const html = renderToStaticMarkup(<PeekingTaskDeck chatId="chat-test-1" />);
+    expect(html).toContain('border-brand-border');
+    expect(html).toContain('text-brand-textMain');
+    expect(html).not.toContain('bg-slate-900');
+    expect(html).not.toContain('border-slate-700');
+  });
+
+  it('cleans up [object Object] artifacts in task details gracefully', () => {
+    sessionStore.markRunning('chat-test-1');
+    sessionStore.setActiveTask('chat-test-1', {
+      type: 'tool',
+      name: 'question',
+      detail: 'questions: [object Object], [object Object]',
+      startedAt: Date.now(),
+    });
+
+    const html = renderToStaticMarkup(<PeekingTaskDeck chatId="chat-test-1" />);
+    expect(html).not.toContain('[object Object]');
+    expect(html).toContain('questions');
+  });
+
   it('mounts into DOM without triggering infinite render loop or Maximum update depth exceeded', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);

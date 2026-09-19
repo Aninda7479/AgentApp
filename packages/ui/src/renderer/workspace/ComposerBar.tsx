@@ -362,8 +362,8 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({
     >
       {/* Slash Suggestions Menu */}
       {isSlashOpen && (
-        <div className="absolute bottom-full mb-2 left-4 right-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-1.5 z-50">
-          <div className="px-3 py-1 text-[10px] font-mono text-slate-500 uppercase tracking-wider">Slash Commands</div>
+        <div className="absolute bottom-full mb-2 left-4 right-4 bg-brand-popover/95 backdrop-blur-2xl border border-brand-border rounded-2xl shadow-2xl overflow-hidden p-1.5 z-50">
+          <div className="px-3 py-1 text-[10px] font-mono text-brand-textMuted uppercase tracking-wider">Slash Commands</div>
           {slashSuggestions.map((item) => (
             <div
               key={item.name}
@@ -371,12 +371,12 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({
                 setPrompt(`/${item.name} `);
                 textareaRef.current?.focus();
               }}
-              className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-800/80 cursor-pointer text-xs transition-colors"
+              className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-brand-hover cursor-pointer text-xs transition-colors"
             >
               <div className="flex items-center gap-2">
                 <Terminal size={14} className="text-cyan-400" />
-                <span className="font-semibold text-slate-200">/{item.name}</span>
-                <span className="text-slate-400 text-[11px]">{item.description}</span>
+                <span className="font-semibold text-brand-textMain">/{item.name}</span>
+                <span className="text-brand-textMuted text-[11px]">{item.description}</span>
               </div>
             </div>
           ))}
@@ -385,7 +385,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({
 
       {/* @agent Mention Autocomplete Popover */}
       {isMentionOpen && (
-        <div className="absolute bottom-full mb-2 left-4 right-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-1.5 z-50 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800">
+        <div className="absolute bottom-full mb-2 left-4 right-4 bg-brand-popover/95 backdrop-blur-2xl border border-brand-border rounded-2xl shadow-2xl overflow-hidden p-1.5 z-50 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-brand-borderStrong">
           <div className="px-3 py-1 text-[10px] font-mono text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
             <Users size={12} />
             <span>Delegate to Digital Employee Persona</span>
@@ -403,20 +403,20 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({
                 });
               }}
               className={`flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer text-xs transition-colors ${
-                idx === mentionIndex ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/20' : 'hover:bg-slate-800/80 text-slate-200'
+                idx === mentionIndex ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-500/20' : 'hover:bg-brand-hover text-brand-textMain'
               }`}
             >
               <div className="flex items-center gap-2.5">
                 <span className="text-base">{persona.avatarEmoji || '🤖'}</span>
                 <div>
-                  <div className="font-bold text-slate-100 flex items-center gap-1.5">
+                  <div className="font-bold text-brand-textMain flex items-center gap-1.5">
                     <span>{persona.name}</span>
                     <span className="text-[11px] font-mono text-cyan-400 font-normal">@{persona.id}</span>
                   </div>
-                  <div className="text-[11px] text-slate-400">{persona.roleTitle}</div>
+                  <div className="text-[11px] text-brand-textMuted">{persona.roleTitle}</div>
                 </div>
               </div>
-              <span className="text-[10px] font-mono text-slate-500 px-2 py-0.5 rounded bg-slate-950">
+              <span className="text-[10px] font-mono text-brand-textMuted px-2 py-0.5 rounded bg-brand-inner-bg/80 border border-brand-border/40">
                 {persona.capabilityTier.replace('_', ' ')}
               </span>
             </div>
@@ -424,138 +424,141 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({
         </div>
       )}
 
-      {/* Attachments Preview Pill Bar */}
-      {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 px-4 py-2 bg-slate-900/90 border-t border-x border-slate-800 rounded-t-2xl">
-          {attachments.map((att, i) => {
-            const isImage =
-              att.filename.match(/\.(png|jpe?g|webp|gif|svg)$/i) ||
-              (att.fullPath && att.fullPath.startsWith('data:image/'));
-
-            return (
-              <div
-                key={i}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950 text-xs text-slate-300 border border-slate-800 group"
-              >
-                {isImage && att.fullPath ? (
-                  <img
-                    src={att.fullPath}
-                    alt={att.filename}
-                    className="w-4 h-4 object-cover rounded"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
-                  />
-                ) : (
-                  <Paperclip size={12} className="text-cyan-400 shrink-0" />
-                )}
-                <span className="truncate max-w-[120px]">{att.filename}</span>
-                <button
-                  type="button"
-                  onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
-                  className="hover:text-red-400 text-slate-500 hover:bg-slate-800 rounded p-0.5 transition-colors cursor-pointer"
-                  aria-label={`Remove ${att.filename}`}
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Active Processing Deck & Queue Peeking Card */}
-      <PeekingTaskDeck chatId={chatId} />
-
       {/* Main Composer Box */}
       <div className="flex flex-col gap-1.5 w-full">
-        {/* Capsule Text Bar */}
+        {/* Capsule Container Card (Houses PeekingTaskDeck extension, Attachments, and Input Text Area) */}
         <div
-          className={`relative w-full min-w-0 flex items-end gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-2xl sm:rounded-[22px] border transition-all duration-200 shadow-lg ${
+          className={`relative w-full min-w-0 flex flex-col rounded-2xl sm:rounded-[22px] border transition-all duration-200 shadow-lg overflow-hidden ${
             isDraggingOver
               ? 'bg-cyan-950/40 border-cyan-500/80 ring-2 ring-cyan-500/30'
               : 'bg-brand-card/90 border-brand-border hover:border-brand-borderStrong focus-within:border-brand-borderStrong focus-within:ring-1 focus-within:ring-brand-borderStrong/30 backdrop-blur-xl'
           }`}
         >
           {isDraggingOver && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-brand-card/95 rounded-[22px] text-cyan-400 text-xs font-semibold animate-pulse select-none">
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-brand-card/95 rounded-2xl sm:rounded-[22px] text-cyan-400 text-xs font-semibold animate-pulse select-none">
               Drop images or files here to attach
             </div>
           )}
 
-          {/* Most Left: Plus Button for file attach */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            onChange={handleFileAttach}
-            className="hidden"
-          />
-          <button
-            type="button"
-            data-testid="composer-attach-btn"
-            onClick={() => fileInputRef.current?.click()}
-            title="Attach files or media"
-            aria-label="Attach files or media"
-            className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer mb-0.5"
-          >
-            <Plus size={18} strokeWidth={2} />
-          </button>
+          {/* Active Processing Deck & Queue Peeking Card (pops out as upper extension of composer card) */}
+          <PeekingTaskDeck chatId={chatId} />
 
-          {/* Auto-growing Textarea */}
-          <textarea
-            ref={textareaRef}
-            data-testid="composer-input"
-            value={prompt}
-            onChange={(e) => {
-              setPrompt(e.target.value);
-              setCursorPos(e.target.selectionStart);
-              adjustTextareaHeight();
-            }}
-            onKeyUp={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart)}
-            onClick={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart)}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            placeholder={placeholder}
-            rows={1}
-            disabled={disabled}
-            className="flex-1 min-w-0 bg-transparent resize-none text-brand-textMain text-sm sm:text-base py-1 px-1 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:shadow-none min-h-[36px] max-h-[220px] leading-relaxed placeholder:text-brand-textMuted/60 scrollbar-thin scrollbar-thumb-neutral-700 font-sans break-words [overflow-wrap:anywhere]"
-          />
+          {/* Attachments Preview Pill Bar */}
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 px-3.5 sm:px-4 py-2 bg-brand-inner-bg/30 border-b border-brand-border/60">
+              {attachments.map((att, i) => {
+                const isImage =
+                  att.filename.match(/\.(png|jpe?g|webp|gif|svg)$/i) ||
+                  (att.fullPath && att.fullPath.startsWith('data:image/'));
 
-          {/* Most Right: Voice Dictation (Mic) & Send (Rounded Arrow Button) */}
-          <div className="flex items-center gap-1 shrink-0 mb-0.5">
-            {workspaceVoiceEnabled && (
-              <button
-                type="button"
-                data-testid="composer-mic-btn"
-                onClick={toggleListening}
-                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                  listening
-                    ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse'
-                    : 'text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover'
-                }`}
-                title={listening ? 'Stop voice input' : 'Voice input'}
-                aria-label={listening ? 'Stop voice input' : 'Voice input'}
-              >
-                {listening ? <MicOff size={18} /> : <Mic size={18} />}
-              </button>
-            )}
+                return (
+                  <div
+                    key={i}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-brand-card text-xs text-brand-textMain border border-brand-border group shadow-2xs"
+                  >
+                    {isImage && att.fullPath ? (
+                      <img
+                        src={att.fullPath}
+                        alt={att.filename}
+                        className="w-4 h-4 object-cover rounded"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <Paperclip size={12} className="text-cyan-400 shrink-0" />
+                    )}
+                    <span className="truncate max-w-[120px]">{att.filename}</span>
+                    <button
+                      type="button"
+                      onClick={() => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="hover:text-red-400 text-brand-textMuted hover:bg-brand-hover rounded p-0.5 transition-colors cursor-pointer"
+                      aria-label={`Remove ${att.filename}`}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
+          {/* Capsule Text Bar (Input Area) */}
+          <div className="relative w-full min-w-0 flex items-end gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-2 sm:py-2.5">
+            {/* Most Left: Plus Button for file attach */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFileAttach}
+              className="hidden"
+            />
             <button
               type="button"
-              data-testid="btn-send"
-              onClick={handleSend}
-              disabled={disabled || (!prompt.trim() && attachments.length === 0)}
-              aria-label="Send message"
-              title="Send (Enter)"
-              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150 active:scale-95 ${
-                !prompt.trim() && attachments.length === 0
-                  ? 'bg-brand-hover text-brand-textMuted/40 cursor-not-allowed border border-brand-border'
-                  : 'bg-brand-highlight text-brand-highlightText hover:bg-brand-highlight/90 shadow-md cursor-pointer'
-              }`}
+              data-testid="composer-attach-btn"
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach files or media"
+              aria-label="Attach files or media"
+              className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover transition-colors cursor-pointer mb-0.5"
             >
-              <ArrowUp size={16} strokeWidth={2.5} />
+              <Plus size={18} strokeWidth={2} />
             </button>
+
+            {/* Auto-growing Textarea */}
+            <textarea
+              ref={textareaRef}
+              data-testid="composer-input"
+              value={prompt}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                setCursorPos(e.target.selectionStart);
+                adjustTextareaHeight();
+              }}
+              onKeyUp={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart)}
+              onClick={(e) => setCursorPos((e.target as HTMLTextAreaElement).selectionStart)}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              placeholder={placeholder}
+              rows={1}
+              disabled={disabled}
+              className="flex-1 min-w-0 bg-transparent resize-none text-brand-textMain text-sm sm:text-base py-1 px-1 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:shadow-none min-h-[36px] max-h-[220px] leading-relaxed placeholder:text-brand-textMuted/60 scrollbar-thin scrollbar-thumb-neutral-700 font-sans break-words [overflow-wrap:anywhere]"
+            />
+
+            {/* Most Right: Voice Dictation (Mic) & Send (Rounded Arrow Button) */}
+            <div className="flex items-center gap-1 shrink-0 mb-0.5">
+              {workspaceVoiceEnabled && (
+                <button
+                  type="button"
+                  data-testid="composer-mic-btn"
+                  onClick={toggleListening}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                    listening
+                      ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse'
+                      : 'text-brand-textMuted hover:text-brand-textMain hover:bg-brand-hover'
+                  }`}
+                  title={listening ? 'Stop voice input' : 'Voice input'}
+                  aria-label={listening ? 'Stop voice input' : 'Voice input'}
+                >
+                  {listening ? <MicOff size={18} /> : <Mic size={18} />}
+                </button>
+              )}
+
+              <button
+                type="button"
+                data-testid="btn-send"
+                onClick={handleSend}
+                disabled={disabled || (!prompt.trim() && attachments.length === 0)}
+                aria-label="Send message"
+                title="Send (Enter)"
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150 active:scale-95 ${
+                  !prompt.trim() && attachments.length === 0
+                    ? 'bg-brand-hover text-brand-textMuted/40 cursor-not-allowed border border-brand-border'
+                    : 'bg-brand-highlight text-brand-highlightText hover:bg-brand-highlight/90 shadow-md cursor-pointer'
+                }`}
+              >
+                <ArrowUp size={16} strokeWidth={2.5} />
+              </button>
+            </div>
           </div>
         </div>
 

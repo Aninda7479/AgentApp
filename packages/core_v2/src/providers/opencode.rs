@@ -50,38 +50,187 @@ pub fn is_free_opencode_model(model_id: &str) -> bool {
     model_id.ends_with("-free") || OPENCODE_FREE_MODELS.contains(&model_id)
 }
 
-/// Returns the official 16 OpenCode tools declared in the OpenAI function format.
+/// Returns the official 16 OpenCode tools declared in the OpenAI function format with rich parameter schemas.
 pub fn get_official_opencode_tools() -> Vec<serde_json::Value> {
     OPENCODE_OFFICIAL_TOOLS
         .iter()
         .map(|name| {
+            let (desc, schema) = match *name {
+                "bash" => (
+                    "Execute a bash or shell command in the system terminal",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "command": { "type": "string", "description": "Command line to execute" }
+                        },
+                        "required": ["command"]
+                    }),
+                ),
+                "read" => (
+                    "Read the contents of a file from the workspace",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Path to the file to read" }
+                        },
+                        "required": ["path"]
+                    }),
+                ),
+                "write" => (
+                    "Write or overwrite content to a file",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Path to file to write" },
+                            "content": { "type": "string", "description": "Content to write" }
+                        },
+                        "required": ["path", "content"]
+                    }),
+                ),
+                "edit" => (
+                    "Perform exact search-and-replace edits on a file",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Path to file to edit" },
+                            "target_content": { "type": "string", "description": "Exact text to replace" },
+                            "replacement_content": { "type": "string", "description": "Replacement text" }
+                        },
+                        "required": ["path", "target_content", "replacement_content"]
+                    }),
+                ),
+                "glob" => (
+                    "Find files matching a glob pattern",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "pattern": { "type": "string", "description": "Glob pattern (e.g. **/*.rs)" }
+                        },
+                        "required": ["pattern"]
+                    }),
+                ),
+                "grep" => (
+                    "Search for text patterns across files in directory",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "query": { "type": "string", "description": "Search pattern or regex" }
+                        },
+                        "required": ["query"]
+                    }),
+                ),
+                "lsp" => (
+                    "Execute language server queries (diagnostics, definitions)",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "query": { "type": "string", "description": "LSP query term" }
+                        }
+                    }),
+                ),
+                "task" => (
+                    "Spawn or manage background subtasks and workflows",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "prompt": { "type": "string", "description": "Subagent prompt or task description" }
+                        },
+                        "required": ["prompt"]
+                    }),
+                ),
+                "question" => (
+                    "Ask the user a question for clarification or input",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "question": { "type": "string", "description": "Question text" }
+                        },
+                        "required": ["question"]
+                    }),
+                ),
+                "todo" => (
+                    "Manage checklist and todo items for current session across multi-step tasks",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "action": { "type": "string", "enum": ["add", "update", "list", "clear"] },
+                            "task": { "type": "string", "description": "Task description" },
+                            "items": { "type": "array", "items": { "type": "string" }, "description": "Batch tasks" },
+                            "id": { "type": "integer", "description": "Task id to update" },
+                            "status": { "type": "string", "enum": ["pending", "in_progress", "completed", "cancelled"] }
+                        }
+                    }),
+                ),
+                "plan" => (
+                    "Create or update active execution roadmap and milestone steps ('a plan to go')",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "action": { "type": "string", "enum": ["create", "update", "get", "clear"] },
+                            "title": { "type": "string", "description": "Goal or plan title" },
+                            "steps": { "type": "array", "items": { "type": "string" }, "description": "Sequential steps" },
+                            "step_id": { "type": "integer", "description": "Step index to update" },
+                            "status": { "type": "string", "enum": ["pending", "in_progress", "completed", "failed"] }
+                        }
+                    }),
+                ),
+                "webfetch" => (
+                    "Fetch webpage content from a given URL",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "url": { "type": "string", "description": "URL to fetch" }
+                        },
+                        "required": ["url"]
+                    }),
+                ),
+                "websearch" => (
+                    "Perform a web search query for information",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "query": { "type": "string", "description": "Search query" }
+                        },
+                        "required": ["query"]
+                    }),
+                ),
+                "patch" => (
+                    "Generate unified diff patch for file modifications",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "File path" }
+                        }
+                    }),
+                ),
+                "apply_patch" => (
+                    "Apply unified diff patch to workspace files",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "patch": { "type": "string", "description": "Diff patch text" }
+                        }
+                    }),
+                ),
+                "skill" => (
+                    "Load and execute specialized agent skill instructions",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "action": { "type": "string", "enum": ["list", "load"] },
+                            "name": { "type": "string", "description": "Skill name or id to load" }
+                        }
+                    }),
+                ),
+                _ => ("OpenCode built-in tool", json!({ "type": "object", "properties": {} })),
+            };
+
             json!({
                 "type": "function",
                 "function": {
                     "name": name,
-                    "description": match *name {
-                        "bash" => "Execute a bash or shell command in the system terminal",
-                        "read" => "Read the contents of a file from the workspace",
-                        "write" => "Write or overwrite content to a file",
-                        "edit" => "Perform exact search-and-replace edits on a file",
-                        "glob" => "Find files matching a glob pattern",
-                        "grep" => "Search for text patterns across files in directory",
-                        "lsp" => "Execute language server queries (diagnostics, definitions)",
-                        "task" => "Spawn or manage background subtasks and workflows",
-                        "question" => "Ask the user a question for clarification or input",
-                        "todo" => "Manage checklist and todo items for current session",
-                        "plan" => "Create or update implementation plan document",
-                        "webfetch" => "Fetch webpage content from a given URL",
-                        "websearch" => "Perform a web search query for information",
-                        "patch" => "Generate unified diff patch for file modifications",
-                        "apply_patch" => "Apply unified diff patch to workspace files",
-                        "skill" => "Load and execute specialized agent skill instructions",
-                        _ => "OpenCode built-in tool"
-                    },
-                    "parameters": {
-                        "type": "object",
-                        "properties": {}
-                    }
+                    "description": desc,
+                    "parameters": schema,
                 }
             })
         })
@@ -114,10 +263,13 @@ pub fn prepare_opencode_free_tier_tools(tools: &[serde_json::Value]) -> Vec<serd
             "replace_file_content" | "edit_file" | "edit" => "edit",
             "find_by_name" | "find_files" | "glob" => "glob",
             "grep_search" | "search_files" | "grep" => "grep",
-            "read_url_content" | "fetch_web" | "webfetch" => "webfetch",
-            "search_web" | "websearch" => "websearch",
+            "browser_navigate" | "read_url_content" | "fetch_web" | "webfetch" => "webfetch",
+            "web_search" | "search_web" | "websearch" => "websearch",
             "ask_question" | "question" => "question",
-            "invoke_subagent" | "manage_task" | "task" => "task",
+            "run_subagent" | "invoke_subagent" | "manage_task" | "task" => "task",
+            "skill" | "load_skill" => "skill",
+            "plan" | "roadmap" => "plan",
+            "todo" | "todowrite" => "todo",
             other if OPENCODE_OFFICIAL_TOOLS.contains(&other) => other,
             _ => "task", // Safe fallback to official whitelist
         };
@@ -149,20 +301,30 @@ pub fn prepare_opencode_free_tier_tools(tools: &[serde_json::Value]) -> Vec<serd
     }
 }
 
-/// Translates tool names emitted by OpenCode back to SuperAgent's internal tool registry.
+/// Translates tool names emitted by OpenCode directly to SuperAgent's internal canonical tool registry.
 pub fn map_opencode_tool_name_to_superagent(raw_name: &str) -> String {
     match raw_name {
         "telegram_telegram" => "telegram".to_string(),
         "bash" => "run_command".to_string(),
-        "read" => "view_file".to_string(),
-        "write" => "write_to_file".to_string(),
-        "edit" => "replace_file_content".to_string(),
-        "glob" => "find_by_name".to_string(),
+        "read" => "read_file".to_string(),
+        "write" => "write_file".to_string(),
+        "edit" => "edit_file".to_string(),
+        "glob" => "glob".to_string(),
         "grep" => "grep_search".to_string(),
-        "webfetch" => "read_url_content".to_string(),
-        "websearch" => "search_web".to_string(),
-        "task" => "invoke_subagent".to_string(),
-        "question" => "ask_question".to_string(),
+        "webfetch" => "browser_navigate".to_string(),
+        "websearch" => "web_search".to_string(),
+        "task" => "run_subagent".to_string(),
+        "skill" => "skill".to_string(),
+        "plan" => "plan".to_string(),
+        "todo" => "todo".to_string(),
+        // Antigravity & legacy aliases
+        "view_file" => "read_file".to_string(),
+        "write_to_file" => "write_file".to_string(),
+        "replace_file_content" => "edit_file".to_string(),
+        "find_by_name" => "glob".to_string(),
+        "read_url_content" => "browser_navigate".to_string(),
+        "search_web" => "web_search".to_string(),
+        "invoke_subagent" => "run_subagent".to_string(),
         _ => raw_name.to_string(),
     }
 }
@@ -1581,32 +1743,26 @@ mod tests {
     #[test]
     fn test_map_opencode_tool_name_to_superagent() {
         assert_eq!(map_opencode_tool_name_to_superagent("bash"), "run_command");
-        assert_eq!(map_opencode_tool_name_to_superagent("read"), "view_file");
-        assert_eq!(
-            map_opencode_tool_name_to_superagent("write"),
-            "write_to_file"
-        );
-        assert_eq!(
-            map_opencode_tool_name_to_superagent("edit"),
-            "replace_file_content"
-        );
-        assert_eq!(map_opencode_tool_name_to_superagent("glob"), "find_by_name");
+        assert_eq!(map_opencode_tool_name_to_superagent("read"), "read_file");
+        assert_eq!(map_opencode_tool_name_to_superagent("write"), "write_file");
+        assert_eq!(map_opencode_tool_name_to_superagent("edit"), "edit_file");
+        assert_eq!(map_opencode_tool_name_to_superagent("glob"), "glob");
         assert_eq!(map_opencode_tool_name_to_superagent("grep"), "grep_search");
         assert_eq!(
             map_opencode_tool_name_to_superagent("webfetch"),
-            "read_url_content"
+            "browser_navigate"
         );
         assert_eq!(
             map_opencode_tool_name_to_superagent("websearch"),
-            "search_web"
+            "web_search"
         );
+        assert_eq!(map_opencode_tool_name_to_superagent("task"), "run_subagent");
+        assert_eq!(map_opencode_tool_name_to_superagent("skill"), "skill");
+        assert_eq!(map_opencode_tool_name_to_superagent("plan"), "plan");
+        assert_eq!(map_opencode_tool_name_to_superagent("todo"), "todo");
         assert_eq!(
-            map_opencode_tool_name_to_superagent("task"),
-            "invoke_subagent"
-        );
-        assert_eq!(
-            map_opencode_tool_name_to_superagent("question"),
-            "ask_question"
+            map_opencode_tool_name_to_superagent("view_file"),
+            "read_file"
         );
         assert_eq!(
             map_opencode_tool_name_to_superagent("custom_tool"),

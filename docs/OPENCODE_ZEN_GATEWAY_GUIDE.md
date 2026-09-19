@@ -55,28 +55,32 @@ Upstream streams Server-Sent Events (SSE) chunks line by line starting with `dat
 
 The official tool definitions sourced from upstream `anomalyco/opencode` (`packages/opencode/src/tool/registry.ts`) are:
 
-| Tool Name | Purpose | SuperAgent Equivalent |
+| Tool Name | Purpose | SuperAgent Canonical Tool & Aliases |
 | :--- | :--- | :--- |
-| `bash` | Execute bash/shell command in system terminal | `run_command` |
-| `read` | Read contents of a file from workspace | `view_file` |
-| `write` | Write or overwrite file with content | `write_to_file` |
-| `edit` | Search-and-replace text edits in a file | `replace_file_content` |
-| `glob` | Find files matching a glob pattern | `find_by_name` |
-| `grep` | Search text regex patterns in directory | `grep_search` |
+| `bash` | Execute bash/shell command in system terminal | `run_command` (aliases: `bash`, `terminal`, `shell`) |
+| `read` | Read contents of a file from workspace | `read_file` (aliases: `read`, `view_file`, `fetch_file`) |
+| `write` | Write or overwrite file with content | `write_file` (aliases: `write`, `write_to_file`) |
+| `edit` | Search-and-replace text edits in a file | `edit_file` (aliases: `edit`, `replace_file_content`) |
+| `glob` | Find files matching a glob pattern | `glob` (aliases: `glob`, `find_by_name`, `find_files`) |
+| `grep` | Search text regex patterns in directory | `grep_search` (alias: `grep`) |
 | `lsp` | Language server query (diagnostics, definitions) | Internal LSP |
-| `task` | Spawn or manage background subtasks | `invoke_subagent` / `manage_task` |
-| `question` | Ask user a question for clarification | `ask_question` |
-| `todo` | Manage checklist and todo items | Session Todo Store |
-| `plan` | Create or update implementation plan | `write_to_file` (plan) |
-| `webfetch` | Fetch webpage content from a URL | `read_url_content` |
-| `websearch` | Search web queries for information | `search_web` |
+| `task` | Spawn or manage background subtasks | `run_subagent` (aliases: `task`, `invoke_subagent`) |
+| `question` | Ask user a question for clarification | `ask_question` (alias: `question`) |
+| `todo` | Manage checklist and multi-step progress | `todo` (`TodoTool` session checklist for web search, reading, edits) |
+| `plan` | Active execution roadmap & milestone steps | `plan` (`PlanTool` — "a plan to go" dynamic roadmap, not a static file write) |
+| `webfetch` | Fetch webpage content from a URL | `browser_navigate` (aliases: `webfetch`, `read_url_content`) |
+| `websearch` | Search web queries for information | `web_search` (aliases: `websearch`, `search_web`) |
 | `patch` | Generate unified diff patch | Git diff |
 | `apply_patch` | Apply unified diff patch to workspace | Git apply |
-| `skill` | Load and execute agent skill | Skill runtime |
+| `skill` | Discover, load, and execute specialized agent skills | `skill` (`SkillTool` workspace & global skill loader) |
 
-SuperAgent maps tool invocations bidirectionally:
-- SuperAgent agent loop maps outgoing tools to official OpenCode names so the upstream gate passes.
-- Incoming tool calls from OpenCode models (e.g. `bash`) are mapped back to SuperAgent's tool names (`run_command`).
+SuperAgent maps tool invocations bidirectionally and seamlessly:
+- **Outgoing tool schemas**: The agent loop maps outgoing tool schemas to official OpenCode names with rich parameter declarations so the upstream gate passes.
+- **Incoming tool calls**: Incoming tool calls from OpenCode models (e.g. `bash`, `read`, `write`, `glob`, `websearch`, `plan`, `todo`, `skill`) are normalized directly to SuperAgent's internal canonical registry names.
+- **Dynamic Execution Roadmap (`plan`)**: The `plan` tool tracks active goals, milestones, and step statuses (`pending`, `in_progress`, `completed`, `failed`) in session memory, streaming live roadmap feedback rather than dumping static files to disk.
+- **Multi-Step Task Tracking (`todo`)**: The `todo` tool maintains a live session checklist, allowing the agent to break down tasks across live web searches, file inspections, code replacements, and tests.
+- **Dynamic Skill Loader (`skill`)**: The `skill` tool discovers skills from `.superagent/skills/` (JSON and markdown `SKILL.md` files), `.gemini/skills/`, and workspace `skills/`, allowing any model to inspect and load specialized operational instructions on demand.
+- **Parameter Resilience**: File and search tools automatically accept common parameter variations (`filePath`/`file_path`/`path`/`TargetFile`/`AbsolutePath`; `target_content`/`old_str`/`targetContent`; `query`/`q`/`Query`; `url`/`Url`/`link`; `command`/`CommandLine`).
 
 ---
 

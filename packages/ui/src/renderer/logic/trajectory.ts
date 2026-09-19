@@ -84,8 +84,8 @@ export class TrajectoryService {
       return toolName;
     }
 
-    if (toolName === 'read_file') {
-      if (/%PDF-\d\.\d/i.test(trimmed) || /�{2,}/.test(trimmed)) {
+    if (toolName === 'read_file' || toolName === 'view_file' || toolName === 'read') {
+      if (/%PDF-\d\.\d/i.test(trimmed) || /\uFFFD{2,}/.test(trimmed)) {
         return 'Opened a binary document preview';
       }
 
@@ -93,7 +93,7 @@ export class TrajectoryService {
       return firstLine || 'Read file contents';
     }
 
-    if (toolName === 'run_command') {
+    if (toolName === 'run_command' || toolName === 'bash') {
       const lines = trimmed.split('\n').map(line => line.trim()).filter(Boolean);
       const firstLine = lines[0] || '';
       const commandFailureMatch = firstLine.match(/^Error:\s*Command failed:\s*(.+)$/i);
@@ -106,6 +106,18 @@ export class TrajectoryService {
       }
 
       return TrajectoryService.truncatePreview(firstLine) || 'Executed command';
+    }
+
+    if (toolName === 'plan') {
+      return 'Updated execution roadmap';
+    }
+
+    if (toolName === 'todo' || toolName === 'todowrite') {
+      return 'Updated session task checklist';
+    }
+
+    if (toolName === 'skill') {
+      return 'Loaded agent skill instructions';
     }
 
     return TrajectoryService.truncatePreview(trimmed);
@@ -177,7 +189,7 @@ export class TrajectoryService {
     const meta = step.metadata || {};
 
     // 1. File read / view / analyze
-    if (toolName === 'view_file' || toolName === 'read_file' || toolName === 'fetch_file') {
+    if (toolName === 'view_file' || toolName === 'read_file' || toolName === 'fetch_file' || toolName === 'read') {
       const summary = TrajectoryService.summarizeToolContent(step);
       const rawPath = input.AbsolutePath || input.path || input.FilePath || meta.filename || '';
 
@@ -209,6 +221,9 @@ export class TrajectoryService {
       toolName === 'edit_file' ||
       toolName === 'replace_file_content' ||
       toolName === 'write_to_file' ||
+      toolName === 'write_file' ||
+      toolName === 'write' ||
+      toolName === 'edit' ||
       toolName === 'patch_file' ||
       toolName === 'fs_write'
     ) {
@@ -237,7 +252,7 @@ export class TrajectoryService {
     }
 
     // 3. Command execution
-    if (toolName === 'run_command' || toolName === 'execute_command' || toolName === 'terminal') {
+    if (toolName === 'run_command' || toolName === 'execute_command' || toolName === 'terminal' || toolName === 'bash') {
       const cmd = input.CommandLine || input.command || meta.command || '';
       const cwd = input.Cwd || input.cwd || '';
       const summary = TrajectoryService.summarizeToolContent(step);
@@ -257,8 +272,27 @@ export class TrajectoryService {
       };
     }
 
-    // 4. Search tools
-    if (toolName === 'grep_search' || toolName === 'search_web' || toolName === 'find_by_name') {
+    // 4. Web browser navigation / fetch
+    if (toolName === 'browser_navigate' || toolName === 'webfetch' || toolName === 'read_url_content') {
+      const targetUrl = input.url || input.Url || input.URL || input.link || '';
+      return {
+        category: 'search',
+        actionLabel: 'Browsed',
+        icon: '🌐',
+        targetName: targetUrl ? TrajectoryService.truncatePreview(targetUrl, 50) : 'webpage',
+      };
+    }
+
+    // 5. Search tools (Grep, Web Search, Glob)
+    if (
+      toolName === 'grep_search' ||
+      toolName === 'grep' ||
+      toolName === 'search_web' ||
+      toolName === 'web_search' ||
+      toolName === 'websearch' ||
+      toolName === 'find_by_name' ||
+      toolName === 'glob'
+    ) {
       const query = input.Query || input.query || input.Pattern || input.pattern || '';
       return {
         category: 'search',
@@ -268,7 +302,40 @@ export class TrajectoryService {
       };
     }
 
-    // 5. Tasks / Schedule / Subagents
+    // 6. Active Execution Plan ("a plan to go")
+    if (toolName === 'plan' || toolName === 'roadmap') {
+      const title = input.title || input.goal || input.objective || (input.action ? `plan: ${input.action}` : 'roadmap');
+      return {
+        category: 'task',
+        actionLabel: 'Planned roadmap',
+        icon: '🗺️',
+        targetName: TrajectoryService.truncatePreview(title, 45),
+      };
+    }
+
+    // 7. Todo checklist manager
+    if (toolName === 'todo' || toolName === 'todowrite') {
+      const taskDesc = input.task || (Array.isArray(input.items) ? `${input.items.length} tasks` : 'checklist');
+      return {
+        category: 'task',
+        actionLabel: 'Updated checklist',
+        icon: '☑️',
+        targetName: TrajectoryService.truncatePreview(taskDesc, 45),
+      };
+    }
+
+    // 8. Skill loader & execution
+    if (toolName === 'skill' || toolName === 'load_skill') {
+      const skillName = input.name || input.skill_name || input.id || 'skills';
+      return {
+        category: 'task',
+        actionLabel: 'Loaded skill',
+        icon: '✨',
+        targetName: TrajectoryService.truncatePreview(skillName, 40),
+      };
+    }
+
+    // 9. Tasks / Schedule / Subagents
     if (toolName === 'schedule' || toolName === 'manage_task') {
       const duration = input.DurationSeconds;
       return {
@@ -279,7 +346,7 @@ export class TrajectoryService {
       };
     }
 
-    if (toolName === 'invoke_subagent') {
+    if (toolName === 'invoke_subagent' || toolName === 'run_subagent' || toolName === 'task') {
       return {
         category: 'task',
         actionLabel: 'Delegated subagent',

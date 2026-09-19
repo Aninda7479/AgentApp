@@ -90,8 +90,12 @@ impl Tool for RunCommandTool {
     }
 
     async fn execute(&self, input: Value) -> Result<String> {
-        let command_str = input["command"]
-            .as_str()
+        let command_str = input
+            .get("command")
+            .or_else(|| input.get("CommandLine"))
+            .or_else(|| input.get("cmd"))
+            .or_else(|| input.get("script"))
+            .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required string parameter 'command'"))?;
 
         // Enforce allowed_commands whitelist if configured
@@ -103,14 +107,18 @@ impl Tool for RunCommandTool {
             });
             if !is_allowed {
                 anyhow::bail!(
-                    "Security policy violation: Command '{}' is not in the allowed commands whitelist ({:?})",
-                    command_str,
+                    "Command '{}' is not in the allowed commands whitelist: {:?}",
+                    cmd_base,
                     self.allowed_commands
                 );
             }
         }
 
-        let cwd_str = input["cwd"].as_str();
+        let cwd_str = input
+            .get("cwd")
+            .or_else(|| input.get("Cwd"))
+            .or_else(|| input.get("working_directory"))
+            .and_then(|v| v.as_str());
         let timeout_secs = input["timeout_secs"]
             .as_u64()
             .unwrap_or(self.default_timeout_secs);

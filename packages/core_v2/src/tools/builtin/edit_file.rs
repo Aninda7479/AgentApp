@@ -54,19 +54,44 @@ impl Tool for EditFileTool {
     }
 
     async fn execute(&self, input: Value) -> Result<String> {
-        let path_str = input["path"]
-            .as_str()
+        let path_str = input
+            .get("path")
+            .or_else(|| input.get("filePath"))
+            .or_else(|| input.get("file_path"))
+            .or_else(|| input.get("TargetFile"))
+            .or_else(|| input.get("file"))
+            .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required string parameter 'path'"))?;
 
-        let target_content = input["target_content"]
-            .as_str()
+        let target_content = input
+            .get("target_content")
+            .or_else(|| input.get("targetContent"))
+            .or_else(|| input.get("old_string"))
+            .or_else(|| input.get("old_str"))
+            .or_else(|| input.get("oldContent"))
+            .or_else(|| input.get("TargetContent"))
+            .or_else(|| input.get("target"))
+            .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required string parameter 'target_content'"))?;
 
-        let replacement_content = input["replacement_content"]
-            .as_str()
+        let replacement_content = input
+            .get("replacement_content")
+            .or_else(|| input.get("replacementContent"))
+            .or_else(|| input.get("new_string"))
+            .or_else(|| input.get("new_str"))
+            .or_else(|| input.get("newContent"))
+            .or_else(|| input.get("ReplacementContent"))
+            .or_else(|| input.get("replacement"))
+            .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required string parameter 'replacement_content'"))?;
 
-        let allow_multiple = input["allow_multiple"].as_bool().unwrap_or(false);
+        let allow_multiple = input
+            .get("allow_multiple")
+            .or_else(|| input.get("allowMultiple"))
+            .or_else(|| input.get("AllowMultiple"))
+            .or_else(|| input.get("multiple"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         let safe_path = validate_path_in_workspace(path_str, &self.workspace_root)?;
 

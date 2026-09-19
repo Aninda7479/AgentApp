@@ -68,8 +68,12 @@ pub async fn start_server(
     registry.register(WriteFileTool::new(workspace_root.clone()));
     registry.register(EditFileTool::new(workspace_root.clone()));
     registry.register(ListDirTool::new(workspace_root.clone()));
+    registry.register(GlobTool::new(workspace_root.clone()));
     registry.register(RunCommandTool::new(workspace_root.clone()));
     registry.register(GrepSearchTool::new(workspace_root.clone()));
+    registry.register(SkillTool::new(workspace_root.clone()));
+    registry.register(PlanTool::new());
+    registry.register(TodoTool::new());
     registry.register(GeneratePdfTool::new(workspace_root.clone()));
     registry.register(GeneratePresentationTool::new(workspace_root.clone()));
     registry.register(BrowserNavigateTool::new());

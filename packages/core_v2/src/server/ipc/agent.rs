@@ -10,9 +10,10 @@ use crate::server::ipc::usage::record_usage;
 use crate::server::routes::chat::resolve_active_workspace_model;
 use crate::server::state::{AppState, SessionStateEntry};
 use crate::tools::builtin::{
-    CreateArtifactTool, EditFileTool, GetAvailableToolsTool, GrepSearchTool, ListArtifactsTool,
-    ListDirTool, PeekTaskTool, ReadArtifactTool, ReadFileTool, RunCommandTool, RunSubagentTool,
-    SleepTimerTool, TaskManager, TelegramTool, WriteFileTool,
+    CreateArtifactTool, EditFileTool, GetAvailableToolsTool, GlobTool, GrepSearchTool,
+    ListArtifactsTool, ListDirTool, PeekTaskTool, PlanTool, ReadArtifactTool, ReadFileTool,
+    RunCommandTool, RunSubagentTool, SkillTool, SleepTimerTool, TaskManager, TelegramTool,
+    TodoTool, WriteFileTool,
 };
 use crate::tools::ToolRegistry;
 use crate::types::{ModelConfig, ProviderType};
@@ -472,6 +473,9 @@ pub async fn handle_agent_channel(
                 session_tool_registry.register(ListArtifactsTool::new());
                 session_tool_registry.register(ReadArtifactTool::new());
                 session_tool_registry.register(SleepTimerTool::new());
+                session_tool_registry.register(PlanTool::new());
+                session_tool_registry.register(TodoTool::new());
+                session_tool_registry.register(SkillTool::new(effective_workspace.clone()));
                 session_tool_registry.register(TelegramTool::with_workspace(
                     state_clone.settings_store.clone(),
                     effective_workspace.clone(),
@@ -483,6 +487,7 @@ pub async fn handle_agent_channel(
                     session_tool_registry.register(WriteFileTool::new(effective_workspace.clone()));
                     session_tool_registry.register(EditFileTool::new(effective_workspace.clone()));
                     session_tool_registry.register(ListDirTool::new(effective_workspace.clone()));
+                    session_tool_registry.register(GlobTool::new(effective_workspace.clone()));
                     session_tool_registry.register(
                         RunCommandTool::with_allowed_commands(
                             effective_workspace.clone(),
