@@ -7,11 +7,13 @@ use walkdir::WalkDir;
 
 use crate::server::ipc::memory::{load_global_memory, load_orchestrator_instructions};
 use crate::server::state::AppState;
+use crate::storage::pcb_storage::resolve_pcb_dir;
 use crate::storage::settings::{get_cache_dir, get_superagent_dir};
 use crate::types::ContentBlock;
 
 fn scan_cache() -> &'static std::sync::Mutex<Option<(Instant, serde_json::Value)>> {
-    static CACHE: OnceLock<std::sync::Mutex<Option<(Instant, serde_json::Value)>>> = OnceLock::new();
+    static CACHE: OnceLock<std::sync::Mutex<Option<(Instant, serde_json::Value)>>> =
+        OnceLock::new();
     CACHE.get_or_init(|| std::sync::Mutex::new(None))
 }
 
@@ -44,20 +46,54 @@ fn calculate_dir_stats(dir: &Path) -> (u64, usize, i64) {
 
 fn infer_file_type(ext: &str) -> &'static str {
     match ext.to_lowercase().as_str() {
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" => "image",
-        "mp4" | "webm" | "mov" | "avi" | "mkv" => "video",
-        "pdf" => "pdf",
-        "txt" | "md" | "doc" | "docx" | "csv" | "xlsx" | "json" | "xml" | "yaml" | "yml" => {
-            "document"
-        }
-        "mp3" | "wav" | "ogg" | "flac" | "m4a" => "audio",
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "ico" | "tiff" => "image",
+        "mp4" | "webm" | "mov" | "avi" | "mkv" | "flv" | "wmv" => "video",
+        "mp3" | "wav" | "ogg" | "flac" | "m4a" | "aac" | "opus" => "audio",
+        "pdf" | "txt" | "md" | "doc" | "docx" | "rtf" | "csv" | "xlsx" => "document",
+        "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "html" | "css" | "c" | "cpp" | "h" | "go"
+        | "sh" | "ps1" | "sql" => "code",
+        "json" | "toml" | "yaml" | "yml" | "xml" | "env" | "ini" | "lock" => "config",
+        "gguf" | "safetensors" | "onnx" | "pt" | "pth" | "ckpt" => "model",
+        "exe" | "dll" | "so" | "dylib" | "node" | "bin" => "binary",
+        "kicad_pcb" | "kicad_sch" | "sch" | "pcb" | "gerber" | "gbr" | "drl" => "pcb",
         _ => "other",
     }
 }
 
+fn infer_domain(path: &Path, superagent_dir: &Path) -> &'static str {
+    if path.starts_with(superagent_dir.join("images")) {
+        "images"
+    } else if path.starts_with(superagent_dir.join("videos")) {
+        "videos"
+    } else if path.starts_with(superagent_dir.join("conversation")) {
+        "conversation"
+    } else if path.starts_with(superagent_dir.join("artifacts")) {
+        "artifacts"
+    } else if path.starts_with(superagent_dir.join("config")) {
+        "config"
+    } else if path.starts_with(superagent_dir.join("bin")) {
+        "bin"
+    } else if path.starts_with(superagent_dir.join("engines")) {
+        "engines"
+    } else if path.starts_with(superagent_dir.join("models")) {
+        "models"
+    } else if path.starts_with(superagent_dir.join("pcb")) {
+        "pcb"
+    } else {
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        match infer_file_type(ext) {
+            "image" => "images",
+            "video" => "videos",
+            "audio" => "videos",
+            _ => "other",
+        }
+    }
+}
+
 fn path_is_jailed(target: &Path, allowed_roots: &[PathBuf]) -> bool {
-    // Canonicalize if possible, or check starts_with
-    let target_norm = target.canonicalize().unwrap_or_else(|_| target.to_path_buf());
+    let target_norm = target
+        .canonicalize()
+        .unwrap_or_else(|_| target.to_path_buf());
     for root in allowed_roots {
         let root_norm = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
         if target_norm.starts_with(&root_norm) {
@@ -85,184 +121,71 @@ pub async fn handle_storage_channel(
                 }
             }
 
+            let workspace_root = state.workspace_root.clone();
+
             let res = tokio::task::spawn_blocking(move || {
                 let superagent_dir = get_superagent_dir();
                 let cache_dir = get_cache_dir();
 
-                let mut folders = Vec::new();
+                let mut domains = Vec::new();
                 let mut total_size_bytes = 0u64;
+                let mut total_files = 0usize;
 
-                // 1. Conversations
-                let conv_dir = superagent_dir.join("conversation");
-                let (c_size, c_files, c_mod) = calculate_dir_stats(&conv_dir);
-                total_size_bytes += c_size;
-                folders.push(serde_json::json!({
-                    "path": conv_dir.to_string_lossy(),
-                    "label": "Conversations",
-                    "size_bytes": c_size,
-                    "file_count": c_files,
-                    "last_modified": c_mod,
-                }));
-
-                // 2. Artifacts
-                let art_dir = superagent_dir.join("artifacts");
-                let (a_size, a_files, a_mod) = calculate_dir_stats(&art_dir);
-                total_size_bytes += a_size;
-                folders.push(serde_json::json!({
-                    "path": art_dir.to_string_lossy(),
-                    "label": "Artifacts",
-                    "size_bytes": a_size,
-                    "file_count": a_files,
-                    "last_modified": a_mod,
-                }));
-
-                // 3. Projects
-                let projects_dir = superagent_dir.join("projects");
-                let (p_size, p_files, p_mod) = calculate_dir_stats(&projects_dir);
-                total_size_bytes += p_size;
-                folders.push(serde_json::json!({
-                    "path": projects_dir.to_string_lossy(),
-                    "label": "Projects",
-                    "size_bytes": p_size,
-                    "file_count": p_files,
-                    "last_modified": p_mod,
-                }));
-
-                // Sub-projects under projects/
-                if projects_dir.exists() {
-                    if let Ok(entries) = std::fs::read_dir(&projects_dir) {
-                        for entry in entries.flatten() {
-                            let path = entry.path();
-                            if path.is_dir() {
-                                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                                let (sub_size, sub_files, sub_mod) = calculate_dir_stats(&path);
-                                folders.push(serde_json::json!({
-                                    "path": path.to_string_lossy(),
-                                    "label": format!("Project: {}", name),
-                                    "size_bytes": sub_size,
-                                    "file_count": sub_files,
-                                    "last_modified": sub_mod,
-                                }));
-                            }
-                        }
-                    }
+                fn make_domain(
+                    id: &str,
+                    label: &str,
+                    path: PathBuf,
+                    desc: &str,
+                    color: &str,
+                    icon: &str,
+                ) -> (serde_json::Value, u64, usize) {
+                    let (size, files, last_mod) = calculate_dir_stats(&path);
+                    (
+                        serde_json::json!({
+                            "id": id,
+                            "label": label,
+                            "path": path.to_string_lossy(),
+                            "size_bytes": size,
+                            "file_count": files,
+                            "last_modified": last_mod,
+                            "description": desc,
+                            "color": color,
+                            "icon": icon,
+                        }),
+                        size,
+                        files,
+                    )
                 }
 
-                // 4. Memory (global_memory.json + orchestrator instructions)
-                let mem_file = superagent_dir.join("global_memory.json");
-                let inst_file = superagent_dir.join("orchestrator-instructions.md");
-                let mut m_size = 0u64;
-                let mut m_files = 0usize;
-                let mut m_mod = 0i64;
-                for f in [&mem_file, &inst_file] {
-                    if f.exists() {
-                        m_files += 1;
-                        if let Ok(meta) = f.metadata() {
-                            m_size += meta.len();
-                            if let Ok(t) = meta.modified() {
-                                if let Ok(dur) = t.duration_since(std::time::UNIX_EPOCH) {
-                                    m_mod = m_mod.max(dur.as_secs() as i64);
-                                }
-                            }
-                        }
-                    }
-                }
-                total_size_bytes += m_size;
-                folders.push(serde_json::json!({
-                    "path": superagent_dir.to_string_lossy(),
-                    "label": "Memory",
-                    "size_bytes": m_size,
-                    "file_count": m_files,
-                    "last_modified": m_mod,
-                }));
+                // 1. Artifacts
+                let (d, s, f) = make_domain(
+                    "artifacts",
+                    "Artifacts",
+                    superagent_dir.join("artifacts"),
+                    "Custom micro-apps, generated web builds, and runtime manifests",
+                    "#f59e0b",
+                    "Blocks",
+                );
+                total_size_bytes += s;
+                total_files += f;
+                domains.push(d);
 
-                // 5. Models (check both superagent_dir/models and cache_dir/models)
-                let sa_models = superagent_dir.join("models");
-                let cache_models = cache_dir.join("models");
-                let (mut mod_size, mut mod_files, mut mod_last) = (0u64, 0usize, 0i64);
-                let models_path = if sa_models.exists() {
-                    let (s, f, l) = calculate_dir_stats(&sa_models);
-                    mod_size += s;
-                    mod_files += f;
-                    mod_last = mod_last.max(l);
-                    sa_models
-                } else {
-                    let (s, f, l) = calculate_dir_stats(&cache_models);
-                    mod_size += s;
-                    mod_files += f;
-                    mod_last = mod_last.max(l);
-                    cache_models
-                };
-                total_size_bytes += mod_size;
-                folders.push(serde_json::json!({
-                    "path": models_path.to_string_lossy(),
-                    "label": "Models",
-                    "size_bytes": mod_size,
-                    "file_count": mod_files,
-                    "last_modified": mod_last,
-                }));
-
-                // 6. Images
-                let images_dir = superagent_dir.join("images");
-                let (img_size, img_files, img_last) = calculate_dir_stats(&images_dir);
-                total_size_bytes += img_size;
-                folders.push(serde_json::json!({
-                    "path": images_dir.to_string_lossy(),
-                    "label": "Images",
-                    "size_bytes": img_size,
-                    "file_count": img_files,
-                    "last_modified": img_last,
-                }));
-
-                // 7. Videos
-                let videos_dir = superagent_dir.join("videos");
-                let (vid_size, vid_files, vid_last) = calculate_dir_stats(&videos_dir);
-                total_size_bytes += vid_size;
-                folders.push(serde_json::json!({
-                    "path": videos_dir.to_string_lossy(),
-                    "label": "Videos",
-                    "size_bytes": vid_size,
-                    "file_count": vid_files,
-                    "last_modified": vid_last,
-                }));
-
-                // 8. Config
-                let config_dir = superagent_dir.join("config");
-                let (cfg_size, cfg_files, cfg_last) = calculate_dir_stats(&config_dir);
-                total_size_bytes += cfg_size;
-                folders.push(serde_json::json!({
-                    "path": config_dir.to_string_lossy(),
-                    "label": "Config",
-                    "size_bytes": cfg_size,
-                    "file_count": cfg_files,
-                    "last_modified": cfg_last,
-                }));
-
-                // 9. Binaries & Tools (bin, engines, standalone binaries)
-                let mut bin_size = 0u64;
-                let mut bin_files = 0usize;
-                let mut bin_last = 0i64;
-                for sub in &["bin", "engines"] {
-                    let d = superagent_dir.join(sub);
-                    if d.exists() {
-                        let (s, f, l) = calculate_dir_stats(&d);
-                        bin_size += s;
-                        bin_files += f;
-                        bin_last = bin_last.max(l);
-                    }
-                }
+                // 2. Binaries & Tools (bin folder + root tools like bun/ffmpeg/opencode/yt-dlp)
+                let bin_dir = superagent_dir.join("bin");
+                let (mut b_size, mut b_files, mut b_mod) = calculate_dir_stats(&bin_dir);
+                // Also count root standalone binaries in superagent_dir
                 if let Ok(entries) = std::fs::read_dir(&superagent_dir) {
                     for entry in entries.flatten() {
                         let p = entry.path();
                         if p.is_file() {
                             let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
-                            if ext == "exe" || ext == "cmd" || ext == "bat" || ext == "js" || ext == "lock" {
+                            if ext == "exe" || ext == "cmd" || ext == "bat" || ext == "js" {
                                 if let Ok(meta) = p.metadata() {
-                                    bin_size += meta.len();
-                                    bin_files += 1;
+                                    b_size += meta.len();
+                                    b_files += 1;
                                     if let Ok(t) = meta.modified() {
                                         if let Ok(dur) = t.duration_since(std::time::UNIX_EPOCH) {
-                                            bin_last = bin_last.max(dur.as_secs() as i64);
+                                            b_mod = b_mod.max(dur.as_secs() as i64);
                                         }
                                     }
                                 }
@@ -270,21 +193,151 @@ pub async fn handle_storage_channel(
                         }
                     }
                 }
-                if bin_files > 0 {
-                    total_size_bytes += bin_size;
-                    folders.push(serde_json::json!({
-                        "path": superagent_dir.to_string_lossy(),
-                        "label": "Binaries & Tools",
-                        "size_bytes": bin_size,
-                        "file_count": bin_files,
-                        "last_modified": bin_last,
-                    }));
-                }
+                total_size_bytes += b_size;
+                total_files += b_files;
+                domains.push(serde_json::json!({
+                    "id": "bin",
+                    "label": "Binaries & Tools",
+                    "path": bin_dir.to_string_lossy(),
+                    "size_bytes": b_size,
+                    "file_count": b_files,
+                    "last_modified": b_mod,
+                    "description": "Installed CLI executables, runtimes (Bun, FFmpeg, Opencode, yt-dlp)",
+                    "color": "#14b8a6",
+                    "icon": "Terminal",
+                }));
+
+                // 3. Config
+                let (d, s, f) = make_domain(
+                    "config",
+                    "Configuration",
+                    superagent_dir.join("config"),
+                    "Settings, authentication keys, credentials, and app preferences",
+                    "#6b7280",
+                    "Settings",
+                );
+                total_size_bytes += s;
+                total_files += f;
+                domains.push(d);
+
+                // 4. Conversation
+                let (d, s, f) = make_domain(
+                    "conversation",
+                    "Conversations",
+                    superagent_dir.join("conversation"),
+                    "Chat sessions, historical messages, trajectory traces, and attachments",
+                    "#6366f1",
+                    "MessageSquare",
+                );
+                total_size_bytes += s;
+                total_files += f;
+                domains.push(d);
+
+                // 5. Engines
+                let (d, s, f) = make_domain(
+                    "engines",
+                    "Engines",
+                    superagent_dir.join("engines"),
+                    "AI execution runtimes, PyTorch, ONNX, and local acceleration modules",
+                    "#8b5cf6",
+                    "Cpu",
+                );
+                total_size_bytes += s;
+                total_files += f;
+                domains.push(d);
+
+                // 6. Images
+                let (d, s, f) = make_domain(
+                    "images",
+                    "Images",
+                    superagent_dir.join("images"),
+                    "Generated AI imagery, user photo attachments, canvas previews",
+                    "#3b82f6",
+                    "Image",
+                );
+                total_size_bytes += s;
+                total_files += f;
+                domains.push(d);
+
+                // 7. Models (check superagent_dir/models and cache_dir/models)
+                let sa_models = superagent_dir.join("models");
+                let cache_models = cache_dir.join("models");
+                let (mut m_size, mut m_files, mut m_mod) = (0u64, 0usize, 0i64);
+                let models_path = if sa_models.exists() {
+                    let (s, f, l) = calculate_dir_stats(&sa_models);
+                    m_size += s;
+                    m_files += f;
+                    m_mod = m_mod.max(l);
+                    sa_models
+                } else {
+                    let (s, f, l) = calculate_dir_stats(&cache_models);
+                    m_size += s;
+                    m_files += f;
+                    m_mod = m_mod.max(l);
+                    cache_models
+                };
+                total_size_bytes += m_size;
+                total_files += m_files;
+                domains.push(serde_json::json!({
+                    "id": "models",
+                    "label": "Models",
+                    "path": models_path.to_string_lossy(),
+                    "size_bytes": m_size,
+                    "file_count": m_files,
+                    "last_modified": m_mod,
+                    "description": "Local GGUF LLM weights, diffusion checkpoints, and embeddings",
+                    "color": "#ec4899",
+                    "icon": "Box",
+                }));
+
+                // 8. PCB CAD
+                let pcb_path = resolve_pcb_dir(None);
+                let (d, s, f) = make_domain(
+                    "pcb",
+                    "PCB CAD",
+                    pcb_path,
+                    "Hardware designs, schematics, netlists, component libraries, and gerbers",
+                    "#10b981",
+                    "Layers",
+                );
+                total_size_bytes += s;
+                total_files += f;
+                domains.push(d);
+
+                // 9. Videos
+                let (d, s, f) = make_domain(
+                    "videos",
+                    "Videos",
+                    superagent_dir.join("videos"),
+                    "Rendered animations, AI video generations, and exported MP4 clips",
+                    "#ef4444",
+                    "Film",
+                );
+                total_size_bytes += s;
+                total_files += f;
+                domains.push(d);
+
+                // Folders list for backwards compatibility
+                let folders = domains
+                    .iter()
+                    .map(|d| {
+                        serde_json::json!({
+                            "path": d["path"],
+                            "label": d["label"],
+                            "size_bytes": d["size_bytes"],
+                            "file_count": d["file_count"],
+                            "last_modified": d["last_modified"]
+                        })
+                    })
+                    .collect::<Vec<_>>();
 
                 serde_json::json!({
                     "data": {
+                        "domains": domains,
                         "folders": folders,
                         "total_size_bytes": total_size_bytes,
+                        "total_files": total_files,
+                        "workspace_root": workspace_root.to_string_lossy()
                     }
                 })
             })
@@ -292,8 +345,11 @@ pub async fn handle_storage_channel(
             .unwrap_or_else(|_| {
                 serde_json::json!({
                     "data": {
+                        "domains": [],
                         "folders": [],
                         "total_size_bytes": 0,
+                        "total_files": 0,
+                        "workspace_root": ""
                     }
                 })
             });
@@ -304,6 +360,369 @@ pub async fn handle_storage_channel(
             }
 
             Some(Ok(Json(res)))
+        }
+
+        "storage:list-files" | "storage_list_files" | "storage-list-files" => {
+            let arg_map = args.first().and_then(|v| v.as_object());
+            let domain_filter = arg_map
+                .and_then(|m| m.get("domain"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let path_filter = arg_map
+                .and_then(|m| m.get("path"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let recursive = arg_map
+                .and_then(|m| m.get("recursive"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let search = arg_map
+                .and_then(|m| m.get("search"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_lowercase());
+            let file_type_filter = arg_map
+                .and_then(|m| m.get("file_type"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_lowercase());
+            let sort_by = arg_map
+                .and_then(|m| m.get("sort_by"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("date")
+                .to_string();
+            let sort_order = arg_map
+                .and_then(|m| m.get("sort_order"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("desc")
+                .to_string();
+            let limit = arg_map
+                .and_then(|m| m.get("limit"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(150) as usize;
+
+            let workspace_root = state.workspace_root.clone();
+
+            let payload = tokio::task::spawn_blocking(move || {
+                let superagent_dir = get_superagent_dir();
+                let cache_dir = get_cache_dir();
+                let allowed_roots = vec![superagent_dir.clone(), cache_dir.clone(), workspace_root];
+
+                // Determine root directory to list
+                let root_dir = if let Some(ref p) = path_filter {
+                    let pb = PathBuf::from(p);
+                    if path_is_jailed(&pb, &allowed_roots) && pb.exists() {
+                        pb
+                    } else {
+                        superagent_dir.clone()
+                    }
+                } else if let Some(ref dom) = domain_filter {
+                    match dom.as_str() {
+                        "artifacts" => superagent_dir.join("artifacts"),
+                        "bin" => superagent_dir.join("bin"),
+                        "config" => superagent_dir.join("config"),
+                        "conversation" => superagent_dir.join("conversation"),
+                        "engines" => superagent_dir.join("engines"),
+                        "images" => superagent_dir.join("images"),
+                        "models" => {
+                            if superagent_dir.join("models").exists() {
+                                superagent_dir.join("models")
+                            } else {
+                                cache_dir.join("models")
+                            }
+                        }
+                        "pcb" => resolve_pcb_dir(None),
+                        "videos" => superagent_dir.join("videos"),
+                        _ => superagent_dir.clone(),
+                    }
+                } else {
+                    superagent_dir.clone()
+                };
+
+                let mut entries = Vec::new();
+                let is_recursive = recursive || search.is_some() || file_type_filter.is_some();
+
+                if is_recursive {
+                    for entry in WalkDir::new(&root_dir)
+                        .max_depth(32)
+                        .into_iter()
+                        .filter_map(|e| e.ok())
+                    {
+                        let p = entry.path();
+                        if p == root_dir {
+                            continue;
+                        }
+
+                        let fname = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                        if fname.is_empty() {
+                            continue;
+                        }
+
+                        let is_dir = entry.file_type().is_dir();
+                        if is_dir {
+                            continue;
+                        }
+
+                        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+                        let ftype = infer_file_type(ext);
+
+                        // Filters
+                        if let Some(ref q) = search {
+                            if !fname.to_lowercase().contains(q) {
+                                continue;
+                            }
+                        }
+                        if let Some(ref ft) = file_type_filter {
+                            if ft == "media" {
+                                if !matches!(ftype, "image" | "video" | "audio" | "document") {
+                                    continue;
+                                }
+                            } else if ft != "all" && ftype != ft {
+                                continue;
+                            }
+                        }
+
+                        let size_bytes = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                        let modified_at = entry
+                            .metadata()
+                            .ok()
+                            .and_then(|m| m.modified().ok())
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(0);
+
+                        let rel_path = p
+                            .strip_prefix(&root_dir)
+                            .unwrap_or(p)
+                            .to_string_lossy()
+                            .to_string();
+
+                        let dom_tag = infer_domain(p, &superagent_dir);
+
+                        entries.push(serde_json::json!({
+                            "name": fname,
+                            "path": p.to_string_lossy(),
+                            "relative_path": rel_path,
+                            "domain": dom_tag,
+                            "file_type": ftype,
+                            "extension": ext,
+                            "size_bytes": size_bytes,
+                            "modified_at": modified_at,
+                            "is_dir": false,
+                        }));
+
+                        if entries.len() >= 50000 {
+                            break;
+                        }
+                    }
+                } else if let Ok(dir_entries) = std::fs::read_dir(&root_dir) {
+                    for entry in dir_entries.flatten() {
+                        let p = entry.path();
+                        let fname = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                        let is_dir = p.is_dir();
+                        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+                        let ftype = if is_dir {
+                            "folder"
+                        } else {
+                            infer_file_type(ext)
+                        };
+
+                        if let Some(ref ft) = file_type_filter {
+                            if ft == "media" {
+                                if !is_dir
+                                    && !matches!(ftype, "image" | "video" | "audio" | "document")
+                                {
+                                    continue;
+                                }
+                            } else if ft != "all" && ftype != ft {
+                                continue;
+                            }
+                        }
+
+                        let size_bytes = if is_dir {
+                            0
+                        } else {
+                            p.metadata().map(|m| m.len()).unwrap_or(0)
+                        };
+                        let modified_at = p
+                            .metadata()
+                            .ok()
+                            .and_then(|m| m.modified().ok())
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(0);
+
+                        let dom_tag = infer_domain(&p, &superagent_dir);
+
+                        entries.push(serde_json::json!({
+                            "name": fname,
+                            "path": p.to_string_lossy(),
+                            "relative_path": fname,
+                            "domain": dom_tag,
+                            "file_type": ftype,
+                            "extension": ext,
+                            "size_bytes": size_bytes,
+                            "modified_at": modified_at,
+                            "is_dir": is_dir,
+                        }));
+                    }
+                }
+
+                // Sorting
+                entries.sort_by(|a, b| {
+                    let a_is_dir = a["is_dir"].as_bool().unwrap_or(false);
+                    let b_is_dir = b["is_dir"].as_bool().unwrap_or(false);
+                    if a_is_dir != b_is_dir {
+                        return b_is_dir.cmp(&a_is_dir); // folders first
+                    }
+
+                    match sort_by.as_str() {
+                        "size" => {
+                            let sa = a["size_bytes"].as_u64().unwrap_or(0);
+                            let sb = b["size_bytes"].as_u64().unwrap_or(0);
+                            if sort_order == "asc" {
+                                sa.cmp(&sb)
+                            } else {
+                                sb.cmp(&sa)
+                            }
+                        }
+                        "name" => {
+                            let na = a["name"].as_str().unwrap_or("");
+                            let nb = b["name"].as_str().unwrap_or("");
+                            if sort_order == "asc" {
+                                na.cmp(nb)
+                            } else {
+                                nb.cmp(na)
+                            }
+                        }
+                        _ => {
+                            let da = a["modified_at"].as_i64().unwrap_or(0);
+                            let db = b["modified_at"].as_i64().unwrap_or(0);
+                            if sort_order == "asc" {
+                                da.cmp(&db)
+                            } else {
+                                db.cmp(&da)
+                            }
+                        }
+                    }
+                });
+
+                let total_matching = entries.len();
+                let files = if limit == 0 {
+                    entries
+                } else {
+                    entries.into_iter().take(limit).collect::<Vec<_>>()
+                };
+
+                let parent_path = root_dir
+                    .parent()
+                    .filter(|p| path_is_jailed(p, &allowed_roots))
+                    .map(|p| p.to_string_lossy().to_string());
+
+                serde_json::json!({
+                    "data": {
+                        "files": files,
+                        "current_path": root_dir.to_string_lossy(),
+                        "parent_path": parent_path,
+                        "total_matching": total_matching,
+                    }
+                })
+            })
+            .await
+            .unwrap_or_else(|_| {
+                serde_json::json!({
+                    "data": {
+                        "files": [],
+                        "current_path": "",
+                        "parent_path": null,
+                        "total_matching": 0,
+                    }
+                })
+            });
+
+            Some(Ok(Json(payload)))
+        }
+
+        "storage:read-text-file" | "storage_read_text_file" | "storage-read-text-file" => {
+            let path_str = args
+                .first()
+                .and_then(|v| {
+                    if let Some(s) = v.as_str() {
+                        Some(s)
+                    } else {
+                        v.get("path").and_then(|s| s.as_str())
+                    }
+                })
+                .unwrap_or("");
+
+            if path_str.is_empty() {
+                return Some(Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({ "error": "Path parameter is required" })),
+                )));
+            }
+
+            let max_bytes = args
+                .first()
+                .and_then(|v| v.get("max_bytes"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(512 * 1024) as usize;
+
+            let target = PathBuf::from(path_str);
+            let allowed_roots = vec![
+                get_superagent_dir(),
+                get_cache_dir(),
+                state.workspace_root.clone(),
+            ];
+
+            if !path_is_jailed(&target, &allowed_roots) {
+                return Some(Err((
+                    StatusCode::FORBIDDEN,
+                    Json(
+                        serde_json::json!({ "error": "Access to path outside allowed directories is denied" }),
+                    ),
+                )));
+            }
+
+            if !target.exists() || !target.is_file() {
+                return Some(Err((
+                    StatusCode::NOT_FOUND,
+                    Json(serde_json::json!({ "error": "File not found" })),
+                )));
+            }
+
+            let result = tokio::task::spawn_blocking(move || {
+                let total_bytes = target.metadata().map(|m| m.len()).unwrap_or(0);
+                let mime = mime_guess::from_path(&target)
+                    .first_or_octet_stream()
+                    .to_string();
+
+                let mut file = std::fs::File::open(&target).map_err(|e| e.to_string())?;
+                use std::io::Read;
+                let mut buffer = vec![0u8; max_bytes.min(total_bytes as usize)];
+                let bytes_read = file.read(&mut buffer).map_err(|e| e.to_string())?;
+                buffer.truncate(bytes_read);
+
+                let content = String::from_utf8_lossy(&buffer).to_string();
+                let truncated = total_bytes > max_bytes as u64;
+
+                Ok::<serde_json::Value, String>(serde_json::json!({
+                    "data": {
+                        "content": content,
+                        "truncated": truncated,
+                        "total_bytes": total_bytes,
+                        "mime": mime,
+                    }
+                }))
+            })
+            .await
+            .unwrap_or_else(|_| Err("Task failed".to_string()));
+
+            match result {
+                Ok(val) => Some(Ok(Json(val))),
+                Err(err) => Some(Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({ "error": err })),
+                ))),
+            }
         }
 
         "storage:open-folder" | "storage_open_folder" | "storage-open-folder" => {
@@ -331,7 +750,9 @@ pub async fn handle_storage_channel(
             if !path_is_jailed(&target, &allowed_roots) {
                 return Some(Err((
                     StatusCode::FORBIDDEN,
-                    Json(serde_json::json!({ "error": "Access to path outside SuperAgent directory is denied" })),
+                    Json(
+                        serde_json::json!({ "error": "Access to path outside SuperAgent directory is denied" }),
+                    ),
                 )));
             }
 
@@ -342,11 +763,17 @@ pub async fn handle_storage_channel(
             };
 
             #[cfg(target_os = "windows")]
-            let _ = std::process::Command::new("explorer").arg(&folder_to_open).spawn();
+            let _ = std::process::Command::new("explorer")
+                .arg(&folder_to_open)
+                .spawn();
             #[cfg(target_os = "macos")]
-            let _ = std::process::Command::new("open").arg(&folder_to_open).spawn();
+            let _ = std::process::Command::new("open")
+                .arg(&folder_to_open)
+                .spawn();
             #[cfg(target_os = "linux")]
-            let _ = std::process::Command::new("xdg-open").arg(&folder_to_open).spawn();
+            let _ = std::process::Command::new("xdg-open")
+                .arg(&folder_to_open)
+                .spawn();
 
             Some(Ok(Json(
                 serde_json::json!({ "data": { "success": true, "path": folder_to_open.to_string_lossy() } }),
@@ -378,7 +805,9 @@ pub async fn handle_storage_channel(
             if !path_is_jailed(&target, &allowed_roots) {
                 return Some(Err((
                     StatusCode::FORBIDDEN,
-                    Json(serde_json::json!({ "error": "Deletion outside SuperAgent directory is denied" })),
+                    Json(
+                        serde_json::json!({ "error": "Deletion outside SuperAgent directory is denied" }),
+                    ),
                 )));
             }
 
@@ -452,7 +881,11 @@ pub async fn handle_storage_channel(
                         if let Ok(content) = std::fs::read_to_string(&chat_json_path) {
                             serde_json::from_str::<serde_json::Value>(&content)
                                 .ok()
-                                .and_then(|v| v.get("title").and_then(|t| t.as_str()).map(|s| s.to_string()))
+                                .and_then(|v| {
+                                    v.get("title")
+                                        .and_then(|t| t.as_str())
+                                        .map(|s| s.to_string())
+                                })
                                 .unwrap_or_else(|| format!("Chat {}", conv_id))
                         } else {
                             format!("Chat {}", conv_id)
@@ -517,6 +950,7 @@ pub async fn handle_storage_channel(
 
         "storage:get-memory-index" | "storage_get_memory_index" | "storage-get-memory-index" => {
             let chat_storage = state.chat_storage.clone();
+            let pcb_storage = state.pcb_storage.clone();
 
             let res = tokio::task::spawn_blocking(move || {
                 let global_mem = load_global_memory();
@@ -528,8 +962,7 @@ pub async fn handle_storage_channel(
                 let mut conversations = Vec::new();
                 let mut total_media_count = 0usize;
 
-                // Examine up to 200 sessions
-                for meta in sessions_meta.into_iter().take(200) {
+                for meta in sessions_meta.into_iter().take(250) {
                     let mut images = 0u32;
                     let mut videos = 0u32;
                     let mut audios = 0u32;
@@ -567,10 +1000,14 @@ pub async fn handle_storage_channel(
                     }));
                 }
 
+                // PCB Projects
+                let pcb_projects = pcb_storage.list_projects().unwrap_or_default();
+
                 serde_json::json!({
                     "data": {
                         "global_memory_size": global_mem_size,
                         "conversations": conversations,
+                        "pcb_projects": pcb_projects,
                         "total_media_count": total_media_count,
                     }
                 })
@@ -581,6 +1018,7 @@ pub async fn handle_storage_channel(
                     "data": {
                         "global_memory_size": 0,
                         "conversations": [],
+                        "pcb_projects": [],
                         "total_media_count": 0,
                     }
                 })
@@ -644,19 +1082,30 @@ pub async fn handle_storage_channel(
                     }));
                 }
 
-                // File index (for full scope or lightweight summary)
+                // File index across all .superagent
                 let mut file_index = Vec::new();
-                let chats_dir = chat_storage.storage_dir().join("chats");
-                if chats_dir.exists() {
-                    for entry in WalkDir::new(&chats_dir).max_depth(3).into_iter().filter_map(|e| e.ok()) {
+                let superagent_dir = get_superagent_dir();
+                let max_index_files = if is_full { 50_000 } else { 1_000 };
+
+                if superagent_dir.exists() {
+                    for entry in WalkDir::new(&superagent_dir)
+                        .max_depth(32)
+                        .into_iter()
+                        .filter_map(|e| e.ok())
+                    {
                         if entry.file_type().is_file() {
                             let p = entry.path();
                             let fname = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                            if fname == "chat.json" || fname == "steps.json" || fname == "messages.json" {
+                            if fname == "chat.json"
+                                || fname == "steps.json"
+                                || fname == "messages.json"
+                                || fname == "web-server.lock"
+                            {
                                 continue;
                             }
                             let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
                             let file_type = infer_file_type(ext);
+                            let dom_tag = infer_domain(&p, &superagent_dir);
                             let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
                             let mod_at = entry
                                 .metadata()
@@ -669,12 +1118,13 @@ pub async fn handle_storage_channel(
                             file_index.push(serde_json::json!({
                                 "name": fname,
                                 "path": p.to_string_lossy(),
+                                "domain": dom_tag,
                                 "file_type": file_type,
                                 "size_bytes": size,
                                 "modified_at": mod_at,
                             }));
 
-                            if !is_full && file_index.len() >= 100 {
+                            if file_index.len() >= max_index_files {
                                 break;
                             }
                         }

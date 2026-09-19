@@ -4,6 +4,7 @@ pub mod conversations;
 pub mod images;
 pub mod pcb;
 pub mod routines;
+mod storage;
 pub mod system;
 pub mod videos;
 
@@ -13,9 +14,9 @@ pub use conversations::*;
 pub use images::*;
 pub use pcb::*;
 pub use routines::*;
+pub use storage::serve_storage_file;
 pub use system::*;
 pub use videos::*;
-
 
 use axum::{
     extract::DefaultBodyLimit,
@@ -27,9 +28,8 @@ use axum::{
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::server::auth::{
-    auth_middleware, change_auth_password, delete_auth_device, get_auth_devices,
-    get_auth_history, get_auth_status, login_auth, logout_auth, serve_login, setup_auth,
-    verify_auth_token,
+    auth_middleware, change_auth_password, delete_auth_device, get_auth_devices, get_auth_history,
+    get_auth_status, login_auth, logout_auth, serve_login, setup_auth, verify_auth_token,
 };
 use crate::server::ipc::handle_ipc;
 use crate::server::spa::spa_fallback_handler;
@@ -135,8 +135,14 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/videos/engine/update", post(update_video_engine))
         .route("/api/videos/engine/rollback", post(rollback_video_engine))
         .route("/api/videos/engine", delete(uninstall_video_engine))
-        .route("/api/videos/engine/check-update", get(check_video_engine_update))
-        .route("/api/videos/engine/ffmpeg/provision", post(provision_ffmpeg))
+        .route(
+            "/api/videos/engine/check-update",
+            get(check_video_engine_update),
+        )
+        .route(
+            "/api/videos/engine/ffmpeg/provision",
+            post(provision_ffmpeg),
+        )
         .route("/api/videos/engine/ffmpeg/status", get(get_ffmpeg_status))
         .route("/api/videos/hardware", get(get_video_hardware_profile))
         .route("/api/videos/models", get(list_video_models))
@@ -151,12 +157,16 @@ pub fn create_router(state: AppState) -> Router {
             get(get_video_generation).delete(delete_video_generation),
         )
         .route("/api/videos/generations/:id/file", get(get_video_file))
-        .route("/api/videos/generations/:id/thumbnail", get(get_video_thumbnail))
-        .route("/api/videos/generations/:id/export", post(export_video_route))
+        .route(
+            "/api/videos/generations/:id/thumbnail",
+            get(get_video_thumbnail),
+        )
+        .route(
+            "/api/videos/generations/:id/export",
+            post(export_video_route),
+        )
         .route("/api/videos/prompt/enhance", post(enhance_video_prompt))
         .route("/api/artifacts", get(list_artifacts))
-
-
         .route("/api/artifacts/:id/start", post(start_artifact))
         .route("/api/artifacts/:id/stop", post(stop_artifact))
         .route("/api/artifacts/sdk.js", get(get_artifact_sdk))
@@ -179,15 +189,9 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/tools", get(list_tools))
         .route("/api/integrations", get(list_integrations))
         .route("/api/personas", get(list_personas).post(save_persona))
-        .route(
-            "/api/personas/:id",
-            get(get_persona).delete(delete_persona),
-        )
+        .route("/api/personas/:id", get(get_persona).delete(delete_persona))
         .route("/api/routines", get(list_routines).post(save_routine))
-        .route(
-            "/api/routines/:id",
-            get(get_routine).delete(delete_routine),
-        )
+        .route("/api/routines/:id", get(get_routine).delete(delete_routine))
         .route("/api/routines/:id/run", post(run_routine_now))
         .route("/api/triggers/webhook/:token", post(handle_webhook_route))
         .route("/api/workflows/run", post(run_workflow))
@@ -197,13 +201,17 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/skills/trace/:id/stop", post(stop_trace_session))
         .route("/api/skills/trace/:id/synthesize", post(synthesize_trace))
         .route("/api/chat/stream", post(handle_chat_stream))
+        .route("/api/storage/file", get(serve_storage_file))
         .route("/api/ipc/:channel", post(handle_ipc))
         .route("/ws/agent", get(handle_agent_ws))
         .route("/api/ws", get(handle_agent_ws));
 
     api_router
         .fallback(spa_fallback_handler)
-        .layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ))
         .layer(DefaultBodyLimit::max(512 * 1024 * 1024))
         .layer(cors)
         .with_state(state)
