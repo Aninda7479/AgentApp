@@ -8,6 +8,7 @@ export interface AuthStatus {
   user?: string | null;
   version?: string;
   isLockedOut?: boolean;
+  backendConnected?: boolean;
 }
 
 function getApiBaseUrl(): string {
@@ -123,6 +124,7 @@ class AuthServiceClass {
             ownerName: owner,
             user: data.user ?? null,
             version: data.version,
+            backendConnected: true,
           };
         } else {
           // Fallback if rejected (e.g. 401 unauthenticated with invalid token)
@@ -132,6 +134,7 @@ class AuthServiceClass {
             authRequired: true,
             passwordSet: true,
             ownerName: owner || this.currentStatus.ownerName,
+            backendConnected: true,
           };
         }
       } catch {
@@ -140,8 +143,11 @@ class AuthServiceClass {
         this.currentStatus = {
           authenticated: false,
           authRequired: true,
-          passwordSet: false,
+          // Guard: Never assume password is unset if the backend is offline/unreachable.
+          // Setting this to false causes the UI to render the master password setup wizard.
+          passwordSet: true,
           ownerName: owner || this.currentStatus.ownerName,
+          backendConnected: false,
         };
       } finally {
         this.checkInFlight = null;
@@ -152,6 +158,25 @@ class AuthServiceClass {
     })();
 
     return this.checkInFlight;
+  }
+
+  /**
+   * Fast health probe to verify if the SuperAgent core daemon on port 1469 is reachable.
+   */
+  public async checkHealth(timeoutMs = 2000): Promise<boolean> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(`${getApiBaseUrl()}/api/health`, {
+        method: 'GET',
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return res.ok;
+    } catch {
+      return false;
+    }
   }
 
   /**

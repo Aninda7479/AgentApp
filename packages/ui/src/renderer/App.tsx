@@ -109,24 +109,94 @@ const PAGE_LABELS: Record<string, string> = {
 export const App: React.FC = () => {
   // ── All React state is declared first (hooks order is stable) ──────────────
   const [loading, setLoading] = useState(true);
+  const [backendOffline, setBackendOffline] = useState<boolean>(false);
+  const [isRetryingBackend, setIsRetryingBackend] = useState<boolean>(false);
+  const [isBackendDisconnected, setIsBackendDisconnected] = useState<boolean>(false);
   const { themeMode, setThemeMode } = useThemeMode();
 
   const [authStatus, setAuthStatus] = useState<AuthStatus>(() => AuthService.getStatus());
 
   useEffect(() => {
-    void AuthService.checkStatusWithRetry();
     const unsubscribe = AuthService.subscribe((s) => {
       setAuthStatus(s);
     });
     return unsubscribe;
   }, []);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 3000);
-    return () => clearTimeout(timer);
+  const probeBackend = useCallback(async (isManualRetry = false): Promise<boolean> => {
+    if (isManualRetry) {
+      setIsRetryingBackend(true);
+    }
+    try {
+      let healthy = false;
+      const isTauriEnv = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__ || (window as any).__TAURI__);
+      const currentIpc = getIpc();
+      if (isTauriEnv && currentIpc) {
+        const ping = await currentIpc.invoke('app-version').catch(() => null);
+        healthy = ping !== null;
+      } else {
+        healthy = await AuthService.checkHealth(2500);
+      }
+
+      if (healthy) {
+        setBackendOffline(false);
+        setIsBackendDisconnected(false);
+        const currentAuth = await AuthService.checkStatus();
+        setAuthStatus(currentAuth);
+        setLoading(false);
+        return true;
+      } else {
+        setBackendOffline(true);
+        setIsBackendDisconnected(true);
+        return false;
+      }
+    } catch {
+      setBackendOffline(true);
+      setIsBackendDisconnected(true);
+      return false;
+    } finally {
+      if (isManualRetry) {
+        setIsRetryingBackend(false);
+      }
+    }
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const startup = async () => {
+      // Perform initial health check with up to 3 retries (approx 1.6s) to allow daemon startup
+      let isOk = false;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (!isMounted) return;
+        isOk = await probeBackend(false);
+        if (isOk) break;
+        if (attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+        }
+      }
+      if (!isMounted) return;
+      if (!isOk) {
+        setBackendOffline(true);
+        setIsBackendDisconnected(true);
+        setLoading(true); // Keep on loading screen in offline mode
+      }
+    };
+
+    void startup();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [probeBackend]);
+
+  // When offline, continuously probe backend in the background every 3s
+  useEffect(() => {
+    if (!backendOffline) return;
+    const interval = setInterval(() => {
+      void probeBackend(false);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [backendOffline, probeBackend]);
   const partners = usePartners();
   // Live mirror of `partners`, typed as the `PartnerController` slice the
   // streaming handler touches, so `AgentStreamService.createHandler` can read
@@ -197,7 +267,6 @@ export const App: React.FC = () => {
   const [settingsCategory, setSettingsCategory] = useState<string>(initialRoute.settingsCategory);
   const [activeProject, setActiveProject] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [isBackendDisconnected, setIsBackendDisconnected] = useState<boolean>(false);
   const [toastOpen, setToastOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
   const [toastType, setToastType] = useState<'info' | 'error'>('info');
@@ -1588,7 +1657,14 @@ export const App: React.FC = () => {
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   if (loading) {
-    return <LoadingScreen signature="Build by Aninda" />;
+    return (
+      <LoadingScreen
+        signature="Build by Aninda"
+        isOffline={backendOffline}
+        isRetrying={isRetryingBackend}
+        onRetry={() => void probeBackend(true)}
+      />
+    );
   }
 
   return (

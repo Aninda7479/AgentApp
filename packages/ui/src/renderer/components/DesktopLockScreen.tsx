@@ -28,7 +28,7 @@ export const DesktopLockScreen: React.FC<DesktopLockScreenProps> = ({ authStatus
     if (e) e.preventDefault();
     setError(null);
 
-    const isSetup = !authStatus.passwordSet;
+    const isSetup = !authStatus.passwordSet && authStatus.backendConnected !== false;
 
     if (!password.trim()) {
       setError('Please enter a password.');
@@ -70,7 +70,7 @@ export const DesktopLockScreen: React.FC<DesktopLockScreenProps> = ({ authStatus
     }
   };
 
-  const isSetup = !authStatus.passwordSet;
+  const isSetup = !authStatus.passwordSet && authStatus.backendConnected !== false;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-bg/95 backdrop-blur-xl p-4 select-none">

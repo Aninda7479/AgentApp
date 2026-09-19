@@ -75,6 +75,7 @@ export class SetupService {
    * Determines whether the Master Password Lock / Setup screen should be rendered.
    */
   static shouldShowLockScreen(authStatus: AuthStatus): boolean {
+    if (authStatus.backendConnected === false) return false;
     return Boolean(authStatus.authRequired && !authStatus.authenticated);
   }
 
@@ -88,6 +89,7 @@ export class SetupService {
     authStatus: AuthStatus;
   }): boolean {
     const { bootstrapping, setupCompleted, onboardingDismissed, authStatus } = params;
+    if (authStatus.backendConnected === false) return false;
     if (bootstrapping) return false;
     if (setupCompleted) return false;
     if (onboardingDismissed) return false;
@@ -113,6 +115,7 @@ export class SetupService {
     ownerName?: string | null;
   }): boolean {
     const { bootstrapping, authStatus, onboardingVisible, hostSetupDismissed, ownerName } = params;
+    if (authStatus.backendConnected === false) return false;
     if (bootstrapping) return false;
     if (hostSetupDismissed) return false;
     if (onboardingVisible) return false;

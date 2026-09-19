@@ -83,6 +83,31 @@ describe('SetupService - Application Readiness & Adaptive Setup', () => {
         authStatus: unlockedAuth,
       })
     ).toBe(false);
+
+    // 4. Backend offline -> LockScreen, Wizard, and Setup MUST NOT show
+    const offlineAuth: AuthStatus = {
+      authRequired: true,
+      passwordSet: false,
+      authenticated: false,
+      backendConnected: false,
+    };
+    expect(SetupService.shouldShowLockScreen(offlineAuth)).toBe(false);
+    expect(
+      SetupService.shouldShowOnboardingWizard({
+        bootstrapping: false,
+        setupCompleted: false,
+        onboardingDismissed: false,
+        authStatus: offlineAuth,
+      })
+    ).toBe(false);
+    expect(
+      SetupService.shouldShowHostSetupPrompt({
+        bootstrapping: false,
+        authStatus: offlineAuth,
+        onboardingVisible: false,
+        hostSetupDismissed: false,
+      })
+    ).toBe(false);
   });
 
   it('provides recommended step based on missing items', () => {
