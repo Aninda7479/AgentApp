@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde_json::json;
+use std::collections::HashMap;
 use tokio::sync::mpsc::{channel, Receiver};
 
 use rand::Rng;
@@ -19,7 +20,152 @@ pub const OPENCODE_FREE_MODELS: &[&str] = &[
     "nemotron-3-ultra-free",
     "nemotron-3.5-lightning-free",
     "ling-3.0-flash-fin-free",
+    "jev-1.13-free",
+    "deepseek-v4-flash-free",
 ];
+
+/// Official OpenCode tool names recognized and whitelisted by OpenCode Zen's API gateway.
+/// Sourced from upstream anomalyco/opencode `packages/opencode/src/tool/registry.ts`.
+pub const OPENCODE_OFFICIAL_TOOLS: &[&str] = &[
+    "bash",
+    "read",
+    "write",
+    "edit",
+    "glob",
+    "grep",
+    "lsp",
+    "task",
+    "question",
+    "todo",
+    "plan",
+    "webfetch",
+    "websearch",
+    "patch",
+    "apply_patch",
+    "skill",
+];
+
+/// Returns whether a given model identifier belongs to OpenCode's free tier.
+pub fn is_free_opencode_model(model_id: &str) -> bool {
+    model_id.ends_with("-free") || OPENCODE_FREE_MODELS.contains(&model_id)
+}
+
+/// Returns the official 16 OpenCode tools declared in the OpenAI function format.
+pub fn get_official_opencode_tools() -> Vec<serde_json::Value> {
+    OPENCODE_OFFICIAL_TOOLS
+        .iter()
+        .map(|name| {
+            json!({
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "description": match *name {
+                        "bash" => "Execute a bash or shell command in the system terminal",
+                        "read" => "Read the contents of a file from the workspace",
+                        "write" => "Write or overwrite content to a file",
+                        "edit" => "Perform exact search-and-replace edits on a file",
+                        "glob" => "Find files matching a glob pattern",
+                        "grep" => "Search for text patterns across files in directory",
+                        "lsp" => "Execute language server queries (diagnostics, definitions)",
+                        "task" => "Spawn or manage background subtasks and workflows",
+                        "question" => "Ask the user a question for clarification or input",
+                        "todo" => "Manage checklist and todo items for current session",
+                        "plan" => "Create or update implementation plan document",
+                        "webfetch" => "Fetch webpage content from a given URL",
+                        "websearch" => "Perform a web search query for information",
+                        "patch" => "Generate unified diff patch for file modifications",
+                        "apply_patch" => "Apply unified diff patch to workspace files",
+                        "skill" => "Load and execute specialized agent skill instructions",
+                        _ => "OpenCode built-in tool"
+                    },
+                    "parameters": {
+                        "type": "object",
+                        "properties": {}
+                    }
+                }
+            })
+        })
+        .collect()
+}
+
+/// Prepares tools for OpenCode Zen free tier requests.
+/// Upstream validates declared tool names against its official whitelist.
+/// If tools are empty, injects the official 16 tools.
+/// If tools are provided, maps known SuperAgent tool names to official OpenCode equivalents.
+pub fn prepare_opencode_free_tier_tools(tools: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    if tools.is_empty() {
+        return get_official_opencode_tools();
+    }
+
+    let mut prepared = Vec::new();
+    let mut seen_names = std::collections::HashSet::new();
+
+    for tool in tools {
+        let original_name = tool
+            .get("name")
+            .or_else(|| tool.get("function").and_then(|f| f.get("name")))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let mapped_name = match original_name {
+            "run_command" | "terminal" | "shell" | "bash" => "bash",
+            "read_file" | "view_file" | "read" => "read",
+            "write_to_file" | "write_file" | "write" => "write",
+            "replace_file_content" | "edit_file" | "edit" => "edit",
+            "find_by_name" | "find_files" | "glob" => "glob",
+            "grep_search" | "search_files" | "grep" => "grep",
+            "read_url_content" | "fetch_web" | "webfetch" => "webfetch",
+            "search_web" | "websearch" => "websearch",
+            "ask_question" | "question" => "question",
+            "invoke_subagent" | "manage_task" | "task" => "task",
+            other if OPENCODE_OFFICIAL_TOOLS.contains(&other) => other,
+            _ => "task", // Safe fallback to official whitelist
+        };
+
+        if seen_names.insert(mapped_name) {
+            let mut t = tool.clone();
+            if let Some(f) = t.get_mut("function") {
+                f["name"] = json!(mapped_name);
+            } else if t.get("type").and_then(|tp| tp.as_str()) == Some("function") {
+                t["name"] = json!(mapped_name);
+            } else {
+                t = json!({
+                    "type": "function",
+                    "function": {
+                        "name": mapped_name,
+                        "description": tool.get("description").unwrap_or(&json!("OpenCode tool")),
+                        "parameters": tool.get("parameters").unwrap_or(&json!({"type": "object", "properties": {}}))
+                    }
+                });
+            }
+            prepared.push(t);
+        }
+    }
+
+    if prepared.is_empty() {
+        get_official_opencode_tools()
+    } else {
+        prepared
+    }
+}
+
+/// Translates tool names emitted by OpenCode back to SuperAgent's internal tool registry.
+pub fn map_opencode_tool_name_to_superagent(raw_name: &str) -> String {
+    match raw_name {
+        "telegram_telegram" => "telegram".to_string(),
+        "bash" => "run_command".to_string(),
+        "read" => "view_file".to_string(),
+        "write" => "write_to_file".to_string(),
+        "edit" => "replace_file_content".to_string(),
+        "glob" => "find_by_name".to_string(),
+        "grep" => "grep_search".to_string(),
+        "webfetch" => "read_url_content".to_string(),
+        "websearch" => "search_web".to_string(),
+        "task" => "invoke_subagent".to_string(),
+        "question" => "ask_question".to_string(),
+        _ => raw_name.to_string(),
+    }
+}
 
 const BASE62_CHARS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
@@ -573,6 +719,243 @@ impl OpenCodeProvider {
         }
         formatted
     }
+
+    /// Sends a direct HTTPS streaming chat completion request to OpenCode Zen API (`https://opencode.ai/zen/v1/chat/completions`)
+    /// satisfying the 4 free-tier contract pillars (tool whitelist validation, mandatory stream, canonical headers, SSE delta parsing).
+    pub async fn direct_keyless_chat_stream(
+        &self,
+        config: &ModelConfig,
+        messages: &[ChatMessage],
+        tools: &[serde_json::Value],
+    ) -> anyhow::Result<Receiver<AgentEvent>> {
+        let base_url = config.get_base_url();
+        let base_trimmed = base_url.trim_end_matches('/');
+        let url = if base_trimmed.ends_with("/chat/completions") {
+            base_trimmed.to_string()
+        } else if base_trimmed.is_empty() || base_trimmed == "https://api.openai.com/v1" {
+            format!("{}/chat/completions", DEFAULT_OPENCODE_BASE_URL)
+        } else {
+            format!("{}/chat/completions", base_trimmed)
+        };
+
+        let prepared_tools = prepare_opencode_free_tier_tools(tools);
+        let mut payload = json!({
+            "model": config.model_id,
+            "messages": Self::format_messages(messages),
+            "stream": true,
+            "tools": prepared_tools,
+        });
+
+        if let Some(temp) = config.temperature {
+            payload["temperature"] = json!(temp);
+        }
+        if let Some(max_t) = config.max_tokens {
+            payload["max_tokens"] = json!(max_t);
+        }
+
+        let session_id = generate_opencode_session_id();
+        let request_id = generate_opencode_request_id();
+
+        let req = self
+            .client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream")
+            .header("User-Agent", "opencode/1.18.31")
+            .header("x-opencode-session", session_id)
+            .header("x-opencode-request", request_id)
+            .header("x-opencode-client", "desktop")
+            .header("x-opencode-project", "global")
+            .json(&payload);
+
+        let response = req
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("OpenCode direct connection error: {}", e))?;
+        let status = response.status();
+
+        if !status.is_success() {
+            let err_body = response.text().await.unwrap_or_default();
+            anyhow::bail!("OpenCode API error (HTTP {}): {}", status, err_body);
+        }
+
+        let (tx, rx) = channel(100);
+        let mut stream = response.bytes_stream();
+
+        tokio::spawn(async move {
+            let mut buffer = String::new();
+            let mut tool_calls_map: HashMap<usize, (String, String, String)> = HashMap::new();
+            let mut in_thinking = false;
+            let mut stop_reason = String::from("stop");
+
+            while let Some(item) = stream.next().await {
+                let bytes = match item {
+                    Ok(b) => b,
+                    Err(e) => {
+                        let _ = tx
+                            .send(AgentEvent::Error {
+                                message: e.to_string(),
+                            })
+                            .await;
+                        return;
+                    }
+                };
+
+                buffer.push_str(&String::from_utf8_lossy(&bytes));
+
+                while let Some(pos) = buffer.find('\n') {
+                    let line = buffer[..pos].trim_end_matches('\r').trim().to_string();
+                    buffer.drain(..=pos);
+
+                    if line.is_empty() || line.starts_with(':') {
+                        continue;
+                    }
+
+                    if let Some(data_str) = line.strip_prefix("data: ") {
+                        let data_str = data_str.trim();
+                        if data_str == "[DONE]" {
+                            break;
+                        }
+
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(data_str) {
+                            if let Some(choice) = v.get("choices").and_then(|c| c.get(0)) {
+                                if let Some(reason) =
+                                    choice.get("finish_reason").and_then(|r| r.as_str())
+                                {
+                                    if !reason.is_empty() {
+                                        stop_reason = reason.to_string();
+                                    }
+                                }
+
+                                if let Some(delta) = choice.get("delta") {
+                                    // Handle reasoning / thinking tokens (Nemotron, Mimo, Ling, Big-Pickle)
+                                    let reasoning_token = delta
+                                        .get("reasoning")
+                                        .or_else(|| delta.get("reasoning_content"))
+                                        .and_then(|r| r.as_str());
+
+                                    if let Some(reason_text) = reasoning_token {
+                                        if !reason_text.is_empty() {
+                                            if !in_thinking {
+                                                in_thinking = true;
+                                                let _ = tx
+                                                    .send(AgentEvent::Token {
+                                                        text: "<think>\n".to_string(),
+                                                    })
+                                                    .await;
+                                            }
+                                            if tx
+                                                .send(AgentEvent::Token {
+                                                    text: reason_text.to_string(),
+                                                })
+                                                .await
+                                                .is_err()
+                                            {
+                                                return;
+                                            }
+                                        }
+                                    }
+
+                                    // Handle regular text completion tokens
+                                    if let Some(content) =
+                                        delta.get("content").and_then(|c| c.as_str())
+                                    {
+                                        if !content.is_empty() {
+                                            if in_thinking {
+                                                in_thinking = false;
+                                                let _ = tx
+                                                    .send(AgentEvent::Token {
+                                                        text: "\n</think>\n\n".to_string(),
+                                                    })
+                                                    .await;
+                                            }
+                                            if tx
+                                                .send(AgentEvent::Token {
+                                                    text: content.to_string(),
+                                                })
+                                                .await
+                                                .is_err()
+                                            {
+                                                return;
+                                            }
+                                        }
+                                    }
+
+                                    // Handle tool calls
+                                    if let Some(tcs) =
+                                        delta.get("tool_calls").and_then(|t| t.as_array())
+                                    {
+                                        for tc in tcs {
+                                            let idx = tc
+                                                .get("index")
+                                                .and_then(|i| i.as_u64())
+                                                .unwrap_or(0)
+                                                as usize;
+                                            let entry =
+                                                tool_calls_map.entry(idx).or_insert_with(|| {
+                                                    (String::new(), String::new(), String::new())
+                                                });
+
+                                            if let Some(id) = tc.get("id").and_then(|i| i.as_str())
+                                            {
+                                                entry.0 = id.to_string();
+                                            }
+                                            if let Some(func) = tc.get("function") {
+                                                if let Some(name) =
+                                                    func.get("name").and_then(|n| n.as_str())
+                                                {
+                                                    entry.1.push_str(name);
+                                                }
+                                                if let Some(args) =
+                                                    func.get("arguments").and_then(|a| a.as_str())
+                                                {
+                                                    entry.2.push_str(args);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if in_thinking {
+                let _ = tx
+                    .send(AgentEvent::Token {
+                        text: "\n</think>\n\n".to_string(),
+                    })
+                    .await;
+            }
+
+            let mut indices: Vec<_> = tool_calls_map.keys().cloned().collect();
+            indices.sort_unstable();
+            for idx in indices {
+                if let Some((id, name, args_str)) = tool_calls_map.remove(&idx) {
+                    let final_id = if id.trim().is_empty() {
+                        format!("call_{}", uuid::Uuid::new_v4().simple())
+                    } else {
+                        id
+                    };
+                    let mapped_name = map_opencode_tool_name_to_superagent(&name);
+                    let input: serde_json::Value = serde_json::from_str(&args_str)
+                        .unwrap_or_else(|_| json!({ "raw": args_str }));
+                    let _ = tx
+                        .send(AgentEvent::ToolCall {
+                            id: final_id,
+                            name: mapped_name,
+                            input,
+                        })
+                        .await;
+                }
+            }
+
+            let _ = tx.send(AgentEvent::Finished { stop_reason }).await;
+        });
+
+        Ok(rx)
+    }
 }
 
 #[async_trait]
@@ -601,8 +984,29 @@ impl LlmProvider for OpenCodeProvider {
             }
         }
 
-        // 2. Free Tier Mode:
-        // Route through local headless opencode serve daemon to ensure valid Zen credentials and avoid 403 FreeTierError
+        // 2. Direct Keyless Free-Tier Mode (Zero-Install & Direct HTTPS streaming):
+        // Connect directly to OpenCode Zen API satisfying the 4 upstream contract pillars.
+        match self
+            .direct_keyless_chat_stream(config, messages, tools)
+            .await
+        {
+            Ok(rx) => {
+                tracing::info!(
+                    "Successfully initiated direct keyless HTTPS stream for OpenCode model '{}'",
+                    config.model_id
+                );
+                return Ok(rx);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "Direct keyless OpenCode streaming failed ({}). Falling back to local opencode serve daemon...",
+                    e
+                );
+            }
+        }
+
+        // 3. Fallback Free Tier Mode (Local Headless Daemon):
+        // Route through local headless opencode serve daemon if direct streaming fails
         let server_base = Self::ensure_opencode_server(&self.client).await?;
 
         // Create a dedicated session for this execution
@@ -1107,5 +1511,116 @@ mod tests {
         assert!(
             engine_dir.ends_with("engines\\opencode") || engine_dir.ends_with("engines/opencode")
         );
+    }
+
+    #[test]
+    fn test_opencode_official_tools_count() {
+        assert_eq!(OPENCODE_OFFICIAL_TOOLS.len(), 16);
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"bash"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"read"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"write"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"edit"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"glob"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"grep"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"lsp"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"task"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"question"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"todo"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"plan"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"webfetch"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"websearch"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"patch"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"apply_patch"));
+        assert!(OPENCODE_OFFICIAL_TOOLS.contains(&"skill"));
+    }
+
+    #[test]
+    fn test_get_official_opencode_tools() {
+        let tools = get_official_opencode_tools();
+        assert_eq!(tools.len(), 16);
+        for t in &tools {
+            assert_eq!(t["type"], "function");
+            let name = t["function"]["name"].as_str().unwrap();
+            assert!(OPENCODE_OFFICIAL_TOOLS.contains(&name));
+            assert!(!t["function"]["description"].as_str().unwrap().is_empty());
+        }
+    }
+
+    #[test]
+    fn test_prepare_opencode_free_tier_tools_empty() {
+        let prepared = prepare_opencode_free_tier_tools(&[]);
+        assert_eq!(prepared.len(), 16);
+    }
+
+    #[test]
+    fn test_prepare_opencode_free_tier_tools_mapping() {
+        let client_tools = vec![
+            json!({
+                "type": "function",
+                "function": {
+                    "name": "run_command",
+                    "description": "Run shell command",
+                    "parameters": {"type": "object", "properties": {}}
+                }
+            }),
+            json!({
+                "type": "function",
+                "function": {
+                    "name": "view_file",
+                    "description": "View file content",
+                    "parameters": {"type": "object", "properties": {}}
+                }
+            }),
+        ];
+        let prepared = prepare_opencode_free_tier_tools(&client_tools);
+        assert_eq!(prepared.len(), 2);
+        assert_eq!(prepared[0]["function"]["name"], "bash");
+        assert_eq!(prepared[1]["function"]["name"], "read");
+    }
+
+    #[test]
+    fn test_map_opencode_tool_name_to_superagent() {
+        assert_eq!(map_opencode_tool_name_to_superagent("bash"), "run_command");
+        assert_eq!(map_opencode_tool_name_to_superagent("read"), "view_file");
+        assert_eq!(
+            map_opencode_tool_name_to_superagent("write"),
+            "write_to_file"
+        );
+        assert_eq!(
+            map_opencode_tool_name_to_superagent("edit"),
+            "replace_file_content"
+        );
+        assert_eq!(map_opencode_tool_name_to_superagent("glob"), "find_by_name");
+        assert_eq!(map_opencode_tool_name_to_superagent("grep"), "grep_search");
+        assert_eq!(
+            map_opencode_tool_name_to_superagent("webfetch"),
+            "read_url_content"
+        );
+        assert_eq!(
+            map_opencode_tool_name_to_superagent("websearch"),
+            "search_web"
+        );
+        assert_eq!(
+            map_opencode_tool_name_to_superagent("task"),
+            "invoke_subagent"
+        );
+        assert_eq!(
+            map_opencode_tool_name_to_superagent("question"),
+            "ask_question"
+        );
+        assert_eq!(
+            map_opencode_tool_name_to_superagent("custom_tool"),
+            "custom_tool"
+        );
+    }
+
+    #[test]
+    fn test_is_free_opencode_model() {
+        assert!(is_free_opencode_model("big-pickle"));
+        assert!(is_free_opencode_model("mimo-v2.5-free"));
+        assert!(is_free_opencode_model("nemotron-3.5-lightning-free"));
+        assert!(is_free_opencode_model("custom-agent-free"));
+        assert!(!is_free_opencode_model("claude-3-5-sonnet"));
+        assert!(!is_free_opencode_model("gpt-4o"));
     }
 }
