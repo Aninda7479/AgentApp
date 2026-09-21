@@ -1,7 +1,7 @@
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use parking_lot::Mutex;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -15,10 +15,7 @@ use crate::server::ipc::lan_addresses;
 use crate::server::routes::create_router;
 use crate::server::state::AppState;
 use crate::storage::{
-    auth::AuthStore,
-    chat_storage::ChatStorage,
-    pcb_storage::PcbStorage,
-    settings::SettingsStore,
+    auth::AuthStore, chat_storage::ChatStorage, pcb_storage::PcbStorage, settings::SettingsStore,
 };
 use crate::tools::ToolRegistry;
 
@@ -31,13 +28,26 @@ fn build_test_state(temp_dir: PathBuf) -> AppState {
     let persona_store = Arc::new(PersonaStore::new(&temp_dir));
     let coordinator = Arc::new(Coordinator::new(persona_store.clone()));
     let tool_registry = Arc::new(ToolRegistry::new());
-    let subagent_runner = Arc::new(SubagentRunner::new(persona_store.clone(), tool_registry.clone()));
+    let subagent_runner = Arc::new(SubagentRunner::new(
+        persona_store.clone(),
+        tool_registry.clone(),
+    ));
     let pipeline_executor = Arc::new(PipelineExecutor::new(subagent_runner.clone()));
     let trigger_engine = Arc::new(TriggerEngine::new(&temp_dir, subagent_runner.clone()));
     let trace_recorder = Arc::new(TraceRecorder::new());
     let skill_synthesizer = Arc::new(SkillSynthesizer::new(&temp_dir));
-    let session_store = Arc::new(Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(50).unwrap())));
+    let session_store = Arc::new(Mutex::new(lru::LruCache::new(
+        std::num::NonZeroUsize::new(50).unwrap(),
+    )));
     let (ws_broadcast_tx, _) = tokio::sync::broadcast::channel::<String>(256);
+    let active_cancellations = Arc::new(Mutex::new(HashMap::new()));
+    let telegram_bot = Arc::new(crate::integrations::TelegramBotManager::new(
+        settings_store.clone(),
+        chat_storage.clone(),
+        ws_broadcast_tx.clone(),
+        session_store.clone(),
+        active_cancellations.clone(),
+    ));
 
     AppState {
         workspace_root: temp_dir.clone(),
@@ -57,7 +67,7 @@ fn build_test_state(temp_dir: PathBuf) -> AppState {
         skill_synthesizer,
         session_store,
         ws_broadcast_tx,
-        active_cancellations: Arc::new(Mutex::new(HashMap::new())),
+        active_cancellations,
         pending_client_tools: Arc::new(Mutex::new(HashMap::new())),
         image_workspace: Arc::new(crate::image_workspace::ImageWorkspaceManager::with_dirs(
             temp_dir.join("engines"),
@@ -69,9 +79,9 @@ fn build_test_state(temp_dir: PathBuf) -> AppState {
             temp_dir.join("video_models"),
             temp_dir.join("video_generations"),
         )),
+        telegram_bot,
     }
 }
-
 
 #[tokio::test]
 async fn test_unauthenticated_requests_gate() {
@@ -82,19 +92,31 @@ async fn test_unauthenticated_requests_gate() {
     let app = create_router(state);
 
     // 1. Root page without auth -> 302 to /login
-    let req_root = Request::builder().uri("/").method("GET").body(Body::empty()).unwrap();
+    let req_root = Request::builder()
+        .uri("/")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
     let res_root = app.clone().oneshot(req_root).await.unwrap();
     assert_eq!(res_root.status(), StatusCode::FOUND);
     assert_eq!(res_root.headers().get("location").unwrap(), "/login");
 
     // 2. SPA page (/chat) without auth -> 302 to /login
-    let req_chat = Request::builder().uri("/chat").method("GET").body(Body::empty()).unwrap();
+    let req_chat = Request::builder()
+        .uri("/chat")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
     let res_chat = app.clone().oneshot(req_chat).await.unwrap();
     assert_eq!(res_chat.status(), StatusCode::FOUND);
     assert_eq!(res_chat.headers().get("location").unwrap(), "/login");
 
     // 3. Protected API without auth -> 401 Unauthorized
-    let req_api = Request::builder().uri("/api/conversations").method("GET").body(Body::empty()).unwrap();
+    let req_api = Request::builder()
+        .uri("/api/conversations")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
     let res_api = app.clone().oneshot(req_api).await.unwrap();
     assert_eq!(res_api.status(), StatusCode::UNAUTHORIZED);
 
@@ -120,36 +142,70 @@ async fn test_public_endpoints_accessible_without_auth() {
     let app = create_router(state);
 
     // Health check
-    let req_health = Request::builder().uri("/api/health").method("GET").body(Body::empty()).unwrap();
+    let req_health = Request::builder()
+        .uri("/api/health")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
     let res_health = app.clone().oneshot(req_health).await.unwrap();
     assert_eq!(res_health.status(), StatusCode::OK);
 
     // Auth status
-    let req_status = Request::builder().uri("/api/auth/status").method("GET").body(Body::empty()).unwrap();
+    let req_status = Request::builder()
+        .uri("/api/auth/status")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
     let res_status = app.clone().oneshot(req_status).await.unwrap();
     assert_eq!(res_status.status(), StatusCode::OK);
 
     // Artifact SDK
-    let req_sdk = Request::builder().uri("/api/artifacts/sdk.js").method("GET").body(Body::empty()).unwrap();
+    let req_sdk = Request::builder()
+        .uri("/api/artifacts/sdk.js")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
     let res_sdk = app.clone().oneshot(req_sdk).await.unwrap();
     assert_eq!(res_sdk.status(), StatusCode::OK);
 
     // PWA Manifest endpoint
-    let req_manifest = Request::builder().uri("/manifest.webmanifest").method("GET").body(Body::empty()).unwrap();
+    let req_manifest = Request::builder()
+        .uri("/manifest.webmanifest")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
     let res_manifest = app.clone().oneshot(req_manifest).await.unwrap();
     assert_eq!(res_manifest.status(), StatusCode::OK);
-    let manifest_ct = res_manifest.headers().get("content-type").unwrap().to_str().unwrap();
+    let manifest_ct = res_manifest
+        .headers()
+        .get("content-type")
+        .unwrap()
+        .to_str()
+        .unwrap();
     assert!(manifest_ct.contains("application/manifest+json"));
 
     // PWA Service Worker endpoint
-    let req_sw = Request::builder().uri("/sw.js").method("GET").body(Body::empty()).unwrap();
+    let req_sw = Request::builder()
+        .uri("/sw.js")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
     let res_sw = app.clone().oneshot(req_sw).await.unwrap();
     assert_eq!(res_sw.status(), StatusCode::OK);
-    let sw_allowed = res_sw.headers().get("service-worker-allowed").unwrap().to_str().unwrap();
+    let sw_allowed = res_sw
+        .headers()
+        .get("service-worker-allowed")
+        .unwrap()
+        .to_str()
+        .unwrap();
     assert_eq!(sw_allowed, "/");
 
     // Login endpoint (served via EmbeddedUi or filesystem)
-    let req_login = Request::builder().uri("/login").method("GET").body(Body::empty()).unwrap();
+    let req_login = Request::builder()
+        .uri("/login")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
     let res_login = app.oneshot(req_login).await.unwrap();
     assert_eq!(res_login.status(), StatusCode::OK);
 
@@ -204,16 +260,19 @@ async fn test_ipc_agent_run_and_stop() {
         .method("POST")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", token))
-        .body(Body::from(serde_json::json!({
-            "args": [{
-                "sessionId": "test-session-123",
-                "prompt": "Hello test agent",
-                "config": {
-                    "model": "gpt-4o",
-                    "provider": "openai"
-                }
-            }]
-        }).to_string()))
+        .body(Body::from(
+            serde_json::json!({
+                "args": [{
+                    "sessionId": "test-session-123",
+                    "prompt": "Hello test agent",
+                    "config": {
+                        "model": "gpt-4o",
+                        "provider": "openai"
+                    }
+                }]
+            })
+            .to_string(),
+        ))
         .unwrap();
     let res_start = app.clone().oneshot(req_start).await.unwrap();
     assert_eq!(res_start.status(), StatusCode::OK);
@@ -224,9 +283,12 @@ async fn test_ipc_agent_run_and_stop() {
         .method("POST")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", token))
-        .body(Body::from(serde_json::json!({
-            "args": ["test-session-123"]
-        }).to_string()))
+        .body(Body::from(
+            serde_json::json!({
+                "args": ["test-session-123"]
+            })
+            .to_string(),
+        ))
         .unwrap();
     let res_stop = app.oneshot(req_stop).await.unwrap();
     assert_eq!(res_stop.status(), StatusCode::OK);
@@ -273,12 +335,20 @@ async fn test_spa_fallback_routing() {
     assert_eq!(res_chat.status(), StatusCode::OK);
 
     // 2. Existing static asset (/assets/app.js) is public -> 200 OK
-    let req_asset = Request::builder().uri("/assets/app.js").method("GET").body(Body::empty()).unwrap();
+    let req_asset = Request::builder()
+        .uri("/assets/app.js")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
     let res_asset = app.clone().oneshot(req_asset).await.unwrap();
     assert_eq!(res_asset.status(), StatusCode::OK);
 
     // 3. Missing static asset (/assets/nonexistent.js) -> 404 NOT FOUND (must NOT serve index.html)
-    let req_missing = Request::builder().uri("/assets/nonexistent.js").method("GET").body(Body::empty()).unwrap();
+    let req_missing = Request::builder()
+        .uri("/assets/nonexistent.js")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
     let res_missing = app.oneshot(req_missing).await.unwrap();
     assert_eq!(res_missing.status(), StatusCode::NOT_FOUND);
 
@@ -397,7 +467,9 @@ async fn test_pcb_project_endpoints() {
     let res_list = app.clone().oneshot(req_list).await.unwrap();
     assert_eq!(res_list.status(), StatusCode::OK);
 
-    let body_bytes = axum::body::to_bytes(res_list.into_body(), usize::MAX).await.unwrap();
+    let body_bytes = axum::body::to_bytes(res_list.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let list_json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
     assert_eq!(list_json.as_array().unwrap().len(), 1);
     assert_eq!(list_json[0]["name"], "Solar Battery Charger");
@@ -415,7 +487,9 @@ async fn test_pcb_project_endpoints() {
     let res_get = app.clone().oneshot(req_get).await.unwrap();
     assert_eq!(res_get.status(), StatusCode::OK);
 
-    let body_bytes_get = axum::body::to_bytes(res_get.into_body(), usize::MAX).await.unwrap();
+    let body_bytes_get = axum::body::to_bytes(res_get.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let get_json: serde_json::Value = serde_json::from_slice(&body_bytes_get).unwrap();
     assert_eq!(get_json["name"], "Solar Battery Charger");
     assert_eq!(get_json["messages"].as_array().unwrap().len(), 2);
@@ -443,7 +517,8 @@ async fn test_pcb_project_endpoints() {
 
 #[tokio::test]
 async fn test_circle_search_analyze_modes() {
-    let temp_dir = std::env::temp_dir().join(format!("test_circle_search_{}", uuid::Uuid::new_v4()));
+    let temp_dir =
+        std::env::temp_dir().join(format!("test_circle_search_{}", uuid::Uuid::new_v4()));
     let _ = std::fs::create_dir_all(&temp_dir);
 
     let state = build_test_state(temp_dir.clone());
@@ -462,7 +537,9 @@ async fn test_circle_search_analyze_modes() {
         .method("POST")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", token))
-        .body(Body::from(serde_json::json!({ "args": [region_payload] }).to_string()))
+        .body(Body::from(
+            serde_json::json!({ "args": [region_payload] }).to_string(),
+        ))
         .unwrap();
     let res_region = app.clone().oneshot(req_region).await.unwrap();
     assert_eq!(res_region.status(), StatusCode::OK);
@@ -479,7 +556,9 @@ async fn test_circle_search_analyze_modes() {
         .method("POST")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", token))
-        .body(Body::from(serde_json::json!({ "args": [fullscreen_payload] }).to_string()))
+        .body(Body::from(
+            serde_json::json!({ "args": [fullscreen_payload] }).to_string(),
+        ))
         .unwrap();
     let res_fullscreen = app.clone().oneshot(req_fullscreen).await.unwrap();
     assert_eq!(res_fullscreen.status(), StatusCode::OK);
@@ -496,7 +575,9 @@ async fn test_circle_search_analyze_modes() {
         .method("POST")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", token))
-        .body(Body::from(serde_json::json!({ "args": [text_only_payload] }).to_string()))
+        .body(Body::from(
+            serde_json::json!({ "args": [text_only_payload] }).to_string(),
+        ))
         .unwrap();
     let res_text = app.clone().oneshot(req_text).await.unwrap();
     assert_eq!(res_text.status(), StatusCode::OK);
@@ -514,7 +595,9 @@ async fn test_circle_search_analyze_modes() {
         .method("POST")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", token))
-        .body(Body::from(serde_json::json!({ "args": [custom_model_payload] }).to_string()))
+        .body(Body::from(
+            serde_json::json!({ "args": [custom_model_payload] }).to_string(),
+        ))
         .unwrap();
     let res_custom = app.oneshot(req_custom).await.unwrap();
     assert_eq!(res_custom.status(), StatusCode::OK);
@@ -530,7 +613,6 @@ async fn test_video_workspace_routes_and_storage() {
     let state = build_test_state(temp_dir.clone());
     let token = state.auth_store.create_session_token("admin");
     let app = create_router(state.clone());
-
 
     // 1. Get video engine status
     let req_status = Request::builder()
@@ -568,7 +650,9 @@ async fn test_video_workspace_routes_and_storage() {
         .method("POST")
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", token))
-        .body(Body::from(serde_json::json!({ "backend": "cpu" }).to_string()))
+        .body(Body::from(
+            serde_json::json!({ "backend": "cpu" }).to_string(),
+        ))
         .unwrap();
     let res_install = app.clone().oneshot(req_install).await.unwrap();
     assert_eq!(res_install.status(), StatusCode::OK);
@@ -638,10 +722,7 @@ async fn test_video_workspace_routes_and_storage() {
         res_range.headers().get("content-range").unwrap(),
         "bytes 0-5/16"
     );
-    assert_eq!(
-        res_range.headers().get("content-length").unwrap(),
-        "6"
-    );
+    assert_eq!(res_range.headers().get("content-length").unwrap(), "6");
 
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
@@ -687,10 +768,11 @@ async fn test_video_engine_generation_produces_real_video() {
     // Verify MP4 ftyp box signature
     let header = std::fs::read(&mp4_path).unwrap();
     assert!(header.len() >= 8);
-    assert_eq!(&header[4..8], b"ftyp", "Must have valid MP4 ftyp box header");
+    assert_eq!(
+        &header[4..8],
+        b"ftyp",
+        "Must have valid MP4 ftyp box header"
+    );
 
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
-
-
-

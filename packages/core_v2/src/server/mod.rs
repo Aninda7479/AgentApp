@@ -111,6 +111,19 @@ pub async fn start_server(
     let image_workspace = Arc::new(crate::image_workspace::ImageWorkspaceManager::new());
     let video_workspace = Arc::new(crate::video_workspace::VideoWorkspaceManager::new());
 
+    let active_cancellations = Arc::new(Mutex::new(HashMap::new()));
+    let telegram_bot = Arc::new(crate::integrations::TelegramBotManager::new(
+        settings_store.clone(),
+        chat_storage.clone(),
+        ws_broadcast_tx.clone(),
+        session_store.clone(),
+        active_cancellations.clone(),
+    ));
+    let tg_bot_boot = telegram_bot.clone();
+    tokio::spawn(async move {
+        tg_bot_boot.autostart_if_enabled().await;
+    });
+
     let state = AppState {
         workspace_root,
         ui_dist_dir,
@@ -129,10 +142,11 @@ pub async fn start_server(
         skill_synthesizer,
         session_store,
         ws_broadcast_tx,
-        active_cancellations: Arc::new(Mutex::new(HashMap::new())),
+        active_cancellations,
         pending_client_tools: Arc::new(Mutex::new(HashMap::new())),
         image_workspace,
         video_workspace,
+        telegram_bot,
     };
 
     let app = create_router(state);

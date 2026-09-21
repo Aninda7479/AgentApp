@@ -1,7 +1,7 @@
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use parking_lot::Mutex;
 
 use serde::{Deserialize, Serialize};
 
@@ -10,10 +10,7 @@ use crate::automation::{SkillSynthesizer, TraceRecorder, TriggerEngine};
 use crate::orchestrator::{Coordinator, PipelineExecutor, SubagentRunner};
 use crate::roster::PersonaStore;
 use crate::storage::{
-    auth::AuthStore,
-    chat_storage::ChatStorage,
-    pcb_storage::PcbStorage,
-    settings::SettingsStore,
+    auth::AuthStore, chat_storage::ChatStorage, pcb_storage::PcbStorage, settings::SettingsStore,
 };
 use crate::tools::ToolRegistry;
 use crate::types::{AgentEvent, ChatMessage, ProviderType, WorkflowDefinition};
@@ -63,11 +60,12 @@ pub struct AppState {
     pub session_store: Arc<Mutex<lru::LruCache<String, SessionStateEntry>>>,
     pub ws_broadcast_tx: tokio::sync::broadcast::Sender<String>,
     pub active_cancellations: Arc<Mutex<HashMap<String, tokio::sync::broadcast::Sender<()>>>>,
-    pub pending_client_tools: Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<serde_json::Value>>>>,
+    pub pending_client_tools:
+        Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<serde_json::Value>>>>,
     pub image_workspace: Arc<crate::image_workspace::ImageWorkspaceManager>,
     pub video_workspace: Arc<crate::video_workspace::VideoWorkspaceManager>,
+    pub telegram_bot: Arc<crate::integrations::TelegramBotManager>,
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct ChatStreamRequest {
@@ -120,7 +118,11 @@ pub struct AuthVerifyRequest {
 pub struct AuthPasswordRequest {
     #[serde(default = "default_admin_username")]
     pub username: String,
-    #[serde(rename = "currentPassword", alias = "current_password", alias = "current")]
+    #[serde(
+        rename = "currentPassword",
+        alias = "current_password",
+        alias = "current"
+    )]
     pub current_password: Option<String>,
     #[serde(rename = "newPassword", alias = "new_password", alias = "next")]
     pub new_password: String,

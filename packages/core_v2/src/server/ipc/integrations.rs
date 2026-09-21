@@ -125,12 +125,16 @@ pub async fn handle_integrations_channel(
                 if let Some(s) = v.as_str() {
                     Some(s)
                 } else {
-                    v.get("chatId").or_else(|| v.get("id")).and_then(|c| c.as_str())
+                    v.get("chatId")
+                        .or_else(|| v.get("id"))
+                        .and_then(|c| c.as_str())
                 }
             });
             if let Some(id) = chat_id {
                 let _ = state.chat_storage.delete_session(id);
-                let _ = state.chat_storage.delete_session(&format!("session_{}", id));
+                let _ = state
+                    .chat_storage
+                    .delete_session(&format!("session_{}", id));
             }
             Some(Ok(Json(serde_json::json!({ "data": { "success": true } }))))
         }
@@ -674,8 +678,43 @@ pub async fn handle_integrations_channel(
                     c_obj.insert("telegram".to_string(), arg.clone());
                     let _ = state.settings_store.save_raw(&current);
                 }
+
+                // If twoWayEnabled is true, launch/reload bot; if false, stop bot
+                let two_way = arg
+                    .get("twoWayEnabled")
+                    .or_else(|| arg.get("two_way_enabled"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+
+                if two_way {
+                    let _ = state.telegram_bot.start().await;
+                } else {
+                    state.telegram_bot.stop().await;
+                }
             }
             Some(Ok(Json(serde_json::json!({ "data": { "success": true } }))))
+        }
+        "telegram-bot-start" => match state.telegram_bot.start().await {
+            Ok(_) => {
+                let status = state.telegram_bot.get_status().await;
+                Some(Ok(Json(
+                    serde_json::json!({ "data": { "success": true, "status": status } }),
+                )))
+            }
+            Err(e) => Some(Ok(Json(
+                serde_json::json!({ "data": { "success": false, "error": e.to_string() } }),
+            ))),
+        },
+        "telegram-bot-stop" => {
+            state.telegram_bot.stop().await;
+            let status = state.telegram_bot.get_status().await;
+            Some(Ok(Json(
+                serde_json::json!({ "data": { "success": true, "status": status } }),
+            )))
+        }
+        "telegram-bot-status" => {
+            let status = state.telegram_bot.get_status().await;
+            Some(Ok(Json(serde_json::json!({ "data": status }))))
         }
         "telegram-test" => {
             let arg = args.first();
@@ -865,12 +904,16 @@ pub async fn handle_integrations_channel(
                 .unwrap_or("");
             let artifacts = state.artifact_runner.scan_artifacts();
             if let Some(art) = artifacts.into_iter().find(|a| a.id == id) {
-                let url = art.url.unwrap_or_else(|| {
-                    format!("http://127.0.0.1:1469/api/artifacts/{}/view/", id)
-                });
-                Some(Ok(Json(serde_json::json!({ "data": { "success": true, "url": url } }))))
+                let url = art
+                    .url
+                    .unwrap_or_else(|| format!("http://127.0.0.1:1469/api/artifacts/{}/view/", id));
+                Some(Ok(Json(
+                    serde_json::json!({ "data": { "success": true, "url": url } }),
+                )))
             } else {
-                Some(Ok(Json(serde_json::json!({ "data": { "success": false, "error": "Artifact not found" } }))))
+                Some(Ok(Json(
+                    serde_json::json!({ "data": { "success": false, "error": "Artifact not found" } }),
+                )))
             }
         }
         "artifact:toggleAutostart" | "artifact_toggle_autostart" => {
@@ -1101,23 +1144,39 @@ pub async fn handle_integrations_channel(
                                 let target = p.join(filename_only);
                                 if target.exists() && target.is_file() {
                                     if let Ok(bytes) = tokio::fs::read(&target).await {
-                                        let b64_str = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                                        let mime = mime_guess::from_path(&target).first_or_octet_stream();
+                                        let b64_str = base64::engine::general_purpose::STANDARD
+                                            .encode(&bytes);
+                                        let mime =
+                                            mime_guess::from_path(&target).first_or_octet_stream();
                                         let data_uri = format!("data:{};base64,{}", mime, b64_str);
-                                        return Some(Ok(Json(serde_json::json!({ "data": data_uri }))));
+                                        return Some(Ok(Json(
+                                            serde_json::json!({ "data": data_uri }),
+                                        )));
                                     }
                                 }
                                 let nested_chats = p.join("chats");
                                 if nested_chats.is_dir() {
-                                    if let Ok(mut sub_entries) = tokio::fs::read_dir(&nested_chats).await {
-                                        while let Ok(Some(sub_entry)) = sub_entries.next_entry().await {
+                                    if let Ok(mut sub_entries) =
+                                        tokio::fs::read_dir(&nested_chats).await
+                                    {
+                                        while let Ok(Some(sub_entry)) =
+                                            sub_entries.next_entry().await
+                                        {
                                             let sub_target = sub_entry.path().join(filename_only);
                                             if sub_target.exists() && sub_target.is_file() {
-                                                if let Ok(bytes) = tokio::fs::read(&sub_target).await {
-                                                    let b64_str = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                                                    let mime = mime_guess::from_path(&sub_target).first_or_octet_stream();
-                                                    let data_uri = format!("data:{};base64,{}", mime, b64_str);
-                                                    return Some(Ok(Json(serde_json::json!({ "data": data_uri }))));
+                                                if let Ok(bytes) =
+                                                    tokio::fs::read(&sub_target).await
+                                                {
+                                                    let b64_str =
+                                                        base64::engine::general_purpose::STANDARD
+                                                            .encode(&bytes);
+                                                    let mime = mime_guess::from_path(&sub_target)
+                                                        .first_or_octet_stream();
+                                                    let data_uri =
+                                                        format!("data:{};base64,{}", mime, b64_str);
+                                                    return Some(Ok(Json(
+                                                        serde_json::json!({ "data": data_uri }),
+                                                    )));
                                                 }
                                             }
                                         }
