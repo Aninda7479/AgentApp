@@ -47,6 +47,10 @@ impl ToolRegistry {
             "todowrite" | "checklist" => "todo",
             "plan_tool" | "roadmap" => "plan",
             "ask_question" => "question",
+            "diff" | "git_diff" => "patch",
+            "git_apply" => "apply_patch",
+            "diagnostics" | "typecheck" => "lsp",
+            "create_artifact" => "create_artifact_app",
             _ => name,
         }
     }

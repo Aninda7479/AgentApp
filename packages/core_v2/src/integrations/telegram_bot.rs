@@ -20,7 +20,7 @@ use crate::server::state::SessionStateEntry;
 use crate::storage::chat_storage::{ChatSession, ChatStorage};
 use crate::storage::settings::{get_superagent_dir, SettingsStore};
 use crate::tools::builtin::{
-    CreateArtifactTool, EditFileTool, GetAvailableToolsTool, GlobTool, GrepSearchTool,
+    CreateArtifactAppTool, EditFileTool, GetAvailableToolsTool, GlobTool, GrepSearchTool,
     ListArtifactsTool, ListDirTool, PlanTool, QuestionTool, ReadArtifactTool, ReadFileTool,
     RunCommandTool, SkillTool, SleepTimerTool, TelegramTool, TodoTool, WriteFileTool,
 };
@@ -810,7 +810,7 @@ impl TelegramBotManager {
         // 5. Build isolated Tool Registry for this Telegram session
         let effective_workspace = media_dir.parent().unwrap_or(&media_dir).to_path_buf();
         let mut tool_registry = ToolRegistry::new();
-        tool_registry.register(CreateArtifactTool::new());
+        tool_registry.register(CreateArtifactAppTool::new());
         tool_registry.register(ListArtifactsTool::new());
         tool_registry.register(ReadArtifactTool::new());
         tool_registry.register(QuestionTool::new());
@@ -1097,10 +1097,7 @@ pub fn generate_telegram_chat_title(prompt: &str, user_name: &str) -> String {
         .lines()
         .map(|l| l.trim())
         .find(|l| {
-            !l.is_empty()
-                && !l.starts_with('[')
-                && !l.starts_with('#')
-                && !l.starts_with("```")
+            !l.is_empty() && !l.starts_with('[') && !l.starts_with('#') && !l.starts_with("```")
         })
         .unwrap_or("")
         .trim();
@@ -1235,7 +1232,8 @@ pub fn resolve_telegram_model(
                 "opencode" => ProviderType::OpenCode,
                 _ => ProviderType::Gemini,
             };
-            let clean_id = if !prov_hint.is_empty() && m_id.starts_with(&format!("{}-", prov_hint)) {
+            let clean_id = if !prov_hint.is_empty() && m_id.starts_with(&format!("{}-", prov_hint))
+            {
                 &m_id[prov_hint.len() + 1..]
             } else {
                 m_id
@@ -1330,11 +1328,17 @@ mod tests {
 
     #[test]
     fn test_generate_telegram_chat_title_never_contains_user_id() {
-        let title = generate_telegram_chat_title("can you download this youtube short video for me", "5084960883");
+        let title = generate_telegram_chat_title(
+            "can you download this youtube short video for me",
+            "5084960883",
+        );
         assert_eq!(title, "can you download this youtube short");
         assert!(!title.contains("5084960883"));
 
-        let title_voice = generate_telegram_chat_title("[Voice Message Transcribed]: \"please summarize my notes\"", "Aninda");
+        let title_voice = generate_telegram_chat_title(
+            "[Voice Message Transcribed]: \"please summarize my notes\"",
+            "Aninda",
+        );
         assert_eq!(title_voice, "please summarize my notes");
 
         let title_empty = generate_telegram_chat_title("", "5084960883");

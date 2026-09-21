@@ -79,10 +79,13 @@ pub async fn start_server(
     registry.register(BrowserNavigateTool::new());
     registry.register(BrowserScreenshotTool::new(workspace_root.clone()));
     registry.register(WebSearchTool::new());
-    registry.register(CreateArtifactTool::new());
+    registry.register(CreateArtifactAppTool::new());
     registry.register(ListArtifactsTool::new());
     registry.register(ReadArtifactTool::new());
     registry.register(QuestionTool::new());
+    registry.register(PatchTool::new(workspace_root.clone()));
+    registry.register(ApplyPatchTool::new(workspace_root.clone()));
+    registry.register(LspTool::new(workspace_root.clone()));
 
     let tool_registry_arc = Arc::new(registry);
     let subagent_runner = Arc::new(SubagentRunner::new(

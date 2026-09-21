@@ -10,7 +10,7 @@ use crate::server::ipc::usage::record_usage;
 use crate::server::routes::chat::resolve_active_workspace_model;
 use crate::server::state::{AppState, SessionStateEntry};
 use crate::tools::builtin::{
-    CreateArtifactTool, EditFileTool, GetAvailableToolsTool, GlobTool, GrepSearchTool,
+    CreateArtifactAppTool, EditFileTool, GetAvailableToolsTool, GlobTool, GrepSearchTool,
     ListArtifactsTool, ListDirTool, PeekTaskTool, PlanTool, QuestionTool, ReadArtifactTool,
     ReadFileTool, RunCommandTool, RunSubagentTool, SkillTool, SleepTimerTool, TaskManager,
     TelegramTool, TodoTool, WriteFileTool,
@@ -469,7 +469,7 @@ pub async fn handle_agent_channel(
                 let task_manager = Arc::new(TaskManager::new());
 
                 // Artifact and utility tools enabled across ALL tiers (Tier 1, 2, and 3)
-                session_tool_registry.register(CreateArtifactTool::new());
+                session_tool_registry.register(CreateArtifactAppTool::new());
                 session_tool_registry.register(ListArtifactsTool::new());
                 session_tool_registry.register(ReadArtifactTool::new());
                 session_tool_registry.register(QuestionTool::new());
@@ -556,11 +556,13 @@ pub async fn handle_agent_channel(
                         })
                         .collect();
 
-                    let has_create_artifact = tool_names.iter().any(|t| t == "create_artifact");
+                    let has_create_artifact = tool_names
+                        .iter()
+                        .any(|t| t == "create_artifact_app" || t == "create_artifact");
                     let has_question = tool_names.iter().any(|t| t == "question");
 
                     let artifact_instruction = if has_create_artifact {
-                        "When the user requests an artifact, micro-app, or interactive tool, use the 'create_artifact' tool to deliver a fully functional, self-contained application:\n\
+                        "When the user requests an artifact, micro-app, or interactive tool, use the 'create_artifact_app' tool to deliver a fully functional, self-contained application:\n\
                         - Web & Visual Applications (type: \"web\"): Dashboards, games, calculators, quizzes, data tables, SVG/Canvas visualizers, and interactive widgets using modern, responsive HTML, CSS, and JavaScript.\n\
                         - Python Utilities & Tools (type: \"python\"): Data processors, calculators, automation scripts, algorithms, or CLI tools with main.py as the entrypoint.\n\
                         Ensure all code is complete, styled, and runnable without missing assets or external dependencies."
@@ -578,7 +580,7 @@ pub async fn handle_agent_channel(
                     };
 
                     let artifact_guideline = if has_create_artifact {
-                        "- For interactive apps, games, or widgets, use 'create_artifact' to build a complete application using HTML/CSS/JS or Python.\n"
+                        "- For interactive apps, games, or widgets, use 'create_artifact_app' to build a complete application using HTML/CSS/JS or Python.\n"
                     } else {
                         "- For interactive apps, games, or widgets, enclose them in <artifact id=\"...\">...</artifact> tags (using HTML/CSS/JS or Python) or write them directly using file tools.\n"
                     };

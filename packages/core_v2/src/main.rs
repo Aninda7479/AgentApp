@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use superagent_core_v2::orchestrator::AgentEngine;
 use superagent_core_v2::server::{lan_addresses, start_server};
 use superagent_core_v2::tools::builtin::{
-    EditFileTool, GrepSearchTool, ListDirTool, ReadFileTool, RunCommandTool, WriteFileTool,
+    ApplyPatchTool, EditFileTool, GlobTool, GrepSearchTool, ListDirTool, LspTool, PatchTool,
+    PlanTool, QuestionTool, ReadFileTool, RunCommandTool, SkillTool, TodoTool, WriteFileTool,
 };
 use superagent_core_v2::tools::ToolRegistry;
 use superagent_core_v2::types::{ModelConfig, ProviderType};
@@ -120,8 +121,16 @@ async fn main() -> Result<()> {
             registry.register(WriteFileTool::new(workspace_root.clone()));
             registry.register(EditFileTool::new(workspace_root.clone()));
             registry.register(ListDirTool::new(workspace_root.clone()));
+            registry.register(GlobTool::new(workspace_root.clone()));
             registry.register(RunCommandTool::new(workspace_root.clone()));
             registry.register(GrepSearchTool::new(workspace_root.clone()));
+            registry.register(PatchTool::new(workspace_root.clone()));
+            registry.register(ApplyPatchTool::new(workspace_root.clone()));
+            registry.register(LspTool::new(workspace_root.clone()));
+            registry.register(PlanTool::new());
+            registry.register(TodoTool::new());
+            registry.register(QuestionTool::new());
+            registry.register(SkillTool::new(workspace_root.clone()));
 
             // Multimodal Media Generation Tools
             registry.register(superagent_core_v2::media::GeneratePdfTool::new(

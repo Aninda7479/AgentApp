@@ -305,7 +305,7 @@ pub fn prepare_opencode_free_tier_tools(tools: &[serde_json::Value]) -> Vec<serd
             "plan" | "roadmap" => "plan",
             "todo" | "todowrite" => "todo",
             other if OPENCODE_OFFICIAL_TOOLS.contains(&other) => other,
-            _ => continue, // Do not map non-whitelisted tools (e.g. create_artifact, generate_pdf) to avoid 403 FreeTierError and schema corruption
+            _ => continue, // Do not map non-whitelisted tools (e.g. create_artifact_app, generate_pdf) to avoid 403 FreeTierError and schema corruption
         };
 
         if seen_names.insert(mapped_name) {
@@ -803,8 +803,8 @@ impl OpenCodeProvider {
         let (tg_bot_token, tg_chat_id) = {
             let env_token = std::env::var("TELEGRAM_BOT_TOKEN").ok();
             let env_chat = std::env::var("TELEGRAM_CHAT_ID").ok();
-            if env_token.as_ref().map_or(false, |t| !t.trim().is_empty())
-                || env_chat.as_ref().map_or(false, |c| !c.trim().is_empty())
+            if env_token.as_ref().is_some_and(|t| !t.trim().is_empty())
+                || env_chat.as_ref().is_some_and(|c| !c.trim().is_empty())
             {
                 (env_token.unwrap_or_default(), env_chat.unwrap_or_default())
             } else if let Ok(raw_settings) = crate::storage::SettingsStore::new().load_raw() {
@@ -1263,476 +1263,69 @@ impl LlmProvider for OpenCodeProvider {
                 return Ok(rx);
             }
             Err(e) => {
+                let err_str = e.to_string();
                 tracing::warn!(
-                    "Direct keyless OpenCode streaming failed ({}). Falling back to local opencode serve daemon...",
+                    "Direct keyless OpenCode streaming failed for '{}': {}",
+                    config.model_id,
+                    err_str
+                );
+
+                // OmniRoute-style Free Tier Model Rotation / Failover:
+                // When an upstream model hits 429 FreeUsageLimitError or 500, attempt failover
+                // to healthy live free models with available capacity.
+                if err_str.contains("429")
+                    || err_str.contains("FreeUsageLimitError")
+                    || err_str.contains("Rate limit")
+                    || err_str.contains("500")
+                {
+                    let fallback_candidates = [
+                        "nemotron-3.5-lightning-free",
+                        "nemotron-3-ultra-free",
+                        "mimo-v2.5-free",
+                        "ling-3.0-flash-fin-free",
+                        "deepseek-v4-flash-free",
+                        "big-pickle",
+                    ];
+                    for fallback_model in fallback_candidates {
+                        if fallback_model != config.model_id {
+                            tracing::info!(
+                                "Attempting automatic free-tier failover from '{}' to '{}'...",
+                                config.model_id,
+                                fallback_model
+                            );
+                            let mut fallback_config = config.clone();
+                            fallback_config.model_id = fallback_model.to_string();
+                            match self
+                                .direct_keyless_chat_stream(&fallback_config, messages, tools)
+                                .await
+                            {
+                                Ok(rx) => {
+                                    tracing::info!(
+                                        "Failover to '{}' succeeded with 100% pure keyless cloud streaming!",
+                                        fallback_model
+                                    );
+                                    return Ok(rx);
+                                }
+                                Err(alt_err) => {
+                                    tracing::warn!(
+                                        "Failover candidate '{}' unavailable: {}",
+                                        fallback_model,
+                                        alt_err
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Never spawn localhost daemon or port 4096. Return error directly to caller.
+                anyhow::bail!(
+                    "OpenCode Zen cloud streaming error for '{}': {}. All free tier fallback models exhausted.",
+                    config.model_id,
                     e
                 );
             }
         }
-
-        // 3. Fallback Free Tier Mode (Local Headless Daemon):
-        // Route through local headless opencode serve daemon if direct streaming fails
-        let server_base = Self::ensure_opencode_server(&self.client).await?;
-
-        // Create a dedicated session for this execution
-        let session_create_url = format!("{}/session", server_base);
-        let s_res = self
-            .client
-            .post(&session_create_url)
-            .json(&json!({ "title": "SuperAgent Execution" }))
-            .send()
-            .await;
-
-        let session_id = if let Ok(resp) = s_res {
-            if let Ok(v) = resp.json::<serde_json::Value>().await {
-                v.get("id")
-                    .and_then(|id| id.as_str())
-                    .unwrap_or("")
-                    .to_string()
-            } else {
-                generate_opencode_session_id()
-            }
-        } else {
-            generate_opencode_session_id()
-        };
-
-        // Construct system prompt and tools guide
-        let mut system_text = String::new();
-        let mut prompt_lines = Vec::new();
-
-        for msg in messages {
-            match msg.role {
-                Role::System => {
-                    if !system_text.is_empty() {
-                        system_text.push('\n');
-                    }
-                    system_text.push_str(&msg.text_content());
-                }
-                Role::User => {
-                    prompt_lines.push(msg.text_content());
-                }
-                Role::Assistant => {
-                    prompt_lines.push(format!("[Assistant]: {}", msg.text_content()));
-                }
-                Role::Tool => {
-                    for block in &msg.content {
-                        if let ContentBlock::ToolResult {
-                            tool_use_id,
-                            content,
-                            ..
-                        } = block
-                        {
-                            prompt_lines
-                                .push(format!("[Tool Result for {}]: {}", tool_use_id, content));
-                        }
-                    }
-                }
-            }
-        }
-
-        if !tools.is_empty() {
-            let mut tools_guide =
-                String::from("\n\nYou have access to the following execution tools:\n");
-            for t in tools {
-                let name = t
-                    .get("name")
-                    .or_else(|| t.get("function").and_then(|f| f.get("name")))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let desc = t
-                    .get("description")
-                    .or_else(|| t.get("function").and_then(|f| f.get("description")))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let params = t
-                    .get("parameters")
-                    .or_else(|| t.get("function").and_then(|f| f.get("parameters")))
-                    .map(|p| p.to_string())
-                    .unwrap_or_default();
-                tools_guide.push_str(&format!("- {}({}): {}\n", name, params, desc));
-            }
-            tools_guide.push_str(
-                "\nWhen you need to execute a tool, respond with a tool call in format:\n<｜DSML｜tool_calls>\n<｜DSML｜invoke name=\"tool_name\">\n<｜DSML｜parameter name=\"param_name\">value</｜DSML｜parameter>\n</｜DSML｜invoke>\n</｜DSML｜tool_calls>\n\nWhen executing tasks, invoke the available tools according to their schema.\n\nCRITICAL FORMATTING RULES:\n- Put all your step-by-step reasoning, analysis, and execution planning inside <think>...</think> tags.\n- Do NOT write informal commentary outside <think> tags while calling tools.\n- Only output your final user-facing response once all actions and tools have completed successfully.\n"
-            );
-            system_text.push_str(&tools_guide);
-        }
-
-        let user_prompt = if prompt_lines.len() == 1 {
-            prompt_lines.remove(0)
-        } else {
-            prompt_lines.join("\n\n")
-        };
-
-        let (tx, rx) = channel(100);
-
-        let event_url = format!("{}/event", server_base);
-        let msg_url = format!("{}/session/{}/message", server_base, session_id);
-        let client_clone = self.client.clone();
-        let target_session_id = session_id.clone();
-        let model_id = config.model_id.clone();
-
-        tokio::spawn(async move {
-            use std::sync::atomic::{AtomicBool, Ordering};
-            use std::sync::Arc;
-
-            let streamed_any = Arc::new(AtomicBool::new(false));
-            let streamed_any_clone = streamed_any.clone();
-            let is_idle = Arc::new(AtomicBool::new(false));
-            let is_idle_clone = is_idle.clone();
-            let in_thinking = Arc::new(AtomicBool::new(false));
-            let in_thinking_clone = in_thinking.clone();
-
-            // Subscribe to SSE events for live token streaming
-            let sse_tx = tx.clone();
-            let sse_sess_id = target_session_id.clone();
-            let sse_client = client_clone.clone();
-
-            let sse_task = tokio::spawn(async move {
-                let mut pending_step_text = String::new();
-                let mut seen_tool_calls = std::collections::HashSet::new();
-                let mut seen_tool_outputs = std::collections::HashSet::new();
-
-                if let Ok(res) = sse_client.get(&event_url).send().await {
-                    let mut stream = res.bytes_stream();
-                    let mut buffer = String::new();
-                    while let Some(item) = stream.next().await {
-                        let bytes = match item {
-                            Ok(b) => b,
-                            Err(_) => break,
-                        };
-                        buffer.push_str(&String::from_utf8_lossy(&bytes));
-                        while let Some(pos) = buffer.find('\n') {
-                            let line = buffer[..pos].trim_end_matches('\r').trim().to_string();
-                            buffer.drain(..=pos);
-                            if let Some(data_str) = line.strip_prefix("data: ") {
-                                if let Ok(val) = serde_json::from_str::<serde_json::Value>(data_str)
-                                {
-                                    let msg_type =
-                                        val.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                                    let props = val.get("properties");
-                                    let sid = props
-                                        .and_then(|p| p.get("sessionID"))
-                                        .and_then(|s| s.as_str())
-                                        .unwrap_or("");
-
-                                    if sid == sse_sess_id {
-                                        if msg_type == "session.idle" {
-                                            if in_thinking_clone.load(Ordering::Relaxed) {
-                                                in_thinking_clone.store(false, Ordering::Relaxed);
-                                                let _ = sse_tx
-                                                    .send(AgentEvent::Token {
-                                                        text: "\n</think>\n\n".to_string(),
-                                                    })
-                                                    .await;
-                                            }
-                                            if !pending_step_text.is_empty() {
-                                                let _ = sse_tx
-                                                    .send(AgentEvent::Token {
-                                                        text: pending_step_text.clone(),
-                                                    })
-                                                    .await;
-                                                pending_step_text.clear();
-                                                streamed_any_clone.store(true, Ordering::Relaxed);
-                                            }
-                                            is_idle_clone.store(true, Ordering::Relaxed);
-                                            return;
-                                        }
-
-                                        if msg_type == "message.part.delta" {
-                                            if let Some(props) = props {
-                                                let field = props
-                                                    .get("field")
-                                                    .and_then(|f| f.as_str())
-                                                    .unwrap_or("");
-                                                if let Some(delta) =
-                                                    props.get("delta").and_then(|d| d.as_str())
-                                                {
-                                                    if field == "reasoning" {
-                                                        if !in_thinking_clone
-                                                            .load(Ordering::Relaxed)
-                                                        {
-                                                            in_thinking_clone
-                                                                .store(true, Ordering::Relaxed);
-                                                            let _ = sse_tx
-                                                                .send(AgentEvent::Token {
-                                                                    text: "<think>\n".to_string(),
-                                                                })
-                                                                .await;
-                                                        }
-                                                        streamed_any_clone
-                                                            .store(true, Ordering::Relaxed);
-                                                        if sse_tx
-                                                            .send(AgentEvent::Token {
-                                                                text: delta.to_string(),
-                                                            })
-                                                            .await
-                                                            .is_err()
-                                                        {
-                                                            return;
-                                                        }
-                                                    } else if field == "text" {
-                                                        pending_step_text.push_str(delta);
-                                                    }
-                                                }
-                                            }
-                                        } else if msg_type == "message.part.updated" {
-                                            if let Some(part) = props.and_then(|p| p.get("part")) {
-                                                let p_type = part
-                                                    .get("type")
-                                                    .and_then(|t| t.as_str())
-                                                    .unwrap_or("");
-
-                                                if p_type == "tool" {
-                                                    if in_thinking_clone.load(Ordering::Relaxed) {
-                                                        in_thinking_clone
-                                                            .store(false, Ordering::Relaxed);
-                                                        let _ = sse_tx
-                                                            .send(AgentEvent::Token {
-                                                                text: "\n</think>\n\n".to_string(),
-                                                            })
-                                                            .await;
-                                                    }
-                                                    if !pending_step_text.trim().is_empty() {
-                                                        let thought = format!(
-                                                            "<think>\n{}\n</think>\n\n",
-                                                            pending_step_text.trim()
-                                                        );
-                                                        let _ = sse_tx
-                                                            .send(AgentEvent::Token {
-                                                                text: thought,
-                                                            })
-                                                            .await;
-                                                        pending_step_text.clear();
-                                                        streamed_any_clone
-                                                            .store(true, Ordering::Relaxed);
-                                                    }
-
-                                                    let call_id = part
-                                                        .get("callID")
-                                                        .and_then(|c| c.as_str())
-                                                        .unwrap_or("")
-                                                        .to_string();
-                                                    let raw_tool_name = part
-                                                        .get("tool")
-                                                        .and_then(|t| t.as_str())
-                                                        .unwrap_or("");
-                                                    let tool_name = match raw_tool_name {
-                                                        "telegram_telegram" => {
-                                                            "telegram".to_string()
-                                                        }
-                                                        "bash" => "run_command".to_string(),
-                                                        _ => raw_tool_name.to_string(),
-                                                    };
-                                                    let state = part.get("state");
-                                                    let status = state
-                                                        .and_then(|s| s.get("status"))
-                                                        .and_then(|st| st.as_str())
-                                                        .unwrap_or("");
-
-                                                    if !call_id.is_empty() {
-                                                        let input = state
-                                                            .and_then(|s| s.get("input"))
-                                                            .cloned()
-                                                            .unwrap_or_else(|| json!({}));
-                                                        let has_non_empty_input =
-                                                            if let Some(obj) = input.as_object() {
-                                                                !obj.is_empty()
-                                                            } else {
-                                                                !input.is_null()
-                                                            };
-
-                                                        // Emit ToolCall once input is populated or status is active/done
-                                                        if !seen_tool_calls.contains(&call_id)
-                                                            && (has_non_empty_input
-                                                                || status == "running"
-                                                                || status == "completed"
-                                                                || status == "error")
-                                                        {
-                                                            seen_tool_calls.insert(call_id.clone());
-                                                            let _ = sse_tx
-                                                                .send(AgentEvent::ToolCall {
-                                                                    id: call_id.clone(),
-                                                                    name: tool_name.clone(),
-                                                                    input: input.clone(),
-                                                                })
-                                                                .await;
-                                                        }
-
-                                                        if (status == "completed"
-                                                            || status == "error")
-                                                            && seen_tool_outputs
-                                                                .insert(call_id.clone())
-                                                        {
-                                                            // Ensure ToolCall was emitted before ToolOutput if somehow skipped
-                                                            if seen_tool_calls
-                                                                .insert(call_id.clone())
-                                                            {
-                                                                let _ = sse_tx
-                                                                    .send(AgentEvent::ToolCall {
-                                                                        id: call_id.clone(),
-                                                                        name: tool_name.clone(),
-                                                                        input,
-                                                                    })
-                                                                    .await;
-                                                            }
-
-                                                            let output = if status == "completed" {
-                                                                state
-                                                                    .and_then(|s| s.get("output"))
-                                                                    .and_then(|o| o.as_str())
-                                                                    .unwrap_or("completed")
-                                                                    .to_string()
-                                                            } else {
-                                                                state
-                                                                    .and_then(|s| s.get("error"))
-                                                                    .and_then(|e| e.as_str())
-                                                                    .unwrap_or("error")
-                                                                    .to_string()
-                                                            };
-                                                            let _ = sse_tx
-                                                                .send(AgentEvent::ToolOutput {
-                                                                    tool_use_id: call_id,
-                                                                    output,
-                                                                    is_error: status == "error",
-                                                                })
-                                                                .await;
-                                                        }
-                                                    }
-                                                } else if p_type == "step-finish" {
-                                                    let reason = part
-                                                        .get("reason")
-                                                        .and_then(|r| r.as_str())
-                                                        .unwrap_or("");
-
-                                                    if reason == "tool-calls" {
-                                                        if in_thinking_clone.load(Ordering::Relaxed)
-                                                        {
-                                                            in_thinking_clone
-                                                                .store(false, Ordering::Relaxed);
-                                                            let _ = sse_tx
-                                                                .send(AgentEvent::Token {
-                                                                    text: "\n</think>\n\n"
-                                                                        .to_string(),
-                                                                })
-                                                                .await;
-                                                        }
-                                                        if !pending_step_text.trim().is_empty() {
-                                                            let thought = format!(
-                                                                "<think>\n{}\n</think>\n\n",
-                                                                pending_step_text.trim()
-                                                            );
-                                                            let _ = sse_tx
-                                                                .send(AgentEvent::Token {
-                                                                    text: thought,
-                                                                })
-                                                                .await;
-                                                            pending_step_text.clear();
-                                                            streamed_any_clone
-                                                                .store(true, Ordering::Relaxed);
-                                                        }
-                                                    } else if reason == "stop" {
-                                                        if in_thinking_clone.load(Ordering::Relaxed)
-                                                        {
-                                                            in_thinking_clone
-                                                                .store(false, Ordering::Relaxed);
-                                                            let _ = sse_tx
-                                                                .send(AgentEvent::Token {
-                                                                    text: "\n</think>\n\n"
-                                                                        .to_string(),
-                                                                })
-                                                                .await;
-                                                        }
-                                                        if !pending_step_text.is_empty() {
-                                                            let _ = sse_tx
-                                                                .send(AgentEvent::Token {
-                                                                    text: pending_step_text.clone(),
-                                                                })
-                                                                .await;
-                                                            pending_step_text.clear();
-                                                            streamed_any_clone
-                                                                .store(true, Ordering::Relaxed);
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-
-            // Post the message to opencode serve
-            let payload = json!({
-                "model": {
-                    "providerID": "opencode",
-                    "modelID": model_id
-                },
-                "system": system_text,
-                "parts": [
-                    { "type": "text", "text": user_prompt }
-                ]
-            });
-
-            let _ = client_clone.post(&msg_url).json(&payload).send().await;
-
-            // Wait for session to finish or timeout (up to 120s for multi-step agent actions)
-            let mut wait_count = 0;
-            while !is_idle.load(Ordering::Relaxed) && wait_count < 240 {
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                wait_count += 1;
-            }
-            sse_task.abort();
-
-            if in_thinking.load(Ordering::Relaxed) {
-                let _ = tx
-                    .send(AgentEvent::Token {
-                        text: "\n</think>\n\n".to_string(),
-                    })
-                    .await;
-            }
-
-            // Fetch final messages to guarantee complete output
-            let history_url = format!("{}/session/{}/message", server_base, target_session_id);
-            if let Ok(hist_res) = client_clone.get(&history_url).send().await {
-                if let Ok(messages_val) = hist_res.json::<Vec<serde_json::Value>>().await {
-                    let mut final_text = String::new();
-                    for m in &messages_val {
-                        if m.get("info")
-                            .and_then(|i| i.get("role"))
-                            .and_then(|r| r.as_str())
-                            == Some("assistant")
-                        {
-                            if let Some(parts) = m.get("parts").and_then(|p| p.as_array()) {
-                                for p in parts {
-                                    if p.get("type").and_then(|t| t.as_str()) == Some("text") {
-                                        if let Some(t) = p.get("text").and_then(|txt| txt.as_str())
-                                        {
-                                            if !t.is_empty() {
-                                                final_text = t.to_string();
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if !streamed_any.load(Ordering::Relaxed) && !final_text.is_empty() {
-                        let _ = tx.send(AgentEvent::Token { text: final_text }).await;
-                    }
-                }
-            }
-
-            let _ = tx
-                .send(AgentEvent::Finished {
-                    stop_reason: "stop".to_string(),
-                })
-                .await;
-        });
-
-        Ok(rx)
     }
 }
 
@@ -1839,8 +1432,8 @@ mod tests {
             json!({
                 "type": "function",
                 "function": {
-                    "name": "create_artifact",
-                    "description": "Create artifact",
+                    "name": "create_artifact_app",
+                    "description": "Create artifact app",
                     "parameters": {"type": "object", "properties": {}}
                 }
             }),
@@ -1880,10 +1473,7 @@ mod tests {
         assert_eq!(map_opencode_tool_name_to_superagent("skill"), "skill");
         assert_eq!(map_opencode_tool_name_to_superagent("plan"), "plan");
         assert_eq!(map_opencode_tool_name_to_superagent("todo"), "todo");
-        assert_eq!(
-            map_opencode_tool_name_to_superagent("question"),
-            "question"
-        );
+        assert_eq!(map_opencode_tool_name_to_superagent("question"), "question");
         assert_eq!(
             map_opencode_tool_name_to_superagent("ask_question"),
             "question"

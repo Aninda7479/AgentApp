@@ -833,7 +833,10 @@ fn try_recover_text_tool_call(
     let trimmed = text.trim();
 
     // 1. Check for XML <artifact id="...">...</artifact> tags
-    if valid_tool_names.iter().any(|v| v == "create_artifact") {
+    if valid_tool_names
+        .iter()
+        .any(|v| v == "create_artifact_app" || v == "create_artifact")
+    {
         if let (Some(start_tag), Some(end_tag)) =
             (trimmed.find("<artifact"), trimmed.rfind("</artifact>"))
         {
@@ -860,7 +863,7 @@ fn try_recover_text_tool_call(
 
             if !inner.is_empty() {
                 return Some((
-                    "create_artifact".to_string(),
+                    "create_artifact_app".to_string(),
                     serde_json::json!({
                         "id": id,
                         "name": "Interactive App",

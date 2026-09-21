@@ -64,24 +64,27 @@ fn validate_path_in_artifact(path_str: &str, artifact_dir: &Path) -> Result<Path
 }
 
 /// Tool for creating or updating interactive micro-app artifacts safely in ~/.superagent/artifacts
-pub struct CreateArtifactTool;
+pub struct CreateArtifactAppTool;
 
-impl CreateArtifactTool {
+impl CreateArtifactAppTool {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Default for CreateArtifactTool {
+impl Default for CreateArtifactAppTool {
     fn default() -> Self {
         Self::new()
     }
 }
 
+/// Backwards-compatible type alias
+pub type CreateArtifactTool = CreateArtifactAppTool;
+
 #[async_trait]
-impl Tool for CreateArtifactTool {
+impl Tool for CreateArtifactAppTool {
     fn name(&self) -> &str {
-        "create_artifact"
+        "create_artifact_app"
     }
 
     fn description(&self) -> &str {
@@ -347,7 +350,7 @@ impl Tool for ListArtifactsTool {
         }
 
         if artifacts.is_empty() {
-            return Ok("No artifacts currently installed in ~/.superagent/artifacts. Use 'create_artifact' to build one!".to_string());
+            return Ok("No artifacts currently installed in ~/.superagent/artifacts. Use 'create_artifact_app' to build one!".to_string());
         }
 
         let json_output = serde_json::to_string_pretty(&artifacts)?;
@@ -435,7 +438,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_and_list_artifact() {
-        let tool = CreateArtifactTool::new();
+        let tool = CreateArtifactAppTool::new();
+        assert_eq!(tool.name(), "create_artifact_app");
         let input = json!({
             "id": "unit-test-timer",
             "name": "Test Timer",

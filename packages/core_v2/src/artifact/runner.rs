@@ -183,7 +183,7 @@ impl ArtifactRunner {
     }
 
     /// Creates a new artifact folder and writes its `manifest.json`.
-    pub fn create_artifact(&self, id: &str, manifest: &ArtifactManifest) -> Result<PathBuf> {
+    pub fn create_artifact_app(&self, id: &str, manifest: &ArtifactManifest) -> Result<PathBuf> {
         let dir = self.storage_dir.join(id);
         if !dir.exists() {
             fs::create_dir_all(&dir)?;
@@ -192,6 +192,12 @@ impl ArtifactRunner {
         let json = serde_json::to_string_pretty(manifest)?;
         fs::write(&manifest_file, json)?;
         Ok(dir)
+    }
+
+    /// Backwards-compatible alias for `create_artifact_app`.
+    #[inline]
+    pub fn create_artifact(&self, id: &str, manifest: &ArtifactManifest) -> Result<PathBuf> {
+        self.create_artifact_app(id, manifest)
     }
 
     /// Deletes an artifact folder and its contents.
@@ -218,7 +224,7 @@ impl ArtifactRunner {
                 port: Some(3081),
                 autostart: false,
             };
-            let dir = self.create_artifact("demo-app", &demo_manifest)?;
+            let dir = self.create_artifact_app("demo-app", &demo_manifest)?;
             let index_html = r#"<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>SuperAgent Demo</title></head>
@@ -359,7 +365,7 @@ mod tests {
             autostart: false,
         };
 
-        runner.create_artifact("calc-1", &manifest).unwrap();
+        runner.create_artifact_app("calc-1", &manifest).unwrap();
 
         let list = runner.scan_artifacts();
         assert_eq!(list.len(), 1);

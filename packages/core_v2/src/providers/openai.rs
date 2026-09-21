@@ -1,12 +1,12 @@
-use std::collections::HashMap;
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde_json::json;
+use std::collections::HashMap;
 use tokio::sync::mpsc::{channel, Receiver};
 
 use crate::providers::LlmProvider;
-use crate::types::{AgentEvent, ChatMessage, ContentBlock, ModelConfig, Role};
+use crate::types::{AgentEvent, ChatMessage, ContentBlock, ModelConfig, ProviderType, Role};
 
 pub struct OpenAiProvider {
     client: Client,
@@ -58,7 +58,9 @@ impl OpenAiProvider {
                             _ => {}
                         }
                     }
-                    if parts.len() == 1 && parts[0].get("type").and_then(|v| v.as_str()) == Some("text") {
+                    if parts.len() == 1
+                        && parts[0].get("type").and_then(|v| v.as_str()) == Some("text")
+                    {
                         formatted.push(json!({
                             "role": "user",
                             "content": parts[0]["text"]
@@ -109,7 +111,12 @@ impl OpenAiProvider {
                 }
                 Role::Tool => {
                     for block in &msg.content {
-                        if let ContentBlock::ToolResult { tool_use_id, content, .. } = block {
+                        if let ContentBlock::ToolResult {
+                            tool_use_id,
+                            content,
+                            ..
+                        } = block
+                        {
                             formatted.push(json!({
                                 "role": "tool",
                                 "tool_call_id": tool_use_id,
@@ -146,8 +153,10 @@ impl LlmProvider for OpenAiProvider {
             format!("{}/chat/completions", base_trimmed)
         };
 
-        // Fallback / redirect if OpenAiProvider is called with an OpenCode endpoint
-        if url.contains("opencode.ai") || base_trimmed.contains("opencode.ai") {
+        // Fallback / redirect if OpenAiProvider is called with an OpenCode endpoint and provider is not OpenCode
+        if config.provider != ProviderType::OpenCode
+            && (url.contains("opencode.ai") || base_trimmed.contains("opencode.ai"))
+        {
             let opencode = crate::providers::OpenCodeProvider::new();
             return opencode.chat_stream(config, messages, tools).await;
         }
@@ -208,12 +217,20 @@ impl LlmProvider for OpenAiProvider {
                         res_opt = Some(response);
                         break;
                     } else if (status.as_u16() == 429 || status.is_server_error()) && attempt < 3 {
-                        tracing::warn!("OpenAI request returned status {} (attempt {}/3). Retrying in 3s...", status, attempt);
+                        tracing::warn!(
+                            "OpenAI request returned status {} (attempt {}/3). Retrying in 3s...",
+                            status,
+                            attempt
+                        );
                         tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
                         continue;
                     } else {
                         let err_text = response.text().await.unwrap_or_default();
-                        if !tools.is_empty() && (err_text.contains("does not support tools") || err_text.contains("tools are not supported") || err_text.contains("tool_calls")) {
+                        if !tools.is_empty()
+                            && (err_text.contains("does not support tools")
+                                || err_text.contains("tools are not supported")
+                                || err_text.contains("tool_calls"))
+                        {
                             let mut fallback_payload = payload.clone();
                             sanitize_and_inject_prompt_tools(&mut fallback_payload, tools);
                             let mut retry_req = self.client.post(&url).json(&fallback_payload);
@@ -235,7 +252,11 @@ impl LlmProvider for OpenAiProvider {
                 Err(err) => {
                     last_send_err = err.to_string();
                     if attempt < 3 {
-                        tracing::warn!("OpenAI request send error (attempt {}/3): {}. Retrying in 3s...", attempt, last_send_err);
+                        tracing::warn!(
+                            "OpenAI request send error (attempt {}/3): {}. Retrying in 3s...",
+                            attempt,
+                            last_send_err
+                        );
                         tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
                     }
                 }
@@ -259,7 +280,11 @@ impl LlmProvider for OpenAiProvider {
                 let bytes = match item {
                     Ok(b) => b,
                     Err(e) => {
-                        let _ = tx.send(AgentEvent::Error { message: e.to_string() }).await;
+                        let _ = tx
+                            .send(AgentEvent::Error {
+                                message: e.to_string(),
+                            })
+                            .await;
                         return;
                     }
                 };
@@ -282,34 +307,57 @@ impl LlmProvider for OpenAiProvider {
 
                         if let Ok(v) = serde_json::from_str::<serde_json::Value>(data_str) {
                             if let Some(choice) = v.get("choices").and_then(|c| c.get(0)) {
-                                if let Some(reason) = choice.get("finish_reason").and_then(|r| r.as_str()) {
+                                if let Some(reason) =
+                                    choice.get("finish_reason").and_then(|r| r.as_str())
+                                {
                                     if !reason.is_empty() {
                                         stop_reason = reason.to_string();
                                     }
                                 }
 
                                 if let Some(delta) = choice.get("delta") {
-                                    if let Some(content) = delta.get("content").and_then(|c| c.as_str()) {
-                                        if !content.is_empty() {
-                                            if tx.send(AgentEvent::Token { text: content.to_string() }).await.is_err() {
-                                                return;
-                                            }
+                                    if let Some(content) =
+                                        delta.get("content").and_then(|c| c.as_str())
+                                    {
+                                        if !content.is_empty()
+                                            && tx
+                                                .send(AgentEvent::Token {
+                                                    text: content.to_string(),
+                                                })
+                                                .await
+                                                .is_err()
+                                        {
+                                            return;
                                         }
                                     }
 
-                                    if let Some(tcs) = delta.get("tool_calls").and_then(|t| t.as_array()) {
+                                    if let Some(tcs) =
+                                        delta.get("tool_calls").and_then(|t| t.as_array())
+                                    {
                                         for tc in tcs {
-                                            let idx = tc.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
-                                            let entry = tool_calls_map.entry(idx).or_insert_with(|| (String::new(), String::new(), String::new()));
+                                            let idx = tc
+                                                .get("index")
+                                                .and_then(|i| i.as_u64())
+                                                .unwrap_or(0)
+                                                as usize;
+                                            let entry =
+                                                tool_calls_map.entry(idx).or_insert_with(|| {
+                                                    (String::new(), String::new(), String::new())
+                                                });
 
-                                            if let Some(id) = tc.get("id").and_then(|i| i.as_str()) {
+                                            if let Some(id) = tc.get("id").and_then(|i| i.as_str())
+                                            {
                                                 entry.0 = id.to_string();
                                             }
                                             if let Some(func) = tc.get("function") {
-                                                if let Some(name) = func.get("name").and_then(|n| n.as_str()) {
+                                                if let Some(name) =
+                                                    func.get("name").and_then(|n| n.as_str())
+                                                {
                                                     entry.1.push_str(name);
                                                 }
-                                                if let Some(args) = func.get("arguments").and_then(|a| a.as_str()) {
+                                                if let Some(args) =
+                                                    func.get("arguments").and_then(|a| a.as_str())
+                                                {
                                                     entry.2.push_str(args);
                                                 }
                                             }
@@ -333,7 +381,13 @@ impl LlmProvider for OpenAiProvider {
                     };
                     let input: serde_json::Value = serde_json::from_str(&args_str)
                         .unwrap_or_else(|_| json!({ "raw": args_str }));
-                    let _ = tx.send(AgentEvent::ToolCall { id: final_id, name, input }).await;
+                    let _ = tx
+                        .send(AgentEvent::ToolCall {
+                            id: final_id,
+                            name,
+                            input,
+                        })
+                        .await;
                 }
             }
 
@@ -354,11 +408,13 @@ fn sanitize_and_inject_prompt_tools(payload: &mut serde_json::Value, tools: &[se
         // Build tool instruction text
         let mut tools_guide = String::from("\n\n# TOOL INVOCATION INSTRUCTIONS\nWhen you need to perform an action (such as creating an artifact, game, web app, or querying tools), you MUST output ONLY a JSON code block in this format:\n```json\n{\n  \"name\": \"tool_name\",\n  \"parameters\": { ... }\n}\n```\nDo not include conversational text when calling a tool.\n\nAvailable tools in this session:\n");
         for t in tools {
-            let name = t.get("name")
+            let name = t
+                .get("name")
                 .or_else(|| t.get("function").and_then(|f| f.get("name")))
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            let desc = t.get("description")
+            let desc = t
+                .get("description")
                 .or_else(|| t.get("function").and_then(|f| f.get("description")))
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
@@ -372,14 +428,33 @@ fn sanitize_and_inject_prompt_tools(payload: &mut serde_json::Value, tools: &[se
                     let role = msg_obj.get("role").and_then(|r| r.as_str()).unwrap_or("");
                     if role == "tool" {
                         msg_obj.insert("role".to_string(), serde_json::json!("user"));
-                        let content = msg_obj.get("content").and_then(|c| c.as_str()).unwrap_or("");
-                        let tool_id = msg_obj.get("tool_call_id").and_then(|id| id.as_str()).unwrap_or("");
-                        msg_obj.insert("content".to_string(), serde_json::json!(format!("[Tool Result for {}]: {}", tool_id, content)));
+                        let content = msg_obj
+                            .get("content")
+                            .and_then(|c| c.as_str())
+                            .unwrap_or("");
+                        let tool_id = msg_obj
+                            .get("tool_call_id")
+                            .and_then(|id| id.as_str())
+                            .unwrap_or("");
+                        msg_obj.insert(
+                            "content".to_string(),
+                            serde_json::json!(format!(
+                                "[Tool Result for {}]: {}",
+                                tool_id, content
+                            )),
+                        );
                     } else if role == "assistant" {
                         if let Some(tool_calls) = msg_obj.remove("tool_calls") {
-                            let text = msg_obj.get("content").and_then(|c| c.as_str()).unwrap_or("").to_string();
+                            let text = msg_obj
+                                .get("content")
+                                .and_then(|c| c.as_str())
+                                .unwrap_or("")
+                                .to_string();
                             let tc_str = tool_calls.to_string();
-                            msg_obj.insert("content".to_string(), serde_json::json!(format!("{}\n[Invoked Tools]: {}", text, tc_str)));
+                            msg_obj.insert(
+                                "content".to_string(),
+                                serde_json::json!(format!("{}\n[Invoked Tools]: {}", text, tc_str)),
+                            );
                         }
                     }
                 }
@@ -400,10 +475,13 @@ fn sanitize_and_inject_prompt_tools(payload: &mut serde_json::Value, tools: &[se
             }
 
             if !found_system {
-                messages.insert(0, serde_json::json!({
-                    "role": "system",
-                    "content": tools_guide
-                }));
+                messages.insert(
+                    0,
+                    serde_json::json!({
+                        "role": "system",
+                        "content": tools_guide
+                    }),
+                );
             }
         }
     }

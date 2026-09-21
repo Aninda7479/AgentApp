@@ -147,5 +147,6 @@ fetch('https://opencode.ai/zen/v1/chat/completions', {
 In SuperAgent (`packages/core_v2/src/providers/opencode.rs`):
 
 - **Priority 1: Configured API Key**: Direct OpenAI client to Zen Cloud API (`DEFAULT_OPENCODE_BASE_URL`).
-- **Priority 2: Keyless Free Tier**: `direct_keyless_chat_stream()` sends HTTPS SSE request directly to `https://opencode.ai/zen/v1/chat/completions` satisfying the 4 pillars with all 16 official OpenCode tools.
-- **Priority 3: Local Daemon Fallback**: If direct network streaming fails (e.g. offline or unexpected upstream changes), gracefully fall back to spawning `opencode serve` locally via `ensure_opencode_server()`.
+- **Priority 2: Keyless Free Tier**: `direct_keyless_chat_stream()` sends HTTPS SSE requests directly to `https://opencode.ai/zen/v1/chat/completions` satisfying the 4 pillars with all 16 official OpenCode tools.
+- **Priority 3: Automatic Free-Tier Model Failover (OmniRoute Style)**: If the requested model encounters an upstream HTTP 429 (`FreeUsageLimitError`) or 500 error, SuperAgent automatically rotates to available healthy live free models (`nemotron-3.5-lightning-free`, `nemotron-3-ultra-free`, `mimo-v2.5-free`) without ever launching a local daemon or port.
+- **Zero Localhost Daemon**: SuperAgent operates 100% cloud-native for OpenCode Zen, with no local server binding port 4096 or headless binary spawning.
