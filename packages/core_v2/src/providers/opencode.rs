@@ -22,6 +22,8 @@ pub const OPENCODE_FREE_MODELS: &[&str] = &[
     "ling-3.0-flash-fin-free",
     "jev-1.13-free",
     "deepseek-v4-flash-free",
+    "muse-spark-1.3-contributor-free",
+    "muse-spark-1.2-contributor-free",
 ];
 
 /// Official OpenCode tool names recognized and whitelisted by OpenCode Zen's API gateway.
@@ -484,8 +486,8 @@ impl Default for OpenCodeProvider {
 impl OpenCodeProvider {
     pub fn new() -> Self {
         let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(300))
-            .connect_timeout(std::time::Duration::from_secs(15))
+            .timeout(std::time::Duration::from_secs(45))
+            .connect_timeout(std::time::Duration::from_secs(8))
             .build()
             .unwrap_or_else(|_| Client::new());
         Self { client }
@@ -1026,11 +1028,12 @@ impl OpenCodeProvider {
             .post(&url)
             .header("Content-Type", "application/json")
             .header("Accept", "text/event-stream")
-            .header("User-Agent", "opencode/1.18.31")
+            .header("User-Agent", "opencode/1.20.0")
             .header("x-opencode-session", session_id)
             .header("x-opencode-request", request_id)
             .header("x-opencode-client", "desktop")
             .header("x-opencode-project", "global")
+            .timeout(std::time::Duration::from_secs(25))
             .json(&payload);
 
         let response = req
@@ -1270,21 +1273,25 @@ impl LlmProvider for OpenCodeProvider {
                     err_str
                 );
 
-                // OmniRoute-style Free Tier Model Rotation / Failover:
-                // When an upstream model hits 429 FreeUsageLimitError or 500, attempt failover
-                // to healthy live free models with available capacity.
-                if err_str.contains("429")
-                    || err_str.contains("FreeUsageLimitError")
-                    || err_str.contains("Rate limit")
-                    || err_str.contains("500")
+                // Fast-fail immediately if IP daily free tier usage limit is reached
+                if err_str.contains("FreeUsageLimitError")
+                    || err_str.contains("daily usage limit")
+                    || err_str.contains("Rate limit exceeded")
                 {
+                    anyhow::bail!(
+                        "OpenCode Zen free-tier daily usage limit reached: {}. Please configure an API key in Settings or switch model.",
+                        err_str
+                    );
+                }
+
+                // OmniRoute-style Free Tier Model Rotation / Failover:
+                // When an upstream model hits a temporary glitch or 500, attempt failover
+                // to healthy live free models with available capacity.
+                if err_str.contains("429") || err_str.contains("500") {
                     let fallback_candidates = [
                         "nemotron-3.5-lightning-free",
-                        "nemotron-3-ultra-free",
                         "mimo-v2.5-free",
-                        "ling-3.0-flash-fin-free",
                         "deepseek-v4-flash-free",
-                        "big-pickle",
                     ];
                     for fallback_model in fallback_candidates {
                         if fallback_model != config.model_id {
@@ -1307,18 +1314,25 @@ impl LlmProvider for OpenCodeProvider {
                                     return Ok(rx);
                                 }
                                 Err(alt_err) => {
+                                    let alt_err_str = alt_err.to_string();
                                     tracing::warn!(
                                         "Failover candidate '{}' unavailable: {}",
                                         fallback_model,
-                                        alt_err
+                                        alt_err_str
                                     );
+                                    if alt_err_str.contains("FreeUsageLimitError")
+                                        || alt_err_str.contains("daily usage limit")
+                                        || alt_err_str.contains("Rate limit exceeded")
+                                    {
+                                        break;
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // Never spawn localhost daemon or port 4096. Return error directly to caller.
+                // 100% cloud-native: Never spawn localhost daemon or bind port 4096 per repository rules.
                 anyhow::bail!(
                     "OpenCode Zen cloud streaming error for '{}': {}. All free tier fallback models exhausted.",
                     config.model_id,

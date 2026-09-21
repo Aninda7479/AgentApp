@@ -822,7 +822,46 @@ impl SettingsStore {
 
     pub fn get_api_key(&self, provider: &str) -> Result<Option<String>> {
         let settings = self.load()?;
-        Ok(settings.api_keys.get(provider).cloned())
+        if let Some(key) = settings.api_keys.get(provider) {
+            if !key.trim().is_empty() {
+                return Ok(Some(key.clone()));
+            }
+        }
+        // Alias check for gemini / google
+        if provider == "gemini" {
+            if let Some(key) = settings.api_keys.get("google") {
+                if !key.trim().is_empty() {
+                    return Ok(Some(key.clone()));
+                }
+            }
+            if let Ok(key) = std::env::var("GEMINI_API_KEY") {
+                if !key.trim().is_empty() {
+                    return Ok(Some(key));
+                }
+            }
+            if let Ok(key) = std::env::var("GOOGLE_API_KEY") {
+                if !key.trim().is_empty() {
+                    return Ok(Some(key));
+                }
+            }
+        } else if provider == "google" {
+            if let Some(key) = settings.api_keys.get("gemini") {
+                if !key.trim().is_empty() {
+                    return Ok(Some(key.clone()));
+                }
+            }
+            if let Ok(key) = std::env::var("GOOGLE_API_KEY") {
+                if !key.trim().is_empty() {
+                    return Ok(Some(key));
+                }
+            }
+            if let Ok(key) = std::env::var("GEMINI_API_KEY") {
+                if !key.trim().is_empty() {
+                    return Ok(Some(key));
+                }
+            }
+        }
+        Ok(None)
     }
 
     pub fn set_api_key(&self, provider: &str, key: &str) -> Result<()> {

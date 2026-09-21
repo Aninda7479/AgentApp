@@ -605,7 +605,14 @@ impl AgentEngine {
                         Ok(rx) => rx,
                         Err(err) => {
                             last_error_msg = err.to_string();
-                            if attempt < MAX_RETRIES {
+                            let is_rate_limit = last_error_msg.contains("429")
+                                || last_error_msg.contains("FreeUsageLimitError")
+                                || last_error_msg.contains("Rate limit")
+                                || last_error_msg.contains("daily usage limit")
+                                || last_error_msg.contains("quota")
+                                || last_error_msg.contains("RESOURCE_EXHAUSTED");
+
+                            if attempt < MAX_RETRIES && !is_rate_limit {
                                 tokio::time::sleep(tokio::time::Duration::from_secs(
                                     RETRY_DELAY_SECS,
                                 ))
@@ -614,10 +621,14 @@ impl AgentEngine {
                             } else {
                                 let _ = tx
                                     .send(AgentEvent::Error {
-                                        message: format!(
-                                            "Failed after {} attempts: {}",
-                                            MAX_RETRIES, last_error_msg
-                                        ),
+                                        message: if is_rate_limit {
+                                            last_error_msg.clone()
+                                        } else {
+                                            format!(
+                                                "Failed after {} attempts: {}",
+                                                MAX_RETRIES, last_error_msg
+                                            )
+                                        },
                                     })
                                     .await;
                                 let _ = history_tx.send(new_messages).await;

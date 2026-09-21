@@ -14,8 +14,8 @@ pub struct GeminiProvider {
 impl GeminiProvider {
     pub fn new() -> Self {
         let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(300))
-            .connect_timeout(std::time::Duration::from_secs(15))
+            .timeout(std::time::Duration::from_secs(60))
+            .connect_timeout(std::time::Duration::from_secs(10))
             .build()
             .unwrap_or_else(|_| Client::new());
         Self { client }
@@ -54,12 +54,20 @@ impl LlmProvider for GeminiProvider {
             base_trimmed.to_string()
         };
         let api_key = config.api_key.clone().unwrap_or_default();
-        let clean_model_id = config.model_id.strip_prefix("models/").unwrap_or(&config.model_id);
-        let clean_model_id = clean_model_id.strip_prefix("google-").unwrap_or(clean_model_id);
+        let clean_model_id = config
+            .model_id
+            .strip_prefix("models/")
+            .unwrap_or(&config.model_id);
+        let clean_model_id = clean_model_id
+            .strip_prefix("google-")
+            .unwrap_or(clean_model_id);
+        let clean_model_id = match clean_model_id {
+            "gemini-2.5-flash" => "gemini-3.6-flash",
+            other => other,
+        };
         let url = format!(
             "{}/models/{}:streamGenerateContent?alt=sse",
-            effective_base,
-            clean_model_id
+            effective_base, clean_model_id
         );
 
         let mut system_instruction_parts = Vec::new();
@@ -90,8 +98,11 @@ impl LlmProvider for GeminiProvider {
                                     }
                                 }));
                             }
-                            ContentBlock::ToolResult { tool_use_id, content, .. } => {
-
+                            ContentBlock::ToolResult {
+                                tool_use_id,
+                                content,
+                                ..
+                            } => {
                                 parts.push(json!({
                                     "functionResponse": {
                                         "name": tool_use_id,
@@ -130,7 +141,12 @@ impl LlmProvider for GeminiProvider {
                 Role::Tool => {
                     let mut parts = Vec::new();
                     for block in &msg.content {
-                        if let ContentBlock::ToolResult { tool_use_id, content, .. } = block {
+                        if let ContentBlock::ToolResult {
+                            tool_use_id,
+                            content,
+                            ..
+                        } = block
+                        {
                             parts.push(json!({
                                 "text": format!("[Tool result for {}]: {}", tool_use_id, content)
                             }));
@@ -203,7 +219,11 @@ impl LlmProvider for GeminiProvider {
                 let bytes = match item {
                     Ok(b) => b,
                     Err(e) => {
-                        let _ = tx.send(AgentEvent::Error { message: e.to_string() }).await;
+                        let _ = tx
+                            .send(AgentEvent::Error {
+                                message: e.to_string(),
+                            })
+                            .await;
                         return;
                     }
                 };
@@ -222,27 +242,54 @@ impl LlmProvider for GeminiProvider {
                         let data_str = data_str.trim();
                         if let Ok(v) = serde_json::from_str::<serde_json::Value>(data_str) {
                             if let Some(candidate) = v.get("candidates").and_then(|c| c.get(0)) {
-                                if let Some(reason) = candidate.get("finishReason").and_then(|r| r.as_str()) {
+                                if let Some(reason) =
+                                    candidate.get("finishReason").and_then(|r| r.as_str())
+                                {
                                     if !reason.is_empty() {
                                         stop_reason = reason.to_string();
                                     }
                                 }
 
-                                if let Some(parts) = candidate.get("content").and_then(|c| c.get("parts")).and_then(|p| p.as_array()) {
+                                if let Some(parts) = candidate
+                                    .get("content")
+                                    .and_then(|c| c.get("parts"))
+                                    .and_then(|p| p.as_array())
+                                {
                                     for part in parts {
-                                        if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
+                                        if let Some(text) =
+                                            part.get("text").and_then(|t| t.as_str())
+                                        {
                                             if !text.is_empty() {
-                                                if tx.send(AgentEvent::Token { text: text.to_string() }).await.is_err() {
+                                                if tx
+                                                    .send(AgentEvent::Token {
+                                                        text: text.to_string(),
+                                                    })
+                                                    .await
+                                                    .is_err()
+                                                {
                                                     return;
                                                 }
                                             }
                                         }
 
                                         if let Some(func) = part.get("functionCall") {
-                                            let name = func.get("name").and_then(|n| n.as_str()).unwrap_or_default().to_string();
-                                            let args = func.get("args").cloned().unwrap_or(json!({}));
+                                            let name = func
+                                                .get("name")
+                                                .and_then(|n| n.as_str())
+                                                .unwrap_or_default()
+                                                .to_string();
+                                            let args =
+                                                func.get("args").cloned().unwrap_or(json!({}));
                                             let id = format!("call_{}", uuid::Uuid::new_v4());
-                                            if tx.send(AgentEvent::ToolCall { id, name, input: args }).await.is_err() {
+                                            if tx
+                                                .send(AgentEvent::ToolCall {
+                                                    id,
+                                                    name,
+                                                    input: args,
+                                                })
+                                                .await
+                                                .is_err()
+                                            {
                                                 return;
                                             }
                                         }

@@ -3,15 +3,18 @@ use chrono::Utc;
 use parking_lot::Mutex as SyncMutex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Notify, RwLock};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::automation::{BrowserNavigateTool, BrowserScreenshotTool, WebSearchTool};
-use crate::integrations::telegram::{TelegramClient, TelegramMessage, TelegramSendOptions};
+use crate::integrations::telegram::{
+    TelegramClient, TelegramMessage, TelegramSendMediaOptions, TelegramSendOptions,
+};
 use crate::media::GeneratePdfTool;
 use crate::orchestrator::AgentEngine;
 use crate::server::ipc::voice::transcribe_audio_bytes;
@@ -782,6 +785,174 @@ impl TelegramBotManager {
             chat_id, prompt
         );
 
+        // Direct Social Media Download Interceptor (Instagram Reels, YouTube Shorts/Video, TikTok, Twitter/X)
+        if let Some(media_url) = extract_social_media_url(&prompt) {
+            let prompt_lower = prompt.to_lowercase();
+            let is_video_request = prompt_lower.contains("send")
+                || prompt_lower.contains("video")
+                || prompt_lower.contains("reel")
+                || prompt_lower.contains("short")
+                || prompt_lower.contains("download")
+                || prompt_lower.contains("get")
+                || prompt_lower.contains("play")
+                || prompt_lower.contains("fetch")
+                || prompt_lower.contains("watch")
+                || turn_texts.len() == 1;
+
+            if is_video_request {
+                info!(
+                    "🎬 Detected direct media video request for URL: {} in chat {}",
+                    media_url, chat_id
+                );
+                let _ = self
+                    .client
+                    .send_chat_action(&bot_token, &chat_id.to_string(), "upload_video")
+                    .await;
+
+                if let Some(ytdlp_bin) = find_ytdlp_binary() {
+                    let out_id = uuid::Uuid::new_v4().simple().to_string();
+                    let out_filename = format!("media_{}.mp4", out_id);
+                    let out_path = media_dir.join(&out_filename);
+                    let out_template = media_dir
+                        .join(format!("media_{}.%(ext)s", out_id))
+                        .to_string_lossy()
+                        .to_string();
+
+                    info!("Running yt-dlp to download media to {}", out_path.display());
+                    let mut cmd = tokio::process::Command::new(&ytdlp_bin);
+                    cmd.args([
+                        "--no-playlist",
+                        "--max-filesize",
+                        "48M",
+                        "-f",
+                        "b[filesize<48M]/b",
+                        "-o",
+                        &out_template,
+                        &media_url,
+                    ]);
+
+                    #[cfg(target_os = "windows")]
+                    {
+                        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+                    }
+
+                    let dl_res = tokio::time::timeout(Duration::from_secs(35), cmd.output()).await;
+                    match dl_res {
+                        Ok(Ok(output)) => {
+                            let mut found_file: Option<PathBuf> = None;
+                            if out_path.exists() {
+                                found_file = Some(out_path);
+                            } else {
+                                for ext in &["mp4", "mkv", "webm", "mov"] {
+                                    let cand = media_dir.join(format!("media_{}.{}", out_id, ext));
+                                    if cand.exists() {
+                                        found_file = Some(cand);
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if let Some(final_video) = found_file {
+                                let meta = tokio::fs::metadata(&final_video).await.ok();
+                                let size_bytes = meta.map(|m| m.len()).unwrap_or(0);
+                                if size_bytes > 0 {
+                                    info!("Downloaded media file successfully ({} bytes). Sending to Telegram...", size_bytes);
+                                    let send_opts = TelegramSendMediaOptions {
+                                        bot_token: bot_token.clone(),
+                                        chat_id: chat_id.to_string(),
+                                        file_path_or_url: final_video.to_string_lossy().to_string(),
+                                        caption: Some(format!(
+                                            "🎬 Here is your video!\n{}",
+                                            media_url
+                                        )),
+                                        media_type: Some("video".to_string()),
+                                        title: None,
+                                    };
+                                    let send_res = self.client.send_media(&send_opts).await;
+                                    match send_res {
+                                        Ok(res) if res.success => {
+                                            info!("✔ Video successfully delivered to Telegram chat {}", chat_id);
+                                            let existing_session =
+                                                self.chat_storage.load_session(&session_id).ok();
+                                            let mut full_history = existing_session
+                                                .as_ref()
+                                                .map(|s| s.messages.clone())
+                                                .unwrap_or_default();
+                                            full_history.push(ChatMessage::user(&prompt));
+                                            full_history.push(ChatMessage::assistant(format!(
+                                                "🎬 Here is your video!\n{}",
+                                                media_url
+                                            )));
+                                            let updated_session = ChatSession {
+                                                id: session_id.clone(),
+                                                title: generate_telegram_chat_title(
+                                                    &prompt, &user_name,
+                                                ),
+                                                project: None,
+                                                model: Some("media_downloader".to_string()),
+                                                created_at: existing_session
+                                                    .as_ref()
+                                                    .map(|s| s.created_at)
+                                                    .unwrap_or_else(|| {
+                                                        Utc::now().timestamp_millis()
+                                                    }),
+                                                updated_at: Utc::now().timestamp_millis(),
+                                                messages: full_history.clone(),
+                                            };
+                                            let _ =
+                                                self.chat_storage.save_session(&updated_session);
+                                            {
+                                                let mut store = self.session_store.lock();
+                                                let entry = SessionStateEntry {
+                                                    full_assistant_text: format!(
+                                                        "🎬 Here is your video!\n{}",
+                                                        media_url
+                                                    ),
+                                                    conversation_history: full_history,
+                                                    ..Default::default()
+                                                };
+                                                store.put(session_id.clone(), entry);
+                                            }
+                                            return;
+                                        }
+                                        Ok(res) => {
+                                            warn!(
+                                                "Telegram send_media returned failure: {:?}",
+                                                res.error
+                                            );
+                                        }
+                                        Err(e) => {
+                                            warn!("Failed to send media to Telegram: {}", e);
+                                        }
+                                    }
+                                }
+                            } else {
+                                let stderr = String::from_utf8_lossy(&output.stderr);
+                                warn!(
+                                    "yt-dlp completed but output file not found. stderr: {}",
+                                    stderr
+                                );
+                                if stderr.contains("File is larger than max-filesize")
+                                    || stderr.contains("exceeds")
+                                {
+                                    let _ = self.client.send_message_chunked(&bot_token, &chat_id.to_string(), "⚠️ The requested video exceeds Telegram's 50MB bot upload limit.", None).await;
+                                    return;
+                                }
+                            }
+                        }
+                        Ok(Err(e)) => {
+                            warn!("Failed to execute yt-dlp: {}", e);
+                        }
+                        Err(_) => {
+                            warn!("yt-dlp execution timed out after 35s");
+                        }
+                    }
+                } else {
+                    warn!("yt-dlp binary not found on system");
+                }
+            }
+        }
+
         // 3. Load or initialize continuous multi-turn chat session
         let existing_session = self.chat_storage.load_session(&session_id).ok();
         let initial_history = if let Some(ref sess) = existing_session {
@@ -868,19 +1039,40 @@ impl TelegramBotManager {
 
         let engine = AgentEngine::new(Arc::new(tool_registry));
 
-        // 6. Start background typing heartbeat task
+        // 6. Start background typing heartbeat task with safety ceiling & RAII guard
         let tok_heartbeat = bot_token.clone();
         let client_heartbeat = self.client.clone();
         let (heartbeat_stop_tx, mut heartbeat_stop_rx) = tokio::sync::oneshot::channel::<()>();
 
+        struct TypingHeartbeatGuard {
+            stop_tx: Option<tokio::sync::oneshot::Sender<()>>,
+        }
+        impl Drop for TypingHeartbeatGuard {
+            fn drop(&mut self) {
+                if let Some(tx) = self.stop_tx.take() {
+                    let _ = tx.send(());
+                }
+            }
+        }
+        let _typing_guard = TypingHeartbeatGuard {
+            stop_tx: Some(heartbeat_stop_tx),
+        };
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(4));
+            let mut ticks = 0;
+            const MAX_TYPING_TICKS: usize = 11; // 44-second maximum typing pulse ceiling
             loop {
                 tokio::select! {
                     _ = &mut heartbeat_stop_rx => {
                         break;
                     }
                     _ = interval.tick() => {
+                        ticks += 1;
+                        if ticks > MAX_TYPING_TICKS {
+                            debug!("Typing heartbeat safety ceiling reached; stopping pulse.");
+                            break;
+                        }
                         let _ = client_heartbeat.send_chat_action(&tok_heartbeat, &chat_id.to_string(), "typing").await;
                     }
                 }
@@ -895,19 +1087,19 @@ impl TelegramBotManager {
         }
 
         // 8. Run Agent Engine Loop
+        let mut assistant_text = String::new();
+        let mut new_messages_collected = Vec::new();
+        let mut stream_error_msg: Option<String> = None;
+
         let run_res = engine
             .run_loop_with_history_and_attachments(
                 &model_config,
                 &system_prompt,
                 &prompt,
                 initial_history.clone(),
-                attachments,
+                attachments.clone(),
             )
             .await;
-
-        let mut assistant_text = String::new();
-        let mut new_messages_collected = Vec::new();
-        let mut stream_error_msg: Option<String> = None;
 
         match run_res {
             Ok((mut event_rx, mut history_rx)) => {
@@ -951,6 +1143,89 @@ impl TelegramBotManager {
             }
         }
 
+        // Automatic Provider Failover on Rate Limit / Quota / FreeTier Error
+        let needs_fallback = stream_error_msg.as_ref().is_some_and(|err| {
+            err.contains("429")
+                || err.contains("Rate limit")
+                || err.contains("FreeUsageLimitError")
+                || err.contains("daily usage limit")
+                || err.contains("exhausted")
+                || err.contains("quota")
+                || err.contains("RESOURCE_EXHAUSTED")
+                || err.contains("OpenCode Zen cloud streaming error")
+        });
+
+        if needs_fallback && assistant_text.trim().is_empty() {
+            let fallback_gemini_key = self
+                .settings_store
+                .get_api_key("gemini")
+                .ok()
+                .flatten()
+                .or_else(|| self.settings_store.get_api_key("google").ok().flatten())
+                .or_else(|| std::env::var("GEMINI_API_KEY").ok())
+                .or_else(|| std::env::var("GOOGLE_API_KEY").ok());
+
+            if let Some(key) = fallback_gemini_key {
+                if model_config.provider != ProviderType::Gemini {
+                    info!(
+                        "🔄 Primary model '{}' failed with rate limit. Automatically failing over to Gemini (gemini-3.6-flash)...",
+                        model_config.model_id
+                    );
+                    let mut fallback_config =
+                        ModelConfig::new(ProviderType::Gemini, "gemini-3.6-flash".to_string());
+                    fallback_config.api_key = Some(key);
+
+                    let fallback_res = engine
+                        .run_loop_with_history_and_attachments(
+                            &fallback_config,
+                            &system_prompt,
+                            &prompt,
+                            initial_history.clone(),
+                            attachments.clone(),
+                        )
+                        .await;
+
+                    if let Ok((mut fb_event_rx, mut fb_hist_rx)) = fallback_res {
+                        stream_error_msg = None;
+                        while let Some(event) = fb_event_rx.recv().await {
+                            match event {
+                                crate::types::AgentEvent::Token { text } => {
+                                    assistant_text.push_str(&text);
+                                    let broadcast_msg = serde_json::json!({
+                                        "channel": "agent-event",
+                                        "data": {
+                                            "sessionId": session_id,
+                                            "type": "token",
+                                            "content": text
+                                        }
+                                    });
+                                    let _ = self.ws_broadcast_tx.send(broadcast_msg.to_string());
+                                }
+                                crate::types::AgentEvent::Error { message } => {
+                                    warn!("Fallback stream error: {}", message);
+                                    stream_error_msg = Some(message);
+                                }
+                                crate::types::AgentEvent::ToolCall { .. } => {
+                                    let _ = self
+                                        .client
+                                        .send_chat_action(
+                                            &bot_token,
+                                            &chat_id.to_string(),
+                                            "typing",
+                                        )
+                                        .await;
+                                }
+                                _ => {}
+                            }
+                        }
+                        if let Some(fb_msgs) = fb_hist_rx.recv().await {
+                            new_messages_collected = fb_msgs;
+                        }
+                    }
+                }
+            }
+        }
+
         // Clean up cancellation handle
         {
             let mut cancels = self.active_cancellations.lock();
@@ -958,7 +1233,7 @@ impl TelegramBotManager {
         }
 
         // Stop the typing heartbeat
-        let _ = heartbeat_stop_tx.send(());
+        drop(_typing_guard);
 
         // Extract assistant response if not streamed as individual tokens
         if assistant_text.trim().is_empty() {
@@ -1001,10 +1276,18 @@ impl TelegramBotManager {
         // If still empty and a stream error was captured, report it
         if assistant_text.trim().is_empty() {
             if let Some(err) = stream_error_msg {
-                assistant_text = format!(
-                    "⚠️ I ran into an error while processing your request: {}",
-                    err
-                );
+                if err.contains("FreeUsageLimitError")
+                    || err.contains("daily usage limit")
+                    || err.contains("Rate limit")
+                    || err.contains("429")
+                {
+                    assistant_text = "⚠️ The AI service is currently experiencing high demand or rate limits. Please configure an API key in Settings for unlimited access or try again shortly.".to_string();
+                } else {
+                    assistant_text = format!(
+                        "⚠️ I ran into an error while processing your request: {}",
+                        err
+                    );
+                }
             }
         }
 
@@ -1082,6 +1365,75 @@ impl TelegramBotManager {
 
         info!("✔ Successfully replied to Telegram chat {}", chat_id);
     }
+}
+
+/// Extracts a direct downloadable social media video link from text (Instagram Reel/Post, YouTube Short/Video, TikTok, Twitter/X)
+pub fn extract_social_media_url(text: &str) -> Option<String> {
+    for word in text.split_whitespace() {
+        let clean = word.trim_matches(|c: char| {
+            c == '<'
+                || c == '>'
+                || c == '('
+                || c == ')'
+                || c == '"'
+                || c == '\''
+                || c == '['
+                || c == ']'
+                || c == ','
+        });
+        if clean.starts_with("http://") || clean.starts_with("https://") {
+            let lower = clean.to_lowercase();
+            if lower.contains("instagram.com/reel/")
+                || lower.contains("instagram.com/p/")
+                || lower.contains("instagram.com/share/")
+                || lower.contains("youtube.com/shorts/")
+                || lower.contains("youtube.com/watch")
+                || lower.contains("youtu.be/")
+                || lower.contains("tiktok.com/")
+                || lower.contains("x.com/")
+                || lower.contains("twitter.com/")
+                || lower.contains("fb.watch/")
+            {
+                return Some(clean.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Locates yt-dlp binary across user data directories and system PATH
+pub fn find_ytdlp_binary() -> Option<PathBuf> {
+    let sa_dir = crate::storage::settings::get_superagent_dir();
+    let candidates = [
+        sa_dir.join("yt-dlp.exe"),
+        sa_dir.join("bin").join("yt-dlp.exe"),
+        sa_dir.join("yt-dlp"),
+        sa_dir.join("bin").join("yt-dlp"),
+        PathBuf::from("C:\\ProgramData\\SuperAgent\\bin\\yt-dlp.exe"),
+    ];
+    for c in &candidates {
+        if c.exists() {
+            return Some(c.clone());
+        }
+    }
+
+    if let Ok(output) =
+        std::process::Command::new(if cfg!(windows) { "where.exe" } else { "which" })
+            .arg("yt-dlp")
+            .output()
+    {
+        if output.status.success() {
+            if let Ok(s) = String::from_utf8(output.stdout) {
+                if let Some(first_line) = s.lines().next() {
+                    let p = PathBuf::from(first_line.trim());
+                    if p.exists() {
+                        return Some(p);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Generates a clean, topic-based chat title for Telegram conversations without exposing private user/chat IDs.
@@ -1436,5 +1788,42 @@ mod tests {
         assert_eq!(api_key, Some("test-claude-key".to_string()));
 
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_extract_social_media_url_instagram_reel() {
+        let text1 = "https://www.instagram.com/reel/DdZJqMrBzK6/";
+        assert_eq!(
+            extract_social_media_url(text1),
+            Some("https://www.instagram.com/reel/DdZJqMrBzK6/".to_string())
+        );
+
+        let text2 = "[User sent 2 messages in sequence]:\n1. https://www.instagram.com/reel/DdZJqMrBzK6/\n2. Send me the video";
+        assert_eq!(
+            extract_social_media_url(text2),
+            Some("https://www.instagram.com/reel/DdZJqMrBzK6/".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_social_media_url_youtube_shorts() {
+        let text = "Check this short out: https://youtube.com/shorts/abc123xyz please";
+        assert_eq!(
+            extract_social_media_url(text),
+            Some("https://youtube.com/shorts/abc123xyz".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_social_media_url_negative() {
+        let text = "Hello SuperAgent! Can you explain how async rust works?";
+        assert_eq!(extract_social_media_url(text), None);
+    }
+
+    #[test]
+    fn test_find_ytdlp_binary() {
+        // Since yt-dlp is installed on system, this returns Some
+        let bin = find_ytdlp_binary();
+        assert!(bin.is_some());
     }
 }
