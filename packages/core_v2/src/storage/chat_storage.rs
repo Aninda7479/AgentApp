@@ -5,7 +5,7 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::storage::settings::{get_legacy_appdata_dirs, get_superagent_dir};
-use crate::types::ChatMessage;
+use crate::types::{ChatMessage, Role};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ChatSession {
@@ -70,6 +70,73 @@ pub fn resolve_conversation_dir(base_dir: Option<&PathBuf>) -> PathBuf {
     base.join("conversation")
 }
 
+/// Extracts the first user text prompt from a raw chat session JSON object.
+pub fn extract_first_user_prompt_from_json(val: &serde_json::Value) -> Option<String> {
+    // 1. Try messages array
+    if let Some(arr) = val.get("messages").and_then(|v| v.as_array()) {
+        for m in arr {
+            let role = m.get("role").and_then(|r| r.as_str()).unwrap_or("");
+            if role == "user" {
+                if let Some(s) = m.get("content").and_then(|c| c.as_str()) {
+                    if !s.trim().is_empty() {
+                        return Some(s.to_string());
+                    }
+                } else if let Some(blocks) = m.get("content").and_then(|c| c.as_array()) {
+                    let texts: Vec<&str> = blocks
+                        .iter()
+                        .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+                        .collect();
+                    if !texts.is_empty() {
+                        return Some(texts.join(" "));
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Try steps array
+    if let Some(arr) = val.get("steps").and_then(|v| v.as_array()) {
+        for s in arr {
+            let typ = s.get("type").and_then(|t| t.as_str()).unwrap_or("");
+            if typ == "user" || typ == "user_input" {
+                if let Some(text) = s.get("content").and_then(|c| c.as_str()) {
+                    if !text.trim().is_empty() {
+                        return Some(text.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Sanitizes a stored chat title to guarantee that private numerical Telegram Chat or User IDs
+/// are never persisted or exposed in the chat list.
+pub fn sanitize_stored_chat_title(raw_title: &str, first_prompt: Option<&str>) -> String {
+    let trimmed = raw_title.trim();
+
+    // Check if the title exposes a numerical Telegram ID or user placeholder
+    let is_telegram_leak = trimmed.starts_with("Telegram Chat")
+        || trimmed == "Telegram Conversation"
+        || trimmed == "Telegram Assistant"
+        || (trimmed.to_lowercase().contains("telegram") && trimmed.chars().any(|c| c.is_ascii_digit()))
+        || (trimmed.starts_with("User ") && trimmed.chars().skip(5).all(|c| c.is_ascii_digit()))
+        || (trimmed.starts_with("Chat ") && trimmed.chars().skip(5).all(|c| c.is_ascii_digit()));
+
+    if is_telegram_leak || trimmed.is_empty() {
+        if let Some(prompt) = first_prompt {
+            let derived = crate::integrations::telegram_bot::generate_telegram_chat_title(prompt, "");
+            if derived != "Telegram Conversation" && !derived.is_empty() {
+                return derived;
+            }
+        }
+        return "Telegram Conversation".to_string();
+    }
+
+    raw_title.to_string()
+}
+
 #[derive(Debug, Clone)]
 pub struct ChatStorage {
     storage_dir: PathBuf,
@@ -109,15 +176,51 @@ impl ChatStorage {
         ];
 
         let sa_conv = get_superagent_dir().join("conversation");
-        if self.storage_dir.starts_with(&sa_conv) || self.storage_dir.to_string_lossy().contains(".superagent") {
-            candidates.push(get_superagent_dir().join("conversation").join("chats").join(id).join("chat.json"));
-            candidates.push(get_superagent_dir().join("conversation").join("Chats").join(id).join("chat.json"));
-            candidates.push(get_superagent_dir().join("chats").join(format!("session_{}.json", id)));
+        if self.storage_dir.starts_with(&sa_conv)
+            || self.storage_dir.to_string_lossy().contains(".superagent")
+        {
+            candidates.push(
+                get_superagent_dir()
+                    .join("conversation")
+                    .join("chats")
+                    .join(id)
+                    .join("chat.json"),
+            );
+            candidates.push(
+                get_superagent_dir()
+                    .join("conversation")
+                    .join("Chats")
+                    .join(id)
+                    .join("chat.json"),
+            );
+            candidates.push(
+                get_superagent_dir()
+                    .join("chats")
+                    .join(format!("session_{}.json", id)),
+            );
 
             for legacy in get_legacy_appdata_dirs() {
-                candidates.push(legacy.join("Conversation").join("Chats").join(id).join("chat.json"));
-                candidates.push(legacy.join("Conversation").join("chats").join(id).join("chat.json"));
-                candidates.push(legacy.join("conversation").join("chats").join(id).join("chat.json"));
+                candidates.push(
+                    legacy
+                        .join("Conversation")
+                        .join("Chats")
+                        .join(id)
+                        .join("chat.json"),
+                );
+                candidates.push(
+                    legacy
+                        .join("Conversation")
+                        .join("chats")
+                        .join(id)
+                        .join("chat.json"),
+                );
+                candidates.push(
+                    legacy
+                        .join("conversation")
+                        .join("chats")
+                        .join(id)
+                        .join("chat.json"),
+                );
                 candidates.push(legacy.join("Conversation").join(id).join("chat.json"));
                 candidates.push(legacy.join("conversation").join(id).join("chat.json"));
             }
@@ -133,7 +236,11 @@ impl ChatStorage {
         if let Ok(projects) = self.list_projects() {
             for proj in projects {
                 let proj_chat_candidates = [
-                    self.storage_dir.join("chats").join(&proj).join(id).join("chat.json"),
+                    self.storage_dir
+                        .join("chats")
+                        .join(&proj)
+                        .join(id)
+                        .join("chat.json"),
                     self.storage_dir.join(&proj).join(id).join("chat.json"),
                 ];
                 for chat_in_proj in proj_chat_candidates {
@@ -152,35 +259,92 @@ impl ChatStorage {
     }
 
     pub fn save_session(&self, session: &ChatSession) -> Result<()> {
-        let file_path = self.find_chat_file(&session.id).unwrap_or_else(|| self.default_write_path(&session.id));
+        let first_prompt = session
+            .messages
+            .iter()
+            .find(|m| m.role == Role::User)
+            .map(|m| m.text_content());
+        let mut session_to_save = session.clone();
+        session_to_save.title = sanitize_stored_chat_title(&session.title, first_prompt.as_deref());
+
+        let file_path = self
+            .find_chat_file(&session_to_save.id)
+            .unwrap_or_else(|| self.default_write_path(&session_to_save.id));
         if let Some(parent) = file_path.parent() {
             if !parent.exists() {
                 fs::create_dir_all(parent)?;
             }
         }
-        let json = serde_json::to_string_pretty(session)?;
-        fs::write(file_path, json)?;
+        let json = serde_json::to_string_pretty(&session_to_save)?;
+        fs::write(&file_path, json)?;
+
+        // Also write steps.json so UI step loaders get structured steps with string content
+        if let Some(parent) = file_path.parent() {
+            let steps: Vec<serde_json::Value> = session_to_save
+                .messages
+                .iter()
+                .map(|m| {
+                    let mut obj = serde_json::to_value(m).unwrap_or_default();
+                    let text = m.text_content();
+                    obj["content"] = serde_json::Value::String(text);
+                    obj["type"] = serde_json::to_value(&m.role)
+                        .unwrap_or_else(|_| serde_json::json!("assistant"));
+                    obj
+                })
+                .collect();
+            let _ = fs::write(
+                parent.join("steps.json"),
+                serde_json::to_string_pretty(&steps).unwrap_or_default(),
+            );
+        }
+
         Ok(())
     }
 
     pub fn load_session(&self, id: &str) -> Result<ChatSession> {
-        let file_path = self.find_chat_file(id)
+        let file_path = self
+            .find_chat_file(id)
             .ok_or_else(|| anyhow!("Chat session with id '{}' not found", id))?;
         let content = fs::read_to_string(file_path)?;
-        
+
         // Try parsing primary ChatSession format
-        if let Ok(session) = serde_json::from_str::<ChatSession>(&content) {
+        if let Ok(mut session) = serde_json::from_str::<ChatSession>(&content) {
+            let first_prompt = session
+                .messages
+                .iter()
+                .find(|m| m.role == Role::User)
+                .map(|m| m.text_content());
+            session.title = sanitize_stored_chat_title(&session.title, first_prompt.as_deref());
             return Ok(session);
         }
 
         // Try parsing TypeScript chat.json schema { id, title, createdAt, updatedAt, messages: [...] }
         if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-            let chat_id = val.get("id").and_then(|v| v.as_str()).unwrap_or(id).to_string();
-            let title = val.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled Chat").to_string();
+            let chat_id = val
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or(id)
+                .to_string();
+            let raw_title = val
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Untitled Chat");
+            let first_prompt = extract_first_user_prompt_from_json(&val);
+            let title = sanitize_stored_chat_title(raw_title, first_prompt.as_deref());
             let created_at = val.get("createdAt").and_then(|v| v.as_i64()).unwrap_or(0);
-            let updated_at = val.get("updatedAt").and_then(|v| v.as_i64()).unwrap_or(created_at);
-            let project = val.get("projectName").or_else(|| val.get("project")).and_then(|v| v.as_str()).map(|s| s.to_string());
-            let model = val.get("model").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let updated_at = val
+                .get("updatedAt")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(created_at);
+            let project = val
+                .get("projectName")
+                .or_else(|| val.get("project"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let model = val
+                .get("model")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
 
             let mut messages = Vec::new();
             if let Some(msg_arr) = val.get("messages").and_then(|v| v.as_array()) {
@@ -216,7 +380,9 @@ impl ChatStorage {
         ];
 
         let sa_conv = get_superagent_dir().join("conversation");
-        if self.storage_dir.starts_with(&sa_conv) || self.storage_dir.to_string_lossy().contains(".superagent") {
+        if self.storage_dir.starts_with(&sa_conv)
+            || self.storage_dir.to_string_lossy().contains(".superagent")
+        {
             search_dirs.push(get_superagent_dir().join("conversation").join("chats"));
             search_dirs.push(get_superagent_dir().join("conversation").join("Chats"));
             search_dirs.push(get_superagent_dir().join("chats"));
@@ -241,7 +407,9 @@ impl ChatStorage {
                     let path = entry.path();
                     let file_to_read = if path.is_dir() && path.join("chat.json").exists() {
                         Some(path.join("chat.json"))
-                    } else if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("json") {
+                    } else if path.is_file()
+                        && path.extension().and_then(|e| e.to_str()) == Some("json")
+                    {
                         Some(path.clone())
                     } else {
                         None
@@ -249,21 +417,56 @@ impl ChatStorage {
 
                     if let Some(target_file) = file_to_read {
                         if let Ok(content) = fs::read_to_string(&target_file) {
-                            if let Ok(session) = serde_json::from_str::<ChatSession>(&content) {
+                            if let Ok(mut session) = serde_json::from_str::<ChatSession>(&content) {
                                 if !seen_ids.contains(&session.id) {
                                     seen_ids.insert(session.id.clone());
+                                    let first_prompt = session
+                                        .messages
+                                        .iter()
+                                        .find(|m| m.role == Role::User)
+                                        .map(|m| m.text_content());
+                                    session.title = sanitize_stored_chat_title(
+                                        &session.title,
+                                        first_prompt.as_deref(),
+                                    );
                                     metadata_list.push(ChatSessionMetadata::from(&session));
                                 }
-                            } else if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                            } else if let Ok(val) =
+                                serde_json::from_str::<serde_json::Value>(&content)
+                            {
                                 if let Some(id) = val.get("id").and_then(|v| v.as_str()) {
                                     if !seen_ids.contains(id) {
                                         seen_ids.insert(id.to_string());
-                                        let title = val.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled Chat").to_string();
-                                        let created_at = val.get("createdAt").and_then(|v| v.as_i64()).unwrap_or(0);
-                                        let updated_at = val.get("updatedAt").and_then(|v| v.as_i64()).unwrap_or(created_at);
-                                        let project = val.get("projectName").or_else(|| val.get("project")).and_then(|v| v.as_str()).map(|s| s.to_string());
-                                        let model = val.get("model").and_then(|v| v.as_str()).map(|s| s.to_string());
-                                        let message_count = val.get("messages").and_then(|v| v.as_array()).map_or(0, |a| a.len());
+                                        let raw_title = val
+                                            .get("title")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("Untitled Chat");
+                                        let first_prompt = extract_first_user_prompt_from_json(&val);
+                                        let title = sanitize_stored_chat_title(
+                                            raw_title,
+                                            first_prompt.as_deref(),
+                                        );
+                                        let created_at = val
+                                            .get("createdAt")
+                                            .and_then(|v| v.as_i64())
+                                            .unwrap_or(0);
+                                        let updated_at = val
+                                            .get("updatedAt")
+                                            .and_then(|v| v.as_i64())
+                                            .unwrap_or(created_at);
+                                        let project = val
+                                            .get("projectName")
+                                            .or_else(|| val.get("project"))
+                                            .and_then(|v| v.as_str())
+                                            .map(|s| s.to_string());
+                                        let model = val
+                                            .get("model")
+                                            .and_then(|v| v.as_str())
+                                            .map(|s| s.to_string());
+                                        let message_count = val
+                                            .get("messages")
+                                            .and_then(|v| v.as_array())
+                                            .map_or(0, |a| a.len());
 
                                         metadata_list.push(ChatSessionMetadata {
                                             id: id.to_string(),
@@ -324,7 +527,8 @@ impl ChatStorage {
                         let mut matches_content = false;
                         if chat_json.exists() {
                             if let Ok(content) = fs::read_to_string(&chat_json) {
-                                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content)
+                                {
                                     if let Some(chat_id) = val.get("id").and_then(|v| v.as_str()) {
                                         if chat_id.eq_ignore_ascii_case(clean_id)
                                             || chat_id.eq_ignore_ascii_case(stripped_id)
@@ -415,16 +619,37 @@ impl ChatStorage {
             _ => return Ok(()),
         };
 
-        let title = chat_val.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled Chat").to_string();
-        let project = chat_val.get("project").or_else(|| chat_val.get("projectName")).and_then(|v| v.as_str()).map(|s| s.to_string());
-        let model = chat_val.get("model").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let timestamp_str = chat_val.get("timestamp").and_then(|v| v.as_str()).unwrap_or("");
-        let created_at = chat_val.get("createdAt").and_then(|v| v.as_i64()).unwrap_or_else(|| {
-            chrono::DateTime::parse_from_rfc3339(timestamp_str)
-                .map(|dt| dt.timestamp_millis())
-                .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis())
-        });
-        let updated_at = chat_val.get("updatedAt").and_then(|v| v.as_i64()).unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
+        let raw_title = chat_val
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Untitled Chat");
+        let first_prompt = extract_first_user_prompt_from_json(chat_val);
+        let title = sanitize_stored_chat_title(raw_title, first_prompt.as_deref());
+        let project = chat_val
+            .get("project")
+            .or_else(|| chat_val.get("projectName"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let model = chat_val
+            .get("model")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let timestamp_str = chat_val
+            .get("timestamp")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let created_at = chat_val
+            .get("createdAt")
+            .and_then(|v| v.as_i64())
+            .unwrap_or_else(|| {
+                chrono::DateTime::parse_from_rfc3339(timestamp_str)
+                    .map(|dt| dt.timestamp_millis())
+                    .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis())
+            });
+        let updated_at = chat_val
+            .get("updatedAt")
+            .and_then(|v| v.as_i64())
+            .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
 
         let chat_dir = self.storage_dir.join("chats").join(&id);
         let _ = fs::create_dir_all(&chat_dir);
@@ -452,12 +677,18 @@ impl ChatStorage {
             meta_json["unread"] = unread.clone();
         }
 
-        let _ = fs::write(chat_dir.join("chat.json"), serde_json::to_string_pretty(&meta_json)?);
+        let _ = fs::write(
+            chat_dir.join("chat.json"),
+            serde_json::to_string_pretty(&meta_json)?,
+        );
 
         // Save steps.json
         if let Some(steps) = chat_val.get("steps").and_then(|v| v.as_array()) {
             if !steps.is_empty() {
-                let _ = fs::write(chat_dir.join("steps.json"), serde_json::to_string_pretty(steps)?);
+                let _ = fs::write(
+                    chat_dir.join("steps.json"),
+                    serde_json::to_string_pretty(steps)?,
+                );
             }
         }
 
@@ -465,7 +696,11 @@ impl ChatStorage {
     }
 
     pub fn save_stored_project_from_json(&self, proj_val: &serde_json::Value) -> Result<()> {
-        let name = match proj_val.get("name").or_else(|| proj_val.get("id")).and_then(|v| v.as_str()) {
+        let name = match proj_val
+            .get("name")
+            .or_else(|| proj_val.get("id"))
+            .and_then(|v| v.as_str())
+        {
             Some(s) if !s.trim().is_empty() => s.trim().to_string(),
             _ => return Ok(()),
         };
@@ -473,7 +708,10 @@ impl ChatStorage {
         let proj_dir = self.storage_dir.join("projects").join(&name);
         let _ = fs::create_dir_all(&proj_dir);
 
-        let _ = fs::write(proj_dir.join("meta.json"), serde_json::to_string_pretty(proj_val)?);
+        let _ = fs::write(
+            proj_dir.join("meta.json"),
+            serde_json::to_string_pretty(proj_val)?,
+        );
         Ok(())
     }
 
@@ -497,9 +735,17 @@ impl ChatStorage {
                         let dir_name = entry.file_name().to_string_lossy().trim().to_string();
                         let meta_file = path.join("meta.json");
                         let proj_file = path.join("project.json");
-                        if let Ok(c) = fs::read_to_string(&meta_file).or_else(|_| fs::read_to_string(&proj_file)) {
+                        if let Ok(c) = fs::read_to_string(&meta_file)
+                            .or_else(|_| fs::read_to_string(&proj_file))
+                        {
                             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&c) {
-                                let name = val.get("name").or_else(|| val.get("id")).and_then(|v| v.as_str()).unwrap_or(&dir_name).trim().to_string();
+                                let name = val
+                                    .get("name")
+                                    .or_else(|| val.get("id"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or(&dir_name)
+                                    .trim()
+                                    .to_string();
                                 let key = name.to_lowercase();
                                 if !key.is_empty() && !seen.contains(&key) {
                                     seen.insert(key);
@@ -547,20 +793,52 @@ impl ChatStorage {
 
                         if chat_json.exists() {
                             if let Ok(content) = fs::read_to_string(&chat_json) {
-                                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-                                    let id = val.get("id").and_then(|v| v.as_str()).unwrap_or(&id_from_dir).trim().to_string();
+                                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content)
+                                {
+                                    let id = val
+                                        .get("id")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or(&id_from_dir)
+                                        .trim()
+                                        .to_string();
                                     let key = id.to_lowercase();
                                     if !key.is_empty() && !seen.contains(&key) {
                                         seen.insert(key);
-                                        let title = val.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled Chat").to_string();
-                                        let project = val.get("project").or_else(|| val.get("projectName")).and_then(|v| v.as_str()).unwrap_or("").to_string();
-                                        let model = val.get("model").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                                        let created_at = val.get("createdAt").and_then(|v| v.as_i64()).unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
-                                        let updated_at = val.get("updatedAt").and_then(|v| v.as_i64()).unwrap_or(created_at);
+                                        let raw_title = val
+                                            .get("title")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("Untitled Chat");
+                                        let first_prompt = extract_first_user_prompt_from_json(&val);
+                                        let title = sanitize_stored_chat_title(
+                                            raw_title,
+                                            first_prompt.as_deref(),
+                                        );
+                                        let project = val
+                                            .get("project")
+                                            .or_else(|| val.get("projectName"))
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("")
+                                            .to_string();
+                                        let model = val
+                                            .get("model")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("")
+                                            .to_string();
+                                        let created_at = val
+                                            .get("createdAt")
+                                            .and_then(|v| v.as_i64())
+                                            .unwrap_or_else(|| {
+                                                chrono::Utc::now().timestamp_millis()
+                                            });
+                                        let updated_at = val
+                                            .get("updatedAt")
+                                            .and_then(|v| v.as_i64())
+                                            .unwrap_or(created_at);
 
-                                        let iso_ts = chrono::DateTime::from_timestamp_millis(created_at)
-                                            .map(|dt| dt.to_rfc3339())
-                                            .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+                                        let iso_ts =
+                                            chrono::DateTime::from_timestamp_millis(created_at)
+                                                .map(|dt| dt.to_rfc3339())
+                                                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
 
                                         let mut chat_obj = serde_json::json!({
                                             "id": id,
@@ -577,8 +855,10 @@ impl ChatStorage {
                                         if let Some(settings) = val.get("settings") {
                                             chat_obj["settings"] = settings.clone();
                                         }
-                                        if let Some(standalone_config) = val.get("standaloneConfig") {
-                                            chat_obj["standaloneConfig"] = standalone_config.clone();
+                                        if let Some(standalone_config) = val.get("standaloneConfig")
+                                        {
+                                            chat_obj["standaloneConfig"] =
+                                                standalone_config.clone();
                                         }
                                         if let Some(pinned) = val.get("pinned") {
                                             chat_obj["pinned"] = pinned.clone();
@@ -611,8 +891,14 @@ impl ChatStorage {
         let clean_id = chat_id.trim().trim_start_matches("session-");
 
         let candidates = [
-            self.storage_dir.join("chats").join(clean_id).join("steps.json"),
-            self.storage_dir.join("Chats").join(clean_id).join("steps.json"),
+            self.storage_dir
+                .join("chats")
+                .join(clean_id)
+                .join("steps.json"),
+            self.storage_dir
+                .join("Chats")
+                .join(clean_id)
+                .join("steps.json"),
             self.storage_dir.join(clean_id).join("steps.json"),
         ];
 
@@ -636,7 +922,9 @@ impl ChatStorage {
                         let p_steps = path.join("chats").join(clean_id).join("steps.json");
                         if p_steps.exists() {
                             if let Ok(content) = fs::read_to_string(&p_steps) {
-                                if let Ok(steps) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
+                                if let Ok(steps) =
+                                    serde_json::from_str::<Vec<serde_json::Value>>(&content)
+                                {
                                     return steps;
                                 }
                             }
@@ -648,8 +936,14 @@ impl ChatStorage {
 
         // Check chat.json messages fallback
         let meta_candidates = [
-            self.storage_dir.join("chats").join(clean_id).join("chat.json"),
-            self.storage_dir.join("Chats").join(clean_id).join("chat.json"),
+            self.storage_dir
+                .join("chats")
+                .join(clean_id)
+                .join("chat.json"),
+            self.storage_dir
+                .join("Chats")
+                .join(clean_id)
+                .join("chat.json"),
             self.storage_dir.join(clean_id).join("chat.json"),
         ];
 
@@ -658,7 +952,39 @@ impl ChatStorage {
                 if let Ok(content) = fs::read_to_string(c) {
                     if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
                         if let Some(msgs) = val.get("messages").and_then(|v| v.as_array()) {
-                            return msgs.clone();
+                            let steps: Vec<serde_json::Value> = msgs
+                                .iter()
+                                .map(|m| {
+                                    let mut step = m.clone();
+                                    let text = if let Some(arr) =
+                                        m.get("content").and_then(|c| c.as_array())
+                                    {
+                                        arr.iter()
+                                            .filter_map(|b| {
+                                                b.get("text")
+                                                    .and_then(|t| t.as_str())
+                                                    .or_else(|| {
+                                                        b.get("content").and_then(|t| t.as_str())
+                                                    })
+                                                    .map(|s| s.to_string())
+                                            })
+                                            .collect::<Vec<_>>()
+                                            .join("\n")
+                                    } else if let Some(s) =
+                                        m.get("content").and_then(|c| c.as_str())
+                                    {
+                                        s.to_string()
+                                    } else {
+                                        String::new()
+                                    };
+                                    step["content"] = serde_json::Value::String(text);
+                                    if let Some(role) = m.get("role").and_then(|r| r.as_str()) {
+                                        step["type"] = serde_json::Value::String(role.to_string());
+                                    }
+                                    step
+                                })
+                                .collect();
+                            return steps;
                         }
                     }
                 }
@@ -738,6 +1064,105 @@ mod tests {
         assert!(storage.load_session(&session_id).is_err());
         let list_after = storage.list_sessions().unwrap();
         assert!(list_after.is_empty());
+
+        let _ = fs::remove_dir_all(test_dir);
+    }
+
+    #[test]
+    fn test_load_chat_steps_normalizes_content_blocks() {
+        let test_dir = std::env::temp_dir().join(format!("test_steps_{}", uuid::Uuid::new_v4()));
+        let storage = ChatStorage::with_dir(test_dir.clone());
+
+        let session_id = "test-steps-456".to_string();
+        let user_msg = ChatMessage::user("Please download this video");
+        let asst_msg = ChatMessage::assistant("I have downloaded the video for you.");
+        let session = ChatSession {
+            id: session_id.clone(),
+            title: "Steps Test".to_string(),
+            project: None,
+            model: Some("gpt-4o".to_string()),
+            created_at: 1000,
+            updated_at: 2000,
+            messages: vec![user_msg, asst_msg],
+        };
+
+        // Save session (which also writes steps.json)
+        storage.save_session(&session).unwrap();
+
+        // Check load_chat_steps returns steps with string content
+        let steps = storage.load_chat_steps(&session_id);
+        assert_eq!(steps.len(), 2);
+        assert!(steps[0]["content"].is_string());
+        assert_eq!(
+            steps[0]["content"].as_str().unwrap(),
+            "Please download this video"
+        );
+        assert!(steps[1]["content"].is_string());
+        assert_eq!(
+            steps[1]["content"].as_str().unwrap(),
+            "I have downloaded the video for you."
+        );
+
+        // Now delete steps.json and test fallback to chat.json messages
+        let steps_file = test_dir.join("chats").join(&session_id).join("steps.json");
+        let _ = fs::remove_file(steps_file);
+
+        let fallback_steps = storage.load_chat_steps(&session_id);
+        assert_eq!(fallback_steps.len(), 2);
+        assert!(fallback_steps[0]["content"].is_string());
+        assert_eq!(
+            fallback_steps[0]["content"].as_str().unwrap(),
+            "Please download this video"
+        );
+        assert!(fallback_steps[1]["content"].is_string());
+        assert_eq!(
+            fallback_steps[1]["content"].as_str().unwrap(),
+            "I have downloaded the video for you."
+        );
+
+        let _ = fs::remove_dir_all(test_dir);
+    }
+
+    #[test]
+    fn test_sanitize_stored_chat_title_and_persistence() {
+        // Leaked Telegram numerical IDs must be sanitized
+        let title1 = sanitize_stored_chat_title("Telegram Chat 5084960883", Some("Summarize this document"));
+        assert_eq!(title1, "Summarize this document");
+        assert!(!title1.contains("5084960883"));
+
+        let title2 = sanitize_stored_chat_title("Telegram Chat 5084960883", None);
+        assert_eq!(title2, "Telegram Conversation");
+        assert!(!title2.contains("5084960883"));
+
+        // Custom normal titles should be preserved
+        let normal_title = sanitize_stored_chat_title("My Custom Research Project", Some("Hello"));
+        assert_eq!(normal_title, "My Custom Research Project");
+
+        // Verify storage save/load cleans up legacy leaked title on disk
+        let test_dir = std::env::temp_dir().join(format!("test_leak_{}", uuid::Uuid::new_v4()));
+        let storage = ChatStorage::with_dir(test_dir.clone());
+
+        let session = ChatSession {
+            id: "telegram-5084960883".to_string(),
+            title: "Telegram Chat 5084960883".to_string(),
+            project: None,
+            model: Some("gpt-4o".to_string()),
+            created_at: 1000,
+            updated_at: 2000,
+            messages: vec![ChatMessage::user("Download youtube short for me")],
+        };
+
+        storage.save_session(&session).unwrap();
+
+        let loaded = storage.load_session("telegram-5084960883").unwrap();
+        assert!(!loaded.title.contains("5084960883"));
+        assert_eq!(loaded.title, "Download youtube short for me");
+
+        let all_chats = storage.load_all_stored_chats();
+        assert_eq!(all_chats.len(), 1);
+        let chat_title = all_chats[0]["title"].as_str().unwrap();
+        assert!(!chat_title.contains("5084960883"));
+        assert_eq!(chat_title, "Download youtube short for me");
 
         let _ = fs::remove_dir_all(test_dir);
     }

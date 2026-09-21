@@ -377,7 +377,7 @@ export const ToolCallCard: React.FC<ToolCallCardProps> = ({
     const meta = step.metadata || {};
     const filename = meta.filename || input.TargetFile || input.AbsolutePath || input.path || details.targetName;
     const original = meta.originalCode || input.TargetContent || '';
-    const modified = meta.modifiedCode || input.ReplacementContent || step.content || '';
+    const modified = meta.modifiedCode || input.ReplacementContent || TrajectoryService.normalizeContent(step.content) || '';
     onViewDiff(filename, original, modified);
   };
 
@@ -514,10 +514,10 @@ export const ToolCallCard: React.FC<ToolCallCardProps> = ({
                     </span>
                   )}
                 </span>
-                {step.content && <ThoughtCopyButton content={step.content} />}
+                {step.content && <ThoughtCopyButton content={TrajectoryService.normalizeContent(step.content)} />}
               </div>
               <div className="max-h-80 overflow-y-auto scrollbar-thin pr-1 break-words [overflow-wrap:anywhere] whitespace-pre-wrap font-mono text-[11.5px] leading-relaxed text-brand-textMuted/90">
-                {step.content}
+                {TrajectoryService.normalizeContent(step.content)}
               </div>
             </div>
           ) : (
@@ -538,8 +538,8 @@ export const ToolCallCard: React.FC<ToolCallCardProps> = ({
                   <div className="text-[9px] font-semibold uppercase tracking-wider text-brand-textMuted/50 mb-1">Result</div>
                   <pre className="text-[10px] font-mono text-brand-textMuted/80 bg-brand-bg/60 rounded p-2 overflow-x-auto max-h-48 whitespace-pre-wrap break-all select-text">
                     {TrajectoryService.stripAnsi(step.content).slice(0, 3000)}
-                    {step.content.length > 3000 && (
-                      <span className="text-brand-textMuted/40">... ({step.content.length} chars)</span>
+                    {TrajectoryService.normalizeContent(step.content).length > 3000 && (
+                      <span className="text-brand-textMuted/40">... ({TrajectoryService.normalizeContent(step.content).length} chars)</span>
                     )}
                   </pre>
                 </div>
@@ -1274,7 +1274,7 @@ const TurnBlock: React.FC<TurnBlockProps> = ({
         >
           {turn.userSteps.map((step, idx) => (
             <div key={step.id} className={idx > 0 ? 'mt-2.5' : ''}>
-              {step.content && <div className="break-words">{step.content}</div>}
+              {step.content && <div className="break-words">{TrajectoryService.normalizeContent(step.content)}</div>}
 
               {step.metadata?.mediaPath && step.metadata?.mediaType === 'image' && (
                 <ErrorBoundary name="Image Preview" compact>
@@ -1683,7 +1683,8 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
       {assistantSteps.map((step, idx) => {
         const isStreamingThis = step.id === streamingStepId;
         const isLast = idx === assistantSteps.length - 1;
-        const hasText = Boolean(step.content && step.content.trim().length > 0);
+        const contentStr = TrajectoryService.normalizeContent(step.content);
+        const hasText = Boolean(contentStr && contentStr.trim().length > 0);
 
         // While actively thinking during streaming and no text has been produced yet,
         // do not render an empty assistant bubble in chat.
@@ -1697,10 +1698,10 @@ const AgentResponseBlock: React.FC<AgentResponseBlockProps> = ({
             data-testid={`step-assistant-${step.id}`}
             className="flex flex-col gap-1 w-full text-left"
           >
-            <MarkdownText content={step.content} streaming={isStreamingThis && isStreaming && !step.isThinkingActive} />
+            <MarkdownText content={contentStr} streaming={isStreamingThis && isStreaming && !step.isThinkingActive} />
 
             {/* What's Next suggestion */}
-            {isLast && !isStreaming && step.content.toLowerCase().includes("what") && (
+            {isLast && !isStreaming && contentStr.toLowerCase().includes("what") && (
               <div className="mt-1">
                 <p className="text-brand-textMuted text-[12px] font-semibold mt-3 mb-1">What's Next?</p>
               </div>

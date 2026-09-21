@@ -425,18 +425,21 @@ export const WorkspaceRightSidebar: React.FC<WorkspaceRightSidebarProps> = ({
           });
         }
       } else if (step.content) {
-        // Regex search for write/edit patterns if metadata missing
-        const writeMatch = step.content.match(/(?:Wrote|Updated|Created|Edited)\s+([a-zA-Z0-9_\-./\\]+\.[a-zA-Z0-9]+)/i);
-        if (writeMatch && writeMatch[1]) {
-          const filename = writeMatch[1];
-          if (!fileMap.has(filename)) {
-            fileMap.set(filename, {
-              filename,
-              action: 'modified',
-              originalCode: '// Original code unavailable',
-              modifiedCode: step.content,
-              stepId: step.id
-            });
+        const contentStr = TrajectoryService.normalizeContent(step.content);
+        if (contentStr) {
+          // Regex search for write/edit patterns if metadata missing
+          const writeMatch = contentStr.match(/(?:Wrote|Updated|Created|Edited)\s+([a-zA-Z0-9_\-./\\]+\.[a-zA-Z0-9]+)/i);
+          if (writeMatch && writeMatch[1]) {
+            const filename = writeMatch[1];
+            if (!fileMap.has(filename)) {
+              fileMap.set(filename, {
+                filename,
+                action: 'modified',
+                originalCode: '// Original code unavailable',
+                modifiedCode: contentStr,
+                stepId: step.id
+              });
+            }
           }
         }
       }

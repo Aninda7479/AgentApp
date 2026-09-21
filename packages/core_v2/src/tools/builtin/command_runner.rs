@@ -1,10 +1,10 @@
+use anyhow::{anyhow, Result};
+use async_trait::async_trait;
+use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
-use anyhow::{anyhow, Result};
-use async_trait::async_trait;
-use serde_json::{json, Value};
 use tokio::process::Command;
 use tokio::time::timeout;
 
@@ -100,7 +100,11 @@ impl Tool for RunCommandTool {
 
         // Enforce allowed_commands whitelist if configured
         if !self.allowed_commands.is_empty() {
-            let cmd_base = command_str.split_whitespace().next().unwrap_or("").to_lowercase();
+            let cmd_base = command_str
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .to_lowercase();
             let is_allowed = self.allowed_commands.iter().any(|allowed| {
                 let a = allowed.trim().to_lowercase();
                 a == "*" || a == cmd_base || command_str.to_lowercase().starts_with(&a)
@@ -156,14 +160,25 @@ impl Tool for RunCommandTool {
             let mut c = Command::new("powershell");
             #[cfg(target_os = "windows")]
             c.creation_flags(0x08000000);
-            c.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command_str]);
+            c.args([
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                command_str,
+            ]);
             if let Ok(path_var) = std::env::var("PATH") {
                 let mut custom_path = path_var;
                 if let Ok(userprofile) = std::env::var("USERPROFILE") {
-                    let sa_bin = format!("{}\\.superagent", userprofile);
-                    let win_apps = format!("{}\\AppData\\Local\\Microsoft\\WindowsApps", userprofile);
+                    let sa_bin = format!("{}\\.superagent\\bin", userprofile);
+                    let sa_root = format!("{}\\.superagent", userprofile);
+                    let win_apps =
+                        format!("{}\\AppData\\Local\\Microsoft\\WindowsApps", userprofile);
                     if !custom_path.contains(&sa_bin) {
                         custom_path = format!("{};{}", sa_bin, custom_path);
+                    }
+                    if !custom_path.contains(&sa_root) {
+                        custom_path = format!("{};{}", sa_root, custom_path);
                     }
                     if !custom_path.contains(&win_apps) {
                         custom_path = format!("{};{}", win_apps, custom_path);

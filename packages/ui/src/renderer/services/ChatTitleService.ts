@@ -21,8 +21,32 @@ export class ChatTitleService {
       t.startsWith('Chat in ') ||
       t.startsWith('New chat in ') ||
       /^Agent \d+$/i.test(t) ||
-      /^Chat \d+$/i.test(t)
+      /^Chat \d+$/i.test(t) ||
+      t.startsWith('Telegram Chat') ||
+      t === 'Telegram Conversation' ||
+      t === 'Telegram Assistant' ||
+      /(telegram).*\d{5,}/i.test(t) ||
+      /^(user|chat)\s+\d{5,}$/i.test(t)
     );
+  }
+
+  /**
+   * Sanitizes any displayed chat title to ensure numerical Telegram IDs
+   * or user IDs are never exposed in the UI sidebar or headers.
+   */
+  static sanitizeTitle(title?: string | null): string {
+    if (!title || !title.trim()) return 'New Chat';
+    const t = title.trim();
+    if (
+      t.startsWith('Telegram Chat') ||
+      t === 'Telegram Conversation' ||
+      t === 'Telegram Assistant' ||
+      /(telegram).*\d{5,}/i.test(t) ||
+      /^(user|chat)\s+\d{5,}$/i.test(t)
+    ) {
+      return 'Telegram Conversation';
+    }
+    return t;
   }
 
   /**

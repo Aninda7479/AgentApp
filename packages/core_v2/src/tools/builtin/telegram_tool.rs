@@ -1,10 +1,12 @@
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use crate::integrations::telegram::{TelegramClient, TelegramSendMediaOptions, TelegramSendOptions};
+use crate::integrations::telegram::{
+    TelegramClient, TelegramSendMediaOptions, TelegramSendOptions,
+};
 use crate::storage::SettingsStore;
 use crate::tools::r#trait::Tool;
 
@@ -12,6 +14,7 @@ use crate::tools::r#trait::Tool;
 pub struct TelegramTool {
     settings_store: Arc<SettingsStore>,
     workspace_root: Option<PathBuf>,
+    default_chat_id: Option<String>,
 }
 
 impl TelegramTool {
@@ -19,6 +22,7 @@ impl TelegramTool {
         Self {
             settings_store,
             workspace_root: None,
+            default_chat_id: None,
         }
     }
 
@@ -26,6 +30,19 @@ impl TelegramTool {
         Self {
             settings_store,
             workspace_root: Some(workspace_root),
+            default_chat_id: None,
+        }
+    }
+
+    pub fn with_chat_id(
+        settings_store: Arc<SettingsStore>,
+        workspace_root: PathBuf,
+        chat_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            settings_store,
+            workspace_root: Some(workspace_root),
+            default_chat_id: Some(chat_id.into()),
         }
     }
 
@@ -52,6 +69,7 @@ impl TelegramTool {
             .get("chat_id")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
+            .or_else(|| self.default_chat_id.clone())
             .or_else(|| {
                 tg_obj
                     .and_then(|t| t.get("chatId").or_else(|| t.get("chat_id")))
@@ -139,7 +157,8 @@ impl Tool for TelegramTool {
 
         if let Some(raw_path) = file_path {
             let path_str = raw_path.trim();
-            let resolved_path = if (path_str.starts_with("http://") || path_str.starts_with("https://"))
+            let resolved_path = if (path_str.starts_with("http://")
+                || path_str.starts_with("https://"))
                 || Path::new(path_str).is_absolute()
             {
                 path_str.to_string()
@@ -160,10 +179,18 @@ impl Tool for TelegramTool {
 
             let res = client.send_media(&send_opts).await?;
             if res.success {
-                let msg_id = res.message_id.map(|id| id.to_string()).unwrap_or_else(|| "unknown".to_string());
-                Ok(format!("Delivered media to Telegram successfully (message_id: {})", msg_id))
+                let msg_id = res
+                    .message_id
+                    .map(|id| id.to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                Ok(format!(
+                    "Delivered media to Telegram successfully (message_id: {})",
+                    msg_id
+                ))
             } else {
-                Err(anyhow!(res.error.unwrap_or_else(|| "Failed to send media to Telegram".to_string())))
+                Err(anyhow!(res.error.unwrap_or_else(|| {
+                    "Failed to send media to Telegram".to_string()
+                })))
             }
         } else if let Some(msg_text) = text {
             let send_opts = TelegramSendOptions {
@@ -176,13 +203,23 @@ impl Tool for TelegramTool {
 
             let res = client.send_message(&send_opts).await?;
             if res.success {
-                let msg_id = res.message_id.map(|id| id.to_string()).unwrap_or_else(|| "unknown".to_string());
-                Ok(format!("Delivered message to Telegram successfully (message_id: {})", msg_id))
+                let msg_id = res
+                    .message_id
+                    .map(|id| id.to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+                Ok(format!(
+                    "Delivered message to Telegram successfully (message_id: {})",
+                    msg_id
+                ))
             } else {
-                Err(anyhow!(res.error.unwrap_or_else(|| "Failed to send message to Telegram".to_string())))
+                Err(anyhow!(res.error.unwrap_or_else(|| {
+                    "Failed to send message to Telegram".to_string()
+                })))
             }
         } else {
-            Err(anyhow!("Either file_path or text must be provided to telegram tool"))
+            Err(anyhow!(
+                "Either file_path or text must be provided to telegram tool"
+            ))
         }
     }
 }

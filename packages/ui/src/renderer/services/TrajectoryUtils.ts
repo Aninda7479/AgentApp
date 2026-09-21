@@ -6,8 +6,39 @@ import type { TrajectoryStep } from '../core/types';
 import { IpcBridge } from '../core/ipc';
 
 export class TrajectoryUtils {
-  static stripAnsi(value: string): string {
-    return value.replace(/\x1b\[[0-9;]*m/g, '').replace(/ \[[0-9;]*m/g, '');
+  static normalizeContent(content: unknown): string {
+    if (typeof content === 'string') return content;
+    if (!content) return '';
+    if (Array.isArray(content)) {
+      return content
+        .map((c: unknown) => {
+          if (typeof c === 'string') return c;
+          if (c && typeof c === 'object') {
+            const item = c as { text?: unknown; content?: unknown };
+            if (typeof item.text === 'string') return item.text;
+            if (typeof item.content === 'string') return item.content;
+          }
+          return '';
+        })
+        .filter(Boolean)
+        .join('\n');
+    }
+    if (typeof content === 'object') {
+      const obj = content as { text?: unknown; content?: unknown };
+      if (typeof obj.text === 'string') return obj.text;
+      if (typeof obj.content === 'string') return obj.content;
+      try {
+        return JSON.stringify(content);
+      } catch {
+        return '';
+      }
+    }
+    return String(content);
+  }
+
+  static stripAnsi(value: unknown): string {
+    const raw = typeof value === 'string' ? value : TrajectoryUtils.normalizeContent(value);
+    return raw.replace(/\x1b\[[0-9;]*m/g, '').replace(/ \[[0-9;]*m/g, '');
   }
 
   static truncatePreview(value: string, maxLength: number = 88): string {

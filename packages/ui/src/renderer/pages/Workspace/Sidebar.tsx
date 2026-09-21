@@ -20,6 +20,7 @@ import {
   Mail,
 } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
+import { ChatTitleService } from '../../services/ChatTitleService';
 
 /** Props for the Sidebar navigation component. */
 export interface SidebarProps {
@@ -481,7 +482,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {isPinned && (
             <Pin className="w-3 h-3 text-brand-accent shrink-0 -rotate-45" title="Pinned" />
           )}
-          <span className="truncate text-[12.5px] leading-snug">{chat.title}</span>
+          <span className="truncate text-[12.5px] leading-snug">{ChatTitleService.sanitizeTitle(chat.title)}</span>
         </div>
 
         {/* Right Side: Position of Time & 3-dot are EXACTLY the same, flush to maximum right */}

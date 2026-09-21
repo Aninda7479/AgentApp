@@ -451,7 +451,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         )}
         {activeCategory === 'voice' && <VoiceSettings />}
         {activeCategory === 'usage' && <UsageTrackerSettings />}
-        {activeCategory === 'telegram' && <TelegramSettings />}
+        {activeCategory === 'telegram' && (
+          <TelegramSettings
+            connectedProviders={connectedProviders}
+            modelsCatalog={modelsCatalog}
+          />
+        )}
         {(activeCategory === 'skills' ||
           activeCategory === 'connectors' ||
           activeCategory === 'plugins') && (

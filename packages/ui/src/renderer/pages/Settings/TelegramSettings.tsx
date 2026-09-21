@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Send, CheckCircle2, AlertCircle, Eye, EyeOff,
   RefreshCw, Key, MessageSquare, Shield, Wifi, WifiOff, Loader2, Bot,
-  Sliders, UserCheck, Play, Square, Mic, FileText
+  Sliders, UserCheck, Play, Square, Mic, FileText, Zap
 } from 'lucide-react';
 import { getIpc } from '../../lib/ipc';
+import { SearchableSelect, SearchableSelectOption } from '../../components/ui/SearchableSelect';
+import type { ProviderConnection, ModelConfig } from '../../types';
 
 interface ConnectionInfo {
   botName: string;
@@ -20,17 +22,91 @@ interface TelegramBotStatusInfo {
   processed_updates?: number;
   active_chats_count?: number;
   debounce_seconds?: number;
+  auto_start?: boolean;
 }
 
-export const TelegramSettings: React.FC = () => {
+export interface TelegramSettingsProps {
+  connectedProviders?: ProviderConnection[];
+  modelsCatalog?: ModelConfig[];
+}
+
+export const TelegramSettings: React.FC<TelegramSettingsProps> = ({
+  connectedProviders: propProviders,
+  modelsCatalog: propModels,
+}) => {
   const ipc = getIpc();
 
   const [botToken, setBotToken] = useState<string>('');
   const [chatId, setChatId] = useState<string>('');
   const [twoWayEnabled, setTwoWayEnabled] = useState<boolean>(false);
+  const [autoStart, setAutoStart] = useState<boolean>(false);
   const [debounceSeconds, setDebounceSeconds] = useState<number>(2.5);
   const [allowedChatIds, setAllowedChatIds] = useState<string[]>([]);
   const [newChatIdInput, setNewChatIdInput] = useState<string>('');
+
+  const [selectedKey, setSelectedKey] = useState<string>('auto');
+  const [selectedProvider, setSelectedProvider] = useState<string>('');
+  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [fallbackProviders, setFallbackProviders] = useState<ProviderConnection[]>([]);
+  const [fallbackModels, setFallbackModels] = useState<ModelConfig[]>([]);
+  const [isModelSaved, setIsModelSaved] = useState<boolean>(false);
+
+  const effectiveProviders = propProviders && propProviders.length > 0 ? propProviders : fallbackProviders;
+  const effectiveModels = propModels && propModels.length > 0 ? propModels : fallbackModels;
+
+  const enabledModels = useMemo(() => {
+    return effectiveModels.filter((m) => m.enabled !== false);
+  }, [effectiveModels]);
+
+  const modelOptions = useMemo<SearchableSelectOption[]>(() => {
+    const options: SearchableSelectOption[] = [
+      {
+        value: 'auto',
+        label: 'Automatic (Workspace Default)',
+        description: 'Uses your primary workspace active AI model',
+        metadata: 'Default',
+        keywords: 'auto default workspace active assistant',
+        raw: { providerId: '', model: 'auto' },
+      },
+    ];
+
+    const seenKeys = new Set<string>();
+
+    for (const m of enabledModels) {
+      const provObj = effectiveProviders.find(
+        (p) => p.id === m.providerId || p.name?.toLowerCase() === m.providerId?.toLowerCase()
+      );
+      const pName = provObj?.name || m.providerId;
+      const bareId = m.id.startsWith(`${m.providerId}-`) ? m.id.slice(m.providerId.length + 1) : m.id;
+      const key = `${m.providerId}::${bareId}`;
+
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        const hasVision =
+          m.inputModalities?.includes('image') ||
+          m.id.toLowerCase().includes('vision') ||
+          m.id.toLowerCase().includes('llava') ||
+          m.id.toLowerCase().includes('4o') ||
+          m.id.toLowerCase().includes('gemini') ||
+          m.id.toLowerCase().includes('claude');
+
+        options.push({
+          value: key,
+          label: m.name || bareId,
+          description: `By ${pName}`,
+          metadata: hasVision ? 'Vision' : '',
+          keywords: `${m.name} ${m.id} ${m.providerId} ${pName}`,
+          raw: { providerId: m.providerId, model: bareId, providerName: pName, hasVision },
+        });
+      }
+    }
+
+    return options;
+  }, [enabledModels, effectiveProviders]);
+
+  const activeSelectedOption = useMemo(() => {
+    return modelOptions.find((o) => o.value === selectedKey);
+  }, [modelOptions, selectedKey]);
 
   const [showToken, setShowToken] = useState<boolean>(false);
   const [testText, setTestText] = useState<string>('Hello from SuperAgent! 🚀');
@@ -50,15 +126,21 @@ export const TelegramSettings: React.FC = () => {
     botToken: string;
     chatId: string;
     twoWayEnabled: boolean;
+    autoStart: boolean;
     debounceSeconds: number;
     allowedChatIds: string[];
+    model: string;
+    provider: string;
   } | null>(null);
 
   const isDirty = savedSnapshot !== null &&
     (botToken.trim() !== savedSnapshot.botToken ||
      chatId.trim() !== savedSnapshot.chatId ||
      twoWayEnabled !== savedSnapshot.twoWayEnabled ||
+     autoStart !== savedSnapshot.autoStart ||
      debounceSeconds !== savedSnapshot.debounceSeconds ||
+     selectedModel !== (savedSnapshot.model || '') ||
+     selectedProvider !== (savedSnapshot.provider || '') ||
      JSON.stringify(allowedChatIds) !== JSON.stringify(savedSnapshot.allowedChatIds));
 
   const [savedOk, setSavedOk] = useState<boolean>(false);
@@ -86,22 +168,50 @@ export const TelegramSettings: React.FC = () => {
         const token = config?.botToken || config?.bot_token || '';
         const chat = config?.chatId || config?.chat_id || '';
         const twoWay = config?.twoWayEnabled ?? config?.two_way_enabled ?? false;
+        const autoStartVal = config?.autoStart ?? config?.auto_start ?? Boolean(twoWay);
         const debounce = config?.debounceSeconds ?? config?.debounce_seconds ?? 2.5;
         const allowed = (config?.allowedChatIds || config?.allowed_chat_ids || []) as string[];
+        const savedMod = config?.model || config?.modelId || config?.model_id || '';
+        const savedProv = config?.provider || config?.providerId || config?.provider_id || '';
 
         setBotToken(token);
         setChatId(chat);
         setTwoWayEnabled(Boolean(twoWay));
+        setAutoStart(Boolean(autoStartVal));
         setDebounceSeconds(Number(debounce) || 2.5);
         setAllowedChatIds(Array.isArray(allowed) ? allowed : []);
+        setSelectedModel(savedMod);
+        setSelectedProvider(savedProv);
+
+        if (!savedMod || savedMod === 'auto') {
+          setSelectedKey('auto');
+        } else if (savedProv) {
+          setSelectedKey(`${savedProv}::${savedMod}`);
+        } else {
+          setSelectedKey(savedMod);
+        }
 
         setSavedSnapshot({
           botToken: token,
           chatId: chat,
           twoWayEnabled: Boolean(twoWay),
+          autoStart: Boolean(autoStartVal),
           debounceSeconds: Number(debounce) || 2.5,
           allowedChatIds: Array.isArray(allowed) ? allowed : [],
+          model: savedMod,
+          provider: savedProv,
         });
+
+        // Load fallback providers and models from settings-read
+        try {
+          const settings = await ipc.invoke('settings-read');
+          if (Array.isArray(settings?.providers)) {
+            setFallbackProviders(settings.providers);
+          }
+          if (Array.isArray(settings?.models)) {
+            setFallbackModels(settings.models);
+          }
+        } catch {}
 
         if (token) {
           setVerifying(true);
@@ -139,25 +249,86 @@ export const TelegramSettings: React.FC = () => {
     token: string,
     chat: string,
     twoWay: boolean,
+    autoStartVal: boolean,
     debounce: number,
-    allowed: string[]
+    allowed: string[],
+    mod?: string,
+    prov?: string
   ) => {
+    const finalMod = mod !== undefined ? mod : selectedModel;
+    const finalProv = prov !== undefined ? prov : selectedProvider;
+
     await ipc!.invoke('telegram-config-save', {
       botToken: token,
       chatId: chat,
       twoWayEnabled: twoWay,
+      autoStart: autoStartVal,
       debounceSeconds: debounce,
       allowedChatIds: allowed,
+      model: finalMod,
+      provider: finalProv,
       enabled: true,
     });
     setSavedSnapshot({
       botToken: token,
       chatId: chat,
       twoWayEnabled: twoWay,
+      autoStart: autoStartVal,
       debounceSeconds: debounce,
       allowedChatIds: allowed,
+      model: finalMod,
+      provider: finalProv,
     });
     await refreshBotStatus();
+  };
+
+  const handleModelChange = async (val: string) => {
+    setSelectedKey(val);
+    let prov = '';
+    let mod = '';
+    if (val === 'auto') {
+      prov = '';
+      mod = 'auto';
+    } else {
+      const matched = modelOptions.find((o) => o.value === val);
+      if (matched?.raw) {
+        prov = (matched.raw as any).providerId || '';
+        mod = (matched.raw as any).model || '';
+      } else if (val.includes('::')) {
+        const [p, m] = val.split('::');
+        prov = p;
+        mod = m;
+      } else {
+        mod = val;
+      }
+    }
+    setSelectedProvider(prov);
+    setSelectedModel(mod);
+    setIsModelSaved(true);
+    setTimeout(() => setIsModelSaved(false), 2500);
+
+    if (ipc) {
+      try {
+        await persistConfig(
+          botToken.trim(),
+          chatId.trim(),
+          twoWayEnabled,
+          autoStart,
+          debounceSeconds,
+          allowedChatIds,
+          mod,
+          prov
+        );
+        setStatus({
+          type: 'success',
+          message: `Telegram AI model updated to ${mod === 'auto' ? 'Automatic (Workspace Default)' : (mod || 'selected model')}.`,
+        });
+        setTimeout(() => setStatus(null), 3000);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setStatus({ type: 'error', message: `Failed to update Telegram model: ${msg}` });
+      }
+    }
   };
 
   const handleSave = async (e?: React.FormEvent) => {
@@ -168,7 +339,7 @@ export const TelegramSettings: React.FC = () => {
     try {
       const trimmedToken = botToken.trim();
       const trimmedChat = chatId.trim();
-      await persistConfig(trimmedToken, trimmedChat, twoWayEnabled, debounceSeconds, allowedChatIds);
+      await persistConfig(trimmedToken, trimmedChat, twoWayEnabled, autoStart, debounceSeconds, allowedChatIds);
 
       if (trimmedToken) {
         try {
@@ -211,7 +382,7 @@ export const TelegramSettings: React.FC = () => {
         sendTestMessage: true,
       });
       if (res?.success) {
-        await persistConfig(botToken.trim(), chatId.trim(), twoWayEnabled, debounceSeconds, allowedChatIds);
+        await persistConfig(botToken.trim(), chatId.trim(), twoWayEnabled, autoStart, debounceSeconds, allowedChatIds);
         setSavedOk(true);
         setConnInfo({ botName: res.botName, username: res.username, botId: res.botId });
         setStatus({
@@ -237,10 +408,10 @@ export const TelegramSettings: React.FC = () => {
       if (isRunning) {
         await ipc.invoke('telegram-bot-stop');
         setTwoWayEnabled(false);
-        await persistConfig(botToken.trim(), chatId.trim(), false, debounceSeconds, allowedChatIds);
+        await persistConfig(botToken.trim(), chatId.trim(), false, autoStart, debounceSeconds, allowedChatIds);
       } else {
         setTwoWayEnabled(true);
-        await persistConfig(botToken.trim(), chatId.trim(), true, debounceSeconds, allowedChatIds);
+        await persistConfig(botToken.trim(), chatId.trim(), true, autoStart, debounceSeconds, allowedChatIds);
         const res = await ipc.invoke('telegram-bot-start');
         if (res?.error) {
           setStatus({ type: 'error', message: `Bot start error: ${res.error}` });
@@ -252,6 +423,30 @@ export const TelegramSettings: React.FC = () => {
       setStatus({ type: 'error', message: `Bot toggle error: ${msg}` });
     } finally {
       setBotToggling(false);
+    }
+  };
+
+  const handleToggleAutoStart = async (newVal: boolean) => {
+    setAutoStart(newVal);
+    if (!ipc) return;
+    try {
+      await persistConfig(
+        botToken.trim(),
+        chatId.trim(),
+        twoWayEnabled,
+        newVal,
+        debounceSeconds,
+        allowedChatIds
+      );
+      setStatus({
+        type: 'success',
+        message: newVal
+          ? 'Auto-start enabled: Bot listener will automatically start when the backend boots.'
+          : 'Auto-start disabled: Bot will only run when manually started.',
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setStatus({ type: 'error', message: `Failed to update auto-start setting: ${msg}` });
     }
   };
 
@@ -432,6 +627,82 @@ export const TelegramSettings: React.FC = () => {
             )}
             <span>{isBotActive ? 'Stop Bot Listener' : 'Start Bot Listener'}</span>
           </button>
+        </div>
+
+        {/* ── Auto-Start Bot on Daemon Startup ── */}
+        <div className="flex items-center justify-between gap-4 pb-4 border-b border-brand-border/40">
+          <div className="text-left">
+            <label className="text-xs font-semibold uppercase tracking-wider text-brand-textMuted flex items-center gap-1.5">
+              <Zap size={13} className="text-amber-400" />
+              Auto-Start Bot
+            </label>
+            <p className="mt-1 text-[11px] text-brand-textMuted leading-relaxed">
+              Automatically start the Telegram bot listener in the background whenever the backend daemon boots up.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autoStart}
+            onClick={() => handleToggleAutoStart(!autoStart)}
+            className={`relative h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors duration-200 focus:outline-hidden ${
+              autoStart ? 'bg-sky-500' : 'bg-brand-border/80'
+            }`}
+            title={autoStart ? 'Auto-start enabled' : 'Auto-start disabled'}
+          >
+            <span
+              className={`block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                autoStart ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* ── AI Model Selection for Telegram ── */}
+        <div className="space-y-3 pb-4 border-b border-brand-border/40">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold uppercase tracking-wider text-brand-textMuted flex items-center gap-1.5">
+              <Bot size={13} className="text-sky-400" />
+              Telegram AI Model
+            </label>
+            {isModelSaved && (
+              <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 animate-fade-in">
+                <CheckCircle2 size={12} />
+                <span>Saved</span>
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-brand-textMuted leading-relaxed">
+            Select which AI model handles Telegram conversations, answers queries, analyzes media, and runs tools.
+          </p>
+
+          <SearchableSelect
+            options={modelOptions}
+            value={selectedKey}
+            onChange={handleModelChange}
+            placeholder="Search your available AI models..."
+          />
+
+          <div className="rounded-xl bg-brand-bg/60 border border-brand-border/50 p-3 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+              <span className="text-brand-textMuted shrink-0">Active Telegram AI:</span>
+              <strong className="text-brand-textMain font-medium truncate">
+                {activeSelectedOption?.label || selectedModel || 'Automatic (Workspace Default)'}
+              </strong>
+              {activeSelectedOption?.description && (
+                <span className="text-brand-textMuted/80 text-[11px] hidden sm:inline truncate">
+                  ({activeSelectedOption.description})
+                </span>
+              )}
+            </div>
+
+            {activeSelectedOption?.metadata && (
+              <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/25 text-[10px] font-semibold shrink-0">
+                {activeSelectedOption.metadata}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* ── Human Burst Debouncing Configuration ── */}

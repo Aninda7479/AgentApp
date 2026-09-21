@@ -54,13 +54,14 @@ function renderAttachmentIcon(mediaType: string) {
 }
 
 export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onUndoStep, onEditStep }) => {
+  const normalizedContent = TrajectoryService.normalizeContent(step.content);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [editContent, setEditContent] = useState(step.content);
+  const [editContent, setEditContent] = useState(normalizedContent);
 
   const handleCopy = async () => {
-    const ok = await copyToClipboard(step.content);
+    const ok = await copyToClipboard(normalizedContent);
     if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
@@ -116,7 +117,7 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
                 <button
                   onClick={() => {
                     setIsEditing(false);
-                    setEditContent(step.content);
+                    setEditContent(normalizedContent);
                   }}
                   className="px-2.5 py-1 text-xs font-semibold rounded bg-[color:var(--brand-card)] hover:bg-[color:var(--brand-hover)] text-[color:var(--brand-text-main)] border border-[color:var(--brand-border)] transition-colors"
                 >
@@ -125,7 +126,7 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
                 <button
                   onClick={() => {
                     setIsEditing(false);
-                    if (onEditStep && editContent.trim() && editContent !== step.content) {
+                    if (onEditStep && editContent.trim() && editContent !== normalizedContent) {
                       onEditStep(step.id, editContent.trim());
                     }
                   }}
@@ -139,19 +140,14 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
             <div className="bg-[color:var(--brand-card)]/80 text-[color:var(--brand-text-main)] rounded-xl px-4 py-2.5 shadow-sm backdrop-blur-sm border border-[color:var(--brand-border)]/70 w-full space-y-2 text-right">
               {/* Attachments Pills */}
               {attachments.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pb-1 border-b border-[color:var(--brand-border)] justify-end">
+                <div className="flex flex-wrap gap-1.5 justify-end mb-2">
                   {attachments.map((att, idx) => (
                     <div
                       key={idx}
-                      className="flex items-center gap-1 px-2 py-0.5 bg-[color:var(--brand-inner-bg)] border border-[color:var(--brand-border)] rounded-md text-xs text-[color:var(--brand-text-main)]"
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[color:var(--brand-card)] border border-[color:var(--brand-border)] text-xs text-[color:var(--brand-text-muted)] shadow-xs"
                     >
-                      {att.mediaType === 'image' && att.path && (att.path.startsWith('data:image/') || att.path.startsWith('blob:')) ? (
-                        <img
-                          src={att.path}
-                          alt={att.name}
-                          className="w-3.5 h-3.5 object-cover rounded shrink-0"
-                          onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
-                        />
+                      {att.mediaType === 'image' && att.dataUrl ? (
+                        <img src={att.dataUrl} alt={att.name} className="w-4 h-4 object-cover rounded" />
                       ) : (
                         renderAttachmentIcon(att.mediaType)
                       )}
@@ -161,7 +157,7 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
                 </div>
               )}
 
-              <div className="text-sm whitespace-pre-wrap break-words text-right">{step.content}</div>
+              <div className="text-sm whitespace-pre-wrap break-words text-right">{normalizedContent}</div>
 
               <div className="text-xs text-[color:var(--brand-text-muted)] mt-1 font-mono flex items-center justify-end gap-2 flex-wrap">
                 {modelName && (
@@ -188,7 +184,7 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
   }
 
   if (step.type === 'assistant') {
-    const { thinking, mainContent } = TrajectoryService.parseThinkingContent(step.content);
+    const { thinking, mainContent } = TrajectoryService.parseThinkingContent(normalizedContent);
     return (
       <div className="flex flex-col gap-1 my-3 px-4 group">
         {thinking && (
@@ -209,7 +205,7 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
           </div>
         )}
         <div className="text-sm text-[color:var(--brand-text-main)] leading-relaxed whitespace-pre-wrap break-words font-sans">
-          {mainContent || step.content}
+          {mainContent || normalizedContent}
         </div>
         <div className="flex items-center justify-between mt-1 text-xs text-[color:var(--brand-text-muted)] font-mono">
           <div className="flex items-center gap-2">
@@ -298,9 +294,9 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
                   </pre>
                 </div>
               )}
-              {step.content && (
+              {normalizedContent && (
                 <div className="overflow-x-auto whitespace-pre-wrap max-h-60 text-[11px] bg-[color:var(--brand-card)] p-2 rounded text-[color:var(--brand-text-main)]">
-                  {TrajectoryUtils.stripAnsi(step.content)}
+                  {TrajectoryUtils.stripAnsi(normalizedContent)}
                 </div>
               )}
             </div>
@@ -326,7 +322,7 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
                 </span>
               )}
             </div>
-            <div className="text-slate-400 text-[11px]">{step.content}</div>
+            <div className="text-slate-400 text-[11px]">{normalizedContent}</div>
           </div>
         </div>
       </div>
@@ -352,7 +348,7 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
               {isFinish ? 'Finished' : 'Running'}
             </span>
           </div>
-          <div className="text-slate-300 whitespace-pre-wrap">{step.content}</div>
+          <div className="text-slate-300 whitespace-pre-wrap">{normalizedContent}</div>
         </div>
       </div>
     );
@@ -364,7 +360,7 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
         <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300">
           <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
           <span className="font-bold">Pipeline Progress:</span>
-          <span>{step.content}</span>
+          <span>{normalizedContent}</span>
         </div>
       </div>
     );
@@ -392,7 +388,7 @@ export const StepRenderer: React.FC<StepRendererProps> = ({ step, isWorking, onU
           </button>
           {expanded && (
             <div className="px-3 pb-3 pt-1 text-xs font-mono text-[color:var(--brand-text-muted)] whitespace-pre-wrap break-words [overflow-wrap:anywhere] border-t border-[color:var(--brand-border)]/30 max-h-60 overflow-y-auto scrollbar-thin">
-              {step.content}
+              {normalizedContent}
             </div>
           )}
         </div>

@@ -14,6 +14,9 @@ describe('ChatTitleService', () => {
       expect(ChatTitleService.isPlaceholderTitle('New chat in MyProject')).toBe(true);
       expect(ChatTitleService.isPlaceholderTitle('Agent 1')).toBe(true);
       expect(ChatTitleService.isPlaceholderTitle('Chat 42')).toBe(true);
+      expect(ChatTitleService.isPlaceholderTitle('Telegram Chat 5084960883')).toBe(true);
+      expect(ChatTitleService.isPlaceholderTitle('Telegram Chat')).toBe(true);
+      expect(ChatTitleService.isPlaceholderTitle('Telegram Conversation')).toBe(true);
       expect(ChatTitleService.isPlaceholderTitle('')).toBe(true);
       expect(ChatTitleService.isPlaceholderTitle(null)).toBe(true);
     });
@@ -22,6 +25,21 @@ describe('ChatTitleService', () => {
       expect(ChatTitleService.isPlaceholderTitle('Greeting')).toBe(false);
       expect(ChatTitleService.isPlaceholderTitle('Rust Axum REST API')).toBe(false);
       expect(ChatTitleService.isPlaceholderTitle('Fix Python Bug')).toBe(false);
+      expect(ChatTitleService.isPlaceholderTitle('Telegram Bot Integration')).toBe(false);
+    });
+  });
+
+  describe('sanitizeTitle', () => {
+    it('sanitizes leaked numerical Telegram IDs from titles', () => {
+      expect(ChatTitleService.sanitizeTitle('Telegram Chat 5084960883')).toBe('Telegram Conversation');
+      expect(ChatTitleService.sanitizeTitle('Telegram Chat 123456789')).toBe('Telegram Conversation');
+      expect(ChatTitleService.sanitizeTitle('Telegram Chat')).toBe('Telegram Conversation');
+      expect(ChatTitleService.sanitizeTitle('User 5084960883')).toBe('Telegram Conversation');
+    });
+
+    it('preserves user-defined or topic-based titles', () => {
+      expect(ChatTitleService.sanitizeTitle('Download YouTube Short')).toBe('Download YouTube Short');
+      expect(ChatTitleService.sanitizeTitle('Rust Development')).toBe('Rust Development');
     });
   });
 

@@ -239,5 +239,47 @@ describe('WorkspaceRightSidebar Component', () => {
     expect(html).toContain('bg-brand-inner-bg');
     expect(html).not.toContain('bg-brand-sidebar/95');
   });
+
+  it('safely handles step.content when it is an array of ContentBlocks or an object without crashing (regression test for step.content.match error)', () => {
+    const stepsWithArrayContent = [
+      {
+        id: 'step-user-arr',
+        type: 'user',
+        // ContentBlock array from ChatMessage deserialization
+        content: [
+          { type: 'text', text: 'Wrote main.rs file to workspace' },
+        ],
+        timestamp: '2026-09-21T06:35:00.000Z',
+      },
+      {
+        id: 'step-asst-arr',
+        type: 'assistant',
+        content: [
+          { type: 'text', text: 'Created src/index.ts with new component' },
+        ],
+        timestamp: '2026-09-21T06:35:05.000Z',
+      },
+      {
+        id: 'step-obj-content',
+        type: 'tool_call',
+        content: { text: 'Edited config.json' },
+        timestamp: '2026-09-21T06:35:10.000Z',
+      },
+    ] as unknown as TrajectoryStep[];
+
+    expect(() => {
+      const html = renderToStaticMarkup(
+        <WorkspaceRightSidebar
+          steps={stepsWithArrayContent}
+          activeChatId="chat-1"
+          isGenerating={false}
+          initialTab="overview"
+        />
+      );
+      expect(html).toContain('main.rs');
+      expect(html).toContain('index.ts');
+      expect(html).toContain('config.json');
+    }).not.toThrow();
+  });
 });
 

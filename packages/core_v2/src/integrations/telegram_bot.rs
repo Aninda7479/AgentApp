@@ -10,7 +10,9 @@ use tokio::sync::{Notify, RwLock};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
+use crate::automation::{BrowserNavigateTool, BrowserScreenshotTool, WebSearchTool};
 use crate::integrations::telegram::{TelegramClient, TelegramMessage, TelegramSendOptions};
+use crate::media::GeneratePdfTool;
 use crate::orchestrator::AgentEngine;
 use crate::server::ipc::voice::transcribe_audio_bytes;
 use crate::server::routes::chat::resolve_active_workspace_model;
@@ -23,7 +25,7 @@ use crate::tools::builtin::{
     RunCommandTool, SkillTool, SleepTimerTool, TelegramTool, TodoTool, WriteFileTool,
 };
 use crate::tools::ToolRegistry;
-use crate::types::{ChatMessage, ModelConfig, ProviderType};
+use crate::types::{ChatMessage, ContentBlock, ModelConfig, ProviderType, Role};
 
 // ─── Status & Configuration Models ───────────────────────────────────────────
 
@@ -45,6 +47,8 @@ pub struct TelegramBotStatus {
     pub processed_updates: u64,
     pub active_chats_count: usize,
     pub debounce_seconds: f32,
+    #[serde(default)]
+    pub auto_start: bool,
 }
 
 // ─── Message Burst Debouncing Models ─────────────────────────────────────────
@@ -103,15 +107,30 @@ impl TelegramBotManager {
         }
     }
 
-    /// Checks settings and starts the bot worker if twoWayEnabled is true and botToken is configured.
-    pub async fn autostart_if_enabled(self: &Arc<Self>) {
+    /// Evaluates whether the bot should auto-start on daemon boot based on stored settings.
+    pub fn is_autostart_enabled(&self) -> bool {
         let raw = self.settings_store.load_raw().unwrap_or_default();
         let tg_obj = raw.get("telegram");
 
-        let enabled = tg_obj
-            .and_then(|t| t.get("twoWayEnabled").or_else(|| t.get("two_way_enabled")))
+        tg_obj
+            .and_then(|t| t.get("autoStart").or_else(|| t.get("auto_start")))
             .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+            .unwrap_or_else(|| {
+                // Backwards-compatibility fallback: if autoStart hasn't been configured yet,
+                // fallback to twoWayEnabled.
+                tg_obj
+                    .and_then(|t| t.get("twoWayEnabled").or_else(|| t.get("two_way_enabled")))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+            })
+    }
+
+    /// Checks settings and starts the bot worker if autoStart is true and botToken is configured.
+    pub async fn autostart_if_enabled(self: &Arc<Self>) {
+        let auto_start = self.is_autostart_enabled();
+
+        let raw = self.settings_store.load_raw().unwrap_or_default();
+        let tg_obj = raw.get("telegram");
 
         let token = tg_obj
             .and_then(|t| t.get("botToken").or_else(|| t.get("bot_token")))
@@ -120,11 +139,26 @@ impl TelegramBotManager {
             .or_else(|| std::env::var("TELEGRAM_BOT_TOKEN").ok())
             .unwrap_or_default();
 
-        if enabled && !token.is_empty() {
-            info!("🤖 Telegram 2-Way Bot is enabled. Launching polling engine...");
-            if let Err(e) = self.start().await {
-                error!("Failed to autostart Telegram bot: {}", e);
+        if auto_start && !token.is_empty() {
+            info!("🤖 Telegram 2-Way Bot auto-start is enabled. Launching polling engine...");
+            let mut attempts = 0;
+            while attempts < 3 {
+                attempts += 1;
+                match self.start().await {
+                    Ok(_) => break,
+                    Err(e) => {
+                        error!(
+                            "Attempt {}/3 to autostart Telegram bot failed: {}",
+                            attempts, e
+                        );
+                        if attempts < 3 {
+                            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                        }
+                    }
+                }
             }
+        } else if !auto_start {
+            info!("🤖 Telegram Bot auto-start is disabled in settings. Skipping launch on backend boot.");
         }
     }
 
@@ -231,6 +265,7 @@ impl TelegramBotManager {
             processed_updates: count,
             active_chats_count: active_chats,
             debounce_seconds: debounce_secs,
+            auto_start: self.is_autostart_enabled(),
         }
     }
 
@@ -310,7 +345,7 @@ impl TelegramBotManager {
                         .to_string()
                 }
             })
-            .unwrap_or_else(|| format!("User {}", user_id));
+            .unwrap_or_else(|| "Telegram User".to_string());
 
         // 1. Authorization Guard
         let is_authorized = self.is_chat_authorized(chat_id, user_id).await;
@@ -355,10 +390,10 @@ impl TelegramBotManager {
             } else if trimmed == "/status" {
                 let raw_settings = self.settings_store.load_raw().unwrap_or_default();
                 let (_, model_id, _, _) =
-                    resolve_active_workspace_model(&raw_settings, &self.settings_store);
+                    resolve_telegram_model(&raw_settings, &self.settings_store);
                 let status_msg = format!(
-                    "⚡ *SuperAgent Status*\n• Engine: Native Rust Core v2\n• Active Model: `{}`\n• Chat ID: `{}`\n• State: Connected & Ready",
-                    model_id, chat_id
+                    "⚡ *SuperAgent Status*\n• Engine: Native Rust Core v2\n• Active Model: `{}`\n• State: Connected & Ready",
+                    model_id
                 );
                 let _ = self
                     .client
@@ -569,7 +604,7 @@ impl TelegramBotManager {
         self: Arc<Self>,
         chat_id: i64,
         _user_id: i64,
-        _user_name: String,
+        user_name: String,
         messages: Vec<TelegramMessage>,
         bot_token: String,
     ) {
@@ -699,11 +734,7 @@ impl TelegramBotManager {
                         if let Ok(bytes) = self.client.download_file(&bot_token, fpath).await {
                             let local_path = media_dir.join(&filename);
                             if tokio::fs::write(&local_path, &bytes).await.is_ok() {
-                                let path_str = local_path.to_string_lossy().to_string();
-                                turn_texts.push(format!(
-                                    "[Attached File: {} (saved at {})]",
-                                    filename, path_str
-                                ));
+                                turn_texts.push(format!("[Attached File: {}]", filename));
                             }
                         }
                     }
@@ -759,10 +790,10 @@ impl TelegramBotManager {
             Vec::new()
         };
 
-        // 4. Resolve active workspace model & provider
+        // 4. Resolve Telegram model & provider
         let raw_settings = self.settings_store.load_raw().unwrap_or_default();
         let (prov_type, model_id, api_key, base_url) =
-            resolve_active_workspace_model(&raw_settings, &self.settings_store);
+            resolve_telegram_model(&raw_settings, &self.settings_store);
 
         let mut model_config = ModelConfig::new(prov_type, model_id.clone());
         model_config.api_key = api_key.or_else(|| match model_config.provider {
@@ -771,6 +802,7 @@ impl TelegramBotManager {
             ProviderType::Gemini => std::env::var("GEMINI_API_KEY").ok(),
             ProviderType::Groq => std::env::var("GROQ_API_KEY").ok(),
             ProviderType::DeepSeek => std::env::var("DEEPSEEK_API_KEY").ok(),
+            ProviderType::OpenRouter => std::env::var("OPENROUTER_API_KEY").ok(),
             _ => None,
         });
         model_config.base_url = base_url;
@@ -793,9 +825,14 @@ impl TelegramBotManager {
         tool_registry.register(GlobTool::new(effective_workspace.clone()));
         tool_registry.register(RunCommandTool::new(effective_workspace.clone()));
         tool_registry.register(GrepSearchTool::new(effective_workspace.clone()));
-        tool_registry.register(TelegramTool::with_workspace(
+        tool_registry.register(WebSearchTool::new());
+        tool_registry.register(BrowserNavigateTool::new());
+        tool_registry.register(BrowserScreenshotTool::new(effective_workspace.clone()));
+        tool_registry.register(GeneratePdfTool::new(effective_workspace.clone()));
+        tool_registry.register(TelegramTool::with_chat_id(
             self.settings_store.clone(),
             effective_workspace.clone(),
+            chat_id.to_string(),
         ));
 
         let tools_summary: Vec<(String, String)> = tool_registry
@@ -817,7 +854,17 @@ impl TelegramBotManager {
             .collect();
         tool_registry.register(GetAvailableToolsTool::new(tools_summary));
 
-        let system_prompt = "You are SuperAgent, speaking with your user via Telegram. Be conversational, concise, insightful, and practical. Format your answers using clean Telegram-compatible Markdown or clear plain text. When writing code, use markdown code blocks.".to_string();
+        let system_prompt = format!(
+            "You are SuperAgent, an intelligent and helpful AI assistant interacting directly with the user via Telegram.\n\
+            - Be conversational, insightful, friendly, and practical.\n\
+            - When the user asks you to send or download media (such as a YouTube video/short, song, audio note, image, or document):\n\
+              1. Download or generate the media file into your working directory (e.g. using yt-dlp, curl, ffmpeg, or python via run_command).\n\
+              2. Deliver the file directly to the user using the `telegram` tool with `file_path`.\n\
+              3. Send a friendly message explaining what was done.\n\
+            - If the user sends you images, documents, or voice recordings, analyze them thoroughly.\n\
+            - When writing code, use markdown code blocks with language specifiers.\n\
+            - Format your replies using clean Telegram Markdown or clear plain text."
+        );
 
         let engine = AgentEngine::new(Arc::new(tool_registry));
 
@@ -860,33 +907,47 @@ impl TelegramBotManager {
 
         let mut assistant_text = String::new();
         let mut new_messages_collected = Vec::new();
+        let mut stream_error_msg: Option<String> = None;
 
         match run_res {
             Ok((mut event_rx, mut history_rx)) => {
                 while let Some(event) = event_rx.recv().await {
-                    if let crate::types::AgentEvent::Token { text } = event {
-                        assistant_text.push_str(&text);
-                        let broadcast_msg = serde_json::json!({
-                            "channel": "agent-event",
-                            "data": {
-                                "sessionId": session_id,
-                                "type": "token",
-                                "content": text
-                            }
-                        });
-                        let _ = self.ws_broadcast_tx.send(broadcast_msg.to_string());
+                    match event {
+                        crate::types::AgentEvent::Token { text } => {
+                            assistant_text.push_str(&text);
+                            let broadcast_msg = serde_json::json!({
+                                "channel": "agent-event",
+                                "data": {
+                                    "sessionId": session_id,
+                                    "type": "token",
+                                    "content": text
+                                }
+                            });
+                            let _ = self.ws_broadcast_tx.send(broadcast_msg.to_string());
+                        }
+                        crate::types::AgentEvent::Error { message } => {
+                            warn!(
+                                "Agent stream error for Telegram chat {}: {}",
+                                chat_id, message
+                            );
+                            stream_error_msg = Some(message);
+                        }
+                        crate::types::AgentEvent::ToolCall { .. } => {
+                            let _ = self
+                                .client
+                                .send_chat_action(&bot_token, &chat_id.to_string(), "typing")
+                                .await;
+                        }
+                        _ => {}
                     }
                 }
-                if let Ok(new_msgs) = history_rx.try_recv() {
+                if let Some(new_msgs) = history_rx.recv().await {
                     new_messages_collected = new_msgs;
                 }
             }
             Err(err) => {
                 error!("Agent loop error for Telegram chat {}: {}", chat_id, err);
-                assistant_text = format!(
-                    "⚠️ I ran into an error while processing your request: {}",
-                    err
-                );
+                stream_error_msg = Some(err.to_string());
             }
         }
 
@@ -899,20 +960,86 @@ impl TelegramBotManager {
         // Stop the typing heartbeat
         let _ = heartbeat_stop_tx.send(());
 
+        // Extract assistant response if not streamed as individual tokens
+        if assistant_text.trim().is_empty() {
+            for msg in new_messages_collected.iter().rev() {
+                if msg.role == Role::Assistant {
+                    let txt = msg.text_content();
+                    if !txt.trim().is_empty() {
+                        assistant_text = txt;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // If still empty, check if tool calls produced output or error
+        if assistant_text.trim().is_empty() {
+            let mut tool_results = Vec::new();
+            for msg in &new_messages_collected {
+                for block in &msg.content {
+                    if let ContentBlock::ToolResult {
+                        content, is_error, ..
+                    } = block
+                    {
+                        if !content.trim().is_empty() {
+                            tool_results.push((content.clone(), *is_error));
+                        }
+                    }
+                }
+            }
+            if let Some((last_result, is_err)) = tool_results.last() {
+                if *is_err {
+                    assistant_text =
+                        format!("⚠️ Action resulted in an error:\n```\n{}\n```", last_result);
+                } else {
+                    assistant_text = last_result.clone();
+                }
+            }
+        }
+
+        // If still empty and a stream error was captured, report it
+        if assistant_text.trim().is_empty() {
+            if let Some(err) = stream_error_msg {
+                assistant_text = format!(
+                    "⚠️ I ran into an error while processing your request: {}",
+                    err
+                );
+            }
+        }
+
+        if assistant_text.trim().is_empty() {
+            assistant_text = "I have processed your request.".to_string();
+        }
+
         // 8. Save updated session to ChatStorage
         let mut full_history = initial_history;
         if !new_messages_collected.is_empty() {
             full_history.extend(new_messages_collected);
         } else {
-            full_history.push(ChatMessage::user(prompt));
+            full_history.push(ChatMessage::user(&prompt));
             if !assistant_text.is_empty() {
                 full_history.push(ChatMessage::assistant(assistant_text.clone()));
             }
         }
 
+        let session_title = if let Some(ref sess) = existing_session {
+            let current = sess.title.trim();
+            if !current.is_empty()
+                && !current.starts_with("Telegram Chat")
+                && current != "Telegram Assistant"
+            {
+                sess.title.clone()
+            } else {
+                generate_telegram_chat_title(&prompt, &user_name)
+            }
+        } else {
+            generate_telegram_chat_title(&prompt, &user_name)
+        };
+
         let updated_session = ChatSession {
             id: session_id.clone(),
-            title: format!("Telegram Chat {}", chat_id),
+            title: session_title,
             project: None,
             model: Some(model_id),
             created_at: existing_session
@@ -935,11 +1062,6 @@ impl TelegramBotManager {
             store.put(session_id.clone(), entry);
         }
 
-        // 9. Deliver response to user via Telegram
-        if assistant_text.trim().is_empty() {
-            assistant_text = "Task completed.".to_string();
-        }
-
         // Try Markdown chunked delivery first; fallback to plain text if Telegram parse error occurs
         let chunk_res = self
             .client
@@ -959,5 +1081,356 @@ impl TelegramBotManager {
         }
 
         info!("✔ Successfully replied to Telegram chat {}", chat_id);
+    }
+}
+
+/// Generates a clean, topic-based chat title for Telegram conversations without exposing private user/chat IDs.
+pub fn generate_telegram_chat_title(prompt: &str, user_name: &str) -> String {
+    // If the prompt includes voice note transcription tags, extract the transcribed text
+    let prompt_to_clean = if let Some(idx) = prompt.find("[Voice Message Transcribed]:") {
+        &prompt[idx + "[Voice Message Transcribed]:".len()..]
+    } else {
+        prompt
+    };
+
+    let clean = prompt_to_clean
+        .lines()
+        .map(|l| l.trim())
+        .find(|l| {
+            !l.is_empty()
+                && !l.starts_with('[')
+                && !l.starts_with('#')
+                && !l.starts_with("```")
+        })
+        .unwrap_or("")
+        .trim();
+
+    // Strip leading punctuation, commands, or quote marks
+    let trimmed = clean
+        .trim_matches(|c: char| c == '"' || c == '\'')
+        .trim_start_matches(|c: char| c == '/' || c == '?' || c == '!' || c == '.' || c == ':')
+        .trim();
+
+    if !trimmed.is_empty() {
+        let words: Vec<&str> = trimmed.split_whitespace().collect();
+        if !words.is_empty() {
+            let mut selected = Vec::new();
+            let mut total_len = 0;
+            for word in words {
+                if selected.len() >= 6 || (total_len + word.len() > 36 && selected.len() >= 2) {
+                    break;
+                }
+                total_len += word.len() + 1;
+                selected.push(word);
+            }
+            if !selected.is_empty() {
+                return selected.join(" ");
+            }
+        }
+    }
+
+    if !user_name.trim().is_empty()
+        && user_name != "Telegram User"
+        && !user_name.chars().all(|c| c.is_ascii_digit())
+    {
+        format!("Telegram: {}", user_name.trim())
+    } else {
+        "Telegram Conversation".to_string()
+    }
+}
+
+/// Resolves the LLM provider and model to use for Telegram requests.
+/// Respects user-configured model in Telegram settings first, falling back to the active workspace model.
+pub fn resolve_telegram_model(
+    raw_settings: &serde_json::Value,
+    settings_store: &crate::storage::SettingsStore,
+) -> (ProviderType, String, Option<String>, Option<String>) {
+    let tg_obj = raw_settings.get("telegram");
+
+    if let Some(tg) = tg_obj {
+        let chosen_model = tg
+            .get("model")
+            .or_else(|| tg.get("modelId"))
+            .or_else(|| tg.get("model_id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        let chosen_provider = tg
+            .get("provider")
+            .or_else(|| tg.get("providerId"))
+            .or_else(|| tg.get("provider_id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+
+        if !chosen_model.is_empty() && chosen_model != "auto" {
+            let (prov_hint, m_id) = if chosen_model.contains("::") {
+                let parts: Vec<&str> = chosen_model.split("::").collect();
+                (parts[0], parts[1])
+            } else if !chosen_provider.is_empty() {
+                (chosen_provider, chosen_model)
+            } else {
+                ("", chosen_model)
+            };
+
+            // 1. Look up model in raw_settings["models"]
+            if let Some(models) = raw_settings.get("models").and_then(|m| m.as_array()) {
+                if let Some(matched) = models.iter().find(|m| {
+                    let id = m.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                    let name = m.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                    let pid = m.get("providerId").and_then(|v| v.as_str()).unwrap_or("");
+
+                    if !prov_hint.is_empty() && !pid.eq_ignore_ascii_case(prov_hint) {
+                        return false;
+                    }
+                    id == m_id || name == m_id || id.ends_with(&format!("-{}", m_id))
+                }) {
+                    let pid = matched
+                        .get("providerId")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(prov_hint);
+                    let id = matched.get("id").and_then(|v| v.as_str()).unwrap_or(m_id);
+                    let prefix = format!("{}-", pid);
+                    let clean_id = if id.starts_with(&prefix) {
+                        &id[prefix.len()..]
+                    } else {
+                        id
+                    };
+                    let mut prov_type = match pid.to_lowercase().as_str() {
+                        "gemini" | "google" => ProviderType::Gemini,
+                        "openai" => ProviderType::OpenAI,
+                        "anthropic" | "claude" => ProviderType::Anthropic,
+                        "ollama" => ProviderType::Ollama,
+                        "openrouter" => ProviderType::OpenRouter,
+                        "deepseek" => ProviderType::DeepSeek,
+                        "groq" => ProviderType::Groq,
+                        "opencode" => ProviderType::OpenCode,
+                        _ => ProviderType::Gemini,
+                    };
+                    if crate::providers::opencode::OPENCODE_FREE_MODELS.contains(&clean_id) {
+                        prov_type = ProviderType::OpenCode;
+                    }
+                    let api_key = matched
+                        .get("apiKey")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                        .or_else(|| settings_store.get_api_key(pid).ok().flatten());
+                    let base_url = matched
+                        .get("baseUrl")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    return (prov_type, clean_id.to_string(), api_key, base_url);
+                }
+            }
+
+            // 2. Direct provider type mapping if not in models array
+            let mut prov_type = match prov_hint.to_lowercase().as_str() {
+                "gemini" | "google" => ProviderType::Gemini,
+                "openai" => ProviderType::OpenAI,
+                "anthropic" | "claude" => ProviderType::Anthropic,
+                "ollama" => ProviderType::Ollama,
+                "openrouter" => ProviderType::OpenRouter,
+                "deepseek" => ProviderType::DeepSeek,
+                "groq" => ProviderType::Groq,
+                "opencode" => ProviderType::OpenCode,
+                _ => ProviderType::Gemini,
+            };
+            let clean_id = if !prov_hint.is_empty() && m_id.starts_with(&format!("{}-", prov_hint)) {
+                &m_id[prov_hint.len() + 1..]
+            } else {
+                m_id
+            };
+            if crate::providers::opencode::OPENCODE_FREE_MODELS.contains(&clean_id) {
+                prov_type = ProviderType::OpenCode;
+            }
+            let api_key = settings_store.get_api_key(prov_hint).ok().flatten();
+            return (prov_type, clean_id.to_string(), api_key, None);
+        }
+    }
+
+    // 3. Fallback to active workspace model
+    resolve_active_workspace_model(raw_settings, settings_store)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_bot(tg_val: serde_json::Value) -> (TelegramBotManager, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("test_tg_{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::create_dir_all(&dir);
+        let settings = Arc::new(SettingsStore::with_path(dir.join("settings.json")));
+        let _ = settings.save_raw(&serde_json::json!({
+            "telegram": tg_val
+        }));
+
+        let chat_storage = Arc::new(ChatStorage::with_dir(dir.join("chats")));
+        let (ws_tx, _) = tokio::sync::broadcast::channel(10);
+        let session_store = Arc::new(parking_lot::Mutex::new(lru::LruCache::new(
+            std::num::NonZeroUsize::new(10).unwrap(),
+        )));
+        let active_cancellations = Arc::new(parking_lot::Mutex::new(HashMap::new()));
+
+        let bot = TelegramBotManager::new(
+            settings,
+            chat_storage,
+            ws_tx,
+            session_store,
+            active_cancellations,
+        );
+
+        (bot, dir)
+    }
+
+    #[test]
+    fn test_is_autostart_enabled_explicit_true() {
+        let (bot, dir) = create_test_bot(serde_json::json!({
+            "autoStart": true,
+            "twoWayEnabled": false,
+            "botToken": "123:abc"
+        }));
+
+        assert!(bot.is_autostart_enabled());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_is_autostart_enabled_explicit_false() {
+        let (bot, dir) = create_test_bot(serde_json::json!({
+            "autoStart": false,
+            "twoWayEnabled": true,
+            "botToken": "123:abc"
+        }));
+
+        assert!(!bot.is_autostart_enabled());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_is_autostart_enabled_fallback_two_way() {
+        let (bot, dir) = create_test_bot(serde_json::json!({
+            "twoWayEnabled": true,
+            "botToken": "123:abc"
+        }));
+
+        assert!(bot.is_autostart_enabled());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_is_autostart_enabled_snake_case() {
+        let (bot, dir) = create_test_bot(serde_json::json!({
+            "auto_start": true,
+            "botToken": "123:abc"
+        }));
+
+        assert!(bot.is_autostart_enabled());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_generate_telegram_chat_title_never_contains_user_id() {
+        let title = generate_telegram_chat_title("can you download this youtube short video for me", "5084960883");
+        assert_eq!(title, "can you download this youtube short");
+        assert!(!title.contains("5084960883"));
+
+        let title_voice = generate_telegram_chat_title("[Voice Message Transcribed]: \"please summarize my notes\"", "Aninda");
+        assert_eq!(title_voice, "please summarize my notes");
+
+        let title_empty = generate_telegram_chat_title("", "5084960883");
+        assert_eq!(title_empty, "Telegram Conversation");
+        assert!(!title_empty.contains("5084960883"));
+
+        let title_user = generate_telegram_chat_title("", "Aninda");
+        assert_eq!(title_user, "Telegram: Aninda");
+    }
+
+    #[test]
+    fn test_resolve_telegram_model_explicit() {
+        let dir = std::env::temp_dir().join(format!("test_tg_model_{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::create_dir_all(&dir);
+        let settings = SettingsStore::with_path(dir.join("settings.json"));
+        let _ = settings.set_api_key("gemini", "test-gemini-key");
+
+        let raw = serde_json::json!({
+            "telegram": {
+                "model": "gemini-2.5-flash",
+                "provider": "gemini"
+            },
+            "models": [
+                {
+                    "id": "gemini-gemini-2.5-flash",
+                    "name": "Gemini 2.5 Flash",
+                    "providerId": "gemini",
+                    "enabled": true
+                }
+            ]
+        });
+
+        let (prov, model_id, api_key, _) = resolve_telegram_model(&raw, &settings);
+        assert_eq!(prov, ProviderType::Gemini);
+        assert_eq!(model_id, "gemini-2.5-flash");
+        assert_eq!(api_key, Some("test-gemini-key".to_string()));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_resolve_telegram_model_colon_format() {
+        let dir = std::env::temp_dir().join(format!("test_tg_model2_{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::create_dir_all(&dir);
+        let settings = SettingsStore::with_path(dir.join("settings.json"));
+        let _ = settings.set_api_key("openai", "test-openai-key");
+
+        let raw = serde_json::json!({
+            "telegram": {
+                "model": "openai::gpt-4o"
+            },
+            "models": [
+                {
+                    "id": "openai-gpt-4o",
+                    "name": "GPT-4o",
+                    "providerId": "openai",
+                    "enabled": true
+                }
+            ]
+        });
+
+        let (prov, model_id, api_key, _) = resolve_telegram_model(&raw, &settings);
+        assert_eq!(prov, ProviderType::OpenAI);
+        assert_eq!(model_id, "gpt-4o");
+        assert_eq!(api_key, Some("test-openai-key".to_string()));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_resolve_telegram_model_fallback_to_workspace() {
+        let dir = std::env::temp_dir().join(format!("test_tg_model3_{}", uuid::Uuid::new_v4()));
+        let _ = std::fs::create_dir_all(&dir);
+        let settings = SettingsStore::with_path(dir.join("settings.json"));
+        let _ = settings.set_api_key("anthropic", "test-claude-key");
+
+        let raw = serde_json::json!({
+            "telegram": {
+                "model": "auto"
+            },
+            "lastUsedModel": "claude-3-5-sonnet",
+            "models": [
+                {
+                    "id": "anthropic-claude-3-5-sonnet",
+                    "name": "Claude 3.5 Sonnet",
+                    "providerId": "anthropic",
+                    "enabled": true
+                }
+            ]
+        });
+
+        let (prov, model_id, api_key, _) = resolve_telegram_model(&raw, &settings);
+        assert_eq!(prov, ProviderType::Anthropic);
+        assert_eq!(model_id, "claude-3-5-sonnet");
+        assert_eq!(api_key, Some("test-claude-key".to_string()));
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

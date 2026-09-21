@@ -15,6 +15,7 @@ import type {
 } from './types';
 import { providerStore } from '../stores/providerStore';
 import { chatStore } from '../stores/chatStore';
+import { ChatTitleService } from '../services/ChatTitleService';
 
 /**
  * Residency (LRU) of chat trajectories in RAM. Only the chats the user is
@@ -91,12 +92,16 @@ export class StoreService {
       return acc;
     }, []);
 
-    // Deduplicate chats by ID
+    // Deduplicate chats by ID and sanitize any leaked numerical Telegram IDs
     const rawChats = stored?.chats ?? [];
     const chats = rawChats.reduce<StoredChat[]>((acc, c) => {
       const id = (c.id || '').trim();
       if (id && !acc.some((existing) => (existing.id || '').trim() === id)) {
-        acc.push({ ...c, isRunning: false });
+        acc.push({
+          ...c,
+          title: ChatTitleService.sanitizeTitle(c.title),
+          isRunning: false,
+        });
       }
       return acc;
     }, []);

@@ -15,12 +15,47 @@ export interface ParsedThinkingContent {
  */
 export class TrajectoryService {
   /**
+   * Safely normalizes step content to a string regardless of whether it is a string,
+   * an array of content blocks (from ChatMessage), or an object.
+   */
+  static normalizeContent(content: unknown): string {
+    if (typeof content === 'string') return content;
+    if (!content) return '';
+    if (Array.isArray(content)) {
+      return content
+        .map((c: unknown) => {
+          if (typeof c === 'string') return c;
+          if (c && typeof c === 'object') {
+            const item = c as { text?: unknown; content?: unknown };
+            if (typeof item.text === 'string') return item.text;
+            if (typeof item.content === 'string') return item.content;
+          }
+          return '';
+        })
+        .filter(Boolean)
+        .join('\n');
+    }
+    if (typeof content === 'object') {
+      const obj = content as { text?: unknown; content?: unknown };
+      if (typeof obj.text === 'string') return obj.text;
+      if (typeof obj.content === 'string') return obj.content;
+      try {
+        return JSON.stringify(content);
+      } catch {
+        return '';
+      }
+    }
+    return String(content);
+  }
+
+  /**
    * Separates reasoning/thinking blocks (<think>, <thought>, <reasoning>) from
    * the final assistant response text. Handles completed tags and active streaming
    * unclosed tags.
    */
-  static parseThinkingContent(content: string): ParsedThinkingContent {
-    if (!content) {
+  static parseThinkingContent(content: unknown): ParsedThinkingContent {
+    const raw = typeof content === 'string' ? content : TrajectoryService.normalizeContent(content);
+    if (!raw) {
       return { thinking: null, mainContent: '', isThinkingActive: false };
     }
 
@@ -29,7 +64,7 @@ export class TrajectoryService {
     let isThinkingActive = false;
 
     // 1. Extract all closed thinking blocks
-    let stripped = content.replace(thinkTagRegex, (_match, _tag, inner) => {
+    let stripped = raw.replace(thinkTagRegex, (_match, _tag, inner) => {
       if (inner && inner.trim()) {
         thoughts.push(inner.trim());
       }
@@ -54,8 +89,9 @@ export class TrajectoryService {
   }
 
   /** Removes ANSI color / escape sequences from a raw tool-output string. */
-  static stripAnsi(value: string): string {
-    return value.replace(/ \[[0-9;]*m/g, '');
+  static stripAnsi(value: unknown): string {
+    const raw = typeof value === 'string' ? value : TrajectoryService.normalizeContent(value);
+    return raw.replace(/\x1b\[[0-9;]*m/g, '').replace(/ \[[0-9;]*m/g, '');
   }
 
   /**
