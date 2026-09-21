@@ -1815,6 +1815,54 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_social_media_url_tiktok() {
+        let text = "Watch this TikTok: https://www.tiktok.com/@user/video/7123456789012345678";
+        assert_eq!(
+            extract_social_media_url(text),
+            Some("https://www.tiktok.com/@user/video/7123456789012345678".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_social_media_url_twitter_x() {
+        let text = "Awesome clip: https://x.com/OpenAI/status/1880000000000000000 please download";
+        assert_eq!(
+            extract_social_media_url(text),
+            Some("https://x.com/OpenAI/status/1880000000000000000".to_string())
+        );
+
+        let text2 = "Old link format: https://twitter.com/nasa/status/123456789";
+        assert_eq!(
+            extract_social_media_url(text2),
+            Some("https://twitter.com/nasa/status/123456789".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_social_media_url_youtube_watch() {
+        let text = "Watch: https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+        assert_eq!(
+            extract_social_media_url(text),
+            Some("https://www.youtube.com/watch?v=dQw4w9WgXcQ".to_string())
+        );
+
+        let text2 = "Short format: https://youtu.be/dQw4w9WgXcQ";
+        assert_eq!(
+            extract_social_media_url(text2),
+            Some("https://youtu.be/dQw4w9WgXcQ".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_social_media_url_bracket_sanitization() {
+        let text = "Check (<https://www.instagram.com/reel/DdZJqMrBzK6/>)";
+        assert_eq!(
+            extract_social_media_url(text),
+            Some("https://www.instagram.com/reel/DdZJqMrBzK6/".to_string())
+        );
+    }
+
+    #[test]
     fn test_extract_social_media_url_negative() {
         let text = "Hello SuperAgent! Can you explain how async rust works?";
         assert_eq!(extract_social_media_url(text), None);
@@ -1825,5 +1873,29 @@ mod tests {
         // Since yt-dlp is installed on system, this returns Some
         let bin = find_ytdlp_binary();
         assert!(bin.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_typing_heartbeat_guard_drop_signal() {
+        let (tx, mut rx) = tokio::sync::oneshot::channel::<()>();
+
+        struct TypingHeartbeatGuard {
+            stop_tx: Option<tokio::sync::oneshot::Sender<()>>,
+        }
+        impl Drop for TypingHeartbeatGuard {
+            fn drop(&mut self) {
+                if let Some(tx) = self.stop_tx.take() {
+                    let _ = tx.send(());
+                }
+            }
+        }
+
+        {
+            let _guard = TypingHeartbeatGuard { stop_tx: Some(tx) };
+            assert!(rx.try_recv().is_err());
+        }
+
+        // After scope ends and guard is dropped, signal MUST have been delivered
+        assert!(rx.try_recv().is_ok());
     }
 }
