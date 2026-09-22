@@ -100,7 +100,7 @@ export class StoreService {
         acc.push({
           ...c,
           title: ChatTitleService.sanitizeTitle(c.title),
-          isRunning: false,
+          isRunning: Boolean(c.isRunning),
         });
       }
       return acc;

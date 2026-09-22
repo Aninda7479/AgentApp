@@ -347,7 +347,7 @@ export class AgentOrchestrator {
     }
   }
 
-  private static setupSessionEventListener(chatId: string, startedAt: number): void {
+  public static setupSessionEventListener(chatId: string, startedAt: number): void {
     // Unsubscribe existing listener if any
     const existingUnsub = AgentOrchestrator.eventUnsubscribers.get(chatId);
     if (existingUnsub) existingUnsub();
@@ -531,6 +531,118 @@ export class AgentOrchestrator {
     });
 
     AgentOrchestrator.eventUnsubscribers.set(chatId, unsub);
+  }
+
+  public static async syncRunningSessions(): Promise<void> {
+    try {
+      const runningIdsFromIpc = await IpcBridge.listRunningAgents();
+      const currentChats = chatStore.getState().chats;
+      const runningFromChats = currentChats.filter((c) => c.isRunning).map((c) => c.id);
+
+      const allCandidateIds = Array.from(
+        new Set([...runningIdsFromIpc, ...runningFromChats].map((id) => id.replace(/^session-/, '').trim()))
+      ).filter(Boolean);
+
+      if (allCandidateIds.length === 0) {
+        return;
+      }
+
+      for (const cleanId of allCandidateIds) {
+        const status = await IpcBridge.getAgentStatus(cleanId);
+        const isRunning = status?.isRunning ?? false;
+
+        if (!isRunning) {
+          sessionStore.markIdle(cleanId);
+          chatStore.setChats(
+            chatStore.getState().chats.map((c) =>
+              c.id === cleanId ? { ...c, isRunning: false } : c
+            )
+          );
+          continue;
+        }
+
+        const chat = chatStore.getState().chats.find((c) => c.id === cleanId);
+        const startedAt = chat?.startedAt || status?.lastUpdated || Date.now();
+
+        // 1. Mark running in session store and chat store
+        sessionStore.markRunning(cleanId, startedAt);
+        chatStore.setChats(
+          chatStore.getState().chats.map((c) =>
+            c.id === cleanId ? { ...c, isRunning: true, startedAt } : c
+          )
+        );
+
+        // 2. Ensure historical steps are loaded so user prompt is displayed
+        let steps = chatStore.getSteps(cleanId);
+        if (steps.length === 0) {
+          const diskSteps = await IpcBridge.readChatSteps(cleanId);
+          if (diskSteps && diskSteps.length > 0) {
+            steps = diskSteps;
+            chatStore.setSteps(cleanId, steps);
+          }
+        }
+
+        // 3. Prepare stream buffer and attach event listener
+        const buffer = AgentOrchestrator.getStreamBuffer(cleanId);
+        buffer.setStartedAt(startedAt);
+        buffer.modelName = chat?.model || '';
+        AgentOrchestrator.setupSessionEventListener(cleanId, startedAt);
+
+        // 4. Replay events / restore in-flight tool calls & streaming text
+        if (status?.events && status.events.length > 0) {
+          for (const ev of status.events) {
+            if (ev.type === 'tool_call' && ev.toolName) {
+              const toolCallId = ev.toolCallId;
+              const alreadyExists = chatStore.getSteps(cleanId).some(
+                (s) => s.type === 'tool_call' && (s.id === toolCallId || s.metadata?.toolCallId === toolCallId)
+              );
+              if (!alreadyExists) {
+                const toolStep = StepFactory.toolCallStep(
+                  ev.toolName,
+                  `${ev.toolName}(${JSON.stringify(ev.toolArgs || {})})`,
+                  'running',
+                  toolCallId,
+                  undefined,
+                  buffer.responseSeq,
+                  'sandboxed',
+                  ev.toolArgs,
+                  chat?.model || ''
+                );
+                if (toolCallId) {
+                  toolStep.metadata = { ...toolStep.metadata, toolCallId };
+                }
+                chatStore.updateSteps(cleanId, (prev) => [...prev, toolStep]);
+              }
+            } else if (ev.type === 'tool_result' && ev.toolCallId) {
+              const isError = Boolean(ev.isError);
+              chatStore.updateSteps(cleanId, (prev) => {
+                return prev.map((s) => {
+                  if (s.type === 'tool_call' && (s.id === ev.toolCallId || s.metadata?.toolCallId === ev.toolCallId)) {
+                    return {
+                      ...s,
+                      status: isError ? 'error' : 'success',
+                      metadata: {
+                        ...s.metadata,
+                        result: ev.toolResult || '',
+                      },
+                    };
+                  }
+                  return s;
+                });
+              });
+            }
+          }
+        }
+
+        // 5. If assistant text was already accumulated, flush into assistant step
+        if (status?.fullAssistantText) {
+          buffer.replace(status.fullAssistantText);
+          buffer.flush();
+        }
+      }
+    } catch (err) {
+      console.error('[AgentOrchestrator] syncRunningSessions failed:', err);
+    }
   }
 
   private static async import3DCharacter(toolResult: string): Promise<void> {

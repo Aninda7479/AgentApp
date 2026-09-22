@@ -12,8 +12,8 @@ use crate::server::state::{AppState, SessionStateEntry};
 use crate::tools::builtin::{
     CreateArtifactAppTool, EditFileTool, GetAvailableToolsTool, GlobTool, GrepSearchTool,
     ListArtifactsTool, ListDirTool, PeekTaskTool, PlanTool, QuestionTool, ReadArtifactTool,
-    ReadFileTool, RunCommandTool, RunSubagentTool, SkillTool, SleepTimerTool, TaskManager,
-    TelegramTool, TodoTool, WriteFileTool,
+    ReadFileTool, RecallMemoryTool, RunCommandTool, RunSubagentTool, SkillTool, SleepTimerTool,
+    TaskManager, TelegramTool, TodoTool, WriteFileTool,
 };
 use crate::tools::ToolRegistry;
 use crate::types::{ModelConfig, ProviderType};
@@ -276,7 +276,9 @@ pub async fn handle_agent_channel(
             let (cancel_tx, mut cancel_rx) = tokio::sync::broadcast::channel::<()>(2);
             {
                 let mut cancellations = state.active_cancellations.lock();
-                cancellations.insert(session_id.clone(), cancel_tx);
+                cancellations.insert(session_id.clone(), cancel_tx.clone());
+                cancellations.insert(clean_chat_id.clone(), cancel_tx.clone());
+                cancellations.insert(format!("session-{}", clean_chat_id), cancel_tx);
             }
 
             let state_clone = state.clone();
@@ -288,26 +290,40 @@ pub async fn handle_agent_channel(
                 // 1. Mark session running in session_store, preserve conversation history
                 let prior_history = {
                     let mut store = state_clone.session_store.lock();
-                    if let Some(entry) = store.get_mut(&sid) {
-                        entry.is_running = true;
-                        entry.events.clear();
-                        entry.full_assistant_text.clear();
-                        entry.full_thought_text.clear();
-                        entry.last_updated = chrono::Utc::now().timestamp_millis();
-                        // Preserve conversation_history across runs for multi-turn context
-                        entry.conversation_history.clone()
+                    let clean = sid.trim_start_matches("session-").to_string();
+                    let pref = format!("session-{}", clean);
+                    let target_key = if store.contains(&sid) {
+                        Some(sid.clone())
+                    } else if store.contains(&clean) {
+                        Some(clean.clone())
+                    } else if store.contains(&pref) {
+                        Some(pref.clone())
                     } else {
-                        store.put(
-                            sid.clone(),
-                            SessionStateEntry {
-                                events: Vec::new(),
-                                is_running: true,
-                                full_assistant_text: String::new(),
-                                full_thought_text: String::new(),
-                                last_updated: chrono::Utc::now().timestamp_millis(),
-                                conversation_history: Vec::new(),
-                            },
-                        );
+                        None
+                    };
+
+                    if let Some(k) = target_key {
+                        if let Some(entry) = store.get_mut(&k) {
+                            entry.is_running = true;
+                            entry.events.clear();
+                            entry.full_assistant_text.clear();
+                            entry.full_thought_text.clear();
+                            entry.last_updated = chrono::Utc::now().timestamp_millis();
+                            // Preserve conversation_history across runs for multi-turn context
+                            entry.conversation_history.clone()
+                        } else {
+                            Vec::new()
+                        }
+                    } else {
+                        let new_entry = SessionStateEntry {
+                            events: Vec::new(),
+                            is_running: true,
+                            full_assistant_text: String::new(),
+                            full_thought_text: String::new(),
+                            last_updated: chrono::Utc::now().timestamp_millis(),
+                            conversation_history: Vec::new(),
+                        };
+                        store.put(clean, new_entry);
                         Vec::new()
                     }
                 };
@@ -480,6 +496,10 @@ pub async fn handle_agent_channel(
                 session_tool_registry.register(TelegramTool::with_workspace(
                     state_clone.settings_store.clone(),
                     effective_workspace.clone(),
+                ));
+                session_tool_registry.register(RecallMemoryTool::with_storage(
+                    state_clone.chat_storage.clone(),
+                    Some(sid.clone()),
                 ));
 
                 if model_tier <= 2 {
@@ -685,14 +705,41 @@ pub async fn handle_agent_channel(
                                                 }
                                             }
 
-                                            // Record text in session store
+                                            // Record text and events in session store
                                             {
                                                 let mut store = state_clone.session_store.lock();
-                                                if let Some(entry) = store.get_mut(&sid) {
+                                                let clean = sid.trim_start_matches("session-").to_string();
+                                                let pref = format!("session-{}", clean);
+                                                let update_entry = |entry: &mut SessionStateEntry| {
                                                     if let Some(c) = data_obj.get("content").and_then(|v| v.as_str()) {
                                                         entry.full_assistant_text.push_str(c);
                                                     }
+                                                    match &event {
+                                                        crate::types::AgentEvent::Token { text } => {
+                                                            if let Some(crate::types::AgentEvent::Token { text: last_text }) = entry.events.last_mut() {
+                                                                last_text.push_str(text);
+                                                            } else {
+                                                                entry.events.push(event.clone());
+                                                            }
+                                                        }
+                                                        _ => {
+                                                            entry.events.push(event.clone());
+                                                        }
+                                                    }
                                                     entry.last_updated = chrono::Utc::now().timestamp_millis();
+                                                };
+                                                if store.contains(&clean) {
+                                                    if let Some(entry) = store.get_mut(&clean) {
+                                                        update_entry(entry);
+                                                    }
+                                                } else if store.contains(&sid) {
+                                                    if let Some(entry) = store.get_mut(&sid) {
+                                                        update_entry(entry);
+                                                    }
+                                                } else if store.contains(&pref) {
+                                                    if let Some(entry) = store.get_mut(&pref) {
+                                                        update_entry(entry);
+                                                    }
                                                 }
                                             }
 
@@ -713,7 +760,13 @@ pub async fn handle_agent_channel(
                         // 7. Persist new messages into conversation_history
                         if let Ok(new_messages) = history_rx.try_recv() {
                             let mut store = state_clone.session_store.lock();
-                            if let Some(entry) = store.get_mut(&sid) {
+                            let clean = sid.trim_start_matches("session-").to_string();
+                            let key = if store.contains(&clean) {
+                                clean
+                            } else {
+                                sid.clone()
+                            };
+                            if let Some(entry) = store.get_mut(&key) {
                                 entry.conversation_history.extend(new_messages);
                             }
                         }
@@ -751,10 +804,18 @@ pub async fn handle_agent_channel(
                     let prompt_for_title = prompt_clone.clone();
                     let resp_for_title = {
                         let store = state_clone.session_store.lock();
-                        store
-                            .peek(&sid)
-                            .map(|e| e.full_assistant_text.clone())
-                            .unwrap_or_default()
+                        let clean = sid.trim_start_matches("session-").to_string();
+                        if store.contains(&clean) {
+                            store
+                                .peek(&clean)
+                                .map(|e| e.full_assistant_text.clone())
+                                .unwrap_or_default()
+                        } else {
+                            store
+                                .peek(&sid)
+                                .map(|e| e.full_assistant_text.clone())
+                                .unwrap_or_default()
+                        }
                     };
                     let cfg_for_title = model_config.clone();
 
@@ -812,10 +873,18 @@ pub async fn handle_agent_channel(
                 let prompt_token_count = std::cmp::max(1, (prompt_clone.len() + 3) / 4);
                 let full_text_len = {
                     let store = state_clone.session_store.lock();
-                    store
-                        .peek(&sid)
-                        .map(|e| e.full_assistant_text.len())
-                        .unwrap_or(0)
+                    let clean = sid.trim_start_matches("session-").to_string();
+                    if store.contains(&clean) {
+                        store
+                            .peek(&clean)
+                            .map(|e| e.full_assistant_text.len())
+                            .unwrap_or(0)
+                    } else {
+                        store
+                            .peek(&sid)
+                            .map(|e| e.full_assistant_text.len())
+                            .unwrap_or(0)
+                    }
                 };
                 let final_completion_tokens =
                     std::cmp::max(completion_token_count, (full_text_len + 3) / 4);
@@ -831,12 +900,18 @@ pub async fn handle_agent_channel(
                 // Mark session idle & clean cancellation token
                 {
                     let mut store = state_clone.session_store.lock();
-                    if let Some(entry) = store.get_mut(&sid) {
-                        entry.is_running = false;
-                        entry.last_updated = chrono::Utc::now().timestamp_millis();
+                    let clean = sid.trim_start_matches("session-").to_string();
+                    let pref = format!("session-{}", clean);
+                    for key in [&clean, &sid, &pref] {
+                        if let Some(entry) = store.get_mut(key) {
+                            entry.is_running = false;
+                            entry.last_updated = chrono::Utc::now().timestamp_millis();
+                        }
                     }
                     let mut cancellations = state_clone.active_cancellations.lock();
                     cancellations.remove(&sid);
+                    cancellations.remove(&clean);
+                    cancellations.remove(&pref);
                 }
             });
 
@@ -861,17 +936,26 @@ pub async fn handle_agent_channel(
                 })
                 .unwrap_or_default();
 
+            let clean = session_id.trim_start_matches("session-").to_string();
+            let pref = format!("session-{}", clean);
+
             {
                 let cancellations = state.active_cancellations.lock();
-                if let Some(tx) = cancellations.get(&session_id) {
-                    let _ = tx.send(());
+                for key in [&session_id, &clean, &pref] {
+                    if let Some(tx) = cancellations.get(key) {
+                        let _ = tx.send(());
+                        break;
+                    }
                 }
             }
 
             {
                 let mut store = state.session_store.lock();
-                if let Some(entry) = store.get_mut(&session_id) {
-                    entry.is_running = false;
+                for key in [&session_id, &clean, &pref] {
+                    if let Some(entry) = store.get_mut(key) {
+                        entry.is_running = false;
+                        entry.last_updated = chrono::Utc::now().timestamp_millis();
+                    }
                 }
             }
 
@@ -888,14 +972,69 @@ pub async fn handle_agent_channel(
         }
         "agent-list" => {
             let store = state.session_store.lock();
-            let sessions: Vec<String> = store
-                .iter()
-                .filter(|(_, v)| v.is_running)
-                .map(|(k, _)| k.clone())
-                .collect();
+            let mut seen = std::collections::HashSet::new();
+            let mut sessions = Vec::new();
+            for (k, v) in store.iter() {
+                if v.is_running {
+                    let clean = k.trim_start_matches("session-").to_string();
+                    if seen.insert(clean.clone()) {
+                        sessions.push(clean);
+                    }
+                }
+            }
             Some(Ok(Json(
-                serde_json::json!({ "data": { "sessions": sessions } }),
+                serde_json::json!({ "data": { "sessions": sessions.clone(), "activeSessions": sessions } }),
             )))
+        }
+        "agent-status" => {
+            let session_id = args
+                .first()
+                .and_then(|v| {
+                    if let Some(s) = v.as_str() {
+                        Some(s.to_string())
+                    } else {
+                        v.get("sessionId")
+                            .and_then(|s| s.as_str())
+                            .map(|s| s.to_string())
+                    }
+                })
+                .unwrap_or_default();
+
+            let clean = session_id.trim_start_matches("session-").to_string();
+            let pref = format!("session-{}", clean);
+
+            let store = state.session_store.lock();
+            let entry = if store.contains(&clean) {
+                store.peek(&clean)
+            } else if store.contains(&session_id) {
+                store.peek(&session_id)
+            } else {
+                store.peek(&pref)
+            };
+
+            if let Some(e) = entry {
+                Some(Ok(Json(serde_json::json!({
+                    "data": {
+                        "sessionId": clean,
+                        "isRunning": e.is_running,
+                        "events": e.events,
+                        "fullAssistantText": e.full_assistant_text,
+                        "fullThoughtText": e.full_thought_text,
+                        "lastUpdated": e.last_updated
+                    }
+                }))))
+            } else {
+                Some(Ok(Json(serde_json::json!({
+                    "data": {
+                        "sessionId": clean,
+                        "isRunning": false,
+                        "events": [],
+                        "fullAssistantText": "",
+                        "fullThoughtText": "",
+                        "lastUpdated": 0
+                    }
+                }))))
+            }
         }
         "agent-permission-response" => {
             Some(Ok(Json(serde_json::json!({ "data": { "success": true } }))))

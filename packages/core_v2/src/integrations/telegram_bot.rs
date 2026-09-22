@@ -206,6 +206,30 @@ impl TelegramBotManager {
                     .to_string();
                 *self.bot_identity.write().await = Some((name.clone(), username.clone()));
                 info!("Verified Telegram Bot: {} (@{})", name, username);
+
+                // Register default slash commands so they appear in Telegram clients
+                let default_commands = vec![
+                    crate::integrations::telegram::TelegramBotCommand {
+                        command: "new".to_string(),
+                        description: "Start a fresh conversation topic".to_string(),
+                    },
+                    crate::integrations::telegram::TelegramBotCommand {
+                        command: "clear".to_string(),
+                        description: "Clear conversation history".to_string(),
+                    },
+                    crate::integrations::telegram::TelegramBotCommand {
+                        command: "status".to_string(),
+                        description: "Show agent status and active model".to_string(),
+                    },
+                    crate::integrations::telegram::TelegramBotCommand {
+                        command: "help".to_string(),
+                        description: "Show capabilities and guide".to_string(),
+                    },
+                ];
+                let _ = self
+                    .client
+                    .set_my_commands(&bot_token, &default_commands)
+                    .await;
             }
         } else {
             let err_body = check_resp.text().await.unwrap_or_default();
@@ -409,12 +433,18 @@ impl TelegramBotManager {
                     })
                     .await;
                 return;
-            } else if trimmed == "/help" {
-                let help_msg = "🤖 *SuperAgent Telegram Capabilities*:\n\n\
+            } else if trimmed == "/help" || trimmed == "/start" || trimmed == "/commands" {
+                let help_msg = "🤖 *Welcome to SuperAgent*!\n\n\
+                    Here are the commands you can use:\n\
+                    • `/new` or `/clear` - Start a fresh conversation topic\n\
+                    • `/status` - Show current agent model and system status\n\
+                    • `/help` - Show capabilities and guide\n\n\
+                    ✨ *SuperAgent Capabilities*:\n\
+                    • **Video & Media Downloads**: Send YouTube Shorts, Reels, or video links with 'send me the video' to receive the file directly.\n\
                     • **Multi-message input**: Send multiple messages, ideas, or corrections in rapid bursts. I will wait for you to finish typing before providing one consolidated response.\n\
                     • **Multimodal files**: Send photos, voice notes, audio tracks, PDFs, code files, or documents.\n\
                     • **Voice notes**: Spoken voice notes are automatically transcribed using Whisper and processed.\n\
-                    • **Commands**:\n  - `/new`: Start a fresh conversation topic\n  - `/status`: Show current agent model and system status\n  - `/help`: Show this guide";
+                    • **Adaptive Memory**: I remember context across chat gaps and can recall earlier discussions or preferences using `recall_memory`.";
                 let _ = self
                     .client
                     .send_message(&TelegramSendOptions {
@@ -818,25 +848,45 @@ impl TelegramBotManager {
                         .to_string_lossy()
                         .to_string();
 
-                    info!("Running yt-dlp to download media to {}", out_path.display());
+                    let ffmpeg_bin = find_ffmpeg_binary();
+
+                    info!(
+                        "Running yt-dlp to download media to {} (ffmpeg: {:?})",
+                        out_path.display(),
+                        ffmpeg_bin
+                    );
                     let mut cmd = tokio::process::Command::new(&ytdlp_bin);
-                    cmd.args([
-                        "--no-playlist",
-                        "--max-filesize",
-                        "48M",
-                        "-f",
-                        "b[filesize<48M]/b",
-                        "-o",
-                        &out_template,
-                        &media_url,
-                    ]);
+                    cmd.arg("--no-playlist");
+                    cmd.arg("--max-filesize").arg("48M");
+
+                    if let Some(ref ff) = ffmpeg_bin {
+                        cmd.arg("--ffmpeg-location").arg(ff);
+                        cmd.args([
+                            "-f",
+                            "bv*[filesize<40M]+ba[filesize<8M]/b[filesize<48M]/best[filesize<48M]/bv*+ba/b",
+                            "--merge-output-format",
+                            "mp4",
+                            "--format-sort",
+                            "res:720,size",
+                        ]);
+                    } else {
+                        // Without ffmpeg, yt-dlp cannot merge video and audio streams.
+                        // Request single pre-merged formats (b / best / worst)
+                        cmd.args([
+                            "-f",
+                            "b[filesize<48M]/best[filesize<48M]/worst[filesize<48M]/worst",
+                        ]);
+                    }
+
+                    cmd.arg("-o").arg(&out_template);
+                    cmd.arg(&media_url);
 
                     #[cfg(target_os = "windows")]
                     {
                         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
                     }
 
-                    let dl_res = tokio::time::timeout(Duration::from_secs(35), cmd.output()).await;
+                    let dl_res = tokio::time::timeout(Duration::from_secs(45), cmd.output()).await;
                     match dl_res {
                         Ok(Ok(output)) => {
                             let mut found_file: Option<PathBuf> = None;
@@ -920,9 +970,26 @@ impl TelegramBotManager {
                                                 "Telegram send_media returned failure: {:?}",
                                                 res.error
                                             );
+                                            let err_msg = res.error.unwrap_or_else(|| {
+                                                "Failed to upload video to Telegram.".to_string()
+                                            });
+                                            let _ = self.client.send_message_chunked(
+                                                &bot_token,
+                                                &chat_id.to_string(),
+                                                &format!("⚠️ Could not send video to Telegram: {}\n\nLink: {}", err_msg, media_url),
+                                                None,
+                                            ).await;
+                                            return;
                                         }
                                         Err(e) => {
                                             warn!("Failed to send media to Telegram: {}", e);
+                                            let _ = self.client.send_message_chunked(
+                                                &bot_token,
+                                                &chat_id.to_string(),
+                                                &format!("⚠️ Network error sending video to Telegram: {}\n\nLink: {}", e, media_url),
+                                                None,
+                                            ).await;
+                                            return;
                                         }
                                     }
                                 }
@@ -937,28 +1004,84 @@ impl TelegramBotManager {
                                 {
                                     let _ = self.client.send_message_chunked(&bot_token, &chat_id.to_string(), "⚠️ The requested video exceeds Telegram's 50MB bot upload limit.", None).await;
                                     return;
+                                } else if ffmpeg_bin.is_none()
+                                    && (stderr.contains("ffmpeg")
+                                        || stderr.contains("Requested format is not available")
+                                        || stderr.contains("not available"))
+                                {
+                                    let _ = self.client.send_message_chunked(
+                                        &bot_token,
+                                        &chat_id.to_string(),
+                                        "⚠️ This video requires FFmpeg to combine video and audio streams, but FFmpeg was not found on this machine.\n\n💡 Please install FFmpeg (e.g. `winget install Gyan.FFmpeg` or place `ffmpeg.exe` in ~/.superagent) to enable high-quality video downloads.",
+                                        None,
+                                    ).await;
+                                    return;
+                                } else {
+                                    let error_snippet = stderr
+                                        .lines()
+                                        .find(|l| l.contains("ERROR:"))
+                                        .unwrap_or("Unable to download this video format from the provided source.");
+                                    let _ = self.client.send_message_chunked(
+                                        &bot_token,
+                                        &chat_id.to_string(),
+                                        &format!("⚠️ Could not download video from the link:\n{}\n\nURL: {}", error_snippet, media_url),
+                                        None,
+                                    ).await;
+                                    return;
                                 }
                             }
                         }
                         Ok(Err(e)) => {
                             warn!("Failed to execute yt-dlp: {}", e);
+                            let _ = self
+                                .client
+                                .send_message_chunked(
+                                    &bot_token,
+                                    &chat_id.to_string(),
+                                    &format!("⚠️ Failed to launch media downloader: {}", e),
+                                    None,
+                                )
+                                .await;
+                            return;
                         }
                         Err(_) => {
-                            warn!("yt-dlp execution timed out after 35s");
+                            warn!("yt-dlp execution timed out after 45s");
+                            let _ = self.client.send_message_chunked(
+                                &bot_token,
+                                &chat_id.to_string(),
+                                "⚠️ Video download timed out after 45s. The media server may be throttling or the file is too large.",
+                                None,
+                            ).await;
+                            return;
                         }
                     }
                 } else {
                     warn!("yt-dlp binary not found on system");
+                    let _ = self
+                        .client
+                        .send_message_chunked(
+                            &bot_token,
+                            &chat_id.to_string(),
+                            "⚠️ Video download tool (`yt-dlp`) is not installed on this system.",
+                            None,
+                        )
+                        .await;
+                    return;
                 }
             }
         }
 
-        // 3. Load or initialize continuous multi-turn chat session
+        // 3. Load or initialize continuous multi-turn chat session with adaptive context
         let existing_session = self.chat_storage.load_session(&session_id).ok();
-        let initial_history = if let Some(ref sess) = existing_session {
-            sess.messages.clone()
+        let (initial_history, adaptive_summary) = if let Some(ref sess) = existing_session {
+            crate::memory::context::prepare_adaptive_history(
+                &sess.messages,
+                Some(sess.updated_at),
+                7200, // 2-hour gap threshold
+                10,   // up to 10 recent messages kept verbatim
+            )
         } else {
-            Vec::new()
+            (Vec::new(), None)
         };
 
         // 4. Resolve Telegram model & provider
@@ -1005,6 +1128,10 @@ impl TelegramBotManager {
             effective_workspace.clone(),
             chat_id.to_string(),
         ));
+        tool_registry.register(crate::tools::builtin::RecallMemoryTool::with_storage(
+            self.chat_storage.clone(),
+            Some(session_id.clone()),
+        ));
 
         let tools_summary: Vec<(String, String)> = tool_registry
             .list_schemas()
@@ -1025,16 +1152,24 @@ impl TelegramBotManager {
             .collect();
         tool_registry.register(GetAvailableToolsTool::new(tools_summary));
 
+        let adaptive_context_note = if let Some(ref summary) = adaptive_summary {
+            format!("\n\n{}", summary)
+        } else {
+            String::new()
+        };
+
         let system_prompt = format!(
             "You are SuperAgent, an intelligent and helpful AI assistant interacting directly with the user via Telegram.\n\
             - Be conversational, insightful, friendly, and practical.\n\
+            - Adaptive Context & Memory: You have access to the `recall_memory` tool. If the user refers to past conversations, earlier links, previous tasks, or preferences from past sessions that are not in the immediate context window, use `recall_memory` to look them up.\n\
             - When the user asks you to send or download media (such as a YouTube video/short, song, audio note, image, or document):\n\
               1. Download or generate the media file into your working directory (e.g. using yt-dlp, curl, ffmpeg, or python via run_command).\n\
               2. Deliver the file directly to the user using the `telegram` tool with `file_path`.\n\
               3. Send a friendly message explaining what was done.\n\
             - If the user sends you images, documents, or voice recordings, analyze them thoroughly.\n\
             - When writing code, use markdown code blocks with language specifiers.\n\
-            - Format your replies using clean Telegram Markdown or clear plain text."
+            - Format your replies using clean Telegram Markdown or clear plain text.{}",
+            adaptive_context_note
         );
 
         let engine = AgentEngine::new(Arc::new(tool_registry));
@@ -1295,8 +1430,11 @@ impl TelegramBotManager {
             assistant_text = "I have processed your request.".to_string();
         }
 
-        // 8. Save updated session to ChatStorage
-        let mut full_history = initial_history;
+        // 8. Save updated session to ChatStorage (preserving complete history)
+        let mut full_history = existing_session
+            .as_ref()
+            .map(|s| s.messages.clone())
+            .unwrap_or_default();
         if !new_messages_collected.is_empty() {
             full_history.extend(new_messages_collected);
         } else {
@@ -1436,6 +1574,92 @@ pub fn find_ytdlp_binary() -> Option<PathBuf> {
     None
 }
 
+/// Locates ffmpeg binary across user data directories, WinGet, Chocolatey, and system PATH
+pub fn find_ffmpeg_binary() -> Option<PathBuf> {
+    let sa_dir = crate::storage::settings::get_superagent_dir();
+    let candidates = [
+        sa_dir.join("ffmpeg.exe"),
+        sa_dir.join("bin").join("ffmpeg.exe"),
+        sa_dir.join("bin").join("ffmpeg").join(if cfg!(windows) {
+            "ffmpeg.exe"
+        } else {
+            "ffmpeg"
+        }),
+        sa_dir.join("ffmpeg"),
+        sa_dir.join("bin").join("ffmpeg"),
+        PathBuf::from("C:\\ProgramData\\SuperAgent\\bin\\ffmpeg.exe"),
+        PathBuf::from("C:\\ProgramData\\chocolatey\\bin\\ffmpeg.exe"),
+        PathBuf::from("C:\\ffmpeg\\bin\\ffmpeg.exe"),
+        PathBuf::from("C:\\tools\\ffmpeg\\bin\\ffmpeg.exe"),
+    ];
+    for c in &candidates {
+        if c.exists() {
+            return Some(c.clone());
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
+            let local_path = PathBuf::from(&local_appdata);
+            let winget_link = local_path
+                .join("Microsoft")
+                .join("WinGet")
+                .join("Links")
+                .join("ffmpeg.exe");
+            if winget_link.exists() {
+                return Some(winget_link);
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        for mac in &[
+            "/opt/homebrew/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/opt/local/bin/ffmpeg",
+        ] {
+            let p = PathBuf::from(mac);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        for linux in &[
+            "/usr/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/snap/bin/ffmpeg",
+        ] {
+            let p = PathBuf::from(linux);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+
+    if let Ok(output) =
+        std::process::Command::new(if cfg!(windows) { "where.exe" } else { "which" })
+            .arg("ffmpeg")
+            .output()
+    {
+        if output.status.success() {
+            if let Ok(s) = String::from_utf8(output.stdout) {
+                if let Some(first_line) = s.lines().next() {
+                    let p = PathBuf::from(first_line.trim());
+                    if p.exists() {
+                        return Some(p);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Generates a clean, topic-based chat title for Telegram conversations without exposing private user/chat IDs.
 pub fn generate_telegram_chat_title(prompt: &str, user_name: &str) -> String {
     // If the prompt includes voice note transcription tags, extract the transcribed text
@@ -1456,8 +1680,8 @@ pub fn generate_telegram_chat_title(prompt: &str, user_name: &str) -> String {
 
     // Strip leading punctuation, commands, or quote marks
     let trimmed = clean
-        .trim_matches(|c: char| c == '"' || c == '\'')
-        .trim_start_matches(|c: char| c == '/' || c == '?' || c == '!' || c == '.' || c == ':')
+        .trim_matches(['"', '\''])
+        .trim_start_matches(['/', '?', '!', '.', ':'])
         .trim();
 
     if !trimmed.is_empty() {
@@ -1897,5 +2121,11 @@ mod tests {
 
         // After scope ends and guard is dropped, signal MUST have been delivered
         assert!(rx.try_recv().is_ok());
+    }
+
+    #[test]
+    fn test_find_ffmpeg_binary() {
+        let bin = find_ffmpeg_binary();
+        assert!(bin.is_some());
     }
 }

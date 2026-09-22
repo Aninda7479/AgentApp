@@ -81,4 +81,40 @@ describe('ChatRepository Persistence', () => {
     await ChatRepository.persistAll(true);
     expect(writeStoreSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('preserves isRunning state and loads disk steps on bootstrap', async () => {
+    const runningChatId = 'running-chat-789';
+    vi.spyOn(IpcBridge, 'readStore').mockResolvedValue({
+      projects: [],
+      chats: [
+        {
+          id: runningChatId,
+          title: 'Active Running Chat',
+          project: '',
+          model: 'claude-3-5-sonnet',
+          timestamp: new Date().toISOString(),
+          isRunning: true,
+          steps: [],
+        },
+      ],
+      connectedProviders: [],
+      modelsCatalog: [],
+    });
+
+    const readStepsSpy = vi.spyOn(IpcBridge, 'readChatSteps').mockResolvedValue([
+      { id: 'user-p', type: 'user', content: 'What is photosynthesis?' },
+    ]);
+    vi.spyOn(IpcBridge, 'writeStore').mockResolvedValue();
+
+    chatStore.setActiveChatId(runningChatId);
+    const res = await ChatRepository.bootstrap();
+
+    expect(res.chats).toHaveLength(1);
+    expect(res.chats[0].isRunning).toBe(true);
+    const storeChat = chatStore.getState().chats.find((c) => c.id === runningChatId);
+    expect(storeChat?.isRunning).toBe(true);
+    expect(readStepsSpy).toHaveBeenCalledWith(runningChatId);
+    expect(chatStore.getSteps(runningChatId)).toHaveLength(1);
+    expect(chatStore.getSteps(runningChatId)[0].content).toBe('What is photosynthesis?');
+  });
 });

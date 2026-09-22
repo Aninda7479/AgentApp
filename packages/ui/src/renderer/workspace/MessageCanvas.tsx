@@ -43,7 +43,7 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({
 
   // Lazy-load steps from disk when opening a chat whose steps are not resident
   useEffect(() => {
-    if (chatId && chatId !== 'draft-chat' && steps.length === 0 && !isRunning) {
+    if (chatId && chatId !== 'draft-chat' && steps.length === 0) {
       IpcBridge.readChatSteps(chatId)
         .then((diskSteps) => {
           if (diskSteps && diskSteps.length > 0) {
@@ -54,7 +54,7 @@ export const MessageCanvas: React.FC<MessageCanvasProps> = ({
         })
         .catch(() => {});
     }
-  }, [chatId, steps.length, isRunning]);
+  }, [chatId, steps.length]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

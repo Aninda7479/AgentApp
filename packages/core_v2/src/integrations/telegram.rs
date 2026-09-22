@@ -29,6 +29,12 @@ pub struct TelegramSendResult {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TelegramBotCommand {
+    pub command: String,
+    pub description: String,
+}
+
 // ─── Telegram Bot API Inbound Models ─────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,6 +204,7 @@ impl TelegramClient {
     }
 
     /// Sends long messages cleanly chunked at <= 4096 character boundaries.
+    /// If delivery with parse_mode (e.g. Markdown) fails, automatically falls back to plain text.
     pub async fn send_message_chunked(
         &self,
         bot_token: &str,
@@ -216,7 +223,19 @@ impl TelegramClient {
                 parse_mode: parse_mode.map(|s| s.to_string()),
                 disable_notification: if i == 0 { None } else { Some(true) },
             };
-            let res = self.send_message(&opts).await?;
+            let mut res = self.send_message(&opts).await?;
+            if !res.success && parse_mode.is_some() {
+                // If markdown parsing failed, retry plain text
+                let fallback_opts = TelegramSendOptions {
+                    parse_mode: None,
+                    ..opts
+                };
+                if let Ok(fb_res) = self.send_message(&fallback_opts).await {
+                    if fb_res.success {
+                        res = fb_res;
+                    }
+                }
+            }
             results.push(res);
 
             // Small throttle between chunk deliveries to prevent rate-limit 429
@@ -226,6 +245,30 @@ impl TelegramClient {
         }
 
         Ok(results)
+    }
+
+    /// Registers bot slash commands with the Telegram Bot API via `setMyCommands`.
+    pub async fn set_my_commands(
+        &self,
+        bot_token: &str,
+        commands: &[TelegramBotCommand],
+    ) -> Result<bool> {
+        if bot_token.is_empty() {
+            return Ok(false);
+        }
+
+        let endpoint = format!("https://api.telegram.org/bot{}/setMyCommands", bot_token);
+        let payload = serde_json::json!({
+            "commands": commands,
+        });
+
+        let resp = self.client.post(&endpoint).json(&payload).send().await?;
+        if resp.status().is_success() {
+            let json: serde_json::Value = resp.json().await?;
+            Ok(json.get("ok").and_then(|v| v.as_bool()).unwrap_or(false))
+        } else {
+            Ok(false)
+        }
     }
 
     /// Sends a chat action (e.g. "typing", "upload_document", "record_voice").
@@ -517,6 +560,23 @@ pub fn split_telegram_message(text: &str, max_len: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_telegram_bot_command_serialization() {
+        let commands = vec![
+            TelegramBotCommand {
+                command: "new".to_string(),
+                description: "Start fresh conversation".to_string(),
+            },
+            TelegramBotCommand {
+                command: "help".to_string(),
+                description: "Show help".to_string(),
+            },
+        ];
+        let val = serde_json::to_value(&commands).unwrap();
+        assert_eq!(val[0]["command"], "new");
+        assert_eq!(val[1]["description"], "Show help");
+    }
 
     #[test]
     fn test_split_telegram_message_short() {

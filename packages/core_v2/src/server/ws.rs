@@ -34,7 +34,10 @@ pub async fn handle_ws_socket(socket: WebSocket, state: AppState) {
                     }
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
-                    tracing::warn!("WebSocket client lagged behind, skipped {} messages", skipped);
+                    tracing::warn!(
+                        "WebSocket client lagged behind, skipped {} messages",
+                        skipped
+                    );
                     continue;
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => {
@@ -58,7 +61,12 @@ pub async fn handle_ws_socket(socket: WebSocket, state: AppState) {
                         "SYNC_SESSION" => {
                             if let Some(sess_id) = val.get("sessionId").and_then(|v| v.as_str()) {
                                 let mut store = state_clone.session_store.lock();
-                                let entry = store.get(sess_id).cloned().unwrap_or_default();
+                                let clean = sess_id.trim_start_matches("session-");
+                                let entry = if store.contains(clean) {
+                                    store.get(clean).cloned().unwrap_or_default()
+                                } else {
+                                    store.get(sess_id).cloned().unwrap_or_default()
+                                };
                                 let sync_payload = serde_json::json!({
                                     "channel": "session-sync",
                                     "data": {
@@ -77,7 +85,10 @@ pub async fn handle_ws_socket(socket: WebSocket, state: AppState) {
                             if let Some(tool_id) = val.get("id").and_then(|v| v.as_str()) {
                                 let mut pending = state_clone.pending_client_tools.lock();
                                 if let Some(sender) = pending.remove(tool_id) {
-                                    let res = val.get("result").cloned().unwrap_or(serde_json::Value::Null);
+                                    let res = val
+                                        .get("result")
+                                        .cloned()
+                                        .unwrap_or(serde_json::Value::Null);
                                     let _ = sender.send(res);
                                 }
                             }

@@ -97,7 +97,15 @@ export const WorkspaceStage: React.FC<WorkspaceStageProps> = ({
   const activeChat = useChatStore((s: ChatStoreState) => s.chats.find((c: StoredChat) => c.id === activeChatId));
   const draftProject = useChatStore((s: ChatStoreState) => s.draftProject);
   const currentProject = activeProject || draftProject || '';
-  const isGenerating = useSessionStore((s: SessionStoreState) => Boolean(s.runningSessions.get(activeChatId)?.isGenerating));
+  const isGenerating = useSessionStore((s: SessionStoreState) => {
+    const clean = activeChatId.replace(/^session-/, '');
+    return (
+      Boolean(s.runningSessions.get(activeChatId)?.isGenerating) ||
+      Boolean(s.runningSessions.get(clean)?.isGenerating) ||
+      Boolean(s.runningSessions.get(`session-${clean}`)?.isGenerating) ||
+      Boolean(activeChat?.isRunning)
+    );
+  });
   const steps = activeChat?.steps || [];
 
   const greeting = useMemo(() => {

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { BrandLogo } from '../../BrandLogo';
 import { ChatTitleService } from '../../services/ChatTitleService';
+import { useSessionStore } from '../../stores/sessionStore';
 
 /** Props for the Sidebar navigation component. */
 export interface SidebarProps {
@@ -93,6 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   mobileOpen = false,
   onMobileClose,
 }) => {
+  const runningSessions = useSessionStore((s) => s.runningSessions);
   // Project folder expanded state: collapsed by default, saved in localStorage
   const STORAGE_KEY_EXPANDED_PROJECTS = 'superagent_sidebar_expanded_projects';
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>(() => {
@@ -428,7 +430,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
    */
   const renderChatRow = (chat: StoredChat, isNestedInProject = false) => {
     const isSelected = activeChatId === chat.id && activeTab === 'trajectory';
-    const isChatRunning = Boolean(chat.isRunning);
+    const cleanId = (chat.id || '').replace(/^session-/, '');
+    const isSessionRunning = Boolean(
+      runningSessions.get(chat.id)?.isGenerating ||
+      runningSessions.get(cleanId)?.isGenerating ||
+      runningSessions.get(`session-${cleanId}`)?.isGenerating
+    );
+    const isChatRunning = Boolean(chat.isRunning) || isSessionRunning;
     const queuedCount = chat.queuedCount ?? 0;
     const isPinned = isChatPinned(chat);
     const isUnread = isChatUnread(chat);

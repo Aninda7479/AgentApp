@@ -3,7 +3,7 @@
  * Delegates to the canonical getIpc and isDesktopApp helpers from lib/ipc.
  */
 
-import type { ProviderConnection, ModelConfig, StoredProject, StoredChat, TrajectoryStep } from './types';
+import type { ProviderConnection, ModelConfig, StoredProject, StoredChat, TrajectoryStep, AgentEvent } from './types';
 import { getIpc, isDesktopApp } from '../lib/ipc';
 
 export interface DesktopIpcBridge {
@@ -90,6 +90,38 @@ export class IpcBridge {
 
   static async stopAgent(sessionId: string): Promise<void> {
     return IpcBridge.invoke('agent-stop', sessionId);
+  }
+
+  static async listRunningAgents(): Promise<string[]> {
+    try {
+      const res = await IpcBridge.invoke<{ sessions?: string[]; activeSessions?: string[] }>('agent-list');
+      return Array.isArray(res?.sessions) ? res.sessions : (Array.isArray(res?.activeSessions) ? res.activeSessions : []);
+    } catch {
+      return [];
+    }
+  }
+
+  static async getAgentStatus(sessionId: string): Promise<{
+    sessionId: string;
+    isRunning: boolean;
+    events: AgentEvent[];
+    fullAssistantText: string;
+    fullThoughtText: string;
+    lastUpdated: number;
+  } | null> {
+    try {
+      const res = await IpcBridge.invoke<{
+        sessionId: string;
+        isRunning: boolean;
+        events: AgentEvent[];
+        fullAssistantText: string;
+        fullThoughtText: string;
+        lastUpdated: number;
+      }>('agent-status', sessionId);
+      return res || null;
+    } catch {
+      return null;
+    }
   }
 
   static async autoDetectProviders(): Promise<Array<{

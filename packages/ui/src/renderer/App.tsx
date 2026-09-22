@@ -50,7 +50,7 @@ import { SetupService } from './logic/setup';
 import { WorkspaceStage } from './workspace/WorkspaceStage';
 import { chatStore } from './stores/chatStore';
 import { providerStore } from './stores/providerStore';
-import { sessionStore } from './stores/sessionStore';
+import { sessionStore, useSessionStore } from './stores/sessionStore';
 import { AgentOrchestrator } from './services/AgentOrchestrator';
 import { ChatRepository } from './services/ChatRepository';
 import { AuthService, AuthStatus } from './services/AuthService';
@@ -269,6 +269,9 @@ export const App: React.FC = () => {
   const [settingsCategory, setSettingsCategory] = useState<string>(initialRoute.settingsCategory);
   const [activeProject, setActiveProject] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const isAnySessionRunning = useSessionStore((s) => s.isAnySessionRunning());
+  const activeSessionRunning = useSessionStore((s) => (activeChatId ? Boolean(s.runningSessions.get(activeChatId)?.isGenerating) : false));
+  const effectiveIsGenerating = isGenerating || isAnySessionRunning || activeSessionRunning;
   const [toastOpen, setToastOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
   const [toastType, setToastType] = useState<'info' | 'error'>('info');
@@ -1131,6 +1134,11 @@ export const App: React.FC = () => {
       await SettingsService.readInto(ctx);
       setSettingsHydrated(true);
       await ProvidersService.autoDetect(ctx, loaded.loadedProviders, loaded.loadedModels, loaded.finalProjects, loaded.finalChats);
+      try {
+        await AgentOrchestrator.syncRunningSessions();
+      } catch (err) {
+        console.error('[App] Failed to sync running sessions on startup:', err);
+      }
       setBootstrapping(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1483,9 +1491,9 @@ export const App: React.FC = () => {
   // Relay demo-mode agent state (no real agent-events) to the 3D Partner.
   useEffect(() => {
     if (!ipc) return;
-    const mood = PartnerSyncService.moodFor(isGenerating, activeChat?.lastError);
+    const mood = PartnerSyncService.moodFor(effectiveIsGenerating, activeChat?.lastError);
     ipc.send('pet-mood', mood);
-  }, [ipc, isGenerating, activeChat?.lastError]);
+  }, [ipc, effectiveIsGenerating, activeChat?.lastError]);
 
   // Relay partner:say DOM events to the pet.
   useEffect(() => {
@@ -1846,7 +1854,7 @@ export const App: React.FC = () => {
         activeTab={activeTab}
         activeProject={activeProject}
         activeChatTitle={currentActiveChat?.title}
-        isGenerating={isGenerating}
+        isGenerating={effectiveIsGenerating}
         onStopAgent={handleStopActiveRun}
         modifiedFilesCount={currentModifiedFilesCount}
         onToggleRightSidebar={() => {

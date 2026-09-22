@@ -12,6 +12,7 @@ jspm_packages/
 .pnpm-store/
 target/
 target_v2/
+downloads/
 # Build and distribution outputs
 dist/
 ui-dist/

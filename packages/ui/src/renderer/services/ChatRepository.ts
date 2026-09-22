@@ -20,7 +20,7 @@ export class ChatRepository {
   }> {
     const data = await IpcBridge.readStore();
     const projects = data.projects || [];
-    const chats = (data.chats || []).map((c) => ({ ...c, isRunning: false }));
+    const chats = (data.chats || []).map((c) => ({ ...c, isRunning: Boolean(c.isRunning) }));
     const connectedProviders = data.connectedProviders || [];
     const modelsCatalog = data.modelsCatalog || [];
 
@@ -38,7 +38,14 @@ export class ChatRepository {
     if (activeChat) {
       chatStore.setActiveChatId(activeChat.id);
       chatStore.setActiveProject(activeChat.project || defaultProject);
-      chatStore.setSteps(activeChat.id, activeChat.steps || []);
+      let initialSteps = activeChat.steps || [];
+      if (initialSteps.length === 0 && activeChat.id !== 'draft-chat') {
+        const diskSteps = await IpcBridge.readChatSteps(activeChat.id);
+        if (diskSteps && diskSteps.length > 0) {
+          initialSteps = diskSteps;
+        }
+      }
+      chatStore.setSteps(activeChat.id, initialSteps);
     } else {
       chatStore.setActiveChatId('draft-chat');
       chatStore.setActiveProject(defaultProject);
