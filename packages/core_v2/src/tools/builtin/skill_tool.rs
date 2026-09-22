@@ -1,7 +1,7 @@
-use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
 
 use crate::tools::r#trait::Tool;
 
@@ -33,7 +33,12 @@ impl SkillTool {
         if let Some(home) = dirs_next() {
             dirs.push(home.join(".superagent").join("skills"));
             dirs.push(home.join(".claude").join("skills"));
-            dirs.push(home.join(".gemini").join("antigravity").join("builtin").join("skills"));
+            dirs.push(
+                home.join(".gemini")
+                    .join("antigravity")
+                    .join("builtin")
+                    .join("skills"),
+            );
         }
 
         dirs
@@ -129,9 +134,21 @@ impl SkillTool {
                         if filename.ends_with(".json") {
                             if let Ok(content) = tokio::fs::read_to_string(&path).await {
                                 if let Ok(parsed) = serde_json::from_str::<Value>(&content) {
-                                    let id = parsed.get("id").and_then(|v| v.as_str()).unwrap_or(filename).to_string();
-                                    let name = parsed.get("name").and_then(|v| v.as_str()).unwrap_or(&id).to_string();
-                                    let description = parsed.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                    let id = parsed
+                                        .get("id")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or(filename)
+                                        .to_string();
+                                    let name = parsed
+                                        .get("name")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or(&id)
+                                        .to_string();
+                                    let description = parsed
+                                        .get("description")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string();
                                     skills.push(DiscoveredSkill {
                                         id,
                                         name,
@@ -140,7 +157,9 @@ impl SkillTool {
                                     });
                                 }
                             }
-                        } else if filename.eq_ignore_ascii_case("skill.md") || filename.ends_with(".skill.md") {
+                        } else if filename.eq_ignore_ascii_case("skill.md")
+                            || filename.ends_with(".skill.md")
+                        {
                             let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("skill");
                             skills.push(DiscoveredSkill {
                                 id: stem.to_string(),
@@ -206,8 +225,14 @@ impl SkillTool {
             if let Ok(mut entries) = tokio::fs::read_dir(dir).await {
                 while let Ok(Some(entry)) = entries.next_entry().await {
                     let path = entry.path();
-                    let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
-                    if name == lower_target || name.replace('_', "-") == lower_target.replace('_', "-") {
+                    let name = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_lowercase();
+                    if name == lower_target
+                        || name.replace('_', "-") == lower_target.replace('_', "-")
+                    {
                         if path.is_file() {
                             return self.read_skill_file(&path).await;
                         } else if path.is_dir() {
@@ -234,13 +259,26 @@ impl SkillTool {
 
         if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
             if let Ok(parsed) = serde_json::from_str::<Value>(&content) {
-                let name = parsed.get("name").and_then(|v| v.as_str()).unwrap_or("Skill");
-                let desc = parsed.get("description").and_then(|v| v.as_str()).unwrap_or("");
-                let script = parsed.get("executionScript").or_else(|| parsed.get("execution_script")).and_then(|v| v.as_str()).unwrap_or("");
+                let name = parsed
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Skill");
+                let desc = parsed
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let script = parsed
+                    .get("executionScript")
+                    .or_else(|| parsed.get("execution_script"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
 
                 let mut out = format!("# Skill: {}\n\n{}\n\n", name, desc);
                 if !script.is_empty() {
-                    out.push_str(&format!("## Execution Script\n```javascript\n{}\n```\n", script));
+                    out.push_str(&format!(
+                        "## Execution Script\n```javascript\n{}\n```\n",
+                        script
+                    ));
                 }
                 return Ok(out);
             }
@@ -267,7 +305,9 @@ mod tests {
             "description": "Reviews code against best practices",
             "executionScript": "export async function run() { return true; }"
         });
-        tokio::fs::write(skills_dir.join("code-review.json"), skill_json.to_string()).await.unwrap();
+        tokio::fs::write(skills_dir.join("code-review.json"), skill_json.to_string())
+            .await
+            .unwrap();
 
         let tool = SkillTool::new(temp_dir.clone());
 
@@ -277,7 +317,10 @@ mod tests {
         assert!(list_res.contains("code-review"));
 
         // Test loading skill
-        let load_res = tool.execute(json!({ "action": "load", "name": "code-review" })).await.unwrap();
+        let load_res = tool
+            .execute(json!({ "action": "load", "name": "code-review" }))
+            .await
+            .unwrap();
         assert!(load_res.contains("# Skill: Code Reviewer"));
         assert!(load_res.contains("Reviews code against best practices"));
         assert!(load_res.contains("export async function run"));

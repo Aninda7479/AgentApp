@@ -1,6 +1,4 @@
-use egui::{
-    vec2, Align2, Color32, FontId, Key, Pos2, Rect, Rounding, Stroke,
-};
+use egui::{vec2, Align2, Color32, FontId, Key, Pos2, Rect, Rounding, Stroke};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::{Duration, Instant};
 
@@ -143,7 +141,10 @@ impl eframe::App for DictationApp {
         ctx.request_repaint();
 
         let screen_rect = ctx.screen_rect();
-        let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("dictation_pill")));
+        let painter = ctx.layer_painter(egui::LayerId::new(
+            egui::Order::Foreground,
+            egui::Id::new("dictation_pill"),
+        ));
 
         // 5. Draw Centered Floating Pill (Matte Charcoal Black)
         let pill_w = 186.0f32;
@@ -166,7 +167,11 @@ impl eframe::App for DictationApp {
         let left_btn_radius = 15.0;
         let left_btn_rect = Rect::from_center_size(left_btn_center, vec2(30.0, 30.0));
 
-        let left_hovered = ctx.input(|i| i.pointer.hover_pos().map_or(false, |p| left_btn_rect.contains(p)));
+        let left_hovered = ctx.input(|i| {
+            i.pointer
+                .hover_pos()
+                .map_or(false, |p| left_btn_rect.contains(p))
+        });
         let left_bg = if left_hovered {
             Color32::from_rgb(85, 85, 90)
         } else {
@@ -202,7 +207,11 @@ impl eframe::App for DictationApp {
         let right_btn_radius = 15.0;
         let right_btn_rect = Rect::from_center_size(right_btn_center, vec2(30.0, 30.0));
 
-        let right_hovered = ctx.input(|i| i.pointer.hover_pos().map_or(false, |p| right_btn_rect.contains(p)));
+        let right_hovered = ctx.input(|i| {
+            i.pointer
+                .hover_pos()
+                .map_or(false, |p| right_btn_rect.contains(p))
+        });
         let right_bg = if right_hovered {
             Color32::from_rgb(235, 235, 240)
         } else {
@@ -241,7 +250,9 @@ impl eframe::App for DictationApp {
                 for idx in 0..num_bars {
                     let bx = start_x + (idx as f32 * bar_spacing);
 
-                    let dist_from_mid = ((idx as f32 - (num_bars as f32 / 2.0)).abs() / (num_bars as f32 / 2.0)).clamp(0.0, 1.0);
+                    let dist_from_mid = ((idx as f32 - (num_bars as f32 / 2.0)).abs()
+                        / (num_bars as f32 / 2.0))
+                        .clamp(0.0, 1.0);
                     let shape_factor = 1.0 - (dist_from_mid * 0.45);
 
                     let hist_idx = (idx % self.level_history.len()) as usize;
@@ -252,7 +263,8 @@ impl eframe::App for DictationApp {
 
                     let min_h = 3.5f32;
                     let max_h = 24.0f32;
-                    let bar_h = (min_h + (max_h - min_h) * combined_level * shape_factor).clamp(min_h, max_h);
+                    let bar_h = (min_h + (max_h - min_h) * combined_level * shape_factor)
+                        .clamp(min_h, max_h);
 
                     let bar_top = center_y - (bar_h / 2.0);
                     let bar_bot = center_y + (bar_h / 2.0);
@@ -274,11 +286,7 @@ impl eframe::App for DictationApp {
                     let phase = elapsed * 6.0 - (idx as f32 * 1.2);
                     let dy = center_y + phase.sin() * 3.0;
 
-                    painter.circle_filled(
-                        Pos2::new(dx, dy),
-                        2.5,
-                        Color32::from_rgb(240, 240, 250),
-                    );
+                    painter.circle_filled(Pos2::new(dx, dy), 2.5, Color32::from_rgb(240, 240, 250));
                 }
             }
             DictationState::Done(_) => {
@@ -291,9 +299,13 @@ impl eframe::App for DictationApp {
                 );
             }
             DictationState::Error(err) => {
-                let display_err = if err.to_lowercase().contains("no voice stt") || err.to_lowercase().contains("key") {
+                let display_err = if err.to_lowercase().contains("no voice stt")
+                    || err.to_lowercase().contains("key")
+                {
                     "No STT Key"
-                } else if err.to_lowercase().contains("reach") || err.to_lowercase().contains("engine") {
+                } else if err.to_lowercase().contains("reach")
+                    || err.to_lowercase().contains("engine")
+                {
                     "Engine Offline"
                 } else {
                     "STT Error"

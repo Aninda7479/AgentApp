@@ -16,11 +16,11 @@ use serde::Deserialize;
 
 use crate::server::state::AppState;
 use crate::storage::video_storage::VideoGenerationRecord;
-use crate::video_workspace::{
-    FfmpegStatus, GpuBackend, HardwareProfile, VideoEngineManager, VideoEngineStatus, VideoExportRequest,
-    VideoExportResponse, VideoModelInfo, VideoUpdateInfo,
-};
 use crate::video_workspace::types::{GenerateVideoRequest, GenerateVideoResponse};
+use crate::video_workspace::{
+    FfmpegStatus, GpuBackend, HardwareProfile, VideoEngineManager, VideoEngineStatus,
+    VideoExportRequest, VideoExportResponse, VideoModelInfo, VideoUpdateInfo,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct InstallVideoEnginePayload {
@@ -60,7 +60,9 @@ pub async fn update_video_engine(
         .engine
         .install(None)
         .await
-        .map(|_| Json(serde_json::json!({ "success": true, "message": "Video engine update started" })))
+        .map(|_| {
+            Json(serde_json::json!({ "success": true, "message": "Video engine update started" }))
+        })
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
@@ -82,7 +84,9 @@ pub async fn uninstall_video_engine(
         .video_workspace
         .engine
         .uninstall()
-        .map(|_| Json(serde_json::json!({ "success": true, "message": "Video engine uninstalled" })))
+        .map(|_| {
+            Json(serde_json::json!({ "success": true, "message": "Video engine uninstalled" }))
+        })
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
@@ -109,9 +113,7 @@ pub async fn provision_ffmpeg(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({ "error": e.to_string() }))))
 }
 
-pub async fn get_ffmpeg_status(
-    State(state): State<AppState>,
-) -> Json<FfmpegStatus> {
+pub async fn get_ffmpeg_status(State(state): State<AppState>) -> Json<FfmpegStatus> {
     Json(state.video_workspace.engine.get_ffmpeg_status())
 }
 
@@ -136,8 +138,15 @@ pub async fn pull_video_model(
         .models
         .pull_model(&payload.model_id)
         .await
-        .map(|_| Json(serde_json::json!({ "success": true, "message": "Video model download started" })))
-        .map_err(|e| (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e.to_string(), "message": e.to_string() }))))
+        .map(|_| {
+            Json(serde_json::json!({ "success": true, "message": "Video model download started" }))
+        })
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": e.to_string(), "message": e.to_string() })),
+            )
+        })
 }
 
 pub async fn delete_video_model(
@@ -177,7 +186,8 @@ pub async fn generate_video(
             Ok(resp) => return Ok(Json(resp)),
             Err(e) => {
                 let err_str = e.to_string();
-                let is_oom = err_str.to_lowercase().contains("out of memory") || err_str.to_lowercase().contains("memory");
+                let is_oom = err_str.to_lowercase().contains("out of memory")
+                    || err_str.to_lowercase().contains("memory");
                 return Err((
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(serde_json::json!({
@@ -321,7 +331,10 @@ pub async fn get_video_file(
             if !parts.is_empty() {
                 let start: u64 = parts[0].parse().unwrap_or(0);
                 let end: u64 = if parts.len() > 1 && !parts[1].is_empty() {
-                    parts[1].parse().unwrap_or(total_len.saturating_sub(1)).min(total_len.saturating_sub(1))
+                    parts[1]
+                        .parse()
+                        .unwrap_or(total_len.saturating_sub(1))
+                        .min(total_len.saturating_sub(1))
                 } else {
                     total_len.saturating_sub(1)
                 };
@@ -377,7 +390,6 @@ pub async fn get_video_file(
 
     Ok(response)
 }
-
 
 pub async fn get_video_thumbnail(
     State(state): State<AppState>,
@@ -437,10 +449,7 @@ pub async fn export_video_route(
     };
 
     let export_filename = format!("{}_export.{}", id, ext);
-    let output_path = state
-        .video_workspace
-        .storage
-        .video_path(&export_filename);
+    let output_path = state.video_workspace.storage.video_path(&export_filename);
 
     match state
         .video_workspace
@@ -498,8 +507,10 @@ pub async fn enhance_video_prompt(
 
     let settings = state.settings_store.load_raw().unwrap_or_default();
     let (provider, model_id, api_key, base_url) =
-        crate::server::routes::chat::resolve_active_workspace_model(&settings, &state.settings_store);
-
+        crate::server::routes::chat::resolve_active_workspace_model(
+            &settings,
+            &state.settings_store,
+        );
 
     let provider_instance = crate::providers::ProviderFactory::create(&provider);
     let config = crate::types::ModelConfig {
@@ -547,5 +558,3 @@ pub async fn enhance_video_prompt(
         enhanced_prompt: enhanced,
     })
 }
-
-

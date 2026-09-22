@@ -41,12 +41,24 @@ pub fn calculate_usage_summary() -> Vec<serde_json::Value> {
 
     for r in records {
         let model = r.get("model").and_then(|v| v.as_str()).unwrap_or("unknown");
-        let provider = r.get("provider").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let provider = r
+            .get("provider")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
         let key = format!("{}:{}", provider, model);
 
-        let p_tok = r.get("promptTokens").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let c_tok = r.get("completionTokens").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let t_tok = r.get("totalTokens").and_then(|v| v.as_f64()).unwrap_or(p_tok + c_tok);
+        let p_tok = r
+            .get("promptTokens")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let c_tok = r
+            .get("completionTokens")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let t_tok = r
+            .get("totalTokens")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(p_tok + c_tok);
         let cost = r.get("cost").and_then(|v| v.as_f64()).unwrap_or(0.0);
 
         let entry = map.entry(key).or_insert_with(|| {
@@ -63,10 +75,19 @@ pub fn calculate_usage_summary() -> Vec<serde_json::Value> {
 
         if let Some(obj) = entry.as_object_mut() {
             if let Some(v) = obj.get_mut("totalPromptTokens").and_then(|v| v.as_f64()) {
-                obj.insert("totalPromptTokens".to_string(), serde_json::json!(v + p_tok));
+                obj.insert(
+                    "totalPromptTokens".to_string(),
+                    serde_json::json!(v + p_tok),
+                );
             }
-            if let Some(v) = obj.get_mut("totalCompletionTokens").and_then(|v| v.as_f64()) {
-                obj.insert("totalCompletionTokens".to_string(), serde_json::json!(v + c_tok));
+            if let Some(v) = obj
+                .get_mut("totalCompletionTokens")
+                .and_then(|v| v.as_f64())
+            {
+                obj.insert(
+                    "totalCompletionTokens".to_string(),
+                    serde_json::json!(v + c_tok),
+                );
             }
             if let Some(v) = obj.get_mut("totalTokens").and_then(|v| v.as_f64()) {
                 obj.insert("totalTokens".to_string(), serde_json::json!(v + t_tok));
@@ -152,7 +173,8 @@ pub fn get_model_pricing(provider: &str, model: &str) -> (f64, f64) {
     let clean_model = model.to_lowercase();
     let clean_provider = provider.to_lowercase();
 
-    if clean_provider == "ollama" || clean_provider == "omniroute" || clean_model.contains("local") {
+    if clean_provider == "ollama" || clean_provider == "omniroute" || clean_model.contains("local")
+    {
         return (0.0, 0.0);
     }
     // Gemini models
@@ -162,10 +184,17 @@ pub fn get_model_pricing(provider: &str, model: &str) -> (f64, f64) {
     if clean_model.contains("gemini-2.5-pro") {
         return (1.25, 5.00);
     }
-    if clean_model.contains("gemini-2.5-flash") || clean_model.contains("gemini-2.0-flash") || clean_model.contains("gemini-1.5-flash") || clean_model.contains("flash") {
+    if clean_model.contains("gemini-2.5-flash")
+        || clean_model.contains("gemini-2.0-flash")
+        || clean_model.contains("gemini-1.5-flash")
+        || clean_model.contains("flash")
+    {
         return (0.075, 0.30);
     }
-    if clean_model.contains("gemini-1.5-pro") || clean_model.contains("gemini-pro") || clean_model.contains("gemini") {
+    if clean_model.contains("gemini-1.5-pro")
+        || clean_model.contains("gemini-pro")
+        || clean_model.contains("gemini")
+    {
         return (1.25, 5.00);
     }
     // OpenAI models
@@ -182,7 +211,10 @@ pub fn get_model_pricing(provider: &str, model: &str) -> (f64, f64) {
         return (15.00, 60.00);
     }
     // Anthropic models
-    if clean_model.contains("claude-3-7-sonnet") || clean_model.contains("claude-3-5-sonnet") || clean_model.contains("sonnet") {
+    if clean_model.contains("claude-3-7-sonnet")
+        || clean_model.contains("claude-3-5-sonnet")
+        || clean_model.contains("sonnet")
+    {
         return (3.00, 15.00);
     }
     if clean_model.contains("claude-3-5-haiku") || clean_model.contains("haiku") {
@@ -246,21 +278,42 @@ pub async fn handle_usage_channel(
     args: Vec<serde_json::Value>,
 ) -> Option<Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)>> {
     match ch {
-        "usage-summary" => Some(Ok(Json(serde_json::json!({ "data": calculate_usage_summary() })))),
-        "usage-records" => Some(Ok(Json(serde_json::json!({ "data": load_usage_records() })))),
+        "usage-summary" => Some(Ok(Json(
+            serde_json::json!({ "data": calculate_usage_summary() }),
+        ))),
+        "usage-records" => Some(Ok(Json(
+            serde_json::json!({ "data": load_usage_records() }),
+        ))),
         "usage-clear" => {
             let _ = save_usage_records(&[]);
             Some(Ok(Json(serde_json::json!({ "data": null }))))
         }
-        "usage-pricing" => Some(Ok(Json(serde_json::json!({ "data": get_default_pricing_catalog() })))),
+        "usage-pricing" => Some(Ok(Json(
+            serde_json::json!({ "data": get_default_pricing_catalog() }),
+        ))),
         "usage-track" | "usage-record-add" => {
             if let Some(arg) = args.first() {
-                let provider = arg.get("provider").and_then(|v| v.as_str()).unwrap_or("unknown");
-                let model = arg.get("model").and_then(|v| v.as_str()).unwrap_or("unknown");
-                let p_tok = arg.get("promptTokens").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-                let c_tok = arg.get("completionTokens").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                let provider = arg
+                    .get("provider")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                let model = arg
+                    .get("model")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                let p_tok = arg
+                    .get("promptTokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as usize;
+                let c_tok = arg
+                    .get("completionTokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as usize;
                 let dur = arg.get("durationMs").and_then(|v| v.as_u64()).unwrap_or(0);
-                let status = arg.get("status").and_then(|v| v.as_str()).unwrap_or("success");
+                let status = arg
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("success");
                 record_usage(provider, model, p_tok, c_tok, dur, status);
             }
             Some(Ok(Json(serde_json::json!({ "data": { "success": true } }))))

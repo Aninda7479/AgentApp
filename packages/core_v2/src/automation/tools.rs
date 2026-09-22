@@ -1,7 +1,7 @@
-use std::path::PathBuf;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::path::PathBuf;
 
 use crate::automation::browser::HeadlessBrowserEngine;
 use crate::automation::search::WebSearchEngine;
@@ -99,8 +99,12 @@ impl Tool for BrowserScreenshotTool {
     }
 
     async fn execute(&self, input: Value) -> Result<String> {
-        let url = input["url"].as_str().ok_or_else(|| anyhow!("Missing url"))?;
-        let out_str = input["output_path"].as_str().ok_or_else(|| anyhow!("Missing output_path"))?;
+        let url = input["url"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing url"))?;
+        let out_str = input["output_path"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing output_path"))?;
         let safe_out = validate_path_in_workspace(out_str, &self.workspace_root)?;
 
         let saved = self.engine.capture_page_preview(url, &safe_out).await?;
@@ -164,6 +168,7 @@ impl Tool for WebSearchTool {
             .unwrap_or(5) as usize;
 
         let results = self.engine.search(query, max_results).await?;
-        serde_json::to_string_pretty(&results).map_err(|e| anyhow!("Failed to serialize search results: {}", e))
+        serde_json::to_string_pretty(&results)
+            .map_err(|e| anyhow!("Failed to serialize search results: {}", e))
     }
 }

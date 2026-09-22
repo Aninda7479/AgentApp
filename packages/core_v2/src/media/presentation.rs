@@ -1,6 +1,5 @@
-use std::path::Path;
 use anyhow::Result;
-
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
@@ -38,7 +37,9 @@ pub fn generate_presentation_deck(spec: &PresentationSpec, output_path: &Path) -
     html.push_str(&format!("  .accent-bar {{ position: absolute; top: 0; left: 0; right: 0; height: 8px; background: {}; }}\n", theme));
     html.push_str("  h1 { font-size: 2.5rem; margin: 0 0 16px 0; color: #ffffff; }\n");
     html.push_str("  h2 { font-size: 2rem; margin: 0 0 24px 0; color: #ffffff; }\n");
-    html.push_str("  ul { font-size: 1.35rem; line-height: 1.8; color: #cbd5e1; margin-left: 24px; }\n");
+    html.push_str(
+        "  ul { font-size: 1.35rem; line-height: 1.8; color: #cbd5e1; margin-left: 24px; }\n",
+    );
     html.push_str("  .footer { display: flex; justify-content: space-between; font-size: 0.9rem; color: #64748b; margin-top: auto; }\n");
     html.push_str("  .controls { margin-top: 24px; display: flex; gap: 12px; }\n");
     html.push_str("  button { background: #334155; color: #ffffff; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 1rem; }\n");
@@ -70,7 +71,9 @@ pub fn generate_presentation_deck(spec: &PresentationSpec, output_path: &Path) -
     html.push_str("    document.getElementById('slideNum').innerText = `${currentIdx + 1} / ${slides.length}`;\n");
     html.push_str("  }\n");
     html.push_str("  function nextSlide() { if (currentIdx < slides.length - 1) { currentIdx++; renderSlide(); } }\n");
-    html.push_str("  function prevSlide() { if (currentIdx > 0) { currentIdx--; renderSlide(); } }\n");
+    html.push_str(
+        "  function prevSlide() { if (currentIdx > 0) { currentIdx--; renderSlide(); } }\n",
+    );
     html.push_str("  window.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight' || e.key === ' ') nextSlide(); if (e.key === 'ArrowLeft') prevSlide(); });\n");
     html.push_str("  renderSlide();\n");
     html.push_str("</script>\n</body>\n</html>");
@@ -103,12 +106,18 @@ mod tests {
             slides: vec![
                 SlideSpec {
                     title: "Overview".to_string(),
-                    bullet_points: vec!["Rust Native Engine".to_string(), "High Throughput".to_string()],
+                    bullet_points: vec![
+                        "Rust Native Engine".to_string(),
+                        "High Throughput".to_string(),
+                    ],
                     notes: None,
                 },
                 SlideSpec {
                     title: "Performance Gains".to_string(),
-                    bullet_points: vec!["Zero runtime bloat".to_string(), "Low memory overhead".to_string()],
+                    bullet_points: vec![
+                        "Zero runtime bloat".to_string(),
+                        "Low memory overhead".to_string(),
+                    ],
                     notes: None,
                 },
             ],

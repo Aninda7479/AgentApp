@@ -1,13 +1,12 @@
-use std::path::PathBuf;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::path::PathBuf;
 
 use crate::media::pdf::{generate_pdf_document, PdfDocumentSpec};
 use crate::media::presentation::{generate_presentation_deck, PresentationSpec};
 use crate::tools::builtin::file_ops::validate_path_in_workspace;
 use crate::tools::r#trait::Tool;
-
 
 pub struct GeneratePdfTool {
     workspace_root: PathBuf,
@@ -55,12 +54,18 @@ impl Tool for GeneratePdfTool {
     }
 
     async fn execute(&self, input: Value) -> Result<String> {
-        let output_path_str = input["output_path"].as_str().ok_or_else(|| anyhow!("Missing output_path"))?;
+        let output_path_str = input["output_path"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing output_path"))?;
         let safe_out = validate_path_in_workspace(output_path_str, &self.workspace_root)?;
 
         let spec: PdfDocumentSpec = serde_json::from_value(input)?;
         let bytes = generate_pdf_document(&spec, &safe_out)?;
-        Ok(format!("Successfully generated PDF ({} bytes) at '{}'", bytes, safe_out.display()))
+        Ok(format!(
+            "Successfully generated PDF ({} bytes) at '{}'",
+            bytes,
+            safe_out.display()
+        ))
     }
 }
 
@@ -112,11 +117,17 @@ impl Tool for GeneratePresentationTool {
     }
 
     async fn execute(&self, input: Value) -> Result<String> {
-        let output_path_str = input["output_path"].as_str().ok_or_else(|| anyhow!("Missing output_path"))?;
+        let output_path_str = input["output_path"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Missing output_path"))?;
         let safe_out = validate_path_in_workspace(output_path_str, &self.workspace_root)?;
 
         let spec: PresentationSpec = serde_json::from_value(input)?;
         let bytes = generate_presentation_deck(&spec, &safe_out)?;
-        Ok(format!("Successfully generated presentation deck ({} bytes) at '{}'", bytes, safe_out.display()))
+        Ok(format!(
+            "Successfully generated presentation deck ({} bytes) at '{}'",
+            bytes,
+            safe_out.display()
+        ))
     }
 }

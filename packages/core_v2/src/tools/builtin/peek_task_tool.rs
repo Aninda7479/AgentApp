@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::sync::Arc;
 
 use crate::tools::builtin::task_manager::{TaskManager, TaskStatus};
 use crate::tools::r#trait::Tool;
@@ -48,7 +48,8 @@ impl Tool for PeekTaskTool {
         let should_kill = input["kill"].as_bool().unwrap_or(false);
 
         if should_kill {
-            let id = task_id.ok_or_else(|| anyhow!("Parameter 'task_id' is required when kill=true"))?;
+            let id =
+                task_id.ok_or_else(|| anyhow!("Parameter 'task_id' is required when kill=true"))?;
             self.task_manager.kill(id)?;
             return Ok(format!("Background task '{}' has been terminated.", id));
         }
@@ -57,7 +58,10 @@ impl Tool for PeekTaskTool {
 
         if snapshots.is_empty() {
             if let Some(id) = task_id {
-                return Ok(format!("Task '{}' was not found in the active background task registry.", id));
+                return Ok(format!(
+                    "Task '{}' was not found in the active background task registry.",
+                    id
+                ));
             } else {
                 return Ok("No background tasks are currently running or recorded.".to_string());
             }
@@ -67,7 +71,9 @@ impl Tool for PeekTaskTool {
         for snap in &snapshots {
             let status_str = match &snap.status {
                 TaskStatus::Running => format!("RUNNING (elapsed: {}s)", snap.elapsed_secs),
-                TaskStatus::Completed { exit_code } => format!("COMPLETED (exit code: {})", exit_code),
+                TaskStatus::Completed { exit_code } => {
+                    format!("COMPLETED (exit code: {})", exit_code)
+                }
                 TaskStatus::Failed { error } => format!("FAILED ({})", error),
                 TaskStatus::Terminated => "TERMINATED BY USER".to_string(),
             };

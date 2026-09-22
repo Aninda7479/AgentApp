@@ -3,5 +3,5 @@ pub mod registry;
 pub mod r#trait;
 
 pub use builtin::*;
-pub use registry::ToolRegistry;
 pub use r#trait::Tool;
+pub use registry::ToolRegistry;

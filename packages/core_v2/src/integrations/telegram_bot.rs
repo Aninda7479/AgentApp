@@ -13,7 +13,8 @@ use tracing::{debug, error, info, warn};
 
 use crate::automation::{BrowserNavigateTool, BrowserScreenshotTool, WebSearchTool};
 use crate::integrations::telegram::{
-    TelegramClient, TelegramMessage, TelegramSendMediaOptions, TelegramSendOptions,
+    sanitize_telegram_error_with_token, TelegramClient, TelegramMessage, TelegramSendMediaOptions,
+    TelegramSendOptions,
 };
 use crate::media::GeneratePdfTool;
 use crate::orchestrator::AgentEngine;
@@ -867,7 +868,7 @@ impl TelegramBotManager {
                             "--merge-output-format",
                             "mp4",
                             "--format-sort",
-                            "res:720,size",
+                            "vcodec:h264,res:720,size",
                         ]);
                     } else {
                         // Without ffmpeg, yt-dlp cannot merge video and audio streams.
@@ -967,26 +968,171 @@ impl TelegramBotManager {
                                         }
                                         Ok(res) => {
                                             warn!(
-                                                "Telegram send_media returned failure: {:?}",
+                                                "Telegram send_media returned failure: {:?}. Retrying with document fallback...",
                                                 res.error
                                             );
-                                            let err_msg = res.error.unwrap_or_else(|| {
-                                                "Failed to upload video to Telegram.".to_string()
-                                            });
-                                            let _ = self.client.send_message_chunked(
-                                                &bot_token,
-                                                &chat_id.to_string(),
-                                                &format!("⚠️ Could not send video to Telegram: {}\n\nLink: {}", err_msg, media_url),
-                                                None,
-                                            ).await;
-                                            return;
+                                            let doc_opts = TelegramSendMediaOptions {
+                                                bot_token: bot_token.clone(),
+                                                chat_id: chat_id.to_string(),
+                                                file_path_or_url: final_video
+                                                    .to_string_lossy()
+                                                    .to_string(),
+                                                caption: Some(format!(
+                                                    "🎬 Here is your video!\n{}",
+                                                    media_url
+                                                )),
+                                                media_type: Some("document".to_string()),
+                                                title: None,
+                                            };
+                                            let doc_res = self.client.send_media(&doc_opts).await;
+                                            match doc_res {
+                                                Ok(d_res) if d_res.success => {
+                                                    info!("✔ Video successfully delivered as document fallback to Telegram chat {}", chat_id);
+                                                    let existing_session = self
+                                                        .chat_storage
+                                                        .load_session(&session_id)
+                                                        .ok();
+                                                    let mut full_history = existing_session
+                                                        .as_ref()
+                                                        .map(|s| s.messages.clone())
+                                                        .unwrap_or_default();
+                                                    full_history.push(ChatMessage::user(&prompt));
+                                                    full_history.push(ChatMessage::assistant(
+                                                        format!(
+                                                            "🎬 Here is your video!\n{}",
+                                                            media_url
+                                                        ),
+                                                    ));
+                                                    let updated_session = ChatSession {
+                                                        id: session_id.clone(),
+                                                        title: generate_telegram_chat_title(
+                                                            &prompt, &user_name,
+                                                        ),
+                                                        project: None,
+                                                        model: Some("media_downloader".to_string()),
+                                                        created_at: existing_session
+                                                            .as_ref()
+                                                            .map(|s| s.created_at)
+                                                            .unwrap_or_else(|| {
+                                                                Utc::now().timestamp_millis()
+                                                            }),
+                                                        updated_at: Utc::now().timestamp_millis(),
+                                                        messages: full_history.clone(),
+                                                    };
+                                                    let _ = self
+                                                        .chat_storage
+                                                        .save_session(&updated_session);
+                                                    {
+                                                        let mut store = self.session_store.lock();
+                                                        let entry = SessionStateEntry {
+                                                            full_assistant_text: format!(
+                                                                "🎬 Here is your video!\n{}",
+                                                                media_url
+                                                            ),
+                                                            conversation_history: full_history,
+                                                            ..Default::default()
+                                                        };
+                                                        store.put(session_id.clone(), entry);
+                                                    }
+                                                    return;
+                                                }
+                                                _ => {
+                                                    let err_raw = res.error.unwrap_or_else(|| {
+                                                        "Failed to upload video to Telegram."
+                                                            .to_string()
+                                                    });
+                                                    let clean_err =
+                                                        sanitize_telegram_error_with_token(
+                                                            &err_raw, &bot_token,
+                                                        );
+                                                    let _ = self.client.send_message_chunked(
+                                                        &bot_token,
+                                                        &chat_id.to_string(),
+                                                        &format!("⚠️ Could not send video to Telegram: {}\n\nLink: {}", clean_err, media_url),
+                                                        None,
+                                                    ).await;
+                                                    return;
+                                                }
+                                            }
                                         }
                                         Err(e) => {
-                                            warn!("Failed to send media to Telegram: {}", e);
+                                            warn!("Failed to send media to Telegram: {}. Retrying with document fallback...", e);
+                                            let doc_opts = TelegramSendMediaOptions {
+                                                bot_token: bot_token.clone(),
+                                                chat_id: chat_id.to_string(),
+                                                file_path_or_url: final_video
+                                                    .to_string_lossy()
+                                                    .to_string(),
+                                                caption: Some(format!(
+                                                    "🎬 Here is your video!\n{}",
+                                                    media_url
+                                                )),
+                                                media_type: Some("document".to_string()),
+                                                title: None,
+                                            };
+                                            if let Ok(d_res) =
+                                                self.client.send_media(&doc_opts).await
+                                            {
+                                                if d_res.success {
+                                                    info!("✔ Video successfully delivered as document fallback to Telegram chat {}", chat_id);
+                                                    let existing_session = self
+                                                        .chat_storage
+                                                        .load_session(&session_id)
+                                                        .ok();
+                                                    let mut full_history = existing_session
+                                                        .as_ref()
+                                                        .map(|s| s.messages.clone())
+                                                        .unwrap_or_default();
+                                                    full_history.push(ChatMessage::user(&prompt));
+                                                    full_history.push(ChatMessage::assistant(
+                                                        format!(
+                                                            "🎬 Here is your video!\n{}",
+                                                            media_url
+                                                        ),
+                                                    ));
+                                                    let updated_session = ChatSession {
+                                                        id: session_id.clone(),
+                                                        title: generate_telegram_chat_title(
+                                                            &prompt, &user_name,
+                                                        ),
+                                                        project: None,
+                                                        model: Some("media_downloader".to_string()),
+                                                        created_at: existing_session
+                                                            .as_ref()
+                                                            .map(|s| s.created_at)
+                                                            .unwrap_or_else(|| {
+                                                                Utc::now().timestamp_millis()
+                                                            }),
+                                                        updated_at: Utc::now().timestamp_millis(),
+                                                        messages: full_history.clone(),
+                                                    };
+                                                    let _ = self
+                                                        .chat_storage
+                                                        .save_session(&updated_session);
+                                                    {
+                                                        let mut store = self.session_store.lock();
+                                                        let entry = SessionStateEntry {
+                                                            full_assistant_text: format!(
+                                                                "🎬 Here is your video!\n{}",
+                                                                media_url
+                                                            ),
+                                                            conversation_history: full_history,
+                                                            ..Default::default()
+                                                        };
+                                                        store.put(session_id.clone(), entry);
+                                                    }
+                                                    return;
+                                                }
+                                            }
+
+                                            let clean_err = sanitize_telegram_error_with_token(
+                                                &e.to_string(),
+                                                &bot_token,
+                                            );
                                             let _ = self.client.send_message_chunked(
                                                 &bot_token,
                                                 &chat_id.to_string(),
-                                                &format!("⚠️ Network error sending video to Telegram: {}\n\nLink: {}", e, media_url),
+                                                &format!("⚠️ Network error sending video to Telegram: {}\n\nLink: {}", clean_err, media_url),
                                                 None,
                                             ).await;
                                             return;
@@ -1021,10 +1167,14 @@ impl TelegramBotManager {
                                         .lines()
                                         .find(|l| l.contains("ERROR:"))
                                         .unwrap_or("Unable to download this video format from the provided source.");
+                                    let clean_snippet = sanitize_telegram_error_with_token(
+                                        error_snippet,
+                                        &bot_token,
+                                    );
                                     let _ = self.client.send_message_chunked(
                                         &bot_token,
                                         &chat_id.to_string(),
-                                        &format!("⚠️ Could not download video from the link:\n{}\n\nURL: {}", error_snippet, media_url),
+                                        &format!("⚠️ Could not download video from the link:\n{}\n\nURL: {}", clean_snippet, media_url),
                                         None,
                                     ).await;
                                     return;
@@ -1033,12 +1183,14 @@ impl TelegramBotManager {
                         }
                         Ok(Err(e)) => {
                             warn!("Failed to execute yt-dlp: {}", e);
+                            let clean_err =
+                                sanitize_telegram_error_with_token(&e.to_string(), &bot_token);
                             let _ = self
                                 .client
                                 .send_message_chunked(
                                     &bot_token,
                                     &chat_id.to_string(),
-                                    &format!("⚠️ Failed to launch media downloader: {}", e),
+                                    &format!("⚠️ Failed to launch media downloader: {}", clean_err),
                                     None,
                                 )
                                 .await;
@@ -1418,9 +1570,10 @@ impl TelegramBotManager {
                 {
                     assistant_text = "⚠️ The AI service is currently experiencing high demand or rate limits. Please configure an API key in Settings for unlimited access or try again shortly.".to_string();
                 } else {
+                    let clean_err = sanitize_telegram_error_with_token(&err, &bot_token);
                     assistant_text = format!(
                         "⚠️ I ran into an error while processing your request: {}",
-                        err
+                        clean_err
                     );
                 }
             }
@@ -1430,12 +1583,30 @@ impl TelegramBotManager {
             assistant_text = "I have processed your request.".to_string();
         }
 
+        // Clean out any <think>...</think>, <thought>...</thought>, or <reasoning>...</reasoning> blocks
+        let cleaned_assistant_text = strip_thinking_tags(&assistant_text);
+        if !cleaned_assistant_text.is_empty() {
+            assistant_text = cleaned_assistant_text;
+        }
+
         // 8. Save updated session to ChatStorage (preserving complete history)
         let mut full_history = existing_session
             .as_ref()
             .map(|s| s.messages.clone())
             .unwrap_or_default();
         if !new_messages_collected.is_empty() {
+            for msg in &mut new_messages_collected {
+                if msg.role == Role::Assistant {
+                    for block in &mut msg.content {
+                        if let ContentBlock::Text { text } = block {
+                            let cleaned = strip_thinking_tags(text);
+                            if !cleaned.is_empty() {
+                                *text = cleaned;
+                            }
+                        }
+                    }
+                }
+            }
             full_history.extend(new_messages_collected);
         } else {
             full_history.push(ChatMessage::user(&prompt));
@@ -1503,6 +1674,22 @@ impl TelegramBotManager {
 
         info!("✔ Successfully replied to Telegram chat {}", chat_id);
     }
+}
+
+/// Strips `<think>...</think>`, `<thought>...</thought>`, and `<reasoning>...</reasoning>` blocks
+/// from the given text (case-insensitive, across multiple lines, and handles unclosed tags).
+pub fn strip_thinking_tags(text: &str) -> String {
+    // 1. Strip closed <think>...</think>, <thought>...</thought>, <reasoning>...</reasoning>
+    let re_closed =
+        regex::Regex::new(r"(?is)<(?:think|thought|reasoning)>.*?</(?:think|thought|reasoning)>")
+            .unwrap();
+    let cleaned = re_closed.replace_all(text, "");
+
+    // 2. Strip any remaining unclosed <think>... or <thought>... to the end of string
+    let re_unclosed = regex::Regex::new(r"(?is)<(?:think|thought|reasoning)>.*$").unwrap();
+    let cleaned = re_unclosed.replace_all(&cleaned, "");
+
+    cleaned.trim().to_string()
 }
 
 /// Extracts a direct downloadable social media video link from text (Instagram Reel/Post, YouTube Short/Video, TikTok, Twitter/X)
@@ -2127,5 +2314,39 @@ mod tests {
     fn test_find_ffmpeg_binary() {
         let bin = find_ffmpeg_binary();
         assert!(bin.is_some());
+    }
+
+    #[test]
+    fn test_strip_thinking_tags() {
+        // 1. Standard thinking block
+        let t1 = "<think>\nUser just said \"Hello\". Need to respond friendly...\n</think>\n\nHello! How can I help you today?";
+        assert_eq!(strip_thinking_tags(t1), "Hello! How can I help you today?");
+
+        // 2. Case-insensitivity and <thought> tag
+        let t2 = "<THOUGHT>Some internal calculation</THOUGHT>The answer is 42.";
+        assert_eq!(strip_thinking_tags(t2), "The answer is 42.");
+
+        // 3. <reasoning> tag
+        let t3 = "<reasoning>\nStep 1\nStep 2\n</reasoning>\nDone!";
+        assert_eq!(strip_thinking_tags(t3), "Done!");
+
+        // 4. Multiple thinking blocks
+        let t4 = "<think>part 1</think>Hello <think>part 2</think>world!";
+        assert_eq!(strip_thinking_tags(t4), "Hello world!");
+
+        // 5. Unclosed tag at end of message
+        let t5 = "Here is the response.<think>unfinished reasoning";
+        assert_eq!(strip_thinking_tags(t5), "Here is the response.");
+
+        // 6. Text without thinking tags
+        let t6 = "Just a normal message without tags.";
+        assert_eq!(
+            strip_thinking_tags(t6),
+            "Just a normal message without tags."
+        );
+
+        // 7. Message entirely inside unclosed think
+        let t7 = "<think>only thinking here";
+        assert_eq!(strip_thinking_tags(t7), "");
     }
 }

@@ -1,8 +1,8 @@
-use std::collections::HashMap;
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use reqwest::Client;
 use serde_json::json;
+use std::collections::HashMap;
 use tokio::sync::mpsc::{channel, Receiver};
 
 use crate::providers::LlmProvider;
@@ -82,8 +82,11 @@ impl LlmProvider for AnthropicProvider {
                                     }
                                 }));
                             }
-                            ContentBlock::ToolResult { tool_use_id, content, is_error } => {
-
+                            ContentBlock::ToolResult {
+                                tool_use_id,
+                                content,
+                                is_error,
+                            } => {
                                 content_blocks.push(json!({
                                     "type": "tool_result",
                                     "tool_use_id": tool_use_id,
@@ -128,7 +131,12 @@ impl LlmProvider for AnthropicProvider {
                 Role::Tool => {
                     let mut content_blocks = Vec::new();
                     for block in &msg.content {
-                        if let ContentBlock::ToolResult { tool_use_id, content, is_error } = block {
+                        if let ContentBlock::ToolResult {
+                            tool_use_id,
+                            content,
+                            is_error,
+                        } = block
+                        {
                             content_blocks.push(json!({
                                 "type": "tool_result",
                                 "tool_use_id": tool_use_id,
@@ -229,7 +237,11 @@ impl LlmProvider for AnthropicProvider {
                 let bytes = match item {
                     Ok(b) => b,
                     Err(e) => {
-                        let _ = tx.send(AgentEvent::Error { message: e.to_string() }).await;
+                        let _ = tx
+                            .send(AgentEvent::Error {
+                                message: e.to_string(),
+                            })
+                            .await;
                         return;
                     }
                 };
@@ -247,34 +259,68 @@ impl LlmProvider for AnthropicProvider {
                     if let Some(data_str) = line.strip_prefix("data: ") {
                         let data_str = data_str.trim();
                         if let Ok(v) = serde_json::from_str::<serde_json::Value>(data_str) {
-                            let event_type = v.get("type").and_then(|t| t.as_str()).unwrap_or_default();
+                            let event_type =
+                                v.get("type").and_then(|t| t.as_str()).unwrap_or_default();
 
                             match event_type {
                                 "content_block_start" => {
-                                    let idx = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
+                                    let idx = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0)
+                                        as usize;
                                     if let Some(block) = v.get("content_block") {
-                                        let b_type = block.get("type").and_then(|t| t.as_str()).unwrap_or_default();
+                                        let b_type = block
+                                            .get("type")
+                                            .and_then(|t| t.as_str())
+                                            .unwrap_or_default();
                                         if b_type == "tool_use" {
-                                            let id = block.get("id").and_then(|s| s.as_str()).unwrap_or_default().to_string();
-                                            let name = block.get("name").and_then(|s| s.as_str()).unwrap_or_default().to_string();
-                                            blocks_map.insert(idx, BlockState { id, name, json_buf: String::new() });
+                                            let id = block
+                                                .get("id")
+                                                .and_then(|s| s.as_str())
+                                                .unwrap_or_default()
+                                                .to_string();
+                                            let name = block
+                                                .get("name")
+                                                .and_then(|s| s.as_str())
+                                                .unwrap_or_default()
+                                                .to_string();
+                                            blocks_map.insert(
+                                                idx,
+                                                BlockState {
+                                                    id,
+                                                    name,
+                                                    json_buf: String::new(),
+                                                },
+                                            );
                                         }
                                     }
                                 }
                                 "content_block_delta" => {
-                                    let idx = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
+                                    let idx = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0)
+                                        as usize;
                                     if let Some(delta) = v.get("delta") {
-                                        let d_type = delta.get("type").and_then(|t| t.as_str()).unwrap_or_default();
+                                        let d_type = delta
+                                            .get("type")
+                                            .and_then(|t| t.as_str())
+                                            .unwrap_or_default();
                                         if d_type == "text_delta" {
-                                            if let Some(text) = delta.get("text").and_then(|t| t.as_str()) {
+                                            if let Some(text) =
+                                                delta.get("text").and_then(|t| t.as_str())
+                                            {
                                                 if !text.is_empty() {
-                                                    if tx.send(AgentEvent::Token { text: text.to_string() }).await.is_err() {
+                                                    if tx
+                                                        .send(AgentEvent::Token {
+                                                            text: text.to_string(),
+                                                        })
+                                                        .await
+                                                        .is_err()
+                                                    {
                                                         return;
                                                     }
                                                 }
                                             }
                                         } else if d_type == "input_json_delta" {
-                                            if let Some(partial) = delta.get("partial_json").and_then(|p| p.as_str()) {
+                                            if let Some(partial) =
+                                                delta.get("partial_json").and_then(|p| p.as_str())
+                                            {
                                                 if let Some(state) = blocks_map.get_mut(&idx) {
                                                     state.json_buf.push_str(partial);
                                                 }
@@ -283,29 +329,54 @@ impl LlmProvider for AnthropicProvider {
                                     }
                                 }
                                 "content_block_stop" => {
-                                    let idx = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
+                                    let idx = v.get("index").and_then(|i| i.as_u64()).unwrap_or(0)
+                                        as usize;
                                     if let Some(state) = blocks_map.remove(&idx) {
-                                        let input: serde_json::Value = serde_json::from_str(&state.json_buf)
-                                            .unwrap_or_else(|_| json!({ "raw": state.json_buf }));
-                                        if tx.send(AgentEvent::ToolCall { id: state.id, name: state.name, input }).await.is_err() {
+                                        let input: serde_json::Value = serde_json::from_str(
+                                            &state.json_buf,
+                                        )
+                                        .unwrap_or_else(|_| json!({ "raw": state.json_buf }));
+                                        if tx
+                                            .send(AgentEvent::ToolCall {
+                                                id: state.id,
+                                                name: state.name,
+                                                input,
+                                            })
+                                            .await
+                                            .is_err()
+                                        {
                                             return;
                                         }
                                     }
                                 }
                                 "message_delta" => {
                                     if let Some(delta) = v.get("delta") {
-                                        if let Some(reason) = delta.get("stop_reason").and_then(|r| r.as_str()) {
+                                        if let Some(reason) =
+                                            delta.get("stop_reason").and_then(|r| r.as_str())
+                                        {
                                             stop_reason = reason.to_string();
                                         }
                                     }
                                 }
                                 "message_stop" => {
-                                    let _ = tx.send(AgentEvent::Finished { stop_reason: stop_reason.clone() }).await;
+                                    let _ = tx
+                                        .send(AgentEvent::Finished {
+                                            stop_reason: stop_reason.clone(),
+                                        })
+                                        .await;
                                     return;
                                 }
                                 "error" => {
-                                    let msg = v.get("error").and_then(|e| e.get("message")).and_then(|m| m.as_str()).unwrap_or("Unknown Anthropic error");
-                                    let _ = tx.send(AgentEvent::Error { message: msg.to_string() }).await;
+                                    let msg = v
+                                        .get("error")
+                                        .and_then(|e| e.get("message"))
+                                        .and_then(|m| m.as_str())
+                                        .unwrap_or("Unknown Anthropic error");
+                                    let _ = tx
+                                        .send(AgentEvent::Error {
+                                            message: msg.to_string(),
+                                        })
+                                        .await;
                                     return;
                                 }
                                 _ => {}

@@ -6,8 +6,8 @@ pub use engine::*;
 pub use models::*;
 pub use types::*;
 
-use std::path::PathBuf;
 use anyhow::{anyhow, Result};
+use std::path::PathBuf;
 use tracing::info;
 use uuid::Uuid;
 
@@ -38,7 +38,10 @@ impl VideoWorkspaceManager {
     }
 
     /// Perform video generation using the local engine synchronously
-    pub async fn generate_local(&self, req: &GenerateVideoRequest) -> Result<GenerateVideoResponse> {
+    pub async fn generate_local(
+        &self,
+        req: &GenerateVideoRequest,
+    ) -> Result<GenerateVideoResponse> {
         if !self.engine.is_installed() {
             return Err(anyhow!(
                 "Local video engine is not installed. Please set up the engine in Settings -> Local Video Model."
@@ -46,16 +49,13 @@ impl VideoWorkspaceManager {
         }
 
         // Resolve model ID
-        let model_id = req
-            .model_id
-            .clone()
-            .unwrap_or_else(|| {
-                let list = self.models.list_models();
-                list.into_iter()
-                    .find(|m| m.is_downloaded)
-                    .map(|m| m.id)
-                    .unwrap_or_else(|| "wan2.1-t2v-1.3b".to_string())
-            });
+        let model_id = req.model_id.clone().unwrap_or_else(|| {
+            let list = self.models.list_models();
+            list.into_iter()
+                .find(|m| m.is_downloaded)
+                .map(|m| m.id)
+                .unwrap_or_else(|| "wan2.1-t2v-1.3b".to_string())
+        });
 
         let model_path = self.models.get_model_path(&model_id).ok_or_else(|| {
             anyhow!(
@@ -111,7 +111,9 @@ impl VideoWorkspaceManager {
         let height = req.height.unwrap_or(480);
         let steps = req.steps.unwrap_or(30);
         let cfg_scale = req.cfg_scale.unwrap_or(6.0);
-        let seed = req.seed.unwrap_or_else(|| rand::random::<i32>().abs() as i64);
+        let seed = req
+            .seed
+            .unwrap_or_else(|| rand::random::<i32>().abs() as i64);
         let created_at = chrono::Utc::now().timestamp_millis();
 
         let record = VideoGenerationRecord {
@@ -138,7 +140,8 @@ impl VideoWorkspaceManager {
         };
 
         let dest_video = self.storage.video_path(&video_filename);
-        move_file_async(&temp_mp4, &dest_video).await
+        move_file_async(&temp_mp4, &dest_video)
+            .await
             .map_err(|e| anyhow!("Failed to move generated video: {}", e))?;
 
         if temp_thumb.exists() {
@@ -183,16 +186,13 @@ impl VideoWorkspaceManager {
         }
 
         // Resolve model ID
-        let model_id = req
-            .model_id
-            .clone()
-            .unwrap_or_else(|| {
-                let list = self.models.list_models();
-                list.into_iter()
-                    .find(|m| m.is_downloaded)
-                    .map(|m| m.id)
-                    .unwrap_or_else(|| "wan2.1-t2v-1.3b".to_string())
-            });
+        let model_id = req.model_id.clone().unwrap_or_else(|| {
+            let list = self.models.list_models();
+            list.into_iter()
+                .find(|m| m.is_downloaded)
+                .map(|m| m.id)
+                .unwrap_or_else(|| "wan2.1-t2v-1.3b".to_string())
+        });
 
         let model_path = self.models.get_model_path(&model_id).ok_or_else(|| {
             anyhow!(
@@ -258,7 +258,13 @@ impl VideoWorkspaceManager {
 
         let elapsed_ms = self
             .engine
-            .execute_generation_streaming(&effective_req, &model_path, &temp_mp4, &temp_thumb, Some(progress_tx))
+            .execute_generation_streaming(
+                &effective_req,
+                &model_path,
+                &temp_mp4,
+                &temp_thumb,
+                Some(progress_tx),
+            )
             .await?;
 
         let num_frames = req.num_frames.unwrap_or(81);
@@ -268,7 +274,9 @@ impl VideoWorkspaceManager {
         let height = req.height.unwrap_or(480);
         let steps = req.steps.unwrap_or(30);
         let cfg_scale = req.cfg_scale.unwrap_or(6.0);
-        let seed = req.seed.unwrap_or_else(|| rand::random::<i32>().abs() as i64);
+        let seed = req
+            .seed
+            .unwrap_or_else(|| rand::random::<i32>().abs() as i64);
         let created_at = chrono::Utc::now().timestamp_millis();
 
         let record = VideoGenerationRecord {
@@ -295,7 +303,8 @@ impl VideoWorkspaceManager {
         };
 
         let dest_video = self.storage.video_path(&video_filename);
-        move_file_async(&temp_mp4, &dest_video).await
+        move_file_async(&temp_mp4, &dest_video)
+            .await
             .map_err(|e| anyhow!("Failed to move generated video: {}", e))?;
 
         if temp_thumb.exists() {

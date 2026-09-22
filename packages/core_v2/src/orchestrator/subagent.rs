@@ -1,8 +1,8 @@
+use anyhow::{anyhow, Result};
+use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::Arc;
-use anyhow::{anyhow, Result};
 use tokio::sync::{mpsc, Mutex};
-use chrono::Utc;
 
 use crate::orchestrator::AgentEngine;
 use crate::roster::PersonaStore;
@@ -72,11 +72,7 @@ impl SubagentRunner {
     }
 
     /// Spawns and executes a subagent persona run synchronously (collecting full output text).
-    pub async fn execute_subagent(
-        &self,
-        persona_id: &str,
-        prompt: &str,
-    ) -> Result<String> {
+    pub async fn execute_subagent(&self, persona_id: &str, prompt: &str) -> Result<String> {
         let persona = self
             .roster
             .get(persona_id)

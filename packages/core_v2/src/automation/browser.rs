@@ -1,6 +1,5 @@
-use std::path::{Path, PathBuf};
 use anyhow::Result;
-
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -58,11 +57,7 @@ impl HeadlessBrowserEngine {
     }
 
     /// Captures a mock / rendered visual screenshot artifact of the URL.
-    pub async fn capture_page_preview(
-        &self,
-        url: &str,
-        output_path: &Path,
-    ) -> Result<PathBuf> {
+    pub async fn capture_page_preview(&self, url: &str, output_path: &Path) -> Result<PathBuf> {
         let page = self.fetch_page_content(url).await?;
 
         let preview_html = format!(

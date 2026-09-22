@@ -1,4 +1,4 @@
-﻿use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::io::Cursor;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -133,7 +133,11 @@ impl AudioRecorder {
     }
 
     pub fn get_current_level(&self) -> f32 {
-        self.peak_level.lock().map(|p| *p).unwrap_or(0.0).clamp(0.0, 1.0)
+        self.peak_level
+            .lock()
+            .map(|p| *p)
+            .unwrap_or(0.0)
+            .clamp(0.0, 1.0)
     }
 
     pub fn stop(self) -> Result<Vec<u8>, String> {

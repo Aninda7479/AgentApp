@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use crate::roster::PersonaStore;
 use crate::types::AgentPersona;
+use std::sync::Arc;
 
 pub struct Coordinator {
     roster: Arc<PersonaStore>,
@@ -87,17 +87,20 @@ mod tests {
         let coordinator = Coordinator::new(roster);
 
         // Test @mention routing
-        let routed = coordinator.route_prompt("@trend-radar scan the AI news").await;
+        let routed = coordinator
+            .route_prompt("@trend-radar scan the AI news")
+            .await;
         assert!(routed.explicit_mention);
         assert_eq!(routed.persona.id, "trend-radar");
         assert_eq!(routed.clean_prompt, "scan the AI news");
 
         // Test default routing
-        let default_routed = coordinator.route_prompt("How do I architect this application?").await;
+        let default_routed = coordinator
+            .route_prompt("How do I architect this application?")
+            .await;
         assert!(!default_routed.explicit_mention);
         assert_eq!(default_routed.persona.id, "coordinator");
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
-

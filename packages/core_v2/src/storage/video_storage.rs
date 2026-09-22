@@ -99,7 +99,8 @@ impl VideoStorage {
                 let path = entry.path();
                 if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some("json") {
                     if let Ok(content) = fs::read_to_string(&path) {
-                        if let Ok(record) = serde_json::from_str::<VideoGenerationRecord>(&content) {
+                        if let Ok(record) = serde_json::from_str::<VideoGenerationRecord>(&content)
+                        {
                             list.push(record);
                         }
                     }

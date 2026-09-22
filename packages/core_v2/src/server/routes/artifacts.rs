@@ -131,7 +131,10 @@ pub async fn get_artifact_sdk() -> impl IntoResponse {
 "#;
 
     (
-        [(header::CONTENT_TYPE, "application/javascript; charset=utf-8")],
+        [(
+            header::CONTENT_TYPE,
+            "application/javascript; charset=utf-8",
+        )],
         sdk_js,
     )
 }
@@ -150,9 +153,7 @@ pub fn get_artifact_dir(id: &str) -> Option<PathBuf> {
     None
 }
 
-pub async fn view_artifact_root(
-    AxumPath(id): AxumPath<String>,
-) -> impl IntoResponse {
+pub async fn view_artifact_root(AxumPath(id): AxumPath<String>) -> impl IntoResponse {
     view_artifact_file(AxumPath((id, String::new()))).await
 }
 
@@ -166,7 +167,9 @@ pub async fn view_artifact_file(
 
     let canonical_root = match art_dir.canonicalize() {
         Ok(p) => p,
-        Err(_) => return (StatusCode::NOT_FOUND, "Artifact directory unresolvable").into_response(),
+        Err(_) => {
+            return (StatusCode::NOT_FOUND, "Artifact directory unresolvable").into_response()
+        }
     };
 
     let requested_path = if subpath.trim().is_empty() || subpath == "/" {
@@ -209,10 +212,11 @@ pub async fn view_artifact_file(
     }
 }
 
-pub async fn get_artifact_storage(
-    AxumPath(id): AxumPath<String>,
-) -> Json<serde_json::Value> {
-    let file = get_superagent_dir().join("artifacts").join(&id).join("storage.json");
+pub async fn get_artifact_storage(AxumPath(id): AxumPath<String>) -> Json<serde_json::Value> {
+    let file = get_superagent_dir()
+        .join("artifacts")
+        .join(&id)
+        .join("storage.json");
     let data: serde_json::Value = tokio::fs::read_to_string(&file)
         .await
         .ok()
@@ -230,15 +234,20 @@ pub async fn set_artifact_storage(
     let dir = get_superagent_dir().join("artifacts").join(&id);
     let _ = tokio::fs::create_dir_all(&dir).await;
     let file = dir.join("storage.json");
-    let _ = tokio::fs::write(&file, serde_json::to_string_pretty(&payload).unwrap_or_default()).await;
+    let _ = tokio::fs::write(
+        &file,
+        serde_json::to_string_pretty(&payload).unwrap_or_default(),
+    )
+    .await;
 
     Json(serde_json::json!({ "ok": true, "id": id, "data": payload }))
 }
 
-pub async fn clear_artifact_storage(
-    AxumPath(id): AxumPath<String>,
-) -> Json<serde_json::Value> {
-    let file = get_superagent_dir().join("artifacts").join(&id).join("storage.json");
+pub async fn clear_artifact_storage(AxumPath(id): AxumPath<String>) -> Json<serde_json::Value> {
+    let file = get_superagent_dir()
+        .join("artifacts")
+        .join(&id)
+        .join("storage.json");
     let _ = tokio::fs::remove_file(file).await;
     Json(serde_json::json!({ "ok": true, "id": id, "cleared": true }))
 }
@@ -246,7 +255,10 @@ pub async fn clear_artifact_storage(
 pub async fn get_artifact_storage_key(
     AxumPath((id, key)): AxumPath<(String, String)>,
 ) -> Json<serde_json::Value> {
-    let file = get_superagent_dir().join("artifacts").join(&id).join("storage.json");
+    let file = get_superagent_dir()
+        .join("artifacts")
+        .join(&id)
+        .join("storage.json");
     let data: HashMap<String, serde_json::Value> = tokio::fs::read_to_string(&file)
         .await
         .ok()
@@ -273,7 +285,11 @@ pub async fn set_artifact_storage_key(
         .unwrap_or_default();
 
     data.insert(key.clone(), value.clone());
-    let _ = tokio::fs::write(&file, serde_json::to_string_pretty(&data).unwrap_or_default()).await;
+    let _ = tokio::fs::write(
+        &file,
+        serde_json::to_string_pretty(&data).unwrap_or_default(),
+    )
+    .await;
 
     Json(serde_json::json!({ "ok": true, "id": id, "key": key, "value": value }))
 }
@@ -281,7 +297,10 @@ pub async fn set_artifact_storage_key(
 pub async fn delete_artifact_storage_key(
     AxumPath((id, key)): AxumPath<(String, String)>,
 ) -> Json<serde_json::Value> {
-    let file = get_superagent_dir().join("artifacts").join(&id).join("storage.json");
+    let file = get_superagent_dir()
+        .join("artifacts")
+        .join(&id)
+        .join("storage.json");
     let mut data: HashMap<String, serde_json::Value> = tokio::fs::read_to_string(&file)
         .await
         .ok()
@@ -290,7 +309,11 @@ pub async fn delete_artifact_storage_key(
 
     let deleted = data.remove(&key).is_some();
     if deleted {
-        let _ = tokio::fs::write(&file, serde_json::to_string_pretty(&data).unwrap_or_default()).await;
+        let _ = tokio::fs::write(
+            &file,
+            serde_json::to_string_pretty(&data).unwrap_or_default(),
+        )
+        .await;
     }
 
     Json(serde_json::json!({ "ok": true, "id": id, "key": key, "deleted": deleted }))

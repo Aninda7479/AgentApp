@@ -153,11 +153,6 @@ pub struct GenerationProgressEvent {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GenerationStreamMessage {
     Progress(GenerationProgressEvent),
-    Complete {
-        result: GenerateImageResponse,
-    },
-    Error {
-        message: String,
-        error_type: String,
-    },
+    Complete { result: GenerateImageResponse },
+    Error { message: String, error_type: String },
 }

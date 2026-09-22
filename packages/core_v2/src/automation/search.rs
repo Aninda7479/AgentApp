@@ -38,7 +38,10 @@ impl WebSearchEngine {
             return Ok(vec![SearchResultItem {
                 title: format!("Search results for '{}'", query),
                 url: format!("https://duckduckgo.com/?q={}", urlencoding::encode(query)),
-                snippet: format!("Web query for '{}' executed via SuperAgent Core v2 engine.", query),
+                snippet: format!(
+                    "Web query for '{}' executed via SuperAgent Core v2 engine.",
+                    query
+                ),
             }]);
         }
 
@@ -56,25 +59,40 @@ impl WebSearchEngine {
                 break;
             }
 
-            let href_start = body[actual_title_idx..].find("href=\"").map(|i| actual_title_idx + i + 6);
+            let href_start = body[actual_title_idx..]
+                .find("href=\"")
+                .map(|i| actual_title_idx + i + 6);
             let href_end = href_start.and_then(|s| body[s..].find('"').map(|e| s + e));
 
             let link_text_start = href_end.and_then(|e| body[e..].find('>').map(|i| e + i + 1));
             let link_text_end = link_text_start.and_then(|s| body[s..].find("</a>").map(|i| s + i));
 
-            if let (Some(h_start), Some(h_end), Some(t_start), Some(t_end)) = (href_start, href_end, link_text_start, link_text_end) {
+            if let (Some(h_start), Some(h_end), Some(t_start), Some(t_end)) =
+                (href_start, href_end, link_text_start, link_text_end)
+            {
                 let url = body[h_start..h_end].to_string();
                 let raw_title = &body[t_start..t_end];
-                let clean_title = raw_title.replace("<b>", "").replace("</b>", "").trim().to_string();
+                let clean_title = raw_title
+                    .replace("<b>", "")
+                    .replace("</b>", "")
+                    .trim()
+                    .to_string();
 
                 let mut snippet = String::new();
                 if let Some(snip_idx) = body[t_end..].find(snippet_marker) {
                     let actual_snip = t_end + snip_idx;
                     if let Some(s_start) = body[actual_snip..].find('>') {
                         let s_content_start = actual_snip + s_start + 1;
-                        if let Some(s_end) = body[s_content_start..].find("</div>").or_else(|| body[s_content_start..].find("</span>")) {
+                        if let Some(s_end) = body[s_content_start..]
+                            .find("</div>")
+                            .or_else(|| body[s_content_start..].find("</span>"))
+                        {
                             let raw_snip = &body[s_content_start..s_content_start + s_end];
-                            snippet = raw_snip.replace("<b>", "").replace("</b>", "").trim().to_string();
+                            snippet = raw_snip
+                                .replace("<b>", "")
+                                .replace("</b>", "")
+                                .trim()
+                                .to_string();
                         }
                     }
                 }

@@ -201,8 +201,8 @@ pub async fn handle_circle_search_channel(
                 .as_deref()
                 .map(|u| u.contains("opencode.ai"))
                 .unwrap_or(false);
-            let is_opencode_model =
-                crate::providers::opencode::OPENCODE_FREE_MODELS.contains(&cfg_model)
+            let is_opencode_model = crate::providers::opencode::OPENCODE_FREE_MODELS
+                .contains(&cfg_model)
                 || cfg_model == "big-pickle";
             if is_opencode_url || is_opencode_model {
                 provider_type = ProviderType::OpenCode;

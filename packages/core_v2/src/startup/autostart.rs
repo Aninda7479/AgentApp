@@ -1,6 +1,5 @@
 use anyhow::Result;
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AutostartTarget {
     Desktop,
@@ -56,7 +55,17 @@ impl AutostartManager {
             let mut cmd = tokio::process::Command::new("reg");
             cmd.creation_flags(0x08000000);
             let status = cmd
-                .args(["add", Self::REG_KEY, "/v", app_name, "/t", "REG_SZ", "/d", exec_path, "/f"])
+                .args([
+                    "add",
+                    Self::REG_KEY,
+                    "/v",
+                    app_name,
+                    "/t",
+                    "REG_SZ",
+                    "/d",
+                    exec_path,
+                    "/f",
+                ])
                 .status()
                 .await?;
 

@@ -23,13 +23,23 @@ fn get_local_session_token() -> Option<String> {
         }
     }
 
-    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).ok()?;
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()?;
     let home_path = std::path::PathBuf::from(home);
     let candidates = [
-        home_path.join(".superagent").join("config").join("auth.json"),
-        home_path.join(".superagent").join("Config").join("auth.json"),
+        home_path
+            .join(".superagent")
+            .join("config")
+            .join("auth.json"),
+        home_path
+            .join(".superagent")
+            .join("Config")
+            .join("auth.json"),
         home_path.join(".superagent").join("auth.json"),
-        std::path::PathBuf::from(".").join(".superagent").join("auth.json"),
+        std::path::PathBuf::from(".")
+            .join(".superagent")
+            .join("auth.json"),
     ];
 
     for path in &candidates {
@@ -37,7 +47,11 @@ fn get_local_session_token() -> Option<String> {
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
                 if let Some(sessions) = val.get("sessions").and_then(|s| s.as_array()) {
                     if let Some(first_session) = sessions.first() {
-                        if let Some(tok) = first_session.get("token").or_else(|| first_session.get("id")).and_then(|t| t.as_str()) {
+                        if let Some(tok) = first_session
+                            .get("token")
+                            .or_else(|| first_session.get("id"))
+                            .and_then(|t| t.as_str())
+                        {
                             if !tok.trim().is_empty() {
                                 return Some(tok.trim().to_string());
                             }
@@ -79,10 +93,12 @@ pub async fn query_voice_transcribe(wav_bytes: &[u8]) -> Result<String, String> 
         req_builder = req_builder.header("Authorization", format!("Bearer {}", token));
     }
 
-    let resp = req_builder
-        .send()
-        .await
-        .map_err(|e| format!("Failed to reach SuperAgent core engine (port 1469): {}. Is the app running?", e))?;
+    let resp = req_builder.send().await.map_err(|e| {
+        format!(
+            "Failed to reach SuperAgent core engine (port 1469): {}. Is the app running?",
+            e
+        )
+    })?;
 
     if !resp.status().is_success() {
         let err_text = resp.text().await.unwrap_or_default();
@@ -99,7 +115,11 @@ pub async fn query_voice_transcribe(wav_bytes: &[u8]) -> Result<String, String> 
         .await
         .map_err(|e| format!("Failed to parse response JSON: {}", e))?;
 
-    if let Some(text) = parsed.get("data").and_then(|d| d.get("text")).and_then(|v| v.as_str()) {
+    if let Some(text) = parsed
+        .get("data")
+        .and_then(|d| d.get("text"))
+        .and_then(|v| v.as_str())
+    {
         Ok(text.to_string())
     } else if let Some(text) = parsed.get("text").and_then(|v| v.as_str()) {
         Ok(text.to_string())

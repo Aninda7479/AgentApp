@@ -1,6 +1,5 @@
-use std::path::Path;
 use anyhow::Result;
-
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
@@ -14,7 +13,10 @@ pub struct MediaTranscodeOptions {
 }
 
 /// Transcodes or extracts audio/video using system `ffmpeg`.
-pub async fn transcode_media(options: &MediaTranscodeOptions, workspace_root: &Path) -> Result<String> {
+pub async fn transcode_media(
+    options: &MediaTranscodeOptions,
+    workspace_root: &Path,
+) -> Result<String> {
     let input = Path::new(&options.input_file);
     let resolved_input = if input.is_absolute() {
         input.to_path_buf()
@@ -54,14 +56,20 @@ pub async fn transcode_media(options: &MediaTranscodeOptions, workspace_root: &P
     match output_res {
         Ok(out) => {
             if out.status.success() {
-                Ok(format!("Successfully transcoded media to '{}'", resolved_output.display()))
+                Ok(format!(
+                    "Successfully transcoded media to '{}'",
+                    resolved_output.display()
+                ))
             } else {
                 let err_msg = String::from_utf8_lossy(&out.stderr);
                 anyhow::bail!("FFmpeg transcode failed: {}", err_msg)
             }
         }
         Err(e) => {
-            anyhow::bail!("Failed to execute ffmpeg: {}. Please ensure ffmpeg is installed.", e)
+            anyhow::bail!(
+                "Failed to execute ffmpeg: {}. Please ensure ffmpeg is installed.",
+                e
+            )
         }
     }
 }

@@ -1,10 +1,10 @@
+use anyhow::{anyhow, Result};
+use async_trait::async_trait;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use anyhow::{anyhow, Result};
-use async_trait::async_trait;
-use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::Mutex;
@@ -143,15 +143,28 @@ impl McpClient {
                     if let Ok(response) = serde_json::from_str::<JsonRpcResponse>(trimmed) {
                         if response.id == target_id {
                             if let Some(err) = response.error {
-                                anyhow::bail!("MCP JSON-RPC Error [code {}]: {}", err.code, err.message);
+                                anyhow::bail!(
+                                    "MCP JSON-RPC Error [code {}]: {}",
+                                    err.code,
+                                    err.message
+                                );
                             }
                             return Ok(response.result.unwrap_or(Value::Null));
                         }
                     }
                 }
             }
-            McpTransport::Http { url, headers, client }
-            | McpTransport::Sse { post_url: url, headers, client, .. } => {
+            McpTransport::Http {
+                url,
+                headers,
+                client,
+            }
+            | McpTransport::Sse {
+                post_url: url,
+                headers,
+                client,
+                ..
+            } => {
                 let mut builder = client.post(url.as_str()).json(&req);
                 for (k, v) in headers {
                     builder = builder.header(k.as_str(), v.as_str());
@@ -238,7 +251,10 @@ impl Tool for McpToolWrapper {
     }
 
     fn description(&self) -> &str {
-        self.info.description.as_deref().unwrap_or("MCP external tool")
+        self.info
+            .description
+            .as_deref()
+            .unwrap_or("MCP external tool")
     }
 
     fn parameters_schema(&self) -> Value {
@@ -270,7 +286,11 @@ impl Tool for McpToolWrapper {
         }
 
         if result.is_error.unwrap_or(false) {
-            anyhow::bail!("MCP tool '{}' returned error: {}", self.info.name, output.trim());
+            anyhow::bail!(
+                "MCP tool '{}' returned error: {}",
+                self.info.name,
+                output.trim()
+            );
         }
 
         Ok(output.trim().to_string())

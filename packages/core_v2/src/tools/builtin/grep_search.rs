@@ -1,10 +1,10 @@
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use regex::{Regex, RegexBuilder};
 use serde_json::{json, Value};
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use walkdir::WalkDir;
 
 use crate::tools::builtin::file_ops::validate_path_in_workspace;
@@ -104,7 +104,11 @@ impl Tool for GrepSearchTool {
                 .filter_entry(|e| {
                     let file_name = e.file_name().to_string_lossy();
                     // Skip hidden dirs/files and common heavy directories
-                    if file_name.starts_with('.') || file_name == "node_modules" || file_name == "target" || file_name == "vendor" {
+                    if file_name.starts_with('.')
+                        || file_name == "node_modules"
+                        || file_name == "target"
+                        || file_name == "vendor"
+                    {
                         return false;
                     }
                     true
@@ -146,7 +150,12 @@ impl Tool for GrepSearchTool {
                         if let Ok(line) = line_res {
                             if re.is_match(&line) {
                                 total_matches += 1;
-                                results.push(format!("{}:{}: {}", display_path, line_num + 1, line));
+                                results.push(format!(
+                                    "{}:{}: {}",
+                                    display_path,
+                                    line_num + 1,
+                                    line
+                                ));
                             }
                         }
                     }

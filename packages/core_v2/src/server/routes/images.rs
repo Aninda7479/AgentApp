@@ -46,7 +46,9 @@ pub async fn install_engine(
         .engine
         .install(backend)
         .await
-        .map(|_| Json(serde_json::json!({ "success": true, "message": "Engine installation started" })))
+        .map(|_| {
+            Json(serde_json::json!({ "success": true, "message": "Engine installation started" }))
+        })
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
@@ -118,7 +120,12 @@ pub async fn pull_image_model(
         .pull_model(&payload.model_id)
         .await
         .map(|_| Json(serde_json::json!({ "success": true, "message": "Model download started" })))
-        .map_err(|e| (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e.to_string(), "message": e.to_string() }))))
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "error": e.to_string(), "message": e.to_string() })),
+            )
+        })
 }
 
 pub async fn delete_image_model(
@@ -159,7 +166,8 @@ pub async fn generate_image(
             Ok(resp) => return Ok(Json(resp)),
             Err(e) => {
                 let err_str = e.to_string();
-                let is_oom = err_str.to_lowercase().contains("out of memory") || err_str.to_lowercase().contains("memory");
+                let is_oom = err_str.to_lowercase().contains("out of memory")
+                    || err_str.to_lowercase().contains("memory");
                 return Err((
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(serde_json::json!({

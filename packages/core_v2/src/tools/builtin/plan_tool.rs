@@ -1,9 +1,9 @@
-use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::tools::r#trait::Tool;
@@ -177,9 +177,7 @@ impl PlanTool {
             .and_then(|v| v.as_u64())
             .map(|n| n as usize);
 
-        let new_status = input
-            .get("status")
-            .and_then(|v| v.as_str());
+        let new_status = input.get("status").and_then(|v| v.as_str());
 
         if let Some(sid) = step_id {
             if let Some(step) = plan.steps.iter_mut().find(|s| s.id == sid) {
@@ -234,7 +232,10 @@ impl PlanTool {
                 "failed" | "error" => "❌ **Failed**",
                 _ => "⏳ Pending",
             };
-            out.push_str(&format!("| {} | {} | {} |\n", step.id, status_badge, step.description));
+            out.push_str(&format!(
+                "| {} | {} | {} |\n",
+                step.id, status_badge, step.description
+            ));
         }
 
         out

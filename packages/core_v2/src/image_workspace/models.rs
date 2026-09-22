@@ -1,9 +1,9 @@
+use anyhow::{anyhow, Result};
+use futures_util::StreamExt;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use anyhow::{anyhow, Result};
-use futures_util::StreamExt;
 use tracing::{error, info};
 
 use crate::image_workspace::types::{ImageModelInfo, ModelFamily};
@@ -347,15 +347,24 @@ impl ModelRegistry {
                 if path.is_file() {
                     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
                     if ext == "gguf" || ext == "safetensors" || ext == "ckpt" {
-                        let fname = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                        let fname = path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string();
                         if !list.iter().any(|m| m.filename == fname) {
                             let len = path.metadata().map(|m| m.len()).unwrap_or(0);
-                            let stem = path.file_stem().unwrap_or_default().to_string_lossy().to_string();
+                            let stem = path
+                                .file_stem()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string();
                             list.push(ImageModelInfo {
                                 id: format!("custom-{}", stem),
                                 name: stem,
                                 family: ModelFamily::Custom,
-                                quantization: if ext == "gguf" { "GGUF" } else { "Safetensors" }.to_string(),
+                                quantization: if ext == "gguf" { "GGUF" } else { "Safetensors" }
+                                    .to_string(),
                                 download_url: String::new(),
                                 filename: fname,
                                 size_bytes: len,
@@ -380,7 +389,10 @@ impl ModelRegistry {
     /// Check available disk space on the models filesystem
     pub fn check_disk_space(&self, required_bytes: u64) -> Result<()> {
         let disks = sysinfo::Disks::new_with_refreshed_list();
-        let canonical = self.models_dir.canonicalize().unwrap_or_else(|_| self.models_dir.clone());
+        let canonical = self
+            .models_dir
+            .canonicalize()
+            .unwrap_or_else(|_| self.models_dir.clone());
         let mut best_match: Option<&sysinfo::Disk> = None;
         let mut best_len = 0;
 
@@ -396,9 +408,15 @@ impl ModelRegistry {
         }
 
         let (free_bytes, mount_name) = if let Some(disk) = best_match {
-            (disk.available_space(), disk.mount_point().to_string_lossy().to_string())
+            (
+                disk.available_space(),
+                disk.mount_point().to_string_lossy().to_string(),
+            )
         } else if let Some(first) = disks.iter().next() {
-            (first.available_space(), first.mount_point().to_string_lossy().to_string())
+            (
+                first.available_space(),
+                first.mount_point().to_string_lossy().to_string(),
+            )
         } else {
             (u64::MAX, "System Disk".to_string())
         };
@@ -419,13 +437,18 @@ impl ModelRegistry {
 
     pub fn get_model_path(&self, id: &str) -> Option<PathBuf> {
         let models = self.list_models();
-        models.iter().find(|m| m.id == id && m.is_downloaded).map(|m| self.models_dir.join(&m.filename))
+        models
+            .iter()
+            .find(|m| m.id == id && m.is_downloaded)
+            .map(|m| self.models_dir.join(&m.filename))
     }
 
     /// Pull / download a model by ID with automatic resume, retry, and disk space validation
     pub async fn pull_model(&self, model_id: &str) -> Result<()> {
         let catalog = self.curated_catalog();
-        let target = catalog.into_iter().find(|m| m.id == model_id)
+        let target = catalog
+            .into_iter()
+            .find(|m| m.id == model_id)
             .ok_or_else(|| anyhow!("Model not found in catalog: {}", model_id))?;
 
         // 1. Verify available disk space before starting
@@ -436,11 +459,14 @@ impl ModelRegistry {
 
         {
             let mut states = self.download_states.write().unwrap();
-            states.insert(model_id.to_string(), DownloadState {
-                progress: 0.0,
-                is_downloading: true,
-                error: None,
-            });
+            states.insert(
+                model_id.to_string(),
+                DownloadState {
+                    progress: 0.0,
+                    is_downloading: true,
+                    error: None,
+                },
+            );
         }
 
         let download_states = self.download_states.clone();
@@ -450,10 +476,20 @@ impl ModelRegistry {
         let target_size = target.size_bytes;
 
         tokio::spawn(async move {
-            info!("Starting resilient download for image model '{}' from {}", m_id, url);
+            info!(
+                "Starting resilient download for image model '{}' from {}",
+                m_id, url
+            );
             let update_status = |prog: f32, is_dl: bool, err: Option<String>| {
                 if let Ok(mut states) = download_states.write() {
-                    states.insert(m_id.clone(), DownloadState { progress: prog, is_downloading: is_dl, error: err });
+                    states.insert(
+                        m_id.clone(),
+                        DownloadState {
+                            progress: prog,
+                            is_downloading: is_dl,
+                            error: err,
+                        },
+                    );
                 }
             };
 
@@ -489,7 +525,10 @@ impl ModelRegistry {
 
             while retry_count < max_retries {
                 let downloaded_bytes: u64 = if temp_path.exists() {
-                    tokio::fs::metadata(&temp_path).await.map(|m| m.len()).unwrap_or(0)
+                    tokio::fs::metadata(&temp_path)
+                        .await
+                        .map(|m| m.len())
+                        .unwrap_or(0)
                 } else {
                     0
                 };
@@ -502,8 +541,14 @@ impl ModelRegistry {
 
                 let mut req = client.get(&url);
                 if downloaded_bytes > 0 {
-                    info!("Resuming model download '{}' from offset {} bytes", m_id, downloaded_bytes);
-                    req = req.header(reqwest::header::RANGE, format!("bytes={}-", downloaded_bytes));
+                    info!(
+                        "Resuming model download '{}' from offset {} bytes",
+                        m_id, downloaded_bytes
+                    );
+                    req = req.header(
+                        reqwest::header::RANGE,
+                        format!("bytes={}-", downloaded_bytes),
+                    );
                 }
 
                 let res = match req.send().await {
@@ -511,9 +556,16 @@ impl ModelRegistry {
                     Err(e) => {
                         retry_count += 1;
                         let wait_secs = (2u64).pow(retry_count.min(4));
-                        let warn_msg = format!("Download connection failed: {} (retry {}/{}, waiting {}s)", e, retry_count, max_retries, wait_secs);
+                        let warn_msg = format!(
+                            "Download connection failed: {} (retry {}/{}, waiting {}s)",
+                            e, retry_count, max_retries, wait_secs
+                        );
                         tracing::warn!("{}", warn_msg);
-                        update_status((downloaded_bytes as f32 / total_size.max(1) as f32).min(0.99), true, Some(warn_msg));
+                        update_status(
+                            (downloaded_bytes as f32 / total_size.max(1) as f32).min(0.99),
+                            true,
+                            Some(warn_msg),
+                        );
                         tokio::time::sleep(std::time::Duration::from_secs(wait_secs)).await;
                         continue;
                     }
@@ -589,7 +641,10 @@ impl ModelRegistry {
                             }
                         }
                         Err(e) => {
-                            let warn_msg = format!("Download stream interrupted: {}. Resuming from byte {}...", e, current_bytes);
+                            let warn_msg = format!(
+                                "Download stream interrupted: {}. Resuming from byte {}...",
+                                e, current_bytes
+                            );
                             tracing::warn!("{}", warn_msg);
                             stream_error = true;
                             break;
@@ -607,18 +662,28 @@ impl ModelRegistry {
 
                 retry_count += 1;
                 let wait_secs = (2u64).pow(retry_count.min(4));
-                let retry_msg = format!("Stream interrupted. Resuming download (retry {}/{}, waiting {}s)...", retry_count, max_retries, wait_secs);
+                let retry_msg = format!(
+                    "Stream interrupted. Resuming download (retry {}/{}, waiting {}s)...",
+                    retry_count, max_retries, wait_secs
+                );
                 tracing::info!("{}", retry_msg);
                 update_status(
-                    if total_size > 0 { (current_bytes as f32 / total_size as f32).min(0.99) } else { 0.0 },
+                    if total_size > 0 {
+                        (current_bytes as f32 / total_size as f32).min(0.99)
+                    } else {
+                        0.0
+                    },
                     true,
-                    Some(retry_msg)
+                    Some(retry_msg),
                 );
                 tokio::time::sleep(std::time::Duration::from_secs(wait_secs)).await;
             }
 
             if !success {
-                let err = format!("Download failed after {} retries due to unstable connection", max_retries);
+                let err = format!(
+                    "Download failed after {} retries due to unstable connection",
+                    max_retries
+                );
                 error!("{}", err);
                 update_status(0.0, false, Some(err));
                 return;
@@ -632,7 +697,11 @@ impl ModelRegistry {
                 return;
             }
 
-            info!("Successfully downloaded image model '{}' to {}", m_id, dest_path.display());
+            info!(
+                "Successfully downloaded image model '{}' to {}",
+                m_id,
+                dest_path.display()
+            );
             update_status(1.0, false, None);
         });
 
@@ -642,7 +711,9 @@ impl ModelRegistry {
     /// Delete a downloaded model by ID
     pub fn delete_model(&self, model_id: &str) -> Result<()> {
         let models = self.list_models();
-        let target = models.into_iter().find(|m| m.id == model_id)
+        let target = models
+            .into_iter()
+            .find(|m| m.id == model_id)
             .ok_or_else(|| anyhow!("Model not found: {}", model_id))?;
 
         let path = self.models_dir.join(&target.filename);

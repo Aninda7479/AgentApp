@@ -28,12 +28,14 @@ export interface ActiveSessionState {
 export interface SessionStoreState {
   runningSessions: Map<string, ActiveSessionState>;
   queues: Map<string, QueuedRunItem[]>;
+  isAnySessionRunning?: () => boolean;
 }
 
 class SessionStoreManager {
   private state: SessionStoreState = {
     runningSessions: new Map(),
     queues: new Map(),
+    isAnySessionRunning: () => this.isAnyGenerating(),
   };
 
   private listeners: Set<() => void> = new Set();
@@ -65,13 +67,21 @@ class SessionStoreManager {
   }
 
   public markIdle(chatId: string, error?: string): void {
+    const clean = chatId.replace(/^session-/, '');
     const newSessions = new Map(this.state.runningSessions);
-    const existing = newSessions.get(chatId);
+    const targetKey = newSessions.has(chatId)
+      ? chatId
+      : newSessions.has(clean)
+        ? clean
+        : newSessions.has(`session-${clean}`)
+          ? `session-${clean}`
+          : chatId;
+    const existing = newSessions.get(targetKey);
     if (existing) {
       if (error) {
-        newSessions.set(chatId, { ...existing, isGenerating: false, lastError: error });
+        newSessions.set(targetKey, { ...existing, isGenerating: false, lastError: error });
       } else {
-        newSessions.delete(chatId);
+        newSessions.delete(targetKey);
       }
     }
     this.state = { ...this.state, runningSessions: newSessions };
@@ -89,11 +99,25 @@ class SessionStoreManager {
   }
 
   public isRunning(chatId: string): boolean {
-    return this.state.runningSessions.get(chatId)?.isGenerating ?? false;
+    const clean = chatId.replace(/^session-/, '');
+    return (
+      this.state.runningSessions.get(chatId)?.isGenerating ??
+      this.state.runningSessions.get(clean)?.isGenerating ??
+      this.state.runningSessions.get(`session-${clean}`)?.isGenerating ??
+      false
+    );
   }
 
   public isAnyGenerating(): boolean {
     return Array.from(this.state.runningSessions.values()).some((s) => s.isGenerating);
+  }
+
+  public isAnySessionRunning(): boolean {
+    return this.isAnyGenerating();
+  }
+
+  public getQueueDepth(chatId: string): number {
+    return this.state.queues.get(chatId)?.length ?? 0;
   }
 
   public enqueue(chatId: string, item: QueuedRunItem): void {

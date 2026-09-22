@@ -114,7 +114,6 @@ pub enum VideoModelFamily {
     Custom,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum VideoModality {
@@ -142,14 +141,24 @@ impl CameraMotionPreset {
     pub fn prompt_modifier(&self) -> &'static str {
         match self {
             CameraMotionPreset::Static => "static camera, locked-off shot",
-            CameraMotionPreset::PanLeft => "smooth cinematic pan left, horizontal tracking camera movement",
-            CameraMotionPreset::PanRight => "smooth cinematic pan right, horizontal tracking camera movement",
+            CameraMotionPreset::PanLeft => {
+                "smooth cinematic pan left, horizontal tracking camera movement"
+            }
+            CameraMotionPreset::PanRight => {
+                "smooth cinematic pan right, horizontal tracking camera movement"
+            }
             CameraMotionPreset::TiltUp => "cinematic camera tilt upwards, ascending perspective",
-            CameraMotionPreset::TiltDown => "cinematic camera tilt downwards, descending perspective",
-            CameraMotionPreset::ZoomIn => "slow cinematic push in, dramatic dolly zoom into subject",
+            CameraMotionPreset::TiltDown => {
+                "cinematic camera tilt downwards, descending perspective"
+            }
+            CameraMotionPreset::ZoomIn => {
+                "slow cinematic push in, dramatic dolly zoom into subject"
+            }
             CameraMotionPreset::ZoomOut => "smooth dolly zoom out, revealing wide landscape",
             CameraMotionPreset::OrbitLeft => "circular 3D orbit camera panning left around subject",
-            CameraMotionPreset::OrbitRight => "circular 3D orbit camera panning right around subject",
+            CameraMotionPreset::OrbitRight => {
+                "circular 3D orbit camera panning right around subject"
+            }
             CameraMotionPreset::CraneUp => "dramatic crane shot lifting upwards into the sky",
         }
     }
@@ -204,7 +213,6 @@ pub struct GenerateVideoRequest {
     pub sampler: Option<String>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerateVideoResponse {
     pub success: bool,
@@ -246,20 +254,15 @@ pub struct VideoProgressEvent {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum VideoGenerationStreamMessage {
     Progress(VideoProgressEvent),
-    Complete {
-        result: GenerateVideoResponse,
-    },
-    Error {
-        message: String,
-        error_type: String,
-    },
+    Complete { result: GenerateVideoResponse },
+    Error { message: String, error_type: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VideoExportRequest {
     pub format: String, // "mp4" | "webm" | "gif" | "prores"
     pub fps: Option<u32>,
-    pub scale_factor: Option<f32>, // 1.0, 1.5, 2.0
+    pub scale_factor: Option<f32>,     // 1.0, 1.5, 2.0
     pub speed_multiplier: Option<f32>, // 0.5, 1.0, 2.0
 }
 

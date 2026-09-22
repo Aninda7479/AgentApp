@@ -1,6 +1,6 @@
-use std::path::PathBuf;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use std::path::PathBuf;
 
 use serde_json::{json, Value};
 
@@ -127,7 +127,13 @@ impl Tool for EditFileTool {
 
         tokio::fs::write(&safe_path, new_content)
             .await
-            .map_err(|e| anyhow!("Failed to write updated file '{}': {}", safe_path.display(), e))?;
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to write updated file '{}': {}",
+                    safe_path.display(),
+                    e
+                )
+            })?;
 
         Ok(format!(
             "Successfully replaced {} occurrence(s) in '{}'",
@@ -147,7 +153,11 @@ mod tests {
         let temp_dir = std::env::temp_dir().join(format!("test_edit_{}", uuid::Uuid::new_v4()));
         let _ = fs::create_dir_all(&temp_dir);
         let file_path = temp_dir.join("sample.txt");
-        fs::write(&file_path, "Line 1: Hello World\nLine 2: Target Text\nLine 3: Goodbye").unwrap();
+        fs::write(
+            &file_path,
+            "Line 1: Hello World\nLine 2: Target Text\nLine 3: Goodbye",
+        )
+        .unwrap();
 
         let tool = EditFileTool::new(temp_dir.clone());
         let res = tool
@@ -161,9 +171,11 @@ mod tests {
 
         assert!(res.contains("Successfully replaced 1 occurrence"));
         let updated = fs::read_to_string(&file_path).unwrap();
-        assert_eq!(updated, "Line 1: Hello World\nLine 2: Replaced Text\nLine 3: Goodbye");
+        assert_eq!(
+            updated,
+            "Line 1: Hello World\nLine 2: Replaced Text\nLine 3: Goodbye"
+        );
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
 }
-

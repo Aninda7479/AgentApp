@@ -269,9 +269,6 @@ export const App: React.FC = () => {
   const [settingsCategory, setSettingsCategory] = useState<string>(initialRoute.settingsCategory);
   const [activeProject, setActiveProject] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const isAnySessionRunning = useSessionStore((s) => s.isAnySessionRunning());
-  const activeSessionRunning = useSessionStore((s) => (activeChatId ? Boolean(s.runningSessions.get(activeChatId)?.isGenerating) : false));
-  const effectiveIsGenerating = isGenerating || isAnySessionRunning || activeSessionRunning;
   const [toastOpen, setToastOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string>('');
   const [toastType, setToastType] = useState<'info' | 'error'>('info');
@@ -292,6 +289,21 @@ export const App: React.FC = () => {
   const [projects, setProjects] = useState<StoredProject[]>([]);
   const [chats, setChats] = useState<StoredChat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(initialRoute.activeChatId);
+  const isAnySessionRunning = useSessionStore((s) =>
+    typeof s.isAnySessionRunning === 'function'
+      ? s.isAnySessionRunning()
+      : Array.from(s.runningSessions?.values() || []).some((sess) => sess.isGenerating)
+  );
+  const activeSessionRunning = useSessionStore((s) => {
+    if (!activeChatId || !s.runningSessions) return false;
+    const clean = activeChatId.replace(/^session-/, '');
+    return Boolean(
+      s.runningSessions.get(activeChatId)?.isGenerating ||
+      s.runningSessions.get(clean)?.isGenerating ||
+      s.runningSessions.get(`session-${clean}`)?.isGenerating
+    );
+  });
+  const effectiveIsGenerating = isGenerating || isAnySessionRunning || activeSessionRunning;
   const [draftProject, setDraftProject] = useState<string>('');
   const [lastUsedModel, setLastUsedModel] = useState<string>('');
   const [isNewChatOpen, setIsNewChatOpen] = useState<boolean>(false);

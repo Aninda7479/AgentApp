@@ -1,12 +1,12 @@
+use anyhow::{anyhow, Result};
+use chrono::Utc;
+use cron::Schedule;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
-use anyhow::{anyhow, Result};
-use chrono::Utc;
-use cron::Schedule;
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
@@ -121,7 +121,11 @@ impl TriggerEngine {
         Ok(deleted)
     }
 
-    pub async fn handle_webhook(&self, token: &str, payload: serde_json::Value) -> anyhow::Result<String> {
+    pub async fn handle_webhook(
+        &self,
+        token: &str,
+        payload: serde_json::Value,
+    ) -> anyhow::Result<String> {
         let routines = self.list().await;
         let mut target_routine = None;
         for r in routines {
@@ -134,11 +138,19 @@ impl TriggerEngine {
                 }
             }
         }
-        
-        let routine = target_routine.ok_or_else(|| anyhow!("No enabled webhook routine found for token"))?;
-        let prompt_with_payload = format!("{}\nWebhook Payload:\n{}", routine.prompt, serde_json::to_string_pretty(&payload).unwrap_or_default());
-        let result = self.subagent_runner.execute_subagent(&routine.persona_id, &prompt_with_payload).await?;
-        
+
+        let routine =
+            target_routine.ok_or_else(|| anyhow!("No enabled webhook routine found for token"))?;
+        let prompt_with_payload = format!(
+            "{}\nWebhook Payload:\n{}",
+            routine.prompt,
+            serde_json::to_string_pretty(&payload).unwrap_or_default()
+        );
+        let result = self
+            .subagent_runner
+            .execute_subagent(&routine.persona_id, &prompt_with_payload)
+            .await?;
+
         Ok(result)
     }
 
@@ -167,7 +179,10 @@ impl TriggerEngine {
 
         let (status, output, error_msg) = match result {
             Ok(out) => {
-                info!("✔ Routine '{}' completed in {}ms", routine.name, duration_ms);
+                info!(
+                    "✔ Routine '{}' completed in {}ms",
+                    routine.name, duration_ms
+                );
                 ("success".to_string(), out, None)
             }
             Err(err) => {
@@ -224,8 +239,10 @@ impl TriggerEngine {
                         RoutineTriggerType::Interval => {
                             if let Some(interval_secs) = routine.interval_seconds {
                                 if let Some(ref last) = routine.last_run_at {
-                                    if let Ok(last_dt) = chrono::DateTime::parse_from_rfc3339(last) {
-                                        (now - last_dt.with_timezone(&Utc)).num_seconds() >= interval_secs as i64
+                                    if let Ok(last_dt) = chrono::DateTime::parse_from_rfc3339(last)
+                                    {
+                                        (now - last_dt.with_timezone(&Utc)).num_seconds()
+                                            >= interval_secs as i64
                                     } else {
                                         true
                                     }
@@ -244,7 +261,11 @@ impl TriggerEngine {
                                     expr.clone()
                                 };
                                 if let Ok(sched) = Schedule::from_str(&standard_expr) {
-                                    if let Some(last_run) = routine.last_run_at.as_ref().and_then(|dt| chrono::DateTime::parse_from_rfc3339(dt).ok()) {
+                                    if let Some(last_run) =
+                                        routine.last_run_at.as_ref().and_then(|dt| {
+                                            chrono::DateTime::parse_from_rfc3339(dt).ok()
+                                        })
+                                    {
                                         let last_utc = last_run.with_timezone(&Utc);
                                         // Find upcoming time after last_run
                                         if let Some(next) = sched.after(&last_utc).next() {
@@ -337,4 +358,3 @@ mod tests {
         let _ = fs::remove_dir_all(&temp_dir);
     }
 }
-

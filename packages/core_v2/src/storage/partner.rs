@@ -135,10 +135,17 @@ pub fn is_valid_manifest(manifest: &PartnerManifest) -> bool {
     if manifest.schema != "superagent-partner" {
         return false;
     }
-    if manifest.id.is_empty() || manifest.name.is_empty() || manifest.kind.is_empty() || manifest.description.is_empty() {
+    if manifest.id.is_empty()
+        || manifest.name.is_empty()
+        || manifest.kind.is_empty()
+        || manifest.description.is_empty()
+    {
         return false;
     }
-    manifest.id.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+    manifest
+        .id
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
 }
 
 pub fn list_partners(user_data: &Path) -> Vec<PartnerManifest> {
@@ -158,9 +165,11 @@ pub fn list_partners(user_data: &Path) -> Vec<PartnerManifest> {
                     let manifest_path = folder_path.join("partner.json");
                     if manifest_path.exists() {
                         if let Ok(raw) = fs::read_to_string(&manifest_path) {
-                            if let Ok(mut manifest) = serde_json::from_str::<PartnerManifest>(&raw) {
+                            if let Ok(mut manifest) = serde_json::from_str::<PartnerManifest>(&raw)
+                            {
                                 if is_valid_manifest(&manifest) {
-                                    manifest.folder = Some(folder_path.to_string_lossy().to_string());
+                                    manifest.folder =
+                                        Some(folder_path.to_string_lossy().to_string());
                                     out.push(manifest);
                                 }
                             }
@@ -229,7 +238,8 @@ pub fn partner_folder_path(user_data: &Path, id: &str) -> PathBuf {
 }
 
 pub fn import_partner_json(user_data: &Path, raw_json: &str) -> Result<PartnerManifest, String> {
-    let mut manifest: PartnerManifest = serde_json::from_str(raw_json).map_err(|e| format!("Invalid JSON: {}", e))?;
+    let mut manifest: PartnerManifest =
+        serde_json::from_str(raw_json).map_err(|e| format!("Invalid JSON: {}", e))?;
     if !is_valid_manifest(&manifest) {
         return Err("Invalid partner manifest format or schema".to_string());
     }

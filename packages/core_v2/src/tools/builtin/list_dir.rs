@@ -1,6 +1,6 @@
-use std::path::PathBuf;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use std::path::PathBuf;
 
 use serde_json::{json, Value};
 use walkdir::WalkDir;
@@ -100,7 +100,8 @@ impl Tool for ListDirTool {
             }));
         }
 
-        serde_json::to_string_pretty(&results).map_err(|e| anyhow!("Failed to serialize list: {}", e))
+        serde_json::to_string_pretty(&results)
+            .map_err(|e| anyhow!("Failed to serialize list: {}", e))
     }
 }
 
@@ -131,4 +132,3 @@ mod tests {
         let _ = fs::remove_dir_all(&temp_dir);
     }
 }
-

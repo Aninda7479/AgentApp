@@ -180,7 +180,8 @@ mod tests {
 
     #[test]
     fn test_pcb_storage_lifecycle() {
-        let temp_dir = std::env::temp_dir().join(format!("test_pcb_storage_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("test_pcb_storage_{}", uuid::Uuid::new_v4()));
         let _ = fs::create_dir_all(&temp_dir);
         let storage = PcbStorage::with_dir(temp_dir.clone());
 
@@ -203,7 +204,7 @@ mod tests {
             }),
             messages: vec![
                 serde_json::json!({ "id": "m1", "sender": "user", "text": "Add ESP32" }),
-                serde_json::json!({ "id": "m2", "sender": "agent", "text": "Added ESP32 and pullups" })
+                serde_json::json!({ "id": "m2", "sender": "agent", "text": "Added ESP32 and pullups" }),
             ],
             settings: Some(serde_json::json!({ "layerCount": 2 })),
             tags: vec!["iot".to_string(), "esp32".to_string()],

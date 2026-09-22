@@ -1,7 +1,7 @@
+use anyhow::Result;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-use anyhow::Result;
 
 pub struct EditorBridge {
     editor_cmd: String,
@@ -35,7 +35,11 @@ impl EditorBridge {
     /// and reads back the edited content.
     pub fn open_editor(&self, initial_content: &str) -> Result<String> {
         let temp_dir = std::env::temp_dir();
-        let file_name = format!("superagent_prompt_{}_{}.txt", std::process::id(), uuid::Uuid::new_v4());
+        let file_name = format!(
+            "superagent_prompt_{}_{}.txt",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        );
         let temp_path: PathBuf = temp_dir.join(file_name);
 
         fs::write(&temp_path, initial_content)?;

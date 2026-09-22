@@ -1,7 +1,7 @@
-use std::time::Duration;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::time::Duration;
 use tokio::time::sleep;
 
 use crate::tools::r#trait::Tool;
@@ -90,20 +90,29 @@ mod tests {
         assert_eq!(tool.name(), "sleep_timer");
         assert!(tool.description().contains("Pauses execution"));
         let schema = tool.parameters_schema();
-        assert!(schema.get("properties").and_then(|p| p.get("seconds")).is_some());
+        assert!(schema
+            .get("properties")
+            .and_then(|p| p.get("seconds"))
+            .is_some());
     }
 
     #[tokio::test]
     async fn test_sleep_timer_zero_seconds() {
         let tool = SleepTimerTool::new();
-        let res = tool.execute(json!({ "seconds": 0, "reason": "none" })).await.unwrap();
+        let res = tool
+            .execute(json!({ "seconds": 0, "reason": "none" }))
+            .await
+            .unwrap();
         assert!(res.contains("0 seconds"));
     }
 
     #[tokio::test]
     async fn test_sleep_timer_short_duration() {
         let tool = SleepTimerTool::new();
-        let res = tool.execute(json!({ "seconds": 1, "reason": "unit test" })).await.unwrap();
+        let res = tool
+            .execute(json!({ "seconds": 1, "reason": "unit test" }))
+            .await
+            .unwrap();
         assert!(res.contains("waited 1 second"));
         assert!(res.contains("unit test"));
     }

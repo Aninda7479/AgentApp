@@ -1,7 +1,7 @@
-use std::fs;
-use std::path::PathBuf;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
 use superagent_core_v2::storage::get_superagent_dir;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,8 +37,7 @@ pub fn generate_session_id() -> String {
     let bytes = u.as_bytes();
     format!(
         "{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}",
-        bytes[0], bytes[1], bytes[2], bytes[3],
-        bytes[4], bytes[5], bytes[6], bytes[7]
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]
     )
 }
 

@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 use crate::automation::recorder::DemonstrationTrace;
 use crate::types::ModelConfig;

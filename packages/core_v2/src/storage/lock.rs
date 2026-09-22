@@ -1,7 +1,7 @@
-use std::fs;
-use std::path::PathBuf;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
 
 use super::settings::get_runtime_dir;
 

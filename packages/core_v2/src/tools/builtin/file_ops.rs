@@ -1,7 +1,7 @@
-use std::path::{Path, PathBuf};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
 
 use crate::tools::r#trait::Tool;
 
@@ -231,9 +231,13 @@ impl Tool for WriteFileTool {
 
         if create_dirs {
             if let Some(parent) = safe_path.parent() {
-                tokio::fs::create_dir_all(parent)
-                    .await
-                    .map_err(|e| anyhow!("Failed to create parent directory '{}': {}", parent.display(), e))?;
+                tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                    anyhow!(
+                        "Failed to create parent directory '{}': {}",
+                        parent.display(),
+                        e
+                    )
+                })?;
             }
         }
 
@@ -272,7 +276,11 @@ mod tests {
 
         // Safe relative path to non-existing file
         let res = validate_path_in_workspace("hello.txt", &canonical_ws);
-        assert!(res.is_ok(), "Expected safe relative path to succeed: {:?}", res);
+        assert!(
+            res.is_ok(),
+            "Expected safe relative path to succeed: {:?}",
+            res
+        );
         let p = res.unwrap();
         assert!(p.starts_with(&canonical_ws));
         assert_eq!(p.file_name().unwrap(), "hello.txt");
@@ -281,7 +289,11 @@ mod tests {
         let sub = canonical_ws.join("subdir");
         fs::create_dir_all(&sub).unwrap();
         let res = validate_path_in_workspace("subdir/nested.txt", &canonical_ws);
-        assert!(res.is_ok(), "Expected nested relative path to succeed: {:?}", res);
+        assert!(
+            res.is_ok(),
+            "Expected nested relative path to succeed: {:?}",
+            res
+        );
         assert!(res.unwrap().starts_with(&canonical_ws));
 
         // Safe existing file
@@ -289,7 +301,10 @@ mod tests {
         fs::write(&existing, "hello").unwrap();
         let res = validate_path_in_workspace("existing.txt", &canonical_ws);
         assert!(res.is_ok());
-        assert_eq!(res.unwrap(), strip_unc_prefix(&existing.canonicalize().unwrap()));
+        assert_eq!(
+            res.unwrap(),
+            strip_unc_prefix(&existing.canonicalize().unwrap())
+        );
 
         // Safe with current dir dot
         let res = validate_path_in_workspace("./subdir/nested.txt", &canonical_ws);
@@ -316,14 +331,20 @@ mod tests {
 
         // Subdir traversal escaping root: subdir/../../secret
         let res = validate_path_in_workspace("subdir/../../secret.txt", &canonical_ws);
-        assert!(res.is_err(), "Expected subdir/../../secret.txt to be rejected");
+        assert!(
+            res.is_err(),
+            "Expected subdir/../../secret.txt to be rejected"
+        );
 
         // Absolute path outside workspace
         let other_temp = std::env::temp_dir();
         if other_temp != canonical_ws {
             let outside_abs = other_temp.join("evil.txt");
             let res = validate_path_in_workspace(outside_abs.to_str().unwrap(), &canonical_ws);
-            assert!(res.is_err(), "Expected outside absolute path to be rejected");
+            assert!(
+                res.is_err(),
+                "Expected outside absolute path to be rejected"
+            );
         }
 
         let _ = fs::remove_dir_all(&temp_dir);
@@ -340,4 +361,3 @@ mod tests {
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
-

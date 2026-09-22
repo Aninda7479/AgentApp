@@ -1,12 +1,10 @@
+use anyhow::Result;
 use std::sync::Arc;
 use std::time::Instant;
-use anyhow::Result;
 use tokio::sync::mpsc;
 
 use crate::orchestrator::SubagentRunner;
-use crate::types::{
-    AgentEvent, WorkflowDefinition, WorkflowExecutionResult, WorkflowStepResult,
-};
+use crate::types::{AgentEvent, WorkflowDefinition, WorkflowExecutionResult, WorkflowStepResult};
 
 pub struct PipelineExecutor {
     subagent_runner: Arc<SubagentRunner>,
@@ -47,7 +45,8 @@ impl PipelineExecutor {
             // Construct step prompt
             let prompt = if step.pass_previous_output && !previous_output.is_empty() {
                 if step.prompt_template.contains("{{previous_output}}") {
-                    step.prompt_template.replace("{{previous_output}}", &previous_output)
+                    step.prompt_template
+                        .replace("{{previous_output}}", &previous_output)
                 } else {
                     format!(
                         "{}\n\n--- Input / Context from Previous Step ---\n{}",
@@ -65,7 +64,10 @@ impl PipelineExecutor {
 
             let (output, is_error) = match step_exec_res {
                 Ok(out) => (out, false),
-                Err(err) => (format!("Error executing step '{}': {}", step.name, err), true),
+                Err(err) => (
+                    format!("Error executing step '{}': {}", step.name, err),
+                    true,
+                ),
             };
 
             let duration_ms = step_start.elapsed().as_millis() as u64;

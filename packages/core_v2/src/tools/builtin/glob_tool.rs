@@ -1,7 +1,7 @@
-use std::path::PathBuf;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::path::PathBuf;
 use walkdir::WalkDir;
 
 use crate::tools::builtin::file_ops::validate_path_in_workspace;
@@ -109,7 +109,10 @@ impl Tool for GlobTool {
             let path = entry.path();
             let rel_path = path.strip_prefix(&ws_root).unwrap_or(path);
             let rel_str = rel_path.to_string_lossy().replace('\\', "/");
-            let file_name = path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+            let file_name = path
+                .file_name()
+                .map(|n| n.to_string_lossy())
+                .unwrap_or_default();
 
             if regex.is_match(&rel_str) || regex.is_match(&file_name) {
                 matches.push(rel_str);
@@ -117,7 +120,10 @@ impl Tool for GlobTool {
         }
 
         if matches.is_empty() {
-            Ok(format!("No files found matching pattern '{}' in '{}'", clean_pattern, search_path_raw))
+            Ok(format!(
+                "No files found matching pattern '{}' in '{}'",
+                clean_pattern, search_path_raw
+            ))
         } else {
             let count = matches.len();
             let mut out = format!("Found {} file(s) matching '{}':\n\n", count, clean_pattern);
@@ -192,10 +198,18 @@ mod tests {
         let sub_dir = temp_dir.join("src").join("models");
         tokio::fs::create_dir_all(&sub_dir).await.unwrap();
 
-        tokio::fs::write(temp_dir.join("Cargo.toml"), "[package]").await.unwrap();
-        tokio::fs::write(sub_dir.join("user.rs"), "struct User;").await.unwrap();
-        tokio::fs::write(sub_dir.join("post.rs"), "struct Post;").await.unwrap();
-        tokio::fs::write(sub_dir.join("readme.md"), "# Readme").await.unwrap();
+        tokio::fs::write(temp_dir.join("Cargo.toml"), "[package]")
+            .await
+            .unwrap();
+        tokio::fs::write(sub_dir.join("user.rs"), "struct User;")
+            .await
+            .unwrap();
+        tokio::fs::write(sub_dir.join("post.rs"), "struct Post;")
+            .await
+            .unwrap();
+        tokio::fs::write(sub_dir.join("readme.md"), "# Readme")
+            .await
+            .unwrap();
 
         let tool = GlobTool::new(temp_dir.clone());
 

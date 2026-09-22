@@ -1,6 +1,5 @@
-use std::path::{Path, PathBuf};
 use anyhow::Result;
-
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -22,7 +21,10 @@ pub struct ImageInpaintSpec {
 }
 
 /// Validates and prepares image processing specs for native conversion or AI generation.
-pub fn prepare_image_processing(options: &ImageProcessOptions, workspace_root: &Path) -> Result<PathBuf> {
+pub fn prepare_image_processing(
+    options: &ImageProcessOptions,
+    workspace_root: &Path,
+) -> Result<PathBuf> {
     let input = Path::new(&options.input_path);
     let resolved_input = if input.is_absolute() {
         input.to_path_buf()
@@ -63,7 +65,6 @@ mod tests {
         let src = temp_dir.join("input.png");
 
         std::fs::write(&src, b"fake_png_bytes").unwrap();
-
 
         let opts = ImageProcessOptions {
             input_path: "input.png".to_string(),

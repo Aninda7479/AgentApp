@@ -1,8 +1,8 @@
 #![windows_subsystem = "windows"]
 
 mod api;
-mod audio;
 mod app;
+mod audio;
 
 use app::DictationApp;
 use eframe::egui;

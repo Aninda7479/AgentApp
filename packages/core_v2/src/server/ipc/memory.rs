@@ -24,7 +24,9 @@ pub fn load_global_memory() -> serde_json::Value {
     if p.exists() {
         if let Ok(raw) = std::fs::read_to_string(&p) {
             if let Ok(mut val) = serde_json::from_str::<serde_json::Value>(&raw) {
-                if let (Some(def_obj), Some(val_obj)) = (default_mem.as_object(), val.as_object_mut()) {
+                if let (Some(def_obj), Some(val_obj)) =
+                    (default_mem.as_object(), val.as_object_mut())
+                {
                     for (k, v) in def_obj {
                         if !val_obj.contains_key(k) {
                             val_obj.insert(k.clone(), v.clone());
@@ -92,9 +94,15 @@ pub async fn handle_memory_channel(
         "global-memory-save-instructions" => {
             let mut mem = load_global_memory();
             if let Some(arg) = args.first() {
-                let inst = arg.get("instructions").and_then(|v| v.as_str()).unwrap_or("");
+                let inst = arg
+                    .get("instructions")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 if let Some(obj) = mem.as_object_mut() {
-                    obj.insert("globalMemoryInstructions".to_string(), serde_json::json!(inst));
+                    obj.insert(
+                        "globalMemoryInstructions".to_string(),
+                        serde_json::json!(inst),
+                    );
                     let _ = save_global_memory(&mem);
                 }
             }
@@ -103,19 +111,38 @@ pub async fn handle_memory_channel(
         "global-memory-add-profile" => {
             let mut mem = load_global_memory();
             if let Some(arg) = args.first() {
-                let key = arg.get("key").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-                let value = arg.get("value").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-                let category = arg.get("category").and_then(|v| v.as_str()).unwrap_or("user_preference").to_string();
+                let key = arg
+                    .get("key")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                let value = arg
+                    .get("value")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                let category = arg
+                    .get("category")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("user_preference")
+                    .to_string();
                 if !key.is_empty() {
                     if let Some(obj) = mem.as_object_mut() {
-                        let profile = obj.entry("userProfile".to_string()).or_insert_with(|| serde_json::json!([]));
+                        let profile = obj
+                            .entry("userProfile".to_string())
+                            .or_insert_with(|| serde_json::json!([]));
                         if let Some(arr) = profile.as_array_mut() {
                             let mut found = false;
                             for item in arr.iter_mut() {
                                 if item.get("key").and_then(|v| v.as_str()) == Some(&key) {
                                     if let Some(iobj) = item.as_object_mut() {
                                         iobj.insert("value".to_string(), serde_json::json!(value));
-                                        iobj.insert("category".to_string(), serde_json::json!(category));
+                                        iobj.insert(
+                                            "category".to_string(),
+                                            serde_json::json!(category),
+                                        );
                                     }
                                     found = true;
                                     break;
@@ -147,12 +174,28 @@ pub async fn handle_memory_channel(
         "global-memory-add-insight" => {
             let mut mem = load_global_memory();
             if let Some(arg) = args.first() {
-                let topic = arg.get("topic").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-                let lesson = arg.get("lesson").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
-                let category = arg.get("category").and_then(|v| v.as_str()).unwrap_or("user_preference").to_string();
+                let topic = arg
+                    .get("topic")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                let lesson = arg
+                    .get("lesson")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                let category = arg
+                    .get("category")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("user_preference")
+                    .to_string();
                 if !topic.is_empty() && !lesson.is_empty() {
                     if let Some(obj) = mem.as_object_mut() {
-                        let insights = obj.entry("learnedInsights".to_string()).or_insert_with(|| serde_json::json!([]));
+                        let insights = obj
+                            .entry("learnedInsights".to_string())
+                            .or_insert_with(|| serde_json::json!([]));
                         if let Some(arr) = insights.as_array_mut() {
                             arr.push(serde_json::json!({
                                 "id": chrono::Utc::now().timestamp_millis().to_string(),
@@ -173,7 +216,10 @@ pub async fn handle_memory_channel(
             if let Some(arg) = args.first() {
                 let id = arg.get("id").and_then(|v| v.as_str()).unwrap_or("").trim();
                 if let Some(obj) = mem.as_object_mut() {
-                    if let Some(arr) = obj.get_mut("learnedInsights").and_then(|v| v.as_array_mut()) {
+                    if let Some(arr) = obj
+                        .get_mut("learnedInsights")
+                        .and_then(|v| v.as_array_mut())
+                    {
                         arr.retain(|item| item.get("id").and_then(|v| v.as_str()) != Some(id));
                         let _ = save_global_memory(&mem);
                     }
@@ -193,11 +239,15 @@ pub async fn handle_memory_channel(
         }
         "orchestrator-update-instructions" => {
             let inst = load_orchestrator_instructions();
-            Some(Ok(Json(serde_json::json!({ "data": { "success": true, "updated": true, "instructions": inst } }))))
+            Some(Ok(Json(
+                serde_json::json!({ "data": { "success": true, "updated": true, "instructions": inst } }),
+            )))
         }
         "orchestrator-optimize-instructions-by-ai" => {
             let inst = load_orchestrator_instructions();
-            Some(Ok(Json(serde_json::json!({ "data": { "success": true, "instructions": inst } }))))
+            Some(Ok(Json(
+                serde_json::json!({ "data": { "success": true, "instructions": inst } }),
+            )))
         }
         _ => None,
     }

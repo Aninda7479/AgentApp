@@ -1,7 +1,11 @@
 fn main() {
     // Ensure externalBin placeholder or actual binaries exist so tauri_build does not panic during check/dev
     if let Ok(target) = std::env::var("TARGET") {
-        let ext = if target.contains("windows") { ".exe" } else { "" };
+        let ext = if target.contains("windows") {
+            ".exe"
+        } else {
+            ""
+        };
         let binaries_dir = std::path::Path::new("binaries");
         let _ = std::fs::create_dir_all(binaries_dir);
 
@@ -11,10 +15,22 @@ fn main() {
             if !bin_path.exists() {
                 // Check if binary was compiled into workspace target directory
                 let target_dirs = [
-                    std::path::PathBuf::from(format!("../../../target/release/superagent-{}{}", bin, ext)),
-                    std::path::PathBuf::from(format!("../../../target/debug/superagent-{}{}", bin, ext)),
-                    std::path::PathBuf::from(format!("../../../target/{}/release/superagent-{}{}", target, bin, ext)),
-                    std::path::PathBuf::from(format!("../../../target/{}/debug/superagent-{}{}", target, bin, ext)),
+                    std::path::PathBuf::from(format!(
+                        "../../../target/release/superagent-{}{}",
+                        bin, ext
+                    )),
+                    std::path::PathBuf::from(format!(
+                        "../../../target/debug/superagent-{}{}",
+                        bin, ext
+                    )),
+                    std::path::PathBuf::from(format!(
+                        "../../../target/{}/release/superagent-{}{}",
+                        target, bin, ext
+                    )),
+                    std::path::PathBuf::from(format!(
+                        "../../../target/{}/debug/superagent-{}{}",
+                        target, bin, ext
+                    )),
                 ];
 
                 let mut copied = false;

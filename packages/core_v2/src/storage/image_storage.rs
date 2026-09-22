@@ -147,7 +147,8 @@ mod tests {
 
     #[test]
     fn test_image_storage_lifecycle() {
-        let temp_dir = std::env::temp_dir().join(format!("test_img_storage_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("test_img_storage_{}", uuid::Uuid::new_v4()));
         let _ = fs::create_dir_all(&temp_dir);
         let storage = ImageStorage::with_dir(temp_dir.clone());
 

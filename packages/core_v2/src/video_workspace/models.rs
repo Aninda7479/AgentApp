@@ -1,12 +1,12 @@
+use anyhow::{anyhow, Result};
+use futures_util::StreamExt;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use anyhow::{anyhow, Result};
-use futures_util::StreamExt;
 use tracing::{error, info};
 
-use crate::video_workspace::types::{VideoModelFamily, VideoModality, VideoModelInfo};
+use crate::video_workspace::types::{VideoModality, VideoModelFamily, VideoModelInfo};
 
 #[derive(Debug, Clone)]
 pub struct DownloadState {
@@ -322,7 +322,10 @@ impl VideoModelRegistry {
             if let Some(companion) = catalog.iter().find(|m| &m.id == companion_id) {
                 let companion_path = self.models_dir.join(&companion.filename);
                 if !companion_path.exists() {
-                    info!("Ensuring companion dependency {} for {}...", companion_id, model_id);
+                    info!(
+                        "Ensuring companion dependency {} for {}...",
+                        companion_id, model_id
+                    );
                     self.start_pull_model_internal(companion_id)?;
                 }
             }
@@ -344,7 +347,10 @@ impl VideoModelRegistry {
             if let Some(companion) = catalog.iter().find(|m| &m.id == companion_id) {
                 let companion_path = self.models_dir.join(&companion.filename);
                 if !companion_path.exists() {
-                    info!("Auto-queuing companion model {} for {}", companion_id, model.id);
+                    info!(
+                        "Auto-queuing companion model {} for {}",
+                        companion_id, model.id
+                    );
                     let _ = self.start_pull_model_internal(companion_id);
                 }
             }
@@ -385,14 +391,16 @@ impl VideoModelRegistry {
         let temp_dest = self.models_dir.join(format!("{}.tmp", model.filename));
 
         tokio::spawn(async move {
-            info!("Starting download for video model {} from {}", model_id_clone, download_url);
+            info!(
+                "Starting download for video model {} from {}",
+                model_id_clone, download_url
+            );
 
             let client = reqwest::Client::builder()
                 .user_agent("SuperAgent/0.42.0")
                 .redirect(reqwest::redirect::Policy::limited(10))
                 .timeout(std::time::Duration::from_secs(7200))
                 .build();
-
 
             let client = match client {
                 Ok(c) => c,

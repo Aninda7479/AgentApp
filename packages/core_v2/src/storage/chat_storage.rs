@@ -120,13 +120,15 @@ pub fn sanitize_stored_chat_title(raw_title: &str, first_prompt: Option<&str>) -
     let is_telegram_leak = trimmed.starts_with("Telegram Chat")
         || trimmed == "Telegram Conversation"
         || trimmed == "Telegram Assistant"
-        || (trimmed.to_lowercase().contains("telegram") && trimmed.chars().any(|c| c.is_ascii_digit()))
+        || (trimmed.to_lowercase().contains("telegram")
+            && trimmed.chars().any(|c| c.is_ascii_digit()))
         || (trimmed.starts_with("User ") && trimmed.chars().skip(5).all(|c| c.is_ascii_digit()))
         || (trimmed.starts_with("Chat ") && trimmed.chars().skip(5).all(|c| c.is_ascii_digit()));
 
     if is_telegram_leak || trimmed.is_empty() {
         if let Some(prompt) = first_prompt {
-            let derived = crate::integrations::telegram_bot::generate_telegram_chat_title(prompt, "");
+            let derived =
+                crate::integrations::telegram_bot::generate_telegram_chat_title(prompt, "");
             if derived != "Telegram Conversation" && !derived.is_empty() {
                 return derived;
             }
@@ -441,7 +443,8 @@ impl ChatStorage {
                                             .get("title")
                                             .and_then(|v| v.as_str())
                                             .unwrap_or("Untitled Chat");
-                                        let first_prompt = extract_first_user_prompt_from_json(&val);
+                                        let first_prompt =
+                                            extract_first_user_prompt_from_json(&val);
                                         let title = sanitize_stored_chat_title(
                                             raw_title,
                                             first_prompt.as_deref(),
@@ -808,7 +811,8 @@ impl ChatStorage {
                                             .get("title")
                                             .and_then(|v| v.as_str())
                                             .unwrap_or("Untitled Chat");
-                                        let first_prompt = extract_first_user_prompt_from_json(&val);
+                                        let first_prompt =
+                                            extract_first_user_prompt_from_json(&val);
                                         let title = sanitize_stored_chat_title(
                                             raw_title,
                                             first_prompt.as_deref(),
@@ -1126,7 +1130,8 @@ mod tests {
     #[test]
     fn test_sanitize_stored_chat_title_and_persistence() {
         // Leaked Telegram numerical IDs must be sanitized
-        let title1 = sanitize_stored_chat_title("Telegram Chat 5084960883", Some("Summarize this document"));
+        let title1 =
+            sanitize_stored_chat_title("Telegram Chat 5084960883", Some("Summarize this document"));
         assert_eq!(title1, "Summarize this document");
         assert!(!title1.contains("5084960883"));
 

@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::tools::r#trait::Tool;
@@ -168,7 +168,10 @@ impl TodoTool {
             }
         } else if let Some(task_match) = input.get("task").and_then(|v| v.as_str()) {
             let lower_match = task_match.to_lowercase();
-            if let Some(item) = guard.iter_mut().find(|it| it.task.to_lowercase().contains(&lower_match)) {
+            if let Some(item) = guard
+                .iter_mut()
+                .find(|it| it.task.to_lowercase().contains(&lower_match))
+            {
                 item.status = new_status.to_lowercase();
             } else {
                 return Err(anyhow::anyhow!("No task matching '{}' found", task_match));
@@ -195,10 +198,16 @@ impl TodoTool {
     }
 
     fn render_checklist(items: &[TodoItem]) -> String {
-        let completed = items.iter().filter(|i| i.status == "completed" || i.status == "done").count();
+        let completed = items
+            .iter()
+            .filter(|i| i.status == "completed" || i.status == "done")
+            .count();
         let total = items.len();
 
-        let mut out = format!("### ☑️ Session Task Checklist ({}/{} completed)\n\n", completed, total);
+        let mut out = format!(
+            "### ☑️ Session Task Checklist ({}/{} completed)\n\n",
+            completed, total
+        );
         out.push_str("| ID | Status | Task |\n");
         out.push_str("| :-: | :--- | :--- |\n");
 

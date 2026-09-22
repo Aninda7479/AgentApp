@@ -1,6 +1,5 @@
-use std::path::Path;
 use anyhow::Result;
-
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
@@ -49,7 +48,11 @@ pub fn generate_pdf_document(spec: &PdfDocumentSpec, output_path: &Path) -> Resu
 
     let mut y_pos = 710;
     if let Some(ref author) = spec.author {
-        stream_data.push_str(&format!("BT /F1 11 Tf 50 {} Td (By: {}) Tj ET\n", y_pos, escape_pdf_string(author)));
+        stream_data.push_str(&format!(
+            "BT /F1 11 Tf 50 {} Td (By: {}) Tj ET\n",
+            y_pos,
+            escape_pdf_string(author)
+        ));
         y_pos -= 25;
     }
 
@@ -90,20 +93,37 @@ pub fn generate_pdf_document(spec: &PdfDocumentSpec, output_path: &Path) -> Resu
     // Page object with standard font reference
     let stream_len = stream_data.len();
     pdf_content.extend_from_slice(b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n");
-    pdf_content.extend_from_slice(format!("4 0 obj\n<< /Length {} >>\nstream\n{}\nendstream\nendobj\n", stream_len, stream_data).as_bytes());
-    pdf_content.extend_from_slice(b"5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n");
+    pdf_content.extend_from_slice(
+        format!(
+            "4 0 obj\n<< /Length {} >>\nstream\n{}\nendstream\nendobj\n",
+            stream_len, stream_data
+        )
+        .as_bytes(),
+    );
+    pdf_content.extend_from_slice(
+        b"5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+    );
 
     // XRef table
     let xref_pos = pdf_content.len();
     pdf_content.extend_from_slice(b"xref\n0 6\n0000000000 65535 f \n0000000015 00000 n \n0000000068 00000 n \n0000000125 00000 n \n");
-    pdf_content.extend_from_slice(format!("trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{}\n%%EOF\n", xref_pos).as_bytes());
+    pdf_content.extend_from_slice(
+        format!(
+            "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{}\n%%EOF\n",
+            xref_pos
+        )
+        .as_bytes(),
+    );
 
     std::fs::write(output_path, &pdf_content)?;
     Ok(pdf_content.len())
 }
 
 fn escape_pdf_string(input: &str) -> String {
-    input.replace('\\', "\\\\").replace('(', "\\(").replace(')', "\\)")
+    input
+        .replace('\\', "\\\\")
+        .replace('(', "\\(")
+        .replace(')', "\\)")
 }
 
 #[cfg(test)]
@@ -123,7 +143,10 @@ mod tests {
             sections: vec![PdfSection {
                 heading: "Executive Summary".to_string(),
                 body: "This is a generated PDF report from SuperAgent core_v2 in Rust.".to_string(),
-                bullet_points: Some(vec!["High performance".to_string(), "Memory safety".to_string()]),
+                bullet_points: Some(vec![
+                    "High performance".to_string(),
+                    "Memory safety".to_string(),
+                ]),
             }],
             footer_text: None,
         };

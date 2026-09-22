@@ -140,7 +140,9 @@ pub async fn run_workflow(
 
 // ─── Demonstration Skills Endpoints ───────────────────────────────────────────
 
-pub async fn list_skills(State(state): State<AppState>) -> Result<Json<Vec<SynthesizedSkill>>, StatusCode> {
+pub async fn list_skills(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<SynthesizedSkill>>, StatusCode> {
     state
         .skill_synthesizer
         .list_skills()
@@ -197,7 +199,8 @@ pub async fn synthesize_trace(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     let raw_settings = state.settings_store.load_raw().unwrap_or_default();
-    let (prov_type, m_id, api_key, base_url) = resolve_active_workspace_model(&raw_settings, &state.settings_store);
+    let (prov_type, m_id, api_key, base_url) =
+        resolve_active_workspace_model(&raw_settings, &state.settings_store);
     let mut model_config = ModelConfig::new(prov_type, m_id);
     if let Some(k) = api_key {
         model_config.api_key = Some(k);

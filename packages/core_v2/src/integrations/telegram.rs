@@ -145,6 +145,7 @@ pub struct TelegramFileInfo {
 pub struct TelegramClient {
     client: reqwest::Client,
     poll_client: reqwest::Client,
+    upload_client: reqwest::Client,
 }
 
 impl TelegramClient {
@@ -165,9 +166,19 @@ impl TelegramClient {
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
 
+        // Dedicated upload/download client with 300s (5min) timeout for large media transfers
+        let upload_client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(300))
+            .pool_idle_timeout(Duration::from_secs(120))
+            .pool_max_idle_per_host(5)
+            .tcp_keepalive(Duration::from_secs(60))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
         Self {
             client,
             poll_client,
+            upload_client,
         }
     }
 
@@ -376,7 +387,7 @@ impl TelegramClient {
             bot_token, clean_path
         );
 
-        let resp = self.client.get(&url).send().await?;
+        let resp = self.upload_client.get(&url).send().await?;
         if resp.status().is_success() {
             let bytes = resp.bytes().await?;
             Ok(bytes.to_vec())
@@ -455,7 +466,15 @@ impl TelegramClient {
                     payload["title"] = serde_json::Value::String(title.clone());
                 }
             }
-            let resp = self.client.post(&endpoint).json(&payload).send().await?;
+            if method == "sendVideo" {
+                payload["supports_streaming"] = serde_json::Value::Bool(true);
+            }
+            let resp = self
+                .upload_client
+                .post(&endpoint)
+                .json(&payload)
+                .send()
+                .await?;
             return Self::parse_response(resp).await;
         }
 
@@ -475,7 +494,21 @@ impl TelegramClient {
             .unwrap_or("file")
             .to_string();
 
+        let mime_type = mime_guess::from_path(path)
+            .first_or_octet_stream()
+            .to_string();
+
         let part = reqwest::multipart::Part::bytes(bytes).file_name(filename);
+        let part = match part.mime_str(&mime_type) {
+            Ok(p) => p,
+            Err(_) => {
+                return Ok(TelegramSendResult {
+                    success: false,
+                    message_id: None,
+                    error: Some(format!("Invalid MIME type detected: {}", mime_type)),
+                });
+            }
+        };
 
         let mut form = reqwest::multipart::Form::new()
             .text("chat_id", options.chat_id.clone())
@@ -491,7 +524,16 @@ impl TelegramClient {
             }
         }
 
-        let resp = self.client.post(&endpoint).multipart(form).send().await?;
+        if method == "sendVideo" {
+            form = form.text("supports_streaming", "true");
+        }
+
+        let resp = self
+            .upload_client
+            .post(&endpoint)
+            .multipart(form)
+            .send()
+            .await?;
         Self::parse_response(resp).await
     }
 
@@ -555,6 +597,23 @@ pub fn split_telegram_message(text: &str, max_len: usize) -> Vec<String> {
     }
 
     chunks
+}
+
+/// Redacts sensitive Telegram bot tokens from error strings and URLs.
+/// Example: "https://api.telegram.org/bot123456:ABC-DEF/sendVideo" -> "https://api.telegram.org/bot[REDACTED]/sendVideo"
+pub fn sanitize_telegram_error(err_str: &str) -> String {
+    let re = regex::Regex::new(r"bot\d+:[A-Za-z0-9_-]+").unwrap();
+    re.replace_all(err_str, "bot[REDACTED]").to_string()
+}
+
+/// Redacts both specific known bot tokens and general Telegram bot URL token patterns from strings.
+pub fn sanitize_telegram_error_with_token(err_str: &str, bot_token: &str) -> String {
+    let sanitized = if !bot_token.trim().is_empty() {
+        err_str.replace(bot_token.trim(), "[REDACTED]")
+    } else {
+        err_str.to_string()
+    };
+    sanitize_telegram_error(&sanitized)
 }
 
 #[cfg(test)]
@@ -682,5 +741,20 @@ mod tests {
         assert_eq!(photos.len(), 2);
         assert_eq!(photos.last().unwrap().file_id, "p_high");
         assert_eq!(photos.last().unwrap().width, 1024);
+    }
+
+    #[test]
+    fn test_sanitize_telegram_error() {
+        let err = "error sending request for url (https://api.telegram.org/bot8668981318:AAGYs5H0l8AL1Jds9qeXfXhhE_mKiwIPei8/sendVideo): operation timed out";
+        let sanitized = sanitize_telegram_error(err);
+        assert_eq!(
+            sanitized,
+            "error sending request for url (https://api.telegram.org/bot[REDACTED]/sendVideo): operation timed out"
+        );
+
+        let token = "8668981318:AAGYs5H0l8AL1Jds9qeXfXhhE_mKiwIPei8";
+        let raw = format!("failed for token {}", token);
+        let sanitized_with_tok = sanitize_telegram_error_with_token(&raw, token);
+        assert_eq!(sanitized_with_tok, "failed for token [REDACTED]");
     }
 }

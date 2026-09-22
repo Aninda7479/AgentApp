@@ -57,7 +57,8 @@ pub struct EngineManager {
     last_error: Arc<RwLock<Option<String>>>,
 }
 
-static HARDWARE_PROFILE_CACHE: std::sync::Mutex<Option<(std::time::Instant, HardwareProfile)>> = std::sync::Mutex::new(None);
+static HARDWARE_PROFILE_CACHE: std::sync::Mutex<Option<(std::time::Instant, HardwareProfile)>> =
+    std::sync::Mutex::new(None);
 
 impl EngineManager {
     pub fn new() -> Self {
@@ -203,7 +204,9 @@ impl EngineManager {
     /// Detect system hardware (OS, GPU, VRAM, RAM, Storage) and recommend backend & model
     pub fn detect_hardware() -> HardwareProfile {
         {
-            let lock = HARDWARE_PROFILE_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+            let lock = HARDWARE_PROFILE_CACHE
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             if let Some((instant, ref hw)) = *lock {
                 if instant.elapsed() < std::time::Duration::from_secs(30) {
                     return hw.clone();
@@ -219,10 +222,18 @@ impl EngineManager {
         let total_ram_mb = sys.total_memory() / (1024 * 1024);
         let available_ram_mb = Some(sys.available_memory() / (1024 * 1024));
 
-        let cpu_brand = sys.cpus().first().map(|c| c.brand().to_string()).unwrap_or_default();
+        let cpu_brand = sys
+            .cpus()
+            .first()
+            .map(|c| c.brand().to_string())
+            .unwrap_or_default();
         let npu_info = crate::server::routes::system::detect_npu_tpu(&cpu_brand);
         let npu_detected = npu_info.get("detected").and_then(|v| v.as_bool());
-        let npu_label = npu_info.get("label").and_then(|v| v.as_str()).map(|s| s.to_string()).filter(|s| !s.is_empty());
+        let npu_label = npu_info
+            .get("label")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .filter(|s| !s.is_empty());
 
         let mut gpu_name: Option<String> = None;
         let mut vram_mb: Option<u64> = None;
@@ -304,7 +315,10 @@ impl EngineManager {
         {
             // 1. Check NVIDIA via nvidia-smi
             if let Ok(output) = crate::server::routes::system::silent_command("nvidia-smi")
-                .args(["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"])
+                .args([
+                    "--query-gpu=name,memory.total",
+                    "--format=csv,noheader,nounits",
+                ])
                 .output()
             {
                 let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -329,7 +343,11 @@ impl EngineManager {
                 if let Ok(entries) = std::fs::read_dir("/sys/class/drm") {
                     for entry in entries.flatten() {
                         let path = entry.path();
-                        let name_str = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                        let name_str = path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string();
                         if name_str.starts_with("card") && !name_str.contains('-') {
                             let vram_path = path.join("device").join("mem_info_vram_total");
                             if vram_path.exists() {
@@ -353,10 +371,21 @@ impl EngineManager {
 
         // Determine recommended backend
         let is_apple_silicon = os == "macos" && arch == "aarch64";
-        let gpu_lower = gpu_name.as_ref().map(|n| n.to_lowercase()).unwrap_or_default();
-        let has_nvidia = gpu_lower.contains("nvidia") || gpu_lower.contains("geforce") || gpu_lower.contains("rtx") || gpu_lower.contains("gtx") || gpu_lower.contains("quadro") || gpu_lower.contains("tesla");
+        let gpu_lower = gpu_name
+            .as_ref()
+            .map(|n| n.to_lowercase())
+            .unwrap_or_default();
+        let has_nvidia = gpu_lower.contains("nvidia")
+            || gpu_lower.contains("geforce")
+            || gpu_lower.contains("rtx")
+            || gpu_lower.contains("gtx")
+            || gpu_lower.contains("quadro")
+            || gpu_lower.contains("tesla");
         let has_amd = gpu_lower.contains("amd") || gpu_lower.contains("radeon");
-        let has_intel_arc = gpu_lower.contains("intel") && (gpu_lower.contains("arc") || gpu_lower.contains("iris") || gpu_lower.contains("xe"));
+        let has_intel_arc = gpu_lower.contains("intel")
+            && (gpu_lower.contains("arc")
+                || gpu_lower.contains("iris")
+                || gpu_lower.contains("xe"));
 
         let recommended_backend = if is_apple_silicon {
             GpuBackend::Metal
@@ -374,9 +403,15 @@ impl EngineManager {
 
         // Determine storage space
         let disks = sysinfo::Disks::new_with_refreshed_list();
-        let (storage_free_gb, storage_total_gb, storage_mount) = if let Some(first_disk) = disks.iter().next() {
-            let free_gb = ((first_disk.available_space() as f64) / (1024.0 * 1024.0 * 1024.0) * 10.0).round() / 10.0;
-            let total_gb = ((first_disk.total_space() as f64) / (1024.0 * 1024.0 * 1024.0) * 10.0).round() / 10.0;
+        let (storage_free_gb, storage_total_gb, storage_mount) = if let Some(first_disk) =
+            disks.iter().next()
+        {
+            let free_gb =
+                ((first_disk.available_space() as f64) / (1024.0 * 1024.0 * 1024.0) * 10.0).round()
+                    / 10.0;
+            let total_gb = ((first_disk.total_space() as f64) / (1024.0 * 1024.0 * 1024.0) * 10.0)
+                .round()
+                / 10.0;
             let mount = first_disk.mount_point().to_string_lossy().to_string();
             (Some(free_gb), Some(total_gb), Some(mount))
         } else {
@@ -430,7 +465,9 @@ impl EngineManager {
             npu_label,
         };
 
-        let mut lock = HARDWARE_PROFILE_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut lock = HARDWARE_PROFILE_CACHE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         *lock = Some((std::time::Instant::now(), profile.clone()));
         profile
     }
@@ -466,7 +503,8 @@ impl EngineManager {
                 .unwrap_or_default();
 
             // Fetch latest release metadata from GitHub
-            let release_url = "https://api.github.com/repos/leejet/stable-diffusion.cpp/releases/latest";
+            let release_url =
+                "https://api.github.com/repos/leejet/stable-diffusion.cpp/releases/latest";
             let release_json: serde_json::Value = match client.get(release_url).send().await {
                 Ok(r) if r.status().is_success() => match r.json().await {
                     Ok(j) => j,
@@ -494,7 +532,10 @@ impl EngineManager {
                 }
             };
 
-            let tag_name = release_json["tag_name"].as_str().unwrap_or("latest").to_string();
+            let tag_name = release_json["tag_name"]
+                .as_str()
+                .unwrap_or("latest")
+                .to_string();
             let assets = match release_json["assets"].as_array() {
                 Some(a) => a,
                 None => {
@@ -538,7 +579,12 @@ impl EngineManager {
                 if is_x86_64 && (name.contains("arm64") || name.contains("aarch64")) {
                     continue;
                 }
-                if is_arm64 && (name.contains("x86_64") || name.contains("x64") || name.contains("intel") || name.contains("amd64")) {
+                if is_arm64
+                    && (name.contains("x86_64")
+                        || name.contains("x64")
+                        || name.contains("intel")
+                        || name.contains("amd64"))
+                {
                     continue;
                 }
 
@@ -552,13 +598,19 @@ impl EngineManager {
                 if is_arm64 && (name.contains("arm64") || name.contains("aarch64")) {
                     score += 20;
                 }
-                if is_x86_64 && (name.contains("x86_64") || name.contains("x64") || name.contains("intel") || name.contains("amd64")) {
+                if is_x86_64
+                    && (name.contains("x86_64")
+                        || name.contains("x64")
+                        || name.contains("intel")
+                        || name.contains("amd64"))
+                {
                     score += 20;
                 }
 
                 match backend {
                     GpuBackend::Cuda => {
-                        if name.contains("cuda12") || name.contains("cuda") || name.contains("cu12") {
+                        if name.contains("cuda12") || name.contains("cuda") || name.contains("cu12")
+                        {
                             score += 50;
                         }
                     }
@@ -582,7 +634,11 @@ impl EngineManager {
                         }
                     }
                     GpuBackend::Cpu => {
-                        if name.contains("cpu") || (!name.contains("cuda") && !name.contains("vulkan") && !name.contains("rocm")) {
+                        if name.contains("cpu")
+                            || (!name.contains("cuda")
+                                && !name.contains("vulkan")
+                                && !name.contains("rocm"))
+                        {
                             score += 50;
                         }
                     }
@@ -597,7 +653,10 @@ impl EngineManager {
             let asset = match matched_asset {
                 Some(a) => a,
                 None => {
-                    let msg = format!("No compatible engine build found for {} ({:?})", os_filter, backend);
+                    let msg = format!(
+                        "No compatible engine build found for {} ({:?})",
+                        os_filter, backend
+                    );
                     error!("{}", msg);
                     *last_error.write().unwrap() = Some(msg);
                     *is_downloading.write().unwrap() = false;
@@ -609,14 +668,18 @@ impl EngineManager {
             let download_url = match asset["browser_download_url"].as_str() {
                 Some(u) => u.to_string(),
                 None => {
-                    *last_error.write().unwrap() = Some("Missing download URL in asset".to_string());
+                    *last_error.write().unwrap() =
+                        Some("Missing download URL in asset".to_string());
                     *is_downloading.write().unwrap() = false;
                     return;
                 }
             };
 
             let total_size_hint = asset["size"].as_u64().unwrap_or(0);
-            info!("Downloading engine build '{}' from {}", asset_name, download_url);
+            info!(
+                "Downloading engine build '{}' from {}",
+                asset_name, download_url
+            );
             *download_progress.write().unwrap() = 0.10;
 
             let download_res = match client.get(&download_url).send().await {
@@ -701,7 +764,11 @@ impl EngineManager {
             }
 
             // Extract using native zip
-            info!("Extracting {} into {}", archive_path.display(), engine_dir.display());
+            info!(
+                "Extracting {} into {}",
+                archive_path.display(),
+                engine_dir.display()
+            );
             if let Err(e) = extract_zip_archive(&archive_path, &engine_dir) {
                 let msg = format!("Extraction failed: {}", e);
                 error!("{}", msg);
@@ -747,7 +814,8 @@ impl EngineManager {
             .user_agent("SuperAgent-EngineManager/1.0")
             .build()?;
 
-        let release_url = "https://api.github.com/repos/leejet/stable-diffusion.cpp/releases/latest";
+        let release_url =
+            "https://api.github.com/repos/leejet/stable-diffusion.cpp/releases/latest";
         let release_json: serde_json::Value = client.get(release_url).send().await?.json().await?;
 
         let latest = release_json["tag_name"].as_str().unwrap_or("").to_string();
@@ -792,7 +860,11 @@ impl EngineManager {
     }
 
     /// Dynamically construct hardware-acceleration, backend, and memory management arguments for sd-cli
-    pub fn build_acceleration_args(&self, req: &GenerateImageRequest, model_path: &Path) -> Vec<String> {
+    pub fn build_acceleration_args(
+        &self,
+        req: &GenerateImageRequest,
+        model_path: &Path,
+    ) -> Vec<String> {
         let hw = Self::detect_hardware();
         let mut args: Vec<String> = Vec::new();
 
@@ -855,7 +927,8 @@ impl EngineManager {
         let width = req.width.unwrap_or(1024);
         let height = req.height.unwrap_or(1024);
         let is_high_res = (width * height) > (512 * 512);
-        let needs_tiling = !is_apple_silicon && (model_size_mb > 2200 || available_vram_mb < 6144 || is_high_res);
+        let needs_tiling =
+            !is_apple_silicon && (model_size_mb > 2200 || available_vram_mb < 6144 || is_high_res);
         if needs_tiling {
             args.push("--vae-tiling".to_string());
         }
@@ -870,7 +943,11 @@ impl EngineManager {
         }
 
         // 6. Max VRAM budget for discrete GPUs (when model fits in VRAM)
-        if !is_apple_silicon && hw.recommended_backend != GpuBackend::Cpu && !needs_offload && available_vram_mb >= 3072 {
+        if !is_apple_silicon
+            && hw.recommended_backend != GpuBackend::Cpu
+            && !needs_offload
+            && available_vram_mb >= 3072
+        {
             let budget_gib = (available_vram_mb as f64 / 1024.0 * 0.90).floor();
             if budget_gib >= 2.0 {
                 args.push("--max-vram".to_string());
@@ -890,7 +967,9 @@ impl EngineManager {
                 let is_face_lock = req.guidance_mode.as_deref() == Some("face_lock");
 
                 // Check if specialized IP-Adapter face weight exists in models directory
-                let models_dir = crate::storage::settings::get_superagent_dir().join("models").join("images");
+                let models_dir = crate::storage::settings::get_superagent_dir()
+                    .join("models")
+                    .join("images");
                 let ip_adapter_face = models_dir.join("ip-adapter-plus-face_sdxl.gguf");
                 let ip_adapter_sd15 = models_dir.join("ip-adapter-plus-face_sd15.gguf");
                 let clip_vision = models_dir.join("clip_vision.gguf");
@@ -995,23 +1074,27 @@ impl EngineManager {
         cmd.stderr(std::process::Stdio::piped());
 
         info!("Spawning async sd-cli: {:?}", cmd);
-        let mut child = cmd.spawn().map_err(|e| anyhow!("Failed to spawn sd-cli: {}", e))?;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| anyhow!("Failed to spawn sd-cli: {}", e))?;
 
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
 
         // Send initial progress event
         if let Some(ref tx) = progress_tx {
-            let _ = tx.send(GenerationProgressEvent {
-                step: 0,
-                total_steps: steps,
-                progress: 0.0,
-                phase: "Loading model weights into VRAM...".to_string(),
-                step_time_ms: None,
-                eta_seconds: None,
-                elapsed_seconds: 0.0,
-                preview_data_url: None,
-            }).await;
+            let _ = tx
+                .send(GenerationProgressEvent {
+                    step: 0,
+                    total_steps: steps,
+                    progress: 0.0,
+                    phase: "Loading model weights into VRAM...".to_string(),
+                    step_time_ms: None,
+                    eta_seconds: None,
+                    elapsed_seconds: 0.0,
+                    preview_data_url: None,
+                })
+                .await;
         }
 
         let mut all_logs = String::new();
@@ -1125,28 +1208,36 @@ impl EngineManager {
 
                 let phase = parsed.phase.unwrap_or_else(|| {
                     if cur_step > 0 {
-                        format!("Sampling diffusion latents (Step {}/{})", cur_step, tot_steps)
+                        format!(
+                            "Sampling diffusion latents (Step {}/{})",
+                            cur_step, tot_steps
+                        )
                     } else {
                         "Processing diffusion pipeline...".to_string()
                     }
                 });
 
                 if let Some(ref tx) = progress_tx {
-                    let _ = tx.send(GenerationProgressEvent {
-                        step: cur_step,
-                        total_steps: tot_steps,
-                        progress: frac.clamp(0.0, 1.0),
-                        phase,
-                        step_time_ms: if cur_step > 0 { Some(step_ms) } else { None },
-                        eta_seconds: if cur_step > 0 { Some(eta_s) } else { None },
-                        elapsed_seconds: elapsed_s,
-                        preview_data_url: None,
-                    }).await;
+                    let _ = tx
+                        .send(GenerationProgressEvent {
+                            step: cur_step,
+                            total_steps: tot_steps,
+                            progress: frac.clamp(0.0, 1.0),
+                            phase,
+                            step_time_ms: if cur_step > 0 { Some(step_ms) } else { None },
+                            eta_seconds: if cur_step > 0 { Some(eta_s) } else { None },
+                            elapsed_seconds: elapsed_s,
+                            preview_data_url: None,
+                        })
+                        .await;
                 }
             }
         }
 
-        let status = child.wait().await.map_err(|e| anyhow!("Failed to wait on sd-cli: {}", e))?;
+        let status = child
+            .wait()
+            .await
+            .map_err(|e| anyhow!("Failed to wait on sd-cli: {}", e))?;
 
         if !status.success() {
             let combined = all_logs.to_lowercase();
@@ -1244,7 +1335,9 @@ impl EngineManager {
         }
 
         info!("Spawning sd-cli: {:?}", cmd);
-        let output = cmd.output().map_err(|e| anyhow!("Failed to execute sd-cli: {}", e))?;
+        let output = cmd
+            .output()
+            .map_err(|e| anyhow!("Failed to execute sd-cli: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1303,15 +1396,27 @@ fn parse_step_from_line(line: &str, default_total_steps: u32) -> Option<ParsedSt
 
     // 1. Detect phase keywords
     let mut phase: Option<String> = None;
-    if lower.contains("decoding") || lower.contains("decode_first_stage") || lower.contains("decoding 1 latents") {
+    if lower.contains("decoding")
+        || lower.contains("decode_first_stage")
+        || lower.contains("decoding 1 latents")
+    {
         phase = Some("Decoding VAE latents into pixels...".to_string());
     } else if lower.contains("sampling completed") {
         phase = Some("Sampling complete. Preparing VAE decoding...".to_string());
     } else if lower.contains("sampling using") || lower.contains("get_sigmas") {
-        phase = Some(format!("Sampling diffusion latents (0/{})...", default_total_steps));
-    } else if lower.contains("loading model") || lower.contains("loading tensors") || lower.contains("load ") {
+        phase = Some(format!(
+            "Sampling diffusion latents (0/{})...",
+            default_total_steps
+        ));
+    } else if lower.contains("loading model")
+        || lower.contains("loading tensors")
+        || lower.contains("load ")
+    {
         phase = Some("Loading model weights into GPU VRAM...".to_string());
-    } else if lower.contains("save result") || lower.contains("saving") || lower.contains("images saved") {
+    } else if lower.contains("save result")
+        || lower.contains("saving")
+        || lower.contains("images saved")
+    {
         phase = Some("Finalizing & saving output image...".to_string());
     }
 
@@ -1350,7 +1455,9 @@ fn parse_step_from_line(line: &str, default_total_steps: u32) -> Option<ParsedSt
     // 3. Extract "X/Y" step fraction.
     // If multiple "X/Y" exist in the line (due to \r or multi-token logging), pick the LAST valid one.
     let tokens: Vec<&str> = line
-        .split(|c: char| c == ' ' || c == '|' || c == '[' || c == ']' || c == '(' || c == ')' || c == '\t')
+        .split(|c: char| {
+            c == ' ' || c == '|' || c == '[' || c == ']' || c == '(' || c == ')' || c == '\t'
+        })
         .filter(|s| !s.is_empty())
         .collect();
 
@@ -1370,9 +1477,17 @@ fn parse_step_from_line(line: &str, default_total_steps: u32) -> Option<ParsedSt
 
     if let Some((cur, tot)) = last_fraction {
         // Classify the step based on total count and line context
-        let detected_phase = if (line.contains('#') || lower.contains("mb/s") || lower.contains("gb/s")) && tot > 100 {
+        let detected_phase = if (line.contains('#')
+            || lower.contains("mb/s")
+            || lower.contains("gb/s"))
+            && tot > 100
+        {
             Some(format!("Loading model weights ({}/{})", cur, tot))
-        } else if tot != default_total_steps || lower.contains("latent") || lower.contains("decod") || lower.contains("tile") {
+        } else if tot != default_total_steps
+            || lower.contains("latent")
+            || lower.contains("decod")
+            || lower.contains("tile")
+        {
             Some(format!("Decoding VAE latent tiles (Tile {}/{})", cur, tot))
         } else {
             Some(format!("Sampling diffusion latents (Step {}/{})", cur, tot))
@@ -1408,7 +1523,8 @@ mod tests {
 
     #[test]
     fn test_parse_sampling_step() {
-        let line = "[INFO ]   |=========================>                        | 12/25 - 4.13s/it";
+        let line =
+            "[INFO ]   |=========================>                        | 12/25 - 4.13s/it";
         let parsed = parse_step_from_line(line, 25).expect("Should parse step");
         assert_eq!(parsed.current_step, 12);
         assert_eq!(parsed.total_steps, 25);
@@ -1499,7 +1615,9 @@ mod tests {
         };
         let args = engine.build_reference_args(&req);
         assert!(!args.is_empty());
-        assert!(args.contains(&"--strength".to_string()) || args.contains(&"--ip-adapter-strength".to_string()));
+        assert!(
+            args.contains(&"--strength".to_string())
+                || args.contains(&"--ip-adapter-strength".to_string())
+        );
     }
 }
-

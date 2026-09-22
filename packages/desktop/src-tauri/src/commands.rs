@@ -54,7 +54,8 @@ pub fn artifact_list() -> Vec<ArtifactRuntimeState> {
                             .map(|s| s.to_string_lossy().to_string())
                             .unwrap_or_default();
 
-                        let is_static = manifest.artifact_type == "web" || manifest.artifact_type == "static";
+                        let is_static =
+                            manifest.artifact_type == "web" || manifest.artifact_type == "static";
                         let port = manifest.port.unwrap_or(3080);
                         let autostart = manifest.autostart;
                         let url = if is_static {
@@ -95,7 +96,8 @@ pub fn artifact_start(id: String) -> Result<ArtifactRuntimeState, String> {
     let list = artifact_list();
     if let Some(mut art) = list.into_iter().find(|a| a.id == id) {
         art.status = "running".to_string();
-        let is_static = art.manifest.artifact_type == "web" || art.manifest.artifact_type == "static";
+        let is_static =
+            art.manifest.artifact_type == "web" || art.manifest.artifact_type == "static";
         let port = art.manifest.port.unwrap_or(3080);
         let dir = get_artifacts_dir().join(&id);
         let entry_path = dir.join(&art.manifest.entry);

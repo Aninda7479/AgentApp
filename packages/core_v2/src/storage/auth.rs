@@ -58,13 +58,25 @@ where
 pub struct AuthFile {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credential: Option<StoredCredential>,
-    #[serde(default, rename = "sessionSecret", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "sessionSecret",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub session_secret: Option<String>,
-    #[serde(default, rename = "sessionVersion", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "sessionVersion",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub session_version: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sessions: Option<Vec<SessionEntry>>,
-    #[serde(default, rename = "loginHistory", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "loginHistory",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub login_history: Option<Vec<serde_json::Value>>,
     #[serde(default, rename = "updatedAt", skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<u64>,
@@ -108,10 +120,19 @@ pub fn resolve_auth_file_path(base_dir: Option<&Path>) -> PathBuf {
         base.join("Config").join("auth.json"),
         base.join("auth").join("auth.json"),
         base.join("auth.json"),
-        get_home_dir().join(".superagent").join("config").join("auth.json"),
-        get_home_dir().join(".superagent").join("Config").join("auth.json"),
+        get_home_dir()
+            .join(".superagent")
+            .join("config")
+            .join("auth.json"),
+        get_home_dir()
+            .join(".superagent")
+            .join("Config")
+            .join("auth.json"),
         get_home_dir().join(".superagent").join("auth.json"),
-        PathBuf::from(".").join(".superagent").join("config").join("auth.json"),
+        PathBuf::from(".")
+            .join(".superagent")
+            .join("config")
+            .join("auth.json"),
         PathBuf::from(".").join(".superagent").join("auth.json"),
     ];
 
@@ -177,13 +198,21 @@ impl AuthStore {
         }
 
         let sa_dir = get_superagent_dir();
-        if self.storage_dir.starts_with(&sa_dir) || self.storage_dir.to_string_lossy().contains(".superagent") {
+        if self.storage_dir.starts_with(&sa_dir)
+            || self.storage_dir.to_string_lossy().contains(".superagent")
+        {
             let global_candidates = [
                 sa_dir.join("config").join("auth.json"),
                 sa_dir.join("Config").join("auth.json"),
                 sa_dir.join("auth.json"),
-                get_home_dir().join(".superagent").join("config").join("auth.json"),
-                get_home_dir().join(".superagent").join("Config").join("auth.json"),
+                get_home_dir()
+                    .join(".superagent")
+                    .join("config")
+                    .join("auth.json"),
+                get_home_dir()
+                    .join(".superagent")
+                    .join("Config")
+                    .join("auth.json"),
                 get_home_dir().join(".superagent").join("auth.json"),
             ];
 
@@ -216,7 +245,8 @@ impl AuthStore {
 
         // Try parsing primary AuthFile format (Node.js/Desktop schema)
         if let Ok(file) = serde_json::from_str::<AuthFile>(&content) {
-            if file.credential.is_some() || file.session_secret.is_some() || file.sessions.is_some() {
+            if file.credential.is_some() || file.session_secret.is_some() || file.sessions.is_some()
+            {
                 return file;
             }
         }
@@ -301,7 +331,10 @@ impl AuthStore {
 
     pub fn record_failed_attempt(&self, ip: &str) {
         let now = Utc::now();
-        let mut entry = self.failed_attempts.entry(ip.to_string()).or_insert((0, now));
+        let mut entry = self
+            .failed_attempts
+            .entry(ip.to_string())
+            .or_insert((0, now));
         entry.0 += 1;
         if entry.0 >= 5 {
             entry.1 = now + Duration::minutes(15);
@@ -329,7 +362,11 @@ impl AuthStore {
 
         let algo = cred.algo.to_lowercase();
         if algo == "scrypt" {
-            let keylen = if cred.keylen == 0 { 64 } else { cred.keylen as usize };
+            let keylen = if cred.keylen == 0 {
+                64
+            } else {
+                cred.keylen as usize
+            };
             if let Ok(candidate_hash) = hash_password_scrypt(pass, &cred.salt, keylen) {
                 if candidate_hash.as_bytes().ct_eq(cred.hash.as_bytes()).into() {
                     return true;
@@ -530,8 +567,7 @@ fn hex_decode(hex_str: &str) -> Result<Vec<u8>> {
     (0..clean.len())
         .step_by(2)
         .map(|i| {
-            u8::from_str_radix(&clean[i..i + 2], 16)
-                .map_err(|e| anyhow!("Invalid hex byte: {}", e))
+            u8::from_str_radix(&clean[i..i + 2], 16).map_err(|e| anyhow!("Invalid hex byte: {}", e))
         })
         .collect()
 }
@@ -562,7 +598,6 @@ fn hash_password(password: &str, salt: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -574,8 +609,6 @@ mod tests {
             "9971ac8c89d23eb086b416752262ed48977d131389ddc3e0c5e6eba4ca02276c"
         );
     }
-
-
 
     #[test]
     fn test_auth_store_seeding_and_verification() {
@@ -594,8 +627,15 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("test_auth_sess_{}", uuid::Uuid::new_v4()));
         let store = AuthStore::new(dir.clone());
 
-        let token = store.create_session_with_metadata("admin", Some("127.0.0.1".into()), Some("Mozilla".into()));
-        assert_eq!(store.validate_session_token(&token), Some("admin".to_string()));
+        let token = store.create_session_with_metadata(
+            "admin",
+            Some("127.0.0.1".into()),
+            Some("Mozilla".into()),
+        );
+        assert_eq!(
+            store.validate_session_token(&token),
+            Some("admin".to_string())
+        );
         assert_eq!(store.validate_session_token("invalid_token"), None);
 
         let sessions = store.list_sessions("admin");
@@ -605,7 +645,10 @@ mod tests {
         // Simulate server restart by creating a new AuthStore instance for the same directory
         drop(store);
         let restarted_store = AuthStore::new(dir.clone());
-        assert_eq!(restarted_store.validate_session_token(&token), Some("admin".to_string()));
+        assert_eq!(
+            restarted_store.validate_session_token(&token),
+            Some("admin".to_string())
+        );
         let reloaded_sessions = restarted_store.list_sessions("admin");
         assert_eq!(reloaded_sessions.len(), 1);
         assert_eq!(reloaded_sessions[0].token, token);
@@ -649,7 +692,9 @@ mod tests {
         assert!(store.verify_password("user1", "oldpass"));
 
         // Changing with wrong old password should fail
-        assert!(store.change_password("user1", "wrongold", "newpass").is_err());
+        assert!(store
+            .change_password("user1", "wrongold", "newpass")
+            .is_err());
 
         // Changing with correct old password should succeed
         assert!(store.change_password("user1", "oldpass", "newpass").is_ok());
@@ -665,7 +710,9 @@ mod tests {
         let store = AuthStore::new(dir.clone());
 
         // Set password which uses scrypt algo
-        store.set_password("MySecurePass123", Some("admin")).unwrap();
+        store
+            .set_password("MySecurePass123", Some("admin"))
+            .unwrap();
         assert!(store.is_password_set());
         assert!(store.verify_password("admin", "MySecurePass123"));
         assert!(!store.verify_password("admin", "wrongpass"));
@@ -682,5 +729,3 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 }
-
-

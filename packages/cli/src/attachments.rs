@@ -1,7 +1,7 @@
-use std::fs;
-use std::path::{Path, PathBuf};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 pub const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp"];
 pub const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024; // 5 MB cap
@@ -33,7 +33,9 @@ pub fn sniff_image_type(bytes: &[u8]) -> Option<&'static str> {
     if bytes.len() >= 2 && bytes.starts_with(&[0x42, 0x4D]) {
         return Some("image/bmp");
     }
-    let head = String::from_utf8_lossy(&bytes[..bytes.len().min(128)]).trim_start().to_string();
+    let head = String::from_utf8_lossy(&bytes[..bytes.len().min(128)])
+        .trim_start()
+        .to_string();
     if head.starts_with("<?xml") || head.starts_with("<svg") {
         return Some("image/svg+xml");
     }

@@ -104,10 +104,7 @@ impl Tool for QuestionTool {
             ));
 
             for (idx, q_val) in questions_arr.iter().enumerate() {
-                let header = q_val
-                    .get("header")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let header = q_val.get("header").and_then(|v| v.as_str()).unwrap_or("");
                 let q_text = q_val
                     .get("question")
                     .and_then(|v| v.as_str())

@@ -89,7 +89,10 @@ impl ChatMessage {
     }
 
     pub fn assistant(text: impl Into<String>) -> Self {
-        Self::new(Role::Assistant, vec![ContentBlock::Text { text: text.into() }])
+        Self::new(
+            Role::Assistant,
+            vec![ContentBlock::Text { text: text.into() }],
+        )
     }
 
     pub fn tool_result(

@@ -99,7 +99,9 @@ pub fn build_asset_response(path: &str, bytes: Vec<u8>) -> Response {
     } else if is_manifest {
         "application/manifest+json; charset=utf-8".to_string()
     } else {
-        mime_guess::from_path(path).first_or_octet_stream().to_string()
+        mime_guess::from_path(path)
+            .first_or_octet_stream()
+            .to_string()
     };
 
     let cache_header = if is_sw
@@ -128,10 +130,7 @@ pub fn build_asset_response(path: &str, bytes: Vec<u8>) -> Response {
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
 }
 
-pub async fn spa_fallback_handler(
-    uri: Uri,
-    State(state): State<AppState>,
-) -> Response {
+pub async fn spa_fallback_handler(uri: Uri, State(state): State<AppState>) -> Response {
     // Never serve SPA HTML for missing /api routes
     if uri.path().starts_with("/api/") || uri.path() == "/api" {
         return (
@@ -195,7 +194,10 @@ pub async fn spa_fallback_handler(
                     return (
                         [
                             (header::CONTENT_TYPE, "text/html; charset=utf-8".to_string()),
-                            (header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".to_string()),
+                            (
+                                header::CACHE_CONTROL,
+                                "no-cache, no-store, must-revalidate".to_string(),
+                            ),
                         ],
                         html,
                     )
@@ -215,7 +217,10 @@ pub async fn spa_fallback_handler(
                 return (
                     [
                         (header::CONTENT_TYPE, "text/html; charset=utf-8".to_string()),
-                        (header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".to_string()),
+                        (
+                            header::CACHE_CONTROL,
+                            "no-cache, no-store, must-revalidate".to_string(),
+                        ),
                     ],
                     html,
                 )

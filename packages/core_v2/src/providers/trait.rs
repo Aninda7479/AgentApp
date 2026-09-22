@@ -1,6 +1,6 @@
+use crate::types::{AgentEvent, ChatMessage, ModelConfig};
 use async_trait::async_trait;
 use tokio::sync::mpsc::Receiver;
-use crate::types::{AgentEvent, ChatMessage, ModelConfig};
 
 #[async_trait]
 pub trait LlmProvider: Send + Sync {

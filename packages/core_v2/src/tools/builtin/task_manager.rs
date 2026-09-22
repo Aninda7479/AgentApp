@@ -1,12 +1,12 @@
+use anyhow::{anyhow, Result};
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use anyhow::{anyhow, Result};
-use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::oneshot;
@@ -73,12 +73,19 @@ impl TaskManager {
             let mut c = Command::new("powershell");
             #[cfg(target_os = "windows")]
             c.creation_flags(0x08000000);
-            c.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command_str]);
+            c.args([
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                command_str,
+            ]);
             if let Ok(path_var) = std::env::var("PATH") {
                 let mut custom_path = path_var;
                 if let Ok(userprofile) = std::env::var("USERPROFILE") {
                     let sa_bin = format!("{}\\.superagent", userprofile);
-                    let win_apps = format!("{}\\AppData\\Local\\Microsoft\\WindowsApps", userprofile);
+                    let win_apps =
+                        format!("{}\\AppData\\Local\\Microsoft\\WindowsApps", userprofile);
                     if !custom_path.contains(&sa_bin) {
                         custom_path = format!("{};{}", sa_bin, custom_path);
                     }
@@ -101,9 +108,13 @@ impl TaskManager {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| anyhow!("Failed to spawn background command '{}': {}", command_str, e))?;
+        let mut child = cmd.spawn().map_err(|e| {
+            anyhow!(
+                "Failed to spawn background command '{}': {}",
+                command_str,
+                e
+            )
+        })?;
 
         let managed = ManagedTask {
             id: task_id.clone(),
@@ -221,7 +232,17 @@ impl TaskManager {
                     status: t.status.clone(),
                     elapsed_secs: now.duration_since(t.started_at).as_secs(),
                     started_at_timestamp: t.started_at_timestamp,
-                    output_tail: t.output_lines.iter().rev().take(10).cloned().collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n"),
+                    output_tail: t
+                        .output_lines
+                        .iter()
+                        .rev()
+                        .take(10)
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .rev()
+                        .collect::<Vec<_>>()
+                        .join("\n"),
                 })
                 .collect();
             list.sort_by_key(|t| t.started_at_timestamp);
@@ -238,7 +259,10 @@ impl TaskManager {
                 t.status = TaskStatus::Terminated;
                 Ok(())
             } else {
-                Err(anyhow!("Task '{}' is not currently running or cannot be stopped", task_id))
+                Err(anyhow!(
+                    "Task '{}' is not currently running or cannot be stopped",
+                    task_id
+                ))
             }
         } else {
             Err(anyhow!("Task '{}' not found", task_id))

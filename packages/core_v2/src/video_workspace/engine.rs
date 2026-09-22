@@ -16,10 +16,9 @@ use tracing::{error, info};
 
 use crate::storage::settings::get_superagent_dir;
 use crate::video_workspace::types::{
-    CameraMotionPreset, FfmpegStatus, GpuBackend, HardwareProfile, VideoEngineManifest, VideoEngineStatus,
-    VideoExportRequest, VideoProgressEvent, VideoUpdateInfo,
+    CameraMotionPreset, FfmpegStatus, GpuBackend, HardwareProfile, VideoEngineManifest,
+    VideoEngineStatus, VideoExportRequest, VideoProgressEvent, VideoUpdateInfo,
 };
-
 
 const CURRENT_ENGINE_VERSION: &str = "0.9.2";
 
@@ -163,7 +162,11 @@ impl VideoEngineManager {
         status.ffmpeg_path = ffmpeg_bin.map(|p| p.to_string_lossy().to_string());
         status.ffmpeg_version = hw.ffmpeg_version;
         status.ffmpeg_is_downloading = ff_state.is_downloading;
-        status.ffmpeg_download_progress = if ff_state.is_downloading { Some(ff_state.progress) } else { None };
+        status.ffmpeg_download_progress = if ff_state.is_downloading {
+            Some(ff_state.progress)
+        } else {
+            None
+        };
         status.ffmpeg_error = ff_state.error;
         status.hardware_accelerators = hw.hardware_accelerators;
 
@@ -202,13 +205,22 @@ impl VideoEngineManager {
         status.installed_at = None;
     }
 
-
     pub fn find_ffmpeg_binary() -> Option<PathBuf> {
         // 1. Check direct superagent bin folders
         let base = crate::storage::settings::get_superagent_dir();
         let direct_candidates = [
-            base.join("bin").join("ffmpeg").join(if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" }),
-            base.join("bin").join("video_engine").join(if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" }),
+            base.join("bin").join("ffmpeg").join(if cfg!(windows) {
+                "ffmpeg.exe"
+            } else {
+                "ffmpeg"
+            }),
+            base.join("bin")
+                .join("video_engine")
+                .join(if cfg!(windows) {
+                    "ffmpeg.exe"
+                } else {
+                    "ffmpeg"
+                }),
         ];
         for candidate in &direct_candidates {
             if candidate.exists() {
@@ -221,7 +233,11 @@ impl VideoEngineManager {
         {
             if let Ok(local_appdata) = std::env::var("LOCALAPPDATA") {
                 let local_path = PathBuf::from(&local_appdata);
-                let winget_link = local_path.join("Microsoft").join("WinGet").join("Links").join("ffmpeg.exe");
+                let winget_link = local_path
+                    .join("Microsoft")
+                    .join("WinGet")
+                    .join("Links")
+                    .join("ffmpeg.exe");
                 if winget_link.exists() {
                     return Some(winget_link);
                 }
@@ -234,7 +250,12 @@ impl VideoEngineManager {
                             if entry.file_name().to_string_lossy().contains("FFmpeg") {
                                 // Search bin subfolder
                                 let pkg_path = entry.path();
-                                for sub in &["bin", "ffmpeg-9.0.1-full_build/bin", "ffmpeg-7.1-full_build/bin", "ffmpeg-release-full/bin"] {
+                                for sub in &[
+                                    "bin",
+                                    "ffmpeg-9.0.1-full_build/bin",
+                                    "ffmpeg-7.1-full_build/bin",
+                                    "ffmpeg-release-full/bin",
+                                ] {
                                     let candidate = pkg_path.join(sub).join("ffmpeg.exe");
                                     if candidate.exists() {
                                         return Some(candidate);
@@ -337,7 +358,11 @@ impl VideoEngineManager {
         let target_dir = base.join("bin").join("ffmpeg");
         let _ = fs::create_dir_all(&target_dir);
 
-        let binary_name = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
+        let binary_name = if cfg!(windows) {
+            "ffmpeg.exe"
+        } else {
+            "ffmpeg"
+        };
         let final_bin = target_dir.join(binary_name);
 
         #[cfg(target_os = "windows")]
@@ -366,7 +391,11 @@ impl VideoEngineManager {
         let mut stream = resp.bytes_stream();
         let mut downloaded: u64 = 0;
         let is_tar = download_url.ends_with(".tar.xz");
-        let temp_archive = target_dir.join(if is_tar { "ffmpeg_download.tar.xz" } else { "ffmpeg_download.zip" });
+        let temp_archive = target_dir.join(if is_tar {
+            "ffmpeg_download.tar.xz"
+        } else {
+            "ffmpeg_download.zip"
+        });
         let mut file = tokio::fs::File::create(&temp_archive)
             .await
             .map_err(|e| anyhow!("Failed to create download file: {}", e))?;
@@ -392,7 +421,12 @@ impl VideoEngineManager {
             #[cfg(target_os = "linux")]
             {
                 let mut tar_cmd = std::process::Command::new("tar");
-                tar_cmd.args(["-xf", temp_archive.to_str().unwrap(), "-C", target_dir.to_str().unwrap()]);
+                tar_cmd.args([
+                    "-xf",
+                    temp_archive.to_str().unwrap(),
+                    "-C",
+                    target_dir.to_str().unwrap(),
+                ]);
                 let _ = tar_cmd.status();
             }
         } else {
@@ -434,7 +468,8 @@ impl VideoEngineManager {
             }
         }
 
-        Self::find_ffmpeg_binary().ok_or_else(|| anyhow!("Failed to locate FFmpeg after auto-provisioning"))
+        Self::find_ffmpeg_binary()
+            .ok_or_else(|| anyhow!("Failed to locate FFmpeg after auto-provisioning"))
     }
 
     pub async fn ensure_ffmpeg_binary() -> Result<PathBuf> {
@@ -450,7 +485,11 @@ impl VideoEngineManager {
             path: bin.map(|p| p.to_string_lossy().to_string()),
             version: hw.ffmpeg_version,
             is_downloading: state.is_downloading,
-            download_progress: if state.is_downloading { Some(state.progress) } else { None },
+            download_progress: if state.is_downloading {
+                Some(state.progress)
+            } else {
+                None
+            },
             error: state.error,
             hardware_accelerators: hw.hardware_accelerators,
         }
@@ -507,7 +546,10 @@ impl VideoEngineManager {
         #[cfg(target_os = "windows")]
         {
             let mut cmd = std::process::Command::new("nvidia-smi");
-            cmd.args(["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"]);
+            cmd.args([
+                "--query-gpu=name,memory.total",
+                "--format=csv,noheader,nounits",
+            ]);
             use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x08000000);
             if let Ok(out) = cmd.output() {
@@ -539,7 +581,10 @@ impl VideoEngineManager {
         #[cfg(target_os = "linux")]
         {
             let mut cmd = std::process::Command::new("nvidia-smi");
-            cmd.args(["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"]);
+            cmd.args([
+                "--query-gpu=name,memory.total",
+                "--format=csv,noheader,nounits",
+            ]);
             if let Ok(out) = cmd.output() {
                 if out.status.success() {
                     let str_out = String::from_utf8_lossy(&out.stdout);
@@ -644,7 +689,11 @@ impl VideoEngineManager {
 
         // If an existing valid engine binary already exists, initialize it immediately
         if let Some(bin) = self.find_sd_cli_binary() {
-            let binary_name = if cfg!(target_os = "windows") { "sd-cli.exe" } else { "sd-cli" };
+            let binary_name = if cfg!(target_os = "windows") {
+                "sd-cli.exe"
+            } else {
+                "sd-cli"
+            };
             let binary_path = self.engine_dir.join(binary_name);
             let _ = fs::create_dir_all(&self.engine_dir);
             if bin != binary_path {
@@ -685,7 +734,10 @@ impl VideoEngineManager {
         let status_arc = self.status.clone();
 
         tokio::spawn(async move {
-            info!("Starting video engine installation for backend: {:?}", backend);
+            info!(
+                "Starting video engine installation for backend: {:?}",
+                backend
+            );
             let client = reqwest::Client::builder()
                 .user_agent("SuperAgent-VideoEngineManager/1.0")
                 .redirect(reqwest::redirect::Policy::limited(10))
@@ -693,8 +745,8 @@ impl VideoEngineManager {
                 .build()
                 .unwrap_or_default();
 
-
-            let release_url = "https://api.github.com/repos/leejet/stable-diffusion.cpp/releases/latest";
+            let release_url =
+                "https://api.github.com/repos/leejet/stable-diffusion.cpp/releases/latest";
             let release_json: serde_json::Value = match client.get(release_url).send().await {
                 Ok(r) if r.status().is_success() => match r.json().await {
                     Ok(j) => j,
@@ -725,8 +777,6 @@ impl VideoEngineManager {
                 }
             };
 
-
-
             let assets = match release_json["assets"].as_array() {
                 Some(a) => a,
                 None => {
@@ -737,7 +787,13 @@ impl VideoEngineManager {
                 }
             };
 
-            let os_filter = if cfg!(windows) { "win" } else if cfg!(target_os = "macos") { "darwin" } else { "linux" };
+            let os_filter = if cfg!(windows) {
+                "win"
+            } else if cfg!(target_os = "macos") {
+                "darwin"
+            } else {
+                "linux"
+            };
             let mut matched_asset = None;
             let mut best_score = -1;
 
@@ -758,7 +814,8 @@ impl VideoEngineManager {
                 let mut score = 0;
                 match backend {
                     GpuBackend::Cuda => {
-                        if name.contains("cuda12") || name.contains("cuda") || name.contains("cu12") {
+                        if name.contains("cuda12") || name.contains("cuda") || name.contains("cu12")
+                        {
                             score += 50;
                         }
                     }
@@ -842,7 +899,11 @@ impl VideoEngineManager {
                 let _ = fs::remove_file(&archive_path);
             }
 
-            let binary_name = if cfg!(target_os = "windows") { "sd-cli.exe" } else { "sd-cli" };
+            let binary_name = if cfg!(target_os = "windows") {
+                "sd-cli.exe"
+            } else {
+                "sd-cli"
+            };
             let binary_path = engine_dir.join(binary_name);
             let manifest = VideoEngineManifest {
                 version: CURRENT_ENGINE_VERSION.to_string(),
@@ -853,7 +914,10 @@ impl VideoEngineManager {
                 source_url: download_url,
             };
 
-            let _ = fs::write(engine_dir.join("manifest.json"), serde_json::to_string_pretty(&manifest).unwrap_or_default());
+            let _ = fs::write(
+                engine_dir.join("manifest.json"),
+                serde_json::to_string_pretty(&manifest).unwrap_or_default(),
+            );
 
             let mut s = status_arc.write().unwrap();
             s.is_downloading = false;
@@ -877,7 +941,9 @@ impl VideoEngineManager {
             self.refresh_status();
             Ok(())
         } else {
-            Err(anyhow!("No previous video engine backup available for rollback"))
+            Err(anyhow!(
+                "No previous video engine backup available for rollback"
+            ))
         }
     }
 
@@ -892,7 +958,9 @@ impl VideoEngineManager {
         Ok(Some(VideoUpdateInfo {
             current: CURRENT_ENGINE_VERSION.to_string(),
             latest: CURRENT_ENGINE_VERSION.to_string(),
-            changelog: Some("Native DiT video generation pipeline with FFmpeg faststart support.".to_string()),
+            changelog: Some(
+                "Native DiT video generation pipeline with FFmpeg faststart support.".to_string(),
+            ),
             download_url: "https://github.com/superagent/superagent/releases".to_string(),
         }))
     }
@@ -900,10 +968,28 @@ impl VideoEngineManager {
     pub fn find_sd_cli_binary(&self) -> Option<PathBuf> {
         let base = get_superagent_dir();
         let candidates = [
-            base.join("engines").join("sd-cpp").join(if cfg!(windows) { "sd-cli.exe" } else { "sd-cli" }),
-            base.join("bin").join("video_engine").join(if cfg!(windows) { "sd-cli.exe" } else { "sd-cli" }),
-            base.join("bin").join(if cfg!(windows) { "sd-cli.exe" } else { "sd-cli" }),
-            self.engine_dir.join(if cfg!(windows) { "sd-cli.exe" } else { "sd-cli" }),
+            base.join("engines").join("sd-cpp").join(if cfg!(windows) {
+                "sd-cli.exe"
+            } else {
+                "sd-cli"
+            }),
+            base.join("bin")
+                .join("video_engine")
+                .join(if cfg!(windows) {
+                    "sd-cli.exe"
+                } else {
+                    "sd-cli"
+                }),
+            base.join("bin").join(if cfg!(windows) {
+                "sd-cli.exe"
+            } else {
+                "sd-cli"
+            }),
+            self.engine_dir.join(if cfg!(windows) {
+                "sd-cli.exe"
+            } else {
+                "sd-cli"
+            }),
         ];
         for candidate in &candidates {
             if candidate.exists() {
@@ -920,7 +1006,11 @@ impl VideoEngineManager {
         if fs::metadata(path).map(|m| m.len()).unwrap_or(0) < 100_000_000 {
             return false;
         }
-        let name = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+        let name = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase();
         // Exclude standalone DiT weights that require separate VAE tensors in sd-cli
         if name.contains("wan") || name.contains("svd") {
             return false;
@@ -949,14 +1039,17 @@ impl VideoEngineManager {
             }
         }
 
-
         // Scan images & videos dir for any .gguf
         for dir in &[images_dir, videos_dir] {
             if let Ok(entries) = fs::read_dir(dir) {
                 for entry in entries.flatten() {
                     let p = entry.path();
                     if p.is_file() {
-                        let ext = p.extension().unwrap_or_default().to_string_lossy().to_lowercase();
+                        let ext = p
+                            .extension()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_lowercase();
                         if ext == "gguf" {
                             return Some(p);
                         }
@@ -1026,9 +1119,11 @@ impl VideoEngineManager {
                 videos_dir.join("wan2.1_t2v_1.3b_q4.gguf"),
                 videos_dir.join("wan2.1_i2v_14b_q4k.gguf"),
             ];
-            candidates
-                .into_iter()
-                .find(|p| p.exists() && fs::metadata(p).map(|m| m.len()).unwrap_or(0) > 100_000_000 && p.to_string_lossy().to_lowercase().contains("wan"))
+            candidates.into_iter().find(|p| {
+                p.exists()
+                    && fs::metadata(p).map(|m| m.len()).unwrap_or(0) > 100_000_000
+                    && p.to_string_lossy().to_lowercase().contains("wan")
+            })
         };
 
         let wan_vae = {
@@ -1061,11 +1156,26 @@ impl VideoEngineManager {
             let (safe_width, safe_height, safe_frames, default_backend) = if vram_mb < 6000 {
                 // On GPUs with <6GB VRAM (e.g. GTX 1650 4GB), offload heavy T5 encoder and VAE to CPU RAM
                 // while keeping the 2.7GB DiT diffusion model on CUDA0 for full GPU acceleration!
-                (width.min(512), height.min(512), num_frames.min(49), "te=cpu,vae=cpu,diffusion=cuda0")
+                (
+                    width.min(512),
+                    height.min(512),
+                    num_frames.min(49),
+                    "te=cpu,vae=cpu,diffusion=cuda0",
+                )
             } else if vram_mb < 12000 {
-                (width.min(640), height.min(480), num_frames.min(81), "te=cpu,vae=cpu,diffusion=cuda0")
+                (
+                    width.min(640),
+                    height.min(480),
+                    num_frames.min(81),
+                    "te=cpu,vae=cpu,diffusion=cuda0",
+                )
             } else {
-                (width.min(832), height.min(480), num_frames.min(81), "te=cpu,vae=cuda0,diffusion=cuda0")
+                (
+                    width.min(832),
+                    height.min(480),
+                    num_frames.min(81),
+                    "te=cpu,vae=cuda0,diffusion=cuda0",
+                )
             };
 
             info!(
@@ -1151,7 +1261,10 @@ impl VideoEngineManager {
                                 frame_current: (fraction * num_frames as f32) as u32,
                                 frame_total: num_frames,
                                 progress: overall,
-                                phase: format!("wan2.1_dit_diffusion (step {}/{})", sim_step, total_steps),
+                                phase: format!(
+                                    "wan2.1_dit_diffusion (step {}/{})",
+                                    sim_step, total_steps
+                                ),
                                 step_time_ms: Some(500),
                                 eta_seconds: Some(eta),
                                 elapsed_seconds: start_time.elapsed().as_secs_f32(),
@@ -1163,13 +1276,21 @@ impl VideoEngineManager {
 
                 let avi_path = output_mp4.with_extension("mp4.avi");
                 let alt_avi = output_mp4.with_extension("avi");
-                let raw_video = if temp_avi.exists() && fs::metadata(&temp_avi).map(|m| m.len()).unwrap_or(0) > 10000 {
+                let raw_video = if temp_avi.exists()
+                    && fs::metadata(&temp_avi).map(|m| m.len()).unwrap_or(0) > 10000
+                {
                     Some(temp_avi.clone())
-                } else if output_mp4.exists() && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000 {
+                } else if output_mp4.exists()
+                    && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000
+                {
                     Some(output_mp4.to_path_buf())
-                } else if avi_path.exists() && fs::metadata(&avi_path).map(|m| m.len()).unwrap_or(0) > 10000 {
+                } else if avi_path.exists()
+                    && fs::metadata(&avi_path).map(|m| m.len()).unwrap_or(0) > 10000
+                {
                     Some(avi_path)
-                } else if alt_avi.exists() && fs::metadata(&alt_avi).map(|m| m.len()).unwrap_or(0) > 10000 {
+                } else if alt_avi.exists()
+                    && fs::metadata(&alt_avi).map(|m| m.len()).unwrap_or(0) > 10000
+                {
                     Some(alt_avi)
                 } else {
                     None
@@ -1231,7 +1352,10 @@ impl VideoEngineManager {
                     }
 
                     let elapsed_ms = start_time.elapsed().as_millis() as u64;
-                    info!("Wan 2.1 native DiT video generation completed in {} ms", elapsed_ms);
+                    info!(
+                        "Wan 2.1 native DiT video generation completed in {} ms",
+                        elapsed_ms
+                    );
                     return Ok(elapsed_ms);
                 }
 
@@ -1243,7 +1367,8 @@ impl VideoEngineManager {
                     #[cfg(target_os = "windows")]
                     cpu_cmd.creation_flags(0x08000000);
 
-                    cpu_cmd.arg("-M")
+                    cpu_cmd
+                        .arg("-M")
                         .arg("vid_gen")
                         .arg("--diffusion-model")
                         .arg(wm)
@@ -1282,13 +1407,21 @@ impl VideoEngineManager {
 
                         let avi_path = output_mp4.with_extension("mp4.avi");
                         let alt_avi = output_mp4.with_extension("avi");
-                        let raw_video = if temp_avi.exists() && fs::metadata(&temp_avi).map(|m| m.len()).unwrap_or(0) > 10000 {
+                        let raw_video = if temp_avi.exists()
+                            && fs::metadata(&temp_avi).map(|m| m.len()).unwrap_or(0) > 10000
+                        {
                             Some(temp_avi.clone())
-                        } else if output_mp4.exists() && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000 {
+                        } else if output_mp4.exists()
+                            && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000
+                        {
                             Some(output_mp4.to_path_buf())
-                        } else if avi_path.exists() && fs::metadata(&avi_path).map(|m| m.len()).unwrap_or(0) > 10000 {
+                        } else if avi_path.exists()
+                            && fs::metadata(&avi_path).map(|m| m.len()).unwrap_or(0) > 10000
+                        {
                             Some(avi_path)
-                        } else if alt_avi.exists() && fs::metadata(&alt_avi).map(|m| m.len()).unwrap_or(0) > 10000 {
+                        } else if alt_avi.exists()
+                            && fs::metadata(&alt_avi).map(|m| m.len()).unwrap_or(0) > 10000
+                        {
                             Some(alt_avi)
                         } else {
                             None
@@ -1333,15 +1466,16 @@ impl VideoEngineManager {
                             }
 
                             let elapsed_ms = start_time.elapsed().as_millis() as u64;
-                            info!("Wan 2.1 CPU fallback video generation completed in {} ms", elapsed_ms);
+                            info!(
+                                "Wan 2.1 CPU fallback video generation completed in {} ms",
+                                elapsed_ms
+                            );
                             return Ok(elapsed_ms);
                         }
                     }
                 }
             }
         }
-
-
 
         // ── 2. Check for Native 3D Spatio-Temporal Diffusion (AnimateDiff) ──
         let motion_module = {
@@ -1370,7 +1504,10 @@ impl VideoEngineManager {
 
         if let (Some(ref bin), Some(ref mm)) = (&sd_bin, &motion_module) {
             for model_file in &model_candidates {
-                info!("Using AnimateDiff for full 3D temporal video diffusion: {}", mm.display());
+                info!(
+                    "Using AnimateDiff for full 3D temporal video diffusion: {}",
+                    mm.display()
+                );
                 let mut cmd = Command::new(bin);
                 #[cfg(target_os = "windows")]
                 cmd.creation_flags(0x08000000);
@@ -1427,7 +1564,10 @@ impl VideoEngineManager {
                                     frame_current: (fraction * num_frames as f32) as u32,
                                     frame_total: num_frames,
                                     progress: overall,
-                                    phase: format!("3d_temporal_diffusion (step {}/{})", sim_step, total_steps),
+                                    phase: format!(
+                                        "3d_temporal_diffusion (step {}/{})",
+                                        sim_step, total_steps
+                                    ),
                                     step_time_ms: Some(500),
                                     eta_seconds: Some(eta),
                                     elapsed_seconds: start_time.elapsed().as_secs_f32(),
@@ -1437,7 +1577,9 @@ impl VideoEngineManager {
                         }
                     }
 
-                    if output_mp4.exists() && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000 {
+                    if output_mp4.exists()
+                        && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000
+                    {
                         if let Some(mut thumb_cmd) = Self::create_ffmpeg_command() {
                             thumb_cmd
                                 .arg("-y")
@@ -1476,9 +1618,17 @@ impl VideoEngineManager {
         }
 
         // ── 3. Multi-Keyframe Latent Trajectory Diffusion + Spatio-Temporal Synthesis ──
-        let num_keyframes = if duration <= 3.0 { 3 } else if duration <= 6.0 { 4 } else { 5 };
+        let num_keyframes = if duration <= 3.0 {
+            3
+        } else if duration <= 6.0 {
+            4
+        } else {
+            5
+        };
         let mut keyframe_paths: Vec<PathBuf> = Vec::new();
-        let base_seed = req.seed.unwrap_or_else(|| (chrono::Utc::now().timestamp_millis() % 1000000) as i64);
+        let base_seed = req
+            .seed
+            .unwrap_or_else(|| (chrono::Utc::now().timestamp_millis() % 1000000) as i64);
 
         let temporal_modifiers = [
             "initial posture, setting scene, wide shot, sharp detail, cinematic lighting",
@@ -1494,13 +1644,17 @@ impl VideoEngineManager {
             if let Some(model_file) = model_candidates.first() {
                 for i in 0..num_keyframes {
                     let kf_path = output_mp4.with_extension(format!("temp_kf_{}.png", i));
-                    let modifier = temporal_modifiers.get(i).copied().unwrap_or("detailed cinematic");
+                    let modifier = temporal_modifiers
+                        .get(i)
+                        .copied()
+                        .unwrap_or("detailed cinematic");
                     let kf_prompt = format!("{}, {}", req.prompt, modifier);
-                    let kf_seed = if loopable && i == num_keyframes - 1 && !keyframe_paths.is_empty() {
-                        base_seed
-                    } else {
-                        base_seed + (i as i64 * 179)
-                    };
+                    let kf_seed =
+                        if loopable && i == num_keyframes - 1 && !keyframe_paths.is_empty() {
+                            base_seed
+                        } else {
+                            base_seed + (i as i64 * 179)
+                        };
 
                     info!(
                         "Generating keyframe {}/{}: prompt='{}', seed={}",
@@ -1515,7 +1669,8 @@ impl VideoEngineManager {
                             .send(VideoProgressEvent {
                                 step: i as u32,
                                 total_steps: num_keyframes as u32,
-                                frame_current: (i as f32 / num_keyframes as f32 * num_frames as f32) as u32,
+                                frame_current: (i as f32 / num_keyframes as f32 * num_frames as f32)
+                                    as u32,
                                 frame_total: num_frames,
                                 progress: 0.1 + 0.65 * (i as f32 / num_keyframes as f32),
                                 phase: format!("denoising_keyframe_{}_of_{}", i + 1, num_keyframes),
@@ -1558,7 +1713,9 @@ impl VideoEngineManager {
                         let _ = child.wait().await;
                     }
 
-                    if kf_path.exists() && fs::metadata(&kf_path).map(|m| m.len()).unwrap_or(0) > 1000 {
+                    if kf_path.exists()
+                        && fs::metadata(&kf_path).map(|m| m.len()).unwrap_or(0) > 1000
+                    {
                         if let Ok(bytes) = fs::read(&kf_path) {
                             let base64_preview = format!(
                                 "data:image/png;base64,{}",
@@ -1569,12 +1726,17 @@ impl VideoEngineManager {
                                     .send(VideoProgressEvent {
                                         step: (i + 1) as u32,
                                         total_steps: num_keyframes as u32,
-                                        frame_current: ((i + 1) as f32 / num_keyframes as f32 * num_frames as f32) as u32,
+                                        frame_current: ((i + 1) as f32 / num_keyframes as f32
+                                            * num_frames as f32)
+                                            as u32,
                                         frame_total: num_frames,
-                                        progress: 0.1 + 0.65 * ((i + 1) as f32 / num_keyframes as f32),
+                                        progress: 0.1
+                                            + 0.65 * ((i + 1) as f32 / num_keyframes as f32),
                                         phase: format!("keyframe_{}_ready", i + 1),
                                         step_time_ms: None,
-                                        eta_seconds: Some((num_keyframes.saturating_sub(i + 1)) as f32 * 6.0),
+                                        eta_seconds: Some(
+                                            (num_keyframes.saturating_sub(i + 1)) as f32 * 6.0,
+                                        ),
                                         elapsed_seconds: start_time.elapsed().as_secs_f32(),
                                         preview_data_url: Some(base64_preview),
                                     })
@@ -1625,7 +1787,10 @@ impl VideoEngineManager {
                 let _ = fs::remove_file(kf);
             }
 
-            if synthesis_ok && output_mp4.exists() && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000 {
+            if synthesis_ok
+                && output_mp4.exists()
+                && fs::metadata(output_mp4).map(|m| m.len()).unwrap_or(0) > 10000
+            {
                 if let Some(ref tx) = progress_tx {
                     let _ = tx
                         .send(VideoProgressEvent {
@@ -1643,7 +1808,10 @@ impl VideoEngineManager {
                         .await;
                 }
                 let elapsed_ms = start_time.elapsed().as_millis() as u64;
-                info!("Adaptive video generation successfully completed in {} ms", elapsed_ms);
+                info!(
+                    "Adaptive video generation successfully completed in {} ms",
+                    elapsed_ms
+                );
                 return Ok(elapsed_ms);
             }
         }
@@ -1859,7 +2027,6 @@ impl VideoEngineManager {
         Ok(())
     }
 
-
     /// Generates genuine playable MP4 video and poster thumbnail
     pub async fn generate_placeholder_or_transcode_video(
         output_mp4: &Path,
@@ -1894,7 +2061,6 @@ impl VideoEngineManager {
                 .arg("-movflags")
                 .arg("+faststart")
                 .arg(output_mp4);
-
 
             let out = cmd.output().await;
             if let Ok(res) = out {
@@ -1932,8 +2098,6 @@ impl VideoEngineManager {
 
         Ok(())
     }
-
-
 
     /// Builds a genuine, valid ISO Base Media File Format (MP4) containing valid H.264 video
     pub fn build_standalone_mp4_bytes(
@@ -2004,7 +2168,7 @@ impl VideoEngineManager {
         mvhd_data.extend_from_slice(&0x00010000u32.to_be_bytes()); // preferred rate 1.0
         mvhd_data.extend_from_slice(&0x0100u16.to_be_bytes()); // preferred volume 1.0
         mvhd_data.extend_from_slice(&[0u8; 10]); // reserved
-        // unity matrix
+                                                 // unity matrix
         mvhd_data.extend_from_slice(&0x00010000u32.to_be_bytes());
         mvhd_data.extend_from_slice(&0u32.to_be_bytes());
         mvhd_data.extend_from_slice(&0u32.to_be_bytes());
@@ -2031,7 +2195,7 @@ impl VideoEngineManager {
         tkhd_data.extend_from_slice(&0u16.to_be_bytes()); // alternate group
         tkhd_data.extend_from_slice(&0u16.to_be_bytes()); // volume
         tkhd_data.extend_from_slice(&0u16.to_be_bytes()); // reserved
-        // unity matrix
+                                                          // unity matrix
         tkhd_data.extend_from_slice(&0x00010000u32.to_be_bytes());
         tkhd_data.extend_from_slice(&0u32.to_be_bytes());
         tkhd_data.extend_from_slice(&0u32.to_be_bytes());
@@ -2238,16 +2402,18 @@ impl VideoEngineManager {
     pub fn build_standalone_jpeg_bytes(_width: u32, _height: u32) -> Vec<u8> {
         // Standard compliant 64x64 valid JFIF JPEG binary
         vec![
-            0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, 0x00, 0x48,
-            0x00, 0x48, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43, 0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08,
-            0x07, 0x07, 0x07, 0x09, 0x09, 0x08, 0x0a, 0x0c, 0x14, 0x0d, 0x0c, 0x0b, 0x0b, 0x0c, 0x19, 0x12,
-            0x13, 0x0f, 0x14, 0x1d, 0x1a, 0x1f, 0x1e, 0x1d, 0x1a, 0x1c, 0x1c, 0x20, 0x24, 0x2e, 0x27, 0x20,
-            0x22, 0x2c, 0x23, 0x1c, 0x1c, 0x28, 0x37, 0x29, 0x2c, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1f, 0x27,
-            0x39, 0x3d, 0x38, 0x32, 0x3c, 0x2e, 0x33, 0x34, 0x32, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x40,
-            0x00, 0x40, 0x01, 0x01, 0x11, 0x00, 0xff, 0xc4, 0x00, 0x1f, 0x00, 0x00, 0x01, 0x05, 0x01, 0x01,
-            0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04,
-            0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f,
-            0x00, 0xbf, 0x6e, 0x5a, 0x93, 0x4d, 0x2e, 0x9a, 0x76, 0x54, 0xa3, 0x5e, 0xbd, 0x7f, 0xff, 0xd9,
+            0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01,
+            0x00, 0x48, 0x00, 0x48, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43, 0x00, 0x08, 0x06, 0x06,
+            0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09, 0x09, 0x08, 0x0a, 0x0c, 0x14, 0x0d,
+            0x0c, 0x0b, 0x0b, 0x0c, 0x19, 0x12, 0x13, 0x0f, 0x14, 0x1d, 0x1a, 0x1f, 0x1e, 0x1d,
+            0x1a, 0x1c, 0x1c, 0x20, 0x24, 0x2e, 0x27, 0x20, 0x22, 0x2c, 0x23, 0x1c, 0x1c, 0x28,
+            0x37, 0x29, 0x2c, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1f, 0x27, 0x39, 0x3d, 0x38, 0x32,
+            0x3c, 0x2e, 0x33, 0x34, 0x32, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x40, 0x00, 0x40,
+            0x01, 0x01, 0x11, 0x00, 0xff, 0xc4, 0x00, 0x1f, 0x00, 0x00, 0x01, 0x05, 0x01, 0x01,
+            0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02,
+            0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0xff, 0xda, 0x00, 0x08, 0x01,
+            0x01, 0x00, 0x00, 0x3f, 0x00, 0xbf, 0x6e, 0x5a, 0x93, 0x4d, 0x2e, 0x9a, 0x76, 0x54,
+            0xa3, 0x5e, 0xbd, 0x7f, 0xff, 0xd9,
         ]
     }
 
@@ -2270,7 +2436,6 @@ impl VideoEngineManager {
 
         cmd.arg("-y").arg("-i").arg(source_path);
 
-
         let mut vf_filters: Vec<String> = Vec::new();
 
         if let Some(speed) = req.speed_multiplier {
@@ -2282,7 +2447,10 @@ impl VideoEngineManager {
 
         if let Some(scale) = req.scale_factor {
             if (scale - 1.0).abs() > 0.01 {
-                vf_filters.push(format!("scale=iw*{:.2}:ih*{:.2}:flags=lanczos", scale, scale));
+                vf_filters.push(format!(
+                    "scale=iw*{:.2}:ih*{:.2}:flags=lanczos",
+                    scale, scale
+                ));
             }
         }
 
@@ -2302,7 +2470,12 @@ impl VideoEngineManager {
                 if !vf_filters.is_empty() {
                     cmd.arg("-vf").arg(vf_filters.join(","));
                 }
-                cmd.arg("-c:v").arg("libvpx-vp9").arg("-crf").arg("30").arg("-b:v").arg("0");
+                cmd.arg("-c:v")
+                    .arg("libvpx-vp9")
+                    .arg("-crf")
+                    .arg("30")
+                    .arg("-b:v")
+                    .arg("0");
             }
             "prores" => {
                 if !vf_filters.is_empty() {
