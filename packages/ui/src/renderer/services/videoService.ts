@@ -117,6 +117,7 @@ export interface GenerateVideoRequest {
   camera_motion?: CameraMotionPreset;
   init_image?: string;
   last_image?: string;
+  input_video?: string;
   interpolate_2x?: boolean;
   sampler?: string;
 }

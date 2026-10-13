@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Sparkles,
   ArrowLeft,
@@ -35,6 +35,7 @@ import {
   AdvancedSettingsState,
   GenerationStepProgress,
 } from './types';
+import { useProviderStore } from '../../stores/providerStore';
 import { ImageComposer } from './components/ImageComposer';
 import { AttachmentShelf } from './components/AttachmentShelf';
 import { AdvancedSettingsDrawer } from './components/AdvancedSettingsDrawer';
@@ -42,7 +43,7 @@ import { CanvasStage } from './components/CanvasStage';
 import { GalleryFilmstrip } from './components/GalleryFilmstrip';
 import { ColorPaletteModal } from './components/ColorPaletteModal';
 import { BrandLogoModal } from './components/BrandLogoModal';
-import { ImageModelSelect } from './components/ImageModelSelect';
+import { ImageModelSelect, OnlineImageModelOption } from './components/ImageModelSelect';
 
 export interface ImageWorkspacePageProps {
   onBack?: () => void;
@@ -51,11 +52,41 @@ export interface ImageWorkspacePageProps {
 }
 
 export function getAdaptiveAspectRatios(modelId?: string): AspectRatioOption[] {
+  const m = modelId?.toLowerCase() || '';
+
+  // DALL-E 3 standard resolution profiles
+  if (m.includes('dall-e-3')) {
+    return [
+      { label: 'Square (1:1)', width: 1024, height: 1024 },
+      { label: 'Landscape (16:9)', width: 1792, height: 1024 },
+      { label: 'Portrait (9:16)', width: 1024, height: 1792 },
+    ];
+  }
+
+  // DALL-E 2 square resolution profiles
+  if (m.includes('dall-e-2')) {
+    return [
+      { label: 'Square (1024x1024)', width: 1024, height: 1024 },
+      { label: 'Square (512x512)', width: 512, height: 512 },
+    ];
+  }
+
+  // Google Imagen 3 adaptive aspect ratios
+  if (m.includes('imagen')) {
+    return [
+      { label: 'Square (1:1)', width: 1024, height: 1024 },
+      { label: 'Landscape (16:9)', width: 1408, height: 768 },
+      { label: 'Portrait (9:16)', width: 768, height: 1408 },
+      { label: 'Photo (4:3)', width: 1280, height: 960 },
+      { label: 'Vertical Photo (3:4)', width: 960, height: 1280 },
+    ];
+  }
+
   const isSd15 =
-    modelId?.toLowerCase().includes('sd15') ||
-    modelId?.toLowerCase().includes('v1-5') ||
-    modelId?.toLowerCase().includes('sd-1-5') ||
-    modelId?.toLowerCase().includes('v1.5');
+    m.includes('sd15') ||
+    m.includes('v1-5') ||
+    m.includes('sd-1-5') ||
+    m.includes('v1.5');
 
   if (isSd15) {
     return [
@@ -132,6 +163,85 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
   const [mobileView, setMobileView] = useState<'controls' | 'canvas'>('controls');
   const [copied, setCopied] = useState(false);
 
+  // ── Online Providers & Models ──
+  const storeProviders = useProviderStore((s) => s.providers) || [];
+  const storeModels = useProviderStore((s) => s.models) || [];
+
+  const onlineModels: OnlineImageModelOption[] = useMemo(() => {
+    const list: OnlineImageModelOption[] = storeModels
+      .filter((m) => {
+        if (!m.enabled) return false;
+        const out = m.outputModalities ?? [];
+        return (
+          out.includes('image') ||
+          /flux|dall-e|imagen|sdxl|stable-diffusion|kolors|playground|recraft|juggernaut|realvis|dreamshaper|auraflow|sana|lumina|pixart|kandinsky/i.test(m.id) ||
+          /flux|dall-e|imagen|sdxl|stable-diffusion|kolors|playground|recraft|juggernaut|realvis|dreamshaper|auraflow|sana|lumina|pixart|kandinsky/i.test(m.name)
+        );
+      })
+      .map((m) => {
+        let ins = m.inputModalities;
+        if (!ins || ins.length === 0) {
+          if (/dall-e-3/i.test(m.id)) {
+            ins = ['text'];
+          } else if (/dall-e-2|imagen|flux|sdxl/i.test(m.id)) {
+            ins = ['text', 'image'];
+          } else {
+            ins = ['text'];
+          }
+        }
+        return {
+          id: m.id,
+          name: m.name,
+          providerId: m.providerId,
+          inputModalities: ins,
+          outputModalities: m.outputModalities || ['image'],
+        };
+      });
+
+    // Provide default curated online options if corresponding providers are connected with API keys
+    const hasOpenAi = storeProviders.some((p) => p.id === 'openai' && Boolean(p.apiKey));
+    if (hasOpenAi && !list.some((m) => m.id === 'dall-e-3')) {
+      list.push({
+        id: 'dall-e-3',
+        name: 'DALL-E 3 (HD)',
+        providerId: 'openai',
+        inputModalities: ['text'],
+        outputModalities: ['image'],
+      });
+    }
+
+    const hasGoogle = storeProviders.some(
+      (p) => (p.id === 'google' || p.id === 'gemini') && Boolean(p.apiKey)
+    );
+    if (hasGoogle && !list.some((m) => m.id.includes('imagen-3'))) {
+      list.push({
+        id: 'imagen-3.0-generate-002',
+        name: 'Google Imagen 3',
+        providerId: 'google',
+        inputModalities: ['text', 'image'],
+        outputModalities: ['image'],
+      });
+    }
+
+    const hasOpenRouter = storeProviders.some((p) => p.id === 'openrouter' && Boolean(p.apiKey));
+    if (hasOpenRouter && !list.some((m) => m.id.includes('flux'))) {
+      list.push({
+        id: 'black-forest-labs/flux-1.1-pro',
+        name: 'FLUX 1.1 Pro',
+        providerId: 'openrouter',
+        inputModalities: ['text', 'image'],
+        outputModalities: ['image'],
+      });
+    }
+
+    return list;
+  }, [storeModels, storeProviders]);
+
+  const selectedOnlineModel = onlineModels.find((m) => m.id === selectedModel);
+  const isOnlineModel = Boolean(selectedOnlineModel);
+  const currentModelName = selectedOnlineModel?.name || models.find((m) => m.id === selectedModel)?.name;
+  const isImageInputSupported = !isOnlineModel || (selectedOnlineModel?.inputModalities?.includes('image') ?? true);
+
   // Load models, engine status, and generations
   const loadData = useCallback(async () => {
     try {
@@ -148,7 +258,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
       if (downloaded.length > 0) {
         // Prioritize SDXL / high-quality model for best facial fidelity, else first downloaded
         setSelectedModel((prev) => {
-          if (!prev || !downloaded.some((m) => m.id === prev)) {
+          if (!prev || (!downloaded.some((m) => m.id === prev) && !onlineModels.some((m) => m.id === prev))) {
             const preferred =
               downloaded.find((m) => m.id.toLowerCase().includes('sdxl') || m.family === 'sdxl') ||
               downloaded[0];
@@ -163,6 +273,18 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
           }
           return prev;
         });
+      } else if (onlineModels.length > 0) {
+        setSelectedModel((prev) => {
+          if (!prev || !onlineModels.some((m) => m.id === prev)) {
+            const preferred =
+              onlineModels.find((m) => m.id.includes('dall-e-3') || m.id.includes('imagen')) ||
+              onlineModels[0];
+            const ratios = getAdaptiveAspectRatios(preferred.id);
+            setDimensions(ratios[1] || ratios[0]);
+            return preferred.id;
+          }
+          return prev;
+        });
       } else {
         setSelectedModel('');
       }
@@ -173,11 +295,22 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
     } catch (err) {
       console.error('Failed to load image workspace data:', err);
     }
-  }, [selectedRecord]);
+  }, [selectedRecord, onlineModels]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!selectedModel && onlineModels.length > 0 && models.every((m) => !m.is_downloaded)) {
+      const preferred =
+        onlineModels.find((m) => m.id.includes('dall-e-3') || m.id.includes('imagen')) ||
+        onlineModels[0];
+      setSelectedModel(preferred.id);
+      const ratios = getAdaptiveAspectRatios(preferred.id);
+      setDimensions(ratios[1] || ratios[0]);
+    }
+  }, [selectedModel, onlineModels, models]);
 
   // Poll if any download is in progress
   const isDownloadingAny =
@@ -200,6 +333,15 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
         steps: m.default_steps,
         cfgScale: m.default_cfg,
       }));
+    } else {
+      const onl = onlineModels.find((item) => item.id === modelId);
+      if (onl) {
+        setAdvanced((prev) => ({
+          ...prev,
+          steps: 20,
+          cfgScale: 7.0,
+        }));
+      }
     }
     const ratios = getAdaptiveAspectRatios(modelId);
     setDimensions((prev) => {
@@ -270,15 +412,33 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
       return;
     }
 
-    const downloadedModels = models.filter((m) => m.is_downloaded);
-    if (downloadedModels.length === 0 || !selectedModel) {
-      notify('No local image models installed. Please download a model from Settings before generating.');
+    if (!selectedModel) {
+      notify('Please select an image model before generating.');
       return;
     }
 
-    if (engineStatus && !engineStatus.installed) {
-      notify('Image generation engine is not installed. Please install it in Settings.');
-      return;
+    const downloadedModels = models.filter((m) => m.is_downloaded);
+    const isOnline = onlineModels.some((m) => m.id === selectedModel);
+
+    if (!isOnline) {
+      if (downloadedModels.length === 0 || !downloadedModels.some((m) => m.id === selectedModel)) {
+        notify('Selected local model is not downloaded. Please download it from Settings before generating.');
+        return;
+      }
+
+      if (engineStatus && !engineStatus.installed) {
+        notify('Image generation engine is not installed. Please install it in Settings.');
+        return;
+      }
+    } else {
+      const onlineModel = onlineModels.find((m) => m.id === selectedModel);
+      if (onlineModel) {
+        const prov = storeProviders.find((p) => p.id.toLowerCase() === onlineModel.providerId.toLowerCase());
+        if (prov && prov.type === 'key' && !prov.apiKey) {
+          notify(`Provider "${prov.name || onlineModel.providerId}" is missing an API key. Please configure it in Settings.`);
+          return;
+        }
+      }
     }
 
     // Auto-switch to Canvas tab on mobile/compact view
@@ -323,9 +483,9 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
     setGenerationTime(0);
     setGenerationProgress({
       step: 0,
-      totalSteps: advanced.steps,
+      totalSteps: isOnline ? 20 : advanced.steps,
       progress: 0,
-      phase: 'Initializing engine & loading model...',
+      phase: isOnline ? 'Connecting to cloud provider...' : 'Initializing engine & loading model...',
       elapsedSeconds: 0,
     });
 
@@ -336,14 +496,16 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
     }, 1000);
 
     try {
+      const effectiveMode = isOnline ? 'cloud' : advanced.mode === 'auto' ? 'local' : advanced.mode;
+
       const req: GenerateImageRequest = {
         prompt: effectivePrompt,
         negative_prompt: effectiveNegative || undefined,
         model_id: selectedModel || undefined,
-        mode: advanced.mode,
+        mode: effectiveMode,
         width: dimensions.width,
         height: dimensions.height,
-        steps: advanced.steps,
+        steps: isOnline ? 20 : advanced.steps,
         cfg_scale: advanced.cfgScale,
         seed: advanced.seed !== null ? advanced.seed : undefined,
         sampler: advanced.sampler,
@@ -465,13 +627,15 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
           <div className="hidden sm:flex items-center gap-2 text-xs shrink-0">
             <div
               className={`w-2 h-2 rounded-full ${
-                engineStatus?.installed
+                isOnlineModel
+                  ? 'bg-[color:var(--neon-constructive)]'
+                  : engineStatus?.installed
                   ? 'bg-[color:var(--neon-constructive)]'
                   : 'bg-[color:var(--neon-attention)]'
               }`}
             />
             <span className="text-brand-textMuted text-[11px]">
-              Engine: {engineStatus?.installed ? 'Local Ready' : 'Setup Required'}
+              Engine: {isOnlineModel ? 'Cloud / Online' : engineStatus?.installed ? 'Local Ready' : 'Setup Required'}
             </span>
           </div>
         </div>
@@ -564,6 +728,8 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
               onRemoveColorPalette={() => setSelectedPalette(null)}
               activePreset={activePreset}
               onSelectPreset={setActivePreset}
+              isImageInputSupported={isImageInputSupported}
+              modelName={currentModelName}
             />
 
             {/* 3. Model Selector */}
@@ -583,6 +749,7 @@ export const ImageWorkspacePage: React.FC<ImageWorkspacePageProps> = ({
               </label>
               <ImageModelSelect
                 models={models}
+                onlineModels={onlineModels}
                 selectedModelId={selectedModel}
                 onSelectModel={handleModelChange}
                 onOpenSettings={onOpenSettings}

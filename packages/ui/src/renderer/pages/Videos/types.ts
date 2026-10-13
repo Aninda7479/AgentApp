@@ -18,7 +18,22 @@ export interface AttachedReferenceMedia {
   dataUrl: string;
   name: string;
   size: number;
-  type: 'first_frame' | 'last_frame';
+  type: 'first_frame' | 'last_frame' | 'source_video';
+}
+
+export interface VideoModelOption {
+  id: string;
+  name: string;
+  source: 'local' | 'cloud';
+  providerId?: string;
+  family?: string;
+  quantization?: string;
+  sizeBytes?: number;
+  isDownloaded?: boolean;
+  isDownloading?: boolean;
+  modality?: string;
+  inputModalities?: string[];
+  outputModalities?: string[];
 }
 
 export interface AdvancedVideoSettingsState {

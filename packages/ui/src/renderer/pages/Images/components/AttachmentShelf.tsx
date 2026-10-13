@@ -72,6 +72,8 @@ interface AttachmentShelfProps {
   onRemoveColorPalette: () => void;
   activePreset: StylePreset | null;
   onSelectPreset: (preset: StylePreset | null) => void;
+  isImageInputSupported?: boolean;
+  modelName?: string;
 }
 
 export const AttachmentShelf: React.FC<AttachmentShelfProps> = ({
@@ -85,6 +87,8 @@ export const AttachmentShelf: React.FC<AttachmentShelfProps> = ({
   onRemoveColorPalette,
   activePreset,
   onSelectPreset,
+  isImageInputSupported = true,
+  modelName,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -173,6 +177,14 @@ export const AttachmentShelf: React.FC<AttachmentShelfProps> = ({
               <span className="text-[10px] text-brand-textMuted font-mono">
                 ({Math.round(referenceImage.strength * 100)}%)
               </span>
+              {!isImageInputSupported && (
+                <span
+                  className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                  title={`Notice: ${modelName || 'Selected model'} does not accept reference images and generates from text prompt only. Image is preserved.`}
+                >
+                  Prompt-Only
+                </span>
+              )}
               <button
                 onClick={() => onSetReferenceImage(null)}
                 className="p-0.5 hover:text-rose-400 text-brand-textMuted transition-colors cursor-pointer"

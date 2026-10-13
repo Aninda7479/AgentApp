@@ -154,11 +154,70 @@ pub async fn open_models_dir(State(state): State<AppState>) -> Json<serde_json::
 
 // ─── Generation Routes ──────────────────────────────────────────────────────
 
+fn is_online_image_model(model_id: Option<&str>, state: &AppState) -> bool {
+    let mid = model_id.unwrap_or("").trim().to_lowercase();
+    if mid.contains("dall-e")
+        || mid.contains("imagen")
+        || mid.contains("openai/")
+        || mid.contains("openrouter/")
+        || mid.contains("google/")
+        || mid.contains("gemini")
+    {
+        return true;
+    }
+    let raw = state
+        .settings_store
+        .load_raw()
+        .unwrap_or_else(|_| serde_json::json!({}));
+    if let Some(models) = raw.get("models").and_then(|m| m.as_array()) {
+        if let Some(found) = models.iter().find(|m| {
+            m.get("id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_lowercase())
+                == Some(mid.clone())
+                || m.get("name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_lowercase())
+                    == Some(mid.clone())
+        }) {
+            if let Some(pid) = found.get("providerId").and_then(|v| v.as_str()) {
+                if pid != "local" {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 pub async fn generate_image(
     State(state): State<AppState>,
     Json(req): Json<GenerateImageRequest>,
 ) -> Result<Json<GenerateImageResponse>, (StatusCode, Json<serde_json::Value>)> {
     let mode = req.mode.as_deref().unwrap_or("auto");
+    let is_online = mode == "cloud"
+        || (mode == "auto" && is_online_image_model(req.model_id.as_deref(), &state));
+
+    if is_online {
+        match state
+            .image_workspace
+            .generate_online(&req, &state.settings_store)
+            .await
+        {
+            Ok(resp) => return Ok(Json(resp)),
+            Err(e) => {
+                let err_str = e.to_string();
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({
+                        "error": err_str,
+                        "message": err_str,
+                        "error_type": "online_generation_failed"
+                    })),
+                ));
+            }
+        }
+    }
 
     // Local or Auto mode
     if mode == "local" || (mode == "auto" && state.image_workspace.engine.is_installed()) {
@@ -180,12 +239,23 @@ pub async fn generate_image(
         }
     }
 
-    // Local image engine or model not ready
+    // Fallback: if local engine not installed in auto mode, try online generator
+    if mode == "auto" {
+        if let Ok(resp) = state
+            .image_workspace
+            .generate_online(&req, &state.settings_store)
+            .await
+        {
+            return Ok(Json(resp));
+        }
+    }
+
+    // No engine or provider ready
     Err((
         StatusCode::BAD_REQUEST,
         Json(serde_json::json!({
-            "error": "Local image engine is not ready. Please install the engine and download a model in Settings -> Local Image Model.",
-            "message": "Local image engine is not ready. Please install the engine and download a model in Settings -> Local Image Model."
+            "error": "No image engine ready. Please configure an online provider in Settings -> Providers or install the local engine in Settings -> Local Image Model.",
+            "message": "No image engine ready. Please configure an online provider in Settings -> Providers or install the local engine in Settings -> Local Image Model."
         })),
     ))
 }
@@ -196,8 +266,53 @@ pub async fn generate_image_stream(
 ) -> Sse<impl Stream<Item = Result<Event, axum::Error>>> {
     let stream = async_stream::stream! {
         let mode = req.mode.as_deref().unwrap_or("auto");
+        let is_online = mode == "cloud"
+            || (mode == "auto" && is_online_image_model(req.model_id.as_deref(), &state));
 
-        if mode == "local" || (mode == "auto" && state.image_workspace.engine.is_installed()) {
+        if is_online {
+            let (tx, mut rx) = tokio::sync::mpsc::channel(100);
+            let state_clone = state.clone();
+            let req_clone = req.clone();
+
+            let join_handle = tokio::spawn(async move {
+                state_clone.image_workspace.generate_online_streaming(&req_clone, &state_clone.settings_store, tx).await
+            });
+
+            while let Some(prog) = rx.recv().await {
+                if let Ok(json_str) = serde_json::to_string(&prog) {
+                    yield Ok(Event::default().event("progress").data(json_str));
+                }
+            }
+
+            match join_handle.await {
+                Ok(Ok(resp)) => {
+                    if let Ok(json_str) = serde_json::to_string(&resp) {
+                        yield Ok(Event::default().event("complete").data(json_str));
+                    }
+                }
+                Ok(Err(e)) => {
+                    let err_str = e.to_string();
+                    let err_obj = serde_json::json!({
+                        "message": err_str,
+                        "error": err_str,
+                        "error_type": "online_generation_failed"
+                    });
+                    if let Ok(json_str) = serde_json::to_string(&err_obj) {
+                        yield Ok(Event::default().event("error").data(json_str));
+                    }
+                }
+                Err(join_err) => {
+                    let err_obj = serde_json::json!({
+                        "message": format!("Online generation task failed: {}", join_err),
+                        "error": format!("Online generation task failed: {}", join_err),
+                        "error_type": "generation_failed"
+                    });
+                    if let Ok(json_str) = serde_json::to_string(&err_obj) {
+                        yield Ok(Event::default().event("error").data(json_str));
+                    }
+                }
+            }
+        } else if mode == "local" || (mode == "auto" && state.image_workspace.engine.is_installed()) {
             let (tx, mut rx) = tokio::sync::mpsc::channel(100);
 
             let state_clone = state.clone();
@@ -243,13 +358,38 @@ pub async fn generate_image_stream(
                 }
             }
         } else {
-            let err_obj = serde_json::json!({
-                "message": "Local image engine is not ready. Please install the engine and download a model in Settings -> Local Image Model.",
-                "error": "Local image engine is not ready. Please install the engine and download a model in Settings -> Local Image Model.",
-                "error_type": "engine_not_ready"
+            // In auto mode, try online generator fallback before failing
+            let mut online_succeeded = false;
+            let (tx, mut rx) = tokio::sync::mpsc::channel(100);
+            let state_clone = state.clone();
+            let req_clone = req.clone();
+
+            let join_handle = tokio::spawn(async move {
+                state_clone.image_workspace.generate_online_streaming(&req_clone, &state_clone.settings_store, tx).await
             });
-            if let Ok(json_str) = serde_json::to_string(&err_obj) {
-                yield Ok(Event::default().event("error").data(json_str));
+
+            while let Some(prog) = rx.recv().await {
+                if let Ok(json_str) = serde_json::to_string(&prog) {
+                    yield Ok(Event::default().event("progress").data(json_str));
+                }
+            }
+
+            if let Ok(Ok(resp)) = join_handle.await {
+                online_succeeded = true;
+                if let Ok(json_str) = serde_json::to_string(&resp) {
+                    yield Ok(Event::default().event("complete").data(json_str));
+                }
+            }
+
+            if !online_succeeded {
+                let err_obj = serde_json::json!({
+                    "message": "No image engine ready. Please configure an online provider in Settings -> Providers or install the local engine in Settings -> Local Image Model.",
+                    "error": "No image engine ready. Please configure an online provider in Settings -> Providers or install the local engine in Settings -> Local Image Model.",
+                    "error_type": "engine_not_ready"
+                });
+                if let Ok(json_str) = serde_json::to_string(&err_obj) {
+                    yield Ok(Event::default().event("error").data(json_str));
+                }
             }
         }
     };

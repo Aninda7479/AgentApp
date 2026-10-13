@@ -10,8 +10,17 @@ import {
 } from 'lucide-react';
 import { ImageModelInfo, EngineStatus } from '../../../services/imageService';
 
+export interface OnlineImageModelOption {
+  id: string;
+  name: string;
+  providerId: string;
+  inputModalities?: string[];
+  outputModalities?: string[];
+}
+
 export interface ImageModelSelectProps {
   models: ImageModelInfo[];
+  onlineModels?: OnlineImageModelOption[];
   selectedModelId: string;
   onSelectModel: (modelId: string) => void;
   onOpenSettings?: () => void;
@@ -43,8 +52,25 @@ const getFamilyLabel = (family: string) => {
   }
 };
 
+const getProviderLabel = (providerId: string) => {
+  switch (providerId.toLowerCase()) {
+    case 'openai':
+      return 'OpenAI';
+    case 'google':
+    case 'gemini':
+      return 'Google';
+    case 'openrouter':
+      return 'OpenRouter';
+    case 'groq':
+      return 'Groq';
+    default:
+      return providerId.toUpperCase();
+  }
+};
+
 export const ImageModelSelect: React.FC<ImageModelSelectProps> = ({
   models,
+  onlineModels = [],
   selectedModelId,
   onSelectModel,
   onOpenSettings,
@@ -62,10 +88,11 @@ export const ImageModelSelect: React.FC<ImageModelSelectProps> = ({
     openUpward: false,
   });
 
-  // Only consider models that have been downloaded locally
   const downloadedModels = models.filter((m) => m.is_downloaded);
   const downloadingModels = models.filter((m) => m.is_downloading);
-  const activeModel = downloadedModels.find((m) => m.id === selectedModelId);
+  const activeLocal = downloadedModels.find((m) => m.id === selectedModelId);
+  const activeOnline = onlineModels.find((m) => m.id === selectedModelId);
+  const hasAnyModels = downloadedModels.length > 0 || onlineModels.length > 0;
 
   const updateCoords = () => {
     if (triggerRef.current) {
@@ -148,25 +175,51 @@ export const ImageModelSelect: React.FC<ImageModelSelectProps> = ({
             : 'bg-brand-bg/60 hover:bg-brand-bg/90 border-brand-border hover:border-brand-border-strong text-brand-textMain'
         }`}
       >
-        {downloadedModels.length > 0 && activeModel ? (
+        {activeLocal ? (
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <Sparkles size={14} className="text-[var(--brand-accent)] shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="font-semibold text-brand-textMain truncate">
-                {activeModel.name}
+                {activeLocal.name}
               </div>
               <div className="flex items-center gap-1.5 text-[10px] text-brand-textMuted mt-0.5 truncate">
                 <span className="px-1.5 py-0.5 rounded bg-brand-hover text-brand-textMuted font-medium">
-                  {getFamilyLabel(activeModel.family)}
+                  {getFamilyLabel(activeLocal.family)}
                 </span>
                 <span className="font-mono text-brand-textMuted">
-                  {activeModel.quantization}
+                  {activeLocal.quantization}
                 </span>
-                {activeModel.size_bytes > 0 && (
+                {activeLocal.size_bytes > 0 && (
                   <>
                     <span>•</span>
-                    <span className="font-mono">{fmtBytes(activeModel.size_bytes)}</span>
+                    <span className="font-mono">{fmtBytes(activeLocal.size_bytes)}</span>
                   </>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : activeOnline ? (
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <Sparkles size={14} className="text-purple-400 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-brand-textMain truncate">
+                {activeOnline.name}
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-brand-textMuted mt-0.5 truncate">
+                <span className="px-1.5 py-0.5 rounded bg-purple-950/60 text-purple-300 border border-purple-800/40 font-medium">
+                  {getProviderLabel(activeOnline.providerId)}
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-brand-hover text-brand-textMuted font-medium">
+                  Cloud
+                </span>
+                {activeOnline.inputModalities?.includes('image') ? (
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800/40 text-[9px]">
+                    I2I
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.5 rounded bg-blue-950/60 text-blue-300 border border-blue-800/40 text-[9px]">
+                    T2I
+                  </span>
                 )}
               </div>
             </div>
@@ -186,10 +239,10 @@ export const ImageModelSelect: React.FC<ImageModelSelectProps> = ({
         )}
 
         <div className="flex items-center gap-2 shrink-0">
-          {downloadedModels.length > 0 ? (
+          {activeLocal || activeOnline ? (
             <span
               className="w-2 h-2 rounded-full bg-[color:var(--neon-constructive)] shadow-[0_0_8px_rgba(52,211,153,0.6)]"
-              title="Model is installed and ready for local inference"
+              title={activeOnline ? "Cloud model ready" : "Model is installed and ready for local inference"}
             />
           ) : (
             <span
@@ -240,9 +293,68 @@ export const ImageModelSelect: React.FC<ImageModelSelectProps> = ({
             }}
             className="z-[9999] bg-brand-card/95 backdrop-blur-xl border border-brand-border rounded-xl shadow-2xl overflow-hidden p-1.5 flex flex-col gap-1 max-h-[320px] overflow-y-auto animate-in fade-in duration-100"
           >
-            {/* Header */}
+            {/* Online Models Section */}
+            {onlineModels.length > 0 && (
+              <div className="space-y-1 py-0.5">
+                <div className="px-2.5 py-1 text-[10px] font-semibold text-purple-400 uppercase tracking-wider flex items-center justify-between border-b border-brand-border/30">
+                  <span>Online Models ({onlineModels.length})</span>
+                  <span className="text-[9px] text-purple-300 font-normal">Cloud API</span>
+                </div>
+                {onlineModels.map((model) => {
+                  const isSelected = model.id === selectedModelId;
+                  return (
+                    <button
+                      key={model.id}
+                      type="button"
+                      role="option"
+                      aria-selected={isSelected}
+                      onClick={() => {
+                        onSelectModel(model.id);
+                        setIsOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between p-2 rounded-lg text-left text-xs transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-[var(--brand-accent)]/15 border border-[var(--brand-accent-border)] text-brand-textMain shadow-xs'
+                          : 'hover:bg-brand-hover text-brand-textMain border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className="w-4 flex items-center justify-center shrink-0">
+                          {isSelected ? (
+                            <Check size={14} className="text-[var(--brand-accent)]" />
+                          ) : (
+                            <div className="w-1.5 h-1.5 rounded-full bg-brand-border" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium truncate text-brand-textMain">
+                            {model.name}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap text-[10px] text-brand-textMuted">
+                            <span className="px-1.5 py-0.5 rounded bg-purple-950/60 text-purple-300 border border-purple-800/40 font-medium">
+                              {getProviderLabel(model.providerId)}
+                            </span>
+                            {model.inputModalities?.includes('image') ? (
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800/40 text-[9px]">
+                                Image-to-Image
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded bg-blue-950/60 text-blue-300 border border-blue-800/40 text-[9px]">
+                                Text-to-Image
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Local Models Header */}
             <div className="px-2.5 py-1.5 flex items-center justify-between text-[11px] font-semibold text-brand-textMuted uppercase tracking-wider border-b border-brand-border/50">
-              <span>Installed Models ({downloadedModels.length})</span>
+              <span>Local Models ({downloadedModels.length})</span>
               {downloadedModels.length > 0 && (
                 <span className="text-[10px] text-[color:var(--neon-constructive)] font-normal flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--neon-constructive)] inline-block" />
@@ -252,7 +364,7 @@ export const ImageModelSelect: React.FC<ImageModelSelectProps> = ({
             </div>
 
             {/* List of Models */}
-            {downloadedModels.length === 0 ? (
+            {!hasAnyModels ? (
               <div className="p-3 text-center space-y-2.5">
                 <div className="flex justify-center text-amber-400">
                   <CircleAlert size={24} />
@@ -279,7 +391,7 @@ export const ImageModelSelect: React.FC<ImageModelSelectProps> = ({
                   </button>
                 )}
               </div>
-            ) : (
+            ) : downloadedModels.length > 0 ? (
               <div className="space-y-1 py-0.5">
                 {downloadedModels.map((model) => {
                   const isSelected = model.id === selectedModelId;
@@ -331,7 +443,7 @@ export const ImageModelSelect: React.FC<ImageModelSelectProps> = ({
                   );
                 })}
               </div>
-            )}
+            ) : null}
 
             {/* Footer Action: Discover & Download */}
             {onOpenSettings && (

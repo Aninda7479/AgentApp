@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Sparkles,
   ArrowLeft,
@@ -25,7 +25,9 @@ import {
   AspectRatioOption,
   AttachedReferenceMedia,
   AdvancedVideoSettingsState,
+  VideoModelOption,
 } from './types';
+import { useProviderStore } from '../../stores/providerStore';
 import { VideoComposer } from './components/VideoComposer';
 import { VideoModelSelect } from './components/VideoModelSelect';
 import { VideoCanvasStage } from './components/VideoCanvasStage';
@@ -64,11 +66,83 @@ export const VideoWorkspacePage: React.FC<VideoWorkspacePageProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [progressEvent, setProgressEvent] = useState<VideoProgressEvent | null>(null);
 
-  // ── Attachments (Keyframes) ──
+  // ── Attachments (Keyframes & Source Video) ──
   const [firstFrame, setFirstFrame] = useState<AttachedReferenceMedia | null>(null);
   const [lastFrame, setLastFrame] = useState<AttachedReferenceMedia | null>(null);
+  const [sourceVideo, setSourceVideo] = useState<AttachedReferenceMedia | null>(null);
   const [motionScale, setMotionScale] = useState(0.8);
   const [isShelfOpen, setIsShelfOpen] = useState(false);
+
+  // ── Online Providers & Models ──
+  const storeProviders = useProviderStore((s) => s.providers) || [];
+  const storeModels = useProviderStore((s) => s.models) || [];
+
+  const onlineVideoModels: VideoModelOption[] = useMemo(() => {
+    const list: VideoModelOption[] = storeModels
+      .filter((m) => {
+        if (!m.enabled) return false;
+        const out = m.outputModalities ?? [];
+        return (
+          out.includes('video') ||
+          /seedance|cogvideox|wanvideo|wan-video|hunyuanvideo|hunyuan-video|ltx-video|mochi|minimax-video|genmo|animatediff|svd|stable-video|videocrafter|kling|hailuo|vidu|veo|luma|sora/i.test(m.id) ||
+          /seedance|cogvideox|wanvideo|wan-video|hunyuanvideo|hunyuan-video|ltx-video|mochi|minimax-video|genmo|animatediff|svd|stable-video|videocrafter|kling|hailuo|vidu|veo|luma|sora/i.test(m.name)
+        );
+      })
+      .map((m) => {
+        let ins = m.inputModalities;
+        if (!ins || ins.length === 0) {
+          if (/veo-2\.0|kling|luma|wan/i.test(m.id)) {
+            ins = ['text', 'image', 'video'];
+          } else {
+            ins = ['text', 'image'];
+          }
+        }
+        return {
+          id: m.id,
+          name: m.name,
+          source: 'cloud',
+          providerId: m.providerId,
+          inputModalities: ins,
+          outputModalities: m.outputModalities || ['video'],
+          modality: ins.includes('video') ? 'both' : ins.includes('image') ? 'both' : 'text_to_video',
+        };
+      });
+
+    // Provide default curated online options if corresponding providers are connected with API keys
+    const hasGoogle = storeProviders.some(
+      (p) => (p.id === 'google' || p.id === 'gemini') && Boolean(p.apiKey)
+    );
+    if (hasGoogle && !list.some((m) => m.id.includes('veo-2'))) {
+      list.push({
+        id: 'veo-2.0-generate-001',
+        name: 'Google Veo 2.0',
+        source: 'cloud',
+        providerId: 'google',
+        inputModalities: ['text', 'image', 'video'],
+        outputModalities: ['video'],
+        modality: 'both',
+      });
+    }
+
+    const hasOpenRouter = storeProviders.some((p) => p.id === 'openrouter' && Boolean(p.apiKey));
+    if (hasOpenRouter && !list.some((m) => m.id.includes('kling') || m.id.includes('luma') || m.id.includes('wan'))) {
+      list.push({
+        id: 'kling-video-v1.5',
+        name: 'Kuaishou Kling 1.5 HD',
+        source: 'cloud',
+        providerId: 'openrouter',
+        inputModalities: ['text', 'image'],
+        outputModalities: ['video'],
+        modality: 'both',
+      });
+    }
+
+    return list;
+  }, [storeModels, storeProviders]);
+
+  const selectedOnlineModel = onlineVideoModels.find((m) => m.id === selectedModel);
+  const isOnlineModel = Boolean(selectedOnlineModel);
+  const supportsVideoInput = !isOnlineModel || (selectedOnlineModel?.inputModalities?.includes('video') ?? false);
 
   // ── Advanced Settings ──
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
@@ -128,6 +202,29 @@ export const VideoWorkspacePage: React.FC<VideoWorkspacePageProps> = ({
   const handleGenerate = async () => {
     if (!prompt.trim() || isGenerating) return;
 
+    if (!selectedModel) {
+      notify('Please select a video model before generating.');
+      return;
+    }
+
+    const isOnline = onlineVideoModels.some((m) => m.id === selectedModel);
+
+    if (!isOnline) {
+      if (engineStatus && !engineStatus.installed) {
+        notify('Local video generation engine is not installed. Please configure it in Settings.');
+        return;
+      }
+    } else {
+      const onlineModel = onlineVideoModels.find((m) => m.id === selectedModel);
+      if (onlineModel) {
+        const prov = storeProviders.find((p) => p.id.toLowerCase() === onlineModel.providerId?.toLowerCase());
+        if (prov && prov.type === 'key' && !prov.apiKey) {
+          notify(`Provider "${prov.name || onlineModel.providerId}" is missing an API key. Please configure it in Settings.`);
+          return;
+        }
+      }
+    }
+
     setIsGenerating(true);
     setProgressEvent(null);
     abortControllerRef.current = new AbortController();
@@ -140,18 +237,19 @@ export const VideoWorkspacePage: React.FC<VideoWorkspacePageProps> = ({
       prompt: prompt.trim(),
       negative_prompt: advancedSettings.negativePrompt || undefined,
       model_id: selectedModel || undefined,
-      mode: 'local',
+      mode: isOnline ? 'cloud' : 'local',
       width: aspectRatio.width,
       height: aspectRatio.height,
-      num_frames: advancedSettings.numFrames,
+      num_frames: isOnline ? Math.min(advancedSettings.numFrames, 81) : advancedSettings.numFrames,
       fps: advancedSettings.fps,
-      steps: advancedSettings.steps,
+      steps: isOnline ? 25 : advancedSettings.steps,
       cfg_scale: advancedSettings.cfgScale,
       seed,
       motion_scale: motionScale,
       camera_motion: cameraMotion !== 'Static' ? cameraMotion : undefined,
       init_image: firstFrame?.dataUrl,
       last_image: lastFrame?.dataUrl,
+      input_video: sourceVideo?.dataUrl,
       interpolate_2x: advancedSettings.interpolate2x,
     };
 
@@ -251,13 +349,22 @@ export const VideoWorkspacePage: React.FC<VideoWorkspacePageProps> = ({
           <VideoModelSelect
             selectedModelId={selectedModel}
             onSelectModel={setSelectedModel}
+            onlineModels={onlineVideoModels}
             triggerToast={triggerToast}
           />
         </div>
 
         {/* Right Tools: Hardware Badge, Settings */}
         <div className="flex items-center gap-2">
-          {hardware && (
+          {isOnlineModel ? (
+            <div
+              className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-950/40 border border-violet-800/40 text-[11px] text-violet-300"
+              title="Cloud video synthesis active (no local GPU load)"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+              <span className="font-medium">Cloud Generation</span>
+            </div>
+          ) : hardware ? (
             <div
               className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-800/60 border border-neutral-700/40 text-[11px] text-neutral-400"
               title={`${hardware.gpu_name || 'CPU Backend'} (${hardware.vram_mb ? Math.round(hardware.vram_mb / 1024) + ' GB VRAM' : 'System RAM'})`}
@@ -272,7 +379,7 @@ export const VideoWorkspacePage: React.FC<VideoWorkspacePageProps> = ({
                 </span>
               )}
             </div>
-          )}
+          ) : null}
 
           {onOpenSettings && (
             <button
@@ -315,6 +422,9 @@ export const VideoWorkspacePage: React.FC<VideoWorkspacePageProps> = ({
             lastFrame={lastFrame}
             onChangeFirstFrame={setFirstFrame}
             onChangeLastFrame={setLastFrame}
+            sourceVideo={sourceVideo}
+            onChangeSourceVideo={setSourceVideo}
+            supportsVideoInput={supportsVideoInput}
             motionScale={motionScale}
             onChangeMotionScale={setMotionScale}
             onClose={() => setIsShelfOpen(false)}
@@ -332,7 +442,7 @@ export const VideoWorkspacePage: React.FC<VideoWorkspacePageProps> = ({
           cameraMotion={cameraMotion}
           onChangeCameraMotion={setCameraMotion}
           onToggleAdvanced={() => setIsAdvancedOpen(!isAdvancedOpen)}
-          hasReferenceMedia={Boolean(firstFrame || lastFrame)}
+          hasReferenceMedia={Boolean(firstFrame || lastFrame || sourceVideo)}
           onToggleShelf={() => setIsShelfOpen(!isShelfOpen)}
         />
       </footer>

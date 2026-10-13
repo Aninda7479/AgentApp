@@ -1,9 +1,11 @@
 pub mod engine;
 pub mod models;
+pub mod online;
 pub mod types;
 
 pub use engine::*;
 pub use models::*;
+pub use online::*;
 pub use types::*;
 
 use anyhow::{anyhow, Result};
@@ -352,6 +354,25 @@ impl ImageWorkspaceManager {
             generation_time_ms: elapsed_ms,
             created_at,
         })
+    }
+
+    /// Perform image generation using an online provider (OpenAI, Gemini/Imagen, OpenRouter, etc.)
+    pub async fn generate_online(
+        &self,
+        req: &GenerateImageRequest,
+        settings_store: &crate::storage::settings::SettingsStore,
+    ) -> Result<GenerateImageResponse> {
+        OnlineImageGenerator::generate(req, settings_store, &self.storage, None).await
+    }
+
+    /// Perform image generation using an online provider with live progress streaming
+    pub async fn generate_online_streaming(
+        &self,
+        req: &GenerateImageRequest,
+        settings_store: &crate::storage::settings::SettingsStore,
+        progress_tx: tokio::sync::mpsc::Sender<GenerationProgressEvent>,
+    ) -> Result<GenerateImageResponse> {
+        OnlineImageGenerator::generate(req, settings_store, &self.storage, Some(progress_tx)).await
     }
 }
 

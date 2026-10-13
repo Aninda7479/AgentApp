@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Upload, X, Image as ImageIcon, Sparkles, ArrowRight, Gauge } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, Sparkles, ArrowRight, Gauge, Film } from 'lucide-react';
 import { AttachedReferenceMedia } from '../types';
 
 export interface VideoAttachmentShelfProps {
@@ -7,6 +7,9 @@ export interface VideoAttachmentShelfProps {
   lastFrame: AttachedReferenceMedia | null;
   onChangeFirstFrame: (media: AttachedReferenceMedia | null) => void;
   onChangeLastFrame: (media: AttachedReferenceMedia | null) => void;
+  sourceVideo?: AttachedReferenceMedia | null;
+  onChangeSourceVideo?: (media: AttachedReferenceMedia | null) => void;
+  supportsVideoInput?: boolean;
   motionScale: number;
   onChangeMotionScale: (val: number) => void;
   onClose: () => void;
@@ -17,16 +20,20 @@ export const VideoAttachmentShelf: React.FC<VideoAttachmentShelfProps> = ({
   lastFrame,
   onChangeFirstFrame,
   onChangeLastFrame,
+  sourceVideo,
+  onChangeSourceVideo,
+  supportsVideoInput = false,
   motionScale,
   onChangeMotionScale,
   onClose,
 }) => {
   const firstInputRef = useRef<HTMLInputElement>(null);
   const lastInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
-    type: 'first_frame' | 'last_frame'
+    type: 'first_frame' | 'last_frame' | 'source_video'
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -43,8 +50,10 @@ export const VideoAttachmentShelf: React.FC<VideoAttachmentShelfProps> = ({
       };
       if (type === 'first_frame') {
         onChangeFirstFrame(media);
-      } else {
+      } else if (type === 'last_frame') {
         onChangeLastFrame(media);
+      } else if (onChangeSourceVideo) {
+        onChangeSourceVideo(media);
       }
     };
     reader.readAsDataURL(file);
@@ -138,6 +147,51 @@ export const VideoAttachmentShelf: React.FC<VideoAttachmentShelfProps> = ({
             onChange={(e) => handleFileUpload(e, 'last_frame')}
           />
         </div>
+
+        {/* Source Video Dropzone (for Video-to-Video models) */}
+        {(supportsVideoInput || sourceVideo) && (
+          <div className="flex flex-col gap-1.5 md:col-span-2 pt-2 border-t border-neutral-800/60">
+            <span className="text-[11px] font-medium text-neutral-400">
+              Source Video (Video-to-Video Stylization / Extension)
+            </span>
+            {sourceVideo ? (
+              <div className="relative group w-full h-24 rounded-xl overflow-hidden border border-amber-600/60 bg-neutral-950 flex items-center justify-center">
+                <video
+                  src={sourceVideo.dataUrl}
+                  className="w-full h-full object-cover"
+                  muted
+                  playsInline
+                />
+                <button
+                  type="button"
+                  onClick={() => onChangeSourceVideo && onChangeSourceVideo(null)}
+                  className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/70 hover:bg-rose-950 text-neutral-300 hover:text-rose-300 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+                <div className="absolute bottom-1 left-2 text-[10px] text-neutral-300 bg-black/60 px-1.5 py-0.5 rounded truncate max-w-[80%]">
+                  {sourceVideo.name}
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => videoInputRef.current?.click()}
+                className="flex flex-col items-center justify-center w-full h-20 rounded-xl border border-dashed border-neutral-700 hover:border-amber-500 bg-neutral-950/40 hover:bg-neutral-800/30 cursor-pointer transition-all text-center p-2"
+              >
+                <Film className="w-5 h-5 text-neutral-400 mb-1" />
+                <span className="text-xs text-neutral-300 font-medium">Upload Source Video</span>
+                <span className="text-[10px] text-neutral-500">MP4, WebM (Stylize or re-render video)</span>
+              </div>
+            )}
+            <input
+              ref={videoInputRef}
+              type="file"
+              accept="video/mp4,video/webm"
+              className="hidden"
+              onChange={(e) => handleFileUpload(e, 'source_video')}
+            />
+          </div>
+        )}
       </div>
 
       {/* Motion Intensity Slider */}

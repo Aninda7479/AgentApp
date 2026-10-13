@@ -54,11 +54,12 @@ describe('ImageModelSelect Component', () => {
     expect(html).not.toContain('FLUX.1 Schnell');
   });
 
-  it('renders empty warning state when no models are downloaded', () => {
+  it('renders empty warning state when no models are downloaded and no online models', () => {
     const emptyModels = mockModels.map((m) => ({ ...m, is_downloaded: false }));
     const html = renderToStaticMarkup(
       <ImageModelSelect
         models={emptyModels}
+        onlineModels={[]}
         selectedModelId=""
         onSelectModel={vi.fn()}
         onOpenSettings={vi.fn()}
@@ -67,5 +68,38 @@ describe('ImageModelSelect Component', () => {
 
     expect(html).toContain('No local models installed');
     expect(html).toContain('Download a model from settings');
+  });
+
+  it('renders active online model with cloud badge and provider label', () => {
+    const onlineModels = [
+      {
+        id: 'dall-e-3',
+        name: 'DALL-E 3 (HD)',
+        providerId: 'openai',
+        inputModalities: ['text'],
+        outputModalities: ['image'],
+      },
+      {
+        id: 'imagen-3.0-generate-002',
+        name: 'Google Imagen 3',
+        providerId: 'google',
+        inputModalities: ['text', 'image'],
+        outputModalities: ['image'],
+      },
+    ];
+
+    const html = renderToStaticMarkup(
+      <ImageModelSelect
+        models={mockModels}
+        onlineModels={onlineModels}
+        selectedModelId="dall-e-3"
+        onSelectModel={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />
+    );
+
+    expect(html).toContain('DALL-E 3 (HD)');
+    expect(html).toContain('Cloud');
+    expect(html).toContain('OpenAI');
   });
 });
