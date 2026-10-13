@@ -6,6 +6,7 @@ pub mod mcp;
 pub mod media;
 pub mod memory;
 pub mod orchestrator;
+pub mod protocol;
 pub mod providers;
 pub mod roster;
 pub mod server;

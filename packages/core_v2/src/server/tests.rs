@@ -842,3 +842,68 @@ async fn test_broadcast_channel_backpressure_and_lag() {
         Err(e) => panic!("Unexpected error: {:?}", e),
     }
 }
+
+#[test]
+fn test_ws_session_subscription_filtering() {
+    use crate::server::ws::should_forward_ws_message;
+    use std::collections::HashSet;
+
+    let mut subs = HashSet::new();
+
+    let msg_session_a = serde_json::json!({
+        "channel": "agent-event",
+        "data": {
+            "type": "token",
+            "sessionId": "session-aaa",
+            "content": "hello"
+        }
+    })
+    .to_string();
+
+    let msg_session_b = serde_json::json!({
+        "channel": "agent-event",
+        "data": {
+            "type": "token",
+            "sessionId": "session-bbb",
+            "content": "world"
+        }
+    })
+    .to_string();
+
+    let msg_system = serde_json::json!({
+        "channel": "system-notice",
+        "data": {
+            "status": "ready"
+        }
+    })
+    .to_string();
+
+    // 1. Backward compatibility: when client has no subscriptions, all messages are forwarded
+    assert!(should_forward_ws_message(&msg_session_a, &subs));
+    assert!(should_forward_ws_message(&msg_session_b, &subs));
+    assert!(should_forward_ws_message(&msg_system, &subs));
+
+    // 2. Client subscribes to "session-aaa"
+    subs.insert("session-aaa".to_string());
+    subs.insert("aaa".to_string());
+
+    // Should forward session-aaa event
+    assert!(should_forward_ws_message(&msg_session_a, &subs));
+
+    // Should NOT forward session-bbb event
+    assert!(!should_forward_ws_message(&msg_session_b, &subs));
+
+    // Should still forward non-session system message
+    assert!(should_forward_ws_message(&msg_system, &subs));
+
+    // 3. Client also subscribes to "session-bbb"
+    subs.insert("session-bbb".to_string());
+    assert!(should_forward_ws_message(&msg_session_a, &subs));
+    assert!(should_forward_ws_message(&msg_session_b, &subs));
+
+    // 4. Client unsubscribes from "session-aaa"
+    subs.remove("session-aaa");
+    subs.remove("aaa");
+    assert!(!should_forward_ws_message(&msg_session_a, &subs));
+    assert!(should_forward_ws_message(&msg_session_b, &subs));
+}
