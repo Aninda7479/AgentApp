@@ -2,30 +2,31 @@ import { Link } from 'react-router-dom'
 import Faq from '../components/Faq.jsx'
 import { faqs } from '../data/faq.jsx'
 import Atmosphere from '../components/Atmosphere.jsx'
-
-const GH = 'https://github.com/Aninda7479/AgentApp'
+import { REPO } from '../config.js'
 
 export default function FaqPage() {
   return (
     <div style={{ position: 'relative', overflow: 'hidden' }}>
       <Atmosphere variant="faq-view" />
-      <section className="section container" style={{ paddingTop: '120px', minHeight: '80vh', position: 'relative', zIndex: 1 }}>
-        <div className="sec-head">
-          <p className="eyebrow">Before you install</p>
-          <h2 className="h-section">Questions, answered</h2>
-          <p className="lead">
-            Everything about installing, privacy, and running SuperAgent. Still stuck?{' '}
-            <a href={`${GH}/issues`} target="_blank" rel="noopener" style={{ color: 'var(--accent)' }}>
+      <section className="section" style={{ paddingTop: '120px', minHeight: '85vh', position: 'relative', zIndex: 1 }}>
+        <div className="section-inner">
+          <p className="eyebrow">— Clarifications</p>
+          <h1 className="statement-line" style={{ marginBottom: '1rem' }}>
+            Questions, <em className="accent">answered</em>.
+          </h1>
+          <p className="statement-caption" style={{ marginBottom: '2.5rem' }}>
+            Everything about running locally, privacy, LLM keys, and security. Need more help?{' '}
+            <a href={`${REPO}/issues`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
               Open an issue on GitHub
             </a>.
           </p>
+
+          <Faq items={faqs} />
+
+          <div style={{ marginTop: '2.5rem' }}>
+            <Link className="btn btn-ghost btn-sm" to="/">← Back to overview</Link>
+          </div>
         </div>
-
-        <Faq items={faqs} />
-
-        <p style={{ marginTop: '32px' }}>
-          <Link className="btn btn-ghost btn-sm" to="/">← Back to home</Link>
-        </p>
       </section>
     </div>
   )

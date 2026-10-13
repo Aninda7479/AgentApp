@@ -14,8 +14,8 @@ export default function Roadmap() {
           desc: 'Set goals and watch the agent plan, execute terminal commands, edit files, and self-correct errors.'
         },
         {
-          title: 'Multidevice Responsive UI',
-          desc: 'Adapts seamlessly from phone to widescreen. Secure VPS login system enables remote hosting.'
+          title: 'Pure Rust Daemon Engine',
+          desc: 'High-performance core_v2 daemon with scrypt authentication, session cookies, and Axum WebSocket IPC.'
         },
         {
           title: 'Model Context Protocol (MCP)',
@@ -26,8 +26,8 @@ export default function Roadmap() {
     {
       phase: 'Phase 2: Active Development',
       status: 'In Progress',
-      progress: '45%',
-      progressVal: 45,
+      progress: '55%',
+      progressVal: 55,
       class: 'progress',
       items: [
         {
@@ -47,8 +47,8 @@ export default function Roadmap() {
     {
       phase: 'Phase 3: On the Horizon',
       status: 'Planned',
-      progress: '0%',
-      progressVal: 0,
+      progress: '15%',
+      progressVal: 15,
       class: 'planned',
       items: [
         {
@@ -56,70 +56,36 @@ export default function Roadmap() {
           desc: 'Spawn specialized coordinator, debugger, and researcher subagents to collaborate on complex projects.'
         },
         {
-          title: 'Self-Hosting VPS Cloud Templates',
-          desc: 'Deploy personal, password-secured instances of SuperAgent web server with one click to Railway or Vercel.'
+          title: 'Deep Local LLM Offline Mode',
+          desc: 'Full native integration with Ollama and Llama.cpp. 100% offline agentic coding with zero cloud dependencies.'
         },
         {
-          title: 'Deep Local LLM Offline Mode',
-          desc: 'Full native integration with Ollama and Llama.cpp. 100% offline agentic coding with zero third-party dependencies.'
+          title: 'Self-Hosting VPS Cloud Templates',
+          desc: 'Deploy personal, password-secured instances of SuperAgent web server with one click to Railway or VPS.'
         }
       ]
     }
   ]
 
   return (
-    <section id="roadmap" style={{ background: 'linear-gradient(180deg, #0d1f1a 0%, #0a0f1f 100%)', width: '100%', overflow: 'hidden' }}>
-      <div className="section container">
-        <Reveal className="roadmap-section">
-          <div className="sec-head text-center mx-auto" style={{ maxWidth: '65ch' }}>
-            <p className="eyebrow">Roadmap</p>
-            <h2 className="h-section">Future & Coming Features</h2>
-            <p className="lead">
-              SuperAgent is constantly evolving. Here is a look at what features are stable, what we are actively building, and what is planned next.
-            </p>
+    <div className="roadmap-grid">
+      {categories.map((cat, i) => (
+        <div className="roadmap-card" key={i}>
+          <div className="roadmap-header">
+            <span className="roadmap-phase">{cat.phase}</span>
+            <span className={`roadmap-badge ${cat.class}`}>{cat.status} · {cat.progress}</span>
           </div>
 
-          <div className="roadmap-grid">
-            {categories.map((cat, i) => (
-              <div className={`roadmap-col ${cat.class}`} key={i}>
-                <div className="roadmap-col-header">
-                  <div className="header-meta">
-                    <div className="phase-title">{cat.phase}</div>
-                    <span className={`status-pill ${cat.class}`}>{cat.status}</span>
-                  </div>
-                  <div className="progress-ring-container">
-                    <svg className="progress-ring" width="36" height="36" viewBox="0 0 36 36">
-                      <circle className="progress-ring-bg" cx="18" cy="18" r="14" fill="none" strokeWidth="3" />
-                      <circle 
-                        className={`progress-ring-fill ${cat.class}`} 
-                        cx="18" 
-                        cy="18" 
-                        r="14" 
-                        fill="none" 
-                        strokeWidth="3" 
-                        strokeDasharray="87.96"
-                        strokeDashoffset={87.96 - (87.96 * cat.progressVal) / 100}
-                        strokeLinecap="round"
-                        transform="rotate(-90 18 18)"
-                      />
-                    </svg>
-                    <span className="progress-percentage">{cat.progress}</span>
-                  </div>
-                </div>
-                <div className="roadmap-items">
-                  {cat.items.map((item, idx) => (
-                    <div className="roadmap-item-card" key={idx}>
-                      <div className="card-indicator"></div>
-                      <h4>{item.title}</h4>
-                      <p>{item.desc}</p>
-                    </div>
-                  ))}
-                </div>
+          <div className="roadmap-items">
+            {cat.items.map((item, idx) => (
+              <div className="roadmap-item" key={idx}>
+                <h4>{item.title}</h4>
+                <p>{item.desc}</p>
               </div>
             ))}
           </div>
-        </Reveal>
-      </div>
-    </section>
+        </div>
+      ))}
+    </div>
   )
 }

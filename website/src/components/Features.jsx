@@ -5,21 +5,22 @@ import FeatureShowcase from './FeatureShowcase.jsx'
 
 export default function Features() {
   const [activeCat, setActiveCat] = useState('orchestration')
-
   const currentCategory = featureCategories.find((cat) => cat.id === activeCat)
 
   return (
     <>
-      <Reveal className="sec-head">
-        <p className="eyebrow">What it does</p>
-        <h2 className="h-section">An agent, not a chatbot</h2>
-        <p className="lead">
-          SuperAgent plans, acts, and corrects itself across the tools you already use — then hands you the result.
+      <div className="product-header">
+        <p className="eyebrow">— Capabilities</p>
+        <h2 className="product-h2">
+          An agent, not a <em className="accent">chatbot</em>.
+        </h2>
+        <p className="subtext">
+          SuperAgent plans, executes tools, and self-corrects in real-time — running natively on your hardware with your preferred LLM provider or local models.
         </p>
-      </Reveal>
+      </div>
 
       {/* Categories Tabs Selector */}
-      <Reveal className="features-cat-selector">
+      <div className="features-cat-selector">
         {featureCategories.map((cat) => (
           <button
             key={cat.id}
@@ -29,24 +30,24 @@ export default function Features() {
             {cat.name}
           </button>
         ))}
-      </Reveal>
+      </div>
 
       {/* Description of current category */}
       {currentCategory && (
-        <Reveal className="category-description-box" key={activeCat + '-desc'}>
+        <div className="category-description-box" key={activeCat + '-desc'}>
           <p>{currentCategory.desc}</p>
-        </Reveal>
+        </div>
       )}
 
       {/* Grid of features for active category */}
-      <div className="feat-grid" style={{ marginBottom: '80px' }} key={activeCat + '-grid'}>
+      <div className="feat-grid" key={activeCat + '-grid'}>
         {currentCategory &&
           currentCategory.features.map((f, i) => (
-            <Reveal className="feat" key={i}>
+            <article className="feat" key={i}>
               <div className="ico">{f.icon}</div>
               <h3>{f.title}</h3>
               <p>{f.body}</p>
-            </Reveal>
+            </article>
           ))}
       </div>
 

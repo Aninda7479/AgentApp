@@ -26,11 +26,47 @@ function ScrollManager() {
 }
 
 export default function App() {
+  // Page-wide scroll progress thread (optimized without layout thrashing)
+  useEffect(() => {
+    const thread = document.querySelector('[data-page-thread]')
+    if (!thread) return
+
+    let ticking = false
+    let docH = Math.max(1, document.documentElement.scrollHeight - window.innerHeight)
+
+    const updateDocH = () => {
+      docH = Math.max(1, document.documentElement.scrollHeight - window.innerHeight)
+    }
+
+    const onScroll = () => {
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(() => {
+        const pct = Math.min(1, Math.max(0, window.scrollY / docH))
+        thread.style.transform = `scaleY(${pct})`
+        ticking = false
+      })
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', updateDocH, { passive: true })
+    window.addEventListener('load', updateDocH, { passive: true })
+    updateDocH()
+
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', updateDocH)
+      window.removeEventListener('load', updateDocH)
+    }
+  }, [])
+
   return (
     <>
+      <div className="page-thread" aria-hidden="true" data-page-thread />
+      <div className="cursor-accent" aria-hidden="true" data-cursor />
       <ScrollManager />
       <Nav />
-      <main>
+      <main id="main-content">
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/cli" element={<CliPage />} />
