@@ -15,7 +15,7 @@ This document is the persistent memory ledger for the end-to-end migration of Su
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Phase 1** | Core v2 Hardening & Canonical Wire Protocol | `packages/core_v2` | Core Specialist | `COMPLETED` | `feat(core_v2): establish canonical protocol module and session-scoped ws subscriptions` |
 | **Phase 2** | Web Client Decoupling & Overlay Port Auto-Discovery | `clients/web`, `dictation-native`, `artifacts-native` | Web & Overlay Specialist | `COMPLETED` | `feat(web,overlays): decouple web client and add dynamic overlay port auto-discovery` |
-| **Phase 3** | Linux Dedicated UI (GTK4 + Libadwaita) | `clients/linux` | Linux Specialist | `NOT_STARTED` | - |
+| **Phase 3** | Linux Dedicated UI (GTK4 + Libadwaita) | `clients/linux` | Linux Specialist | `COMPLETED` | `feat(linux): implement dedicated linux client with gtk4, libadwaita and daemon client` |
 | **Phase 4** | macOS Dedicated UI (SwiftUI Native) | `clients/macos` | macOS Specialist | `NOT_STARTED` | - |
 | **Phase 5** | Windows Dedicated UI (WinUI 3 Native) | `clients/windows` | Windows Specialist | `NOT_STARTED` | - |
 | **Phase 6** | End-to-End Verification & Documentation | Monorepo | Integration Coordinator | `NOT_STARTED` | - |
@@ -63,16 +63,19 @@ This document is the persistent memory ledger for the end-to-end migration of Su
 
 ### Phase 3: Linux Dedicated UI (GTK4 + Libadwaita)
 * **Objective**:
-  1. Scaffold `clients/linux/` Rust workspace package.
-  2. Implement native GTK4 / Libadwaita application with AdwApplicationWindow.
-  3. Implement `DaemonClient` communicating with `core_v2` over HTTP + WS (with optional feature for direct crate linkage).
-* **Status**: `NOT_STARTED`
+  1. Scaffold `clients/linux/` Rust workspace package (`superagent-linux-client`).
+  2. Implement native GTK4 / Libadwaita application with `AdwApplicationWindow`, `AdwHeaderBar`, `NavigationSplitView`, chat list, and composer.
+  3. Implement high-performance `DaemonClient` communicating with `core_v2` over HTTP IPC and full-duplex WebSocket streaming using canonical `superagent_core_v2::protocol`.
+* **Status**: `COMPLETED`
 * **Checkpoints**:
-  - [ ] `clients/linux/Cargo.toml` and directory structure created
-  - [ ] Daemon client & protocol models implemented
-  - [ ] Main window with navigation split view and basic chat streaming UI
-  - [ ] `cargo check -p superagent-linux-client` passing
-  - [ ] Git commit created
+  - [x] `clients/linux/Cargo.toml` and directory structure created with Linux target dependencies (`gtk4`, `libadwaita`, `glib`)
+  - [x] High-performance `DaemonClient` implemented with full-duplex WebSocket streaming, session subscription management (`SUBSCRIBE_SESSION`, `UNSUBSCRIBE_SESSION`, `SYNC_SESSION`), ping/pong heartbeats, and HTTP IPC invocation
+  - [x] Reactive `AppState` implemented managing sessions, active chat messages, streaming thought/token buffers, and connection lifecycle
+  - [x] Main window with `AdwApplicationWindow`, `AdwHeaderBar`, `NavigationSplitView`, chat message list view, and composer implemented with cross-platform fallback stubs
+  - [x] CLI entrypoint in `main.rs` with `--port`, `--server`, `--token`, and `--headless` modes
+  - [x] Added `"clients/linux"` to root `Cargo.toml` workspace members
+  - [x] Unit test suite implemented and passing (12/12 unit tests passing in `superagent-linux-client`)
+  - [x] Compilation and formatting verified (`cargo check -p superagent-linux-client`, `cargo check --workspace`, `cargo clippy --package superagent-linux-client --no-deps`, `cargo fmt -- --check` all passing)
 
 ---
 
