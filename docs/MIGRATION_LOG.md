@@ -135,9 +135,23 @@ This document is the persistent memory ledger for the end-to-end migration of Su
   - [x] macOS XCTest suite created covering Codable wire protocol in `ProtocolTests.swift`
   - [x] Living navigation map updated in `docs/PROJECT_MAP.md`
   - [x] Walkthrough artifact updated
-  - [x] Ready for final commit: `docs: update project map and finalize dedicated native uis migration`
+  - [x] Final commit recorded: `docs: update project map and finalize dedicated native uis migration`
+
+---
+
+### Supplementary Milestone: Canonical UI Behavioral Specification (`docs/UI_SPECIFICATION.md`)
+* **Objective**:
+  1. Author an exhaustive, self-contained behavioral and visual specification of the legacy React application (`packages/ui`).
+  2. Document all 15 operational domains: visual design tokens, shell navigation, message rendering, thought disclosure cards, tool execution cards, auto-scroll locking, composer bar & model picker, interactive question composer, image/video/3D/artifacts/tasks workspaces, companion VRM pet, settings & LLM providers, global modals, IPC/WS wire contracts, and edge-case rendering rules.
+  3. Ensure future AI coding agents and human contributors can build native frontends without repeatedly re-reading `packages/ui`.
+* **Status**: `COMPLETED`
+* **Checkpoints**:
+  - [x] Comprehensive 15-section specification created in `docs/UI_SPECIFICATION.md` (502 lines, complete type definitions, ASCII mockups, wire JSON payloads)
+  - [x] Referenced across `AGENTS.md` and `docs/PROJECT_MAP.md`
+  - [x] Ready for commit: `docs: establish canonical UI behavioral specification for native frontends`
 
 ---
 
 ## 3. Active Incident / Recovery Notes
 * **Restart Recovery**: If an agent resumes mid-flight, check which phase checkpoint was last checked above. Continue strictly from that unchecked item.
+

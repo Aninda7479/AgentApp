@@ -283,7 +283,8 @@ AgentApp/
 ├── website/                      # Official marketing and docs site (Vite + React Router)
 ├── docs/                         # Living architecture maps, migration logs, and guides
 │   ├── PROJECT_MAP.md            # Living domain ownership and package navigation matrix
-│   └── MIGRATION_LOG.md          # Multi-phase agent execution ledger & checkpoints
+│   ├── MIGRATION_LOG.md          # Multi-phase agent execution ledger & checkpoints
+│   └── UI_SPECIFICATION.md       # Canonical behavioral & functional specification for native UIs
 ├── scripts/                      # Version-bumping, updater JSON, and release notes scripts
 ├── .github/
 │   └── workflows/                # CI cross-platform matrix, PR auto-loop, releases
@@ -376,4 +377,5 @@ For large or multi-package features, do not attempt to hold all crate details in
 6. **Native Overlay Specialist Subagent**: Handles native egui overlays in `packages/dictation-native`, `packages/artifacts-native`, and `packages/circle-search-native`.
 Each subagent executes in a fresh, unpolluted context window and reports concise verification results back to the primary session.
 
-
+### D. Master UI Behavioral Specification
+When implementing or extending native frontends (`clients/web`, `clients/macos`, `clients/windows`, `clients/linux`), developers and subagents **must consult [`docs/UI_SPECIFICATION.md`](docs/UI_SPECIFICATION.md)** instead of analyzing the legacy React codebase (`packages/ui`). It provides the canonical, self-contained specification of all visual design tokens, workspace views, interactive question tools, keyboard shortcuts, and wire synchronization edge cases.

@@ -22,6 +22,7 @@
 | **Voice Dictation Native Overlay** | `packages/dictation-native` | Rust (egui, cpal) | `cargo test -p superagent-dictation-native` | `Native Overlay Specialist` |
 | **Circle-to-Search Native Overlay** | `packages/circle-search-native` | Rust (egui, eframe) | `cargo check -p superagent-circle-search-native` | `Native Overlay Specialist` |
 | **Artifacts Native Overlay** | `packages/artifacts-native` | Rust | `cargo test -p superagent-artifacts-native` | `Native Overlay Specialist` |
+| **UI Behavioral & Functional Spec** | `docs/UI_SPECIFICATION.md` | Markdown | N/A | `All Frontend Specialists` |
 | **Archived / Deprecated Core** | `legacy/` | TypeScript | 🚫 **NEVER TOUCH / READ ONLY** | N/A |
 
 ---
@@ -91,6 +92,7 @@ flowchart TD
 1. **Core Changes First**: Launch a `Core Specialist` subagent to implement data models, endpoints, or engine logic. Verify with `cargo check -p superagent-core-v2`.
 2. **UI Implementation Next**: Pass the completed type definitions to a `UI Specialist` subagent. Verify with `npm run build:tsc --workspace=@superagent/ui`.
 3. **Shell / Packaging Last**: If desktop bindings are affected, delegate to a `Desktop Specialist`.
+4. **Native Frontends**: When implementing views in `clients/web`, `clients/macos`, `clients/windows`, or `clients/linux`, consult [`docs/UI_SPECIFICATION.md`](UI_SPECIFICATION.md) as the canonical design and behavioral specification.
 
 ---
 
