@@ -280,6 +280,7 @@ pub fn run() {
             settings_read,
             settings_write,
             web_change_password,
+            web_is_default_password,
             store_read,
             store_write,
             chat_steps_read,

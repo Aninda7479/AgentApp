@@ -97,6 +97,8 @@ pub fn is_public_path(path: &str) -> bool {
         || (path.starts_with("/api/images/generations/") && path.ends_with("/file"))
         || (path.starts_with("/api/videos/generations/")
             && (path.ends_with("/file") || path.ends_with("/thumbnail")))
+        || (path.starts_with("/api/threed/generations/")
+            && (path.ends_with("/file") || path.ends_with("/thumbnail")))
 }
 
 /// Axum middleware guarding all protected API routes, WebSockets, and SPA pages.
@@ -244,10 +246,13 @@ pub async fn get_auth_status(
         false
     };
 
+    let is_default_password = state.auth_store.verify_password("admin", "admin");
+
     Json(serde_json::json!({
         "authenticated": authenticated,
         "authRequired": auth_required,
         "passwordSet": password_set,
+        "isDefaultPassword": is_default_password,
         "ownerName": owner_name,
         "user": if authenticated { Some("admin") } else { None },
         "version": env!("CARGO_PKG_VERSION")

@@ -130,6 +130,62 @@ export class SetupService {
   }
 
   /**
+   * Determines whether the "No AI model enabled" banner should be displayed.
+   * Triggered when bootstrapping has finished, setup is completed, the banner was
+   * not dismissed, and there are 0 enabled models in the catalog.
+   */
+  static shouldShowMissingModelBanner(params: {
+    bootstrapping: boolean;
+    setupCompleted: boolean;
+    modelsCatalog: ModelConfig[];
+    dismissed: boolean;
+  }): boolean {
+    const { bootstrapping, setupCompleted, modelsCatalog, dismissed } = params;
+    if (bootstrapping) return false;
+    if (!setupCompleted) return false;
+    if (dismissed) return false;
+    const hasEnabled = Array.isArray(modelsCatalog) && modelsCatalog.some((m) => m.enabled !== false);
+    return !hasEnabled;
+  }
+
+  /**
+   * Determines whether the "Core Engine Daemon offline" banner should be displayed.
+   * Triggered when loading has finished, bootstrapping is done, daemon is explicitly
+   * offline/unreachable on port 1469, and user has not dismissed it for this session.
+   */
+  static shouldShowDaemonOfflineBanner(params: {
+    loading: boolean;
+    authStatus: AuthStatus;
+    dismissed: boolean;
+  }): boolean {
+    const { loading, authStatus, dismissed } = params;
+    if (loading) return false;
+    if (dismissed) return false;
+    return authStatus.isDaemonOnline === false || authStatus.backendConnected === false;
+  }
+
+  /**
+   * Determines whether the default admin password security alert modal should be shown.
+   * Triggered when the user is authenticated, default password 'admin' is verified in use,
+   * user has NOT set ignoreDefaultPasswordWarning in settings, and it has not been dismissed this session.
+   */
+  static shouldShowDefaultPasswordAlert(params: {
+    bootstrapping: boolean;
+    authStatus: AuthStatus;
+    ignoreWarning: boolean;
+    dismissed: boolean;
+    onboardingVisible: boolean;
+  }): boolean {
+    const { bootstrapping, authStatus, ignoreWarning, dismissed, onboardingVisible } = params;
+    if (bootstrapping) return false;
+    if (ignoreWarning) return false;
+    if (dismissed) return false;
+    if (onboardingVisible) return false;
+    if (authStatus.authRequired && !authStatus.authenticated) return false;
+    return Boolean(authStatus.isDefaultPassword);
+  }
+
+  /**
    * Returns the recommended starting step of OnboardingWizard based on what is missing.
    * Step 1: Welcome & Developer Name
    * Step 2: Providers & Models Catalog

@@ -216,5 +216,184 @@ describe('SetupService - Application Readiness & Adaptive Setup', () => {
       ).toBe(true);
     });
   });
+
+  describe('shouldShowMissingModelBanner', () => {
+    it('returns false during bootstrapping or before setup is completed', () => {
+      expect(
+        SetupService.shouldShowMissingModelBanner({
+          bootstrapping: true,
+          setupCompleted: true,
+          modelsCatalog: [],
+          dismissed: false,
+        })
+      ).toBe(false);
+
+      expect(
+        SetupService.shouldShowMissingModelBanner({
+          bootstrapping: false,
+          setupCompleted: false,
+          modelsCatalog: [],
+          dismissed: false,
+        })
+      ).toBe(false);
+    });
+
+    it('returns false when dismissed', () => {
+      expect(
+        SetupService.shouldShowMissingModelBanner({
+          bootstrapping: false,
+          setupCompleted: true,
+          modelsCatalog: [],
+          dismissed: true,
+        })
+      ).toBe(false);
+    });
+
+    it('returns false when at least one model is enabled', () => {
+      expect(
+        SetupService.shouldShowMissingModelBanner({
+          bootstrapping: false,
+          setupCompleted: true,
+          modelsCatalog: [{ id: 'm1', name: 'Model 1', providerId: 'openai', enabled: true }],
+          dismissed: false,
+        })
+      ).toBe(false);
+    });
+
+    it('returns true when models list is empty or all models are disabled', () => {
+      expect(
+        SetupService.shouldShowMissingModelBanner({
+          bootstrapping: false,
+          setupCompleted: true,
+          modelsCatalog: [],
+          dismissed: false,
+        })
+      ).toBe(true);
+
+      expect(
+        SetupService.shouldShowMissingModelBanner({
+          bootstrapping: false,
+          setupCompleted: true,
+          modelsCatalog: [{ id: 'm1', name: 'Model 1', providerId: 'openai', enabled: false }],
+          dismissed: false,
+        })
+      ).toBe(true);
+    });
+  });
+
+  describe('shouldShowDaemonOfflineBanner', () => {
+    it('returns false while loading or when dismissed', () => {
+      expect(
+        SetupService.shouldShowDaemonOfflineBanner({
+          loading: true,
+          authStatus: { authenticated: false, authRequired: true, passwordSet: false, isDaemonOnline: false },
+          dismissed: false,
+        })
+      ).toBe(false);
+
+      expect(
+        SetupService.shouldShowDaemonOfflineBanner({
+          loading: false,
+          authStatus: { authenticated: false, authRequired: true, passwordSet: false, isDaemonOnline: false },
+          dismissed: true,
+        })
+      ).toBe(false);
+    });
+
+    it('returns true when daemon is offline after loading screen', () => {
+      expect(
+        SetupService.shouldShowDaemonOfflineBanner({
+          loading: false,
+          authStatus: { authenticated: false, authRequired: true, passwordSet: false, isDaemonOnline: false },
+          dismissed: false,
+        })
+      ).toBe(true);
+    });
+
+    it('returns false when daemon is online', () => {
+      expect(
+        SetupService.shouldShowDaemonOfflineBanner({
+          loading: false,
+          authStatus: { authenticated: true, authRequired: true, passwordSet: true, isDaemonOnline: true, version: '0.44.0' },
+          dismissed: false,
+        })
+      ).toBe(false);
+    });
+  });
+
+  describe('shouldShowDefaultPasswordAlert', () => {
+    const unlockedAuth: AuthStatus = {
+      authRequired: true,
+      passwordSet: true,
+      authenticated: true,
+      isDefaultPassword: true,
+    };
+
+    it('returns false when bootstrapping, warning is ignored, dismissed, or onboarding visible', () => {
+      expect(
+        SetupService.shouldShowDefaultPasswordAlert({
+          bootstrapping: true,
+          authStatus: unlockedAuth,
+          ignoreWarning: false,
+          dismissed: false,
+          onboardingVisible: false,
+        })
+      ).toBe(false);
+
+      expect(
+        SetupService.shouldShowDefaultPasswordAlert({
+          bootstrapping: false,
+          authStatus: unlockedAuth,
+          ignoreWarning: true,
+          dismissed: false,
+          onboardingVisible: false,
+        })
+      ).toBe(false);
+
+      expect(
+        SetupService.shouldShowDefaultPasswordAlert({
+          bootstrapping: false,
+          authStatus: unlockedAuth,
+          ignoreWarning: false,
+          dismissed: true,
+          onboardingVisible: false,
+        })
+      ).toBe(false);
+
+      expect(
+        SetupService.shouldShowDefaultPasswordAlert({
+          bootstrapping: false,
+          authStatus: unlockedAuth,
+          ignoreWarning: false,
+          dismissed: false,
+          onboardingVisible: true,
+        })
+      ).toBe(false);
+    });
+
+    it('returns true when authenticated and default password is in use without ignore flag', () => {
+      expect(
+        SetupService.shouldShowDefaultPasswordAlert({
+          bootstrapping: false,
+          authStatus: unlockedAuth,
+          ignoreWarning: false,
+          dismissed: false,
+          onboardingVisible: false,
+        })
+      ).toBe(true);
+    });
+
+    it('returns false when custom password is in use', () => {
+      expect(
+        SetupService.shouldShowDefaultPasswordAlert({
+          bootstrapping: false,
+          authStatus: { ...unlockedAuth, isDefaultPassword: false },
+          ignoreWarning: false,
+          dismissed: false,
+          onboardingVisible: false,
+        })
+      ).toBe(false);
+    });
+  });
 });
 

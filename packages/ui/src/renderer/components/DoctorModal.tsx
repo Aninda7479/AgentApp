@@ -3,6 +3,7 @@ import { Stethoscope, CheckCircle2, AlertTriangle, XCircle, RefreshCw } from 'lu
 import { Button } from './ui';
 import { ModelConfig } from '../pages/Settings/SettingsView';
 import { DiagnosticsService, DiagnosticCheck } from '../logic/diagnostics';
+import { AuthStatus } from '../services/AuthService';
 
 export interface DoctorModalProps {
   isOpen: boolean;
@@ -10,6 +11,9 @@ export interface DoctorModalProps {
   byokKeys: Record<string, string>;
   modelsCatalog: ModelConfig[];
   unsandboxedActions: boolean;
+  authStatus?: AuthStatus;
+  ownerName?: string | null;
+  telegramConfigured?: boolean;
 }
 
 export const DoctorModal: React.FC<DoctorModalProps> = ({
@@ -17,7 +21,10 @@ export const DoctorModal: React.FC<DoctorModalProps> = ({
   onClose,
   byokKeys,
   modelsCatalog,
-  unsandboxedActions
+  unsandboxedActions,
+  authStatus,
+  ownerName,
+  telegramConfigured,
 }) => {
   const [loading, setLoading] = useState(false);
   const [checks, setChecks] = useState<DiagnosticCheck[]>([]);
@@ -25,7 +32,13 @@ export const DoctorModal: React.FC<DoctorModalProps> = ({
   const runDiagnostics = () => {
     setLoading(true);
     setTimeout(() => {
-      setChecks(DiagnosticsService.buildChecks(byokKeys, modelsCatalog.length, unsandboxedActions));
+      setChecks(
+        DiagnosticsService.buildChecks(byokKeys, modelsCatalog.length, unsandboxedActions, {
+          authStatus,
+          ownerName,
+          telegramConfigured,
+        })
+      );
       setLoading(false);
     }, 600);
   };
@@ -34,7 +47,7 @@ export const DoctorModal: React.FC<DoctorModalProps> = ({
     if (isOpen) {
       runDiagnostics();
     }
-  }, [isOpen, byokKeys, modelsCatalog, unsandboxedActions]);
+  }, [isOpen, byokKeys, modelsCatalog, unsandboxedActions, authStatus, ownerName, telegramConfigured]);
 
   if (!isOpen) return null;
 

@@ -9,6 +9,8 @@ export interface AuthStatus {
   version?: string;
   isLockedOut?: boolean;
   backendConnected?: boolean;
+  isDefaultPassword?: boolean;
+  isDaemonOnline?: boolean;
 }
 
 function getApiBaseUrl(): string {
@@ -90,6 +92,20 @@ class AuthServiceClass {
     return null;
   }
 
+  private async checkDefaultPasswordViaIpc(): Promise<boolean> {
+    try {
+      const ipc = getIpc();
+      if (!ipc) return false;
+      interface DefaultPwPayload {
+        isDefaultPassword?: boolean;
+      }
+      const res = (await ipc.invoke('web_is_default_password')) as DefaultPwPayload | null | undefined;
+      return Boolean(res?.isDefaultPassword);
+    } catch {
+      return false;
+    }
+  }
+
   public async checkStatus(): Promise<AuthStatus> {
     if (this.checkInFlight) {
       return this.checkInFlight;
@@ -121,33 +137,41 @@ class AuthServiceClass {
             authenticated: Boolean(data.authenticated),
             authRequired: Boolean(data.authRequired),
             passwordSet: Boolean(data.passwordSet),
+            isDefaultPassword: Boolean(data.isDefaultPassword),
             ownerName: owner,
             user: data.user ?? null,
             version: data.version,
             backendConnected: true,
+            isDaemonOnline: true,
           };
         } else {
           // Fallback if rejected (e.g. 401 unauthenticated with invalid token)
           const owner = await this.resolveOwnerNameFromSettings();
+          const isDefault = await this.checkDefaultPasswordViaIpc();
           this.currentStatus = {
             authenticated: false,
             authRequired: true,
             passwordSet: true,
+            isDefaultPassword: isDefault,
             ownerName: owner || this.currentStatus.ownerName,
             backendConnected: true,
+            isDaemonOnline: true,
           };
         }
       } catch {
         // Backend offline or unreachable - check IPC settings directly
         const owner = await this.resolveOwnerNameFromSettings();
+        const isDefault = await this.checkDefaultPasswordViaIpc();
         this.currentStatus = {
           authenticated: false,
           authRequired: true,
           // Guard: Never assume password is unset if the backend is offline/unreachable.
           // Setting this to false causes the UI to render the master password setup wizard.
           passwordSet: true,
+          isDefaultPassword: isDefault,
           ownerName: owner || this.currentStatus.ownerName,
           backendConnected: false,
+          isDaemonOnline: false,
         };
       } finally {
         this.checkInFlight = null;

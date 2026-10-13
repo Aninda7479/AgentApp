@@ -555,6 +555,14 @@ pub fn web_change_password(current: Option<String>, next: Option<String>) -> ser
 }
 
 #[tauri::command]
+pub fn web_is_default_password() -> serde_json::Value {
+    let superagent_dir = superagent_core_v2::storage::settings::get_superagent_dir();
+    let auth_store = superagent_core_v2::storage::AuthStore::new(superagent_dir);
+    let is_default = auth_store.verify_password("admin", "admin");
+    serde_json::json!({ "isDefaultPassword": is_default })
+}
+
+#[tauri::command]
 pub fn store_read() -> serde_json::Value {
     let settings_val = settings_read();
     let providers = settings_val

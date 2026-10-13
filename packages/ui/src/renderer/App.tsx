@@ -27,6 +27,8 @@ import { LoadingScreen } from './components/LoadingScreen';
 import { WorkspaceView } from './pages/Workspace/WorkspaceView';
 import { OnboardingWizard } from './components/OnboardingWizard';
 import { HostSetupModal } from './components/HostSetupModal';
+import { DefaultPasswordAlertModal } from './components/DefaultPasswordAlertModal';
+import { SystemReadinessBanners } from './components/SystemReadinessBanners';
 import { ProjectSettingsModal } from './pages/Workspace/ProjectSettingsModal';
 import { StandaloneChatPage } from './pages/Workspace/StandaloneChatPage';
 import { builtinSuggestions, SkillInfo } from './components/slashCommands';
@@ -349,6 +351,30 @@ export const App: React.FC = () => {
       return false;
     }
   });
+  const [missingModelDismissed, setMissingModelDismissed] = useState<boolean>(() => {
+    try {
+      return typeof sessionStorage !== 'undefined' && sessionStorage.getItem('superagent_missing_model_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [daemonOfflineDismissed, setDaemonOfflineDismissed] = useState<boolean>(() => {
+    try {
+      return typeof sessionStorage !== 'undefined' && sessionStorage.getItem('superagent_daemon_offline_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [defaultPasswordDismissed, setDefaultPasswordDismissed] = useState<boolean>(() => {
+    try {
+      return typeof sessionStorage !== 'undefined' && sessionStorage.getItem('superagent_default_password_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [ignoreDefaultPasswordWarning, setIgnoreDefaultPasswordWarning] = useState<boolean>(false);
+  const [isRestartingDaemon, setIsRestartingDaemon] = useState<boolean>(false);
+  const [telegramConfigured, setTelegramConfigured] = useState<boolean>(false);
   const [setupCompleted, setSetupCompleted] = useState<boolean>(() => {
     try {
       return typeof localStorage !== 'undefined' && localStorage.getItem('superagent_setup_completed') === 'true';
@@ -414,9 +440,57 @@ export const App: React.FC = () => {
             }
           } catch {}
         }
+        if (current?.telegram?.botToken && typeof current.telegram.botToken === 'string' && current.telegram.botToken.trim()) {
+          setTelegramConfigured(true);
+        }
+        if (current?.general?.ignoreDefaultPasswordWarning === true) {
+          setIgnoreDefaultPasswordWarning(true);
+        }
       })
       .catch(() => {});
   }, [ipc]);
+
+  const handleIgnoreDefaultPassword = () => {
+    setIgnoreDefaultPasswordWarning(true);
+    setDefaultPasswordDismissed(true);
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('superagent_default_password_dismissed', 'true');
+      }
+    } catch {}
+    if (ipc) {
+      ipc.invoke('settings-read')
+        .then((current: any) => {
+          return ipc.invoke('settings-write', {
+            ...current,
+            general: {
+              ...current?.general,
+              ignoreDefaultPasswordWarning: true,
+            },
+          });
+        })
+        .catch(() => {});
+    }
+  };
+
+  const handleRestartDaemon = async () => {
+    setIsRestartingDaemon(true);
+    try {
+      if (ipc) {
+        await ipc.invoke('web-start', { port: 1469 });
+      }
+      await AuthService.checkStatusWithRetry(4, 500);
+    } catch {
+      /* ignore */
+    } finally {
+      setIsRestartingDaemon(false);
+    }
+  };
+
+  const handleGoToConnectProvider = () => {
+    setActiveTab('settings');
+    setSettingsCategory('providers');
+  };
 
   // ── Live-state mirror so logic classes can read fresh values ───────────────
   const stateRef = useRef({
@@ -1876,6 +1950,41 @@ export const App: React.FC = () => {
         }}
       />
 
+      {/* System Readiness & Status Banners */}
+      <SystemReadinessBanners
+        showMissingModel={SetupService.shouldShowMissingModelBanner({
+          bootstrapping,
+          setupCompleted,
+          modelsCatalog,
+          dismissed: missingModelDismissed,
+        })}
+        onConnectProvider={handleGoToConnectProvider}
+        onDismissMissingModel={() => {
+          setMissingModelDismissed(true);
+          try {
+            if (typeof sessionStorage !== 'undefined') {
+              sessionStorage.setItem('superagent_missing_model_dismissed', 'true');
+            }
+          } catch {}
+        }}
+        showDaemonOffline={SetupService.shouldShowDaemonOfflineBanner({
+          loading,
+          authStatus,
+          dismissed: daemonOfflineDismissed,
+        })}
+        onRestartDaemon={handleRestartDaemon}
+        onOpenDoctor={() => setIsDoctorOpen(true)}
+        onDismissDaemonOffline={() => {
+          setDaemonOfflineDismissed(true);
+          try {
+            if (typeof sessionStorage !== 'undefined') {
+              sessionStorage.setItem('superagent_daemon_offline_dismissed', 'true');
+            }
+          } catch {}
+        }}
+        isRestartingDaemon={isRestartingDaemon}
+      />
+
       {/* Main Body container */}
       <div className={`flex-1 flex overflow-hidden overflow-x-hidden relative min-w-0 ${(mobileNavOpen || mobileRightOpen) ? 'z-50' : 'z-10 lg:z-auto'}`}>
         {/* Mobile drawer backdrop */}
@@ -2223,7 +2332,16 @@ export const App: React.FC = () => {
       <ShortcutsModal isOpen={isShortcutsOpen} onClose={() => setIsShortcutsOpen(false)} />
 
       {/* Doctor Diagnostics Modal */}
-      <DoctorModal isOpen={isDoctorOpen} onClose={() => setIsDoctorOpen(false)} byokKeys={byokKeys} modelsCatalog={modelsCatalog} unsandboxedActions={fullAccess} />
+      <DoctorModal
+        isOpen={isDoctorOpen}
+        onClose={() => setIsDoctorOpen(false)}
+        byokKeys={byokKeys}
+        modelsCatalog={modelsCatalog}
+        unsandboxedActions={fullAccess}
+        authStatus={authStatus}
+        ownerName={authStatus.ownerName}
+        telegramConfigured={telegramConfigured}
+      />
 
       {/* Sandbox permission prompt — user-in-the-loop approval */}
       <PermissionDialog
@@ -2320,6 +2438,37 @@ export const App: React.FC = () => {
                 sessionStorage.setItem('superagent_host_setup_dismissed', 'true');
               }
             } catch {}
+          }}
+        />
+      )}
+
+      {/* Default Password Security Alert */}
+      {SetupService.shouldShowDefaultPasswordAlert({
+        bootstrapping,
+        authStatus,
+        ignoreWarning: ignoreDefaultPasswordWarning,
+        dismissed: defaultPasswordDismissed,
+        onboardingVisible: SetupService.shouldShowOnboardingWizard({
+          bootstrapping,
+          setupCompleted,
+          onboardingDismissed,
+          authStatus,
+        }),
+      }) && (
+        <DefaultPasswordAlertModal
+          isOpen={true}
+          onClose={() => {
+            setDefaultPasswordDismissed(true);
+            try {
+              if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.setItem('superagent_default_password_dismissed', 'true');
+              }
+            } catch {}
+          }}
+          onIgnore={handleIgnoreDefaultPassword}
+          onPasswordChanged={() => {
+            setDefaultPasswordDismissed(true);
+            void AuthService.checkStatus();
           }}
         />
       )}
