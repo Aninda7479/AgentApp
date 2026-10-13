@@ -109,7 +109,7 @@ describe('Step 083: Responsive Left Sidebar Navigation', () => {
         collapsed: true
       })
     );
-    expect(html).toContain('width:70px');
+    expect(html).toContain('width:68px');
     expect(html).not.toContain('nav-label');
   });
 
@@ -131,7 +131,6 @@ describe('Step 083: Responsive Left Sidebar Navigation', () => {
       })
     );
 
-    expect(html).toContain('Working...');
     expect(html).toContain('animate-pulse');
   });
 

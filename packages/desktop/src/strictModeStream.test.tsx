@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import React, { useState } from 'react';
+import React, { useState, act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { act } from 'react-dom/test-utils';
+
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 // Replicates StoreService.updateChatSteps' pattern INSIDE React.StrictMode,
 // which double-invokes updaters. We want to confirm the nested setTrajectorySteps

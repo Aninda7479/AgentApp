@@ -1,3 +1,4 @@
+process.env.VITE_CONFIG_NATIVE_IGNORE_WARNING = 'true';
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'path';
 
@@ -18,7 +19,8 @@ export default defineConfig({
       'dist/**',
       'node_modules/**'
     ],
-    environment: 'jsdom'
+    environment: 'jsdom',
+    setupFiles: [resolve(__dirname, 'test/setup.ts')]
   }
 });
 

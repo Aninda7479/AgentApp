@@ -7,6 +7,8 @@ import { PeekingTaskDeck } from './PeekingTaskDeck';
 import { sessionStore } from '../../stores/sessionStore';
 import { chatStore } from '../../stores/chatStore';
 
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
 describe('PeekingTaskDeck Component', () => {
   beforeEach(() => {
     chatStore.setActiveChatId('chat-test-1');

@@ -1,9 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as THREE from 'three';
 import { Lily } from '../models/lily/index';
 
 describe('Lily 3D model (anime girl)', () => {
-  const make = () => new Lily('#ff8fb3');
+  const make = () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      return new Lily('#ff8fb3');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  };
 
   it('builds with the required joint hierarchy intact', () => {
     const l = make();

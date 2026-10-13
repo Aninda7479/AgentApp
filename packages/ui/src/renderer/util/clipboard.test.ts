@@ -156,8 +156,10 @@ describe('copyToClipboard', () => {
       writable: true,
     });
 
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const result = await copyToClipboard('failed text');
     expect(result).toBe(false);
+    warnSpy.mockRestore();
   });
 });
 

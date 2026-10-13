@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { UpdatesSettings } from '../src/renderer/pages/Settings/UpdatesSettings';
 
@@ -12,6 +12,14 @@ vi.mock('../src/renderer/lib/ipc', () => ({
 }));
 
 describe('UpdatesSettings UI', () => {
+  beforeEach(() => {
+    (window as any).__TAURI_INTERNALS__ = {};
+  });
+
+  afterEach(() => {
+    delete (window as any).__TAURI_INTERNALS__;
+  });
+
   it('renders the current version and update button', () => {
     const html = renderToString(
       <UpdatesSettings 

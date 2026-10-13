@@ -68,6 +68,7 @@ describe('imageService', () => {
   });
 
   it('returns default fallback status if engine status fetch fails', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network offline'));
 
     const status = await getEngineStatus();
@@ -76,6 +77,7 @@ describe('imageService', () => {
       is_running: false,
       is_downloading: false,
     });
+    errorSpy.mockRestore();
   });
 
   it('constructs fully-qualified image URL using API base URL', () => {
