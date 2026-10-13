@@ -10,13 +10,18 @@
 | Domain / Capability | Primary Package | Language / Stack | Targeted Verification Command | Subagent Role |
 | :--- | :--- | :--- | :--- | :--- |
 | **Agent Engine, LLMs, Tools, WS Server** | `packages/core_v2` | Rust (Axum, Tokio) | `cargo check -p superagent-core-v2` | `Core Specialist` |
-| **Desktop Shell, OS Windows, Tray** | `packages/desktop` | Rust (Tauri v2) + TS | `cargo check -p superagent-desktop-app` | `Desktop Specialist` |
-| **Frontend UI, React Components, Styles** | `packages/ui` | React 18, Tailwind v4 | `npm run build:tsc --workspace=@superagent/ui` | `UI Specialist` |
+| **Canonical Wire Protocol** | `packages/core_v2/src/protocol` | Rust (Serde) | `cargo test -p superagent-core-v2 protocol` | `Core Specialist` |
+| **Dedicated Web Client (Browser)** | `clients/web` | React 18 (Vite, TS) | `npm run test:web` / `npm run build:web` | `Web Specialist` |
+| **Dedicated Linux Client (GTK4)** | `clients/linux` | Rust (GTK4, Libadwaita) | `cargo test -p superagent-linux-client` | `Linux Specialist` |
+| **Dedicated macOS Client (SwiftUI)** | `clients/macos` | Swift 5.9 (SwiftUI) | `swift test` (or Xcode) | `macOS Specialist` |
+| **Dedicated Windows Client (WinUI 3)** | `clients/windows` | C# / .NET 8 (WinUI 3) | `dotnet test` (or Visual Studio) | `Windows Specialist` |
+| **Desktop Shell (Legacy Tauri)** | `packages/desktop` | Rust (Tauri v2) + TS | `cargo check -p superagent-desktop-app` | `Desktop Specialist` |
+| **Shared UI Bundle (Legacy React)** | `packages/ui` | React 18, Tailwind v4 | `npm run build:tsc --workspace=@superagent/ui` | `UI Specialist` |
 | **Browser Extension (MV3)** | `packages/browser-extension` | TypeScript (Vite) | `npx tsc -p packages/browser-extension/tsconfig.json --noEmit` | `Extension Specialist` |
 | **Terminal CLI & TUI** | `packages/cli` | Rust (Ratatui, Clap) | `cargo check -p superagent-cli` | `CLI Specialist` |
-| **Voice Dictation Native Overlay** | `packages/dictation-native` | Rust (egui, cpal) | `cargo check -p superagent-dictation-native` | `Native Overlay Specialist` |
+| **Voice Dictation Native Overlay** | `packages/dictation-native` | Rust (egui, cpal) | `cargo test -p superagent-dictation-native` | `Native Overlay Specialist` |
 | **Circle-to-Search Native Overlay** | `packages/circle-search-native` | Rust (egui, eframe) | `cargo check -p superagent-circle-search-native` | `Native Overlay Specialist` |
-| **Artifacts Native Overlay** | `packages/artifacts-native` | Rust | `cargo check -p superagent-artifacts-native` | `Native Overlay Specialist` |
+| **Artifacts Native Overlay** | `packages/artifacts-native` | Rust | `cargo test -p superagent-artifacts-native` | `Native Overlay Specialist` |
 | **Archived / Deprecated Core** | `legacy/` | TypeScript | 🚫 **NEVER TOUCH / READ ONLY** | N/A |
 
 ---
@@ -26,13 +31,20 @@
 ### `packages/core_v2` (Pure Rust Intelligence Engine)
 * **Role**: The central nervous system of SuperAgent. Runs as a background daemon on port `1469` (`http://` and `ws://`).
 * **Sub-modules**:
+  * `src/protocol/`: [NEW] Canonical wire contract: constants (`commands.rs`), typed events (`events.rs`), and envelopes (`dtos.rs`).
   * `src/orchestrator/`: ReAct loop, step planning, tool execution coordination.
   * `src/providers/`: LLM client integrations (OpenAI, Anthropic, Gemini, Groq, DeepSeek).
   * `src/tools/`: Built-in agent tools (filesystem, shell, browser, web search).
   * `src/memory/`: Session context window management, message compaction, sliding-window buffers.
-  * `src/server/`: Axum HTTP and WebSocket `/ws` server for IPC communication with all frontends.
-  * `src/storage/`: Settings store, scrypt-hashed auth store, workspace lock file, chat history.
+  * `src/server/`: Axum HTTP and WebSocket `/ws` server with session-scoped subscription event filtering.
+  * `src/storage/`: Settings store, scrypt-hashed auth store, workspace lock file (`web-server.lock`), chat history.
 * **Strict Boundary Rule**: Does not depend on any frontend package. Communicates exclusively via structured JSON-RPC / WebSocket events over port 1469.
+
+### `clients/` (Dedicated Platform-Native Frontends)
+* **`clients/web/`**: Pure browser PWA client (`@superagent/web-client`). Built with Vite and React 18, communicating directly with the daemon via HTTP IPC and WebSocket.
+* **`clients/linux/`**: Native Linux GTK4 / Libadwaita client (`superagent-linux-client`). Features `AdwApplicationWindow`, `NavigationSplitView`, chat streaming, and dynamic lockfile port discovery.
+* **`clients/macos/`**: Native macOS client written in Swift 5.9 with SwiftUI. Features macOS window grouping, native menu bar commands, `NavigationSplitView`, URLSession HTTP/2, and Combine WebSocket streaming.
+* **`clients/windows/`**: Native Windows 11 client written in C# / .NET 8 with WinUI 3 (Windows App SDK). Features Mica backdrop material, Fluent controls, MVVM architecture (`CommunityToolkit.Mvvm`), and full-duplex ClientWebSocket.
 
 ### `packages/ui` (Shared React Frontend)
 * **Role**: Houses all user interface components, pages, hooks, state stores, and VRM 3D companion models.
