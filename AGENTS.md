@@ -11,9 +11,9 @@ Clear operational boundaries for what you must **NEVER** do in this repository:
 - 🚫 **NEVER touch or modify `legacy/`**: The `legacy/` directory (`legacy/core`) is the retired, deprecated TypeScript core kept solely for historical reference. The active, production intelligence engine is **`packages/core_v2`** (pure Rust). Any edits in `legacy/` are strictly forbidden and will be rejected.
 - 🚫 **NEVER commit directly to `main`, `master`, or `release`**: All work must occur on dedicated feature/fix branches and merge via pull requests. Direct pushes to release branches are blocked.
 - 🚫 **NEVER commit secrets, credentials, or private API keys**: Never hardcode, stage, or commit API keys (OpenAI, Anthropic, Gemini, Groq, DeepSeek, OpenRouter, Telegram bot tokens), private keys, session tokens, or local credentials (`auth.json`, `.env`). Always check your git diff before staging.
-- 🚫 **NEVER introduce explicit `any` types in TypeScript**: In `@superagent/ui`, `@superagent/desktop`, and `@superagent/browser-extension`, write explicit interfaces, types, or generics. Maintain strict TypeScript compliance (`noImplicitAny`).
+- 🚫 **NEVER introduce explicit `any` types in TypeScript**: In `@superagent/ui`, `@superagent/web-client` (`clients/web`), `@superagent/desktop`, and `@superagent/browser-extension`, write explicit interfaces, types, or generics. Maintain strict TypeScript compliance (`noImplicitAny`).
 - 🚫 **NEVER perform broad formatting sweeps across untouched files**: Keep PR diffs tight and focused on the functional change. Do not run mass reformatters, newline normalizers, or prettier passes on code you did not change.
-- 🚫 **NEVER break the Core-to-UI IPC / WebSocket protocol silently**: The backend daemon (`packages/core_v2`) and frontend surfaces (`@superagent/ui`, `@superagent/desktop`, `@superagent/browser-extension`) communicate via WebSocket and JSON-RPC (`/ws` at port `1469`). Never change event names or payload structures without updating all client consumers in lockstep.
+- 🚫 **NEVER break the Core-to-UI IPC / WebSocket protocol silently**: The backend daemon (`packages/core_v2`) and all client surfaces communicate via WebSocket and JSON-RPC (`/ws` at port `1469`). The canonical wire contract is defined in `packages/core_v2/src/protocol/` (`commands.rs`, `events.rs`, `dtos.rs`). Never change event names or payload structures without updating all client consumers in lockstep.
 - 🚫 **NEVER disable or weaken security/auth guards**: The `AuthStore` in `packages/core_v2` enforces scrypt-hashed password authentication, constant-time validation, and signed session cookies. Do not disable authentication checks, remove CSRF protections, or permit unauthorized route access in production code.
 - 🚫 **NEVER delete or alter copyright and attribution notices**: SuperAgent is licensed under Apache 2.0 / GPL-3.0. Preserving attribution in `NOTICE` and license headers is mandatory per License Section 4(d).
 
@@ -80,8 +80,14 @@ npm test
 | :--- | :--- | :--- | :--- |
 | **Full Monorepo** | Rust + TS | Cargo + Vitest | `npm test` |
 | **Core Engine** (`packages/core_v2`) | Rust | Cargo | `npm run test:core`<br>_or_ `cargo test -p superagent-core-v2` |
-| **UI Components** (`packages/ui`) | TypeScript | Vitest | `npm run test:ui`<br>_or_ `npm test --workspace=@superagent/ui` |
-| **Desktop Shell** (`packages/desktop`) | TypeScript | Vitest | `npm run test:desktop`<br>_or_ `npm test --workspace=@superagent/desktop` |
+| **Dedicated Web Client** (`clients/web`) | TypeScript | Vitest | `npm run test:web`<br>_or_ `npm test --workspace=@superagent/web-client` |
+| **Dedicated Linux Client** (`clients/linux`) | Rust | Cargo | `cargo test -p superagent-linux-client` |
+| **Dedicated macOS Client** (`clients/macos`) | Swift | SwiftPM / XCTest | `cd clients/macos && swift test` |
+| **Dedicated Windows Client** (`clients/windows`) | C# | dotnet test | `dotnet test clients/windows/SuperAgent.Tests/SuperAgent.Tests.csproj` |
+| **Voice Dictation Overlay** (`packages/dictation-native`) | Rust | Cargo | `cargo test -p superagent-dictation-native` |
+| **Artifacts Overlay** (`packages/artifacts-native`) | Rust | Cargo | `cargo test -p superagent-artifacts-native` |
+| **UI Components (Legacy/Shared)** (`packages/ui`) | TypeScript | Vitest | `npm run test:ui`<br>_or_ `npm test --workspace=@superagent/ui` |
+| **Desktop Shell (Legacy Tauri)** (`packages/desktop`) | TypeScript | Vitest | `npm run test:desktop`<br>_or_ `npm test --workspace=@superagent/desktop` |
 | **CLI & TUI** (`packages/cli`) | Rust | Cargo | `npm run test:cli`<br>_or_ `cargo test -p superagent-cli` |
 | **Browser Extension** (`packages/browser-extension`) | TypeScript | Vitest | `npm run test:ext`<br>_or_ `npm test --workspace=@superagent/browser-extension` |
 
@@ -109,7 +115,15 @@ npm test
   cargo clippy --workspace --all-targets -- -D warnings
   ```
 
-### TypeScript & Frontend (`packages/ui`, `packages/desktop`, `packages/browser-extension`)
+### TypeScript & Frontend (`clients/web`, `packages/ui`, `packages/desktop`, `packages/browser-extension`)
+- **Type Check Dedicated Web Client**:
+  ```bash
+  npx tsc -p clients/web/tsconfig.json --noEmit
+  ```
+- **Bundle Dedicated Web Client with Vite**:
+  ```bash
+  npm run build:web
+  ```
 - **Type Check UI package**:
   ```bash
   npm run build:tsc --workspace=@superagent/ui
@@ -129,6 +143,21 @@ npm test
 - **Run Vitest in Interactive Watch Mode**:
   ```bash
   npx vitest --project packages/ui
+  ```
+
+### Dedicated Native Desktop Frontends (`clients/macos`, `clients/windows`, `clients/linux`)
+- **Check Linux Client (Rust / GTK4)**:
+  ```bash
+  cargo check -p superagent-linux-client
+  ```
+- **Build & Test macOS Client (Swift / SwiftUI)**:
+  ```bash
+  cd clients/macos && swift build && swift test
+  ```
+- **Build & Test Windows Client (C# / WinUI 3)**:
+  ```bash
+  dotnet build clients/windows/SuperAgent.sln -c Release
+  dotnet test clients/windows/SuperAgent.Tests/SuperAgent.Tests.csproj
   ```
 
 ---
@@ -212,12 +241,18 @@ Environment variables can be provided inline or in your shell environment (no `.
 AgentApp/
 ├── Cargo.toml                    # Root Rust workspace configuration (resolver = "2")
 ├── package.json                  # Root npm monorepo configuration (npm workspaces)
+├── clients/                      # [ACTIVE] Dedicated Platform-Native Frontends
+│   ├── web/                      # Dedicated React 18 browser PWA (@superagent/web-client)
+│   ├── linux/                    # Native GTK4 / Libadwaita client in pure Rust
+│   ├── macos/                    # Native Swift 5.9 / SwiftUI application (Package.swift)
+│   └── windows/                  # Native WinUI 3 / C# application (SuperAgent.sln)
 ├── packages/
 │   ├── core_v2/                  # [ACTIVE] Pure Rust Agent Intelligence Engine & Daemon
 │   │   ├── Cargo.toml            # Package manifest for superagent-core-v2 & daemon
 │   │   └── src/
 │   │       ├── main.rs           # Daemon binary entrypoint (superagent-core-daemon)
 │   │       ├── lib.rs            # Library exports
+│   │       ├── protocol/         # Canonical wire contract (commands, events, DTOs)
 │   │       ├── orchestrator/     # Autonomous agent loop, planning, and task execution
 │   │       ├── providers/        # LLM clients (OpenAI, Anthropic, Gemini, Groq, etc.)
 │   │       ├── mcp/              # Model Context Protocol (MCP) client implementation
@@ -227,12 +262,12 @@ AgentApp/
 │   │       ├── storage/          # Settings, auth (scrypt), lock, and chat stores
 │   │       ├── image_workspace/  # Image processing, generations, and prompt pipelines
 │   │       └── video_workspace/  # Video generation, FFmpeg bindings, and models
-│   ├── ui/                       # [ACTIVE] Shared React 18 UI across Desktop and Web
+│   ├── ui/                       # [LEGACY/SHARED] React 18 UI components
 │   │   ├── package.json          # @superagent/ui package manifest
 │   │   ├── src/                  # React components, pages, hooks, state stores
 │   │   ├── models/               # VRM 3D companion models and animations
 │   │   └── scripts/build-ui.mjs  # esbuild + Tailwind CSS v4 compiler script
-│   ├── desktop/                  # [ACTIVE] Tauri v2 desktop host wrapper
+│   ├── desktop/                  # [LEGACY HOST] Tauri v2 desktop host wrapper
 │   │   ├── package.json          # @superagent/desktop package manifest
 │   │   └── src-tauri/            # Rust native shell, tray icon, OS windows, shortcuts
 │   ├── cli/                      # [ACTIVE] Pure Rust Terminal TUI & CLI
@@ -243,9 +278,12 @@ AgentApp/
 │   │   ├── src/                  # Background service worker, popup, and sidepanel
 │   │   └── test/                 # Vitest test suite for extension
 │   ├── circle-search-native/     # Native Rust overlay for circle-to-search (egui/eframe)
-│   └── dictation-native/         # Native Rust overlay for global voice dictation (egui/cpal)
+│   ├── dictation-native/         # Native Rust overlay for global voice dictation (egui/cpal)
+│   └── artifacts-native/         # Native Rust overlay for artifacts inspector (egui/eframe)
 ├── website/                      # Official marketing and docs site (Vite + React Router)
-├── docs/                         # Developer architecture and installation guides
+├── docs/                         # Living architecture maps, migration logs, and guides
+│   ├── PROJECT_MAP.md            # Living domain ownership and package navigation matrix
+│   └── MIGRATION_LOG.md          # Multi-phase agent execution ledger & checkpoints
 ├── scripts/                      # Version-bumping, updater JSON, and release notes scripts
 ├── .github/
 │   └── workflows/                # CI cross-platform matrix, PR auto-loop, releases
@@ -318,6 +356,11 @@ Always consult [`docs/PROJECT_MAP.md`](docs/PROJECT_MAP.md) before initiating ch
 ### B. Strict Targeted Verification (Fast Iteration Loop)
 Do **not** run the entire monorepo test suite (`npm test`) on minor incremental changes. Strictly verify against the target package being modified:
 - **Core Engine changes**: `cargo check -p superagent-core-v2`
+- **Canonical Protocol changes**: `cargo test -p superagent-core-v2 protocol`
+- **Dedicated Web Client changes**: `npm run test:web` (or `npm run build:web`)
+- **Dedicated Linux Client changes**: `cargo test -p superagent-linux-client`
+- **Dedicated macOS Client changes**: `cd clients/macos && swift test`
+- **Dedicated Windows Client changes**: `dotnet test clients/windows/SuperAgent.Tests/SuperAgent.Tests.csproj`
 - **CLI changes**: `cargo check -p superagent-cli`
 - **Desktop host changes**: `cargo check -p superagent-desktop-app`
 - **UI changes**: `npm run build:tsc --workspace=@superagent/ui`
@@ -325,8 +368,12 @@ Do **not** run the entire monorepo test suite (`npm test`) on minor incremental 
 
 ### C. Subagent Task Delegation
 For large or multi-package features, do not attempt to hold all crate details in a single chat context. Decompose the task and delegate:
-1. **Core Specialist Subagent**: Implements backend Rust data structures, storage, and WebSocket RPC in `packages/core_v2`.
-2. **UI Specialist Subagent**: Implements frontend React components and state stores in `packages/ui`.
-3. **Host / Shell Subagent**: Handles native desktop wrappers in `packages/desktop` or native overlays.
+1. **Core Specialist Subagent**: Implements backend Rust data structures, storage, canonical protocol definitions, and WebSocket RPC in `packages/core_v2`.
+2. **Web Specialist Subagent**: Implements browser PWA features in `clients/web` and shared React components in `packages/ui`.
+3. **Linux Specialist Subagent**: Implements native GTK4 / Libadwaita application views and logic in `clients/linux`.
+4. **macOS Specialist Subagent**: Implements native Swift 5.9 / SwiftUI views and URLSession networking in `clients/macos`.
+5. **Windows Specialist Subagent**: Implements native WinUI 3 XAML views, ViewModels, and ClientWebSocket networking in `clients/windows`.
+6. **Native Overlay Specialist Subagent**: Handles native egui overlays in `packages/dictation-native`, `packages/artifacts-native`, and `packages/circle-search-native`.
 Each subagent executes in a fresh, unpolluted context window and reports concise verification results back to the primary session.
+
 
