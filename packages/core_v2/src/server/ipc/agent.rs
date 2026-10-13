@@ -10,10 +10,10 @@ use crate::server::ipc::usage::record_usage;
 use crate::server::routes::chat::resolve_active_workspace_model;
 use crate::server::state::{AppState, SessionStateEntry};
 use crate::tools::builtin::{
-    CreateArtifactAppTool, EditFileTool, GetAvailableToolsTool, GlobTool, GrepSearchTool,
-    ListArtifactsTool, ListDirTool, PeekTaskTool, PlanTool, QuestionTool, ReadArtifactTool,
-    ReadFileTool, RecallMemoryTool, RunCommandTool, RunSubagentTool, SkillTool, SleepTimerTool,
-    TaskManager, TelegramTool, TodoTool, WriteFileTool,
+    AskQuestionTool, CreateArtifactAppTool, EditFileTool, GetAvailableToolsTool, GlobTool,
+    GrepSearchTool, ListArtifactsTool, ListDirTool, PeekTaskTool, PlanTool, QuestionTool,
+    ReadArtifactTool, ReadFileTool, RecallMemoryTool, RunCommandTool, RunSubagentTool, SkillTool,
+    SleepTimerTool, TaskManager, TelegramTool, TodoTool, WriteFileTool,
 };
 use crate::tools::ToolRegistry;
 use crate::types::{ModelConfig, ProviderType};
@@ -489,6 +489,7 @@ pub async fn handle_agent_channel(
                 session_tool_registry.register(ListArtifactsTool::new());
                 session_tool_registry.register(ReadArtifactTool::new());
                 session_tool_registry.register(QuestionTool::new());
+                session_tool_registry.register(AskQuestionTool::new());
                 session_tool_registry.register(SleepTimerTool::new());
                 session_tool_registry.register(PlanTool::new());
                 session_tool_registry.register(TodoTool::new());
@@ -579,7 +580,9 @@ pub async fn handle_agent_channel(
                     let has_create_artifact = tool_names
                         .iter()
                         .any(|t| t == "create_artifact_app" || t == "create_artifact");
-                    let has_question = tool_names.iter().any(|t| t == "question");
+                    let has_question = tool_names
+                        .iter()
+                        .any(|t| t == "question" || t == "ask_question");
 
                     let artifact_instruction = if has_create_artifact {
                         "When the user requests an artifact, micro-app, or interactive tool, use the 'create_artifact_app' tool to deliver a fully functional, self-contained application:\n\
@@ -594,7 +597,7 @@ pub async fn handle_agent_channel(
                     };
 
                     let question_guideline = if has_question {
-                        "- When you need clarification or want to ask the user a question or quiz, use the 'question' tool.\n"
+                        "- When you need clarification, user choices, or want to ask the user a question or quiz (system ask), call the 'ask_question' (or 'question') tool with structured options. This transforms the user's compose box into an interactive selection UI.\n"
                     } else {
                         ""
                     };

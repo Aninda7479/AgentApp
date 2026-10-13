@@ -27,6 +27,8 @@ import { TaskRecorderModal } from './TaskRecorderModal';
 import type { ComposerOptions, ComposerAttachment } from '../core/types';
 import { getIpc } from '../lib/ipc';
 import { useLastUsedModel, providerStore } from '../stores/providerStore';
+import { usePendingQuestion, questionStore } from '../stores/questionStore';
+import { InteractiveQuestionComposer } from './InteractiveQuestionComposer';
 import { readClipboardText } from '../util/clipboard';
 
 interface ComposerBarProps {
@@ -52,6 +54,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({
 }) => {
   const [prompt, setPrompt] = useState('');
   const lastUsedModel = useLastUsedModel();
+  const pendingQuestion = usePendingQuestion(chatId);
   const [approvalMode, setApprovalMode] = useState<'ask' | 'always' | 'never'>('ask');
   const [isPermissionOpen, setIsPermissionOpen] = useState(false);
   const permissionRef = useRef<HTMLDivElement>(null);
@@ -426,14 +429,27 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({
 
       {/* Main Composer Box */}
       <div className="flex flex-col gap-1.5 w-full">
-        {/* Capsule Container Card (Houses PeekingTaskDeck extension, Attachments, and Input Text Area) */}
-        <div
-          className={`relative w-full min-w-0 flex flex-col rounded-2xl sm:rounded-[22px] border transition-all duration-200 shadow-lg overflow-hidden ${
-            isDraggingOver
-              ? 'bg-cyan-950/40 border-cyan-500/80 ring-2 ring-cyan-500/30'
-              : 'bg-brand-card/90 border-brand-border hover:border-brand-borderStrong focus-within:border-brand-borderStrong focus-within:ring-1 focus-within:ring-brand-borderStrong/30 backdrop-blur-xl'
-          }`}
-        >
+        {pendingQuestion ? (
+          <InteractiveQuestionComposer
+            pendingQuestion={pendingQuestion}
+            disabled={disabled}
+            onSubmit={(answerPrompt) => {
+              questionStore.clearPendingQuestion(chatId);
+              onSend(answerPrompt, { approvalMode, sandbox, orchestratorEnabled }, []);
+            }}
+            onDismiss={() => {
+              questionStore.clearPendingQuestion(chatId);
+            }}
+          />
+        ) : (
+          /* Capsule Container Card (Houses PeekingTaskDeck extension, Attachments, and Input Text Area) */
+          <div
+            className={`relative w-full min-w-0 flex flex-col rounded-2xl sm:rounded-[22px] border transition-all duration-200 shadow-lg overflow-hidden ${
+              isDraggingOver
+                ? 'bg-cyan-950/40 border-cyan-500/80 ring-2 ring-cyan-500/30'
+                : 'bg-brand-card/90 border-brand-border hover:border-brand-borderStrong focus-within:border-brand-borderStrong focus-within:ring-1 focus-within:ring-brand-borderStrong/30 backdrop-blur-xl'
+            }`}
+          >
           {isDraggingOver && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-brand-card/95 rounded-2xl sm:rounded-[22px] text-cyan-400 text-xs font-semibold animate-pulse select-none">
               Drop images or files here to attach
@@ -561,6 +577,7 @@ export const ComposerBar: React.FC<ComposerBarProps> = ({
             </div>
           </div>
         </div>
+      )}
 
         {/* Under the text box: Model Select and Permission Mode Level */}
         <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-3 px-1.5 sm:px-2 pt-0.5 text-xs select-none">

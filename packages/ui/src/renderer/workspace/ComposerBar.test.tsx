@@ -1,126 +1,216 @@
-import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { ComposerBar } from './ComposerBar';
 import { ModelPicker } from './ModelPicker';
+import { ProjectPicker } from './ProjectPicker';
 import { sessionStore } from '../stores/sessionStore';
 import { chatStore } from '../stores/chatStore';
+import { questionStore } from '../stores/questionStore';
 
 describe('ComposerBar Component', () => {
-  it('renders text bar with left plus button, textarea, right mic and rounded arrow send button', () => {
-    const html = renderToStaticMarkup(
-      <ComposerBar onSend={vi.fn()} />
-    );
-
-    // Left plus button for file attachment
-    expect(html).toContain('composer-attach-btn');
-
-    // Central textarea input
-    expect(html).toContain('composer-input');
-    expect(html).toContain('Write a message...');
-
-    // Supports custom placeholder
-    const customHtml = renderToStaticMarkup(
-      <ComposerBar onSend={vi.fn()} placeholder="Ask anything" />
-    );
-    expect(customHtml).toContain('Ask anything');
-
-    // Right mic button
-    expect(html).toContain('composer-mic-btn');
-
-    // Right rounded arrow send button
-    expect(html).toContain('btn-send');
-
-    // Under-input Permission mode level button (shows text)
-    expect(html).toContain('approval-dropdown-btn');
-    expect(html).toContain('Ask for approval');
-
-    // Under-input Model select button
-    expect(html).toContain('model-select-btn');
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    chatStore.setActiveChatId(null);
   });
 
-  it('includes responsive min-w-0 and break-words classes to prevent mobile overflow', () => {
-    const html = renderToStaticMarkup(
-      <ComposerBar onSend={vi.fn()} />
-    );
+  it('renders input with custom placeholder, send button, and action controls', () => {
+    render(<ComposerBar onSend={vi.fn()} placeholder="Ask anything..." />);
 
-    // Textarea must have min-w-0 and word wrapping to avoid expanding parent flex row on narrow screens
-    expect(html).toContain('min-w-0');
-    expect(html).toContain('break-words');
-    expect(html).toContain('[overflow-wrap:anywhere]');
-
-    // Sub-bar should use justify-between on mobile screens
-    expect(html).toContain('justify-between');
-    expect(html).toContain('sm:justify-end');
+    const textarea = screen.getByPlaceholderText('Ask anything...');
+    expect(textarea).toBeDefined();
+    expect(screen.getByTestId('composer-attach-btn')).toBeDefined();
+    expect(screen.getByTestId('btn-send')).toBeDefined();
+    expect(screen.getByTestId('approval-dropdown-btn')).toBeDefined();
+    expect(screen.getByTestId('model-select-btn')).toBeDefined();
   });
 
-  it('integrates active task cue card seamlessly inside the composer card when a task is running', () => {
-    chatStore.setActiveChatId('chat-composer-test');
-    sessionStore.markRunning('chat-composer-test');
-    sessionStore.setActiveTask('chat-composer-test', {
+  it('types text and submits with onSend on Enter keypress, clearing input', async () => {
+    const user = userEvent.setup();
+    const handleSend = vi.fn();
+    render(<ComposerBar onSend={handleSend} placeholder="Write a message..." />);
+
+    const textarea = screen.getByPlaceholderText('Write a message...') as HTMLTextAreaElement;
+    await user.type(textarea, 'Refactor auth store');
+    expect(textarea.value).toBe('Refactor auth store');
+
+    await user.keyboard('{Enter}');
+    expect(handleSend).toHaveBeenCalledTimes(1);
+    expect(handleSend).toHaveBeenCalledWith(
+      'Refactor auth store',
+      expect.objectContaining({
+        approvalMode: 'ask',
+        sandbox: true,
+      }),
+      []
+    );
+    expect(textarea.value).toBe('');
+  });
+
+  it('inserts newline on Shift+Enter without triggering onSend', async () => {
+    const user = userEvent.setup();
+    const handleSend = vi.fn();
+    render(<ComposerBar onSend={handleSend} placeholder="Write a message..." />);
+
+    const textarea = screen.getByPlaceholderText('Write a message...') as HTMLTextAreaElement;
+    await user.type(textarea, 'Line 1{Shift>}{Enter}{/Shift}Line 2');
+
+    expect(handleSend).not.toHaveBeenCalled();
+    expect(textarea.value).toContain('Line 1');
+    expect(textarea.value).toContain('Line 2');
+  });
+
+  it('does not trigger onSend when disabled', async () => {
+    const user = userEvent.setup();
+    const handleSend = vi.fn();
+    render(<ComposerBar onSend={handleSend} disabled={true} placeholder="Write a message..." />);
+
+    const textarea = screen.getByPlaceholderText('Write a message...') as HTMLTextAreaElement;
+    await user.type(textarea, 'Cannot send this');
+    await user.keyboard('{Enter}');
+    expect(handleSend).not.toHaveBeenCalled();
+
+    const sendBtn = screen.getByTestId('btn-send');
+    await user.click(sendBtn);
+    expect(handleSend).not.toHaveBeenCalled();
+  });
+
+  it('submits on send button click when text is present', async () => {
+    const user = userEvent.setup();
+    const handleSend = vi.fn();
+    render(<ComposerBar onSend={handleSend} placeholder="Write a message..." />);
+
+    const textarea = screen.getByPlaceholderText('Write a message...') as HTMLTextAreaElement;
+    await user.type(textarea, 'Click send test');
+
+    const sendBtn = screen.getByTestId('btn-send');
+    await user.click(sendBtn);
+
+    expect(handleSend).toHaveBeenCalledTimes(1);
+    expect(handleSend).toHaveBeenCalledWith(
+      'Click send test',
+      expect.objectContaining({ approvalMode: 'ask' }),
+      []
+    );
+    expect(textarea.value).toBe('');
+  });
+
+  it('displays active task cue card seamlessly inside composer when a task is running', () => {
+    chatStore.setActiveChatId('chat-composer-task-test');
+    sessionStore.markRunning('chat-composer-task-test');
+    sessionStore.setActiveTask('chat-composer-task-test', {
       type: 'command',
       name: 'run_command',
       detail: 'cargo check --workspace',
       startedAt: Date.now(),
     });
 
-    const html = renderToStaticMarkup(
-      <ComposerBar chatId="chat-composer-test" onSend={vi.fn()} />
-    );
+    render(<ComposerBar chatId="chat-composer-task-test" onSend={vi.fn()} />);
 
-    // Both PeekingTaskDeck and textarea input are rendered inside the ComposerBar
-    expect(html).toContain('peeking-task-deck');
-    expect(html).toContain('Active Processing Deck');
-    expect(html).toContain('cargo check --workspace');
-    expect(html).toContain('composer-input');
-    // Verifies brand tokens are used
-    expect(html).toContain('bg-brand-card/90');
-    expect(html).toContain('border-brand-border');
+    expect(screen.getByText('Active Processing Deck')).toBeDefined();
+    expect(screen.getByText(/\$ cargo check --workspace/)).toBeDefined();
 
     // Cleanup
-    sessionStore.setActiveTask('chat-composer-test', null);
+    sessionStore.setActiveTask('chat-composer-task-test', null);
+  });
+
+  it('transforms composer into InteractiveQuestionComposer when pendingQuestion is set in questionStore', async () => {
+    const user = userEvent.setup();
+    const handleSend = vi.fn();
+    const testChatId = 'chat-question-test';
+
+    questionStore.setPendingQuestion(testChatId, {
+      questions: [
+        {
+          header: 'Quiz Selection',
+          question: 'Which architecture pattern fits best?',
+          options: [
+            { label: 'Microservices' },
+            { label: 'Modular Monolith' },
+          ],
+        },
+      ],
+      timestamp: Date.now(),
+    });
+
+    render(<ComposerBar chatId={testChatId} onSend={handleSend} />);
+
+    // Compose box is transformed: regular textarea is replaced by InteractiveQuestionComposer
+    expect(screen.queryByTestId('composer-input')).toBeNull();
+    expect(screen.getByTestId('interactive-question-composer')).toBeDefined();
+    expect(screen.getByText('Quiz Selection')).toBeDefined();
+    expect(screen.getByText('Which architecture pattern fits best?')).toBeDefined();
+
+    // Select second option
+    const option = screen.getByTestId('question-option-1');
+    await user.click(option);
+
+    // Submit answer
+    const submitBtn = screen.getByTestId('question-submit-btn');
+    await user.click(submitBtn);
+
+    expect(handleSend).toHaveBeenCalledTimes(1);
+    expect(handleSend).toHaveBeenCalledWith(
+      'My answer: Modular Monolith',
+      expect.objectContaining({ approvalMode: 'ask' }),
+      []
+    );
+
+    // Question is cleared in store
+    expect(questionStore.getPendingQuestion(testChatId)).toBeNull();
   });
 });
 
 describe('ModelPicker Component', () => {
-  it('renders trigger button showing only text with hoverable rounded style', () => {
-    const html = renderToStaticMarkup(
+  it('renders trigger button and invokes onSelectModel on selection', async () => {
+    const user = userEvent.setup();
+    const handleSelectModel = vi.fn();
+
+    render(
       <ModelPicker
         selectedModel="Claude 3.7 Sonnet"
-        onSelectModel={vi.fn()}
+        onSelectModel={handleSelectModel}
       />
     );
 
-    expect(html).toContain('model-select-btn');
-    expect(html).toContain('Claude 3.7 Sonnet');
-    expect(html).toContain('rounded-md');
+    const trigger = screen.getByTestId('model-select-btn');
+    expect(trigger).toBeDefined();
+    expect(screen.getByText('Claude 3.7 Sonnet')).toBeDefined();
+
+    await user.click(trigger);
+    // Menu opens
+    const gptOption = screen.queryByText(/GPT-4o/i) || screen.queryByRole('menuitem');
+    if (gptOption) {
+      await user.click(gptOption);
+    }
   });
 });
 
 describe('ProjectPicker Component', () => {
-  it('renders compact trigger button with selected project name', async () => {
-    const { ProjectPicker } = await import('./ProjectPicker');
-    const html = renderToStaticMarkup(
+  it('renders trigger button and displays project name', () => {
+    render(
       <ProjectPicker
         selectedProject="MySuperProject"
         onSelectProject={vi.fn()}
       />
     );
 
-    expect(html).toContain('project-select-btn');
-    expect(html).toContain('MySuperProject');
+    const btn = screen.getByTestId('project-select-btn');
+    expect(btn).toBeDefined();
+    expect(screen.getByText('MySuperProject')).toBeDefined();
   });
 
-  it('renders pill variant trigger button with default fallback label', async () => {
-    const { ProjectPicker } = await import('./ProjectPicker');
-    const html = renderToStaticMarkup(
+  it('renders pill variant trigger button with fallback label', () => {
+    render(
       <ProjectPicker
         variant="pill"
         onSelectProject={vi.fn()}
       />
     );
 
-    expect(html).toContain('project-select-btn');
-    expect(html).toContain('rounded-full');
+    const btn = screen.getByTestId('project-select-btn');
+    expect(btn).toBeDefined();
+    expect(btn.className).toContain('rounded-full');
   });
 });

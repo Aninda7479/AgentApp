@@ -79,6 +79,7 @@ fn build_test_state(temp_dir: PathBuf) -> AppState {
             temp_dir.join("video_models"),
             temp_dir.join("video_generations"),
         )),
+        threed_workspace: Arc::new(crate::threed_workspace::ThreeDWorkspaceManager::new()),
         telegram_bot,
     }
 }
@@ -775,4 +776,69 @@ async fn test_video_engine_generation_produces_real_video() {
     );
 
     let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_concurrent_api_requests_stress() {
+    let temp_dir = std::env::temp_dir().join(format!("test_stress_{}", uuid::Uuid::new_v4()));
+    let _ = std::fs::create_dir_all(&temp_dir);
+
+    let state = build_test_state(temp_dir.clone());
+    let token = state.auth_store.create_session_token("admin");
+    let app = create_router(state);
+
+    let mut handles = Vec::new();
+    for i in 0..50 {
+        let app_clone = app.clone();
+        let token_clone = token.clone();
+        handles.push(tokio::spawn(async move {
+            let req = Request::builder()
+                .uri(if i % 2 == 0 {
+                    "/api/health"
+                } else {
+                    "/api/auth/status"
+                })
+                .method("GET")
+                .header("Authorization", format!("Bearer {}", token_clone))
+                .body(Body::empty())
+                .unwrap();
+            let res = app_clone.oneshot(req).await.unwrap();
+            assert_eq!(res.status(), StatusCode::OK);
+        }));
+    }
+
+    for handle in handles {
+        handle.await.unwrap();
+    }
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn test_broadcast_channel_backpressure_and_lag() {
+    // Tests that tokio broadcast channel bounded buffer behaves gracefully
+    // when slow receivers lag behind rapid agent token emission.
+    let (tx, mut rx_fast) = tokio::sync::broadcast::channel::<usize>(16);
+    let mut rx_slow = tx.subscribe();
+
+    // Blast 50 items (exceeding buffer capacity 16)
+    for i in 0..50 {
+        let _ = tx.send(i);
+        // Fast consumer reads along
+        if let Ok(val) = rx_fast.try_recv() {
+            assert!(val <= i);
+        }
+    }
+
+    // Slow consumer attempts to read after lagging behind
+    match rx_slow.try_recv() {
+        Err(tokio::sync::broadcast::error::TryRecvError::Lagged(skipped)) => {
+            assert!(
+                skipped > 0,
+                "Expected slow receiver to lag gracefully without blocking"
+            );
+        }
+        Ok(_) => {}
+        Err(e) => panic!("Unexpected error: {:?}", e),
+    }
 }

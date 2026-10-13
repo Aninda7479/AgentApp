@@ -1254,12 +1254,86 @@ pub async fn handle_integrations_channel(
                 ]
             }
         })))),
+        "three-d-list-models" => {
+            let models = state
+                .threed_workspace
+                .list_generations()
+                .unwrap_or_default();
+            let items: Vec<serde_json::Value> = models
+                .into_iter()
+                .map(|m| {
+                    serde_json::json!({
+                        "id": m.id,
+                        "name": m.prompt,
+                        "path": format!("/api/threed/generations/{}/file", m.id),
+                        "format": m.format.extension(),
+                        "size": 1048576,
+                        "polyCount": m.poly_count,
+                        "modified": m.created_at
+                    })
+                })
+                .collect();
+            Some(Ok(Json(serde_json::json!({ "data": items }))))
+        }
+        "three-d-generate" => {
+            let arg = args.first();
+            let prompt = arg
+                .and_then(|a| {
+                    a.get("prompt")
+                        .and_then(|p| p.as_str())
+                        .or_else(|| a.get("name").and_then(|n| n.as_str()))
+                })
+                .unwrap_or("A procedural 3D model")
+                .to_string();
+            let req = crate::threed_workspace::Generate3DRequest {
+                prompt,
+                negative_prompt: None,
+                model_id: None,
+                mode: None,
+                modality: None,
+                output_format: None,
+                init_image: None,
+                poly_budget: None,
+                texture_resolution: None,
+                seed: None,
+                geometry_style: None,
+                spatial_world: None,
+            };
+            match state.threed_workspace.generate(&req, None).await {
+                Ok(resp) => Some(Ok(Json(serde_json::json!({
+                    "data": {
+                        "ok": true,
+                        "path": resp.model_url,
+                        "format": resp.format.extension(),
+                        "polyCount": resp.poly_count,
+                        "vertexCount": resp.vertex_count,
+                        "provider": resp.source,
+                        "message": "3D asset generated successfully."
+                    }
+                })))),
+                Err(e) => Some(Ok(Json(serde_json::json!({
+                    "data": {
+                        "ok": false,
+                        "error": e.to_string()
+                    }
+                })))),
+            }
+        }
+        "three-d-delete-model" => {
+            let arg = args.first();
+            let file_path = arg
+                .and_then(|a| a.get("filePath").or_else(|| a.get("id")))
+                .and_then(|p| p.as_str())
+                .unwrap_or("");
+            let id = file_path
+                .trim_start_matches("/api/threed/generations/")
+                .trim_end_matches("/file");
+            let _ = state.threed_workspace.delete_generation(id);
+            Some(Ok(Json(serde_json::json!({ "data": { "ok": true } }))))
+        }
 
         // ─── Desktop Stubs (Graceful handling in Web mode) ───────────────────
-        "three-d-generate"
-        | "three-d-list-models"
-        | "three-d-delete-model"
-        | "pick-image-file"
+        "pick-image-file"
         | "partner-install"
         | "partner-pick-model-file"
         | "partner-pick-model-folder"

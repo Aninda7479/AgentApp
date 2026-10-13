@@ -140,8 +140,8 @@ pub fn get_official_opencode_tools() -> Vec<serde_json::Value> {
                         "required": ["prompt"]
                     }),
                 ),
-                "question" => (
-                    "Ask the user one or more questions, clarification prompts, or quiz items",
+                "question" | "ask_question" => (
+                    "Ask the user one or more questions, clarification prompts, or interactive quiz items (system ask)",
                     json!({
                         "type": "object",
                         "properties": {

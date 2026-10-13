@@ -13,6 +13,7 @@ import { StoreService } from './store';
 import { FormatService } from './format';
 import type { StreamingRefs } from './agent';
 import { runManager } from './runManager';
+import { questionStore, parseQuestionToolArgs } from '../stores/questionStore';
 
 /** Shape of an `agent-event` payload emitted by the main process. */
 export interface AgentEvent {
@@ -183,6 +184,14 @@ export class AgentStreamService {
           if (isDuplicate) return prev;
           return [...prev, toolStep];
         });
+
+        // If tool is question or ask_question, parse questions and transform composer
+        if (agentEvent.toolName === 'question' || agentEvent.toolName === 'ask_question') {
+          const pendingQ = parseQuestionToolArgs(agentEvent.toolArgs, agentEvent.toolCallId);
+          if (pendingQ) {
+            questionStore.setPendingQuestion(sessionId, pendingQ);
+          }
+        }
       }
 
       // ── tool_result: mark the matching running tool step "success" and, on a
@@ -226,6 +235,9 @@ export class AgentStreamService {
 
       // ── done / error / abort: finalize the chat (worked duration, not-running) ──
       if (agentEvent.type === 'done' || agentEvent.type === 'error' || agentEvent.type === 'abort') {
+        if (agentEvent.type === 'abort') {
+          questionStore.clearPendingQuestion(sessionId);
+        }
         // Commit any pending token flush right now so the final state is exact.
         if (flushTimer) {
           clearTimeout(flushTimer);

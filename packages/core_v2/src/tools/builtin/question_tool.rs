@@ -15,6 +15,35 @@ impl QuestionTool {
     }
 }
 
+/// Alias tool for `ask_question` (system ask / interactive questions)
+#[derive(Clone, Default)]
+pub struct AskQuestionTool;
+
+impl AskQuestionTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl Tool for AskQuestionTool {
+    fn name(&self) -> &str {
+        "ask_question"
+    }
+
+    fn description(&self) -> &str {
+        "System ask tool: Asks the user questions, clarification prompts, or interactive quizzes with selectable options in the UI."
+    }
+
+    fn parameters_schema(&self) -> Value {
+        QuestionTool.parameters_schema()
+    }
+
+    async fn execute(&self, input: Value) -> Result<String> {
+        QuestionTool.execute(input).await
+    }
+}
+
 #[async_trait]
 impl Tool for QuestionTool {
     fn name(&self) -> &str {
@@ -233,5 +262,22 @@ mod tests {
         assert!(res.contains("[Dev Q2] Which language powers the SuperAgent core?"));
         assert!(res.contains("A. Rust"));
         assert!(res.contains("Awaiting user's answers or choices."));
+    }
+
+    #[tokio::test]
+    async fn test_ask_question_tool_alias() {
+        let tool = AskQuestionTool::new();
+        assert_eq!(tool.name(), "ask_question");
+        let res = tool
+            .execute(json!({
+                "question": "Which architecture style?",
+                "options": ["Monolith", "Microservices"]
+            }))
+            .await
+            .unwrap();
+
+        assert!(res.contains("Which architecture style?"));
+        assert!(res.contains("A. Monolith"));
+        assert!(res.contains("B. Microservices"));
     }
 }
