@@ -16,8 +16,8 @@ This document is the persistent memory ledger for the end-to-end migration of Su
 | **Phase 1** | Core v2 Hardening & Canonical Wire Protocol | `packages/core_v2` | Core Specialist | `COMPLETED` | `feat(core_v2): establish canonical protocol module and session-scoped ws subscriptions` |
 | **Phase 2** | Web Client Decoupling & Overlay Port Auto-Discovery | `clients/web`, `dictation-native`, `artifacts-native` | Web & Overlay Specialist | `COMPLETED` | `feat(web,overlays): decouple web client and add dynamic overlay port auto-discovery` |
 | **Phase 3** | Linux Dedicated UI (GTK4 + Libadwaita) | `clients/linux` | Linux Specialist | `COMPLETED` | `feat(linux): implement dedicated linux client with gtk4, libadwaita and daemon client` |
-| **Phase 4** | macOS Dedicated UI (SwiftUI Native) | `clients/macos` | macOS Specialist | `NOT_STARTED` | - |
-| **Phase 5** | Windows Dedicated UI (WinUI 3 Native) | `clients/windows` | Windows Specialist | `NOT_STARTED` | - |
+| **Phase 4** | macOS Dedicated UI (SwiftUI Native) | `clients/macos` | macOS Specialist | `COMPLETED` | `feat(macos): implement dedicated macos client with swiftui and daemon client` |
+| **Phase 5** | Windows Dedicated UI (WinUI 3 Native) | `clients/windows` | Windows Specialist | `IN_PROGRESS` | - |
 | **Phase 6** | End-to-End Verification & Documentation | Monorepo | Integration Coordinator | `NOT_STARTED` | - |
 
 ---
@@ -81,16 +81,24 @@ This document is the persistent memory ledger for the end-to-end migration of Su
 
 ### Phase 4: macOS Dedicated UI (SwiftUI Native)
 * **Objective**:
-  1. Scaffold `clients/macos/` native SwiftUI project structure.
-  2. Implement `DaemonClient.swift` with URLSession HTTP/2 and WebSocket streaming.
-  3. Implement Codable protocol structs matching `core_v2/src/protocol/`.
-  4. Build SwiftUI Chat, Settings, and navigation views with native macOS styling.
-* **Status**: `NOT_STARTED`
+  1. Scaffold `clients/macos/` native SwiftUI project structure with Swift Package Manager (macOS v13+).
+  2. Implement `DaemonClient.swift` with URLSession HTTP/2, WebSocket streaming, automatic reconnection backoff, and port auto-discovery.
+  3. Implement Codable protocol structs matching `core_v2/src/protocol/` (`AgentStreamEvent`, `WireMessage`, DTOs, `AnyCodable`).
+  4. Build SwiftUI Chat, Settings, and navigation views with native macOS styling and AppKit integrations.
+  5. Provide complete XCTest unit test suite verifying roundtrip wire serialization.
+* **Status**: `COMPLETED`
 * **Checkpoints**:
-  - [ ] Project directory & Swift package / Xcode spec created
-  - [ ] Swift models and URLSession client implemented
-  - [ ] SwiftUI views with native macOS toolbar and split navigation
-  - [ ] Git commit created
+  - [x] Project directory & Swift package (`Package.swift`) created for macOS v13+ with executable and test targets
+  - [x] Canonical constants and Codable models implemented in `Protocol.swift` (`AgentStreamEvent`, `WireMessage`, `SessionSyncPayload`, `IpcRequestEnvelope`, `IpcResponseEnvelope`, `AgentRunRequest`, `AgentStopRequest`, `AnyCodable`)
+  - [x] High-performance `DaemonClient.swift` implemented with URLSession HTTP/2, full-duplex WebSocket streaming, session subscriptions, heartbeats, and dynamic port/token discovery (`SUPERAGENT_PORT` -> lockfile -> `1469`)
+  - [x] Reactive `@MainActor` state store implemented in `AppState.swift` managing sessions, messages, streaming thought/token buffers, and active tool call state
+  - [x] Native SwiftUI `ContentView.swift` implemented with `NavigationSplitView`, sidebar search, detail chat feed, thought disclosures, tool cards, and live streaming tokens
+  - [x] Native macOS `ComposerBar.swift` implemented with text editing, model switching, attachment picker (`NSOpenPanel`), and send/stop controls
+  - [x] Native multi-tab macOS `SettingsView.swift` implemented (General, Server Connection, Model Providers)
+  - [x] Native `@main SuperAgentApp` entrypoint implemented with `WindowGroup`, `Settings`, and native menu bar commands (Cmd+N, Cmd+K, Cmd+.)
+  - [x] XCTest suite implemented in `ProtocolTests.swift` covering roundtrip Codable serialization of all `AgentStreamEvent` variants, wire messages, and DTOs
+  - [x] `Makefile` and architecture `README.md` created
+  - [x] Ready for Git commit: `feat(macos): implement dedicated macos client with swiftui and daemon client`
 
 ---
 
