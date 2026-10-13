@@ -170,7 +170,7 @@ impl eframe::App for DictationApp {
         let left_hovered = ctx.input(|i| {
             i.pointer
                 .hover_pos()
-                .map_or(false, |p| left_btn_rect.contains(p))
+                .is_some_and(|p| left_btn_rect.contains(p))
         });
         let left_bg = if left_hovered {
             Color32::from_rgb(85, 85, 90)
@@ -210,7 +210,7 @@ impl eframe::App for DictationApp {
         let right_hovered = ctx.input(|i| {
             i.pointer
                 .hover_pos()
-                .map_or(false, |p| right_btn_rect.contains(p))
+                .is_some_and(|p| right_btn_rect.contains(p))
         });
         let right_bg = if right_hovered {
             Color32::from_rgb(235, 235, 240)
@@ -228,10 +228,10 @@ impl eframe::App for DictationApp {
         painter.line_segment([p1, p2], check_stroke);
         painter.line_segment([p2, p3], check_stroke);
 
-        if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary) && right_hovered) {
-            if self.state == DictationState::Listening {
-                self.stop_and_transcribe();
-            }
+        if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary) && right_hovered)
+            && self.state == DictationState::Listening
+        {
+            self.stop_and_transcribe();
         }
 
         // 8. Center Audio Equalizer Soundwave Bars
@@ -255,7 +255,7 @@ impl eframe::App for DictationApp {
                         .clamp(0.0, 1.0);
                     let shape_factor = 1.0 - (dist_from_mid * 0.45);
 
-                    let hist_idx = (idx % self.level_history.len()) as usize;
+                    let hist_idx = idx % self.level_history.len();
                     let raw_level = self.level_history[hist_idx];
 
                     let idle_wave = (elapsed * 5.0 + idx as f32 * 0.7).sin() * 0.2 + 0.3;
