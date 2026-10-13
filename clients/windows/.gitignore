@@ -1,0 +1,8 @@
+## .NET and Visual Studio ignore patterns for clients/windows
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
